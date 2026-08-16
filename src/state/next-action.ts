@@ -88,6 +88,12 @@ export type NextActionInput = Readonly<{
   subject_digest?: Sha256Digest;
   authenticated_approvals?: readonly AuthenticatedApprovalFact[];
   commit_observed?: boolean;
+  /**
+   * Set when running the authorized milestone commit could not produce a recognizable milestone:
+   * either it already ran and the result cannot be proven, or something in the task directory would
+   * make the commit unprovable the moment it is made. Absent when the commit is simply not made yet.
+   */
+  commit_blocked_reason?: string;
   design_commit?: Readonly<{
     path: string;
     message: string;
@@ -171,6 +177,17 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
   if (designPhase && !legacyDesignApproval && input.commit_observed !== true) {
     if (input.design_commit === undefined) {
       return action("inspect-state", "Inspect why the approved design commit authority is unavailable.", true, state);
+    }
+    // The commit action can only run while the target is still the approved baseline, so a commit
+    // that cannot be proven can never be retried. Offering it again — or offering one that would be
+    // unprovable the moment it is made — only loops. The blocking reason says what to look at.
+    if (input.commit_blocked_reason !== undefined) {
+      return action(
+        "inspect-state",
+        "Inspect why the authorized design milestone commit cannot be recognized; running it again cannot resolve this.",
+        true,
+        state,
+      );
     }
     return action("commit-artifacts", "Commit the exact recoverable task-local milestone authorized by design approval.", false, state, {
       commit_path: input.design_commit.path,

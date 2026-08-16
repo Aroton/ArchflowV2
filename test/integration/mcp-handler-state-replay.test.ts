@@ -210,6 +210,15 @@ describe("state handler durable integration", () => {
       operation: parseSafeCode("compose-planning-restart"),
     });
     if (!services.ok || services.value.state === undefined) throw new Error("restart services unavailable");
+
+    // Documents the abandoned forward work left behind. The milestone commit that follows the
+    // redone planning covers the whole task directory, so leaving these here would sweep unreviewed
+    // documents into it and make that commit unprovable — with no way to retry it.
+    const phaseRoot = join(h.repository.path, ".archflow", "tasks", TASK, "phases", "15");
+    mkdirSync(phaseRoot, { recursive: true });
+    writeFileSync(join(phaseRoot, "design.md"), "# Superseded phase design\n");
+    writeFileSync(join(phaseRoot, "impl-notes.md"), "# Superseded attempt\n");
+
     const composed = await runBuildRequest(services.value, {
       kind: "restart",
       intent_id: "restart-to-prd",
@@ -246,6 +255,8 @@ describe("state handler durable integration", () => {
         },
       }],
     });
+    expect(existsSync(join(phaseRoot, "design.md"))).toBe(false);
+    expect(existsSync(join(phaseRoot, "impl-notes.md"))).toBe(false);
     const replay = await boundary.invoke(
       "archflow_state",
       { ...(composed.value.request.input as Record<string, unknown>), expected_revision: 5 },

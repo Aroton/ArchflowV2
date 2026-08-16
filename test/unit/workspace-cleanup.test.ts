@@ -16,7 +16,7 @@ import { createGitRunner, preflightGit } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
 import type { TransactionDependencies } from "../../src/state/transaction.js";
-import { cleanTaskWorkspace, cleanTerminalTaskWorkspace, inspectWorkspaceCleanup } from "../../src/state/workspace-cleanup.js";
+import { cleanTaskWorkspace, cleanTerminalTaskWorkspace, inspectWorkspaceCleanup, removeSupersededPhaseDocuments } from "../../src/state/workspace-cleanup.js";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -296,5 +296,55 @@ describe("task workspace cleanup", () => {
     expect(existsSync(join(resultsRoot, `${directArtifact.digest}.json`))).toBe(true);
     expect(existsSync(join(resultsRoot, `${incidental.digest}.json`))).toBe(false);
     expect(existsSync(join(resultsRoot, `${malformedDigest}.json`))).toBe(true);
+  });
+
+  it("clears the untracked phase documents a backward restart supersedes", async () => {
+    const root = mkdtempSync(join(tmpdir(), "archflow-restart-documents-"));
+    roots.push(root);
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root, env: gitEnv });
+
+    const taskId = parseTaskSlug("restart-task");
+    const taskPath = `.archflow/tasks/${taskId}`;
+    const taskRoot = join(root, taskPath);
+    mkdirSync(join(taskRoot, "phases", "1"), { recursive: true });
+    mkdirSync(join(taskRoot, "phases", "2"), { recursive: true });
+    mkdirSync(join(taskRoot, "phases", "3"), { recursive: true });
+    writeFileSync(join(taskRoot, "phases", "1", "design.md"), "# Phase 1\n");
+    writeFileSync(join(taskRoot, "phases", "1", "impl-notes.md"), "# Phase 1 log\n");
+    writeFileSync(join(taskRoot, "phases", "2", "design.md"), "# Phase 2\n");
+    execFileSync("git", ["add", "--", taskPath], { cwd: root, env: gitEnv });
+    execFileSync("git", ["commit", "-qm", "base"], { cwd: root, env: gitEnv });
+    // Left behind by the abandoned phase-impl-2 attempt and a speculative later phase design.
+    writeFileSync(join(taskRoot, "phases", "2", "impl-notes.md"), "# Abandoned attempt\n");
+    writeFileSync(join(taskRoot, "phases", "3", "design.md"), "# Never approved\n");
+
+    const context = {
+      task_id: taskId,
+      phase_instance: parsePhaseInstanceId("phase-design-2"),
+      operation: parseSafeCode("restart-documents-test"),
+      attempt: parseSafeInteger(1),
+    };
+    const discovered = await discoverWorktree(createGitRunner({ cwd: root }), context);
+    if (!discovered.ok) throw discovered.error;
+    const environment = await preflightGit(discovered.value, context);
+    if (!environment.ok) throw environment.error;
+    const authority = await createInternalTransactionAuthority({
+      runner: discovered.value, environment: environment.value, task_id: taskId, context,
+    });
+    if (!authority.ok) throw authority.error;
+    const dependencies = { runner: discovered.value, environment: environment.value } as TransactionDependencies;
+
+    expect(await removeSupersededPhaseDocuments(dependencies, authority.value, "phase-design-2"))
+      .toEqual(["phases/2/impl-notes.md", "phases/3/design.md"]);
+    expect(existsSync(join(taskRoot, "phases", "2", "impl-notes.md"))).toBe(false);
+    expect(existsSync(join(taskRoot, "phases", "3"))).toBe(false);
+    // The phase the restart returns to keeps its design, and committed history is never touched.
+    expect(existsSync(join(taskRoot, "phases", "2", "design.md"))).toBe(true);
+    expect(existsSync(join(taskRoot, "phases", "1", "impl-notes.md"))).toBe(true);
+
+    // A tracked document is already in history; removing it would only move the same unauthorized
+    // change into the next commit as a deletion.
+    expect(await removeSupersededPhaseDocuments(dependencies, authority.value, "design")).toEqual([]);
+    expect(existsSync(join(taskRoot, "phases", "1", "impl-notes.md"))).toBe(true);
   });
 });

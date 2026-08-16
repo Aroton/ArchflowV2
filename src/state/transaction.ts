@@ -75,7 +75,7 @@ import {
   type PreparedSnapshot,
   type ProjectionPlan,
 } from "./snapshots.js";
-import { cleanTaskWorkspace, cleanTerminalTaskWorkspace } from "./workspace-cleanup.js";
+import { cleanTaskWorkspace, cleanTerminalTaskWorkspace, removeSupersededPhaseDocuments } from "./workspace-cleanup.js";
 
 const MAX_RECEIPT_BYTES = 1024 * 1024;
 
@@ -987,6 +987,13 @@ async function cleanupCommittedWorkspace(
   committed: TaskStateV1,
 ): Promise<void> {
   try {
+    // A restart records itself at exactly the revision this commit produced, which is what makes
+    // this safe to run on every commit and on replay: it fires once, for the restart's own move.
+    const restart = (committed.restart_history ?? []).find((record) =>
+      record.restarted_at_revision === committed.revision);
+    if (restart !== undefined) {
+      await removeSupersededPhaseDocuments(dependencies, authority, restart.to_phase_instance);
+    }
     await cleanTaskWorkspace(dependencies, authority, committed);
   } catch {
     // Cleanup debt is derived and reported by status; authority is already committed.

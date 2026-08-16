@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -135,5 +135,67 @@ describe("local authorized commit", () => {
     if (!result.ok) throw new Error(JSON.stringify(result.error));
     expect(result).toMatchObject({ ok: true, value: { paths: ["new-name.txt", "old-name.txt"] } });
     expect(git(root, ["show", "--format=", "--name-status", "HEAD"])).toMatch(/R100\s+old-name\.txt\s+new-name\.txt/u);
+  });
+
+  it("commits the whole authorized task directory for the design milestone", async () => {
+    const root = mkdtempSync(join(tmpdir(), "archflow-local-milestone-"));
+    roots.push(root);
+    git(root, ["init", "-q", "-b", "main"]);
+    git(root, ["config", "user.name", "ArchFlow Test"]);
+    git(root, ["config", "user.email", "test@example.invalid"]);
+    const taskId = parseTaskSlug("local-milestone");
+    const taskPath = `.archflow/tasks/${taskId}`;
+    mkdirSync(join(root, taskPath, "phases", "2"), { recursive: true });
+    writeFileSync(join(root, "unrelated.txt"), "before\n");
+    writeFileSync(join(root, taskPath, "prd.md"), "# Requirements\n");
+    git(root, ["add", "."]);
+    git(root, ["commit", "-qm", "baseline"]);
+    const baseline = parseGitOid(git(root, ["rev-parse", "HEAD"]));
+
+    // Exactly the shape the milestone commit takes: a new document plus durable recovery authority,
+    // all reached through the single task-directory path rather than an enumerated file list.
+    writeFileSync(join(root, taskPath, "phases", "2", "design.md"), "# Phase 2\n");
+    writeFileSync(join(root, taskPath, "state.json"), "{}\n");
+    mkdirSync(join(root, taskPath, "authority", "decisions", "gate-1"), { recursive: true });
+    writeFileSync(join(root, taskPath, "authority", "decisions", "gate-1", "request.json"), "{}\n");
+    writeFileSync(join(root, "unrelated.txt"), "after\n");
+
+    mocks.status.mockResolvedValue({
+      schema_version: "1",
+      ok: true,
+      value: {
+        next_action: {
+          code: "commit-artifacts",
+          commit_path: taskPath,
+          commit_message: "ArchFlow: Approve local-milestone phase 2 design",
+          commit_target_ref: "refs/heads/main",
+          commit_baseline: baseline,
+        },
+      },
+    });
+    const context = {
+      task_id: taskId,
+      phase_instance: parsePhaseInstanceId("phase-design-2"),
+      operation: parseSafeCode("test-local-milestone"),
+      attempt: parseSafeInteger(1),
+    };
+    const discovered = await discoverWorktree(createGitRunner({ cwd: root }), context);
+    if (!discovered.ok) throw new Error(discovered.error.code);
+
+    const result = await commitCurrentAuthorizedAction({
+      runner: discovered.value,
+      dependencies: {},
+      state: { value: { phase_instance: "phase-design-2" } },
+      authority: { context },
+    } as unknown as ProductionServices);
+
+    if (!result.ok) throw new Error(JSON.stringify(result.error));
+    expect(result).toMatchObject({ ok: true, value: { action: "commit-artifacts", paths: [taskPath] } });
+    expect(git(root, ["show", "--format=", "--name-only", "HEAD"]).split("\n")).toEqual([
+      `${taskPath}/authority/decisions/gate-1/request.json`,
+      `${taskPath}/phases/2/design.md`,
+      `${taskPath}/state.json`,
+    ]);
+    expect(git(root, ["diff", "--name-only"])).toBe("unrelated.txt");
   });
 });

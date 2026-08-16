@@ -24674,6 +24674,14 @@ function classifyIn(rules2, claim) {
   for (const rule4 of rules2) if (rule4.pattern.test(claim)) return rule4.path_class;
   return void 0;
 }
+var DOCUMENT_RULE = (() => {
+  const rule4 = TASK_CLASS_RULES.find((entry) => entry.path_class === "document");
+  if (rule4 === void 0) throw new TypeError("the task path table lost its document rule");
+  return rule4;
+})();
+function isTaskDocumentPath(taskRelativePath) {
+  return DOCUMENT_RULE.pattern.test(taskRelativePath);
+}
 function classifyTaskPath(taskId, claim) {
   const matched = classifyIn(TASK_CLASS_RULES, claim);
   if (matched === void 0) return fail2(pathInvalid(taskId, void 0));
@@ -25732,8 +25740,8 @@ function validateDurableSemantics(subject) {
     const stepped = artifact === void 0 ? void 0 : durableSteppedPayload(artifact);
     if (stepped !== void 0 && stepped.phase_instance === state.phase_instance && stepped.step === state.step && stepped.input_fingerprint !== state.input_fingerprint) {
       const expected = state.input_fingerprint;
-      const observed = stepped.input_fingerprint;
-      return fail3(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest: expected, observed_digest: observed }));
+      const observed2 = stepped.input_fingerprint;
+      return fail3(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest: expected, observed_digest: observed2 }));
     }
   }
   if (relation !== void 0 && receipt !== void 0 && intentState !== void 0) {
@@ -25974,12 +25982,12 @@ function computePinnedConfigDigest(configBytes) {
   return sha256Bytes(configBytes);
 }
 function verifyPinnedConfig(expected, observedBytes) {
-  const observed = computePinnedConfigDigest(observedBytes);
-  if (observed === expected) return { schema_version: "1", ok: true, value: observed };
+  const observed2 = computePinnedConfigDigest(observedBytes);
+  if (observed2 === expected) return { schema_version: "1", ok: true, value: observed2 };
   return {
     schema_version: "1",
     ok: false,
-    error: createProjectError("PINNED_CONFIG_MISMATCH", { expected_digest: expected, observed_digest: observed })
+    error: createProjectError("PINNED_CONFIG_MISMATCH", { expected_digest: expected, observed_digest: observed2 })
   };
 }
 
@@ -26152,9 +26160,15 @@ async function hashGitBlobIdentity(runner, bytes, path2) {
   if (!GIT_OID.test(oid)) throw new TypeError("git hash-object returned an invalid SHA-1 object id");
   return Object.freeze({ oid, size_bytes: await readGitBlobSize(runner, oid) });
 }
-async function readChangedGitPaths(runner) {
+async function readChangedGitPaths(runner, pathspecs = []) {
   const result = await runner.run({
-    argv: ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+    argv: [
+      "status",
+      "--porcelain=v1",
+      "-z",
+      "--untracked-files=all",
+      ...pathspecs.length === 0 ? [] : ["--", ...pathspecs]
+    ],
     operation: "git-status-declared-scope"
   });
   const fields = [];
@@ -26507,12 +26521,12 @@ async function resolveRepositoryIdentity(runner, environment, context2) {
     throw error51;
   }
 }
-function verifyRepositoryIdentity(expected, observed) {
-  if (expected === observed.digest) return ok3(observed);
+function verifyRepositoryIdentity(expected, observed2) {
+  if (expected === observed2.digest) return ok3(observed2);
   return fail5(
     createProjectError("REPOSITORY_MISMATCH", {
       expected_digest: expected,
-      observed_digest: observed.digest
+      observed_digest: observed2.digest
     })
   );
 }
@@ -31509,59 +31523,80 @@ async function implementationOutputCommittedAtCurrentTarget(runner, output, cont
   }
   return await resolveCommit(runner, "HEAD") === headCommit && await resolveCommit(runner, context2.target_ref) === headCommit;
 }
+var observed = Object.freeze({ observed: true });
+function missed(reason2, paths) {
+  return Object.freeze({
+    observed: false,
+    reason: reason2,
+    blocking: reason2 !== "not-committed",
+    ...paths === void 0 ? {} : { paths: Object.freeze([...paths]) }
+  });
+}
 async function designArtifactCommittedAtCurrentTarget(runner, taskId, artifact, outputs, context2) {
   const symbolicRef = await runner.runText({
     argv: ["symbolic-ref", "--quiet", "HEAD"],
     operation: "git-current-design-target",
     expectedAbsence: [{ code: 1, stderrIncludes: "" }]
   });
-  if (context2.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== context2.target_ref) return false;
+  if (context2.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== context2.target_ref) {
+    return missed("target-moved");
+  }
   const head = await resolveCommit(runner, "HEAD");
-  if (await resolveCommit(runner, context2.target_ref) !== head) return false;
-  if (head === context2.baseline_commit) return false;
-  if (await resolveCommit(runner, `${head}^`) !== context2.baseline_commit) return false;
-  const message = await runner.runText({
-    argv: ["log", "-1", "--format=%s", head],
-    operation: "git-design-commit-message"
-  });
-  if (message !== context2.commit_message) return false;
+  if (await resolveCommit(runner, context2.target_ref) !== head) return missed("target-moved");
   const prefix = `.archflow/tasks/${taskId}/`;
-  const changed = await runner.runNulFields({
-    argv: ["diff-tree", "--no-commit-id", "--name-only", "-z", "-r", context2.baseline_commit, head, "--"],
-    operation: "git-design-commit-paths"
-  });
-  if (changed.length === 0 || changed.some((path2) => !path2.startsWith(prefix))) return false;
-  if (!changed.includes(`${prefix}state.json`)) return false;
-  if (!changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/request.json")) || !changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/decision.json"))) return false;
   const additional = artifact.additional_documents ?? [];
   const approvedDocumentPaths = /* @__PURE__ */ new Set([
     artifact.projection_target,
     ...additional.map((entry) => entry.projection_target)
   ]);
-  for (const path2 of approvedDocumentPaths) {
-    const output = outputs.find((entry) => entry.path === path2);
-    if (output === void 0 || output.operation === "delete") return false;
-    const committed = await readCommitTreeBlob(runner, head, path2);
-    if (committed?.mode !== output.after.mode || committed.oid !== output.after.oid) return false;
-    const baseline = await readCommitTreeBlob(runner, context2.baseline_commit, path2);
-    const differsFromBaseline = baseline?.mode !== output.after.mode || baseline.oid !== output.after.oid;
-    if (differsFromBaseline && !changed.includes(path2)) return false;
-  }
   const authorizedDocumentPaths = /* @__PURE__ */ new Set([
     ...approvedDocumentPaths,
     ...context2.authorized_document_paths ?? []
   ]);
-  const taskDocumentPath = /^(?:prd\.md|design\.md|phases\/[1-9][0-9]*\/(?:design|impl-notes)\.md)$/u;
-  if (changed.some((path2) => {
-    const taskRelative = path2.startsWith(prefix) ? path2.slice(prefix.length) : path2;
-    return taskDocumentPath.test(taskRelative) && !authorizedDocumentPaths.has(path2);
-  })) return false;
-  const dirty = await runner.runNulFields({
-    argv: ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", prefix.slice(0, -1)],
-    operation: "git-design-task-clean"
+  const unauthorizedDocuments = (paths) => paths.filter((path2) => path2.startsWith(prefix) && isTaskDocumentPath(path2.slice(prefix.length)) && !authorizedDocumentPaths.has(path2));
+  if (head === context2.baseline_commit) {
+    const pending = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
+    const unauthorized2 = unauthorizedDocuments(pending.paths);
+    if (unauthorized2.length > 0) return missed("unauthorized-task-document", unauthorized2);
+    return missed("not-committed");
+  }
+  if (await resolveCommit(runner, `${head}^`) !== context2.baseline_commit) {
+    return missed("parent-not-baseline");
+  }
+  const message = await runner.runText({
+    argv: ["log", "-1", "--format=%s", head],
+    operation: "git-design-commit-message"
   });
-  if (dirty.length !== 0) return false;
-  return await resolveCommit(runner, "HEAD") === head && await resolveCommit(runner, context2.target_ref) === head;
+  if (message !== context2.commit_message) return missed("message-mismatch");
+  const changed = await runner.runNulFields({
+    argv: ["diff-tree", "--no-commit-id", "--name-only", "-z", "-r", context2.baseline_commit, head, "--"],
+    operation: "git-design-commit-paths"
+  });
+  if (changed.length === 0) return missed("paths-outside-task");
+  const outsideTask = changed.filter((path2) => !path2.startsWith(prefix));
+  if (outsideTask.length > 0) return missed("paths-outside-task", outsideTask);
+  if (!changed.includes(`${prefix}state.json`)) return missed("missing-recovery-authority");
+  if (!changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/request.json")) || !changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/decision.json"))) {
+    return missed("missing-recovery-authority");
+  }
+  for (const path2 of approvedDocumentPaths) {
+    const output = outputs.find((entry) => entry.path === path2);
+    if (output === void 0 || output.operation === "delete") return missed("approved-document-mismatch", [path2]);
+    const committed = await readCommitTreeBlob(runner, head, path2);
+    if (committed?.mode !== output.after.mode || committed.oid !== output.after.oid) {
+      return missed("approved-document-mismatch", [path2]);
+    }
+    const baseline = await readCommitTreeBlob(runner, context2.baseline_commit, path2);
+    const differsFromBaseline = baseline?.mode !== output.after.mode || baseline.oid !== output.after.oid;
+    if (differsFromBaseline && !changed.includes(path2)) return missed("approved-document-mismatch", [path2]);
+  }
+  const unauthorized = unauthorizedDocuments(changed);
+  if (unauthorized.length > 0) return missed("unauthorized-task-document", unauthorized);
+  const dirty = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
+  if (dirty.paths.length !== 0 || dirty.unrepresentable_count !== 0) {
+    return missed("task-tree-dirty", dirty.paths);
+  }
+  return await resolveCommit(runner, "HEAD") === head && await resolveCommit(runner, context2.target_ref) === head ? observed : missed("target-moved");
 }
 var ordinal5 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 function ownEnumerableData(value, key) {
@@ -31630,8 +31665,8 @@ function deriveWorktreeIdentityDigest(entries, undeclaredChanges) {
     undeclared_changes: undeclaredChanges
   });
 }
-function sameIdentity(observed, expected) {
-  return observed.state === "present" && observed.oid === expected.oid && observed.mode === expected.mode && observed.size_bytes === expected.size_bytes;
+function sameIdentity(observed2, expected) {
+  return observed2.state === "present" && observed2.oid === expected.oid && observed2.mode === expected.mode && observed2.size_bytes === expected.size_bytes;
 }
 async function observePath(runner, resolved) {
   const lexicalPath = resolvePath4(runner.location.worktreeRoot, resolved.repositoryRelative);
@@ -31961,14 +31996,14 @@ async function buildImplementationOutput(dependencies, authority, state, supplie
   }
   const scanCandidates = outputs.flatMap((output) => {
     if (output.operation === "delete") return [];
-    const observed = observations.get(output.path);
-    if (observed.observation.state !== "present" || observed.bytes === void 0) {
+    const observed2 = observations.get(output.path);
+    if (observed2.observation.state !== "present" || observed2.bytes === void 0) {
       throw new TypeError("present output bytes are unavailable");
     }
     return [secretScanCandidateFromBytes({
       virtual_path: output.path,
       path_class: output.path_class,
-      bytes: observed.bytes
+      bytes: observed2.bytes
     })];
   });
   const secretScan = await createSecretlintScanner().scan(scanCandidates);
@@ -32093,17 +32128,17 @@ async function verifyImplementationManifest(runner, supplied, context2, supplied
     throw new TypeError("undeclared change report does not match the live Git working set");
   }
   const resolved = await resolveAll(runner, output, context2);
-  const observed = /* @__PURE__ */ new Map();
+  const observed2 = /* @__PURE__ */ new Map();
   for (const path2 of scope3) {
     const target = resolved.get(path2);
     if (target === void 0) throw new TypeError("declared scope path was not resolved");
-    observed.set(path2, await observePath(runner, target));
+    observed2.set(path2, await observePath(runner, target));
   }
   const ancestryRetained = await isCommitAncestorOfHead(runner, output.base_commit);
   const rawPayloads = /* @__PURE__ */ new Map();
   const snapshot2 = /* @__PURE__ */ new Map();
   for (const entry of output.outputs) {
-    const after = observed.get(entry.path);
+    const after = observed2.get(entry.path);
     if (after === void 0) throw new TypeError("missing output observation");
     const beforePath = entry.operation === "rename" ? entry.previous_path : entry.path;
     const currentBefore = currentSources.get(beforePath);
@@ -32122,7 +32157,7 @@ async function verifyImplementationManifest(runner, supplied, context2, supplied
         throw new TypeError("delete identity does not match base/worktree state");
       }
     } else {
-      const previous = observed.get(entry.previous_path)?.observation;
+      const previous = observed2.get(entry.previous_path)?.observation;
       if (before === void 0 || destinationBefore !== void 0 || previous?.state !== "absent" || !sameIdentity(after.observation, entry.after) || before.oid !== entry.before.oid || before.mode !== entry.before.mode || before.size_bytes !== entry.before.size_bytes) {
         throw new TypeError("rename identity or non-overwrite condition does not match base/worktree state");
       }
@@ -32149,8 +32184,8 @@ async function verifyImplementationManifest(runner, supplied, context2, supplied
     }
     snapshot2.set(entry.path, after.observation);
   }
-  const worktreeEntries = Object.freeze(scope3.map((path2) => observed.get(path2)?.observation));
-  const snapshotEntries = Object.freeze(scope3.map((path2) => snapshot2.get(path2) ?? observed.get(path2)?.observation));
+  const worktreeEntries = Object.freeze(scope3.map((path2) => observed2.get(path2)?.observation));
+  const snapshotEntries = Object.freeze(scope3.map((path2) => snapshot2.get(path2) ?? observed2.get(path2)?.observation));
   const indexResult = await readIndexEntries(runner, scope3, context2);
   if (!indexResult.ok) throw indexResult.error;
   const byIndexPath = new Map(indexResult.value.map((entry) => [entry.path, entry]));
@@ -32549,7 +32584,7 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
   }
   const entries = [];
   for (const source of materialized) {
-    const observed = await observe(source.target);
+    const observed2 = await observe(source.target);
     if (source.authenticated_before.state === "present") {
       if (source.rollback === void 0 || !isDeepStrictEqual4(desiredObservation(source.rollback), source.authenticated_before)) {
         throw new TypeError("present authenticated before-image requires matching rollback bytes");
@@ -32557,13 +32592,13 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
     } else if (source.rollback !== void 0 && source.rollback.state !== "absent") {
       throw new TypeError("absent authenticated before-image cannot carry present rollback bytes");
     }
-    const exact = isDeepStrictEqual4(observed, desiredObservation(source.desired));
-    const before = isDeepStrictEqual4(observed, source.authenticated_before);
-    const renameDestinationBlocked = source.rename_pair?.role === "destination" && observed.state !== "absent" && !exact;
+    const exact = isDeepStrictEqual4(observed2, desiredObservation(source.desired));
+    const before = isDeepStrictEqual4(observed2, source.authenticated_before);
+    const renameDestinationBlocked = source.rename_pair?.role === "destination" && observed2.state !== "absent" && !exact;
     entries.push(Object.freeze({
       path: source.path,
       target: source.target,
-      observed_before: observed,
+      observed_before: observed2,
       desired: source.desired,
       ...source.rollback === void 0 ? {} : { rollback: source.rollback },
       git_tracked: source.git_tracked,
@@ -34480,7 +34515,7 @@ async function readConstitutionTreeFiles(runner, commit2) {
     oid: parseGitOid(entry.oid)
   })).sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
 }
-function invalidPolicyBase(policyBaseCommit, observed) {
+function invalidPolicyBase(policyBaseCommit, observed2) {
   const expected = canonicalJsonDigest({
     schema_version: "1",
     digest_kind: "policy-base-commit",
@@ -34488,7 +34523,7 @@ function invalidPolicyBase(policyBaseCommit, observed) {
   });
   return createProjectError("POLICY_BASE_INVALID", {
     expected_digest: expected,
-    ...observed === void 0 ? {} : { observed_digest: observed }
+    ...observed2 === void 0 ? {} : { observed_digest: observed2 }
   });
 }
 async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
@@ -34963,13 +34998,13 @@ async function createProductionServices(input) {
     context: provisionalContext
   });
   if (!provisionalAuthority.ok) return provisionalAuthority;
-  const observed = await readTaskState(provisionalAuthority.value.state);
-  if (observed.kind === "unreadable") {
+  const observed2 = await readTaskState(provisionalAuthority.value.state);
+  if (observed2.kind === "unreadable") {
     return fail11(createProjectError("IO_ERROR", { operation: input.operation, attempt: provisionalContext.attempt }));
   }
-  if (observed.kind === "noncanonical") return stateFailure(provisionalPhase, "task-state-noncanonical");
-  const resolvedContext = observed.kind === "canonical" ? context(input, observed.document.value.phase_instance, observed.document.value.attempt) : provisionalContext;
-  const authorityResult = observed.kind === "canonical" ? await createInternalTransactionAuthority({
+  if (observed2.kind === "noncanonical") return stateFailure(provisionalPhase, "task-state-noncanonical");
+  const resolvedContext = observed2.kind === "canonical" ? context(input, observed2.document.value.phase_instance, observed2.document.value.attempt) : provisionalContext;
+  const authorityResult = observed2.kind === "canonical" ? await createInternalTransactionAuthority({
     runner: discovered.value,
     environment: environment.value,
     task_id: input.task_id,
@@ -35038,7 +35073,7 @@ async function createProductionServices(input) {
     runner: discovered.value,
     environment: environment.value,
     authority,
-    ...observed.kind === "canonical" ? { state: observed.document } : {},
+    ...observed2.kind === "canonical" ? { state: observed2.document } : {},
     dependencies
   }));
 }
@@ -35737,6 +35772,14 @@ function advanceAction(input, state) {
   if (designPhase && !legacyDesignApproval && input.commit_observed !== true) {
     if (input.design_commit === void 0) {
       return action("inspect-state", "Inspect why the approved design commit authority is unavailable.", true, state);
+    }
+    if (input.commit_blocked_reason !== void 0) {
+      return action(
+        "inspect-state",
+        "Inspect why the authorized design milestone commit cannot be recognized; running it again cannot resolve this.",
+        true,
+        state
+      );
     }
     return action("commit-artifacts", "Commit the exact recoverable task-local milestone authorized by design approval.", false, state, {
       commit_path: input.design_commit.path,
@@ -36441,9 +36484,9 @@ function ownData(value, field, label) {
 function reconcileCurrentAuthority(value) {
   const input = materialize3(value);
   const findings = [];
-  const observed = new Map(input.current_projections.map((projection) => [projection.path, projection.content_digest]));
+  const observed2 = new Map(input.current_projections.map((projection) => [projection.path, projection.content_digest]));
   for (const recorded of input.recorded_projections) {
-    const digest10 = observed.get(recorded.path);
+    const digest10 = observed2.get(recorded.path);
     if (digest10 !== recorded.content_digest) {
       findings.push(Object.freeze({
         kind: "projection-mismatch",
@@ -36560,11 +36603,11 @@ function partitionExpectedReentryEdits(findings, assessment, produceSubject, sta
     expected_reentry_edits: Object.freeze(expected)
   });
 }
-function unavailableConfig(expected, observed, issue3) {
+function unavailableConfig(expected, observed2, issue3) {
   return Object.freeze({
     verified: false,
     ...expected === void 0 ? {} : { expected_digest: expected },
-    ...observed === void 0 ? {} : { observed_digest: observed },
+    ...observed2 === void 0 ? {} : { observed_digest: observed2 },
     ...issue3 === void 0 ? {} : { issue: issue3 }
   });
 }
@@ -36902,6 +36945,7 @@ async function computeTaskStatus(dependencies, authority) {
     }
   }
   let commitObserved = false;
+  let commitBlockedReason;
   let implementationCommit;
   if (produceSubject?.artifact.artifact_kind === "implementation-output") {
     for (const authenticated of authenticatedApprovals) {
@@ -36939,18 +36983,23 @@ async function computeTaskStatus(dependencies, authority) {
         baseline_commit: authenticated.request.context.baseline_commit
       });
       try {
-        commitObserved = await designArtifactCommittedAtCurrentTarget(
+        const observation = await designArtifactCommittedAtCurrentTarget(
           dependencies.runner,
           state.task_id,
           produceSubject.artifact,
           produceSubject.retained.prepared.manifest.value.outputs,
           authenticated.request.context
         );
+        commitObserved = observation.observed;
+        if (!observation.observed && observation.blocking) {
+          commitBlockedReason = observation.reason;
+          blockers.push(`design-milestone-${observation.reason}`);
+        }
       } catch {
         blockers.push("commit-observation-unavailable");
       }
     }
-    const migration = authenticatedApprovals.find((item) => item.request.kind === "migration-audit" && item.request.phase_instance === state.phase_instance && item.request.subject_digest === produceSubject.artifact_digest && item.decision.envelope.payload.decision === "accept-import-audit");
+    const migration = commitObserved ? void 0 : authenticatedApprovals.find((item) => item.request.kind === "migration-audit" && item.request.phase_instance === state.phase_instance && item.request.subject_digest === produceSubject.artifact_digest && item.decision.envelope.payload.decision === "accept-import-audit");
     if (migration?.request.kind === "migration-audit" && migration.request.context.target_ref !== void 0 && migration.request.context.baseline_commit !== void 0 && migration.request.context.commit_message !== void 0) {
       designCommit = Object.freeze({
         path: `.archflow/tasks/${state.task_id}`,
@@ -36959,7 +37008,7 @@ async function computeTaskStatus(dependencies, authority) {
         baseline_commit: migration.request.context.baseline_commit
       });
       try {
-        commitObserved = await designArtifactCommittedAtCurrentTarget(
+        const observation = await designArtifactCommittedAtCurrentTarget(
           dependencies.runner,
           state.task_id,
           produceSubject.artifact,
@@ -36973,6 +37022,11 @@ async function computeTaskStatus(dependencies, authority) {
             }
           }
         );
+        commitObserved = observation.observed;
+        if (!observation.observed && observation.blocking) {
+          commitBlockedReason = observation.reason;
+          blockers.push(`design-milestone-${observation.reason}`);
+        }
       } catch {
         blockers.push("commit-observation-unavailable");
       }
@@ -37148,6 +37202,7 @@ async function computeTaskStatus(dependencies, authority) {
     ...subjectDigest === void 0 ? {} : { subject_digest: subjectDigest },
     authenticated_approvals: approvalFacts,
     commit_observed: commitObserved,
+    ...commitBlockedReason === void 0 ? {} : { commit_blocked_reason: commitBlockedReason },
     ...designCommit === void 0 ? {} : { design_commit: designCommit },
     ...implementationCommit === void 0 ? {} : { implementation_commit: implementationCommit },
     ...adjudicationGateKind === void 0 ? {} : { adjudication_gate_kind: adjudicationGateKind },
@@ -39320,9 +39375,9 @@ async function buildDocumentArtifact(runner, authority, input) {
   if (!observedPrimary.ok) return observedPrimary;
   const observedAdditional = [];
   for (const path2 of additionalPaths) {
-    const observed = await observeDocument(path2);
-    if (!observed.ok) return observed;
-    observedAdditional.push(observed.value);
+    const observed2 = await observeDocument(path2);
+    if (!observed2.ok) return observed2;
+    observedAdditional.push(observed2.value);
   }
   const declaredInputs = [];
   for (const declared of materialized.declared_inputs) {
@@ -39337,17 +39392,17 @@ async function buildDocumentArtifact(runner, authority, input) {
   }
   declaredInputs.sort((left, right) => left.input_id < right.input_id ? -1 : left.input_id > right.input_id ? 1 : 0);
   const observations = [observedPrimary.value, ...observedAdditional].sort((left, right) => left.projection_target < right.projection_target ? -1 : left.projection_target > right.projection_target ? 1 : 0);
-  const outputs = Object.freeze(observations.map((observed) => observed.output));
-  const projections = Object.freeze(observations.map((observed) => Object.freeze({
-    path: observed.projection_target,
-    content_digest: observed.content_digest
+  const outputs = Object.freeze(observations.map((observed2) => observed2.output));
+  const projections = Object.freeze(observations.map((observed2) => Object.freeze({
+    path: observed2.projection_target,
+    content_digest: observed2.content_digest
   })));
   const additionalDocuments = Object.freeze(
-    observedAdditional.map((observed) => Object.freeze({
-      document_path: observed.document_path,
-      byte_count: observed.byte_count,
-      content_digest: observed.content_digest,
-      projection_target: observed.projection_target
+    observedAdditional.map((observed2) => Object.freeze({
+      document_path: observed2.document_path,
+      byte_count: observed2.byte_count,
+      content_digest: observed2.content_digest,
+      projection_target: observed2.projection_target
     }))
   );
   return ok18(parseDocumentArtifact({
@@ -39653,13 +39708,13 @@ async function validateLiveInitialization(dependencies, request2, initialization
   const commits = initialization.artifact_kind === "task-initialization" ? [initialization.code_baseline_commit, initialization.policy_base_commit] : [initialization.import_baseline_commit, initialization.code_baseline_commit, initialization.policy_base_commit];
   for (const oid of new Set(commits)) {
     try {
-      const observed = await dependencies.runner.run({
+      const observed2 = await dependencies.runner.run({
         argv: ["rev-parse", "--verify", "--quiet", `${oid}^{commit}`],
         operation: parseSafeCode("validate-initialization-commit"),
         expectedAbsence: [{ code: 1, stderrIncludes: "" }]
       });
-      if (observed.absent) return contract("initialization-commit-missing");
-      const resolved = new TextDecoder("utf-8", { fatal: true }).decode(observed.stdout).trim();
+      if (observed2.absent) return contract("initialization-commit-missing");
+      const resolved = new TextDecoder("utf-8", { fatal: true }).decode(observed2.stdout).trim();
       if (resolved !== oid) return contract("initialization-commit-mismatch");
     } catch {
       return io3(request2, "validate-initialization-commit");
@@ -40694,8 +40749,8 @@ async function commitCurrentAuthorizedAction(services2) {
     if (next.code === "commit-phase") {
       const changed = await readChangedGitPaths(services2.runner);
       const authorized = new Set(sortedPaths2);
-      const observed = [...new Set(changed.paths.filter((path2) => authorized.has(path2)))].sort();
-      if (JSON.stringify(observed) !== JSON.stringify(sortedPaths2)) {
+      const observed2 = [...new Set(changed.paths.filter((path2) => authorized.has(path2)))].sort();
+      if (JSON.stringify(observed2) !== JSON.stringify(sortedPaths2)) {
         return fail24(services2, "commit-staged-paths-mismatch");
       }
     }

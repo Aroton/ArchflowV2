@@ -37,7 +37,7 @@ import { deriveNextAction, type NextAction } from "./next-action.js";
 import { buildNextActionRequest } from "./request-templates.js";
 import { expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject, produceUpstreamBindingsForSubject } from "./produce-subject.js";
 import type { CurrentProduceSubject } from "./produce-subject.js";
-import { designArtifactCommittedAtCurrentTarget, implementationOutputCommittedAtCurrentTarget } from "./implementation-manifest.js";
+import { designArtifactCommittedAtCurrentTarget, implementationOutputCommittedAtCurrentTarget, type DesignMilestoneMiss } from "./implementation-manifest.js";
 import { phaseStatusResources, type StatusResource } from "./phase-documents.js";
 import { inspectWorkspaceCleanup, type WorkspaceCleanupReport } from "./workspace-cleanup.js";
 import { discoverReconciliationInput } from "./reconciliation-discovery.js";
@@ -778,6 +778,7 @@ export async function computeTaskStatus(
   }
 
   let commitObserved = false;
+  let commitBlockedReason: DesignMilestoneMiss | undefined;
   let implementationCommit: Readonly<{
     paths: readonly string[];
     message: string;
@@ -834,18 +835,25 @@ export async function computeTaskStatus(
         baseline_commit: authenticated.request.context.baseline_commit,
       });
       try {
-        commitObserved = await designArtifactCommittedAtCurrentTarget(
+        const observation = await designArtifactCommittedAtCurrentTarget(
           dependencies.runner,
           state.task_id,
           produceSubject.artifact,
           produceSubject.retained.prepared.manifest.value.outputs,
           authenticated.request.context,
         );
+        commitObserved = observation.observed;
+        if (!observation.observed && observation.blocking) {
+          commitBlockedReason = observation.reason;
+          blockers.push(`design-milestone-${observation.reason}`);
+        }
       } catch {
         blockers.push("commit-observation-unavailable");
       }
     }
-    const migration = authenticatedApprovals.find((item) =>
+    // Only consulted when the design-approval arm above did not already prove the milestone; a
+    // migration audit for the same subject must not overwrite an observed commit with its own miss.
+    const migration = commitObserved ? undefined : authenticatedApprovals.find((item) =>
       item.request.kind === "migration-audit" &&
       item.request.phase_instance === state.phase_instance &&
       item.request.subject_digest === produceSubject!.artifact_digest &&
@@ -863,7 +871,7 @@ export async function computeTaskStatus(
         baseline_commit: migration.request.context.baseline_commit,
       });
       try {
-        commitObserved = await designArtifactCommittedAtCurrentTarget(
+        const observation = await designArtifactCommittedAtCurrentTarget(
           dependencies.runner,
           state.task_id,
           produceSubject.artifact,
@@ -877,6 +885,11 @@ export async function computeTaskStatus(
             }),
           },
         );
+        commitObserved = observation.observed;
+        if (!observation.observed && observation.blocking) {
+          commitBlockedReason = observation.reason;
+          blockers.push(`design-milestone-${observation.reason}`);
+        }
       } catch {
         blockers.push("commit-observation-unavailable");
       }
@@ -1093,6 +1106,7 @@ export async function computeTaskStatus(
     ...(subjectDigest === undefined ? {} : { subject_digest: subjectDigest }),
     authenticated_approvals: approvalFacts,
     commit_observed: commitObserved,
+    ...(commitBlockedReason === undefined ? {} : { commit_blocked_reason: commitBlockedReason }),
     ...(designCommit === undefined ? {} : { design_commit: designCommit }),
     ...(implementationCommit === undefined ? {} : { implementation_commit: implementationCommit }),
     ...(adjudicationGateKind === undefined ? {} : { adjudication_gate_kind: adjudicationGateKind }),

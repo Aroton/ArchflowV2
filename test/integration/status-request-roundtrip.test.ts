@@ -8,7 +8,7 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -511,6 +511,19 @@ describe("status-derived requests execute against the real handlers", () => {
       });
       const approvedRevision = approved.revision;
       expect(approvedRevision).toBeDefined();
+
+      // A task document nobody approved — the shape a backward restart used to leave behind — is
+      // named before the milestone commit sweeps it in, while the commit can still be made to
+      // succeed. Offering `commit-artifacts` here would produce an unrecognizable commit that can
+      // never be retried, because the local commit path requires HEAD to still be the baseline.
+      const strayDocument = join(fixture.root, ".archflow", "tasks", task, "phases", "1", "impl-notes.md");
+      mkdirSync(dirname(strayDocument), { recursive: true });
+      writeFileSync(strayDocument, "# Superseded attempt\n");
+      const stray = await h.status();
+      expect(stray.blocking_reasons).toContain("design-milestone-unauthorized-task-document");
+      expect(stray.next_action).toMatchObject({ code: "inspect-state", human_required: true });
+      rmSync(strayDocument);
+      expect((await h.status()).next_action).toMatchObject({ code: "commit-artifacts" });
 
       git(fixture.root, "add", "-A", "--", approved.next_action.commit_path!);
       git(

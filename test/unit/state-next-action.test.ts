@@ -127,6 +127,24 @@ describe("deriveNextAction", () => {
       .toEqual(cases.map(([expected]) => [expected, expected]));
   });
 
+  it("stops offering the design milestone commit once it can no longer succeed", () => {
+    const commitInput = {
+      state: state({ phase_instance: encodePhaseInstance({ kind: "design" }) }),
+      assessment: assessment("advance"),
+      authenticated_approvals: [{ gate_kind: "design-approval" as const, subject_digest: D("a") }],
+      design_commit: designCommit,
+    };
+    expect(deriveNextAction(input(commitInput)).code).toBe("commit-artifacts");
+    // The commit action requires the target to still be the approved baseline, so once the
+    // milestone exists but cannot be recognized, re-offering it would loop forever.
+    const blocked = deriveNextAction(input({
+      ...commitInput,
+      commit_blocked_reason: "unauthorized-task-document",
+    }));
+    expect(blocked).toMatchObject({ code: "inspect-state", human_required: true });
+    expect(blocked.detail).toMatch(/running it again cannot resolve this/u);
+  });
+
   it("routes an editorial revision to the produce step with revision-intent wording", () => {
     const editorial = deriveNextAction(input({
       assessment: { ...assessment("produce"), editorial_revision_required: true },

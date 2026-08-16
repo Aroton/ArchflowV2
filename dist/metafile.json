@@ -6054,7 +6054,7 @@
       ]
     },
     "src/mcp/handlers/state.ts": {
-      "bytes": 17963,
+      "bytes": 17985,
       "format": "esm",
       "imports": [
         {
@@ -6467,7 +6467,7 @@
       ]
     },
     "src/repository/git.ts": {
-      "bytes": 24064,
+      "bytes": 24373,
       "format": "esm",
       "imports": [
         {
@@ -6545,7 +6545,7 @@
       ]
     },
     "src/repository/paths.ts": {
-      "bytes": 39461,
+      "bytes": 40137,
       "format": "esm",
       "imports": [
         {
@@ -7532,7 +7532,7 @@
       ]
     },
     "src/state/implementation-manifest.ts": {
-      "bytes": 44324,
+      "bytes": 46918,
       "format": "esm",
       "imports": [
         {
@@ -7853,7 +7853,7 @@
       ]
     },
     "src/state/next-action.ts": {
-      "bytes": 15173,
+      "bytes": 16085,
       "format": "esm",
       "imports": [
         {
@@ -8366,7 +8366,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 59692,
+      "bytes": 60582,
       "format": "esm",
       "imports": [
         {
@@ -8522,7 +8522,7 @@
       ]
     },
     "src/state/transaction.ts": {
-      "bytes": 56904,
+      "bytes": 57398,
       "format": "esm",
       "imports": [
         {
@@ -8690,7 +8690,7 @@
       ]
     },
     "src/state/workspace-cleanup.ts": {
-      "bytes": 19035,
+      "bytes": 21872,
       "format": "esm",
       "imports": [
         {
@@ -8748,7 +8748,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1664509,
+      "bytes": 1666908,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -9753,7 +9753,7 @@
           "bytesInOutput": 531
         },
         "src/contracts/durable.ts": {
-          "bytesInOutput": 32191
+          "bytesInOutput": 32193
         },
         "src/contracts/errors.ts": {
           "bytesInOutput": 16039
@@ -9762,7 +9762,7 @@
           "bytesInOutput": 2125
         },
         "src/contracts/fingerprints.ts": {
-          "bytesInOutput": 7493
+          "bytesInOutput": 7497
         },
         "src/contracts/gates.ts": {
           "bytesInOutput": 17586
@@ -9858,7 +9858,7 @@
           "bytesInOutput": 13233
         },
         "src/local/commit.ts": {
-          "bytesInOutput": 3638
+          "bytesInOutput": 3640
         },
         "src/local/gate-preview.ts": {
           "bytesInOutput": 4605
@@ -9870,16 +9870,16 @@
           "bytesInOutput": 4461
         },
         "src/repository/git.ts": {
-          "bytesInOutput": 15079
+          "bytesInOutput": 15186
         },
         "src/repository/identity.ts": {
-          "bytesInOutput": 5762
+          "bytesInOutput": 5766
         },
         "src/repository/index-entries.ts": {
           "bytesInOutput": 2782
         },
         "src/repository/paths.ts": {
-          "bytesInOutput": 17605
+          "bytesInOutput": 17935
         },
         "src/review/adjudication.ts": {
           "bytesInOutput": 3838
@@ -9897,10 +9897,10 @@
           "bytesInOutput": 2725
         },
         "src/state/constitution.ts": {
-          "bytesInOutput": 5024
+          "bytesInOutput": 5027
         },
         "src/state/document-artifact.ts": {
-          "bytesInOutput": 5798
+          "bytesInOutput": 5812
         },
         "src/state/evidence-results.ts": {
           "bytesInOutput": 6159
@@ -9927,10 +9927,10 @@
           "bytesInOutput": 0
         },
         "src/state/implementation-manifest.ts": {
-          "bytesInOutput": 35498
+          "bytesInOutput": 36522
         },
         "src/state/initialization.ts": {
-          "bytesInOutput": 9055
+          "bytesInOutput": 9058
         },
         "src/state/layout.ts": {
           "bytesInOutput": 4538
@@ -9945,7 +9945,7 @@
           "bytesInOutput": 2300
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 9174
+          "bytesInOutput": 9435
         },
         "src/state/phase-documents.ts": {
           "bytesInOutput": 4683
@@ -9954,7 +9954,7 @@
           "bytesInOutput": 7406
         },
         "src/state/production.ts": {
-          "bytesInOutput": 12725
+          "bytesInOutput": 12734
         },
         "src/state/read.ts": {
           "bytesInOutput": 2453
@@ -9963,7 +9963,7 @@
           "bytesInOutput": 7999
         },
         "src/state/reconciliation.ts": {
-          "bytesInOutput": 5856
+          "bytesInOutput": 5858
         },
         "src/state/request-templates.ts": {
           "bytesInOutput": 11228
@@ -9975,13 +9975,13 @@
           "bytesInOutput": 4541
         },
         "src/state/snapshots.ts": {
-          "bytesInOutput": 22430
+          "bytesInOutput": 22435
         },
         "src/state/staged-requests.ts": {
           "bytesInOutput": 1353
         },
         "src/state/status.ts": {
-          "bytesInOutput": 39441
+          "bytesInOutput": 40070
         },
         "src/state/transitions.ts": {
           "bytesInOutput": 982
@@ -9995,7 +9995,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2529427,
+      "bytes": 2532760,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -10993,7 +10993,7 @@
           "bytesInOutput": 531
         },
         "src/contracts/durable.ts": {
-          "bytesInOutput": 32206
+          "bytesInOutput": 32208
         },
         "src/contracts/errors.ts": {
           "bytesInOutput": 17560
@@ -11143,7 +11143,7 @@
           "bytesInOutput": 2638
         },
         "src/mcp/handlers/counter-review.ts": {
-          "bytesInOutput": 14222
+          "bytesInOutput": 14226
         },
         "src/mcp/handlers/errors.ts": {
           "bytesInOutput": 908
@@ -11161,10 +11161,10 @@
           "bytesInOutput": 2447
         },
         "src/mcp/handlers/state-results.ts": {
-          "bytesInOutput": 12288
+          "bytesInOutput": 12296
         },
         "src/mcp/handlers/state.ts": {
-          "bytesInOutput": 14337
+          "bytesInOutput": 14359
         },
         "src/mcp/handlers/waiver.ts": {
           "bytesInOutput": 5226
@@ -11185,22 +11185,22 @@
           "bytesInOutput": 11467
         },
         "src/repository/git.ts": {
-          "bytesInOutput": 15081
+          "bytesInOutput": 15188
         },
         "src/repository/identity.ts": {
-          "bytesInOutput": 5762
+          "bytesInOutput": 5766
         },
         "src/repository/index-entries.ts": {
           "bytesInOutput": 2782
         },
         "src/repository/paths.ts": {
-          "bytesInOutput": 17479
+          "bytesInOutput": 17809
         },
         "src/review/adjudication.ts": {
           "bytesInOutput": 1886
         },
         "src/review/counter-review.ts": {
-          "bytesInOutput": 9655
+          "bytesInOutput": 9660
         },
         "src/review/envelopes.ts": {
           "bytesInOutput": 15997
@@ -11221,7 +11221,7 @@
           "bytesInOutput": 2725
         },
         "src/state/constitution.ts": {
-          "bytesInOutput": 3362
+          "bytesInOutput": 3365
         },
         "src/state/evidence-results.ts": {
           "bytesInOutput": 15350
@@ -11254,10 +11254,10 @@
           "bytesInOutput": 59727
         },
         "src/state/implementation-manifest.ts": {
-          "bytesInOutput": 21020
+          "bytesInOutput": 22040
         },
         "src/state/initialization.ts": {
-          "bytesInOutput": 21858
+          "bytesInOutput": 21866
         },
         "src/state/layout.ts": {
           "bytesInOutput": 6966
@@ -11281,7 +11281,7 @@
           "bytesInOutput": 11248
         },
         "src/state/production.ts": {
-          "bytesInOutput": 12717
+          "bytesInOutput": 12726
         },
         "src/state/read.ts": {
           "bytesInOutput": 2453
@@ -11293,22 +11293,22 @@
           "bytesInOutput": 4541
         },
         "src/state/snapshots.ts": {
-          "bytesInOutput": 26321
+          "bytesInOutput": 26326
         },
         "src/state/staged-requests.ts": {
           "bytesInOutput": 3568
         },
         "src/state/transaction.ts": {
-          "bytesInOutput": 42839
+          "bytesInOutput": 43106
         },
         "src/state/transitions.ts": {
-          "bytesInOutput": 17942
+          "bytesInOutput": 17946
         },
         "src/state/waiver-origin.ts": {
           "bytesInOutput": 1204
         },
         "src/state/workspace-cleanup.ts": {
-          "bytesInOutput": 14136
+          "bytesInOutput": 15671
         }
       }
     }

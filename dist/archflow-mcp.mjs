@@ -38468,6 +38468,14 @@ function classifyIn(rules2, claim) {
   for (const rule4 of rules2) if (rule4.pattern.test(claim)) return rule4.path_class;
   return void 0;
 }
+var DOCUMENT_RULE = (() => {
+  const rule4 = TASK_CLASS_RULES.find((entry) => entry.path_class === "document");
+  if (rule4 === void 0) throw new TypeError("the task path table lost its document rule");
+  return rule4;
+})();
+function isTaskDocumentPath(taskRelativePath) {
+  return DOCUMENT_RULE.pattern.test(taskRelativePath);
+}
 function classifyTaskPath(taskId, claim) {
   const matched = classifyIn(TASK_CLASS_RULES, claim);
   if (matched === void 0) return fail2(pathInvalid(taskId, void 0));
@@ -38944,9 +38952,15 @@ async function hashGitBlobIdentity(runner, bytes, path2) {
   if (!GIT_OID.test(oid)) throw new TypeError("git hash-object returned an invalid SHA-1 object id");
   return Object.freeze({ oid, size_bytes: await readGitBlobSize(runner, oid) });
 }
-async function readChangedGitPaths(runner) {
+async function readChangedGitPaths(runner, pathspecs = []) {
   const result = await runner.run({
-    argv: ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+    argv: [
+      "status",
+      "--porcelain=v1",
+      "-z",
+      "--untracked-files=all",
+      ...pathspecs.length === 0 ? [] : ["--", ...pathspecs]
+    ],
     operation: "git-status-declared-scope"
   });
   const fields = [];
@@ -39297,12 +39311,12 @@ async function resolveRepositoryIdentity(runner, environment, context2) {
     throw error51;
   }
 }
-function verifyRepositoryIdentity(expected, observed) {
-  if (expected === observed.digest) return ok3(observed);
+function verifyRepositoryIdentity(expected, observed2) {
+  if (expected === observed2.digest) return ok3(observed2);
   return fail4(
     createProjectError("REPOSITORY_MISMATCH", {
       expected_digest: expected,
-      observed_digest: observed.digest
+      observed_digest: observed2.digest
     })
   );
 }
@@ -40189,7 +40203,7 @@ async function readConstitutionTreeFiles(runner, commit) {
     oid: parseGitOid(entry.oid)
   })).sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
 }
-function invalidPolicyBase(policyBaseCommit, observed) {
+function invalidPolicyBase(policyBaseCommit, observed2) {
   const expected = canonicalJsonDigest({
     schema_version: "1",
     digest_kind: "policy-base-commit",
@@ -40197,7 +40211,7 @@ function invalidPolicyBase(policyBaseCommit, observed) {
   });
   return createProjectError("POLICY_BASE_INVALID", {
     expected_digest: expected,
-    ...observed === void 0 ? {} : { observed_digest: observed }
+    ...observed2 === void 0 ? {} : { observed_digest: observed2 }
   });
 }
 async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
@@ -45880,8 +45894,8 @@ function validateDurableSemantics(subject) {
     const stepped = artifact === void 0 ? void 0 : durableSteppedPayload(artifact);
     if (stepped !== void 0 && stepped.phase_instance === state.phase_instance && stepped.step === state.step && stepped.input_fingerprint !== state.input_fingerprint) {
       const expected = state.input_fingerprint;
-      const observed = stepped.input_fingerprint;
-      return fail7(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest: expected, observed_digest: observed }));
+      const observed2 = stepped.input_fingerprint;
+      return fail7(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest: expected, observed_digest: observed2 }));
     }
   }
   if (relation !== void 0 && receipt !== void 0 && intentState !== void 0) {
@@ -46080,59 +46094,80 @@ async function implementationOutputCommittedAtCurrentTarget(runner, output, cont
   }
   return await resolveCommit(runner, "HEAD") === headCommit && await resolveCommit(runner, context2.target_ref) === headCommit;
 }
+var observed = Object.freeze({ observed: true });
+function missed(reason2, paths) {
+  return Object.freeze({
+    observed: false,
+    reason: reason2,
+    blocking: reason2 !== "not-committed",
+    ...paths === void 0 ? {} : { paths: Object.freeze([...paths]) }
+  });
+}
 async function designArtifactCommittedAtCurrentTarget(runner, taskId, artifact, outputs, context2) {
   const symbolicRef = await runner.runText({
     argv: ["symbolic-ref", "--quiet", "HEAD"],
     operation: "git-current-design-target",
     expectedAbsence: [{ code: 1, stderrIncludes: "" }]
   });
-  if (context2.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== context2.target_ref) return false;
+  if (context2.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== context2.target_ref) {
+    return missed("target-moved");
+  }
   const head = await resolveCommit(runner, "HEAD");
-  if (await resolveCommit(runner, context2.target_ref) !== head) return false;
-  if (head === context2.baseline_commit) return false;
-  if (await resolveCommit(runner, `${head}^`) !== context2.baseline_commit) return false;
-  const message = await runner.runText({
-    argv: ["log", "-1", "--format=%s", head],
-    operation: "git-design-commit-message"
-  });
-  if (message !== context2.commit_message) return false;
+  if (await resolveCommit(runner, context2.target_ref) !== head) return missed("target-moved");
   const prefix = `.archflow/tasks/${taskId}/`;
-  const changed = await runner.runNulFields({
-    argv: ["diff-tree", "--no-commit-id", "--name-only", "-z", "-r", context2.baseline_commit, head, "--"],
-    operation: "git-design-commit-paths"
-  });
-  if (changed.length === 0 || changed.some((path2) => !path2.startsWith(prefix))) return false;
-  if (!changed.includes(`${prefix}state.json`)) return false;
-  if (!changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/request.json")) || !changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/decision.json"))) return false;
   const additional = artifact.additional_documents ?? [];
   const approvedDocumentPaths = /* @__PURE__ */ new Set([
     artifact.projection_target,
     ...additional.map((entry) => entry.projection_target)
   ]);
-  for (const path2 of approvedDocumentPaths) {
-    const output = outputs.find((entry) => entry.path === path2);
-    if (output === void 0 || output.operation === "delete") return false;
-    const committed2 = await readCommitTreeBlob(runner, head, path2);
-    if (committed2?.mode !== output.after.mode || committed2.oid !== output.after.oid) return false;
-    const baseline = await readCommitTreeBlob(runner, context2.baseline_commit, path2);
-    const differsFromBaseline = baseline?.mode !== output.after.mode || baseline.oid !== output.after.oid;
-    if (differsFromBaseline && !changed.includes(path2)) return false;
-  }
   const authorizedDocumentPaths = /* @__PURE__ */ new Set([
     ...approvedDocumentPaths,
     ...context2.authorized_document_paths ?? []
   ]);
-  const taskDocumentPath = /^(?:prd\.md|design\.md|phases\/[1-9][0-9]*\/(?:design|impl-notes)\.md)$/u;
-  if (changed.some((path2) => {
-    const taskRelative = path2.startsWith(prefix) ? path2.slice(prefix.length) : path2;
-    return taskDocumentPath.test(taskRelative) && !authorizedDocumentPaths.has(path2);
-  })) return false;
-  const dirty = await runner.runNulFields({
-    argv: ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", prefix.slice(0, -1)],
-    operation: "git-design-task-clean"
+  const unauthorizedDocuments = (paths) => paths.filter((path2) => path2.startsWith(prefix) && isTaskDocumentPath(path2.slice(prefix.length)) && !authorizedDocumentPaths.has(path2));
+  if (head === context2.baseline_commit) {
+    const pending = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
+    const unauthorized2 = unauthorizedDocuments(pending.paths);
+    if (unauthorized2.length > 0) return missed("unauthorized-task-document", unauthorized2);
+    return missed("not-committed");
+  }
+  if (await resolveCommit(runner, `${head}^`) !== context2.baseline_commit) {
+    return missed("parent-not-baseline");
+  }
+  const message = await runner.runText({
+    argv: ["log", "-1", "--format=%s", head],
+    operation: "git-design-commit-message"
   });
-  if (dirty.length !== 0) return false;
-  return await resolveCommit(runner, "HEAD") === head && await resolveCommit(runner, context2.target_ref) === head;
+  if (message !== context2.commit_message) return missed("message-mismatch");
+  const changed = await runner.runNulFields({
+    argv: ["diff-tree", "--no-commit-id", "--name-only", "-z", "-r", context2.baseline_commit, head, "--"],
+    operation: "git-design-commit-paths"
+  });
+  if (changed.length === 0) return missed("paths-outside-task");
+  const outsideTask = changed.filter((path2) => !path2.startsWith(prefix));
+  if (outsideTask.length > 0) return missed("paths-outside-task", outsideTask);
+  if (!changed.includes(`${prefix}state.json`)) return missed("missing-recovery-authority");
+  if (!changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/request.json")) || !changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/decision.json"))) {
+    return missed("missing-recovery-authority");
+  }
+  for (const path2 of approvedDocumentPaths) {
+    const output = outputs.find((entry) => entry.path === path2);
+    if (output === void 0 || output.operation === "delete") return missed("approved-document-mismatch", [path2]);
+    const committed2 = await readCommitTreeBlob(runner, head, path2);
+    if (committed2?.mode !== output.after.mode || committed2.oid !== output.after.oid) {
+      return missed("approved-document-mismatch", [path2]);
+    }
+    const baseline = await readCommitTreeBlob(runner, context2.baseline_commit, path2);
+    const differsFromBaseline = baseline?.mode !== output.after.mode || baseline.oid !== output.after.oid;
+    if (differsFromBaseline && !changed.includes(path2)) return missed("approved-document-mismatch", [path2]);
+  }
+  const unauthorized = unauthorizedDocuments(changed);
+  if (unauthorized.length > 0) return missed("unauthorized-task-document", unauthorized);
+  const dirty = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
+  if (dirty.paths.length !== 0 || dirty.unrepresentable_count !== 0) {
+    return missed("task-tree-dirty", dirty.paths);
+  }
+  return await resolveCommit(runner, "HEAD") === head && await resolveCommit(runner, context2.target_ref) === head ? observed : missed("target-moved");
 }
 var ordinal5 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 function ownEnumerableData(value, key) {
@@ -46201,8 +46236,8 @@ function deriveWorktreeIdentityDigest(entries, undeclaredChanges) {
     undeclared_changes: undeclaredChanges
   });
 }
-function sameIdentity(observed, expected) {
-  return observed.state === "present" && observed.oid === expected.oid && observed.mode === expected.mode && observed.size_bytes === expected.size_bytes;
+function sameIdentity(observed2, expected) {
+  return observed2.state === "present" && observed2.oid === expected.oid && observed2.mode === expected.mode && observed2.size_bytes === expected.size_bytes;
 }
 async function observePath(runner, resolved) {
   const lexicalPath = resolvePath4(runner.location.worktreeRoot, resolved.repositoryRelative);
@@ -46360,17 +46395,17 @@ async function verifyImplementationManifest(runner, supplied, context2, supplied
     throw new TypeError("undeclared change report does not match the live Git working set");
   }
   const resolved = await resolveAll(runner, output, context2);
-  const observed = /* @__PURE__ */ new Map();
+  const observed2 = /* @__PURE__ */ new Map();
   for (const path2 of scope3) {
     const target2 = resolved.get(path2);
     if (target2 === void 0) throw new TypeError("declared scope path was not resolved");
-    observed.set(path2, await observePath(runner, target2));
+    observed2.set(path2, await observePath(runner, target2));
   }
   const ancestryRetained = await isCommitAncestorOfHead(runner, output.base_commit);
   const rawPayloads = /* @__PURE__ */ new Map();
   const snapshot = /* @__PURE__ */ new Map();
   for (const entry of output.outputs) {
-    const after = observed.get(entry.path);
+    const after = observed2.get(entry.path);
     if (after === void 0) throw new TypeError("missing output observation");
     const beforePath = entry.operation === "rename" ? entry.previous_path : entry.path;
     const currentBefore = currentSources.get(beforePath);
@@ -46389,7 +46424,7 @@ async function verifyImplementationManifest(runner, supplied, context2, supplied
         throw new TypeError("delete identity does not match base/worktree state");
       }
     } else {
-      const previous = observed.get(entry.previous_path)?.observation;
+      const previous = observed2.get(entry.previous_path)?.observation;
       if (before === void 0 || destinationBefore !== void 0 || previous?.state !== "absent" || !sameIdentity(after.observation, entry.after) || before.oid !== entry.before.oid || before.mode !== entry.before.mode || before.size_bytes !== entry.before.size_bytes) {
         throw new TypeError("rename identity or non-overwrite condition does not match base/worktree state");
       }
@@ -46416,8 +46451,8 @@ async function verifyImplementationManifest(runner, supplied, context2, supplied
     }
     snapshot.set(entry.path, after.observation);
   }
-  const worktreeEntries = Object.freeze(scope3.map((path2) => observed.get(path2)?.observation));
-  const snapshotEntries = Object.freeze(scope3.map((path2) => snapshot.get(path2) ?? observed.get(path2)?.observation));
+  const worktreeEntries = Object.freeze(scope3.map((path2) => observed2.get(path2)?.observation));
+  const snapshotEntries = Object.freeze(scope3.map((path2) => snapshot.get(path2) ?? observed2.get(path2)?.observation));
   const indexResult = await readIndexEntries(runner, scope3, context2);
   if (!indexResult.ok) throw indexResult.error;
   const byIndexPath = new Map(indexResult.value.map((entry) => [entry.path, entry]));
@@ -46851,7 +46886,7 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
   }
   const entries = [];
   for (const source of materialized) {
-    const observed = await observe(source.target);
+    const observed2 = await observe(source.target);
     if (source.authenticated_before.state === "present") {
       if (source.rollback === void 0 || !isDeepStrictEqual6(desiredObservation(source.rollback), source.authenticated_before)) {
         throw new TypeError("present authenticated before-image requires matching rollback bytes");
@@ -46859,13 +46894,13 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
     } else if (source.rollback !== void 0 && source.rollback.state !== "absent") {
       throw new TypeError("absent authenticated before-image cannot carry present rollback bytes");
     }
-    const exact = isDeepStrictEqual6(observed, desiredObservation(source.desired));
-    const before = isDeepStrictEqual6(observed, source.authenticated_before);
-    const renameDestinationBlocked = source.rename_pair?.role === "destination" && observed.state !== "absent" && !exact;
+    const exact = isDeepStrictEqual6(observed2, desiredObservation(source.desired));
+    const before = isDeepStrictEqual6(observed2, source.authenticated_before);
+    const renameDestinationBlocked = source.rename_pair?.role === "destination" && observed2.state !== "absent" && !exact;
     entries.push(Object.freeze({
       path: source.path,
       target: source.target,
-      observed_before: observed,
+      observed_before: observed2,
       desired: source.desired,
       ...source.rollback === void 0 ? {} : { rollback: source.rollback },
       git_tracked: source.git_tracked,
@@ -47110,13 +47145,13 @@ async function createProductionServices(input) {
     context: provisionalContext
   });
   if (!provisionalAuthority.ok) return provisionalAuthority;
-  const observed = await readTaskState(provisionalAuthority.value.state);
-  if (observed.kind === "unreadable") {
+  const observed2 = await readTaskState(provisionalAuthority.value.state);
+  if (observed2.kind === "unreadable") {
     return fail10(createProjectError("IO_ERROR", { operation: input.operation, attempt: provisionalContext.attempt }));
   }
-  if (observed.kind === "noncanonical") return stateFailure(provisionalPhase, "task-state-noncanonical");
-  const resolvedContext = observed.kind === "canonical" ? context(input, observed.document.value.phase_instance, observed.document.value.attempt) : provisionalContext;
-  const authorityResult = observed.kind === "canonical" ? await createInternalTransactionAuthority({
+  if (observed2.kind === "noncanonical") return stateFailure(provisionalPhase, "task-state-noncanonical");
+  const resolvedContext = observed2.kind === "canonical" ? context(input, observed2.document.value.phase_instance, observed2.document.value.attempt) : provisionalContext;
+  const authorityResult = observed2.kind === "canonical" ? await createInternalTransactionAuthority({
     runner: discovered.value,
     environment: environment.value,
     task_id: input.task_id,
@@ -47185,7 +47220,7 @@ async function createProductionServices(input) {
     runner: discovered.value,
     environment: environment.value,
     authority,
-    ...observed.kind === "canonical" ? { state: observed.document } : {},
+    ...observed2.kind === "canonical" ? { state: observed2.document } : {},
     dependencies
   }));
 }
@@ -59920,6 +59955,39 @@ async function cleanTaskWorkspace(dependencies, authority, state) {
     return io2(authority, "clean-task-workspace");
   }
 }
+async function removeSupersededPhaseDocuments(dependencies, authority, targetPhaseInstance) {
+  const planning = /^phase-design-([1-9][0-9]*)$/u.exec(targetPhaseInstance);
+  const target2 = targetPhaseInstance === "prd" || targetPhaseInstance === "design" ? 0 : planning === null ? NaN : Number(planning[1]);
+  if (!Number.isInteger(target2)) return Object.freeze([]);
+  const prefix = `.archflow/tasks/${authority.task_id}/`;
+  const untracked = await dependencies.runner.runNulFields({
+    argv: [
+      "ls-files",
+      "--others",
+      "--exclude-standard",
+      "-z",
+      "--",
+      `:(top,literal)${prefix}phases`
+    ],
+    operation: "git-restart-superseded-documents"
+  });
+  const removed = [];
+  for (const path2 of untracked) {
+    if (!path2.startsWith(prefix)) continue;
+    const relative7 = path2.slice(prefix.length);
+    const document2 = /^phases\/([1-9][0-9]*)\/(design|impl-notes)\.md$/u.exec(relative7);
+    if (document2 === null) continue;
+    const phase3 = Number(document2[1]);
+    const superseded = document2[2] === "impl-notes" ? phase3 >= target2 : phase3 > target2;
+    if (!superseded) continue;
+    const absolute = join7(authority.task_root, ...relative7.split("/"));
+    if (!inside(authority.task_root, absolute)) throw new TypeError("superseded document escaped its task root");
+    await unlink2(absolute).catch(() => void 0);
+    await removeEmptyParents(dirname4(absolute), join7(authority.task_root, "phases"));
+    removed.push(relative7);
+  }
+  return Object.freeze(removed.sort());
+}
 async function cleanTerminalTaskWorkspace(dependencies, authority) {
   const target2 = await cleanupTarget(dependencies, authority);
   if (!target2.ok) return target2;
@@ -60576,6 +60644,10 @@ async function installResultFacts(dependencies, authority, current, facts, repla
 }
 async function cleanupCommittedWorkspace(dependencies, authority, committed2) {
   try {
+    const restart = (committed2.restart_history ?? []).find((record2) => record2.restarted_at_revision === committed2.revision);
+    if (restart !== void 0) {
+      await removeSupersededPhaseDocuments(dependencies, authority, restart.to_phase_instance);
+    }
     await cleanTaskWorkspace(dependencies, authority, committed2);
   } catch {
   }
@@ -60643,14 +60715,14 @@ async function installPlan(dependencies, request, intentPath, current, plan, rec
     }
     return io3(request.authority, "task-state-replace");
   }
-  const observed = await dependencies.read_state(request.authority.state);
-  if (observed.kind !== "canonical") {
-    return observed.kind === "missing" ? issue3("CONTRACT_INVALID", "transaction-outcome-ambiguous") : stateIssue2(current.value, "transaction-outcome-ambiguous");
+  const observed2 = await dependencies.read_state(request.authority.state);
+  if (observed2.kind !== "canonical") {
+    return observed2.kind === "missing" ? issue3("CONTRACT_INVALID", "transaction-outcome-ambiguous") : stateIssue2(current.value, "transaction-outcome-ambiguous");
   }
-  const committed2 = validateDurableSemantics(createCommittedIntentSubject(observed.document, plan.receipt));
+  const committed2 = validateDurableSemantics(createCommittedIntentSubject(observed2.document, plan.receipt));
   if (!committed2.ok) return committed2;
-  await cleanupCommittedWorkspace(dependencies, request.authority, observed.document.value);
-  return outcomeResult(observed.document, plan.outcome, false);
+  await cleanupCommittedWorkspace(dependencies, request.authority, observed2.document.value);
+  return outcomeResult(observed2.document, plan.outcome, false);
 }
 async function handleExisting(dependencies, request, intentPath, current, receipt, onPlan) {
   const local = validateReceiptLocally(receipt);
@@ -60906,13 +60978,13 @@ function invalid(input, from, to) {
     })
   });
 }
-function fingerprintFailure(expected, observed) {
+function fingerprintFailure(expected, observed2) {
   return Object.freeze({
     schema_version: "1",
     ok: false,
     error: createProjectError("INPUT_FINGERPRINT_MISMATCH", {
       expected_digest: expected,
-      observed_digest: observed
+      observed_digest: observed2
     })
   });
 }
@@ -61073,7 +61145,7 @@ function pendingHumanRevisionMatches(input) {
   if (input.current.attempt !== pending.attempt) return false;
   if (input.target.status !== "succeeded") return declaration === void 0;
   if (declaration === void 0 || input.result_reference === void 0 || input.resulting_subject_digest === void 0 || input.resulting_subject_digest === pending.predecessor_subject_digest) return false;
-  return pending.evidence.every((expected) => input.current.authoritative_results.some((observed) => isDeepStrictEqual10(expected, observed)));
+  return pending.evidence.every((expected) => input.current.authoritative_results.some((observed2) => isDeepStrictEqual10(expected, observed2)));
 }
 function withResultReference(current, reference) {
   if (reference === void 0) return current;
@@ -62084,7 +62156,7 @@ async function runCounterReview(dependencies, input) {
       })
     };
   }
-  const observed = mintReviewObservation({
+  const observed2 = mintReviewObservation({
     subject,
     adapter: route.adapter,
     cli_version: dispatched.cli_version,
@@ -62093,7 +62165,7 @@ async function runCounterReview(dependencies, input) {
     extracted_output_bytes: dispatched.extracted_output_bytes
   });
   const prepared = await dependencies.prepare_evidence(
-    observed.evidence,
+    observed2.evidence,
     input.measured_at_revision
   );
   if (!prepared.ok) return prepared;
@@ -62101,7 +62173,7 @@ async function runCounterReview(dependencies, input) {
   let constitutionPrepared;
   const plan = input.constitution;
   if (plan !== void 0) {
-    const derivedSet = deriveEvidenceSetFromCounter(observed.evidence);
+    const derivedSet = deriveEvidenceSetFromCounter(observed2.evidence);
     const setDigest = derivedSet.current_evidence_set.set_digest;
     const constitutionRoute = resolveDispatchRoute(
       input.config,
@@ -62190,7 +62262,7 @@ async function runCounterReview(dependencies, input) {
       task_id: input.authority.task_id,
       intent_id: input.call.input.intent_id,
       request_digest: identified.request_digest,
-      review_evidence: observed.evidence,
+      review_evidence: observed2.evidence,
       constitution_evidence: summarizedConstitution,
       result_reference: prepared.value.reference,
       result_installation: installation,
@@ -62204,7 +62276,7 @@ async function runCounterReview(dependencies, input) {
     ok: true,
     value: Object.freeze({
       transaction: committed2.value,
-      evidence: observed.evidence,
+      evidence: observed2.evidence,
       ...constitutionEvidence === void 0 ? {} : { constitution_evidence: constitutionEvidence }
     })
   };
@@ -63810,13 +63882,13 @@ async function reobserveProjectionDigest(services, phaseInstance4, expectedArtif
     phase_instance: phaseInstance4,
     issue_code: "counter-review-subject-not-current"
   }));
-  const observed = await readProduceProjectionSet(
+  const observed2 = await readProduceProjectionSet(
     services.runner,
     services.authority,
     retained.value,
     artifactPath
   );
-  return observed.ok ? Object.freeze({ schema_version: "1", ok: true, value: produceProjectionSetDigest(observed.value) }) : observed;
+  return observed2.ok ? Object.freeze({ schema_version: "1", ok: true, value: produceProjectionSetDigest(observed2.value) }) : observed2;
 }
 async function handleCounterReview(call, context2) {
   return mapHandlerErrors(context2.invocation_id, async () => {
@@ -64246,13 +64318,13 @@ async function validateLiveInitialization(dependencies, request, initialization)
   const commits = initialization.artifact_kind === "task-initialization" ? [initialization.code_baseline_commit, initialization.policy_base_commit] : [initialization.import_baseline_commit, initialization.code_baseline_commit, initialization.policy_base_commit];
   for (const oid of new Set(commits)) {
     try {
-      const observed = await dependencies.runner.run({
+      const observed2 = await dependencies.runner.run({
         argv: ["rev-parse", "--verify", "--quiet", `${oid}^{commit}`],
         operation: parseSafeCode("validate-initialization-commit"),
         expectedAbsence: [{ code: 1, stderrIncludes: "" }]
       });
-      if (observed.absent) return contract("initialization-commit-missing");
-      const resolved = new TextDecoder("utf-8", { fatal: true }).decode(observed.stdout).trim();
+      if (observed2.absent) return contract("initialization-commit-missing");
+      const resolved = new TextDecoder("utf-8", { fatal: true }).decode(observed2.stdout).trim();
       if (resolved !== oid) return contract("initialization-commit-mismatch");
     } catch {
       return io4(request, "validate-initialization-commit");
@@ -64512,9 +64584,9 @@ async function executeLocked2(dependencies, request, path2) {
       }
       const installed = await installLegacyDestination(request, artifact, artifactDocument.bytes, final.bytes);
       if (!installed.ok) return installed;
-      const observed2 = await dependencies.read_state(request.authority.state);
-      if (observed2.kind !== "canonical" || observed2.document.digest !== final.digest) return contract("transaction-outcome-ambiguous");
-      return ok17(Object.freeze({ state: observed2.document, outcome, replayed: false }));
+      const observed3 = await dependencies.read_state(request.authority.state);
+      if (observed3.kind !== "canonical" || observed3.document.digest !== final.digest) return contract("transaction-outcome-ambiguous");
+      return ok17(Object.freeze({ state: observed3.document, outcome, replayed: false }));
     }
     await ensureAuthorityDirectory(request.authority);
     await ensureIntentDirectory(request.authority);
@@ -64547,17 +64619,17 @@ async function executeLocked2(dependencies, request, path2) {
   } catch (error51) {
     if (error51 instanceof IntentLayoutError) return io4(request, "intent-receipt-create");
     if (!(error51 instanceof AtomicReplaceError)) throw error51;
-    const observed2 = await dependencies.read_state(request.authority.state);
-    if (observed2.kind === "canonical" && observed2.document.digest === final.digest) {
-      return ok17(Object.freeze({ state: observed2.document, outcome, replayed: false }));
+    const observed3 = await dependencies.read_state(request.authority.state);
+    if (observed3.kind === "canonical" && observed3.document.digest === final.digest) {
+      return ok17(Object.freeze({ state: observed3.document, outcome, replayed: false }));
     }
-    if (observed2.kind === "missing") return io4(request, error51.operation === "replace" ? "task-state-replace" : "intent-receipt-create");
+    if (observed3.kind === "missing") return io4(request, error51.operation === "replace" ? "task-state-replace" : "intent-receipt-create");
     return contract("transaction-outcome-ambiguous");
   }
-  const observed = await dependencies.read_state(request.authority.state);
-  if (observed.kind !== "canonical" || observed.document.digest !== final.digest) return contract("transaction-outcome-ambiguous");
-  await cleanTaskWorkspace(dependencies, request.authority, observed.document.value).catch(() => void 0);
-  return ok17(Object.freeze({ state: observed.document, outcome, replayed: false }));
+  const observed2 = await dependencies.read_state(request.authority.state);
+  if (observed2.kind !== "canonical" || observed2.document.digest !== final.digest) return contract("transaction-outcome-ambiguous");
+  await cleanTaskWorkspace(dependencies, request.authority, observed2.document.value).catch(() => void 0);
+  return ok17(Object.freeze({ state: observed2.document, outcome, replayed: false }));
 }
 async function runStateInitialization(dependencies, request) {
   assertInternalTransactionAuthority(request.authority, { runner: dependencies.runner, environment: dependencies.environment });
@@ -64711,17 +64783,17 @@ async function payloadTarget(services, resultDigest, path2) {
   });
 }
 function scannerCapture(scanner) {
-  let observed;
+  let observed2;
   return {
     scanner: Object.freeze({
       scan: async (candidates) => {
-        observed = parseSecretScanResult(await scanner.scan(candidates));
-        return observed;
+        observed2 = parseSecretScanResult(await scanner.scan(candidates));
+        return observed2;
       }
     }),
     result: () => {
-      if (observed === void 0) throw new TypeError("projection scanner did not run");
-      return observed;
+      if (observed2 === void 0) throw new TypeError("projection scanner did not run");
+      return observed2;
     }
   };
 }
@@ -64919,9 +64991,9 @@ async function prepareImplementationResult(input) {
   const projections = [];
   for (const output of input.artifact.outputs) {
     if (output.operation === "delete") continue;
-    const observed = snapshotByPath.get(output.path);
-    if (observed?.state !== "present") return contractInvalid2("implementation-projection-identity-missing");
-    projections.push({ path: output.path, content_digest: observed.content_digest });
+    const observed2 = snapshotByPath.get(output.path);
+    if (observed2?.state !== "present") return contractInvalid2("implementation-projection-identity-missing");
+    projections.push({ path: output.path, content_digest: observed2.content_digest });
   }
   const manifestValue = {
     schema_version: "1",
@@ -65132,13 +65204,13 @@ async function handleState(call, context2) {
           if (designExit && currentProduce?.artifact.artifact_kind === "document") {
             for (const authenticated of authenticatedGateApprovals2) {
               if (authenticated.request.kind !== "design-approval") continue;
-              if (await designArtifactCommittedAtCurrentTarget(
+              if ((await designArtifactCommittedAtCurrentTarget(
                 services.runner,
                 current.value.task_id,
                 currentProduce.artifact,
                 currentProduce.retained.prepared.manifest.value.outputs,
                 authenticated.request.context
-              )) {
+              )).observed) {
                 commitObserved = true;
                 break;
               }
@@ -65194,7 +65266,7 @@ async function handleState(call, context2) {
               if (!loaded.ok) return loaded;
               authenticatedGateApprovals2.push(loaded.value);
               if (loaded.value.request.kind === "migration-audit" && loaded.value.request.context.target_ref !== void 0 && loaded.value.request.context.baseline_commit !== void 0 && loaded.value.request.context.commit_message !== void 0 && currentProduce?.artifact.artifact_kind === "document") {
-                commitObserved = await designArtifactCommittedAtCurrentTarget(
+                commitObserved = (await designArtifactCommittedAtCurrentTarget(
                   services.runner,
                   current.value.task_id,
                   currentProduce.artifact,
@@ -65207,7 +65279,7 @@ async function handleState(call, context2) {
                       authorized_document_paths: loaded.value.request.context.imported_documents.map((document2) => document2.path)
                     }
                   }
-                );
+                )).observed;
               }
             }
           }

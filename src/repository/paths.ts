@@ -362,6 +362,21 @@ function classifyIn<C extends string>(
   return undefined;
 }
 
+const DOCUMENT_RULE = ((): ClassRule<TaskPathClass> => {
+  const rule = TASK_CLASS_RULES.find((entry) => entry.path_class === "document");
+  if (rule === undefined) throw new TypeError("the task path table lost its document rule");
+  return rule;
+})();
+
+/**
+ * True when a path relative to `.archflow/tasks/<task-id>/` is one of the four reviewable task
+ * documents. Shares the single `document` rule above so a caller that must reason about reviewable
+ * documents outside the claim-parsing path cannot drift from the classification table.
+ */
+export function isTaskDocumentPath(taskRelativePath: string): boolean {
+  return DOCUMENT_RULE.pattern.test(taskRelativePath);
+}
+
 /** Classifies a claim rooted at `.archflow/tasks/<task-id>/` against the task-scoped table. */
 export function classifyTaskPath(
   taskId: TaskSlug,

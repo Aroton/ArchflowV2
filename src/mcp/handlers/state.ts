@@ -231,13 +231,13 @@ export async function handleState(
           ) {
             for (const authenticated of authenticatedGateApprovals) {
               if (authenticated.request.kind !== "design-approval") continue;
-              if (await designArtifactCommittedAtCurrentTarget(
+              if ((await designArtifactCommittedAtCurrentTarget(
                 services.runner,
                 current.value.task_id,
                 currentProduce.artifact,
                 currentProduce.retained.prepared.manifest.value.outputs,
                 authenticated.request.context,
-              )) {
+              )).observed) {
                 commitObserved = true;
                 break;
               }
@@ -311,7 +311,7 @@ export async function handleState(
                 loaded.value.request.context.commit_message !== undefined &&
                 currentProduce?.artifact.artifact_kind === "document"
               ) {
-                commitObserved = await designArtifactCommittedAtCurrentTarget(
+                commitObserved = (await designArtifactCommittedAtCurrentTarget(
                   services.runner,
                   current.value.task_id,
                   currentProduce.artifact,
@@ -324,7 +324,7 @@ export async function handleState(
                       authorized_document_paths: loaded.value.request.context.imported_documents.map((document) => document.path),
                     }),
                   },
-                );
+                )).observed;
               }
             }
           }

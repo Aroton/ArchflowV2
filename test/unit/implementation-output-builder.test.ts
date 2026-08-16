@@ -127,26 +127,50 @@ describe("implementation-output builder", () => {
     const discovered = await discoverWorktree(createGitRunner({ cwd: root }), operation);
     if (!discovered.ok) throw discovered.error;
 
-    await expect(designArtifactCommittedAtCurrentTarget(
+    const observe = () => designArtifactCommittedAtCurrentTarget(
       discovered.value, taskId, artifact, outputs, context,
-    )).resolves.toBe(false);
+    );
+
+    // Nothing committed yet: the miss is the one the authorized commit action can still resolve.
+    expect(await observe()).toEqual({ observed: false, reason: "not-committed", blocking: false });
+
+    // A superseded phase document left in the worktree is reported *before* the commit sweeps it in,
+    // while the commit action can still be made to succeed.
+    writeFileSync(join(taskRoot, "phases", "1", "impl-notes.md"), "# Abandoned attempt\n");
+    expect(await observe()).toEqual({
+      observed: false,
+      reason: "unauthorized-task-document",
+      blocking: true,
+      paths: [`${taskPath}/phases/1/impl-notes.md`],
+    });
+    rmSync(join(taskRoot, "phases", "1", "impl-notes.md"));
+
     writeFileSync(join(taskRoot, "phases", "1", "design.md"), "# Illegally changed prior phase\n");
     execFileSync("git", ["add", "-A", "--", taskPath], { cwd: root, env: gitEnv });
     execFileSync("git", ["commit", "-qm", context.commit_message, "--", taskPath], { cwd: root, env: gitEnv });
-    await expect(designArtifactCommittedAtCurrentTarget(
-      discovered.value, taskId, artifact, outputs, context,
-    )).resolves.toBe(false);
+    expect(await observe()).toEqual({
+      observed: false,
+      reason: "unauthorized-task-document",
+      blocking: true,
+      paths: [`${taskPath}/phases/1/design.md`],
+    });
+
     writeFileSync(join(taskRoot, "phases", "1", "design.md"), "# Prior phase\n");
     execFileSync("git", ["add", "-A", "--", taskPath], { cwd: root, env: gitEnv });
     execFileSync("git", ["commit", "--amend", "--no-edit", "-q"], { cwd: root, env: gitEnv });
-    await expect(designArtifactCommittedAtCurrentTarget(
-      discovered.value, taskId, artifact, outputs, context,
-    )).resolves.toBe(true);
+    expect(await observe()).toEqual({ observed: true });
 
     writeFileSync(join(taskRoot, "late-change.txt"), "dirty\n");
-    await expect(designArtifactCommittedAtCurrentTarget(
-      discovered.value, taskId, artifact, outputs, context,
-    )).resolves.toBe(false);
+    expect(await observe()).toEqual({
+      observed: false,
+      reason: "task-tree-dirty",
+      blocking: true,
+      paths: [`${taskPath}/late-change.txt`],
+    });
+    rmSync(join(taskRoot, "late-change.txt"));
+
+    execFileSync("git", ["commit", "--amend", "-qm", "Not the approved message"], { cwd: root, env: gitEnv });
+    expect(await observe()).toEqual({ observed: false, reason: "message-mismatch", blocking: true });
   });
 
   it("derives operations, identities, undeclared changes, secret scan, and successive accounting", async () => {

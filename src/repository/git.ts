@@ -310,10 +310,20 @@ export type GitChangedPathReport = Readonly<{
   unrepresentable_count: number;
 }>;
 
-/** Reads porcelain-v1 `-z` without losing invalid UTF-8 names; those are counted, never omitted silently. */
-export async function readChangedGitPaths(runner: GitRunner): Promise<GitChangedPathReport> {
+/**
+ * Reads porcelain-v1 `-z` without losing invalid UTF-8 names; those are counted, never omitted
+ * silently. `pathspecs` narrows the report to one subtree; omit it for the whole worktree. Callers
+ * pass their own pathspec magic and must not add `--literal-pathspecs`, which would disable it.
+ */
+export async function readChangedGitPaths(
+  runner: GitRunner,
+  pathspecs: readonly string[] = [],
+): Promise<GitChangedPathReport> {
   const result = await runner.run({
-    argv: ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+    argv: [
+      "status", "--porcelain=v1", "-z", "--untracked-files=all",
+      ...(pathspecs.length === 0 ? [] : ["--", ...pathspecs]),
+    ],
     operation: "git-status-declared-scope" as SafeCode,
   });
   const fields: Uint8Array[] = [];
