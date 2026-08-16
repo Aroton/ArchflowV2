@@ -51,6 +51,7 @@ export type {
   GateInput,
   GateSuccess,
   HumanRevisionDeclaration,
+  PlanningRestartDeclaration,
   ParsedToolCall,
   ParsedToolInput,
   ResultExpectation,

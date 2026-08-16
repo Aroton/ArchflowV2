@@ -207,9 +207,17 @@ export function produceUpstreamBindingsForSubject(
   state: TaskStateV1,
   artifact: ProduceArtifact,
 ): readonly ProduceUpstreamBinding[] {
-  if (artifact.artifact_kind !== "document") return expectedProduceUpstreamBindings(state);
+  const bindings = expectedProduceUpstreamBindings(state);
+  if (artifact.artifact_kind === "implementation-output") {
+    const prefix = `.archflow/tasks/${state.task_id}/`;
+    const coProduced = new Set(artifact.outputs
+      .map((entry) => String(entry.path))
+      .filter((path) => path.startsWith(prefix))
+      .map((path) => path.slice(prefix.length)));
+    return Object.freeze(bindings.filter((binding) => !coProduced.has(binding.path)));
+  }
   const owned = new Set(documentProjectionDescriptors(artifact).map((entry) => entry.document_path));
-  return Object.freeze(expectedProduceUpstreamBindings(state).filter((binding) => !owned.has(binding.path)));
+  return Object.freeze(bindings.filter((binding) => !owned.has(binding.path)));
 }
 
 /**
@@ -260,9 +268,21 @@ export async function readProduceProjectionSet(
   subject: ProduceUpstreamSubject,
   selectedPath: TaskPathClaim,
 ): Promise<ProjectResult<readonly ProduceProjection[]>> {
-  const paths = "imported_projection" in subject || subject.artifact.artifact_kind === "implementation-output"
-    ? [selectedPath]
-    : documentProjectionDescriptors(subject.artifact).map((entry) => entry.document_path);
+  let paths: readonly TaskPathClaim[];
+  if ("imported_projection" in subject) {
+    paths = [selectedPath];
+  } else if (subject.artifact.artifact_kind === "implementation-output") {
+    const prefix = `.archflow/tasks/${subject.artifact.task_id}/`;
+    const outputPaths = new Set(subject.artifact.outputs.map((entry) => String(entry.path)));
+    paths = Object.freeze([...new Set([
+      selectedPath,
+      ...subject.artifact.parent_documents
+        .filter((parent) => outputPaths.has(`${prefix}${parent.document_path}`))
+        .map((parent) => parent.document_path),
+    ])]);
+  } else {
+    paths = documentProjectionDescriptors(subject.artifact).map((entry) => entry.document_path);
+  }
   const projections: ProduceProjection[] = [];
   for (const path of paths) {
     const projection = await readProduceProjection(runner, authority, subject, path);
@@ -293,10 +313,22 @@ export function renderProduceReviewMaterial(
       `## Document: ${projection.path}\n\n${fatalUtf8.decode(projection.bytes)}`,
     ).join("\n\n");
   }
+  const prefix = `.archflow/tasks/${subject.artifact.task_id}/`;
+  const outputPaths = new Set(subject.artifact.outputs.map((entry) => String(entry.path)));
+  const coProducedDocuments = projections
+    .filter((projection) => outputPaths.has(`${prefix}${projection.path}`))
+    .map((projection) => ({
+      path: projection.path,
+      content_digest: projection.digest,
+      content: fatalUtf8.decode(projection.bytes),
+    }));
   return `${JSON.stringify({
     schema_version: "1",
     subject_kind: "retained-implementation-output",
     artifact_digest: subject.artifact_digest,
     implementation_output: subject.artifact,
+    ...(coProducedDocuments.length === 0 ? {} : {
+      co_produced_documents: coProducedDocuments,
+    }),
   }, null, 2)}\n`;
 }

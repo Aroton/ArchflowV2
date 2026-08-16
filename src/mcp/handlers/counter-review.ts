@@ -79,7 +79,10 @@ export function envelopeOverflowError(
   if (parameters.issue_code !== "envelope-byte-cap") return undefined;
   if (subject.artifact.artifact_kind !== "implementation-output") return undefined;
   const encoder = new TextEncoder();
-  const offending = subject.artifact.outputs
+  const taskPrefix = `.archflow/tasks/${subject.artifact.task_id}/`;
+  const coProduced = subject.artifact.outputs.filter((entry) => entry.path.startsWith(taskPrefix));
+  const candidates = coProduced.length === 0 ? subject.artifact.outputs : coProduced;
+  const offending = candidates
     .map((entry) => ({ path: entry.path, byte_count: encoder.encode(JSON.stringify(entry)).byteLength }))
     .sort((left, right) => right.byte_count - left.byte_count)
     .slice(0, 5)

@@ -10,6 +10,8 @@ import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { TOOL_NAMES } from "../../src/contracts/tool-names.js";
 
 const digest = parseSha256Digest("a".repeat(64));
+const gateDecisionInput = { preview_digest: digest, decision: { choice: "approve", reason: "Reviewed." } } as const;
+const waiverDecisionInput = { preview_digest: digest, decision: { choice: "grant", reason: "Reviewed." } } as const;
 const stateInput = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 2, input_fingerprint: digest, phase_instance: "phase-impl-2", step: "produce", status: "succeeded" } as const;
 const taskInitialization = JSON.parse(readFileSync(
   new URL("../fixtures/contracts/durable/task-initialization.valid.json", import.meta.url),
@@ -30,14 +32,14 @@ describe("correlated MCP tool contracts", () => {
     expect(Object.isFrozen(counter.input)).toBe(true);
 
     const originSource = { origin_gate_id: "gate-1", origin_decision_digest: "1".repeat(64), origin_context_digest: "2".repeat(64), task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: "3".repeat(64), current_evidence_set_digest: "4".repeat(64), rule: { rule_id: "Rule:1", rule_version: 1 }, scope: { operation: "review-trigger", boundary: "subject" } };
-    const waiver = parseToolCall("archflow_waiver", { schema_version: "1", task_id: "task-1", intent_id: "intent-3", expected_revision: 0, input_fingerprint: digest, origin: originSource, rationale: "Needed" });
+    const waiver = parseToolCall("archflow_waiver", { schema_version: "1", task_id: "task-1", intent_id: "intent-3", expected_revision: 0, input_fingerprint: digest, origin: originSource, rationale: "Needed", ...waiverDecisionInput });
     originSource.rule.rule_version = 2;
     expect(waiver.input.origin.rule.rule_version).toBe(1);
     expect(Object.isFrozen(waiver.input.origin.rule)).toBe(true);
     expect(Object.isFrozen(waiver.input.origin.scope)).toBe(true);
 
     const counterSlot = { role: "counter-review", evidence_digest: "6".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" };
-    const gate = parseToolCall("archflow_gate", { schema_version: "1", task_id: "task-1", intent_id: "intent-4", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: "7".repeat(64), current_evidence: { set_digest: "8".repeat(64), slots: [counterSlot] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } });
+    const gate = parseToolCall("archflow_gate", { schema_version: "1", task_id: "task-1", intent_id: "intent-4", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: "7".repeat(64), current_evidence: { set_digest: "8".repeat(64), slots: [counterSlot] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, ...gateDecisionInput });
     expect(Object.isFrozen(gate.input.current_evidence.slots)).toBe(true);
     expect(Object.isFrozen(gate.input.current_evidence.slots[0])).toBe(true);
     expect(Object.isFrozen(gate.input.context)).toBe(true);
@@ -222,7 +224,7 @@ describe("correlated MCP tool contracts", () => {
   it("uses the authoritative exact current-evidence tuple parser for gates", () => {
     const counter = { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" };
     const gateCounter = { role: "gate-counter-review", evidence_digest: "1".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "gate-1" };
-    const base = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: digest, current_evidence: { set_digest: "3".repeat(64), slots: [counter] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } };
+    const base = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: digest, current_evidence: { set_digest: "3".repeat(64), slots: [counter] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, ...gateDecisionInput };
     expect(parseToolCall("archflow_gate", base).input.task_id).toBe("task-1");
     expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [counter, gateCounter] } })).toThrow();
     expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [gateCounter] } })).toThrow();
@@ -241,7 +243,8 @@ describe("correlated MCP tool contracts", () => {
       phase_instance: "phase-impl-2",
       summary: "Review",
       subject_digest: digest,
-      current_evidence: { set_digest: "3".repeat(64), slots: [counter] }
+      current_evidence: { set_digest: "3".repeat(64), slots: [counter] },
+      ...gateDecisionInput,
     } as const;
     const humanProvenance = {
       schema_version: "1",
@@ -324,7 +327,7 @@ describe("correlated MCP tool contracts", () => {
 
   it("enforces waiver origin identity and canonical UTC-millisecond provenance", () => {
     const origin = { origin_gate_id: "gate-1", origin_decision_digest: "1".repeat(64), origin_context_digest: "2".repeat(64), task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: "3".repeat(64), current_evidence_set_digest: "4".repeat(64), rule: { rule_id: "Rule:1", rule_version: 1 }, scope: { operation: "review-trigger", boundary: "subject" } };
-    const input = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, origin, rationale: "Needed" };
+    const input = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, origin, rationale: "Needed", ...waiverDecisionInput };
     expect(() => parseToolCall("archflow_waiver", { ...input, task_id: "other" })).toThrow(/task_id/);
     const call = parseToolCall("archflow_waiver", input);
     expect(() => parseToolCall("archflow_waiver", { ...input, obsolete_extra: {} })).toThrow();
@@ -338,7 +341,7 @@ describe("retightened boundary identifiers", () => {
   const rubric = { schema_version: "1", kind: "implementation", mode: "adversarial", criteria: [{ id: "paths", text: "Check paths", blocking: true }] } as const;
   const counterInput = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, artifact_path: "phases/2/result.md" } as const;
   const waiverOrigin = { origin_gate_id: "gate-1", origin_decision_digest: "1".repeat(64), origin_context_digest: "2".repeat(64), task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: "3".repeat(64), current_evidence_set_digest: "4".repeat(64), rule: { rule_id: "Rule:1", rule_version: 1 }, scope: { operation: "review-trigger", boundary: "subject" } } as const;
-  const waiverInput = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, origin: waiverOrigin, rationale: "Needed" } as const;
+  const waiverInput = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, origin: waiverOrigin, rationale: "Needed", ...waiverDecisionInput } as const;
 
   // Each value below was accepted before the retightening; `safeId` permits `:`, `_`, and uppercase.
   it.each(["Task_1", "Task:1", "task:1", "TASK-1", "-task", "a".repeat(65)])("rejects the previously legal task_id %s", (taskId) => {

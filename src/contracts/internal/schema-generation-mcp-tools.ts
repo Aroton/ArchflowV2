@@ -92,6 +92,8 @@ const gateInputEmission: GeneratedDefOverride = {
         "current_evidence",
         "kind",
         "context",
+        "preview_digest",
+        "decision",
       ],
       properties: {
         schema_version: { const: "1" },
@@ -117,6 +119,16 @@ const gateInputEmission: GeneratedDefOverride = {
           ],
         },
         context: { type: "object" },
+        preview_digest: { $ref: "#/$defs/digest" },
+        decision: {
+          type: "object",
+          additionalProperties: false,
+          required: ["choice", "reason"],
+          properties: {
+            choice: { $ref: "#/$defs/text" },
+            reason: { $ref: "#/$defs/text" },
+          },
+        },
       },
       allOf: [
         {

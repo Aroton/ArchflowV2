@@ -1,7 +1,9 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   decodePhaseInstance,
+  comparePhaseInstances,
   encodePhaseInstance,
+  isEarlierPlanningPhase,
   parsePositiveSafePhaseNumber,
   nextPhaseInstance,
   type PhaseInstance,
@@ -35,6 +37,18 @@ describe("phase instance codec", () => {
     expect(nextPhaseInstance(encodePhaseInstance({
       kind: "phase-impl", phase: parsePositiveSafePhaseNumber(7)
     }))).toBe("phase-design-8");
+  });
+
+  it("orders restart targets across fixed and iterated planning stages", () => {
+    const values = ["prd", "design", "phase-design-1", "phase-impl-1", "phase-design-2", "phase-impl-2"]
+      .map((value) => value as PhaseInstanceId);
+    for (let index = 1; index < values.length; index += 1) {
+      expect(comparePhaseInstances(values[index - 1]!, values[index]!)).toBeLessThan(0);
+    }
+    expect(isEarlierPlanningPhase("prd" as PhaseInstanceId, "phase-design-2" as PhaseInstanceId)).toBe(true);
+    expect(isEarlierPlanningPhase("phase-design-2" as PhaseInstanceId, "phase-impl-2" as PhaseInstanceId)).toBe(true);
+    expect(isEarlierPlanningPhase("phase-impl-1" as PhaseInstanceId, "phase-design-2" as PhaseInstanceId)).toBe(false);
+    expect(isEarlierPlanningPhase("phase-design-2" as PhaseInstanceId, "phase-design-2" as PhaseInstanceId)).toBe(false);
   });
 
   it("returns no successor instead of overflowing the phase-number contract", () => {

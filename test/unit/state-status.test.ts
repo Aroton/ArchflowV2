@@ -156,7 +156,13 @@ describe("computeTaskStatus", () => {
       artifact_digest: D("b"),
       artifact: {
         artifact_kind: "implementation-output",
+        task_id: TASK,
+        phase_instance: PHASE,
         diff_digest: D("c"),
+        outputs: [
+          { operation: "delete", path: "removed.txt" },
+          { operation: "rename", path: "renamed.txt", previous_path: "old-name.txt" },
+        ],
         parent_documents: [
           { content_digest: D("f") },
           { content_digest: D("d") },
@@ -166,11 +172,13 @@ describe("computeTaskStatus", () => {
     } as unknown as CurrentProduceSubject;
     const input = buildCommitAuthorizationInput(subject, evidence, {
       value: "refs/heads/feature", guidance: "Current symbolic branch ref observed from repository authority.",
-    });
+    }, "1".repeat(40));
     expect(input).toEqual({
       kind: "commit-authorization", subject_digest: D("b"), current_evidence: evidence,
       context: {
-        target_ref: "refs/heads/feature", diff_digest: D("c"),
+        target_ref: "refs/heads/feature", baseline_commit: "1".repeat(40),
+        commit_message: "ArchFlow: Implement status-task phase 17",
+        paths: ["old-name.txt", "removed.txt", "renamed.txt"], diff_digest: D("c"),
         current_artifact_digests: [D("b")], parent_document_digests: [D("d"), D("f")],
       },
       target_ref_guidance: "Current symbolic branch ref observed from repository authority.",

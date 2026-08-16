@@ -172,7 +172,9 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
         {
           phase_instance: phaseInstance,
           step: "produce",
-          base_commit: baseCommit,
+          base_commit: parseGitOid(execFileSync("git", ["rev-parse", "HEAD"], {
+            cwd: h.root, env: environment, encoding: "utf8",
+          }).trim()),
           outputs: [outputPath],
           restore_targets: [outputPath],
           parent_documents: [{ document_path: parentDocument, role: "design" }],
@@ -241,11 +243,17 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
 
     const approveCommit = async (currentServices: ProductionServices, subject: typeof second) => {
       const subjectDigest = canonicalJsonDigest(subject);
+      const subjectPhase = subject.phase_instance.slice("phase-impl-".length);
       const evidence = currentEvidenceSetRef([
           { role: "counter-review" as const, evidence_digest: sha256Bytes(new TextEncoder().encode(`counter-${subjectDigest}`)), assurance: "server-attested" as const, producer_family: "claude" as const, reviewer_family: "codex" as const, independence: "opposite-family" as const },
       ]);
       const context = {
         target_ref: "refs/heads/main",
+        baseline_commit: parseGitOid(execFileSync("git", ["rev-parse", "HEAD"], { cwd: currentServices.authority.workspace_root, env: environment, encoding: "utf8" }).trim()),
+        commit_message: `ArchFlow: Implement ${task} phase ${subjectPhase}`,
+        paths: [...new Set(subject.outputs.flatMap((output) => output.operation === "rename"
+          ? [output.previous_path, output.path]
+          : [output.path]))].sort(),
         diff_digest: subject.diff_digest,
         current_artifact_digests: [subjectDigest],
         parent_document_digests: subject.parent_documents.map((document) => document.content_digest),
@@ -297,7 +305,7 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
     if (!completion.ok) throw new Error(completion.error.code);
     await approveCommit(completion.value, second);
     execFileSync("git", ["add", "--", outputPath], { cwd: h.root, env: environment });
-    execFileSync("git", ["commit", "-qm", "first implementation"], { cwd: h.root, env: environment });
+    execFileSync("git", ["commit", "-qm", `ArchFlow: Implement ${task} phase 17`], { cwd: h.root, env: environment });
     completion = await createProductionServices({
       working_directory: h.root, task_id: task, operation: parseSafeCode("non-final-advance"),
     });
@@ -369,7 +377,7 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
     if (!completion.ok) throw new Error(completion.error.code);
     await approveCommit(completion.value, finalOutput);
     execFileSync("git", ["add", "--", outputPath], { cwd: h.root, env: environment });
-    execFileSync("git", ["commit", "-qm", "second implementation"], { cwd: h.root, env: environment });
+    execFileSync("git", ["commit", "-qm", `ArchFlow: Implement ${task} phase 18`], { cwd: h.root, env: environment });
     completion = await createProductionServices({
       working_directory: h.root, task_id: task, operation: parseSafeCode("final-completion"),
     });

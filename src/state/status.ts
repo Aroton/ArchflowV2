@@ -131,6 +131,9 @@ export type CommitAuthorizationInput = Readonly<{
   current_evidence: CurrentEvidenceSetRef;
   context: Readonly<{
     target_ref: string;
+    baseline_commit: string;
+    commit_message: string;
+    paths: readonly string[];
     diff_digest: Sha256Digest;
     current_artifact_digests: readonly Sha256Digest[];
     parent_document_digests: readonly Sha256Digest[];
@@ -521,6 +524,7 @@ export function buildCommitAuthorizationInput(
   subject: CurrentProduceSubject,
   currentEvidence: CurrentEvidenceSetRef,
   target: Readonly<{ value: string; guidance: string }>,
+  baselineCommit: string,
 ): CommitAuthorizationInput {
   if (subject.artifact.artifact_kind !== "implementation-output") {
     throw new TypeError("commit authorization requires retained implementation output");
@@ -529,12 +533,21 @@ export function buildCommitAuthorizationInput(
   if (manifest.artifact_digest !== subject.artifact_digest) {
     throw new TypeError("commit authorization manifest subject disagrees");
   }
+  const paths = new Set<string>();
+  for (const output of subject.artifact.outputs) {
+    paths.add(output.path);
+    if (output.operation === "rename") paths.add(output.previous_path);
+  }
+  const phase = decodePhaseInstance(subject.artifact.phase_instance);
   return Object.freeze({
     kind: "commit-authorization",
     subject_digest: subject.artifact_digest,
     current_evidence: currentEvidence,
     context: Object.freeze({
       target_ref: target.value,
+      baseline_commit: baselineCommit,
+      commit_message: `ArchFlow: Implement ${subject.artifact.task_id} phase ${phase.kind === "phase-impl" ? String(phase.phase) : subject.artifact.phase_instance}`,
+      paths: Object.freeze([...paths].sort()),
       diff_digest: subject.artifact.diff_digest,
       current_artifact_digests: Object.freeze([manifest.artifact_digest]),
       parent_document_digests: Object.freeze(subject.artifact.parent_documents
@@ -765,18 +778,31 @@ export async function computeTaskStatus(
   }
 
   let commitObserved = false;
+  let implementationCommit: Readonly<{
+    paths: readonly string[];
+    message: string;
+    target_ref: string;
+    baseline_commit: string;
+  }> | undefined;
   if (produceSubject?.artifact.artifact_kind === "implementation-output") {
     for (const authenticated of authenticatedApprovals) {
       if (
         authenticated.request.kind !== "commit-authorization" ||
         authenticated.request.phase_instance !== state.phase_instance ||
-        authenticated.request.subject_digest !== produceSubject.artifact_digest
+        authenticated.request.subject_digest !== produceSubject.artifact_digest ||
+        authenticated.decision.envelope.payload.decision !== "authorize-commit"
       ) continue;
+      implementationCommit = Object.freeze({
+        paths: authenticated.request.context.paths,
+        message: authenticated.request.context.commit_message,
+        target_ref: authenticated.request.context.target_ref,
+        baseline_commit: authenticated.request.context.baseline_commit,
+      });
       try {
         if (await implementationOutputCommittedAtCurrentTarget(
           dependencies.runner,
           produceSubject.artifact,
-          authenticated.request.context.target_ref,
+          authenticated.request.context,
         )) {
           commitObserved = true;
           break;
@@ -1064,6 +1090,7 @@ export async function computeTaskStatus(
     authenticated_approvals: approvalFacts,
     commit_observed: commitObserved,
     ...(designCommit === undefined ? {} : { design_commit: designCommit }),
+    ...(implementationCommit === undefined ? {} : { implementation_commit: implementationCommit }),
     ...(adjudicationGateKind === undefined ? {} : { adjudication_gate_kind: adjudicationGateKind }),
     ...(pendingGates.length === 0 ? {} : { pending_adjudication_gate_kinds: pendingGates.map((gate) => gate.kind) }),
     migration_audit_required: migrationAuditRequired,
@@ -1076,7 +1103,12 @@ export async function computeTaskStatus(
     produceSubject?.artifact.artifact_kind === "implementation-output" && evidence.available
   ) {
     const target = await currentTargetRef(dependencies);
-    gateInput = buildCommitAuthorizationInput(produceSubject, evidence.current_evidence, target);
+    gateInput = buildCommitAuthorizationInput(
+      produceSubject,
+      evidence.current_evidence,
+      target,
+      await resolveCommit(dependencies.runner, "HEAD"),
+    );
   }
   if (
     nextAction.code === "open-gate" && nextAction.gate_kind === "design-approval" && evidence.available

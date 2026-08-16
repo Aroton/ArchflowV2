@@ -63,6 +63,7 @@ export type GateReentryFingerprintResolver = (
     authority: TransactionAuthority;
     request: GateRequestV1;
     current: CanonicalDocument<TaskStateV1>;
+    target_phase_instance?: TaskStateV1["phase_instance"];
   }>,
 ) => Promise<ProjectResult<Sha256Digest>>;
 

@@ -161,6 +161,9 @@ describe("bundled local CLI", () => {
     const verificationPath = join(fixture.root, ".archflow", "runtime", "tasks", task, "cache", "phases", "1", "verification.txt");
     mkdirSync(dirname(verificationPath), { recursive: true });
     writeFileSync(verificationPath, "npm test: passed\n");
+    const revisedPhaseDesign = join(bootstrap.value.authority.task_root, "phases", "1", "design.md");
+    mkdirSync(dirname(revisedPhaseDesign), { recursive: true });
+    writeFileSync(revisedPhaseDesign, "# Revised phase 1 design\n");
     const implementation = cli(fixture.root, "build-request", {
       intent_id: "produce-impl", kind: "produce",
       implementation: {
@@ -170,7 +173,16 @@ describe("bundled local CLI", () => {
     });
     expect(implementation).toMatchObject({ status: 0, value: { ok: true, value: { tool: "archflow_state" } } });
     const implementationArtifact = implementation.value.value.request.input.artifact;
-    expect(implementationArtifact).toMatchObject({ artifact_kind: "implementation-output" });
+    const phaseDesignOutput = `.archflow/tasks/${task}/phases/1/design.md`;
+    expect(implementationArtifact).toMatchObject({
+      artifact_kind: "implementation-output",
+      outputs: expect.arrayContaining([expect.objectContaining({ path: phaseDesignOutput })]),
+      restore_targets: expect.arrayContaining([phaseDesignOutput]),
+      parent_documents: expect.arrayContaining([expect.objectContaining({
+        document_path: "phases/1/design.md",
+        role: "phase-design",
+      })]),
+    });
     expect(cli(fixture.root, "validate", { kind: "implementation-output", value: implementationArtifact }))
       .toMatchObject({ status: 0, value: { artifact_kind: "implementation-output" } });
     writeFileSync(statePath, stateBytesBefore);
@@ -224,7 +236,8 @@ describe("bundled local CLI", () => {
     const gateInput = {
       ...common, intent_id: "gate-cli", phase_instance: "prd", summary: "Approve PRD",
       subject_digest: digest("d"), current_evidence: evidence, kind: "artifact-approval",
-      context: { artifact_kind: "prd" },
+      context: { artifact_kind: "prd" }, preview_digest: digest("9"),
+      decision: { choice: "approve", reason: "The PRD is ready." },
     };
     const gate = cli(fixture.root, "envelope", { tool: "archflow_gate", input: gateInput });
     expect(gate).toMatchObject({ status: 0, value: { ok: true, value: { gate: {
@@ -253,6 +266,7 @@ describe("bundled local CLI", () => {
     writeFileSync(join(originAuthority, "request.json"), canonicalDocument(request).bytes);
     const waiver = cli(fixture.root, "envelope", { tool: "archflow_waiver", input: {
       ...common, intent_id: "waiver-cli", rationale: "Rule does not apply.",
+      preview_digest: digest("9"), decision: { choice: "grant", reason: "Grant this bounded exception." },
       origin: { origin_gate_id: originGateId, origin_decision_digest: digest("1"), origin_context_digest: originContextDigest,
         task_id: task, phase_instance: "prd", subject_digest: request.subject_digest,
         current_evidence_set_digest: evidence.set_digest, rule, scope },
@@ -297,7 +311,8 @@ describe("bundled local CLI", () => {
         input_fingerprint: digest("0"), phase_instance: "prd", summary: "Missing", subject_digest: digest("1"),
         current_evidence: { set_digest: digest("2"), slots: [
           { role: "counter-review", evidence_digest: digest("4"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
-        ] }, kind: "artifact-approval", context: { artifact_kind: "prd" } },
+        ] }, kind: "artifact-approval", context: { artifact_kind: "prd" }, preview_digest: digest("3"),
+        decision: { choice: "approve", reason: "Approve the missing-state fixture." } },
     });
     expect(unavailable).toMatchObject({ status: 1, value: { ok: false, error: { code: "STATE_MISSING" } } });
 

@@ -359,6 +359,19 @@
         "target_ref": {
           "$ref": "#/$defs/text"
         },
+        "baseline_commit": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+        },
+        "commit_message": {
+          "$ref": "#/$defs/text"
+        },
+        "paths": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+          }
+        },
         "diff_digest": {
           "$ref": "#/$defs/digest"
         },
@@ -379,6 +392,9 @@
       },
       "required": [
         "target_ref",
+        "baseline_commit",
+        "commit_message",
+        "paths",
         "diff_digest",
         "current_artifact_digests",
         "parent_document_digests"

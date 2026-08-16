@@ -1219,9 +1219,9 @@ var require_directives = __commonJS({
         this.tags = Object.assign({}, _Directives.defaultTags, tags);
       }
       clone() {
-        const copy = new _Directives(this.yaml, this.tags);
-        copy.docStart = this.docStart;
-        return copy;
+        const copy2 = new _Directives(this.yaml, this.tags);
+        copy2.docStart = this.docStart;
+        return copy2;
       }
       /**
        * During parsing, get a Directives instance for the current document and
@@ -1273,13 +1273,13 @@ var require_directives = __commonJS({
               onError(0, "%YAML directive should contain exactly one part");
               return false;
             }
-            const [version3] = parts;
-            if (version3 === "1.1" || version3 === "1.2") {
-              this.yaml.version = version3;
+            const [version4] = parts;
+            if (version4 === "1.1" || version4 === "1.2") {
+              this.yaml.version = version4;
               return true;
             } else {
-              const isValid = /^\d+\.\d+$/.test(version3);
-              onError(6, `Unsupported YAML version ${version3}`, isValid);
+              const isValid = /^\d+\.\d+$/.test(version4);
+              onError(6, `Unsupported YAML version ${version4}`, isValid);
               return false;
             }
           }
@@ -1530,10 +1530,10 @@ var require_Node = __commonJS({
       }
       /** Create a copy of this node.  */
       clone() {
-        const copy = Object.create(Object.getPrototypeOf(this), Object.getOwnPropertyDescriptors(this));
+        const copy2 = Object.create(Object.getPrototypeOf(this), Object.getOwnPropertyDescriptors(this));
         if (this.range)
-          copy.range = this.range.slice();
-        return copy;
+          copy2.range = this.range.slice();
+        return copy2;
       }
       /** A plain JavaScript representation of this node. */
       toJS(doc, { mapAsMap, maxAliasCount, onAnchor, reviver } = {}) {
@@ -1825,13 +1825,13 @@ var require_Collection = __commonJS({
        * @param schema - If defined, overwrites the original's schema
        */
       clone(schema) {
-        const copy = Object.create(Object.getPrototypeOf(this), Object.getOwnPropertyDescriptors(this));
+        const copy2 = Object.create(Object.getPrototypeOf(this), Object.getOwnPropertyDescriptors(this));
         if (schema)
-          copy.schema = schema;
-        copy.items = copy.items.map((it) => identity.isNode(it) || identity.isPair(it) ? it.clone(schema) : it);
+          copy2.schema = schema;
+        copy2.items = copy2.items.map((it) => identity.isNode(it) || identity.isPair(it) ? it.clone(schema) : it);
         if (this.range)
-          copy.range = this.range.slice();
-        return copy;
+          copy2.range = this.range.slice();
+        return copy2;
       }
       /**
        * Adds a value to the collection. For `!!map` and `!!omap` the value must
@@ -1946,14 +1946,14 @@ var require_foldFlowLines = __commonJS({
     var FOLD_FLOW = "flow";
     var FOLD_BLOCK = "block";
     var FOLD_QUOTED = "quoted";
-    function foldFlowLines(text3, indent, mode = "flow", { indentAtStart, lineWidth = 80, minContentWidth = 20, onFold, onOverflow } = {}) {
+    function foldFlowLines(text4, indent, mode = "flow", { indentAtStart, lineWidth = 80, minContentWidth = 20, onFold, onOverflow } = {}) {
       if (!lineWidth || lineWidth < 0)
-        return text3;
+        return text4;
       if (lineWidth < minContentWidth)
         minContentWidth = 0;
       const endStep = Math.max(1 + minContentWidth, 1 + lineWidth - indent.length);
-      if (text3.length <= endStep)
-        return text3;
+      if (text4.length <= endStep)
+        return text4;
       const folds = [];
       const escapedFolds = {};
       let end = lineWidth - indent.length;
@@ -1970,14 +1970,14 @@ var require_foldFlowLines = __commonJS({
       let escStart = -1;
       let escEnd = -1;
       if (mode === FOLD_BLOCK) {
-        i = consumeMoreIndentedLines(text3, i, indent.length);
+        i = consumeMoreIndentedLines(text4, i, indent.length);
         if (i !== -1)
           end = i + endStep;
       }
-      for (let ch; ch = text3[i += 1]; ) {
+      for (let ch; ch = text4[i += 1]; ) {
         if (mode === FOLD_QUOTED && ch === "\\") {
           escStart = i;
-          switch (text3[i + 1]) {
+          switch (text4[i + 1]) {
             case "x":
               i += 3;
               break;
@@ -1994,12 +1994,12 @@ var require_foldFlowLines = __commonJS({
         }
         if (ch === "\n") {
           if (mode === FOLD_BLOCK)
-            i = consumeMoreIndentedLines(text3, i, indent.length);
+            i = consumeMoreIndentedLines(text4, i, indent.length);
           end = i + indent.length + endStep;
           split = void 0;
         } else {
           if (ch === " " && prev && prev !== " " && prev !== "\n" && prev !== "	") {
-            const next = text3[i + 1];
+            const next = text4[i + 1];
             if (next && next !== " " && next !== "\n" && next !== "	")
               split = i;
           }
@@ -2011,12 +2011,12 @@ var require_foldFlowLines = __commonJS({
             } else if (mode === FOLD_QUOTED) {
               while (prev === " " || prev === "	") {
                 prev = ch;
-                ch = text3[i += 1];
+                ch = text4[i += 1];
                 overflow = true;
               }
               const j = i > escEnd + 1 ? i - 2 : escStart - 1;
               if (escapedFolds[j])
-                return text3;
+                return text4;
               folds.push(j);
               escapedFolds[j] = true;
               end = j + endStep;
@@ -2031,39 +2031,39 @@ var require_foldFlowLines = __commonJS({
       if (overflow && onOverflow)
         onOverflow();
       if (folds.length === 0)
-        return text3;
+        return text4;
       if (onFold)
         onFold();
-      let res = text3.slice(0, folds[0]);
+      let res = text4.slice(0, folds[0]);
       for (let i2 = 0; i2 < folds.length; ++i2) {
         const fold = folds[i2];
-        const end2 = folds[i2 + 1] || text3.length;
+        const end2 = folds[i2 + 1] || text4.length;
         if (fold === 0)
           res = `
-${indent}${text3.slice(0, end2)}`;
+${indent}${text4.slice(0, end2)}`;
         else {
           if (mode === FOLD_QUOTED && escapedFolds[fold])
-            res += `${text3[fold]}\\`;
+            res += `${text4[fold]}\\`;
           res += `
-${indent}${text3.slice(fold + 1, end2)}`;
+${indent}${text4.slice(fold + 1, end2)}`;
         }
       }
       return res;
     }
-    function consumeMoreIndentedLines(text3, i, indent) {
+    function consumeMoreIndentedLines(text4, i, indent) {
       let end = i;
       let start = i + 1;
-      let ch = text3[start];
+      let ch = text4[start];
       while (ch === " " || ch === "	") {
         if (i < start + indent) {
-          ch = text3[++i];
+          ch = text4[++i];
         } else {
           do {
-            ch = text3[++i];
+            ch = text4[++i];
           } while (ch && ch !== "\n");
           end = i;
           start = i + 1;
-          ch = text3[start];
+          ch = text4[start];
         }
       }
       return end;
@@ -4250,9 +4250,9 @@ var require_Schema = __commonJS({
         this.sortMapEntries = typeof sortMapEntries === "function" ? sortMapEntries : sortMapEntries === true ? sortMapEntriesByKey : null;
       }
       clone() {
-        const copy = Object.create(_Schema.prototype, Object.getOwnPropertyDescriptors(this));
-        copy.tags = this.tags.slice();
-        return copy;
+        const copy2 = Object.create(_Schema.prototype, Object.getOwnPropertyDescriptors(this));
+        copy2.tags = this.tags.slice();
+        return copy2;
       }
     };
     exports.Schema = Schema;
@@ -4379,14 +4379,14 @@ var require_Document = __commonJS({
           version: "1.2"
         }, options);
         this.options = opt;
-        let { version: version3 } = opt;
+        let { version: version4 } = opt;
         if (options?._directives) {
           this.directives = options._directives.atDocument();
           if (this.directives.yaml.explicit)
-            version3 = this.directives.yaml.version;
+            version4 = this.directives.yaml.version;
         } else
-          this.directives = new directives.Directives({ version: version3 });
-        this.setSchema(version3, options);
+          this.directives = new directives.Directives({ version: version4 });
+        this.setSchema(version4, options);
         this.contents = value === void 0 ? null : this.createNode(value, _replacer, options);
       }
       /**
@@ -4395,21 +4395,21 @@ var require_Document = __commonJS({
        * Custom Node values that inherit from `Object` still refer to their original instances.
        */
       clone() {
-        const copy = Object.create(_Document.prototype, {
+        const copy2 = Object.create(_Document.prototype, {
           [identity.NODE_TYPE]: { value: identity.DOC }
         });
-        copy.commentBefore = this.commentBefore;
-        copy.comment = this.comment;
-        copy.errors = this.errors.slice();
-        copy.warnings = this.warnings.slice();
-        copy.options = Object.assign({}, this.options);
+        copy2.commentBefore = this.commentBefore;
+        copy2.comment = this.comment;
+        copy2.errors = this.errors.slice();
+        copy2.warnings = this.warnings.slice();
+        copy2.options = Object.assign({}, this.options);
         if (this.directives)
-          copy.directives = this.directives.clone();
-        copy.schema = this.schema.clone();
-        copy.contents = identity.isNode(this.contents) ? this.contents.clone(copy.schema) : this.contents;
+          copy2.directives = this.directives.clone();
+        copy2.schema = this.schema.clone();
+        copy2.contents = identity.isNode(this.contents) ? this.contents.clone(copy2.schema) : this.contents;
         if (this.range)
-          copy.range = this.range.slice();
-        return copy;
+          copy2.range = this.range.slice();
+        return copy2;
       }
       /** Adds a value to the document. */
       add(value) {
@@ -4566,11 +4566,11 @@ var require_Document = __commonJS({
        *
        * Overrides all previously set schema options.
        */
-      setSchema(version3, options = {}) {
-        if (typeof version3 === "number")
-          version3 = String(version3);
+      setSchema(version4, options = {}) {
+        if (typeof version4 === "number")
+          version4 = String(version4);
         let opt;
-        switch (version3) {
+        switch (version4) {
           case "1.1":
             if (this.directives)
               this.directives.yaml.version = "1.1";
@@ -4581,9 +4581,9 @@ var require_Document = __commonJS({
           case "1.2":
           case "next":
             if (this.directives)
-              this.directives.yaml.version = version3;
+              this.directives.yaml.version = version4;
             else
-              this.directives = new directives.Directives({ version: version3 });
+              this.directives = new directives.Directives({ version: version4 });
             opt = { resolveKnownTags: true, schema: "core" };
             break;
           case null:
@@ -4592,7 +4592,7 @@ var require_Document = __commonJS({
             opt = null;
             break;
           default: {
-            const sv = JSON.stringify(version3);
+            const sv = JSON.stringify(version4);
             throw new Error(`Expected '1.1', '1.2' or null as first argument, but found: ${sv}`);
           }
         }
@@ -5773,8 +5773,8 @@ var require_resolve_flow_scalar = __commonJS({
     };
     function parseCharCode(source, offset, length, onError) {
       const cc = source.substr(offset, length);
-      const ok24 = cc.length === length && /^[0-9a-fA-F]+$/.test(cc);
-      const code2 = ok24 ? parseInt(cc, 16) : NaN;
+      const ok26 = cc.length === length && /^[0-9a-fA-F]+$/.test(cc);
+      const code2 = ok26 ? parseInt(cc, 16) : NaN;
       try {
         return String.fromCodePoint(code2);
       } catch {
@@ -9910,10 +9910,10 @@ var nanoid = /^[a-zA-Z0-9_-]{21}$/;
 var duration = /^P(?:(\d+W)|(?!.*W)(?=\d|T\d)(\d+Y)?(\d+M)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+([.,]\d+)?S)?)?)$/;
 var extendedDuration = /^[-+]?P(?!$)(?:(?:[-+]?\d+Y)|(?:[-+]?\d+[.,]\d+Y$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:(?:[-+]?\d+W)|(?:[-+]?\d+[.,]\d+W$))?(?:(?:[-+]?\d+D)|(?:[-+]?\d+[.,]\d+D$))?(?:T(?=[\d+-])(?:(?:[-+]?\d+H)|(?:[-+]?\d+[.,]\d+H$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:[-+]?\d+(?:[.,]\d+)?S)?)??$/;
 var guid = /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/;
-var uuid = (version3) => {
-  if (!version3)
+var uuid = (version4) => {
+  if (!version4)
     return /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/;
-  return new RegExp(`^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-${version3}[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$`);
+  return new RegExp(`^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-${version4}[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$`);
 };
 var uuid4 = /* @__PURE__ */ uuid(4);
 var uuid6 = /* @__PURE__ */ uuid(6);
@@ -11408,42 +11408,42 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def2) =
     }
     doc.write(`const newResult = {};`);
     for (const key of normalized.keys) {
-      const id5 = ids[key];
+      const id6 = ids[key];
       const k = esc(key);
       const schema = shape[key];
       const isOptionalIn = schema?._zod?.optin === "optional";
       const isOptionalOut = schema?._zod?.optout === "optional";
-      doc.write(`const ${id5} = ${parseStr(key)};`);
+      doc.write(`const ${id6} = ${parseStr(key)};`);
       if (isOptionalIn && isOptionalOut) {
         doc.write(`
-        if (${id5}.issues.length) {
+        if (${id6}.issues.length) {
           if (${k} in input) {
-            payload.issues = payload.issues.concat(${id5}.issues.map(iss => ({
+            payload.issues = payload.issues.concat(${id6}.issues.map(iss => ({
               ...iss,
               path: iss.path ? [${k}, ...iss.path] : [${k}]
             })));
           }
         }
         
-        if (${id5}.value === undefined) {
+        if (${id6}.value === undefined) {
           if (${k} in input) {
             newResult[${k}] = undefined;
           }
         } else {
-          newResult[${k}] = ${id5}.value;
+          newResult[${k}] = ${id6}.value;
         }
         
       `);
       } else if (!isOptionalIn) {
         doc.write(`
-        const ${id5}_present = ${k} in input;
-        if (${id5}.issues.length) {
-          payload.issues = payload.issues.concat(${id5}.issues.map(iss => ({
+        const ${id6}_present = ${k} in input;
+        if (${id6}.issues.length) {
+          payload.issues = payload.issues.concat(${id6}.issues.map(iss => ({
             ...iss,
             path: iss.path ? [${k}, ...iss.path] : [${k}]
           })));
         }
-        if (!${id5}_present && !${id5}.issues.length) {
+        if (!${id6}_present && !${id6}.issues.length) {
           payload.issues.push({
             code: "invalid_type",
             expected: "nonoptional",
@@ -11452,30 +11452,30 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def2) =
           });
         }
 
-        if (${id5}_present) {
-          if (${id5}.value === undefined) {
+        if (${id6}_present) {
+          if (${id6}.value === undefined) {
             newResult[${k}] = undefined;
           } else {
-            newResult[${k}] = ${id5}.value;
+            newResult[${k}] = ${id6}.value;
           }
         }
 
       `);
       } else {
         doc.write(`
-        if (${id5}.issues.length) {
-          payload.issues = payload.issues.concat(${id5}.issues.map(iss => ({
+        if (${id6}.issues.length) {
+          payload.issues = payload.issues.concat(${id6}.issues.map(iss => ({
             ...iss,
             path: iss.path ? [${k}, ...iss.path] : [${k}]
           })));
         }
         
-        if (${id5}.value === undefined) {
+        if (${id6}.value === undefined) {
           if (${k} in input) {
             newResult[${k}] = undefined;
           }
         } else {
-          newResult[${k}] = ${id5}.value;
+          newResult[${k}] = ${id6}.value;
         }
         
       `);
@@ -15954,8 +15954,8 @@ function ko_default() {
 }
 
 // node_modules/zod/v4/locales/lt.js
-var capitalizeFirstCharacter = (text3) => {
-  return text3.charAt(0).toUpperCase() + text3.slice(1);
+var capitalizeFirstCharacter = (text4) => {
+  return text4.charAt(0).toUpperCase() + text4.slice(1);
 };
 function getUnitTypeFromNumber(number4) {
   const abs = Math.abs(number4);
@@ -19807,26 +19807,26 @@ function extractDefs(ctx, schema) {
     throw new Error("Unprocessed schema. This is a bug in Zod.");
   const idToSchema = /* @__PURE__ */ new Map();
   for (const entry of ctx.seen.entries()) {
-    const id5 = ctx.metadataRegistry.get(entry[0])?.id;
-    if (id5) {
-      const existing = idToSchema.get(id5);
+    const id6 = ctx.metadataRegistry.get(entry[0])?.id;
+    if (id6) {
+      const existing = idToSchema.get(id6);
       if (existing && existing !== entry[0]) {
-        throw new Error(`Duplicate schema id "${id5}" detected during JSON Schema conversion. Two different schemas cannot share the same id when converted together.`);
+        throw new Error(`Duplicate schema id "${id6}" detected during JSON Schema conversion. Two different schemas cannot share the same id when converted together.`);
       }
-      idToSchema.set(id5, entry[0]);
+      idToSchema.set(id6, entry[0]);
     }
   }
   const makeURI = (entry) => {
     const defsSegment = ctx.target === "draft-2020-12" ? "$defs" : "definitions";
     if (ctx.external) {
       const externalId = ctx.external.registry.get(entry[0])?.id;
-      const uriGenerator = ctx.external.uri ?? ((id6) => id6);
+      const uriGenerator = ctx.external.uri ?? ((id7) => id7);
       if (externalId) {
         return { ref: uriGenerator(externalId) };
       }
-      const id5 = entry[1].defId ?? entry[1].schema.id ?? `schema${ctx.counter++}`;
-      entry[1].defId = id5;
-      return { defId: id5, ref: `${uriGenerator("__shared")}#/${defsSegment}/${id5}` };
+      const id6 = entry[1].defId ?? entry[1].schema.id ?? `schema${ctx.counter++}`;
+      entry[1].defId = id6;
+      return { defId: id6, ref: `${uriGenerator("__shared")}#/${defsSegment}/${id6}` };
     }
     if (entry[1] === root) {
       return { ref: "#" };
@@ -19874,8 +19874,8 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
         continue;
       }
     }
-    const id5 = ctx.metadataRegistry.get(entry[0])?.id;
-    if (id5) {
+    const id6 = ctx.metadataRegistry.get(entry[0])?.id;
+    if (id6) {
       extractToDef(entry);
       continue;
     }
@@ -19971,10 +19971,10 @@ function finalize(ctx, schema) {
   } else {
   }
   if (ctx.external?.uri) {
-    const id5 = ctx.external.registry.get(schema)?.id;
-    if (!id5)
+    const id6 = ctx.external.registry.get(schema)?.id;
+    if (!id6)
       throw new Error("Schema is missing an `id` property");
-    result.$id = ctx.external.uri(id5);
+    result.$id = ctx.external.uri(id6);
   }
   Object.assign(result, root.def ?? root.schema);
   const rootMetaId = ctx.metadataRegistry.get(schema)?.id;
@@ -22789,10 +22789,10 @@ function fromJSONSchema(schema, params) {
   } catch {
     throw new Error("fromJSONSchema input is not valid JSON (possibly cyclic); use $defs/$ref for recursive schemas");
   }
-  const version3 = detectVersion(normalized, params?.defaultTarget);
+  const version4 = detectVersion(normalized, params?.defaultTarget);
   const defs = normalized.$defs || normalized.definitions || {};
   const ctx = {
-    version: version3,
+    version: version4,
     defs,
     refs: /* @__PURE__ */ new Map(),
     processing: /* @__PURE__ */ new Set(),
@@ -22929,9 +22929,9 @@ function ordinal(a, b) {
 function sortCanonical(value) {
   if (Array.isArray(value)) return value.map(sortCanonical);
   if (value !== null && typeof value === "object") {
-    const record3 = value;
+    const record4 = value;
     return Object.fromEntries(
-      Object.keys(record3).sort(ordinal).map((key) => [key, sortCanonical(record3[key])])
+      Object.keys(record4).sort(ordinal).map((key) => [key, sortCanonical(record4[key])])
     );
   }
   if (value === void 0) throw new TypeError("canonical JSON cannot contain undefined");
@@ -22963,15 +22963,15 @@ function canonicalDocument(value) {
 }
 function parseCanonicalDocument(bytes, label = "JSON document") {
   if (!(bytes instanceof Uint8Array)) throw new TypeError(`${label} must be bytes`);
-  let text3;
+  let text4;
   try {
-    text3 = decoder.decode(bytes);
+    text4 = decoder.decode(bytes);
   } catch (error51) {
     throw new TypeError(`${label} is not valid UTF-8: ${error51.message}`);
   }
   let value;
   try {
-    value = JSON.parse(text3);
+    value = JSON.parse(text4);
   } catch (error51) {
     throw new TypeError(`${label} is not valid JSON: ${error51.message}`);
   }
@@ -23074,6 +23074,23 @@ function nextPhaseInstance(instance) {
         phase: parsePositiveSafePhaseNumber(decoded.phase + 1)
       });
   }
+}
+function isPlanningPhaseInstance(instance) {
+  return decodePhaseInstance(instance).kind !== "phase-impl";
+}
+function comparePhaseInstances(left, right) {
+  const leftDecoded = decodePhaseInstance(left);
+  const rightDecoded = decodePhaseInstance(right);
+  const prefixRank = (kind) => kind === "prd" ? 0 : kind === "design" ? 1 : 2;
+  const prefix = prefixRank(leftDecoded.kind) - prefixRank(rightDecoded.kind);
+  if (prefix !== 0) return prefix;
+  if (leftDecoded.kind === "prd" || leftDecoded.kind === "design" || (rightDecoded.kind === "prd" || rightDecoded.kind === "design")) return 0;
+  const phaseDifference = Number(leftDecoded.phase) - Number(rightDecoded.phase);
+  if (phaseDifference !== 0) return phaseDifference;
+  return leftDecoded.kind === rightDecoded.kind ? 0 : leftDecoded.kind === "phase-design" ? -1 : 1;
+}
+function isEarlierPlanningPhase(target, current) {
+  return isPlanningPhaseInstance(target) && comparePhaseInstances(target, current) < 0;
 }
 var phaseInstanceIdV1Schema = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u).refine((value) => {
   try {
@@ -23215,7 +23232,15 @@ var contexts = {
   "material-drift": external_exports.object({ affected_upstream: external_exports.object({ kind: external_exports.enum(["prd", "architecture", "phase-design", "implementation-result", "review", "adjudication", "constitution", "workflow", "import"]), digest }).strict(), drift: external_exports.literal("material"), affected_claim_ids: canonicalStrings.min(1) }).strict(),
   "attempts-exhausted": external_exports.object({ step: external_exports.enum(PIPELINE_STEPS), attempts: safeInteger, maximum_attempts: safeInteger }).strict().refine((value) => value.attempts >= value.maximum_attempts, "attempts must be at least maximum_attempts"),
   "constitution-edit": external_exports.object({ pinned_constitution_digest: digest, current_constitution_digest: digest, changed_path_class: external_exports.literal("task-branch-constitution") }).strict(),
-  "commit-authorization": external_exports.object({ target_ref: boundedText, diff_digest: digest, current_artifact_digests: canonicalDigests.min(1), parent_document_digests: canonicalDigests.min(1) }).strict(),
+  "commit-authorization": external_exports.object({
+    target_ref: boundedText,
+    baseline_commit: gitOidV1Schema,
+    commit_message: boundedText,
+    paths: external_exports.array(repositoryPathClaimV1Schema).min(1).refine((items) => sortedUnique(items, (a, b) => a.localeCompare(b)), "paths must be sorted with no duplicates"),
+    diff_digest: digest,
+    current_artifact_digests: canonicalDigests.min(1),
+    parent_document_digests: canonicalDigests.min(1)
+  }).strict(),
   "restore-collision": external_exports.object({ path: taskPathClaimV1Schema, recorded_generation_digest: digest, current_generation_digest: digest, adoption_candidate: authorityLink.optional() }).strict(),
   "migration-audit": external_exports.object({
     source_identity_digest: digest,
@@ -23587,8 +23612,8 @@ function deepFreezeJson(value) {
 }
 var copyFreezeJson = (value) => deepFreezeJson(structuredClone(value));
 function decodeJson(bytes) {
-  const text3 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  return JSON.parse(text3);
+  const text4 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  return JSON.parse(text4);
 }
 var digestBytes = (bytes) => parseSha256Digest(createHash2("sha256").update(bytes).digest("hex"));
 var copiedBytes = (bytes) => Uint8Array.from(bytes);
@@ -24472,6 +24497,9 @@ function constructError(registry2, code2, parameters) {
 function createProjectError(code2, parameters) {
   return constructError(PROJECT_ERROR_DEFINITIONS, code2, parameters);
 }
+function createProtocolError(code2, parameters) {
+  return constructError(PROTOCOL_ERROR_DEFINITIONS, code2, parameters);
+}
 var internalErrorSchemaTables = Object.freeze({
   project: Object.freeze({
     parameters: PROJECT_PARAMETER_SCHEMAS,
@@ -25024,21 +25052,68 @@ var humanRevisionRecordV1Schema = external_exports.object({
   previous_attempt: positiveSafeInteger,
   resulting_attempt: positiveSafeInteger,
   evidence: humanRevisionEvidenceV1Schema
-}).strict().superRefine((record3, context2) => {
-  if (record3.user_override?.agent_classification === record3.classification) {
+}).strict().superRefine((record4, context2) => {
+  if (record4.user_override?.agent_classification === record4.classification) {
     context2.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
   }
-  if (record3.classification === "simple" && record3.previous_attempt !== record3.resulting_attempt) {
+  if (record4.classification === "simple" && record4.previous_attempt !== record4.resulting_attempt) {
     context2.addIssue({ code: "custom", path: ["resulting_attempt"], message: "a simple revision preserves its attempt" });
   }
-  if (record3.classification === "significant" && record3.resulting_attempt !== 1) {
+  if (record4.classification === "significant" && record4.resulting_attempt !== 1) {
     context2.addIssue({ code: "custom", path: ["resulting_attempt"], message: "a significant revision resets to attempt 1" });
   }
-  if (record3.predecessor_subject_digest === record3.resulting_subject_digest) {
+  if (record4.predecessor_subject_digest === record4.resulting_subject_digest) {
     context2.addIssue({ code: "custom", path: ["resulting_subject_digest"], message: "a human revision must change the subject" });
   }
-  if (record3.evidence.some((reference) => reference.phase_instance !== record3.phase_instance)) {
+  if (record4.evidence.some((reference) => reference.phase_instance !== record4.phase_instance)) {
     context2.addIssue({ code: "custom", path: ["evidence"], message: "human revision evidence must belong to its phase" });
+  }
+});
+var provenanceBase3 = {
+  schema_version: external_exports.literal("1"),
+  actor_class: external_exports.enum(["human", "archforge"]),
+  assurance: external_exports.literal("declared-local-trace"),
+  decision_event_id: safeIdV1Schema,
+  recorded_at: external_exports.string().datetime({ offset: false, local: false, precision: 3 })
+};
+var planningRestartHumanProvenanceV1Schema = external_exports.union([
+  external_exports.object({
+    ...provenanceBase3,
+    channel: external_exports.literal("connected-host"),
+    connection_id: safeIdV1Schema,
+    request_id_digest: sha256Digest3
+  }).strict(),
+  external_exports.object({
+    ...provenanceBase3,
+    channel: external_exports.literal("archflow-local"),
+    helper_invocation_id: safeIdV1Schema
+  }).strict()
+]);
+var planningRestartRecordV1Schema = external_exports.object({
+  restart_id: pathSafeIdV1Schema,
+  from_phase_instance: phaseInstanceIdV1Schema,
+  to_phase_instance: phaseInstanceIdV1Schema,
+  reason: external_exports.string().min(1).max(4096).regex(/\S/u),
+  restarted_at_revision: positiveSafeInteger,
+  superseded_results: external_exports.array(authoritativeResultRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "superseded restart results must be sorted by (phase_instance, step) with no duplicates"),
+  cleared_waivers: external_exports.array(waiverRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "cleared restart waivers must be sorted by gate_id with no duplicates"),
+  cleared_pending_human_revision: pendingHumanRevisionV1Schema.optional(),
+  provenance: external_exports.union([
+    planningRestartHumanProvenanceV1Schema,
+    external_exports.object({
+      schema_version: external_exports.literal("1"),
+      actor_class: external_exports.literal("human"),
+      assurance: external_exports.literal("connected-request-trace"),
+      channel: external_exports.literal("connected-host"),
+      connection_id: safeIdV1Schema,
+      invocation_id: safeIdV1Schema,
+      request_id_digest: sha256Digest3,
+      request_digest: sha256Digest3
+    }).strict()
+  ])
+}).strict().superRefine((record4, context2) => {
+  if (!isEarlierPlanningPhase(record4.to_phase_instance, record4.from_phase_instance)) {
+    context2.addIssue({ code: "custom", path: ["to_phase_instance"], message: "a planning restart target must be strictly earlier than its source" });
   }
 });
 var lastTransitionOutcomeV1Schema = external_exports.json();
@@ -25077,9 +25152,13 @@ var taskStateV1Schema = external_exports.object({
   open_gate: openGateRefV1Schema.optional(),
   pending_human_revision: pendingHumanRevisionV1Schema.optional(),
   human_revision_history: external_exports.array(humanRevisionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "human_revision_history must be sorted by gate_id with no duplicates").optional(),
+  restart_history: external_exports.array(planningRestartRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("restart_id")), "restart_history must be sorted by restart_id with no duplicates").optional(),
   last_transition: lastTransitionV1Schema.optional(),
   terminal: external_exports.enum(TERMINAL_STATES).optional()
 }).strict().superRefine((state, context2) => {
+  if (state.restart_history?.some((record4) => record4.restarted_at_revision > state.revision)) {
+    context2.addIssue({ code: "custom", path: ["restart_history"], message: "restart history cannot name a future revision" });
+  }
   const pending = state.pending_human_revision;
   if (pending === void 0) return;
   if (state.open_gate !== void 0 || state.terminal !== void 0 || state.step !== "produce" || state.status === "succeeded" || state.attempt !== pending.attempt || pending.requested_at_revision > state.revision || pending.evidence.some((reference) => reference.phase_instance !== state.phase_instance)) {
@@ -25770,6 +25849,16 @@ function closedOperationFields(subject) {
         exactFields(fields, ["phase_instance", "step", "status"]);
         return { phase_instance: fields.phase_instance, step: fields.step, status: fields.status };
       }
+      if (subject.operation === "restart-planning") {
+        const restartFields = subject.operation_fields;
+        exactFields(restartFields, ["phase_instance", "step", "status", "planning_restart"]);
+        return {
+          phase_instance: restartFields.phase_instance,
+          step: restartFields.step,
+          status: restartFields.status,
+          planning_restart: restartFields.planning_restart
+        };
+      }
       const artifactFields = fields;
       const operationForKind = {
         "task-initialization": "adopt-task-initialization",
@@ -25802,7 +25891,7 @@ function closedOperationFields(subject) {
     case "archflow_gate": {
       const fields = subject.operation_fields;
       if (subject.operation !== "gate") throw new TypeError("invalid archflow_gate operation");
-      const expected = ["phase_instance", "summary", "subject_digest", "current_evidence", "kind", "context"];
+      const expected = ["phase_instance", "summary", "subject_digest", "current_evidence", "kind", "context", "preview_digest", "decision"];
       exactFields(fields, expected);
       const selected = {
         phase_instance: fields.phase_instance,
@@ -25810,15 +25899,22 @@ function closedOperationFields(subject) {
         subject_digest: fields.subject_digest,
         current_evidence: fields.current_evidence,
         kind: fields.kind,
-        context: fields.context
+        context: fields.context,
+        preview_digest: fields.preview_digest,
+        decision: fields.decision
       };
       return selected;
     }
     case "archflow_waiver": {
       const fields = subject.operation_fields;
       if (subject.operation !== "waiver") throw new TypeError("invalid archflow_waiver operation");
-      exactFields(fields, ["origin", "rationale"]);
-      return { origin: fields.origin, rationale: fields.rationale };
+      exactFields(fields, ["origin", "rationale", "preview_digest", "decision"]);
+      return {
+        origin: fields.origin,
+        rationale: fields.rationale,
+        preview_digest: fields.preview_digest,
+        decision: fields.decision
+      };
     }
     default: {
       const exhaustive = subject;
@@ -25995,8 +26091,8 @@ function createGitRunner(options) {
   async function runText(spec) {
     const result = await run(spec);
     if (result.absent) return "";
-    const text3 = decodeFatal(result.stdout, spec.operation);
-    return text3.endsWith("\n") ? text3.slice(0, -1) : text3;
+    const text4 = decodeFatal(result.stdout, spec.operation);
+    return text4.endsWith("\n") ? text4.slice(0, -1) : text4;
   }
   async function runNulFields(spec) {
     const result = await run(spec);
@@ -26084,9 +26180,9 @@ async function isCommitAncestor(runner, ancestor, descendant) {
 async function isCommitAncestorOfHead(runner, ancestor) {
   return isCommitAncestor(runner, ancestor, "HEAD");
 }
-async function readCommitTreeBlob(runner, commit, path2) {
+async function readCommitTreeBlob(runner, commit2, path2) {
   const fields = await runner.runNulFields({
-    argv: ["ls-tree", "-z", commit, "--", path2],
+    argv: ["ls-tree", "-z", commit2, "--", path2],
     operation: TREE_ENTRY_OPERATION
   });
   if (fields.length === 0) return void 0;
@@ -26100,10 +26196,10 @@ async function readCommitTreeBlob(runner, commit, path2) {
     oid: match.groups["oid"]
   });
 }
-async function readCommitTreeEntries(runner, commit, directory) {
+async function readCommitTreeEntries(runner, commit2, directory) {
   const prefix = directory.endsWith("/") ? directory : `${directory}/`;
   const fields = await runner.runNulFields({
-    argv: ["ls-tree", "-z", commit, "--", prefix],
+    argv: ["ls-tree", "-z", commit2, "--", prefix],
     operation: TREE_LIST_OPERATION
   });
   if (fields.length > MAX_COMMIT_TREE_ENTRIES) {
@@ -26210,8 +26306,8 @@ var SAFE_VERSION = /^[A-Za-z0-9.-]{1,64}$/u;
 function safeVersionOf(value) {
   return SAFE_VERSION.test(value) ? value : "unknown";
 }
-function unsupportedRuntime(component, version3) {
-  return createProjectError("RUNTIME_VERSION_UNSUPPORTED", { component, version: version3 });
+function unsupportedRuntime(component, version4) {
+  return createProjectError("RUNTIME_VERSION_UNSUPPORTED", { component, version: version4 });
 }
 var VERSION_OPERATION = "git-version";
 var OBJECT_FORMAT_OPERATION = "git-object-format";
@@ -26227,11 +26323,11 @@ async function preflightGit(runner, context2) {
   }
   const reported = /(?<major>\d+)\.(?<minor>\d+)(?:\.[^\s]*)?/u.exec(versionOutput);
   const token = /^git version (?<token>\S+)/u.exec(versionOutput)?.groups?.["token"] ?? versionOutput.trim();
-  const version3 = safeVersionOf(token);
+  const version4 = safeVersionOf(token);
   const major = Number(reported?.groups?.["major"] ?? Number.NaN);
   const minor = Number(reported?.groups?.["minor"] ?? Number.NaN);
   if (!Number.isInteger(major) || !Number.isInteger(minor) || major < GIT_MAJOR_FLOOR || major === GIT_MAJOR_FLOOR && minor < GIT_MINOR_FLOOR) {
-    return fail4(unsupportedRuntime("git", version3));
+    return fail4(unsupportedRuntime("git", version4));
   }
   let objectFormat;
   try {
@@ -26248,7 +26344,7 @@ async function preflightGit(runner, context2) {
   if (objectFormat !== "sha1") {
     return fail4(unsupportedRuntime("git-object-format", safeVersionOf(objectFormat.trim())));
   }
-  return ok2(Object.freeze({ version: version3, object_format: "sha1" }));
+  return ok2(Object.freeze({ version: version4, object_format: "sha1" }));
 }
 
 // src/repository/identity.ts
@@ -29008,12 +29104,12 @@ function requireRegexpStringMatcher() {
     var isEqualMatchPatternResult = function(a, b) {
       return a.startIndex === b.startIndex && a.endIndex === b.endIndex && a.match === b.match;
     };
-    var matchPatterns = function(text3, regExpLikeStrings) {
+    var matchPatterns = function(text4, regExpLikeStrings) {
       var matchPatternResults = [];
       regExpLikeStrings.map(function(patternString) {
         return (0, exports.createRegExp)(patternString);
       }).forEach(function(regExp) {
-        var results = text3.matchAll(regExp);
+        var results = text4.matchAll(regExp);
         Array.from(results).forEach(function(result) {
           if (result.index === void 0) {
             return;
@@ -29232,11 +29328,11 @@ var MAX_MAC_ITERATIONS = 1e6;
 function parsePkcs12(buf) {
   const pfx = readTlv(buf, 0);
   expectTag(pfx, TAG_SEQUENCE, "PFX SEQUENCE");
-  const version3 = readTlv(pfx.content, 0);
-  if (readInteger(version3) !== 3) {
+  const version4 = readTlv(pfx.content, 0);
+  if (readInteger(version4) !== 3) {
     throw new Error("PKCS12: unsupported version");
   }
-  const authSafeInfo = readTlv(pfx.content, version3.end);
+  const authSafeInfo = readTlv(pfx.content, version4.end);
   expectTag(authSafeInfo, TAG_SEQUENCE, "ContentInfo SEQUENCE");
   const contentType = readTlv(authSafeInfo.content, 0);
   expectTag(contentType, TAG_OID, "contentType OID");
@@ -29286,9 +29382,9 @@ function parsePkcs12(buf) {
   };
 }
 function toBufferSource(data) {
-  const copy = new Uint8Array(data.length);
-  copy.set(data);
-  return copy;
+  const copy2 = new Uint8Array(data.length);
+  copy2.set(data);
+  return copy2;
 }
 async function digest7(hash3, data) {
   return new Uint8Array(await globalThis.crypto.subtle.digest(hash3.name, toBufferSource(data)));
@@ -31246,7 +31342,7 @@ var utf8 = new TextDecoder("utf-8", { fatal: true });
 var ordinal4 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 var enabledCreators = rules.filter((creator) => creator.meta.id !== FILTER_RULE);
 var enabledRuleIds = Object.freeze(enabledCreators.map((creator) => creator.meta.id).sort());
-if (new Set(enabledRuleIds).size !== enabledRuleIds.length || enabledRuleIds.some((id5) => !RULE_ID.test(id5))) {
+if (new Set(enabledRuleIds).size !== enabledRuleIds.length || enabledRuleIds.some((id6) => !RULE_ID.test(id6))) {
   throw new TypeError("Secretlint preset exported duplicate or unsupported public rule identifiers");
 }
 var SECRETLINT_DETECTOR_SET_ID = parseSafeId(`secretlint:v1:${canonicalJsonDigest({
@@ -31263,9 +31359,9 @@ function secretScanText(bytes) {
   try {
     return utf8.decode(materialized);
   } catch {
-    let text3 = "";
-    for (const byte of materialized) text3 += String.fromCharCode(byte);
-    return text3;
+    let text4 = "";
+    for (const byte of materialized) text4 += String.fromCharCode(byte);
+    return text4;
   }
 }
 function secretScanCandidateFromBytes(candidate) {
@@ -31357,17 +31453,30 @@ function createSecretlintScanner() {
 }
 
 // src/state/implementation-manifest.ts
-async function implementationOutputCommittedAtCurrentTarget(runner, output, targetRef) {
+async function implementationOutputCommittedAtCurrentTarget(runner, output, context2) {
   const symbolicRef = await runner.runText({
     argv: ["symbolic-ref", "--quiet", "HEAD"],
     operation: "git-current-commit-target",
     expectedAbsence: [{ code: 1, stderrIncludes: "" }]
   });
-  if (targetRef === "HEAD" ? symbolicRef !== "" : symbolicRef !== targetRef) return false;
+  if (context2.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== context2.target_ref) return false;
   const headCommit = await resolveCommit(runner, "HEAD");
-  const targetCommit = await resolveCommit(runner, targetRef);
+  const targetCommit = await resolveCommit(runner, context2.target_ref);
   if (headCommit !== targetCommit) return false;
-  if (!await isCommitAncestor(runner, output.base_commit, headCommit)) return false;
+  if (context2.baseline_commit !== output.base_commit || headCommit === context2.baseline_commit) return false;
+  if (await resolveCommit(runner, `${headCommit}^`) !== context2.baseline_commit) return false;
+  const message = await runner.runText({
+    argv: ["log", "-1", "--format=%s", headCommit],
+    operation: "git-implementation-commit-message"
+  });
+  if (message !== context2.commit_message) return false;
+  const authorizedPaths = [...context2.paths].sort(ordinal5);
+  if (JSON.stringify(authorizedPaths) !== JSON.stringify(sortedUniquePaths(output))) return false;
+  const changedPaths = [...new Set(await runner.runNulFields({
+    argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", context2.baseline_commit, headCommit, "--"],
+    operation: "git-implementation-commit-paths"
+  }))].sort(ordinal5);
+  if (JSON.stringify(changedPaths) !== JSON.stringify(authorizedPaths)) return false;
   for (const entry of output.outputs) {
     const committed = await readCommitTreeBlob(runner, headCommit, entry.path);
     if (entry.operation === "delete") {
@@ -31377,7 +31486,7 @@ async function implementationOutputCommittedAtCurrentTarget(runner, output, targ
     if (committed?.mode !== entry.after.mode || committed.oid !== entry.after.oid) return false;
     if (entry.operation === "rename" && await readCommitTreeBlob(runner, headCommit, entry.previous_path) !== void 0) return false;
   }
-  return true;
+  return await resolveCommit(runner, "HEAD") === headCommit && await resolveCommit(runner, context2.target_ref) === headCommit;
 }
 async function designArtifactCommittedAtCurrentTarget(runner, taskId, artifact, outputs, context2) {
   const symbolicRef = await runner.runText({
@@ -31580,8 +31689,8 @@ async function resolveAll(runner, output, context2) {
   }
   return resolved;
 }
-async function baseIdentity(runner, commit, path2) {
-  const entry = await readCommitTreeBlob(runner, commit, path2);
+async function baseIdentity(runner, commit2, path2) {
+  const entry = await readCommitTreeBlob(runner, commit2, path2);
   if (entry === void 0) return void 0;
   return Object.freeze({ oid: parseGitOid(entry.oid), mode: entry.mode, size_bytes: parseSafeInteger(await readGitBlobSize(runner, entry.oid)) });
 }
@@ -33061,8 +33170,8 @@ async function referencedDecisionDigests(authority) {
   const pattern = /\b[0-9a-f]{64}\b/gu;
   for (const file2 of files) {
     if (file2.symlink) return /* @__PURE__ */ new Set(["*"]);
-    const text3 = await readFile2(file2.absolute, "utf8").catch(() => "");
-    for (const match of text3.matchAll(pattern)) digests.add(match[0]);
+    const text4 = await readFile2(file2.absolute, "utf8").catch(() => "");
+    for (const match of text4.matchAll(pattern)) digests.add(match[0]);
   }
   return digests;
 }
@@ -33104,7 +33213,11 @@ async function unreferencedAuthorityResults(authority, state, decisionProtectedR
   const root = join4(authority.task_root, "authority", "results");
   const live = /* @__PURE__ */ new Set([
     ...state.authoritative_results.map((reference) => reference.result_digest),
-    ...(state.human_revision_history ?? []).flatMap((revision) => revision.evidence.map((reference) => reference.result_digest))
+    ...(state.human_revision_history ?? []).flatMap((revision) => revision.evidence.map((reference) => reference.result_digest)),
+    ...(state.restart_history ?? []).flatMap((restart) => [
+      ...restart.superseded_results.map((reference) => reference.result_digest),
+      ...(restart.cleared_pending_human_revision?.evidence ?? []).map((reference) => reference.result_digest)
+    ])
   ]);
   if (decisionProtectedResults.has("*")) return Object.freeze([]);
   let files;
@@ -33137,6 +33250,11 @@ async function unreferencedAuthorityDecisions(authority, state) {
     ...openGateIds,
     ...state.pending_human_revision === void 0 ? [] : [state.pending_human_revision.gate_id],
     ...(state.human_revision_history ?? []).map((entry) => entry.gate_id),
+    ...(state.restart_history ?? []).flatMap((restart) => [
+      restart.restart_id,
+      ...restart.cleared_waivers.map((entry) => entry.gate_id),
+      ...restart.cleared_pending_human_revision === void 0 ? [] : [restart.cleared_pending_human_revision.gate_id]
+    ]),
     ...state.last_transition !== void 0 && known.has(state.last_transition.result_id) ? [state.last_transition.result_id] : []
   ]);
   let changed = true;
@@ -33151,9 +33269,9 @@ async function unreferencedAuthorityDecisions(authority, state) {
       }
       for (const entry of entries) {
         if (entry.symlink) return Object.freeze([]);
-        const text3 = await readFile2(entry.absolute, "utf8").catch(() => "");
+        const text4 = await readFile2(entry.absolute, "utf8").catch(() => "");
         for (const candidate of known) {
-          if (!live.has(candidate) && text3.includes(`"${candidate}"`)) {
+          if (!live.has(candidate) && text4.includes(`"${candidate}"`)) {
             live.add(candidate);
             changed = true;
           }
@@ -33315,6 +33433,51 @@ async function cleanTerminalTaskWorkspace(dependencies, authority) {
 // src/state/gate-decision-interface.ts
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual as isDeepStrictEqual7 } from "node:util";
+
+// src/contracts/contexts.ts
+var authenticConnections = /* @__PURE__ */ new WeakSet();
+var ProtocolContextError = class extends Error {
+  constructor(protocol_error) {
+    super(protocol_error.code);
+    this.protocol_error = protocol_error;
+    this.name = "ProtocolContextError";
+  }
+  protocol_error;
+};
+var id5 = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
+var text2 = external_exports.string().min(1).max(4096).regex(/\S/u);
+var version3 = external_exports.string().regex(/^[A-Za-z0-9.-]{1,64}$/u);
+var requestIdSchema = external_exports.union([external_exports.string(), external_exports.number().int().safe()]);
+var clientImplementationSchema = external_exports.object({ name: external_exports.string(), version: external_exports.string() });
+var startupSchema = external_exports.object({ connection_id: id5, startup_repository_candidate: external_exports.object({ working_directory: text2 }).strict() }).strict();
+var initializationSchema = external_exports.object({ client: clientImplementationSchema, host: external_exports.enum(["claude", "codex", "unknown"]), protocol_version: version3 }).strict();
+var invocationSchema = external_exports.object({ invocation_id: id5, transport_metadata: external_exports.object({ request_id: requestIdSchema, operation: external_exports.literal("tools/call") }).strict() }).strict();
+function deepFreeze2(value) {
+  if (value !== null && typeof value === "object") {
+    for (const nested of Object.values(value)) deepFreeze2(nested);
+    Object.freeze(value);
+  }
+  return value;
+}
+function copy(value) {
+  return structuredClone(value);
+}
+var connectionContextFactory = Object.freeze({ captureStartup(seed) {
+  assertPlainJson(seed, "connection startup");
+  const startup = deepFreeze2(copy(startupSchema.parse(seed)));
+  let initialized = false;
+  return Object.freeze({ initialize(candidates) {
+    if (initialized) throw new ProtocolContextError(createProtocolError("INITIALIZATION_REPEATED", { connection_id: startup.connection_id }));
+    assertPlainJson(candidates, "connection initialization");
+    const initialization = deepFreeze2(copy(initializationSchema.parse(candidates)));
+    initialized = true;
+    const connection = deepFreeze2({ connection_id: startup.connection_id, startup_repository_candidate: startup.startup_repository_candidate, initialization_candidates: initialization });
+    authenticConnections.add(connection);
+    return connection;
+  } });
+} });
+
+// src/state/gate-decision-interface.ts
 var TEMPLATE_REASON = "Record the human decision reason.";
 var TEMPLATE_RATIONALE = "Record the human decision rationale.";
 function decisionTemplateBase(active) {
@@ -33437,7 +33600,7 @@ var OPTION_COPY = Object.freeze({
   abort: Object.freeze({ token: "stop-work", label: "Stop this work", consequence: "End this workflow path without approval." }),
   "revert-edit": Object.freeze({ token: "undo-policy-change", label: "Undo the policy edit", consequence: "Restore the policy version this task originally reviewed against." }),
   "start-base-amendment": Object.freeze({ token: "update-project-policy", label: "Update the project policy", consequence: "Move the policy change into the project baseline before continuing this task." }),
-  "authorize-commit": Object.freeze({ token: "authorize-commit", label: "Authorize the commit", consequence: "Permit ArchFlow to commit the exact reviewed changes after the required final confirmation." }),
+  "authorize-commit": Object.freeze({ token: "authorize-commit", label: "Authorize the commit", consequence: "Permit ArchFlow to commit the exact reviewed changes; this is the final human confirmation." }),
   "discard-and-restore": Object.freeze({ token: "restore-saved-version", label: "Restore the saved version", consequence: "Discard the conflicting workspace copy and reconstruct it from durable authority." }),
   "adopt-as-new-generation": Object.freeze({ token: "keep-current-version", label: "Keep the current version", consequence: "Treat the current workspace copy as a new generation of the artifact." }),
   "accept-import-audit": Object.freeze({ token: "accept-import", label: "Accept the import", consequence: "Confirm that the imported task faithfully represents the legacy source and continue." }),
@@ -33482,12 +33645,12 @@ function presentationBindings(active) {
 function buildHumanGatePresentation(active) {
   const request2 = parseActiveGate(structuredClone(active));
   const waiver = waiverContext(request2.context);
-  const copy = waiver === void 0 ? PRESENTATION_COPY[request2.kind] : Object.freeze({
+  const copy2 = waiver === void 0 ? PRESENTATION_COPY[request2.kind] : Object.freeze({
     title: "Decide a policy exception",
     question: "Should this narrowly scoped policy exception be granted?"
   });
   return Object.freeze({
-    title: copy.title,
+    title: copy2.title,
     summary: request2.summary,
     ...request2.kind === "design-approval" ? {
       details: Object.freeze(request2.context.policy_findings.flatMap((finding) => {
@@ -33501,7 +33664,7 @@ function buildHumanGatePresentation(active) {
         return lines;
       }))
     } : {},
-    question: `${copy.question} Choose an option and briefly explain why.`,
+    question: `${copy2.question} Choose an option and briefly explain why.`,
     options: Object.freeze(presentationBindings(request2).map((binding) => binding.option))
   });
 }
@@ -33511,18 +33674,18 @@ function choiceRecord(value) {
   if (materialized === null || Array.isArray(materialized) || typeof materialized !== "object") {
     throw new TypeError("gate decision choice must be a JSON object");
   }
-  const record3 = materialized;
+  const record4 = materialized;
   const allowed = /* @__PURE__ */ new Set(["choice", "reason", "rationale", "rule", "operation"]);
-  if (Object.keys(record3).some((key) => !allowed.has(key))) {
+  if (Object.keys(record4).some((key) => !allowed.has(key))) {
     throw new TypeError("gate decision choice contains unsupported fields");
   }
-  if (typeof record3.choice !== "string" || record3.choice.trim() === "") {
+  if (typeof record4.choice !== "string" || record4.choice.trim() === "") {
     throw new TypeError("gate decision choice.choice must be a non-empty string");
   }
-  if (typeof record3.reason !== "string" || record3.reason.trim() === "") {
+  if (typeof record4.reason !== "string" || record4.reason.trim() === "") {
     throw new TypeError("gate decision choice.reason must be a non-empty string");
   }
-  return record3;
+  return record4;
 }
 function selectGateDecisionTemplate(active, value) {
   const choice = choiceRecord(value);
@@ -33607,7 +33770,7 @@ async function writeGateDecisionChoice(dependencies, authority, value) {
   const selected = structuredClone(choiceRecord(value));
   return writeSelectedGateDecision(dependencies, authority, (active) => selectGateDecisionTemplate(active, selected));
 }
-async function writeSelectedGateDecision(dependencies, authority, select) {
+async function writeSelectedGateDecision(dependencies, authority, select, suppliedProvenance) {
   try {
     await ensureIntentDirectory(authority);
     return await dependencies.lock.runExclusive(authority.workspace_root, async () => {
@@ -33648,7 +33811,7 @@ async function writeSelectedGateDecision(dependencies, authority, select) {
           issue_code: "decision-choice-invalid"
         }));
       }
-      const provenance2 = {
+      const provenance2 = suppliedProvenance ?? {
         schema_version: "1",
         actor_class: "human",
         assurance: "declared-local-trace",
@@ -33670,7 +33833,16 @@ async function writeSelectedGateDecision(dependencies, authority, select) {
       const existing = await readCanonical(interfacePath.value, "gate decision interface", (raw) => raw);
       if (existing !== "missing" && existing !== "invalid") {
         try {
-          parseInterface(existing.value, active);
+          const boundExisting = parseInterface(existing.value, active);
+          const boundCandidate = parseInterface(candidate, active);
+          const semantics = (record4) => record4.outcome === "decided" ? { outcome: record4.outcome, kind: record4.kind, payload: record4.envelope.payload } : record4.outcome === "waiver-decided" ? { outcome: record4.outcome, granted: record4.granted, scope: record4.scope, origin: record4.origin, notes: record4.notes } : { outcome: record4.outcome, reason: record4.reason };
+          if (canonicalJsonDigest(semantics(boundExisting)) === canonicalJsonDigest(semantics(boundCandidate))) {
+            return ok6({
+              gate_id: active.gate_id,
+              decision_path: interfacePath.value.repositoryRelative,
+              decision_digest: existing.digest
+            });
+          }
           return fail8(createProjectError("GATE_ACTIVE", {
             gate_id: active.gate_id,
             gate_kind: active.kind
@@ -33716,7 +33888,7 @@ var parsedCalls = /* @__PURE__ */ new WeakSet();
 var requestDigests = /* @__PURE__ */ new WeakMap();
 var digest8 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var safeId2 = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
-var text2 = external_exports.string().min(1).max(4096).regex(/\S/u);
+var text3 = external_exports.string().min(1).max(4096).regex(/\S/u);
 var safeInteger6 = external_exports.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 var phase2 = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u).refine((v) => {
   try {
@@ -33745,24 +33917,29 @@ var durableArtifact = external_exports.union([
 ]);
 var humanRevisionDeclarationSchema = external_exports.object({
   classification: external_exports.enum(HUMAN_REVISION_CLASSIFICATIONS),
-  rationale: text2,
+  rationale: text3,
   user_override: external_exports.object({
     agent_classification: external_exports.enum(HUMAN_REVISION_CLASSIFICATIONS),
-    rationale: text2
+    rationale: text3
   }).strict().optional()
 }).strict().superRefine((revision, context2) => {
   if (revision.user_override?.agent_classification === revision.classification) {
     context2.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
   }
 });
-var stateInputSchema = external_exports.object({ ...common2, phase_instance: phase2, step: external_exports.enum(["produce", "counter_review", "triage"]), status: external_exports.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional(), human_revision: humanRevisionDeclarationSchema.optional() }).strict().superRefine((input, context2) => {
+var planningRestartDeclarationSchema = external_exports.object({ reason: text3 }).strict();
+var stateInputSchema = external_exports.object({ ...common2, phase_instance: phase2, step: external_exports.enum(["produce", "counter_review", "triage"]), status: external_exports.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional(), human_revision: humanRevisionDeclarationSchema.optional(), planning_restart: planningRestartDeclarationSchema.optional() }).strict().superRefine((input, context2) => {
   if (input.human_revision !== void 0 && (input.step !== "produce" || input.status !== "succeeded")) {
     context2.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
+  }
+  if (input.planning_restart !== void 0 && (input.step !== "produce" || input.status !== "running" || input.artifact !== void 0 || input.human_revision !== void 0)) {
+    context2.addIssue({ code: "custom", path: ["planning_restart"], message: "planning_restart is allowed only on an artifact-free produce-running transition" });
   }
 });
 var stagedReferenceInput = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, request_digest: digest8 }).strict();
 var counterReviewInputSchema = external_exports.object({ ...common2, artifact_path: taskPathClaimV1Schema }).strict();
-var gateInputSchema = external_exports.object({ ...common2, phase_instance: phase2, summary: text2, subject_digest: digest8, current_evidence: external_exports.unknown(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown() }).strict().superRefine((input, context2) => {
+var humanGateChoiceSchema = external_exports.object({ choice: text3, reason: text3 }).strict();
+var gateInputSchema = external_exports.object({ ...common2, phase_instance: phase2, summary: text3, subject_digest: digest8, current_evidence: external_exports.unknown(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown(), preview_digest: digest8, decision: humanGateChoiceSchema }).strict().superRefine((input, context2) => {
   try {
     parseGateContext(input.kind, input.context);
   } catch (error51) {
@@ -33775,7 +33952,7 @@ var gateInputSchema = external_exports.object({ ...common2, phase_instance: phas
   }
 });
 var waiverOrigin = external_exports.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest8, origin_context_digest: digest8, task_id: taskSlugV1Schema, phase_instance: phase2, subject_digest: digest8, current_evidence_set_digest: digest8, rule: rule3, scope: scope2 }).strict();
-var waiverInputSchema = external_exports.object({ ...common2, origin: waiverOrigin, rationale: text2 }).strict().superRefine((input, context2) => {
+var waiverInputSchema = external_exports.object({ ...common2, origin: waiverOrigin, rationale: text3, preview_digest: digest8, decision: humanGateChoiceSchema }).strict().superRefine((input, context2) => {
   if (input.task_id !== input.origin.task_id) context2.addIssue({ code: "custom", path: ["task_id"], message: "waiver task_id must match origin task_id" });
 });
 function inputFor(name, value) {
@@ -33786,9 +33963,9 @@ function inputFor(name, value) {
   }
   return parsed;
 }
-function deepFreeze2(value) {
+function deepFreeze3(value) {
   if (value !== null && typeof value === "object") {
-    for (const nested of Object.values(value)) deepFreeze2(nested);
+    for (const nested of Object.values(value)) deepFreeze3(nested);
     Object.freeze(value);
   }
   return value;
@@ -33804,7 +33981,7 @@ function parseToolCall(name, value) {
   const parsed = inputFor(name, structuredClone(value));
   assertPlainJson(parsed, `${name} parsed input`);
   const input = structuredClone(parsed);
-  for (const nested of Object.values(input)) deepFreeze2(nested);
+  for (const nested of Object.values(input)) deepFreeze3(nested);
   Object.defineProperty(input, parsedToolInputBrand, { value: name, enumerable: false, writable: false, configurable: false });
   Object.freeze(input);
   const call = Object.freeze({ name, input });
@@ -33830,13 +34007,13 @@ var toolSuccessSchemas = {
     revision: safeInteger6,
     request_digest: digest8.optional()
   }).strict(),
-  archflow_gate: external_exports.object({ kind: external_exports.enum(GATE_KINDS), decision: gateDecisionEnvelopeV1Schema, notes: text2, revision: safeInteger6, request_digest: digest8.optional() }).strict(),
-  archflow_waiver: external_exports.union([external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest8, current_evidence_set_digest: digest8, scope: scope2, human_provenance: provenance, granted: external_exports.literal(true), expires: external_exports.literal("task-complete"), notes: text2, revision: safeInteger6, request_digest: digest8.optional() }).strict(), external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest8, current_evidence_set_digest: digest8, scope: scope2, human_provenance: provenance, granted: external_exports.literal(false), notes: text2, revision: safeInteger6, request_digest: digest8.optional() }).strict()])
+  archflow_gate: external_exports.object({ kind: external_exports.enum(GATE_KINDS), decision: gateDecisionEnvelopeV1Schema, notes: text3, revision: safeInteger6, request_digest: digest8.optional() }).strict(),
+  archflow_waiver: external_exports.union([external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest8, current_evidence_set_digest: digest8, scope: scope2, human_provenance: provenance, granted: external_exports.literal(true), expires: external_exports.literal("task-complete"), notes: text3, revision: safeInteger6, request_digest: digest8.optional() }).strict(), external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest8, current_evidence_set_digest: digest8, scope: scope2, human_provenance: provenance, granted: external_exports.literal(false), notes: text3, revision: safeInteger6, request_digest: digest8.optional() }).strict()])
 };
 var mcpToolsSchemaDefs = Object.freeze({
   digest: digest8,
   id: safeId2,
-  text: text2,
+  text: text3,
   integer: safeInteger6,
   phase: phase2,
   durableArtifact,
@@ -34223,8 +34400,8 @@ function parseConstitutionRuleMarkdown(source, label) {
   const close = normalized.indexOf("\n---\n", 4);
   if (close < 0) throw new Error(`${label}: expected closing YAML frontmatter delimiter`);
   const frontmatter = parseSingleYamlDocument(normalized.slice(4, close), `${label} frontmatter`);
-  const text3 = normalized.slice(close + 5).trim();
-  return parseConstitutionRuleV1({ ...frontmatter, text: text3 });
+  const text4 = normalized.slice(close + 5).trim();
+  return parseConstitutionRuleV1({ ...frontmatter, text: text4 });
 }
 function registryFromRules(rules2) {
   const registry2 = /* @__PURE__ */ new Map();
@@ -34250,12 +34427,12 @@ function assertResolvedConstitution(value) {
   }
 }
 function immutableRegistry(rules2) {
-  const entries = [...rules2].map(([id5, rule4]) => {
+  const entries = [...rules2].map(([id6, rule4]) => {
     const frozenRule = Object.freeze({
       ...rule4,
       ...rule4.enforced_by === void 0 ? {} : { enforced_by: Object.freeze([...rule4.enforced_by]) }
     });
-    return Object.freeze([id5, frozenRule]);
+    return Object.freeze([id6, frozenRule]);
   });
   const backing = new Map(entries);
   let registry2;
@@ -34275,8 +34452,8 @@ function immutableRegistry(rules2) {
 }
 var ok8 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail9 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-async function readConstitutionTreeFiles(runner, commit) {
-  const listed = await readCommitTreeEntries(runner, commit, CONSTITUTION_DIRECTORY);
+async function readConstitutionTreeFiles(runner, commit2) {
+  const listed = await readCommitTreeEntries(runner, commit2, CONSTITUTION_DIRECTORY);
   return Object.freeze(listed.filter((entry) => RULE_FILE.test(entry.path)).map((entry) => Object.freeze({
     path: parseRepositoryPathClaim(entry.path),
     oid: parseGitOid(entry.oid)
@@ -34513,10 +34690,10 @@ function parseConfigYaml(source, label = "config.yaml") {
 
 // src/state/read.ts
 var decoder3 = new TextDecoder("utf-8", { fatal: true });
-function deepFreeze3(value) {
+function deepFreeze4(value) {
   if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {
     Object.freeze(value);
-    for (const child of Object.values(value)) deepFreeze3(child);
+    for (const child of Object.values(value)) deepFreeze4(child);
   }
   return value;
 }
@@ -34541,7 +34718,7 @@ async function readTaskState(path2) {
   try {
     const document2 = parseCanonicalDocument(read.bytes, "task state");
     taskStateV1Schema.parse(document2.value);
-    deepFreeze3(document2.value);
+    deepFreeze4(document2.value);
     return Object.freeze({ kind: "canonical", document: document2 });
   } catch {
     return Object.freeze({ kind: "noncanonical" });
@@ -34797,7 +34974,11 @@ async function createProductionServices(input) {
       let total = 0;
       const retainedReferences = [
         ...current.document.value.authoritative_results,
-        ...(current.document.value.human_revision_history ?? []).flatMap((revision) => revision.evidence)
+        ...(current.document.value.human_revision_history ?? []).flatMap((revision) => revision.evidence),
+        ...(current.document.value.restart_history ?? []).flatMap((restart) => [
+          ...restart.superseded_results,
+          ...restart.cleared_pending_human_revision?.evidence ?? []
+        ])
       ].filter((reference, index, references) => references.findIndex((candidate) => candidate.result_digest === reference.result_digest) === index);
       for (const reference of retainedReferences) {
         if (reference.result_digest === excluded?.result_digest) continue;
@@ -34808,7 +34989,7 @@ async function createProductionServices(input) {
       return parseSafeInteger(total);
     },
     load_retained_result: (reference) => readRetainedResult(discovered.value, authority, reference),
-    resolve_gate_reentry_fingerprint: async ({ request: request2, current }) => {
+    resolve_gate_reentry_fingerprint: async ({ request: request2, current, target_phase_instance }) => {
       const liveConfig = await readTaskConfig(authority.config);
       if (liveConfig.kind !== "valid") return stateFailure(current.value.phase_instance, "task-config-invalid");
       const call = parseToolCall("archflow_state", {
@@ -34817,7 +34998,7 @@ async function createProductionServices(input) {
         intent_id: request2.intent_id,
         expected_revision: current.value.revision,
         input_fingerprint: current.value.input_fingerprint,
-        phase_instance: request2.phase_instance,
+        phase_instance: target_phase_instance ?? request2.phase_instance,
         step: "produce",
         status: "running"
       });
@@ -35115,9 +35296,14 @@ function documentProjectionDescriptors(artifact) {
   ]);
 }
 function produceUpstreamBindingsForSubject(state, artifact) {
-  if (artifact.artifact_kind !== "document") return expectedProduceUpstreamBindings(state);
+  const bindings = expectedProduceUpstreamBindings(state);
+  if (artifact.artifact_kind === "implementation-output") {
+    const prefix = `.archflow/tasks/${state.task_id}/`;
+    const coProduced = new Set(artifact.outputs.map((entry) => String(entry.path)).filter((path2) => path2.startsWith(prefix)).map((path2) => path2.slice(prefix.length)));
+    return Object.freeze(bindings.filter((binding) => !coProduced.has(binding.path)));
+  }
   const owned = new Set(documentProjectionDescriptors(artifact).map((entry) => entry.document_path));
-  return Object.freeze(expectedProduceUpstreamBindings(state).filter((binding) => !owned.has(binding.path)));
+  return Object.freeze(bindings.filter((binding) => !owned.has(binding.path)));
 }
 
 // src/state/evidence-results.ts
@@ -35539,11 +35725,20 @@ function advanceAction(input, state) {
     });
   }
   if (phase3.kind === "phase-impl" && input.commit_observed !== true) {
+    if (input.implementation_commit === void 0) {
+      return action("inspect-state", "Inspect why the approved implementation commit authority is unavailable.", true, state);
+    }
     return action(
       "commit-phase",
-      "Stage the authorized phase outputs, show and confirm the commit, then commit them to the approved current target ref.",
-      true,
-      state
+      "Commit the exact phase outputs authorized by the human's commit decision.",
+      false,
+      state,
+      {
+        commit_paths: input.implementation_commit.paths,
+        commit_message: input.implementation_commit.message,
+        commit_target_ref: input.implementation_commit.target_ref,
+        commit_baseline: input.implementation_commit.baseline_commit
+      }
     );
   }
   if (phase3.kind === "phase-impl" && state.planned_final_phase !== void 0 && Number(phase3.phase) === Number(state.planned_final_phase)) {
@@ -35795,15 +35990,15 @@ var TERMINAL_ARTIFACT_PLACEHOLDERS = {
   produce: "Replace with the complete document or implementation-output artifact; archflow-local build-request emits this entire request already completed and fingerprint-resolved.",
   triage: 'Replace with the complete triage artifact; archflow-local build-request (kind "triage") composes this entire request from the dispositions alone.'
 };
-function deepFreeze4(value) {
+function deepFreeze5(value) {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const nested of Object.values(value)) deepFreeze4(nested);
+    for (const nested of Object.values(value)) deepFreeze5(nested);
     Object.freeze(value);
   }
   return value;
 }
 function request(tool2, input, guidance) {
-  return deepFreeze4({ request: { tool: tool2, input }, guidance });
+  return deepFreeze5({ request: { tool: tool2, input }, guidance });
 }
 function envelopeGuidance(taskId, tool2, detail) {
   return `${detail} Fill every placeholder field, then pipe the completed request as {"tool":"${tool2}","input":<request>} to archflow-local envelope --task ${taskId}; it resolves the fingerprint internally, so call ${tool2} with the returned request.input verbatim \u2014 the envelope output, not this template, is the fingerprint authority.`;
@@ -36474,7 +36669,7 @@ async function currentTargetRef(dependencies) {
     guidance: "Repository HEAD is detached or its symbolic branch ref is unavailable; confirm this target before authorizing commit."
   });
 }
-function buildCommitAuthorizationInput(subject, currentEvidence, target) {
+function buildCommitAuthorizationInput(subject, currentEvidence, target, baselineCommit) {
   if (subject.artifact.artifact_kind !== "implementation-output") {
     throw new TypeError("commit authorization requires retained implementation output");
   }
@@ -36482,12 +36677,21 @@ function buildCommitAuthorizationInput(subject, currentEvidence, target) {
   if (manifest.artifact_digest !== subject.artifact_digest) {
     throw new TypeError("commit authorization manifest subject disagrees");
   }
+  const paths = /* @__PURE__ */ new Set();
+  for (const output of subject.artifact.outputs) {
+    paths.add(output.path);
+    if (output.operation === "rename") paths.add(output.previous_path);
+  }
+  const phase3 = decodePhaseInstance(subject.artifact.phase_instance);
   return Object.freeze({
     kind: "commit-authorization",
     subject_digest: subject.artifact_digest,
     current_evidence: currentEvidence,
     context: Object.freeze({
       target_ref: target.value,
+      baseline_commit: baselineCommit,
+      commit_message: `ArchFlow: Implement ${subject.artifact.task_id} phase ${phase3.kind === "phase-impl" ? String(phase3.phase) : subject.artifact.phase_instance}`,
+      paths: Object.freeze([...paths].sort()),
       diff_digest: subject.artifact.diff_digest,
       current_artifact_digests: Object.freeze([manifest.artifact_digest]),
       parent_document_digests: Object.freeze(subject.artifact.parent_documents.map((item) => item.content_digest).sort())
@@ -36677,14 +36881,21 @@ async function computeTaskStatus(dependencies, authority) {
     }
   }
   let commitObserved = false;
+  let implementationCommit;
   if (produceSubject?.artifact.artifact_kind === "implementation-output") {
     for (const authenticated of authenticatedApprovals) {
-      if (authenticated.request.kind !== "commit-authorization" || authenticated.request.phase_instance !== state.phase_instance || authenticated.request.subject_digest !== produceSubject.artifact_digest) continue;
+      if (authenticated.request.kind !== "commit-authorization" || authenticated.request.phase_instance !== state.phase_instance || authenticated.request.subject_digest !== produceSubject.artifact_digest || authenticated.decision.envelope.payload.decision !== "authorize-commit") continue;
+      implementationCommit = Object.freeze({
+        paths: authenticated.request.context.paths,
+        message: authenticated.request.context.commit_message,
+        target_ref: authenticated.request.context.target_ref,
+        baseline_commit: authenticated.request.context.baseline_commit
+      });
       try {
         if (await implementationOutputCommittedAtCurrentTarget(
           dependencies.runner,
           produceSubject.artifact,
-          authenticated.request.context.target_ref
+          authenticated.request.context
         )) {
           commitObserved = true;
           break;
@@ -36915,6 +37126,7 @@ async function computeTaskStatus(dependencies, authority) {
     authenticated_approvals: approvalFacts,
     commit_observed: commitObserved,
     ...designCommit === void 0 ? {} : { design_commit: designCommit },
+    ...implementationCommit === void 0 ? {} : { implementation_commit: implementationCommit },
     ...adjudicationGateKind === void 0 ? {} : { adjudication_gate_kind: adjudicationGateKind },
     ...pendingGates.length === 0 ? {} : { pending_adjudication_gate_kinds: pendingGates.map((gate) => gate.kind) },
     migration_audit_required: migrationAuditRequired
@@ -36923,7 +37135,12 @@ async function computeTaskStatus(dependencies, authority) {
   let designGateInput;
   if (nextAction.code === "open-gate" && nextAction.gate_kind === "commit-authorization" && produceSubject?.artifact.artifact_kind === "implementation-output" && evidence.available) {
     const target = await currentTargetRef(dependencies);
-    gateInput = buildCommitAuthorizationInput(produceSubject, evidence.current_evidence, target);
+    gateInput = buildCommitAuthorizationInput(
+      produceSubject,
+      evidence.current_evidence,
+      target,
+      await resolveCommit(dependencies.runner, "HEAD")
+    );
   }
   if (nextAction.code === "open-gate" && nextAction.gate_kind === "design-approval" && evidence.available) {
     const target = await currentTargetRef(dependencies);
@@ -37118,9 +37335,9 @@ async function appendGitAttributes(workingDirectory) {
     }
     return true;
   }
-  const text3 = new TextDecoder("utf-8", { fatal: true }).decode(current);
-  if (text3.split(/\r?\n/u).includes(ARCHFLOW_GITATTRIBUTES_LINE)) return false;
-  const prefix = current.byteLength === 0 || text3.endsWith("\n") ? "" : "\n";
+  const text4 = new TextDecoder("utf-8", { fatal: true }).decode(current);
+  if (text4.split(/\r?\n/u).includes(ARCHFLOW_GITATTRIBUTES_LINE)) return false;
+  const prefix = current.byteLength === 0 || text4.endsWith("\n") ? "" : "\n";
   const handle = await open4(path2, "a");
   try {
     await handle.writeFile(`${prefix}${ARCHFLOW_GITATTRIBUTES_LINE}
@@ -37572,10 +37789,10 @@ var fail16 = (error51, cliVersion) => {
   throw new CliAdapterError(error51, cliVersion);
 };
 function decodeJson2(bytes, adapter2, issueCode) {
-  let text3;
+  let text4;
   try {
-    text3 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    const value = JSON.parse(text3);
+    text4 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    const value = JSON.parse(text4);
     assertPlainJson(value, "CLI JSON output");
     return value;
   } catch {
@@ -37596,8 +37813,8 @@ function compareVersions(left, right) {
   return 0;
 }
 function exactVersion(adapter2, output) {
-  const text3 = Buffer.from(output).toString("utf8").trim();
-  const match = adapter2 === "claude-cli" ? /^(\d+\.\d+\.\d+) \(Claude Code\)$/u.exec(text3) : /^codex-cli (\d+\.\d+\.\d+)$/u.exec(text3);
+  const text4 = Buffer.from(output).toString("utf8").trim();
+  const match = adapter2 === "claude-cli" ? /^(\d+\.\d+\.\d+) \(Claude Code\)$/u.exec(text4) : /^codex-cli (\d+\.\d+\.\d+)$/u.exec(text4);
   return match?.[1] ?? "unrecognized";
 }
 async function detectManagedPolicyPaths(paths) {
@@ -37632,9 +37849,9 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
     signal,
     cancellationSource
   );
-  const version3 = exactVersion(adapter2, versionResult.stdout);
-  if (versionResult.exit_code !== 0 || version3 === "unrecognized" || compareVersions(version3, minimumVersion) < 0) {
-    return fail16(createProjectError("CLI_VERSION_UNSUPPORTED", { adapter: adapter2, version: version3 }));
+  const version4 = exactVersion(adapter2, versionResult.stdout);
+  if (versionResult.exit_code !== 0 || version4 === "unrecognized" || compareVersions(version4, minimumVersion) < 0) {
+    return fail16(createProjectError("CLI_VERSION_UNSUPPORTED", { adapter: adapter2, version: version4 }));
   }
   const authResult = await runPreflightCommand(
     adapter2,
@@ -37656,10 +37873,10 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
     const successLines = [authResult.stdout, authResult.stderr].flatMap((channel) => channel.toString("utf8").split(/\r?\n/u)).filter((line) => /^Logged in(?:\s|$)/u.test(line.trim()));
     loggedIn = successLines.length >= 1;
   }
-  if (!loggedIn) return fail16(createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 }), version3);
+  if (!loggedIn) return fail16(createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 }), version4);
   const managedPolicyPaths = await detectManagedPolicyPaths(policyPaths);
   return Object.freeze({
-    cli_version: version3,
+    cli_version: version4,
     managed_policy_present: managedPolicyPaths.length > 0,
     managed_policy_paths: managedPolicyPaths
   });
@@ -37704,9 +37921,9 @@ function claudeFailureMessage(result) {
   try {
     const value = JSON.parse(result.stdout.toString("utf8"));
     if (value === null || typeof value !== "object") return void 0;
-    const record3 = value;
-    if (record3.is_error !== true && record3.type !== "error") return void 0;
-    return typeof record3.result === "string" ? record3.result : typeof record3.error === "string" ? record3.error : void 0;
+    const record4 = value;
+    if (record4.is_error !== true && record4.type !== "error") return void 0;
+    return typeof record4.result === "string" ? record4.result : typeof record4.error === "string" ? record4.error : void 0;
   } catch {
     return void 0;
   }
@@ -38055,11 +38272,11 @@ function parseMcpJson(source) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return fail17("mcp-json-foreign-keys");
   }
-  const record3 = value;
-  if (Object.keys(record3).some((key) => key !== "mcpServers")) {
+  const record4 = value;
+  if (Object.keys(record4).some((key) => key !== "mcpServers")) {
     return fail17("mcp-json-foreign-keys");
   }
-  const servers = record3.mcpServers;
+  const servers = record4.mcpServers;
   if (servers === void 0) return ok15({ mcpServers: {} });
   if (servers === null || typeof servers !== "object" || Array.isArray(servers)) {
     return fail17("mcp-json-foreign-keys");
@@ -38124,9 +38341,9 @@ async function registerClaudeProject(input) {
     } catch (error51) {
       return commandFailure("claude-cli", error51);
     }
-    const text3 = `${get.stdout}
+    const text4 = `${get.stdout}
 ${get.stderr}`;
-    const diagnostic = claudeGetDiagnostic(text3);
+    const diagnostic = claudeGetDiagnostic(text4);
     return ok15(Object.freeze({
       schema_version: "1",
       host: "claude",
@@ -38135,7 +38352,7 @@ ${get.stderr}`;
       pending_approval: diagnostic.pending_approval,
       project_trusted: null,
       masked_by_higher_precedence: diagnostic.masked_by_higher_precedence,
-      diagnostic: get.exit_code === 0 ? text3.trim() : "Project registration written; Claude runtime approval remains to be completed."
+      diagnostic: get.exit_code === 0 ? text4.trim() : "Project registration written; Claude runtime approval remains to be completed."
     }));
   } catch {
     return ioFailure3("claude-registration");
@@ -38179,15 +38396,15 @@ function codexGetDiagnostic(output) {
   try {
     const value = JSON.parse(output);
     if (value === null || typeof value !== "object" || Array.isArray(value)) return void 0;
-    const record3 = value;
-    let command = typeof record3.command === "string" ? record3.command : void 0;
-    const transport = record3.transport;
+    const record4 = value;
+    let command = typeof record4.command === "string" ? record4.command : void 0;
+    const transport = record4.transport;
     if (transport !== null && typeof transport === "object" && !Array.isArray(transport)) {
       const transportCommand = transport.command;
       if (typeof transportCommand === "string") command = transportCommand;
     }
-    const startupTimeout = record3.startup_timeout_sec;
-    const toolTimeout = record3.tool_timeout_sec;
+    const startupTimeout = record4.startup_timeout_sec;
+    const toolTimeout = record4.tool_timeout_sec;
     return {
       command,
       startup_timeout_sec: typeof startupTimeout === "number" || startupTimeout === null ? startupTimeout : void 0,
@@ -38305,10 +38522,10 @@ async function diagnoseAdapter(adapter2, repository) {
   } catch (caught) {
     const error51 = preflightError(caught);
     const paths = await pathsPromise;
-    const version3 = caught instanceof CliAdapterError ? caught.cli_version ?? unsupportedVersion(caught.project_error) : null;
+    const version4 = caught instanceof CliAdapterError ? caught.cli_version ?? unsupportedVersion(caught.project_error) : null;
     return Object.freeze({
       adapter: adapter2,
-      version: version3,
+      version: version4,
       authenticated: error51?.code === "AUTH_UNAVAILABLE" ? false : null,
       managed_policy_present: paths.length > 0,
       managed_policy_paths: paths,
@@ -38474,12 +38691,12 @@ var fail18 = (error51) => Object.freeze({ schema_version: "1", ok: false, error:
 function errno2(error51, code2) {
   return error51 instanceof Error && error51.code === code2;
 }
-function commitDigest(commit, digest_kind) {
-  return canonicalJsonDigest({ schema_version: "1", digest_kind, commit });
+function commitDigest(commit2, digest_kind) {
+  return canonicalJsonDigest({ schema_version: "1", digest_kind, commit: commit2 });
 }
-function policyBaseInvalid(commit) {
+function policyBaseInvalid(commit2) {
   return createProjectError("POLICY_BASE_INVALID", {
-    expected_digest: commitDigest(commit, "policy-base-commit")
+    expected_digest: commitDigest(commit2, "policy-base-commit")
   });
 }
 async function createTaskConfig(root, taskId) {
@@ -38514,17 +38731,17 @@ function canonicalTaskPaths(taskId) {
     constitution_root: parseRepositoryPathClaim(".archflow/constitution")
   });
 }
-async function resolveInitializationPolicyBase(runner, commit, context2) {
-  const constitution = await resolvePinnedConstitution(runner, commit, context2);
+async function resolveInitializationPolicyBase(runner, commit2, context2) {
+  const constitution = await resolvePinnedConstitution(runner, commit2, context2);
   if (!constitution.ok) return constitution;
   try {
-    const workflowEntry = await readCommitTreeBlob(runner, commit, PINNED_WORKFLOW_PATH);
-    if (workflowEntry === void 0) return fail18(policyBaseInvalid(commit));
+    const workflowEntry = await readCommitTreeBlob(runner, commit2, PINNED_WORKFLOW_PATH);
+    if (workflowEntry === void 0) return fail18(policyBaseInvalid(commit2));
     const workflowBytes = await readGitBlobBytes(runner, workflowEntry.oid);
     try {
       parseWorkflowYaml(decoder4.decode(workflowBytes), "pinned workflow");
     } catch {
-      return fail18(policyBaseInvalid(commit));
+      return fail18(policyBaseInvalid(commit2));
     }
     return ok16(Object.freeze({
       constitution_digest: constitution.value.digest,
@@ -38754,8 +38971,8 @@ async function stageLegacyUpgrade(input) {
     const policyCommit = parseGitOid(input.policy_base_commit);
     const importCommit = parseGitOid(input.import_baseline_commit);
     const codeCommit = parseGitOid(input.code_baseline_commit);
-    for (const commit of [policyCommit, importCommit, codeCommit]) {
-      if (await resolveCommit(runner, commit) !== commit) return fail19(policyBaseInvalid(commit));
+    for (const commit2 of [policyCommit, importCommit, codeCommit]) {
+      if (await resolveCommit(runner, commit2) !== commit2) return fail19(policyBaseInvalid(commit2));
     }
     const policy = await resolveInitializationPolicyBase(runner, policyCommit, context2);
     if (!policy.ok) return policy;
@@ -39128,6 +39345,85 @@ async function buildDocumentArtifact(runner, authority, input) {
   }));
 }
 
+// src/state/gate-preview.ts
+var ZERO_DIGEST = "0".repeat(64);
+function commitFor(input) {
+  if (input.kind === "commit-authorization" && !("origin" in input.context)) {
+    const context2 = input.context;
+    return Object.freeze({
+      target_ref: context2.target_ref,
+      baseline_commit: context2.baseline_commit,
+      message: context2.commit_message,
+      paths: Object.freeze([...context2.paths]),
+      diff_digest: context2.diff_digest
+    });
+  }
+  if (input.kind === "design-approval" && !("origin" in input.context)) {
+    const context2 = input.context;
+    return Object.freeze({
+      target_ref: context2.target_ref,
+      baseline_commit: context2.baseline_commit,
+      message: context2.commit_message,
+      paths: Object.freeze([`.archflow/tasks/${input.task_id}`])
+    });
+  }
+  if (input.kind === "migration-audit" && !("origin" in input.context)) {
+    const context2 = input.context;
+    if (context2.target_ref !== void 0 && context2.baseline_commit !== void 0 && context2.commit_message !== void 0) {
+      return Object.freeze({
+        target_ref: context2.target_ref,
+        baseline_commit: context2.baseline_commit,
+        message: context2.commit_message,
+        paths: Object.freeze([`.archflow/tasks/${input.task_id}`])
+      });
+    }
+  }
+  return void 0;
+}
+function buildGatePreview(input) {
+  const waiver = "origin" in input.context;
+  const request2 = parseGateRequest({
+    schema_version: "1",
+    gate_id: "preview-gate",
+    intent_id: "preview-intent",
+    request_digest: ZERO_DIGEST,
+    task_id: input.task_id,
+    phase_instance: input.phase_instance,
+    summary: input.summary,
+    subject_digest: input.subject_digest,
+    context_digest: waiver ? computeGateContextDigest("waiver", input.context) : computeGateContextDigest(input.kind, input.context),
+    current_evidence: input.current_evidence,
+    kind: input.kind,
+    context: input.context,
+    allowed_decisions: waiver ? ["grant", "deny", "cancel"] : DECISIONS[input.kind],
+    opened_at_revision: parseSafeInteger(input.revision + 1)
+  });
+  const presentation = buildHumanGatePresentation(activeProjection(request2));
+  const commit2 = commitFor(input);
+  const preview = Object.freeze({
+    schema_version: "1",
+    task_id: input.task_id,
+    revision: input.revision,
+    phase_instance: input.phase_instance,
+    summary: input.summary,
+    subject_digest: input.subject_digest,
+    current_evidence: input.current_evidence,
+    kind: input.kind,
+    context: structuredClone(input.context),
+    options: presentation.options,
+    ...commit2 === void 0 ? {} : { commit: commit2 }
+  });
+  const previewDigest = canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "gate-preview",
+    preview
+  });
+  return Object.freeze({ preview_digest: previewDigest, preview, presentation });
+}
+function previewHasChoice(preview, decision3) {
+  return preview.presentation.options.some((option) => option.token === decision3.choice) && decision3.reason.trim() !== "";
+}
+
 // src/state/request.ts
 function subjectFor(call, authority, inputFingerprint) {
   const common3 = {
@@ -39139,6 +39435,19 @@ function subjectFor(call, authority, inputFingerprint) {
   switch (call.name) {
     case "archflow_state":
       if (call.input.artifact === void 0) {
+        if (call.input.planning_restart !== void 0) {
+          return {
+            ...common3,
+            tool: call.name,
+            operation: "restart-planning",
+            operation_fields: {
+              phase_instance: call.input.phase_instance,
+              step: call.input.step,
+              status: call.input.status,
+              planning_restart: call.input.planning_restart
+            }
+          };
+        }
         return { ...common3, tool: call.name, operation: "record-state-boundary", operation_fields: { phase_instance: call.input.phase_instance, step: call.input.step, status: call.input.status } };
       }
       return {
@@ -39169,12 +39478,19 @@ function subjectFor(call, authority, inputFingerprint) {
         subject_digest: call.input.subject_digest,
         current_evidence: call.input.current_evidence,
         kind: call.input.kind,
-        context: call.input.context
+        context: call.input.context,
+        preview_digest: call.input.preview_digest,
+        decision: call.input.decision
       };
       return { ...common3, tool: call.name, operation: "gate", operation_fields };
     }
     case "archflow_waiver":
-      return { ...common3, tool: call.name, operation: "waiver", operation_fields: { origin: call.input.origin, rationale: call.input.rationale } };
+      return { ...common3, tool: call.name, operation: "waiver", operation_fields: {
+        origin: call.input.origin,
+        rationale: call.input.rationale,
+        preview_digest: call.input.preview_digest,
+        decision: call.input.decision
+      } };
     default: {
       const exhaustive = call;
       throw new TypeError(`unknown tool ${String(exhaustive.name)}`);
@@ -39211,12 +39527,12 @@ async function writeStagedRequest(input) {
     context: services2.authority.context
   });
   if (!target.ok) return target;
-  const record3 = {
+  const record4 = {
     schema_version: "1",
     request: { tool: input.tool, input: input.request_input },
     request_digest: input.request_digest
   };
-  await services2.dependencies.atomic.replace(target.value, canonicalJsonBytes(record3));
+  await services2.dependencies.atomic.replace(target.value, canonicalJsonBytes(record4));
   return ok19(Object.freeze({
     path: target.value.repositoryRelative,
     reference: Object.freeze({
@@ -39422,9 +39738,9 @@ async function identifyStateInitialization(dependencies, request2) {
 // src/local/call-envelope.ts
 var ok21 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail22 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-function deepFreeze5(value) {
+function deepFreeze6(value) {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const nested of Object.values(value)) deepFreeze5(nested);
+    for (const nested of Object.values(value)) deepFreeze6(nested);
     Object.freeze(value);
   }
   return value;
@@ -39493,7 +39809,7 @@ async function computeCallEnvelope(services2, value) {
   const draft = parseToolCall(tool2, Reflect.get(snapshot2, "input"));
   const fingerprint = await fingerprintFor(services2, draft);
   if (!fingerprint.ok) return fingerprint;
-  const resolvedInput = deepFreeze5(resolveCallInput(draft, fingerprint.value));
+  const resolvedInput = deepFreeze6(resolveCallInput(draft, fingerprint.value));
   const call = parseToolCall(tool2, resolvedInput);
   const identified = identifyTransactionRequest(call, services2.authority, fingerprint.value);
   const envelope2 = {
@@ -39520,8 +39836,124 @@ async function computeCallEnvelope(services2, value) {
   }));
 }
 
-// src/local/build-request.ts
+// src/state/waiver-origin.ts
+import { isDeepStrictEqual as isDeepStrictEqual8 } from "node:util";
+function authenticWaiverOriginArchive(request2, decision3, origin2) {
+  const payload = decision3.value.outcome === "decided" ? decision3.value.envelope.payload : void 0;
+  return request2.value.gate_id === origin2.origin_gate_id && request2.value.task_id === origin2.task_id && request2.value.phase_instance === origin2.phase_instance && request2.value.subject_digest === origin2.subject_digest && request2.value.context_digest === origin2.origin_context_digest && request2.value.current_evidence.set_digest === origin2.current_evidence_set_digest && (request2.value.kind === "constitution-review" || request2.value.kind === "design-approval") && decision3.digest === origin2.origin_decision_digest && payload?.decision === "waiver-requested" && isDeepStrictEqual8(payload.rule, origin2.rule) && payload.operation === origin2.scope.operation && "eligible_waivers" in request2.value.context && request2.value.context.eligible_waivers.some((eligible) => isDeepStrictEqual8(eligible.rule, origin2.rule) && isDeepStrictEqual8(eligible.scope, origin2.scope)) && validateDurableSemantics({ gate_request: request2, gate_decision: decision3 }).ok;
+}
+
+// src/local/gate-preview.ts
 var ok22 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+function record2(value) {
+  assertPlainJson(value, "gate-preview input");
+  if (value === null || Array.isArray(value) || typeof value !== "object") {
+    throw new TypeError("gate-preview input must be an object");
+  }
+  return structuredClone(value);
+}
+function invalid(services2, issueCode) {
+  return Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("STATE_INVALID", {
+      phase_instance: services2.state?.value.phase_instance ?? services2.authority.context.phase_instance,
+      issue_code: issueCode
+    })
+  });
+}
+async function currentGatePreview(services2, summary) {
+  const status2 = await computeTaskStatus(services2.dependencies, services2.authority);
+  if (!status2.ok) return status2;
+  if (status2.value.next_action.code !== "open-gate") {
+    return invalid(services2, "gate-preview-action-not-current");
+  }
+  const request2 = status2.value.next_action.request;
+  if (request2?.tool !== "archflow_gate" || request2.input === null || Array.isArray(request2.input) || typeof request2.input !== "object") {
+    return invalid(services2, "gate-preview-request-unavailable");
+  }
+  const input = request2.input;
+  const kind = String(input.kind);
+  const context2 = parseGateContext(kind, input.context);
+  const evidence = parseCurrentEvidenceSetRef(input.current_evidence);
+  return ok22(buildGatePreview({
+    task_id: services2.authority.task_id,
+    revision: status2.value.revision,
+    phase_instance: status2.value.phase_instance,
+    summary,
+    subject_digest: String(input.subject_digest),
+    current_evidence: evidence,
+    kind,
+    context: context2
+  }));
+}
+async function readWaiverOrigin(services2, origin2) {
+  const requestTarget = await resolveTaskPath({
+    runner: services2.runner,
+    taskId: services2.authority.task_id,
+    claim: gateRequestClaim(origin2.origin_gate_id),
+    expectedClass: "authority-decision",
+    context: services2.authority.context
+  });
+  if (!requestTarget.ok) return requestTarget;
+  const decisionTarget = await resolveTaskPath({
+    runner: services2.runner,
+    taskId: services2.authority.task_id,
+    claim: gateDecisionClaim(origin2.origin_gate_id),
+    expectedClass: "authority-decision",
+    context: services2.authority.context
+  });
+  if (!decisionTarget.ok) return decisionTarget;
+  try {
+    const requestHandle = await openResolved(requestTarget.value.absolute, 0);
+    const request2 = parseCanonicalDocument(
+      new Uint8Array(await requestHandle.readFile().finally(() => requestHandle.close())),
+      "waiver origin request"
+    );
+    const parsedRequest = Object.freeze({ ...request2, value: parseArchivedGateRequest(request2.value) });
+    const decisionHandle = await openResolved(decisionTarget.value.absolute, 0);
+    const decision3 = parseCanonicalDocument(
+      new Uint8Array(await decisionHandle.readFile().finally(() => decisionHandle.close())),
+      "waiver origin decision"
+    );
+    const parsedDecision = Object.freeze({ ...decision3, value: parseArchivedGateDecisionRecord(decision3.value) });
+    if (!authenticWaiverOriginArchive(parsedRequest, parsedDecision, origin2)) {
+      return invalid(services2, "waiver-preview-origin-invalid");
+    }
+    return ok22(Object.freeze({
+      context: Object.freeze({ origin: origin2, rationale: "" }),
+      evidence: parsedRequest.value.current_evidence
+    }));
+  } catch {
+    return invalid(services2, "waiver-preview-origin-invalid");
+  }
+}
+async function waiverPreview(services2, value) {
+  if (services2.state === void 0) return invalid(services2, "waiver-preview-state-missing");
+  const origin2 = value.origin;
+  const rationale = String(value.rationale ?? "");
+  if (rationale.trim() === "") throw new TypeError("gate-preview waiver requires a non-empty rationale");
+  const loaded = await readWaiverOrigin(services2, origin2);
+  if (!loaded.ok) return loaded;
+  const context2 = Object.freeze({ origin: origin2, rationale });
+  return ok22(buildGatePreview({
+    task_id: services2.authority.task_id,
+    revision: services2.state.value.revision,
+    phase_instance: origin2.phase_instance,
+    summary: `Waiver request for ${origin2.rule.rule_id}`,
+    subject_digest: origin2.subject_digest,
+    current_evidence: loaded.value.evidence,
+    kind: "constitution-review",
+    context: context2
+  }));
+}
+async function computeLocalGatePreview(services2, input) {
+  const value = record2(input);
+  return value.kind === "waiver" ? waiverPreview(services2, value) : currentGatePreview(services2, String(value.summary ?? ""));
+}
+
+// src/local/build-request.ts
+var ok23 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail23 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 var BUILD_REQUEST_KINDS = Object.freeze([
   "initialize",
@@ -39530,10 +39962,12 @@ var BUILD_REQUEST_KINDS = Object.freeze([
   "triage",
   "counter-review",
   "gate",
-  "advance"
+  "waiver",
+  "advance",
+  "restart"
 ]);
-var PAYLOAD_SHAPE = `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},"step"?:<pipeline step for kind running>,"document"?:{...},"implementation"?:{...},"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],"summary"?:<gate summary text>}`;
-function record2(value, name) {
+var PAYLOAD_SHAPE = `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},"step"?:<pipeline step for kind running>,"document"?:{...},"implementation"?:{...},"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],"summary"?:<gate summary text>,"preview_digest"?:<gate-preview digest>,"decision"?:{"choice":<option token>,"reason":<human reason>},"origin"?:<waiver origin>,"rationale"?:<waiver rationale>,"target_phase_instance"?:<earlier planning phase>,"reason"?:<restart reason>}`;
+function record3(value, name) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${name} must be an object; expected ${PAYLOAD_SHAPE}`);
   }
@@ -39546,6 +39980,18 @@ function transitionInvalid(state, to) {
     to
   }));
 }
+function requestedGateDecision(snapshot2, label) {
+  const raw = record3(snapshot2.decision, `${label} decision`);
+  const choice = String(raw.choice ?? "");
+  const reason2 = String(raw.reason ?? "");
+  if (choice.trim() === "" || reason2.trim() === "") {
+    throw new TypeError(`${label} decision requires non-empty "choice" and "reason" fields`);
+  }
+  return Object.freeze({
+    preview_digest: parseSha256Digest(snapshot2.preview_digest),
+    decision: Object.freeze({ choice, reason: reason2 })
+  });
+}
 function isPipelineStep(value) {
   return PIPELINE_STEPS.includes(value);
 }
@@ -39557,6 +40003,44 @@ function mechanicalInput(services2, state, intentId) {
     expected_revision: state.revision,
     input_fingerprint: state.input_fingerprint
   };
+}
+var ordinal7 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+function includeChangedImplementationDocuments(input) {
+  const defaults = phaseImplParentDocumentDefaults(input.phase_instance);
+  if (defaults === void 0) throw new TypeError("implementation document capture requires a phase-impl phase");
+  const changed = new Set(input.changed_paths);
+  const outputs = new Set(input.outputs);
+  const restoreTargets = new Set(input.restore_targets);
+  const parents = new Map(input.parent_documents.map((parent) => [parent.document_path, parent]));
+  for (const parent of defaults) {
+    const taskPath = parseTaskPathClaim(parent.document_path);
+    const repositoryPath = toRepositoryPathClaim(input.task_id, taskPath);
+    if (!changed.has(repositoryPath)) continue;
+    outputs.add(repositoryPath);
+    restoreTargets.add(repositoryPath);
+    if (!parents.has(parent.document_path)) parents.set(parent.document_path, parent);
+  }
+  return Object.freeze({
+    outputs: Object.freeze([...outputs].sort(ordinal7)),
+    restore_targets: Object.freeze([...restoreTargets].sort(ordinal7)),
+    parent_documents: Object.freeze([...parents.values()].sort((left, right) => ordinal7(left.document_path, right.document_path)))
+  });
+}
+function implementationPathList(value, name) {
+  if (!Array.isArray(value)) throw new TypeError(`implementation ${name} must be an array`);
+  return value.map((path2) => parseRepositoryPathClaim(path2));
+}
+function implementationParentDocuments(value, defaults) {
+  if (value === void 0) return defaults;
+  if (!Array.isArray(value)) throw new TypeError("implementation parent_documents must be an array");
+  return value.map((candidate) => {
+    const parent = record3(candidate, "implementation parent document");
+    const role = parent.role;
+    if (role !== "prd" && role !== "design" && role !== "phase-design" && role !== "impl-notes") {
+      throw new TypeError("implementation parent document role is invalid");
+    }
+    return Object.freeze({ document_path: parseTaskPathClaim(parent.document_path), role });
+  });
 }
 var INITIALIZATION_FINGERPRINT_SENTINEL = "0".repeat(64);
 async function composeInitialize(services2, intentId) {
@@ -39593,19 +40077,30 @@ async function composeProduce(services2, state, intentId, snapshot2) {
     if (snapshot2.document !== void 0) {
       throw new TypeError("phase-impl produces an implementation output; supply implementation facts, not document facts");
     }
-    const implementation = record2(
+    const implementation = record3(
       snapshot2.implementation,
       "build-request implementation facts (required for phase-impl)"
     );
+    const parentDefaults = phaseImplParentDocumentDefaults(state.phase_instance);
+    if (parentDefaults === void 0) throw new TypeError("phase-impl parent document defaults are unavailable");
+    const changed = await readChangedGitPaths(services2.runner);
+    const captured = includeChangedImplementationDocuments({
+      task_id: services2.authority.task_id,
+      phase_instance: state.phase_instance,
+      changed_paths: changed.paths,
+      outputs: implementationPathList(implementation.outputs, "outputs"),
+      restore_targets: implementationPathList(implementation.restore_targets, "restore_targets"),
+      parent_documents: implementationParentDocuments(implementation.parent_documents, parentDefaults)
+    });
     const built = await buildImplementationOutput(
       services2.dependencies,
       services2.authority,
       services2.state,
       {
         ...implementation,
+        ...captured,
         phase_instance: state.phase_instance,
         step: "produce",
-        parent_documents: implementation.parent_documents ?? phaseImplParentDocumentDefaults(state.phase_instance),
         declared_inputs: implementation.declared_inputs ?? [],
         input_fingerprint: state.input_fingerprint
       }
@@ -39618,7 +40113,7 @@ async function composeProduce(services2, state, intentId, snapshot2) {
     }
     const defaults = phaseDocumentDefaults(services2.authority.task_id, state.phase_instance);
     if (defaults === void 0) throw new TypeError(`${phaseKind2} has no canonical document defaults`);
-    const document2 = snapshot2.document === void 0 ? {} : record2(snapshot2.document, "build-request document facts");
+    const document2 = snapshot2.document === void 0 ? {} : record3(snapshot2.document, "build-request document facts");
     const built = await buildDocumentArtifact(services2.runner, services2.authority, {
       phase_instance: state.phase_instance,
       step: "produce",
@@ -39639,7 +40134,7 @@ async function composeProduce(services2, state, intentId, snapshot2) {
     if (snapshot2.human_revision === void 0) {
       throw new TypeError("this produce result completes a human-requested revision; human_revision classification and rationale are required");
     }
-    humanRevision = structuredClone(record2(snapshot2.human_revision, "build-request human revision"));
+    humanRevision = structuredClone(record3(snapshot2.human_revision, "build-request human revision"));
   } else if (snapshot2.human_revision !== void 0) {
     throw new TypeError("human_revision is accepted only while durable state has a pending human-requested revision");
   }
@@ -39703,7 +40198,7 @@ async function composeTriage(services2, state, intentId, snapshot2) {
     }
   }
   const dispositions = snapshot2.dispositions.map((entry, index) => {
-    const item = record2(entry, `triage disposition ${index}`);
+    const item = record3(entry, `triage disposition ${index}`);
     const findingId = String(item.finding_id ?? "");
     const candidates = digestsByFindingId.get(findingId);
     if (candidates === void 0) {
@@ -39800,6 +40295,7 @@ async function composeGate(services2, state, intentId, snapshot2) {
   if (summary.trim() === "") {
     throw new TypeError('build-request gate facts require a non-empty "summary" written for the human reviewer');
   }
+  const requested = requestedGateDecision(snapshot2, "build-request gate");
   const phaseKind2 = decodePhaseInstance(state.phase_instance).kind;
   const gateKind2 = phaseKind2 === "phase-impl" ? "commit-authorization" : phaseKind2 === "design" || phaseKind2 === "phase-design" ? "design-approval" : "artifact-approval";
   if (state.terminal !== void 0 || state.open_gate !== void 0) {
@@ -39860,7 +40356,12 @@ async function composeGate(services2, state, intentId, snapshot2) {
     };
   } else if (gateKind2 === "commit-authorization") {
     const target = await currentTargetRef(services2.dependencies);
-    const authorization = buildCommitAuthorizationInput(subject.value, derived.current_evidence_set, target);
+    const authorization = buildCommitAuthorizationInput(
+      subject.value,
+      derived.current_evidence_set,
+      target,
+      await resolveCommit(services2.runner, "HEAD")
+    );
     input = {
       ...mechanicalInput(services2, state, intentId),
       phase_instance: state.phase_instance,
@@ -39881,7 +40382,50 @@ async function composeGate(services2, state, intentId, snapshot2) {
       context: { artifact_kind: APPROVAL_ARTIFACT_KINDS[phaseKind2] }
     };
   }
+  const preview = buildGatePreview({
+    task_id: services2.authority.task_id,
+    revision: state.revision,
+    phase_instance: state.phase_instance,
+    summary,
+    subject_digest: input.subject_digest,
+    current_evidence: derived.current_evidence_set,
+    kind: input.kind,
+    context: input.context
+  });
+  if (preview.preview_digest !== requested.preview_digest || !previewHasChoice(preview, requested.decision)) {
+    return transitionInvalid(state, preview.preview_digest !== requested.preview_digest ? "gate-preview-stale" : "gate-decision-choice-invalid");
+  }
+  input.preview_digest = requested.preview_digest;
+  input.decision = requested.decision;
   return computeCallEnvelope(services2, { tool: "archflow_gate", input });
+}
+async function composeWaiver(services2, state, intentId, snapshot2) {
+  if (state.terminal !== void 0 || state.open_gate !== void 0) {
+    return transitionInvalid(state, "waiver-gate");
+  }
+  const requested = requestedGateDecision(snapshot2, "build-request waiver");
+  const origin2 = record3(snapshot2.origin, "build-request waiver origin");
+  const rationale = String(snapshot2.rationale ?? "");
+  if (rationale.trim() === "") throw new TypeError('build-request waiver requires a non-empty "rationale"');
+  const preview = await computeLocalGatePreview(services2, {
+    kind: "waiver",
+    origin: origin2,
+    rationale
+  });
+  if (!preview.ok) return preview;
+  if (preview.value.preview_digest !== requested.preview_digest || !previewHasChoice(preview.value, requested.decision)) {
+    return transitionInvalid(state, preview.value.preview_digest !== requested.preview_digest ? "waiver-preview-stale" : "waiver-decision-choice-invalid");
+  }
+  return computeCallEnvelope(services2, {
+    tool: "archflow_waiver",
+    input: {
+      ...mechanicalInput(services2, state, intentId),
+      origin: origin2,
+      rationale,
+      preview_digest: requested.preview_digest,
+      decision: requested.decision
+    }
+  });
 }
 async function composeAdvance(services2, state, intentId) {
   const computed = await computeTaskStatus(services2.dependencies, services2.authority);
@@ -39901,6 +40445,23 @@ async function composeAdvance(services2, state, intentId) {
     }
   });
 }
+function composePlanningRestart(services2, state, intentId, snapshot2) {
+  const target = parsePhaseInstanceId(snapshot2.target_phase_instance);
+  const reason2 = String(snapshot2.reason ?? "");
+  if (reason2.trim() === "" || state.terminal !== void 0 || state.open_gate !== void 0 || !isEarlierPlanningPhase(target, state.phase_instance)) {
+    return transitionInvalid(state, `${target}-restart`);
+  }
+  return computeCallEnvelope(services2, {
+    tool: "archflow_state",
+    input: {
+      ...mechanicalInput(services2, state, intentId),
+      phase_instance: target,
+      step: "produce",
+      status: "running",
+      planning_restart: { reason: reason2 }
+    }
+  });
+}
 function generateIntentId(kind) {
   const stamp = (/* @__PURE__ */ new Date()).toISOString().replaceAll("-", "").replaceAll(":", "").slice(0, 15);
   const random = randomUUID4().replaceAll("-", "").slice(0, 4);
@@ -39916,11 +40477,11 @@ async function withStagedRequest(services2, intentId, result) {
     request_digest: result.value.request_digest
   });
   if (!staged.ok) return staged;
-  return ok22(Object.freeze({ ...result.value, staged: staged.value }));
+  return ok23(Object.freeze({ ...result.value, staged: staged.value }));
 }
 async function runBuildRequest(services2, value) {
   assertPlainJson(value, "build-request input");
-  const snapshot2 = record2(structuredClone(value), "build-request input");
+  const snapshot2 = record3(structuredClone(value), "build-request input");
   const kind = snapshot2.kind === void 0 ? "produce" : String(snapshot2.kind);
   const intentId = snapshot2.intent_id === void 0 ? generateIntentId(kind) : parsePathSafeId(String(snapshot2.intent_id));
   if (kind === "initialize") {
@@ -39943,8 +40504,12 @@ async function runBuildRequest(services2, value) {
       return withStagedRequest(services2, intentId, await composeCounterReview(services2, state, intentId, snapshot2));
     case "gate":
       return withStagedRequest(services2, intentId, await composeGate(services2, state, intentId, snapshot2));
+    case "waiver":
+      return withStagedRequest(services2, intentId, await composeWaiver(services2, state, intentId, snapshot2));
     case "advance":
       return withStagedRequest(services2, intentId, await composeAdvance(services2, state, intentId));
+    case "restart":
+      return withStagedRequest(services2, intentId, await composePlanningRestart(services2, state, intentId, snapshot2));
     default:
       throw new TypeError(`build-request kind ${JSON.stringify(kind)} is not recognized; expected ${PAYLOAD_SHAPE}`);
   }
@@ -39953,7 +40518,7 @@ async function runBuildRequest(services2, value) {
 // src/local/status-classification.ts
 import { readdir as readdir5, readFile as readFile13 } from "node:fs/promises";
 import { join as join15 } from "node:path";
-var ok23 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok24 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function action2(code2, detail, human, commands, input) {
   return Object.freeze({ code: code2, detail, human_required: human, ...commands === void 0 ? {} : { commands }, ...input === void 0 ? {} : { input } });
 }
@@ -40011,8 +40576,8 @@ async function classifyWorkflowStatus(input) {
   });
   if (readability.readability === "absent") {
     const staged = await stagedUpgradeStatus(input);
-    if (staged !== void 0) return ok23(staged);
-    return ok23(Object.freeze({
+    if (staged !== void 0) return ok24(staged);
+    return ok24(Object.freeze({
       mode: "degraded",
       next_action: action2(
         "wait-for-server",
@@ -40022,7 +40587,7 @@ async function classifyWorkflowStatus(input) {
     }));
   }
   if (readability.readability === "unreadable") {
-    return ok23(Object.freeze({
+    return ok24(Object.freeze({
       mode: "repair-required",
       next_action: action2(
         "repair-durable-state",
@@ -40047,7 +40612,7 @@ async function classifyWorkflowStatus(input) {
     claude: [`/${derived.skill}`, args].filter(Boolean).join(" "),
     codex: [`$${derived.skill}`, args].filter(Boolean).join(" ")
   });
-  return ok23(Object.freeze({
+  return ok24(Object.freeze({
     mode: "normal",
     task_status: status2.value,
     next_action: action2(
@@ -40060,6 +40625,91 @@ async function classifyWorkflowStatus(input) {
   }));
 }
 
+// src/local/commit.ts
+var ok25 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail24 = (services2, issueCode) => Object.freeze({
+  schema_version: "1",
+  ok: false,
+  error: createProjectError("STATE_INVALID", {
+    phase_instance: services2.state?.value.phase_instance ?? services2.authority.context.phase_instance,
+    issue_code: issueCode
+  })
+});
+function literalPathspec(path2) {
+  return `:(top,literal)${path2}`;
+}
+async function targetMatches(services2, targetRef, baseline) {
+  const symbolic = await services2.runner.runText({
+    argv: ["symbolic-ref", "--quiet", "HEAD"],
+    operation: parseSafeCode("git-local-commit-target"),
+    expectedAbsence: [{ code: 1, stderrIncludes: "" }]
+  });
+  if (targetRef === "HEAD" ? symbolic !== "" : symbolic !== targetRef) return false;
+  const head = await resolveCommit(services2.runner, "HEAD");
+  const target = await resolveCommit(services2.runner, targetRef);
+  return head === baseline && target === baseline;
+}
+async function commitCurrentAuthorizedAction(services2) {
+  if (services2.state === void 0) return fail24(services2, "commit-state-missing");
+  const status2 = await computeTaskStatus(services2.dependencies, services2.authority);
+  if (!status2.ok) return status2;
+  const next = status2.value.next_action;
+  if (next.code !== "commit-artifacts" && next.code !== "commit-phase") {
+    return fail24(services2, "commit-action-not-current");
+  }
+  const message = next.commit_message;
+  const targetRef = next.commit_target_ref;
+  const baseline = next.commit_baseline;
+  const paths = next.code === "commit-artifacts" ? next.commit_path === void 0 ? void 0 : [next.commit_path] : next.commit_paths;
+  if (message === void 0 || targetRef === void 0 || baseline === void 0 || paths === void 0 || paths.length === 0) return fail24(services2, "commit-authority-incomplete");
+  try {
+    if (!await targetMatches(services2, targetRef, baseline)) {
+      return fail24(services2, "commit-target-or-baseline-changed");
+    }
+    const sortedPaths2 = Object.freeze([...new Set(paths)].sort());
+    const pathspecs = sortedPaths2.map(literalPathspec);
+    if (next.code === "commit-phase") {
+      const changed = await readChangedGitPaths(services2.runner);
+      const authorized = new Set(sortedPaths2);
+      const observed = [...new Set(changed.paths.filter((path2) => authorized.has(path2)))].sort();
+      if (JSON.stringify(observed) !== JSON.stringify(sortedPaths2)) {
+        return fail24(services2, "commit-staged-paths-mismatch");
+      }
+    }
+    const untracked = await services2.runner.runNulFields({
+      argv: ["ls-files", "--others", "--exclude-standard", "-z", "--", ...pathspecs],
+      operation: parseSafeCode("git-local-commit-untracked-paths")
+    });
+    if (untracked.length > 0) {
+      await services2.runner.runText({
+        argv: ["add", "-N", "--", ...untracked.map(literalPathspec)],
+        operation: parseSafeCode("git-local-commit-intent-to-add")
+      });
+    }
+    await services2.runner.runText({
+      argv: ["commit", "--only", "-m", message, "--", ...pathspecs],
+      operation: parseSafeCode("git-local-commit-create")
+    });
+    const commit2 = parseGitOid(await resolveCommit(services2.runner, "HEAD"));
+    return ok25(Object.freeze({
+      action: next.code,
+      commit: commit2,
+      target_ref: targetRef,
+      message,
+      paths: sortedPaths2
+    }));
+  } catch {
+    return Object.freeze({
+      schema_version: "1",
+      ok: false,
+      error: createProjectError("IO_ERROR", {
+        operation: parseSafeCode("git-local-commit"),
+        attempt: services2.authority.context.attempt
+      })
+    });
+  }
+}
+
 // src/local/commands.ts
 var LOCAL_COMMANDS = Object.freeze([
   "validate",
@@ -40068,8 +40718,10 @@ var LOCAL_COMMANDS = Object.freeze([
   "snapshot",
   "restore",
   "clean",
+  "commit",
   "decide",
   "status",
+  "gate-preview",
   "reconcile",
   "init",
   "envelope",
@@ -40084,8 +40736,10 @@ var LOCAL_COMMAND_CONTRACTS = Object.freeze({
   snapshot: { payload: '{"manifest":<result manifest>,"payloads":[...],"retained_task_bytes":<n>}', task: "required" },
   restore: { payload: '{"result_digest":<sha256>,"output_path":<path>}', task: "required" },
   clean: { payload: null, task: "required" },
+  commit: { payload: null, task: "required" },
   decide: { payload: '{"kind":"choice","choice":<presentation option token>,"reason":<human reason>} (legacy interface payload remains accepted)', task: "required" },
   status: { payload: null, task: "required" },
+  "gate-preview": { payload: '{"kind"?:"gate"|"waiver","summary"?:<human summary>,"origin"?:<waiver origin>,"rationale"?:<waiver rationale>}', task: "required" },
   reconcile: { payload: '{"recorded_projections":[...],"current_projections":[...],"active_heads":{...}}', task: "required" },
   init: { payload: null, task: "ignored" },
   envelope: { payload: '{"tool":<tool name>,"input":<tool input>}', task: "required" },
@@ -40202,6 +40856,11 @@ async function clean(input) {
     })
   });
 }
+async function commit(input) {
+  const created = await services(input);
+  if (!created.ok) return created;
+  return commitCurrentAuthorizedAction(created.value);
+}
 async function manualStatus(input) {
   return classifyWorkflowStatus({
     working_directory: input.working_directory,
@@ -40214,6 +40873,11 @@ async function status(input) {
   const computed = await computeTaskStatus(created.value.dependencies, created.value.authority);
   if (!computed.ok || input.brief !== true) return computed;
   return Object.freeze({ schema_version: "1", ok: true, value: projectBriefStatus(computed.value) });
+}
+async function gatePreview(input) {
+  const created = await services(input);
+  if (!created.ok) return created;
+  return computeLocalGatePreview(created.value, requireValue(input));
 }
 async function envelope(input) {
   const created = await services(input);
@@ -40299,8 +40963,10 @@ var LOCAL_COMMAND_HANDLERS = Object.freeze({
   snapshot,
   restore,
   clean,
+  commit,
   decide,
   status,
+  "gate-preview": gatePreview,
   reconcile,
   init,
   envelope,

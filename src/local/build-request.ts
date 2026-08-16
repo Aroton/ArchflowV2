@@ -1,13 +1,21 @@
 import { randomUUID } from "node:crypto";
 
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
-import { parsePathSafeId, type PathSafeId } from "../contracts/evidence.js";
-import { decodePhaseInstance } from "../contracts/phase-instance.js";
+import { parsePathSafeId, parseSha256Digest, type PathSafeId } from "../contracts/evidence.js";
+import type { GateKind } from "../contracts/gates.js";
+import { decodePhaseInstance, isEarlierPlanningPhase, parsePhaseInstanceId } from "../contracts/phase-instance.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { parseTriageCandidate, type TriageDisposition } from "../contracts/triage.js";
 import { PIPELINE_STEPS, type PipelineStep } from "../contracts/vocabulary.js";
 import { parseDocumentArtifact } from "../contracts/durable-document.js";
+import {
+  parseRepositoryPathClaim,
+  parseTaskPathClaim,
+  toRepositoryPathClaim,
+  type RepositoryPathClaim,
+} from "../contracts/path-claims.js";
 import { stageTaskInitialization } from "../init/task-initialization.js";
+import { readChangedGitPaths, resolveCommit } from "../repository/git.js";
 import { buildDocumentArtifact, type DocumentArtifactInput } from "../state/document-artifact.js";
 import {
   deriveCurrentEvidenceSet,
@@ -19,6 +27,7 @@ import {
   phaseDocumentDefaults,
   phaseImplParentDocumentDefaults,
   phaseReviewPaths,
+  type PhaseImplParentDocument,
 } from "../state/phase-documents.js";
 import { loadCurrentProduceSubject } from "../state/produce-subject.js";
 import type { ProductionServices } from "../state/production.js";
@@ -28,8 +37,10 @@ import { APPROVAL_ARTIFACT_KINDS } from "../state/request-templates.js";
 import { buildCommitAuthorizationInput, buildDesignApprovalInput, computeTaskStatus, currentTargetRef, pendingAdjudicationGate } from "../state/status.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { legalRunStepStatus } from "../state/transitions.js";
+import { buildGatePreview, previewHasChoice, type GateDecisionChoice, type ProspectiveGate } from "../state/gate-preview.js";
 import { writeStagedRequest } from "../state/staged-requests.js";
 import { computeCallEnvelope, type CallEnvelope } from "./call-envelope.js";
+import { computeLocalGatePreview } from "./gate-preview.js";
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 const fail = <T = never>(error: ProjectError): ProjectResult<T> =>
@@ -37,7 +48,8 @@ const fail = <T = never>(error: ProjectError): ProjectResult<T> =>
 
 export const BUILD_REQUEST_KINDS = Object.freeze([
   "initialize", "produce", "running", "triage",
-  "counter-review", "gate", "advance",
+  "counter-review", "gate", "waiver", "advance",
+  "restart",
 ] as const);
 export type BuildRequestKind = typeof BUILD_REQUEST_KINDS[number];
 
@@ -47,7 +59,8 @@ const PAYLOAD_SHAPE =
   '"document"?:{...},"implementation"?:{...},' +
   '"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},' +
   '"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],' +
-  '"summary"?:<gate summary text>}';
+  '"summary"?:<gate summary text>,"preview_digest"?:<gate-preview digest>,"decision"?:{"choice":<option token>,"reason":<human reason>},' +
+  '"origin"?:<waiver origin>,"rationale"?:<waiver rationale>,"target_phase_instance"?:<earlier planning phase>,"reason"?:<restart reason>}';
 
 function record(value: unknown, name: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -62,6 +75,22 @@ function transitionInvalid(state: TaskStateV1, to: string): ProjectResult<never>
     from: `${state.step}-${state.status}`,
     to,
   }));
+}
+
+function requestedGateDecision(snapshot: Record<string, unknown>, label: string): Readonly<{
+  preview_digest: ReturnType<typeof parseSha256Digest>;
+  decision: GateDecisionChoice;
+}> {
+  const raw = record(snapshot.decision, `${label} decision`);
+  const choice = String(raw.choice ?? "");
+  const reason = String(raw.reason ?? "");
+  if (choice.trim() === "" || reason.trim() === "") {
+    throw new TypeError(`${label} decision requires non-empty "choice" and "reason" fields`);
+  }
+  return Object.freeze({
+    preview_digest: parseSha256Digest(snapshot.preview_digest),
+    decision: Object.freeze({ choice, reason }),
+  });
 }
 
 function isPipelineStep(value: string): value is PipelineStep {
@@ -80,6 +109,70 @@ function mechanicalInput(
     expected_revision: state.revision,
     input_fingerprint: state.input_fingerprint,
   };
+}
+
+const ordinal = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
+
+/**
+ * Extends an implementation declaration with every canonical task document that is currently
+ * changed. These documents are writable during implementation, but they live outside the
+ * repository snapshot exposed to review children. Making them ordinary outputs both retains
+ * their reviewed bytes and ensures rollback covers them without relying on the caller to notice
+ * that a plan edit needs special treatment.
+ */
+export function includeChangedImplementationDocuments(input: {
+  readonly task_id: TaskStateV1["task_id"];
+  readonly phase_instance: TaskStateV1["phase_instance"];
+  readonly changed_paths: readonly string[];
+  readonly outputs: readonly RepositoryPathClaim[];
+  readonly restore_targets: readonly RepositoryPathClaim[];
+  readonly parent_documents: readonly PhaseImplParentDocument[];
+}): Readonly<{
+  outputs: readonly RepositoryPathClaim[];
+  restore_targets: readonly RepositoryPathClaim[];
+  parent_documents: readonly PhaseImplParentDocument[];
+}> {
+  const defaults = phaseImplParentDocumentDefaults(input.phase_instance);
+  if (defaults === undefined) throw new TypeError("implementation document capture requires a phase-impl phase");
+  const changed = new Set(input.changed_paths);
+  const outputs = new Set(input.outputs);
+  const restoreTargets = new Set(input.restore_targets);
+  const parents = new Map(input.parent_documents.map((parent) => [parent.document_path, parent]));
+  for (const parent of defaults) {
+    const taskPath = parseTaskPathClaim(parent.document_path);
+    const repositoryPath = toRepositoryPathClaim(input.task_id, taskPath);
+    if (!changed.has(repositoryPath)) continue;
+    outputs.add(repositoryPath);
+    restoreTargets.add(repositoryPath);
+    if (!parents.has(parent.document_path)) parents.set(parent.document_path, parent);
+  }
+  return Object.freeze({
+    outputs: Object.freeze([...outputs].sort(ordinal)),
+    restore_targets: Object.freeze([...restoreTargets].sort(ordinal)),
+    parent_documents: Object.freeze([...parents.values()].sort((left, right) =>
+      ordinal(left.document_path, right.document_path))),
+  });
+}
+
+function implementationPathList(value: unknown, name: string): readonly RepositoryPathClaim[] {
+  if (!Array.isArray(value)) throw new TypeError(`implementation ${name} must be an array`);
+  return value.map((path) => parseRepositoryPathClaim(path));
+}
+
+function implementationParentDocuments(
+  value: unknown,
+  defaults: readonly PhaseImplParentDocument[],
+): readonly PhaseImplParentDocument[] {
+  if (value === undefined) return defaults;
+  if (!Array.isArray(value)) throw new TypeError("implementation parent_documents must be an array");
+  return value.map((candidate) => {
+    const parent = record(candidate, "implementation parent document");
+    const role = parent.role;
+    if (role !== "prd" && role !== "design" && role !== "phase-design" && role !== "impl-notes") {
+      throw new TypeError("implementation parent document role is invalid");
+    }
+    return Object.freeze({ document_path: parseTaskPathClaim(parent.document_path), role });
+  });
 }
 
 // Parseable on purpose so the draft passes tool-call parsing; computeCallEnvelope substitutes
@@ -141,16 +234,26 @@ async function composeProduce(
       snapshot.implementation,
       "build-request implementation facts (required for phase-impl)",
     );
+    const parentDefaults = phaseImplParentDocumentDefaults(state.phase_instance);
+    if (parentDefaults === undefined) throw new TypeError("phase-impl parent document defaults are unavailable");
+    const changed = await readChangedGitPaths(services.runner);
+    const captured = includeChangedImplementationDocuments({
+      task_id: services.authority.task_id,
+      phase_instance: state.phase_instance,
+      changed_paths: changed.paths,
+      outputs: implementationPathList(implementation.outputs, "outputs"),
+      restore_targets: implementationPathList(implementation.restore_targets, "restore_targets"),
+      parent_documents: implementationParentDocuments(implementation.parent_documents, parentDefaults),
+    });
     const built = await buildImplementationOutput(
       services.dependencies,
       services.authority,
       services.state!,
       {
         ...implementation,
+        ...captured,
         phase_instance: state.phase_instance,
         step: "produce",
-        parent_documents: implementation.parent_documents ??
-          phaseImplParentDocumentDefaults(state.phase_instance),
         declared_inputs: implementation.declared_inputs ?? [],
         input_fingerprint: state.input_fingerprint,
       } as unknown as ImplementationOutputInput,
@@ -386,6 +489,7 @@ async function composeGate(
   if (summary.trim() === "") {
     throw new TypeError('build-request gate facts require a non-empty "summary" written for the human reviewer');
   }
+  const requested = requestedGateDecision(snapshot, "build-request gate");
   const phaseKind = decodePhaseInstance(state.phase_instance).kind;
   const gateKind = phaseKind === "phase-impl"
     ? "commit-authorization"
@@ -452,7 +556,12 @@ async function composeGate(
     };
   } else if (gateKind === "commit-authorization") {
     const target = await currentTargetRef(services.dependencies);
-    const authorization = buildCommitAuthorizationInput(subject.value, derived.current_evidence_set, target);
+    const authorization = buildCommitAuthorizationInput(
+      subject.value,
+      derived.current_evidence_set,
+      target,
+      await resolveCommit(services.runner, "HEAD"),
+    );
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
@@ -473,7 +582,61 @@ async function composeGate(
       context: { artifact_kind: APPROVAL_ARTIFACT_KINDS[phaseKind] },
     };
   }
+  const preview = buildGatePreview({
+    task_id: services.authority.task_id,
+    revision: state.revision,
+    phase_instance: state.phase_instance,
+    summary,
+    subject_digest: input.subject_digest as ProspectiveGate["subject_digest"],
+    current_evidence: derived.current_evidence_set,
+    kind: input.kind as GateKind,
+    context: input.context as ProspectiveGate["context"],
+  });
+  if (preview.preview_digest !== requested.preview_digest || !previewHasChoice(preview, requested.decision)) {
+    return transitionInvalid(state, preview.preview_digest !== requested.preview_digest
+      ? "gate-preview-stale"
+      : "gate-decision-choice-invalid");
+  }
+  input.preview_digest = requested.preview_digest;
+  input.decision = requested.decision as unknown as PlainJsonValue;
   return computeCallEnvelope(services, { tool: "archflow_gate", input });
+}
+
+async function composeWaiver(
+  services: ProductionServices,
+  state: TaskStateV1,
+  intentId: string,
+  snapshot: Record<string, unknown>,
+): Promise<ProjectResult<CallEnvelope>> {
+  if (state.terminal !== undefined || state.open_gate !== undefined) {
+    return transitionInvalid(state, "waiver-gate");
+  }
+  const requested = requestedGateDecision(snapshot, "build-request waiver");
+  const origin = record(snapshot.origin, "build-request waiver origin");
+  const rationale = String(snapshot.rationale ?? "");
+  if (rationale.trim() === "") throw new TypeError('build-request waiver requires a non-empty "rationale"');
+  const preview = await computeLocalGatePreview(services, {
+    kind: "waiver",
+    origin: origin as unknown as PlainJsonValue,
+    rationale,
+  });
+  if (!preview.ok) return preview;
+  if (preview.value.preview_digest !== requested.preview_digest ||
+      !previewHasChoice(preview.value, requested.decision)) {
+    return transitionInvalid(state, preview.value.preview_digest !== requested.preview_digest
+      ? "waiver-preview-stale"
+      : "waiver-decision-choice-invalid");
+  }
+  return computeCallEnvelope(services, {
+    tool: "archflow_waiver",
+    input: {
+      ...mechanicalInput(services, state, intentId),
+      origin: origin as unknown as PlainJsonValue,
+      rationale,
+      preview_digest: requested.preview_digest,
+      decision: requested.decision as unknown as PlainJsonValue,
+    },
+  });
 }
 
 /**
@@ -503,6 +666,30 @@ async function composeAdvance(
       phase_instance: next.target_phase_instance,
       step: completing ? state.step : "produce",
       status: completing ? state.status : "running",
+    },
+  });
+}
+
+function composePlanningRestart(
+  services: ProductionServices,
+  state: TaskStateV1,
+  intentId: string,
+  snapshot: Record<string, unknown>,
+): Promise<ProjectResult<CallEnvelope>> | ProjectResult<never> {
+  const target = parsePhaseInstanceId(snapshot.target_phase_instance);
+  const reason = String(snapshot.reason ?? "");
+  if (reason.trim() === "" || state.terminal !== undefined || state.open_gate !== undefined ||
+      !isEarlierPlanningPhase(target, state.phase_instance)) {
+    return transitionInvalid(state, `${target}-restart`);
+  }
+  return computeCallEnvelope(services, {
+    tool: "archflow_state",
+    input: {
+      ...mechanicalInput(services, state, intentId),
+      phase_instance: target,
+      step: "produce",
+      status: "running",
+      planning_restart: { reason },
     },
   });
 }
@@ -585,7 +772,9 @@ export async function runBuildRequest(
     case "triage": return withStagedRequest(services, intentId, await composeTriage(services, state, intentId, snapshot));
     case "counter-review": return withStagedRequest(services, intentId, await composeCounterReview(services, state, intentId, snapshot));
     case "gate": return withStagedRequest(services, intentId, await composeGate(services, state, intentId, snapshot));
+    case "waiver": return withStagedRequest(services, intentId, await composeWaiver(services, state, intentId, snapshot));
     case "advance": return withStagedRequest(services, intentId, await composeAdvance(services, state, intentId));
+    case "restart": return withStagedRequest(services, intentId, await composePlanningRestart(services, state, intentId, snapshot));
     default:
       throw new TypeError(`build-request kind ${JSON.stringify(kind)} is not recognized; expected ${PAYLOAD_SHAPE}`);
   }

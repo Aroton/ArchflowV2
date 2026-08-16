@@ -85,7 +85,10 @@ describe("canonical skill contracts", () => {
       expect(source).toContain("`resources`");
       expect(source).toContain("{role,path,access}");
       expect(source).toContain('`{"kind":"counter-review"}`');
-      expect(source).toContain("`archflow-local decide --task <task>`");
+      expect(source).toContain("`gate-preview`");
+      expect(source).toContain("preview_digest");
+      expect(source).toContain("decision");
+      expect(source).not.toContain("`archflow-local decide --task <task>`");
       expect(source).not.toContain("## Stable rubric");
       expect(source).not.toContain('"criteria":[');
       expect(source).not.toContain('"kind":"counter-review","rubric"');

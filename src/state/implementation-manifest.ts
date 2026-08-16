@@ -33,7 +33,6 @@ import { assertPlainJson } from "../contracts/plain-json.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
 import {
   hashGitBlobIdentity,
-  isCommitAncestor,
   isCommitAncestorOfHead,
   readCommitTreeBlob,
   readGitBlobBytes,
@@ -116,25 +115,40 @@ export type CurrentAuthoritativeOutputSource =
   | Readonly<{ path: RepositoryPathClaim; state: "present"; identity: BlobIdentity; bytes?: Uint8Array }>;
 
 /**
- * Proves that the authenticated commit gate's target is still current and that the immutable
- * current HEAD tree contains every after-image (and every required absence) retained by the
- * implementation output. Worktree and index state are deliberately irrelevant after commit.
+ * Proves that HEAD is exactly the commit authorized by the authenticated implementation gate:
+ * the target is current, the approved baseline is its direct parent, its subject/message/path
+ * set are exact, and its tree contains every retained after-image or absence. Unrelated worktree
+ * and index state are deliberately irrelevant after commit.
  */
 export async function implementationOutputCommittedAtCurrentTarget(
   runner: RootBoundGitRunner,
   output: ImplementationOutputV1,
-  targetRef: string,
+  context: GateContext<"commit-authorization">,
 ): Promise<boolean> {
   const symbolicRef = await runner.runText({
     argv: ["symbolic-ref", "--quiet", "HEAD"],
     operation: "git-current-commit-target" as SafeCode,
     expectedAbsence: [{ code: 1, stderrIncludes: "" }],
   });
-  if (targetRef === "HEAD" ? symbolicRef !== "" : symbolicRef !== targetRef) return false;
+  if (context.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== context.target_ref) return false;
   const headCommit = await resolveCommit(runner, "HEAD");
-  const targetCommit = await resolveCommit(runner, targetRef);
+  const targetCommit = await resolveCommit(runner, context.target_ref);
   if (headCommit !== targetCommit) return false;
-  if (!await isCommitAncestor(runner, output.base_commit, headCommit)) return false;
+  if (context.baseline_commit !== output.base_commit || headCommit === context.baseline_commit) return false;
+  if (await resolveCommit(runner, `${headCommit}^`) !== context.baseline_commit) return false;
+  const message = await runner.runText({
+    argv: ["log", "-1", "--format=%s", headCommit],
+    operation: "git-implementation-commit-message" as SafeCode,
+  });
+  if (message !== context.commit_message) return false;
+
+  const authorizedPaths = [...context.paths].sort(ordinal);
+  if (JSON.stringify(authorizedPaths) !== JSON.stringify(sortedUniquePaths(output))) return false;
+  const changedPaths = [...new Set(await runner.runNulFields({
+    argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", context.baseline_commit, headCommit, "--"],
+    operation: "git-implementation-commit-paths" as SafeCode,
+  }))].sort(ordinal);
+  if (JSON.stringify(changedPaths) !== JSON.stringify(authorizedPaths)) return false;
 
   for (const entry of output.outputs) {
     const committed = await readCommitTreeBlob(runner, headCommit, entry.path);
@@ -146,7 +160,9 @@ export async function implementationOutputCommittedAtCurrentTarget(
     if (entry.operation === "rename" &&
         await readCommitTreeBlob(runner, headCommit, entry.previous_path) !== undefined) return false;
   }
-  return true;
+  // Close the observation window after all explicit-commit tree reads.
+  return await resolveCommit(runner, "HEAD") === headCommit &&
+    await resolveCommit(runner, context.target_ref) === headCommit;
 }
 
 /**

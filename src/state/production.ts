@@ -320,6 +320,10 @@ export async function createProductionServices(input: ProductionInput): Promise<
       const retainedReferences = [
         ...current.document.value.authoritative_results,
         ...(current.document.value.human_revision_history ?? []).flatMap((revision) => revision.evidence),
+        ...(current.document.value.restart_history ?? []).flatMap((restart) => [
+          ...restart.superseded_results,
+          ...(restart.cleared_pending_human_revision?.evidence ?? []),
+        ]),
       ].filter((reference, index, references) => references.findIndex((candidate) =>
         candidate.result_digest === reference.result_digest) === index);
       for (const reference of retainedReferences) {
@@ -331,7 +335,7 @@ export async function createProductionServices(input: ProductionInput): Promise<
       return parseSafeInteger(total);
     },
     load_retained_result: (reference) => readRetainedResult(discovered.value, authority, reference),
-    resolve_gate_reentry_fingerprint: async ({ request, current }) => {
+    resolve_gate_reentry_fingerprint: async ({ request, current, target_phase_instance }) => {
       const liveConfig = await readTaskConfig(authority.config);
       if (liveConfig.kind !== "valid") return stateFailure(current.value.phase_instance, "task-config-invalid");
       const call = parseToolCall("archflow_state", {
@@ -340,7 +344,7 @@ export async function createProductionServices(input: ProductionInput): Promise<
           intent_id: request.intent_id,
           expected_revision: current.value.revision,
           input_fingerprint: current.value.input_fingerprint,
-          phase_instance: request.phase_instance,
+          phase_instance: target_phase_instance ?? request.phase_instance,
           step: "produce",
           status: "running",
       });

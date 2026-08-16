@@ -1,15 +1,16 @@
 import { isDeepStrictEqual } from "node:util";
 
 import type { DurableArtifact } from "../contracts/durable.js";
-import type { AuthoritativeResultRef, HumanRevisionRecord, TaskStateV1 } from "../contracts/durable-state.js";
+import type { AuthoritativeResultRef, HumanRevisionRecord, PlanningRestartConnectedProvenance, PlanningRestartRecord, TaskStateV1 } from "../contracts/durable-state.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
-import { parseSafeInteger, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
-import { decodePhaseInstance, nextPhaseInstance } from "../contracts/phase-instance.js";
+import { parseSafeInteger, type PathSafeId, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
+import { comparePhaseInstances, decodePhaseInstance, isEarlierPlanningPhase, nextPhaseInstance } from "../contracts/phase-instance.js";
 import type { PhaseInstanceId } from "../contracts/phase-instance.js";
 import { assertPlainJson } from "../contracts/plain-json.js";
 import { WORKFLOW_V1 } from "../contracts/workflow.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
 import type { HumanRevisionDeclaration } from "../contracts/mcp-tools.js";
+import type { HumanDecisionProvenance } from "../contracts/gates.js";
 import {
   assertAuthenticatedGateApproval,
   type AuthenticatedGateApproval,
@@ -45,6 +46,11 @@ export type TransitionPlanInput = Readonly<{
   resulting_subject_digest?: Sha256Digest;
   /** Internal gate boundary: human-requested bytes begin without consuming a review attempt. */
   human_revision_reentry?: boolean;
+  planning_restart?: Readonly<{
+    restart_id: PathSafeId;
+    reason: string;
+    provenance: HumanDecisionProvenance | PlanningRestartConnectedProvenance;
+  }>;
 }>;
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
@@ -209,6 +215,78 @@ function legalMovement(input: TransitionPlanInput): boolean {
     target.attempt === 1;
 }
 
+export type PlanningRestartPlanInput = Readonly<{
+  current: TaskStateV1;
+  target_phase_instance: PhaseInstanceId;
+  input_fingerprint: Sha256Digest;
+  restart_id: PathSafeId;
+  reason: string;
+  provenance: HumanDecisionProvenance | PlanningRestartConnectedProvenance;
+}>;
+
+/** Plans one explicit, audit-preserving restart to a strictly earlier planning stage. */
+export function planPlanningRestart(value: PlanningRestartPlanInput): ProjectResult<NextStateDraft> {
+  assertPlainJson(value, "planning restart input");
+  const input = structuredClone(value) as PlanningRestartPlanInput;
+  if (input.current.terminal !== undefined || input.current.open_gate !== undefined ||
+      !isEarlierPlanningPhase(input.target_phase_instance, input.current.phase_instance) ||
+      input.reason.trim() === "") {
+    return Object.freeze({
+      schema_version: "1",
+      ok: false,
+      error: createProjectError("TRANSITION_INVALID", {
+        phase_instance: input.target_phase_instance,
+        from: `${input.current.step}-${input.current.status}`,
+        to: "produce-running",
+      }),
+    });
+  }
+  const supersededResults = input.current.authoritative_results.filter((reference) =>
+    comparePhaseInstances(reference.phase_instance, input.target_phase_instance) >= 0);
+  const retainedResults = input.current.authoritative_results.filter((reference) =>
+    comparePhaseInstances(reference.phase_instance, input.target_phase_instance) < 0);
+  const restartedAtRevision = parseSafeInteger(input.current.revision + 1);
+  const record: PlanningRestartRecord = Object.freeze({
+    restart_id: input.restart_id,
+    from_phase_instance: input.current.phase_instance,
+    to_phase_instance: input.target_phase_instance,
+    reason: input.reason,
+    restarted_at_revision: restartedAtRevision,
+    superseded_results: Object.freeze(supersededResults),
+    cleared_waivers: Object.freeze([...input.current.waivers]),
+    ...(input.current.pending_human_revision === undefined ? {} : {
+      cleared_pending_human_revision: input.current.pending_human_revision,
+    }),
+    provenance: input.provenance,
+  });
+  const history = [...(input.current.restart_history ?? []), record]
+    .sort((left, right) => left.restart_id.localeCompare(right.restart_id));
+  const {
+    revision: _revision,
+    last_transition: _transition,
+    open_gate: _openGate,
+    pending_human_revision: _pending,
+    terminal: _terminal,
+    planned_final_phase: plannedFinalPhase,
+    ...preserved
+  } = input.current;
+  const targetKind = decodePhaseInstance(input.target_phase_instance).kind;
+  return ok(Object.freeze({
+    ...preserved,
+    phase_instance: input.target_phase_instance,
+    step: "produce",
+    status: "running",
+    attempt: parseSafeInteger(1),
+    input_fingerprint: input.input_fingerprint,
+    authoritative_results: Object.freeze(retainedResults),
+    waivers: Object.freeze([]),
+    restart_history: Object.freeze(history),
+    ...(targetKind === "phase-design" && plannedFinalPhase !== undefined
+      ? { planned_final_phase: plannedFinalPhase }
+      : {}),
+  } as NextStateDraft));
+}
+
 function artifactMatches(input: TransitionPlanInput): boolean {
   const artifact = input.artifact;
   if (artifact === undefined) {
@@ -333,6 +411,19 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
   const to = `${input.target.step}-${input.target.status}`;
   if (input.target.input_fingerprint !== input.recomputed_input_fingerprint) {
     return fingerprintFailure(input.recomputed_input_fingerprint, input.target.input_fingerprint);
+  }
+  if (input.planning_restart !== undefined) {
+    if (
+      input.target.step !== "produce" || input.target.status !== "running" || input.target.attempt !== 1 ||
+      input.artifact !== undefined || input.result_reference !== undefined ||
+      input.constitution_result_reference !== undefined || input.human_revision !== undefined
+    ) return invalid(input, from, to);
+    return planPlanningRestart({
+      current: input.current,
+      target_phase_instance: input.target.phase_instance,
+      input_fingerprint: input.target.input_fingerprint,
+      ...input.planning_restart,
+    });
   }
   const committedOutput = hasAuthenticatedCommittedOutput(input);
   const decodedCurrent = decodePhaseInstance(input.current.phase_instance);

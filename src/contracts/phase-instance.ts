@@ -84,6 +84,38 @@ export function nextPhaseInstance(instance: PhaseInstanceId): PhaseInstanceId | 
   }
 }
 
+/** Whether an instance is a planning stage that may be selected as a restart target. */
+export function isPlanningPhaseInstance(instance: PhaseInstanceId): boolean {
+  return decodePhaseInstance(instance).kind !== "phase-impl";
+}
+
+/**
+ * The fixed lifecycle order, used only for comparing already-valid instances. The numeric form
+ * deliberately leaves PRD and design before the per-phase pairs:
+ * `prd < design < phase-design-1 < phase-impl-1 < phase-design-2 < ...`.
+ */
+export function comparePhaseInstances(left: PhaseInstanceId, right: PhaseInstanceId): number {
+  const leftDecoded = decodePhaseInstance(left);
+  const rightDecoded = decodePhaseInstance(right);
+  const prefixRank = (kind: PhaseInstance["kind"]): number =>
+    kind === "prd" ? 0 : kind === "design" ? 1 : 2;
+  const prefix = prefixRank(leftDecoded.kind) - prefixRank(rightDecoded.kind);
+  if (prefix !== 0) return prefix;
+  if ((leftDecoded.kind === "prd" || leftDecoded.kind === "design") ||
+      (rightDecoded.kind === "prd" || rightDecoded.kind === "design")) return 0;
+  const phaseDifference = Number(leftDecoded.phase) - Number(rightDecoded.phase);
+  if (phaseDifference !== 0) return phaseDifference;
+  return leftDecoded.kind === rightDecoded.kind ? 0 : leftDecoded.kind === "phase-design" ? -1 : 1;
+}
+
+/** A restart target must be a planning stage strictly earlier than current durable work. */
+export function isEarlierPlanningPhase(
+  target: PhaseInstanceId,
+  current: PhaseInstanceId,
+): boolean {
+  return isPlanningPhaseInstance(target) && comparePhaseInstances(target, current) < 0;
+}
+
 /**
  * The shared authority for the phase-instance *string*. The `.regex()` carries
  * `primitives.schema.json#/$defs/phaseInstanceId` verbatim, so a generated schema emits the same

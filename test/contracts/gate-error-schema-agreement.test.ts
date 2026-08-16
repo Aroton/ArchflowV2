@@ -18,7 +18,7 @@ const protocolValidator = createJsonSchemaValidator(protocolErrorSchema);
 
 describe("gate and error JSON Schema authority", () => {
   it("accepts a correlated gate contract and rejects cross-kind/unknown fields", () => {
-    const value = { kind: "commit-authorization", context: { target_ref: "refs-heads-task", diff_digest: D, current_artifact_digests: [D], parent_document_digests: [D] }, payload: { decision: "authorize-commit", reason: "Approved" } };
+    const value = { kind: "commit-authorization", context: { target_ref: "refs-heads-task", baseline_commit: "1".repeat(40), commit_message: "ArchFlow: Implement task-1 phase 2", paths: ["tracked.txt"], diff_digest: D, current_artifact_digests: [D], parent_document_digests: [D] }, payload: { decision: "authorize-commit", reason: "Approved" } };
     expect(gateValidator.validate(value)).toBe(true);
     expect(gateValidator.validate({ ...value, payload: { decision: "waiver-requested", reason: "No", rule: { rule_id: "rule", rule_version: 1 }, rationale: "No" } })).toBe(false);
     expect(gateValidator.validate({ ...value, context: { ...value.context, gate_id: "forged" } })).toBe(false);

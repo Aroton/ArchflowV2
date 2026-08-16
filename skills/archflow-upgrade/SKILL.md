@@ -33,11 +33,13 @@ Record the imported `design.md` as the design produce result without changing it
 
 After review reaches its fixed point, status opens one `migration-audit` gate instead of separate PRD and design approval gates. Present the imported requirements, overall design, phase history, review findings, omissions, planned final phase, and proposed resume point in plain language. Ask the human to accept, revise, abort, or cancel. Keep gate IDs, hashes, JSON, and runtime paths out of the default response.
 
+Before presenting that question, run `archflow-local gate-preview --task <task>` with the human summary. After the user explicitly chooses one returned option and gives a reason, run `build-request` with `{"kind":"gate","summary":<same summary>,"preview_digest":<returned digest>,"decision":{"choice":<option token>,"reason":<human reason>}}` and call `archflow_gate` once with its staged reference. The call resolves synchronously; never start it before asking the user or wait for a second process or approval channel. Re-preview after any stale-preview refusal.
+
 A significant revision runs a fresh automatic review before returning to the gate. A simple typo, formatting, or wording-only revision may reuse review evidence for one hop but still requires approval of the final bytes. Uncertainty is significant, and the human may override the classification.
 
 ## Commit and resume
 
-Acceptance is the fresh human approval for the exact imported document bytes bound into the gate, including an imported current phase design when the resume target is phase implementation. It also authorizes one task-local import milestone commit. Follow status, show the exact task-local changes, obtain the normal commit confirmation, and commit with the bound message and target. Never push automatically.
+Acceptance is the fresh human approval for the exact imported document bytes bound into the gate, including an imported current phase design when the resume target is phase implementation. It also authorizes one task-local import milestone commit. When status returns `commit-artifacts`, run the input-free `archflow-local commit --task <task>`; it re-derives the bound path, message, target, and baseline and preserves unrelated changes. Do not ask for a second commit confirmation. Never push automatically.
 
 After the commit is observed, follow the authenticated resume action:
 

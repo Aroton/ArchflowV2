@@ -19,6 +19,19 @@ function subjectFor(call: ParsedToolCall, authority: TransactionAuthority, input
   switch (call.name) {
     case "archflow_state":
       if (call.input.artifact === undefined) {
+        if (call.input.planning_restart !== undefined) {
+          return {
+            ...common,
+            tool: call.name,
+            operation: "restart-planning",
+            operation_fields: {
+              phase_instance: call.input.phase_instance,
+              step: call.input.step,
+              status: call.input.status,
+              planning_restart: call.input.planning_restart,
+            },
+          };
+        }
         return { ...common, tool: call.name, operation: "record-state-boundary", operation_fields: { phase_instance: call.input.phase_instance, step: call.input.step, status: call.input.status } };
       }
       return {
@@ -50,11 +63,18 @@ function subjectFor(call: ParsedToolCall, authority: TransactionAuthority, input
         current_evidence: call.input.current_evidence,
         kind: call.input.kind,
         context: call.input.context,
+        preview_digest: call.input.preview_digest,
+        decision: call.input.decision,
       };
       return { ...common, tool: call.name, operation: "gate", operation_fields };
     }
     case "archflow_waiver":
-      return { ...common, tool: call.name, operation: "waiver", operation_fields: { origin: call.input.origin, rationale: call.input.rationale } };
+      return { ...common, tool: call.name, operation: "waiver", operation_fields: {
+        origin: call.input.origin,
+        rationale: call.input.rationale,
+        preview_digest: call.input.preview_digest,
+        decision: call.input.decision,
+      } };
     default: {
       const exhaustive: never = call;
       throw new TypeError(`unknown tool ${String((exhaustive as { name?: unknown }).name)}`);
