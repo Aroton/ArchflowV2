@@ -119,6 +119,27 @@ describe("correlated MCP tool contracts", () => {
       },
     })).toThrow();
   });
+  it("accepts only the bounded additive planning_restart arm", () => {
+    const restart = {
+      ...stateInput,
+      intent_id: "restart-1",
+      expected_revision: 12,
+      phase_instance: "phase-impl-2",
+      step: "produce",
+      status: "running",
+      operation: "planning_restart",
+      target_phase_instance: "prd",
+      reason: "Reconsider the API boundary.",
+      ask_base_digest: "b".repeat(64),
+    } as const;
+    const parsed = parseToolCall("archflow_state", restart);
+    expect(parsed.input.operation).toBe("planning_restart");
+    expect(parsed.input.target_phase_instance).toBe("prd");
+    expect(() => parseToolCall("archflow_state", { ...restart, ask_base_digest: undefined })).toThrow();
+    expect(() => parseToolCall("archflow_state", { ...restart, target_phase_instance: "design", ask_base_digest: "b".repeat(64) })).toThrow();
+    expect(() => parseToolCall("archflow_state", { ...restart, step: "triage" })).toThrow();
+    expect(() => parseToolCall("archflow_state", { ...stateInput, target_phase_instance: "prd", reason: "forged" })).toThrow();
+  });
   it("checks direct state request/result equalities", () => {
     const call = bindParsedToolCallRequest(parseToolCall("archflow_state", stateInput), parseSha256Digest("b".repeat(64)));
     expect(() => validateProjectResultStructure(call, { schema_version: "1", ok: true, value: { path: "phases/2/result.json", revision: 3, status: "failed" } })).toThrow(/status mismatch/);

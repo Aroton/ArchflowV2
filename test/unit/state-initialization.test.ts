@@ -115,6 +115,7 @@ describe("revision-0 state initialization", () => {
         events.push("state");
         state = parseCanonicalDocument<TaskStateV1>(bytes);
       },
+      replaceTaskAsk: async () => { throw new TypeError("unexpected task ask replacement"); },
       removeGateInterface: async () => undefined,
     };
     const dependencies: TransactionDependencies = {

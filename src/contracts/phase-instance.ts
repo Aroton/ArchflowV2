@@ -85,6 +85,30 @@ export function nextPhaseInstance(instance: PhaseInstanceId): PhaseInstanceId | 
 }
 
 /**
+ * Compares phase instances in the canonical workflow order:
+ * `prd < design < phase-design-1 < phase-impl-1 < phase-design-2 < ...`.
+ */
+export function comparePhaseInstances(left: PhaseInstanceId, right: PhaseInstanceId): number {
+  const a = decodePhaseInstance(left);
+  const b = decodePhaseInstance(right);
+  if (a.kind === "prd") return b.kind === "prd" ? 0 : -1;
+  if (b.kind === "prd") return 1;
+  if (a.kind === "design") return b.kind === "design" ? 0 : -1;
+  if (b.kind === "design") return 1;
+  if (a.phase !== b.phase) return a.phase - b.phase;
+  if (a.kind === b.kind) return 0;
+  return a.kind === "phase-design" ? -1 : 1;
+}
+
+/** True only when `target` is an earlier planning boundary, never an implementation phase. */
+export function isStrictlyEarlierPlanningPhase(
+  target: PhaseInstanceId,
+  current: PhaseInstanceId,
+): boolean {
+  return decodePhaseInstance(target).kind !== "phase-impl" && comparePhaseInstances(target, current) < 0;
+}
+
+/**
  * The shared authority for the phase-instance *string*. The `.regex()` carries
  * `primitives.schema.json#/$defs/phaseInstanceId` verbatim, so a generated schema emits the same
  * `pattern`. The refine delegates to `decodePhaseInstance` rather than copying `ITERATED_PHASE`

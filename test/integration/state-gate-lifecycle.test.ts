@@ -6,11 +6,7 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { canonicalDocument, canonicalJsonDigest, parseCanonicalDocument, sha256Bytes, type CanonicalDocument } from "../../src/contracts/canonical.js";
-import {
-  parseAndDeriveAdjudication,
-  type AdjudicationEvidence,
-} from "../../src/contracts/adjudication.js";
-import type { ConstitutionRegistry } from "../../src/contracts/constitution.js";
+import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
 import type { GateDecisionRecordV1, GateRequestV1 } from "../../src/contracts/durable-gate.js";
 import type { IntentReceiptV1 } from "../../src/contracts/durable-intent.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
@@ -31,10 +27,6 @@ import { readIntentReceipt, readTaskState } from "../../src/state/read.js";
 import type { TransactionDependencies } from "../../src/state/transaction.js";
 import { captureProjectionTarget, projectionGenerationDigest, type ProjectionPlan } from "../../src/state/snapshots.js";
 import { planStateTransition } from "../../src/state/transitions.js";
-import {
-  selectAdjudicationGate,
-  type AdjudicationGateRequest,
-} from "../../src/review/adjudication.js";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -605,122 +597,113 @@ describe("durable gate lifecycle", () => {
     });
   });
 
-  it("serializes two material upstream gates with re-adjudication and different decisions", async () => {
+  it("restarts material drift at the authenticated phase that actually produced the upstream", async () => {
     const h = await harness();
+    const phaseDesign12 = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(12) });
+    const phaseDesign11 = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(11) });
+    const phase12Bytes = new TextEncoder().encode("# Phase 12\n");
+    const phase12Artifact = {
+      schema_version: "1", artifact_kind: "document", task_id: TASK,
+      phase_instance: phaseDesign12, step: "produce",
+      document_path: parseTaskPathClaim("phases/12/design.md"), path_class: "document",
+      byte_count: parseSafeInteger(phase12Bytes.byteLength), content_digest: sha256Bytes(phase12Bytes),
+      declared_inputs: [], input_fingerprint: FINGERPRINT, snapshot_digest: D("2"),
+      projection_target: `.archflow/tasks/${TASK}/phases/12/design.md` as never,
+    } as DocumentArtifactV1;
+    const phase11Bytes = new TextEncoder().encode("# Phase 11\n");
+    const designBytes = new TextEncoder().encode("# Architecture from phase 11\n");
+    const compoundArtifact = {
+      ...phase12Artifact,
+      phase_instance: phaseDesign11, document_path: parseTaskPathClaim("phases/11/design.md"),
+      byte_count: parseSafeInteger(phase11Bytes.byteLength), content_digest: sha256Bytes(phase11Bytes),
+      projection_target: `.archflow/tasks/${TASK}/phases/11/design.md` as never,
+      additional_documents: [{
+        document_path: parseTaskPathClaim("design.md"), byte_count: parseSafeInteger(designBytes.byteLength),
+        content_digest: sha256Bytes(designBytes), projection_target: `.archflow/tasks/${TASK}/design.md` as never,
+      }],
+    } as DocumentArtifactV1;
+    const phase12Digest = canonicalJsonDigest(phase12Artifact);
+    const compoundDigest = canonicalJsonDigest(compoundArtifact);
+    const phase12Ref = {
+      phase_instance: "phase-design-12", step: "produce", result_digest: D("1"),
+      result_id: parseSafeId("phase-12-result"), input_fingerprint: FINGERPRINT,
+    } as TaskStateV1["authoritative_results"][number];
+    const compoundRef = {
+      phase_instance: "phase-design-11", step: "produce", result_digest: D("2"),
+      result_id: parseSafeId("compound-result"), input_fingerprint: FINGERPRINT,
+    } as TaskStateV1["authoritative_results"][number];
     writeFileSync(h.authority.state.absolute, canonicalDocument({
       ...initialState(h.authority),
       step: "triage",
       status: "succeeded",
       attempt: parseSafeInteger(2),
+      authoritative_results: [compoundRef, phase12Ref],
+      approvals: [
+        { gate_id: parsePathSafeId("compound-approval"), gate_kind: "design-approval", subject_digest: compoundDigest, decision_digest: D("4"), resolved_at_revision: parseSafeInteger(6) },
+        { gate_id: parsePathSafeId("phase-12-approval"), gate_kind: "design-approval", subject_digest: phase12Digest, decision_digest: D("3"), resolved_at_revision: parseSafeInteger(5) },
+      ],
     }).bytes);
-    const corpus = JSON.parse(readFileSync(
-      new URL("../fixtures/corpus/adjudication-scenarios.json", import.meta.url),
-      "utf8",
-    )) as {
-      scenarios: Array<{ name: string; output: Record<string, unknown> }>;
+    const retained = (artifact: DocumentArtifactV1, measuredAtRevision: number) => ({
+      prepared: { manifest: { value: {
+        source_artifact: artifact, artifact_digest: canonicalJsonDigest(artifact),
+        accounting: { measured_at_revision: measuredAtRevision }, projections: [], outputs: [],
+      } } },
+    });
+    const dependencies: GateLifecycleDependencies = {
+      ...h.dependencies,
+      load_retained_result: async (reference) => ({
+        schema_version: "1", ok: true,
+        value: (reference.result_id === compoundRef.result_id
+          ? retained(compoundArtifact, 6)
+          : retained(phase12Artifact, 5)) as never,
+      }),
     };
-    const registry: ConstitutionRegistry = new Map([[
-      "plain-rule",
-      {
-        id: "plain-rule",
-        version: 1,
-        status: "active",
-        text: "The artifact must not contain a seeded defect.",
-        review_trigger: "Review when DEFECT-SEED is present.",
-      },
-    ]]);
-    const selected = (name: string) => {
-      const scenario = corpus.scenarios.find((entry) => entry.name === name);
-      if (scenario === undefined) throw new Error(`missing scenario ${name}`);
-      const {
-        constitution: _constitution,
-        drift: _drift,
-        matched_rule_versions: _matched,
-        uncertain_rule_versions: _uncertain,
-        ...rawOutput
-      } = scenario.output;
-      const gate = selectAdjudicationGate(
-        registry,
-        parseAndDeriveAdjudication(rawOutput) as unknown as AdjudicationEvidence,
-      );
-      if (gate?.kind !== "material-drift") throw new Error(`expected material gate for ${name}`);
-      return gate as AdjudicationGateRequest<"material-drift">;
-    };
-
-    const firstGate = selected("two-material-upstreams");
-    expect(firstGate.context.affected_upstream.digest).toBe(D("1"));
     const firstInput: GateOpenInput = {
       ...gateInput(h, "first-material"),
       request_digest: D("1"),
-      kind: firstGate.kind,
-      subject_digest: firstGate.subject_digest,
-      context: firstGate.context,
+      kind: "material-drift",
+      context: {
+        affected_upstream: { kind: "architecture", digest: compoundDigest },
+        drift: "material",
+        affected_claim_ids: ["claim-one"],
+      },
     };
-    const firstOpened = await openDurableGate(h.dependencies, firstInput);
-    expect(firstOpened.ok).toBe(true);
+    const firstOpened = await openDurableGate(dependencies, firstInput);
+    expect(firstOpened.ok, JSON.stringify(firstOpened)).toBe(true);
     if (!firstOpened.ok) return;
     const firstRequest = firstOpened.value.request.value;
     writeFileSync(decisionPath(h), canonicalDocument({
       schema_version: "1", gate_id: firstRequest.gate_id, task_id: firstRequest.task_id,
       phase_instance: firstRequest.phase_instance, kind: firstRequest.kind,
       subject_digest: firstRequest.subject_digest, context_digest: firstRequest.context_digest,
-      human_provenance: PROVENANCE,
+      human_provenance: {
+        schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "connected-host",
+        decision_event_id: firstRequest.gate_id, connection_id: "connection-material-drift",
+        request_id_digest: D("f"), recorded_at: "2026-07-30T12:00:00.000Z",
+      },
       payload: { decision: "amend-upstream", reason: "Amend the first upstream" },
     }).bytes);
     const firstResolved = await resolveDurableGate(
-      h.dependencies, h.authority, firstRequest.gate_id,
+      dependencies, h.authority, firstRequest.gate_id,
     );
-    expect(firstResolved).toMatchObject({
+    expect(firstResolved, JSON.stringify(firstResolved)).toMatchObject({
       ok: true,
       value: {
         effect: "redirect-upstream",
-        state: { value: { step: "triage", status: "succeeded", attempt: 2 } },
-      },
-    });
-    if (!firstResolved.ok) return;
-
-    const secondGate = selected("second-material-upstream-after-readjudication");
-    expect(secondGate.context.affected_upstream.digest).toBe(D("2"));
-    const nextFingerprint = D("e");
-    const dependencies: GateLifecycleDependencies = {
-      ...h.dependencies,
-      resolve_gate_reentry_fingerprint: async () => ({
-        schema_version: "1", ok: true, value: nextFingerprint,
-      }),
-    };
-    const secondInput: GateOpenInput = {
-      ...gateInput(h, "second-material"),
-      expected_revision: firstResolved.value.state.value.revision,
-      request_digest: D("2"),
-      kind: secondGate.kind,
-      subject_digest: secondGate.subject_digest,
-      context: secondGate.context,
-    };
-    const secondOpened = await openDurableGate(dependencies, secondInput);
-    expect(secondOpened.ok).toBe(true);
-    if (!secondOpened.ok) return;
-    const secondRequest = secondOpened.value.request.value;
-    writeFileSync(decisionPath(h), canonicalDocument({
-      schema_version: "1", gate_id: secondRequest.gate_id, task_id: secondRequest.task_id,
-      phase_instance: secondRequest.phase_instance, kind: secondRequest.kind,
-      subject_digest: secondRequest.subject_digest, context_digest: secondRequest.context_digest,
-      human_provenance: PROVENANCE,
-      payload: { decision: "revise-current", reason: "Revise for the second upstream" },
-    }).bytes);
-    const secondResolved = await resolveDurableGate(
-      dependencies, h.authority, secondRequest.gate_id,
-    );
-    expect(secondResolved).toMatchObject({
-      ok: true,
-      value: {
-        effect: "retry",
         state: { value: {
-          step: "produce", status: "running", attempt: 2,
-          input_fingerprint: nextFingerprint,
-          pending_human_revision: { gate_kind: "material-drift", attempt: 2 },
+          phase_instance: "phase-design-11", step: "produce", status: "running", attempt: 1,
+          restart_history: [{
+            restart_id: firstRequest.gate_id,
+            source_phase_instance: PHASE,
+            target_phase_instance: "phase-design-11",
+            reason: "Amend the first upstream",
+          }],
         } },
       },
     });
+    if (!firstResolved.ok) return;
+    const replay = await resolveDurableGate(dependencies, h.authority, firstRequest.gate_id);
+    expect(replay).toMatchObject({ ok: true, value: { replayed: true, effect: "redirect-upstream" } });
   });
 
   it("rejects gate re-entry from the wrong step, status, phase, or exhausted-attempt context", async () => {

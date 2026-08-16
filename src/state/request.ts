@@ -18,6 +18,19 @@ function subjectFor(call: ParsedToolCall, authority: TransactionAuthority, input
   };
   switch (call.name) {
     case "archflow_state":
+      if (call.input.operation === "planning_restart") {
+        return {
+          ...common,
+          tool: call.name,
+          operation: "planning-restart",
+          operation_fields: {
+            phase_instance: call.input.phase_instance,
+            target_phase_instance: call.input.target_phase_instance,
+            reason: call.input.reason,
+            ...(call.input.ask_base_digest === undefined ? {} : { ask_base_digest: call.input.ask_base_digest }),
+          },
+        };
+      }
       if (call.input.artifact === undefined) {
         return { ...common, tool: call.name, operation: "record-state-boundary", operation_fields: { phase_instance: call.input.phase_instance, step: call.input.step, status: call.input.status } };
       }

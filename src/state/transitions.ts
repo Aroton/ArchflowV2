@@ -1,10 +1,20 @@
 import { isDeepStrictEqual } from "node:util";
 
 import type { DurableArtifact } from "../contracts/durable.js";
-import type { AuthoritativeResultRef, HumanRevisionRecord, TaskStateV1 } from "../contracts/durable-state.js";
+import type {
+  AuthoritativeResultRef,
+  HumanRevisionRecord,
+  PlanningRestartRecord,
+  TaskStateV1,
+} from "../contracts/durable-state.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parseSafeInteger, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
-import { decodePhaseInstance, nextPhaseInstance } from "../contracts/phase-instance.js";
+import {
+  comparePhaseInstances,
+  decodePhaseInstance,
+  isStrictlyEarlierPlanningPhase,
+  nextPhaseInstance,
+} from "../contracts/phase-instance.js";
 import type { PhaseInstanceId } from "../contracts/phase-instance.js";
 import { assertPlainJson } from "../contracts/plain-json.js";
 import { WORKFLOW_V1 } from "../contracts/workflow.js";
@@ -47,7 +57,91 @@ export type TransitionPlanInput = Readonly<{
   human_revision_reentry?: boolean;
 }>;
 
+export type PlanningRestartPlanInput = Readonly<{
+  current: TaskStateV1;
+  restart_id: PlanningRestartRecord["restart_id"];
+  target_phase_instance: PhaseInstanceId;
+  reason: string;
+  recomputed_input_fingerprint: Sha256Digest;
+  human_provenance: PlanningRestartRecord["human_provenance"];
+}>;
+
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
+
+function restartInvalid(input: PlanningRestartPlanInput, issue: string): ProjectResult<never> {
+  void issue;
+  return Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("TRANSITION_INVALID", {
+      phase_instance: input.target_phase_instance,
+      from: `${input.current.step}-${input.current.status}`,
+      to: "planning-restart",
+    }),
+  });
+}
+
+/**
+ * Plans the one exceptional backward edge. It archives, rather than deletes, every invalidated
+ * authority root and lands directly in the existing target produce window.
+ */
+export function planPlanningRestart(value: PlanningRestartPlanInput): ProjectResult<NextStateDraft> {
+  assertPlainJson(value, "planning restart input");
+  const input = structuredClone(value);
+  const current = input.current;
+  if (
+    current.terminal !== undefined || current.open_gate !== undefined || input.reason.trim() === "" ||
+    !isStrictlyEarlierPlanningPhase(input.target_phase_instance, current.phase_instance)
+  ) return restartInvalid(input, "target-not-strictly-earlier-planning-phase");
+  if ((current.restart_history ?? []).some((record) => record.restart_id === input.restart_id)) {
+    return restartInvalid(input, "restart-id-already-recorded");
+  }
+
+  const retained = current.authoritative_results.filter((reference) =>
+    comparePhaseInstances(reference.phase_instance, input.target_phase_instance) < 0);
+  const superseded = current.authoritative_results.filter((reference) =>
+    comparePhaseInstances(reference.phase_instance, input.target_phase_instance) >= 0);
+  const restartedAtRevision = parseSafeInteger(current.revision + 1);
+  const record: PlanningRestartRecord = Object.freeze({
+    restart_id: input.restart_id,
+    source_phase_instance: current.phase_instance,
+    target_phase_instance: input.target_phase_instance,
+    reason: input.reason,
+    restarted_at_revision: restartedAtRevision,
+    superseded_results: Object.freeze(superseded),
+    cleared_waivers: Object.freeze([...current.waivers]),
+    ...(current.pending_human_revision === undefined
+      ? {}
+      : { cleared_pending_human_revision: current.pending_human_revision }),
+    human_provenance: input.human_provenance,
+  });
+  const history = Object.freeze(
+    [...(current.restart_history ?? []), record]
+      .sort((left, right) => left.restart_id.localeCompare(right.restart_id)),
+  );
+  const targetKind = decodePhaseInstance(input.target_phase_instance).kind;
+  const {
+    revision: _revision,
+    last_transition: _lastTransition,
+    pending_human_revision: _pendingHumanRevision,
+    planned_final_phase: plannedFinalPhase,
+    ...preserved
+  } = current;
+  return ok(Object.freeze({
+    ...preserved,
+    phase_instance: input.target_phase_instance,
+    step: "produce",
+    status: "running",
+    attempt: parseSafeInteger(1),
+    input_fingerprint: input.recomputed_input_fingerprint,
+    authoritative_results: Object.freeze(retained),
+    waivers: Object.freeze([]),
+    restart_history: history,
+    ...(targetKind === "prd" || targetKind === "design" || plannedFinalPhase === undefined
+      ? {}
+      : { planned_final_phase: plannedFinalPhase }),
+  }));
+}
 
 function invalid(input: TransitionPlanInput, from: string, to: string): ProjectResult<never> {
   return Object.freeze({

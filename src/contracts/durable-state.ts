@@ -8,7 +8,7 @@ import type { GateKind, WaiverScope } from "./gates.js";
 import { GATE_KINDS } from "./gates.js";
 import type { PlainJsonValue } from "./plain-json.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
-import { phaseInstanceIdV1Schema } from "./phase-instance.js";
+import { isStrictlyEarlierPlanningPhase, phaseInstanceIdV1Schema } from "./phase-instance.js";
 import { isSortedUniqueBy, tupleKey } from "./validators.js";
 import type { PipelineStep } from "./vocabulary.js";
 import { PIPELINE_STEPS } from "./vocabulary.js";
@@ -125,6 +125,39 @@ export type HumanRevisionRecord = {
   readonly evidence: readonly AuthoritativeResultRef[];
 };
 
+/** Human provenance captured for an explicit planning restart through either supported channel. */
+export type PlanningRestartHumanProvenance = {
+  readonly schema_version: "1";
+  readonly actor_class: "human";
+  readonly assurance: "declared-local-trace";
+  readonly channel: "connected-host";
+  readonly decision_event_id: string;
+  readonly connection_id: string;
+  readonly request_id_digest: Sha256Digest;
+  readonly recorded_at: string;
+} | {
+  readonly schema_version: "1";
+  readonly actor_class: "human";
+  readonly assurance: "declared-local-trace";
+  readonly channel: "archflow-local";
+  readonly decision_event_id: string;
+  readonly helper_invocation_id: string;
+  readonly recorded_at: string;
+};
+
+/** Audit authority moved out of the active graph by one explicit backward planning restart. */
+export type PlanningRestartRecord = {
+  readonly restart_id: PathSafeId;
+  readonly source_phase_instance: PhaseInstanceId;
+  readonly target_phase_instance: PhaseInstanceId;
+  readonly reason: string;
+  readonly restarted_at_revision: SafeInteger;
+  readonly superseded_results: readonly AuthoritativeResultRef[];
+  readonly cleared_waivers: readonly WaiverRef[];
+  readonly cleared_pending_human_revision?: PendingHumanRevision;
+  readonly human_provenance: PlanningRestartHumanProvenance;
+};
+
 /**
  * `expires` is the const `"task-complete"` — the narrowest representation of the only expiry this
  * project has. That is a *format* decision. Phase 12 records waiver scope; Phase 14 owns expiry
@@ -220,6 +253,8 @@ export type TaskStateV1 = {
   readonly open_gate?: OpenGateRef;
   readonly pending_human_revision?: PendingHumanRevision;
   readonly human_revision_history?: readonly HumanRevisionRecord[];
+  /** Sorted by `restart_id`; absent means no planning restart has occurred. */
+  readonly restart_history?: readonly PlanningRestartRecord[];
   readonly last_transition?: LastTransition;
   readonly terminal?: TerminalState;
 };
@@ -342,6 +377,50 @@ export const humanRevisionRecordV1Schema = z.object({
   }
 }) as unknown as z.ZodType<HumanRevisionRecord>;
 
+const planningRestartConnectedHostProvenanceV1Schema = z.object({
+  schema_version: z.literal("1"),
+  actor_class: z.literal("human"),
+  assurance: z.literal("declared-local-trace"),
+  channel: z.literal("connected-host"),
+  decision_event_id: safeIdV1Schema,
+  connection_id: safeIdV1Schema,
+  request_id_digest: sha256Digest,
+  recorded_at: z.string().datetime({ offset: false, local: false, precision: 3 }),
+}).strict();
+
+const planningRestartLocalProvenanceV1Schema = z.object({
+  schema_version: z.literal("1"),
+  actor_class: z.literal("human"),
+  assurance: z.literal("declared-local-trace"),
+  channel: z.literal("archflow-local"),
+  decision_event_id: safeIdV1Schema,
+  helper_invocation_id: safeIdV1Schema,
+  recorded_at: z.string().datetime({ offset: false, local: false, precision: 3 }),
+}).strict();
+
+export const planningRestartHumanProvenanceV1Schema = z.union([
+  planningRestartConnectedHostProvenanceV1Schema,
+  planningRestartLocalProvenanceV1Schema,
+]) as unknown as z.ZodType<PlanningRestartHumanProvenance>;
+
+export const planningRestartRecordV1Schema = z.object({
+  restart_id: pathSafeIdV1Schema,
+  source_phase_instance: phaseInstanceIdV1Schema,
+  target_phase_instance: phaseInstanceIdV1Schema,
+  reason: z.string().min(1).max(4096).regex(/\S/u),
+  restarted_at_revision: positiveSafeInteger,
+  superseded_results: z.array(authoritativeResultRefV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "superseded_results must be sorted by (phase_instance, step) with no duplicates"),
+  cleared_waivers: z.array(waiverRefV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "cleared_waivers must be sorted by gate_id with no duplicates"),
+  cleared_pending_human_revision: pendingHumanRevisionV1Schema.optional(),
+  human_provenance: planningRestartHumanProvenanceV1Schema,
+}).strict().superRefine((record, context) => {
+  if (!isStrictlyEarlierPlanningPhase(record.target_phase_instance, record.source_phase_instance)) {
+    context.addIssue({ code: "custom", path: ["target_phase_instance"], message: "restart target must be a strictly earlier planning phase" });
+  }
+}) as unknown as z.ZodType<PlanningRestartRecord>;
+
 /** Recursive JSON value used by `lastTransitionV1Schema`; overridden during JSON Schema emission. */
 export const lastTransitionOutcomeV1Schema = z.json();
 
@@ -392,9 +471,17 @@ export const taskStateV1Schema = z.object({
   human_revision_history: z.array(humanRevisionRecordV1Schema)
     .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "human_revision_history must be sorted by gate_id with no duplicates")
     .optional(),
+  restart_history: z.array(planningRestartRecordV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("restart_id")), "restart_history must be sorted by restart_id with no duplicates")
+    .optional(),
   last_transition: lastTransitionV1Schema.optional(),
   terminal: z.enum(TERMINAL_STATES).optional(),
 }).strict().superRefine((state, context) => {
+  state.restart_history?.forEach((restart, index) => {
+    if (restart.restarted_at_revision > state.revision) {
+      context.addIssue({ code: "custom", path: ["restart_history", index, "restarted_at_revision"], message: "restart revision cannot exceed the current state revision" });
+    }
+  });
   const pending = state.pending_human_revision;
   if (pending === undefined) return;
   if (state.open_gate !== undefined || state.terminal !== undefined || state.step !== "produce" ||

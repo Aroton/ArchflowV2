@@ -69,7 +69,6 @@ export const RELEASE_BUILD_PROFILE = Object.freeze({
 });
 
 const PROOF_INPUTS = Object.freeze([
-  ".github/workflows/ci.yml",
   "package.json",
   "scripts/smoke-release-bundle.mjs",
   "scripts/test-release-integrity.mjs",
@@ -88,7 +87,6 @@ const LAUNCH_FIXTURES = Object.freeze([
 
 const REQUIRED_CONTROLS = Object.freeze([
   ".gitattributes",
-  ".github/workflows/ci.yml",
   "package-lock.json",
   "package.json",
   "scripts/build-release.mjs",

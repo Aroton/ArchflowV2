@@ -1,6 +1,6 @@
 # mcp/SERVER
 
-**Explored:** 2026-08-13 · **Commit:** `247df34` · **Covers:** `src/main.ts`, `src/mcp/`, `src/state/staged-requests.ts`
+**Explored:** 2026-08-16 · **Commit:** `3a190c1` · **Covers:** `src/main.ts`, `src/mcp/`, `src/state/staged-requests.ts`, `src/state/semantic-*.ts`
 
 `archflow-mcp` is a stdio MCP server speaking newline-delimited JSON-RPC. It is the system's sole authority: the only writer of durable state and the only judge of request validity. It takes no arguments and has no other mode — `src/main.ts` is 28 lines that either print usage or start the runtime.
 
@@ -10,12 +10,20 @@ Tool names are frozen in `src/contracts/tool-names.ts`; handlers live in `src/mc
 
 | Tool | What it does |
 |---|---|
-| `archflow_state` | The workflow's write path. Records that a pipeline step (`produce`, `counter_review`, `triage`) is running/succeeded/failed, optionally attaching a durable artifact. Runs a state transaction and returns the new revision. |
+| `archflow_state` | The workflow's write path. Records that a pipeline step (`produce`, `counter_review`, `triage`) is running/succeeded/failed, optionally attaching a durable artifact. Its additive `planning_restart` full-payload arm routes an explicit strictly backward planning correction through the same state handler and bounded restart kernel. Runs a state transaction and returns the new revision. |
 | `archflow_counter_review` | Selects the phase's immutable canonical rubric, assembles a sealed control envelope plus a read-only repository view, and dispatches it to the opposite-family model CLI. Implementation views are reconstructed post-change snapshots from the attested base commit and retained output bytes, so source size does not consume the envelope cap. When the pinned constitution has active rules (the server decides, never the agent), a second opposite-family child receives its own sealed envelope and the same snapshot for constitution/drift review. Both results commit in one atomic state transaction; the result reports both: `{path, verdict, blocking_count, constitution, revision, request_digest}`, where `constitution` is `{status: "evaluated", path, constitution: pass\|fail\|uncertain, drift: aligned\|incidental\|material, triggers: […]}` or `{status: "not-run", reason: "no-active-constitution-rules"}`. `artifact_path` is now its only operation-specific full-request field; normal callers let `build-request` derive even that. |
 | `archflow_gate` | Records and resolves a durable human gate decision against a subject digest; task/phase-design `design-approval` combines document judgment, constitution findings, and task-local milestone commit authority. `migration-audit` is the corresponding single approval for a reviewed legacy import and binds its exact visible documents, resume point, and import commit authority; handles supersession (`GATE_SUPERSEDED`). |
 | `archflow_waiver` | Grants or denies a human waiver against a gate whose decision was `waiver-requested`, after re-verifying the archived origin gate. |
 
 The advertised catalogue carries names and JSON Schemas; each input schema also carries one description naming its two parameter groups. The skills, not the tool listing, teach agents when to call what.
+
+## Internal semantic foundation, not an advertised surface
+
+Phase 1 adds `WorkflowViewV1`, semantic status/apply inputs, internal one-action offers, and action planning under `src/contracts/semantic-workflow.ts` and `src/state/semantic-*.ts`. They are deliberately absent from `TOOL_NAMES` and `tools/list`: there is no live `archflow_status` or `archflow_apply` handler yet, and the advertised catalogue remains exactly the four tools above.
+
+The status projection joins full status—not brief status—with repository identity, complete finding prose, authenticated decision/waiver/revision recovery facts, and server-derived reopen impacts. It exposes one human/client action without exposing revisions, fingerprints, request digests, intent IDs, gate bindings, or routing identity. A generic status invocation has no mutation offer. A skill invocation can receive an opaque `af1_` token bound to repository, task, invocation, state, and action; applying it recomputes current truth before planning one fixed named substep.
+
+The internal action planner does not run a workflow loop. Supported actions route fixed named substeps through the common request composer and explicit execution capabilities, refreshing authenticated status between substeps and returning before another offered action. Task initialization stages the exact ask before revision-zero composition; failed production, planning restart, and no-submission waiver opening share the same composer as the legacy adapter. Direct semantic human-decision archive/settlement remains explicitly deferred to Phase 2. The contracts prove the intended boundary, but do not yet advertise the new surface to a host.
 
 Rendered reviews and gate UI are disposable interfaces, not authority. The gate projection is deliberately human-shaped: title, plain summary, direct question, material evidence, and labeled choices with consequences. Combined design approval also projects each policy conflict or trigger with its actual rationale/evidence in `presentation.details`, making the one human decision self-contained. Skills use that projection rather than relaying raw tool output; IDs, digests, JSON, paths, and protocol codes remain available for explicit diagnostics. Durable structured evidence can regenerate the presentation after cleanup or on a fresh clone.
 
@@ -68,6 +76,8 @@ What remains adapter-owned, and why:
 ## Handler shape
 
 Every handler follows the same skeleton: open a handler session (durable services + config pin check + host identity), run a **replay probe** to detect whether this intent was already committed (so a retried call returns the recorded outcome instead of doing the work twice), then perform its state transaction or dispatch. Revision-zero legacy initialization is the one state-absent exception to the canonical config read: it authenticates the digest-pinned config from the ignored import stage, validates every mapped payload, constructs the entire task beside the destination, and renames it into place. The replay probe is worth knowing about before reading handler code: it deliberately runs a state transaction whose callback always fails with a sentinel issue code, purely to learn whether the intent is new — it looks like dead error handling and isn't.
+
+`archflow_state` planning restart is an additive exception inside that handler, not a separate server tool. It authenticates the low-level request, derives a stable restart ID from its request digest, exact-replays an existing matching history record, performs the PRD ask append when applicable, and asks the transaction kernel to validate the exact backward restart draft. The future semantic reopen path is expected to derive this low-level target and impact rather than publishing them as caller choices.
 
 ## Registration and hosts
 

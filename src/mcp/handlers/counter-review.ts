@@ -35,6 +35,7 @@ import {
   type PreparedEvidenceResult,
 } from "../../state/evidence-results.js";
 import { loadAuthenticatedGateApproval } from "../../state/gates.js";
+import { authenticatedApprovalIsEligibleAfterLatestRestart } from "../../state/restart-authority.js";
 import {
   loadCurrentProduceSubject,
   loadProduceUpstreamSubject,
@@ -151,6 +152,7 @@ async function deriveApprovedUpstreams(
       for (const approval of durable.approvals.filter((candidate) => candidate.gate_kind === "migration-audit")) {
         const authenticated = await loadAuthenticatedGateApproval(services.dependencies, services.authority, approval);
         if (!authenticated.ok) return authenticated;
+        if (!authenticatedApprovalIsEligibleAfterLatestRestart(durable, authenticated.value)) continue;
         if (
           authenticated.value.request.kind === "migration-audit" &&
           authenticated.value.decision.envelope.payload.decision === "accept-import-audit" &&
@@ -171,6 +173,9 @@ async function deriveApprovedUpstreams(
         services.dependencies, services.authority, approval,
       );
       if (!authenticated.ok) return authenticated;
+      if (!authenticatedApprovalIsEligibleAfterLatestRestart(
+        durable, authenticated.value, upstream.value.artifact.phase_instance,
+      )) continue;
       const request = authenticated.value.request;
       const ownerKind = decodePhaseInstance(upstream.value.artifact.phase_instance).kind;
       if ((request.kind === "artifact-approval" || request.kind === "design-approval") &&
@@ -246,6 +251,7 @@ async function reobserveProjectionDigest(
 export async function handleCounterReview(
   call: Extract<ParsedToolCall, { name: "archflow_counter_review" }>,
   context: InvocationContext,
+  dispatchAlreadySerialized = false,
 ): Promise<ProjectResult<ToolSuccess<"archflow_counter_review">>> {
   return mapHandlerErrors<"archflow_counter_review">(context.invocation_id, async () => {
     const session = await openHandlerSession(call, context);
@@ -378,6 +384,7 @@ export async function handleCounterReview(
     const result = await runCounterReview({
       transaction: services.dependencies,
       dispatch: coordinator,
+      ...(dispatchAlreadySerialized ? { serialize_dispatch: async <T>(operation: () => Promise<T>) => operation() } : {}),
       prepare_evidence: (evidence, measuredAtRevision) => prepareDispatchEvidence(
         services, retainedBytes, resultId, { kind: "review", evidence }, measuredAtRevision,
       ),
@@ -423,4 +430,12 @@ export async function handleCounterReview(
       value: result.value.transaction.outcome,
     });
   });
+}
+
+/** Semantic review owns the outer FIFO across replay, dispatch, and commit, so inner dispatch is direct. */
+export function handleCounterReviewWithinDispatch(
+  call: Extract<ParsedToolCall, { name: "archflow_counter_review" }>,
+  context: InvocationContext,
+): Promise<ProjectResult<ToolSuccess<"archflow_counter_review">>> {
+  return handleCounterReview(call, context, true);
 }

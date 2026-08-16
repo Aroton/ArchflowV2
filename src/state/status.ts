@@ -27,6 +27,7 @@ import { assertInternalTransactionAuthority, createInternalTransactionAuthority 
 import { resolvePinnedConstitution, type ResolvedConstitution } from "./constitution.js";
 import { deriveCurrentEvidenceSet, loadRetainedEvidence, type RetainedEvidenceSet } from "./evidence-results.js";
 import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "./gate-approvals.js";
+import { authenticatedApprovalIsEligibleAfterLatestRestart } from "./restart-authority.js";
 import {
   buildGateDecisionTemplates,
   buildHumanGatePresentation,
@@ -200,6 +201,16 @@ export type TaskStatusV1 = Readonly<{
   /** Derived cleanup state. Cleanup debt is non-blocking and never changes workflow routing. */
   workspace?: WorkspaceCleanupReport;
   next_action: NextAction;
+}>;
+
+/**
+ * Authenticated inputs retained by the detailed status read for internal semantic projection.
+ * This is intentionally not part of the serialized legacy status contract.
+ */
+export type DetailedTaskStatusV1 = Readonly<{
+  status: TaskStatusV1;
+  state?: TaskStateV1;
+  retained: RetainedEvidenceSet;
 }>;
 
 /**
@@ -397,6 +408,9 @@ async function currentApprovedUpstreams(
     const approval = [...authenticated]
       .filter((item) => {
         if (item.approval.subject_digest !== loaded.value.artifact_digest) return false;
+        if (!authenticatedApprovalIsEligibleAfterLatestRestart(
+          state, item, loaded.value.artifact.phase_instance,
+        )) return false;
         return (item.approval.gate_kind === "design-approval" &&
             item.request.kind === "design-approval" &&
             item.request.context.artifact_kind === ownerKind) ||
@@ -582,10 +596,10 @@ export async function buildDesignApprovalInput(
 }
 
 /** Computes reconciled normal-mode status without mutating any durable authority. */
-export async function computeTaskStatus(
+async function computeTaskStatusDetailedInternal(
   dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
-): Promise<ProjectResult<TaskStatusV1>> {
+): Promise<ProjectResult<DetailedTaskStatusV1>> {
   const blockers: string[] = [];
   let stateRead: Awaited<ReturnType<typeof readTaskState>>;
   try {
@@ -593,25 +607,27 @@ export async function computeTaskStatus(
     stateRead = await readTaskState(authority.state);
   } catch {
     const next = deriveNextAction({ repository_initialized: true });
-    return ok(Object.freeze({
+    const status = Object.freeze({
       task_id: authority.task_id,
       state: "missing" as const,
       config: unavailableConfig(undefined, undefined, "status-authority-invalid"),
       blocking_reasons: Object.freeze(["status-authority-invalid"]),
       next_action: attachNextActionRequest(next, { task_id: authority.task_id }),
-    }));
+    });
+    return ok(Object.freeze({ status, retained: new Map() }));
   }
 
   if (stateRead.kind !== "canonical") {
     const reason = stateRead.kind === "missing" ? "state-missing" : `state-${stateRead.kind}`;
     const next = deriveNextAction({ repository_initialized: true });
-    return ok(Object.freeze({
+    const status = Object.freeze({
       task_id: authority.task_id,
       state: "missing" as const,
       config: unavailableConfig(undefined, undefined, "state-unavailable"),
       blocking_reasons: Object.freeze([reason]),
       next_action: attachNextActionRequest(next, { task_id: authority.task_id }),
-    }));
+    });
+    return ok(Object.freeze({ status, retained: new Map() }));
   }
   const stateDocument = stateRead.document;
   const state = stateDocument.value;
@@ -739,6 +755,7 @@ export async function computeTaskStatus(
     try {
       const loaded = await loadAuthenticatedGateApproval(dependencies, authority, approval);
       if (loaded.ok) {
+        if (!authenticatedApprovalIsEligibleAfterLatestRestart(state, loaded.value)) continue;
         authenticatedApprovals.push(loaded.value);
         approvalFacts.push(Object.freeze({ gate_kind: approval.gate_kind, subject_digest: approval.subject_digest }));
       } else {
@@ -1125,7 +1142,7 @@ export async function computeTaskStatus(
     });
   }
 
-  return ok(Object.freeze({
+  const status: TaskStatusV1 = Object.freeze({
     task_id: authority.task_id,
     state: state.terminal ?? "active",
     revision: state.revision,
@@ -1150,7 +1167,25 @@ export async function computeTaskStatus(
     workspace,
     blocking_reasons: Object.freeze([...new Set(blockers)]),
     next_action: nextActionWithRequest,
-  }));
+  });
+  return ok(Object.freeze({ status, state, retained }));
+}
+
+/** Computes status and exposes the exact authenticated state/evidence read to internal consumers. */
+export async function computeTaskStatusDetailed(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+): Promise<ProjectResult<DetailedTaskStatusV1>> {
+  return computeTaskStatusDetailedInternal(dependencies, authority);
+}
+
+/** Computes reconciled normal-mode status without exposing internal authority material. */
+export async function computeTaskStatus(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+): Promise<ProjectResult<TaskStatusV1>> {
+  const detailed = await computeTaskStatusDetailedInternal(dependencies, authority);
+  return detailed.ok ? ok(detailed.value.status) : detailed;
 }
 
 function attachNextActionRequest(

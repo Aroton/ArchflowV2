@@ -44,12 +44,27 @@ export type HumanRevisionDeclaration = {
   readonly rationale: string;
   readonly user_override?: HumanRevisionOverride;
 };
-export type StateInput = CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly step: "produce" | "counter_review" | "triage"; readonly status: "running" | "succeeded" | "failed"; readonly artifact?: DurableArtifact; readonly human_revision?: HumanRevisionDeclaration };
+export type StateBoundaryInput = CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly step: "produce" | "counter_review" | "triage"; readonly status: "running" | "succeeded" | "failed"; readonly artifact?: DurableArtifact; readonly human_revision?: HumanRevisionDeclaration; readonly operation?: never; readonly target_phase_instance?: never; readonly reason?: never; readonly ask_base_digest?: never };
+/** Additive migration adapter for the bounded planning-restart kernel. */
+export type PlanningRestartInput = CommonToolInput & {
+  readonly operation: "planning_restart";
+  /** Authenticated current/source phase. */
+  readonly phase_instance: PhaseInstanceId;
+  /** Strictly earlier planning target; the transition kernel remains authoritative. */
+  readonly target_phase_instance: PhaseInstanceId;
+  readonly reason: string;
+  readonly ask_base_digest?: Sha256Digest;
+  readonly step: "produce";
+  readonly status: "running";
+  readonly artifact?: never;
+  readonly human_revision?: never;
+};
+export type StateInput = StateBoundaryInput | PlanningRestartInput;
 // Every success value optionally echoes the request_digest the server recorded for the call, so
 // a client can compare one string against its envelope output to prove the arguments arrived
 // untranscribed. Optional in the contract because receipts recorded before the echo existed must
 // keep replaying byte-identically; live handlers always emit it.
-export interface StateSuccess { readonly path: TaskPathClaim; readonly revision: number; readonly status: StateInput["status"]; readonly request_digest?: Sha256Digest }
+export interface StateSuccess { readonly path: TaskPathClaim; readonly revision: number; readonly status: "running" | "succeeded" | "failed"; readonly request_digest?: Sha256Digest }
 export interface CounterReviewInput extends CommonToolInput { readonly artifact_path: TaskPathClaim }
 /**
  * The server decides whether the constitution review runs: it is evaluated as a second
@@ -99,11 +114,49 @@ const humanRevisionDeclarationSchema = z.object({
     context.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
   }
 });
-export const stateInputSchema = z.object({ ...common, phase_instance: phase, step: z.enum(["produce", "counter_review", "triage"]), status: z.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional(), human_revision: humanRevisionDeclarationSchema.optional() }).strict().superRefine((input, context) => {
+export const stateBoundaryInputSchema = z.object({ ...common, phase_instance: phase, step: z.enum(["produce", "counter_review", "triage"]), status: z.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional(), human_revision: humanRevisionDeclarationSchema.optional() }).strict().superRefine((input, context) => {
   if (input.human_revision !== undefined && (input.step !== "produce" || input.status !== "succeeded")) {
     context.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
   }
 });
+export const planningRestartInputSchema = z.object({
+  ...common,
+  operation: z.literal("planning_restart"),
+  phase_instance: phase,
+  target_phase_instance: phase,
+  reason: text,
+  ask_base_digest: digest.optional(),
+  step: z.literal("produce"),
+  status: z.literal("running"),
+}).strict();
+/**
+ * One plain object root. Some MCP hosts flatten root unions into a zero-field object, so the
+ * additive operation shares a union-of-properties root and the runtime refinement enforces arms.
+ */
+export const stateInputSchema = z.object({
+  ...common,
+  phase_instance: phase,
+  step: z.enum(["produce", "counter_review", "triage"]),
+  status: z.enum(["running", "succeeded", "failed"]),
+  artifact: durableArtifact.optional(),
+  human_revision: humanRevisionDeclarationSchema.optional(),
+  operation: z.literal("planning_restart").optional(),
+  target_phase_instance: phase.optional(),
+  reason: text.optional(),
+  ask_base_digest: digest.optional(),
+}).strict().superRefine((input, context) => {
+  if (input.operation === "planning_restart") {
+    if (input.target_phase_instance === undefined) context.addIssue({ code: "custom", path: ["target_phase_instance"], message: "planning_restart requires target_phase_instance" });
+    if (input.reason === undefined) context.addIssue({ code: "custom", path: ["reason"], message: "planning_restart requires reason" });
+    if (input.step !== "produce" || input.status !== "running") context.addIssue({ code: "custom", path: ["step"], message: "planning_restart lands at produce/running" });
+    if (input.artifact !== undefined || input.human_revision !== undefined) context.addIssue({ code: "custom", path: ["artifact"], message: "planning_restart cannot carry an artifact or human revision" });
+    if (input.target_phase_instance === "prd" && input.ask_base_digest === undefined) context.addIssue({ code: "custom", path: ["ask_base_digest"], message: "PRD planning_restart requires ask_base_digest" });
+    if (input.target_phase_instance !== "prd" && input.ask_base_digest !== undefined) context.addIssue({ code: "custom", path: ["ask_base_digest"], message: "ask_base_digest is PRD-only" });
+    return;
+  }
+  if (input.target_phase_instance !== undefined || input.reason !== undefined || input.ask_base_digest !== undefined) context.addIssue({ code: "custom", path: ["operation"], message: "restart fields require planning_restart" });
+  if (input.human_revision !== undefined && (input.step !== "produce" || input.status !== "succeeded")) context.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
+}) as unknown as z.ZodType<StateInput>;
 /**
  * The staged-request reference arm shared by every tool input union. It is structurally disjoint
  * from every full-payload arm: strictness rejects any full payload (extra fields), and every full
@@ -215,7 +268,11 @@ export const mcpToolsSchemaDefs: Readonly<Record<string, z.ZodType>> = Object.fr
 });
 function successFor<K extends ToolName>(call: Extract<ParsedToolCall, { name: K }>, value: unknown): ToolSuccess<K> {
   const parsed = toolSuccessSchemas[call.name].parse(value) as ToolSuccess<K>;
-  if (call.name === "archflow_state" && (parsed as StateSuccess).status !== (call.input as ParsedToolInput<"archflow_state">).status) throw new TypeError("state status mismatch");
+  if (call.name === "archflow_state") {
+    const input = call.input as ParsedToolInput<"archflow_state">;
+    const expectedStatus = input.operation === "planning_restart" ? "running" : input.status;
+    if ((parsed as StateSuccess).status !== expectedStatus) throw new TypeError("state status mismatch");
+  }
   if (call.name === "archflow_gate") {
     const input = call.input as ParsedToolInput<"archflow_gate">;
     const result = parsed as GateSuccess;

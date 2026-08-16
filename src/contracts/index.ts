@@ -32,6 +32,7 @@ export * from "./durable-implementation-output.js";
 export * from "./durable-result-manifest.js";
 export * from "./durable-gate.js";
 export * from "./durable.js";
+export * from "./semantic-workflow.js";
 export {
   TOOL_DEFINITIONS,
   bindParsedToolCallRequest,

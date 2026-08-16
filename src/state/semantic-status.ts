@@ -1,0 +1,305 @@
+import { isDeepStrictEqual } from "node:util";
+
+import { canonicalJsonDigest, type CanonicalDocument } from "../contracts/canonical.js";
+import { parseArchivedGateDecisionRecord, parseArchivedGateRequest, type ArchivedGateDecisionRecordV1, type ArchivedGateRequestV1 } from "../contracts/durable-gate.js";
+import type { TaskStateV1 } from "../contracts/durable-state.js";
+import { validateDurableSemantics } from "../contracts/durable.js";
+import type { ProjectResult } from "../contracts/errors.js";
+import { parsePathSafeId, parseSha256Digest, type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
+import { comparePhaseInstances, decodePhaseInstance, encodePhaseInstance, parsePositiveSafePhaseNumber, type PhaseInstanceId } from "../contracts/phase-instance.js";
+import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
+import {
+  publicFindingV1Schema,
+  type PublicFindingV1,
+  type SemanticStatusSnapshotV1,
+  type WorkflowReopenImpactV1,
+} from "../contracts/semantic-workflow.js";
+import { gateDecisionClaim, gateRequestClaim, resolveTaskPath } from "../repository/paths.js";
+import type { TransactionAuthority } from "./authority.js";
+import { deriveCurrentEvidenceSet } from "./evidence-results.js";
+import { readCanonical, type GateLifecycleDependencies } from "./gate-core.js";
+import { computeTaskStatusDetailed, type DetailedTaskStatusV1, type TaskStatusV1 } from "./status.js";
+
+/**
+ * Enrichments that detailed status obtains while it still owns the canonical read. They are
+ * deliberately explicit: callers may not recover review prose, restart eligibility, or decision
+ * authority from the smaller serialized status projection after the read lock has been released.
+ */
+export type SemanticStatusEnrichmentsV1 = Readonly<{
+  repository_identity_digest: Sha256Digest;
+  state?: TaskStateV1;
+  full_findings: readonly PublicFindingV1[];
+  pending_waiver_origin?: PlainJsonValue;
+  archived_decision?: PlainJsonValue;
+  revision_checkpoint?: PlainJsonValue;
+  reopen_impacts?: readonly WorkflowReopenImpactV1[];
+}>;
+
+const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
+
+function workflowPosition(phase: PhaseInstanceId): WorkflowReopenImpactV1["target"] {
+  const decoded = decodePhaseInstance(phase);
+  return decoded.kind === "prd" || decoded.kind === "design"
+    ? Object.freeze({ kind: decoded.kind })
+    : Object.freeze({ kind: decoded.kind, phase: Number(decoded.phase) });
+}
+
+function planningTargetsBefore(current: PhaseInstanceId): readonly PhaseInstanceId[] {
+  const decoded = decodePhaseInstance(current);
+  const candidates: PhaseInstanceId[] = [
+    encodePhaseInstance({ kind: "prd" }),
+    encodePhaseInstance({ kind: "design" }),
+  ];
+  const maximum = decoded.kind === "phase-design" || decoded.kind === "phase-impl" ? decoded.phase : 0;
+  for (let phase = 1; phase <= maximum; phase += 1) {
+    const target = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(phase) });
+    if (comparePhaseInstances(target, current) < 0) candidates.push(target);
+  }
+  return Object.freeze(candidates.filter((target) => comparePhaseInstances(target, current) < 0));
+}
+
+function reopenImpacts(state: TaskStateV1, status: TaskStatusV1): readonly WorkflowReopenImpactV1[] {
+  if (state.terminal !== undefined || state.open_gate !== undefined || status.blocking_reasons.length !== 0) return Object.freeze([]);
+  return Object.freeze(planningTargetsBefore(state.phase_instance).map((target) => {
+    const affected = new Set<PhaseInstanceId>([state.phase_instance]);
+    for (const reference of state.authoritative_results) {
+      if (comparePhaseInstances(reference.phase_instance, target) >= 0) affected.add(reference.phase_instance);
+    }
+    const targetKind = decodePhaseInstance(target).kind;
+    const authorityEffects: WorkflowReopenImpactV1["authority_effects"][number][] = [];
+    if (state.authoritative_results.some((reference) => comparePhaseInstances(reference.phase_instance, target) >= 0)) authorityEffects.push("supersede-results");
+    if (state.waivers.length !== 0) authorityEffects.push("clear-active-waivers");
+    if (state.pending_human_revision !== undefined) authorityEffects.push("clear-pending-human-revision");
+    if ((targetKind === "prd" || targetKind === "design") && state.planned_final_phase !== undefined) authorityEffects.push("clear-planned-final-phase");
+    return Object.freeze({
+      target: workflowPosition(target),
+      affected_positions: Object.freeze([...affected]
+        .filter((phase) => comparePhaseInstances(phase, target) >= 0)
+        .sort(comparePhaseInstances)
+        .map(workflowPosition)),
+      authority_effects: Object.freeze(authorityEffects),
+      planned_final_phase: targetKind === "prd" || targetKind === "design" ? "clear" : "retain",
+      preserves_existing_git_index_and_worktree_bytes: true as const,
+      appends_prd_ask_history: targetKind === "prd",
+      requires_fresh_review_and_approval: true as const,
+    });
+  }));
+}
+
+async function archivedGate(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  gateId: PathSafeId,
+): Promise<Readonly<{
+  request: "missing" | "invalid" | CanonicalDocument<ArchivedGateRequestV1>;
+  decision: "missing" | "invalid" | CanonicalDocument<ArchivedGateDecisionRecordV1>;
+}>> {
+  const requestPath = await resolveTaskPath({ runner: dependencies.runner, taskId: authority.task_id, claim: gateRequestClaim(gateId), expectedClass: "authority-decision", context: authority.context });
+  const decisionPath = await resolveTaskPath({ runner: dependencies.runner, taskId: authority.task_id, claim: gateDecisionClaim(gateId), expectedClass: "authority-decision", context: authority.context });
+  if (!requestPath.ok || !decisionPath.ok) return Object.freeze({ request: "invalid" as const, decision: "invalid" as const });
+  return Object.freeze({
+    request: await readCanonical(requestPath.value, "semantic gate request", parseArchivedGateRequest),
+    decision: await readCanonical(decisionPath.value, "semantic gate decision", parseArchivedGateDecisionRecord),
+  });
+}
+
+function materializeJson<T>(value: T, label: string): T {
+  assertPlainJson(value, label);
+  return structuredClone(value);
+}
+
+function fullFindings(details: DetailedTaskStatusV1): readonly PublicFindingV1[] {
+  if (details.status.evidence?.available !== true) return Object.freeze([]);
+  const current = deriveCurrentEvidenceSet(details.retained);
+  const triage = details.retained.get("triage")?.manifest.source_artifact;
+  const dispositions = new Map<string, NonNullable<PublicFindingV1["current_disposition"]>>();
+  if (triage?.artifact_kind === "triage") {
+    for (const disposition of triage.evidence.dispositions) {
+      const key = `${disposition.review_evidence_digest}:${disposition.finding_id}`;
+      dispositions.set(key, disposition.disposition === "rejected"
+        ? Object.freeze({ disposition: "rejected", rationale: disposition.rationale, evidence: disposition.evidence })
+        : Object.freeze({ disposition: disposition.disposition, rationale: disposition.rationale, revision_intent: disposition.revision_intent }));
+    }
+  }
+  return Object.freeze(current.reviews.flatMap((review) => review.evidence.findings.map((finding) =>
+    Object.freeze(publicFindingV1Schema.parse({
+      ...finding,
+      ...(dispositions.get(`${review.evidence_digest}:${finding.finding_id}`) === undefined ? {} : {
+        current_disposition: dispositions.get(`${review.evidence_digest}:${finding.finding_id}`),
+      }),
+    })) as PublicFindingV1)));
+}
+
+function archiveBinds(
+  state: TaskStateV1,
+  request: CanonicalDocument<ArchivedGateRequestV1>,
+  decision: CanonicalDocument<ArchivedGateDecisionRecordV1>,
+): boolean {
+  return validateDurableSemantics({ gate_request: request, gate_decision: decision }).ok &&
+    request.value.task_id === state.task_id && request.value.phase_instance === state.phase_instance &&
+    decision.value.task_id === state.task_id && decision.value.phase_instance === state.phase_instance;
+}
+
+function transitionCarriesDecision(outcome: PlainJsonValue, decision: ArchivedGateDecisionRecordV1): boolean {
+  if (decision.outcome !== "decided" || outcome === null || Array.isArray(outcome) || typeof outcome !== "object") return false;
+  const descriptor = Object.getOwnPropertyDescriptor(outcome, "decision");
+  return descriptor?.enumerable === true && "value" in descriptor && isDeepStrictEqual(descriptor.value, decision.envelope);
+}
+
+async function deriveArchiveEnrichments(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  details: DetailedTaskStatusV1,
+): Promise<Pick<SemanticStatusEnrichmentsV1, "pending_waiver_origin" | "archived_decision" | "revision_checkpoint">> {
+  const state = details.state;
+  if (state === undefined) return Object.freeze({});
+
+  if (state.open_gate !== undefined) {
+    const archive = await archivedGate(dependencies, authority, state.open_gate.gate_id);
+    if (archive.decision === "missing") return Object.freeze({});
+    if (archive.request === "missing" || archive.request === "invalid" || archive.decision === "invalid" ||
+        !archiveBinds(state, archive.request, archive.decision) ||
+        archive.request.value.gate_id !== state.open_gate.gate_id ||
+        archive.request.value.kind !== state.open_gate.gate_kind ||
+        archive.request.value.subject_digest !== state.open_gate.subject_digest ||
+        archive.request.value.context_digest !== state.open_gate.context_digest ||
+        archive.request.value.opened_at_revision !== state.open_gate.opened_at_revision ||
+        archive.decision.value.outcome === "superseded") {
+      return Object.freeze({ archived_decision: Object.freeze({ status: "invalid" }) });
+    }
+    return Object.freeze({ archived_decision: Object.freeze({ status: "exact" }) });
+  }
+
+  const transition = state.last_transition;
+  if (transition === undefined || transition.tool !== "archflow_gate" || transition.resulting_revision !== state.revision) return Object.freeze({});
+  let transitionGateId: PathSafeId;
+  try { transitionGateId = parsePathSafeId(transition.result_id); }
+  catch { return Object.freeze({}); }
+  const archive = await archivedGate(dependencies, authority, transitionGateId);
+  const invalid = archive.request === "missing" || archive.request === "invalid" || archive.decision === "missing" || archive.decision === "invalid" ||
+    !archiveBinds(state, archive.request as CanonicalDocument<ArchivedGateRequestV1>, archive.decision as CanonicalDocument<ArchivedGateDecisionRecordV1>);
+  if (invalid) {
+    return transition.operation === "semantic-revision-requested"
+      ? Object.freeze({ revision_checkpoint: Object.freeze({ status: "invalid" }) })
+      : transition.operation === "gate"
+        ? Object.freeze({ pending_waiver_origin: Object.freeze({ status: "invalid" }) })
+        : Object.freeze({});
+  }
+  const request = (archive.request as CanonicalDocument<ArchivedGateRequestV1>);
+  const decision = (archive.decision as CanonicalDocument<ArchivedGateDecisionRecordV1>);
+  if (request.value.request_digest !== transition.request_digest || request.value.intent_id !== transition.intent_id ||
+      request.value.gate_id !== transitionGateId || decision.value.gate_id !== transitionGateId ||
+      canonicalJsonDigest(transition.outcome) !== transition.outcome_digest || decision.value.outcome !== "decided" ||
+      !transitionCarriesDecision(transition.outcome, decision.value)) {
+    return transition.operation === "semantic-revision-requested"
+      ? Object.freeze({ revision_checkpoint: Object.freeze({ status: "invalid" }) })
+      : Object.freeze({ pending_waiver_origin: Object.freeze({ status: "invalid" }) });
+  }
+  const payload = decision.value.envelope.payload;
+  if (transition.operation === "semantic-revision-requested") {
+    const enactsReentry = payload.decision === "revise";
+    return Object.freeze({ revision_checkpoint: Object.freeze({ status: enactsReentry ? "valid" : "invalid" }) });
+  }
+  if (transition.operation !== "gate" || payload.decision !== "waiver-requested" ||
+      (request.value.kind !== "constitution-review" && request.value.kind !== "design-approval") ||
+      !("eligible_waivers" in request.value.context) ||
+      !request.value.context.eligible_waivers.some((eligible) =>
+        isDeepStrictEqual(eligible.rule, payload.rule) && eligible.scope.operation === payload.operation)) {
+    return Object.freeze({});
+  }
+  const scope = request.value.context.eligible_waivers.find((eligible) =>
+    isDeepStrictEqual(eligible.rule, payload.rule) && eligible.scope.operation === payload.operation)!.scope;
+  return Object.freeze({ pending_waiver_origin: Object.freeze({
+    origin_gate_id: request.value.gate_id,
+    origin_decision_digest: decision.digest,
+    origin_context_digest: request.value.context_digest,
+    task_id: request.value.task_id,
+    phase_instance: request.value.phase_instance,
+    subject_digest: request.value.subject_digest,
+    current_evidence_set_digest: request.value.current_evidence.set_digest,
+    rule: payload.rule,
+    scope,
+    rationale: payload.rationale,
+  }) });
+}
+
+/**
+ * Direct server-internal semantic read. Every enrichment is derived from the state/evidence read
+ * owned by detailed status plus immutable archives authenticated against that state.
+ */
+export async function computeAuthoritativeSemanticStatus(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+): Promise<ProjectResult<SemanticStatusSnapshotV1>> {
+  const detailed = await computeTaskStatusDetailed(dependencies, authority);
+  if (!detailed.ok) return detailed;
+  const { state, status } = detailed.value;
+  if (state !== undefined && state.repository_identity_digest !== authority.repository_identity_digest) {
+    throw new TypeError("semantic status repository identity does not match durable state");
+  }
+  const archives = await deriveArchiveEnrichments(dependencies, authority, detailed.value);
+  return ok(computeSemanticStatusSnapshot(status, {
+    repository_identity_digest: authority.repository_identity_digest,
+    ...(state === undefined ? {} : { state }),
+    full_findings: fullFindings(detailed.value),
+    ...archives,
+    reopen_impacts: state === undefined ? Object.freeze([]) : reopenImpacts(state, status),
+  }));
+}
+
+/**
+ * Builds the semantic snapshot from the full detailed status and enrichments captured by the same
+ * authenticated read. This function performs no filesystem reads, which lets status assembly call
+ * it before releasing its consistent canonical view.
+ */
+export function computeSemanticStatusSnapshot(
+  status: TaskStatusV1,
+  enrichments: SemanticStatusEnrichmentsV1,
+): SemanticStatusSnapshotV1 {
+  const repositoryIdentity = parseSha256Digest(enrichments.repository_identity_digest);
+  const statusJson = materializeJson(status, "full task status") as unknown as PlainJsonValue;
+  const state = enrichments.state === undefined
+    ? undefined
+    : materializeJson(enrichments.state, "semantic status durable state");
+
+  if (state !== undefined) {
+    if (status.state === "missing") throw new TypeError("active semantic state cannot accompany missing status");
+    if (state.repository_identity_digest !== repositoryIdentity) {
+      throw new TypeError("semantic status repository identity does not match durable state");
+    }
+    if (
+      status.revision !== state.revision ||
+      status.phase_instance !== state.phase_instance ||
+      status.step !== state.step ||
+      status.status !== state.status ||
+      status.attempt !== state.attempt ||
+      status.input_fingerprint !== state.input_fingerprint
+    ) {
+      throw new TypeError("semantic status and durable state are not from the same canonical read");
+    }
+  } else if (status.state !== "missing") {
+    throw new TypeError("active semantic status requires its authenticated durable state");
+  }
+
+  const findings: readonly PublicFindingV1[] = enrichments.full_findings.map((finding) =>
+    Object.freeze(publicFindingV1Schema.parse(materializeJson(finding, "semantic review finding"))) as PublicFindingV1);
+  const snapshot: SemanticStatusSnapshotV1 = {
+    schema_version: "1",
+    repository_identity_digest: repositoryIdentity,
+    ...(state === undefined ? {} : { state: Object.freeze(state) }),
+    status: statusJson,
+    full_findings: Object.freeze(findings),
+    ...(enrichments.pending_waiver_origin === undefined ? {} : {
+      pending_waiver_origin: materializeJson(enrichments.pending_waiver_origin, "pending waiver origin"),
+    }),
+    ...(enrichments.archived_decision === undefined ? {} : {
+      archived_decision: materializeJson(enrichments.archived_decision, "archived decision enrichment"),
+    }),
+    ...(enrichments.revision_checkpoint === undefined ? {} : {
+      revision_checkpoint: materializeJson(enrichments.revision_checkpoint, "revision checkpoint enrichment"),
+    }),
+    reopen_impacts: Object.freeze((enrichments.reopen_impacts ?? []).map((impact) =>
+      Object.freeze(materializeJson(impact, "reopen impact")))),
+  };
+  return Object.freeze(snapshot);
+}

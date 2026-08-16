@@ -1,0 +1,1298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:semantic-workflow",
+  "$defs": {
+    "workflowResource": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "access": {
+          "type": "string",
+          "enum": [
+            "read",
+            "write",
+            "read-write"
+          ]
+        }
+      },
+      "required": [
+        "role",
+        "path",
+        "access"
+      ],
+      "additionalProperties": false
+    },
+    "publicFinding": {
+      "type": "object",
+      "properties": {
+        "finding_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "blocker",
+            "major",
+            "minor"
+          ]
+        },
+        "blocking": {
+          "type": "boolean"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "evidence": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "suggested_resolution": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "current_disposition": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "disposition": {
+                  "type": "string",
+                  "enum": [
+                    "accepted",
+                    "accepted-editorial"
+                  ]
+                },
+                "rationale": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096,
+                  "pattern": "\\S"
+                },
+                "revision_intent": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "disposition",
+                "rationale",
+                "revision_intent"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "disposition": {
+                  "type": "string",
+                  "const": "rejected"
+                },
+                "rationale": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096,
+                  "pattern": "\\S"
+                },
+                "evidence": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "disposition",
+                "rationale",
+                "evidence"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "finding_id",
+        "severity",
+        "blocking",
+        "summary",
+        "evidence",
+        "suggested_resolution"
+      ],
+      "additionalProperties": false
+    },
+    "workflowPosition": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "prd"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "design"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "phase-design"
+            },
+            "phase": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber"
+            }
+          },
+          "required": [
+            "kind",
+            "phase"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "phase-impl"
+            },
+            "phase": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber"
+            }
+          },
+          "required": [
+            "kind",
+            "phase"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "workflowInvocation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "skill": {
+              "type": "string",
+              "const": "archflow-prd"
+            },
+            "intent": {
+              "type": "string",
+              "enum": [
+                "resume",
+                "reopen"
+              ]
+            }
+          },
+          "required": [
+            "skill",
+            "intent"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "skill": {
+              "type": "string",
+              "const": "archflow-design"
+            },
+            "intent": {
+              "type": "string",
+              "enum": [
+                "resume",
+                "reopen"
+              ]
+            }
+          },
+          "required": [
+            "skill",
+            "intent"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "skill": {
+              "type": "string",
+              "const": "archflow-phase-design"
+            },
+            "phase": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber"
+            },
+            "intent": {
+              "type": "string",
+              "enum": [
+                "resume",
+                "reopen"
+              ]
+            }
+          },
+          "required": [
+            "skill",
+            "phase",
+            "intent"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "skill": {
+              "type": "string",
+              "const": "archflow-phase-impl"
+            },
+            "phase": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber"
+            },
+            "intent": {
+              "type": "string",
+              "const": "resume"
+            }
+          },
+          "required": [
+            "skill",
+            "phase",
+            "intent"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "semanticNextAction": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "initialize-task",
+            "begin-work",
+            "submit-work",
+            "review",
+            "triage",
+            "revise",
+            "reopen",
+            "open-waiver",
+            "decide",
+            "commit",
+            "start-next-skill",
+            "finish-task",
+            "inspect",
+            "none"
+          ]
+        },
+        "instruction": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "offer": {
+          "type": "string",
+          "pattern": "^af1_[0-9a-f]{64}$"
+        },
+        "expected_submission": {
+          "type": "string",
+          "enum": [
+            "none",
+            "task-ask",
+            "work-result",
+            "triage",
+            "gate-summary",
+            "reopening-request",
+            "decision"
+          ]
+        },
+        "skill": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "skill_args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "commit": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "target_ref": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "baseline": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "requires_human_confirmation": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "path",
+            "message",
+            "target_ref",
+            "baseline",
+            "requires_human_confirmation"
+          ],
+          "additionalProperties": false
+        },
+        "reopen": {
+          "type": "object",
+          "properties": {
+            "target": {
+              "$ref": "#/$defs/workflowPosition"
+            },
+            "affected_positions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/workflowPosition"
+              }
+            },
+            "authority_effects": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "supersede-results",
+                  "clear-active-waivers",
+                  "clear-pending-human-revision",
+                  "clear-planned-final-phase"
+                ]
+              }
+            },
+            "planned_final_phase": {
+              "type": "string",
+              "enum": [
+                "clear",
+                "retain"
+              ]
+            },
+            "preserves_existing_git_index_and_worktree_bytes": {
+              "type": "boolean",
+              "const": true
+            },
+            "appends_prd_ask_history": {
+              "type": "boolean"
+            },
+            "requires_fresh_review_and_approval": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "target",
+            "affected_positions",
+            "authority_effects",
+            "planned_final_phase",
+            "preserves_existing_git_index_and_worktree_bytes",
+            "appends_prd_ask_history",
+            "requires_fresh_review_and_approval"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "kind",
+        "instruction"
+      ],
+      "additionalProperties": false
+    },
+    "workflowView": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "condition": {
+          "type": "string",
+          "enum": [
+            "awaiting-client",
+            "awaiting-human",
+            "ready",
+            "blocked",
+            "complete"
+          ]
+        },
+        "headline": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "position": {
+          "$ref": "#/$defs/workflowPosition"
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/workflowResource"
+          }
+        },
+        "next_action": {
+          "$ref": "#/$defs/semanticNextAction"
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/publicFinding"
+          }
+        },
+        "review_context": {
+          "type": "object",
+          "properties": {
+            "rubric": {
+              "type": "object",
+              "properties": {
+                "schema_version": {
+                  "type": "string",
+                  "const": "1"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "artifact",
+                    "implementation"
+                  ]
+                },
+                "mode": {
+                  "type": "string",
+                  "const": "adversarial"
+                },
+                "criteria": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "blocking": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "text",
+                      "blocking"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "schema_version",
+                "kind",
+                "mode",
+                "criteria"
+              ],
+              "additionalProperties": false
+            },
+            "active_rules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "version": {
+                    "$ref": "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber"
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "review_trigger": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "enforced_by": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "version",
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "rubric",
+            "active_rules"
+          ],
+          "additionalProperties": false
+        },
+        "presentation": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "summary": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "details": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "question": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "options": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "consequence": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "token",
+                  "label",
+                  "consequence"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "title",
+            "summary",
+            "question",
+            "options"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "condition",
+        "headline",
+        "detail",
+        "resources",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "applySubmission": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "task-ask"
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "reopening-request"
+            },
+            "request": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "kind",
+            "request"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "work-result"
+            },
+            "outcome": {
+              "type": "string",
+              "const": "succeeded"
+            },
+            "implementation": {
+              "type": "object",
+              "properties": {
+                "base_commit": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "outputs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  }
+                },
+                "restore_targets": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  }
+                },
+                "declared_inputs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "input_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "input_id",
+                      "path"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "base_commit",
+                "outputs",
+                "restore_targets",
+                "declared_inputs"
+              ],
+              "additionalProperties": false
+            },
+            "human_revision": {
+              "type": "object",
+              "properties": {
+                "classification": {
+                  "type": "string",
+                  "enum": [
+                    "simple",
+                    "significant"
+                  ]
+                },
+                "rationale": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096,
+                  "pattern": "\\S"
+                },
+                "user_override": {
+                  "type": "object",
+                  "properties": {
+                    "agent_classification": {
+                      "type": "string",
+                      "enum": [
+                        "simple",
+                        "significant"
+                      ]
+                    },
+                    "rationale": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096,
+                      "pattern": "\\S"
+                    }
+                  },
+                  "required": [
+                    "agent_classification",
+                    "rationale"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "classification",
+                "rationale"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "kind",
+            "outcome"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "work-result"
+            },
+            "outcome": {
+              "type": "string",
+              "const": "failed"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "kind",
+            "outcome",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "triage"
+            },
+            "dispositions": {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "finding_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "disposition": {
+                        "type": "string",
+                        "enum": [
+                          "accepted",
+                          "accepted-editorial"
+                        ]
+                      },
+                      "rationale": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096,
+                        "pattern": "\\S"
+                      },
+                      "revision_intent": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "finding_id",
+                      "disposition",
+                      "rationale",
+                      "revision_intent"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "finding_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "disposition": {
+                        "type": "string",
+                        "const": "rejected"
+                      },
+                      "rationale": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096,
+                        "pattern": "\\S"
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "finding_id",
+                      "disposition",
+                      "rationale",
+                      "evidence"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "dispositions"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "gate-summary"
+            },
+            "summary": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "kind",
+            "summary"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "decision"
+            },
+            "choice": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            },
+            "option_rationale": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "kind",
+            "choice",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "statusInput": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "invocation": {
+          "$ref": "#/$defs/workflowInvocation"
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id"
+      ],
+      "additionalProperties": false
+    },
+    "applyInput": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "invocation": {
+          "$ref": "#/$defs/workflowInvocation"
+        },
+        "action": {
+          "type": "object",
+          "properties": {
+            "offer": {
+              "type": "string",
+              "pattern": "^af1_[0-9a-f]{64}$"
+            },
+            "submission": {
+              "$ref": "#/$defs/applySubmission"
+            }
+          },
+          "required": [
+            "offer"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "invocation",
+        "action"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1"
+    },
+    "task_id": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+    },
+    "condition": {
+      "type": "string",
+      "enum": [
+        "awaiting-client",
+        "awaiting-human",
+        "ready",
+        "blocked",
+        "complete"
+      ]
+    },
+    "headline": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "detail": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "position": {
+      "$ref": "#/$defs/workflowPosition"
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/workflowResource"
+      }
+    },
+    "next_action": {
+      "$ref": "#/$defs/semanticNextAction"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/publicFinding"
+      }
+    },
+    "review_context": {
+      "type": "object",
+      "properties": {
+        "rubric": {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "type": "string",
+              "const": "1"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "artifact",
+                "implementation"
+              ]
+            },
+            "mode": {
+              "type": "string",
+              "const": "adversarial"
+            },
+            "criteria": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "blocking": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "id",
+                  "text",
+                  "blocking"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "schema_version",
+            "kind",
+            "mode",
+            "criteria"
+          ],
+          "additionalProperties": false
+        },
+        "active_rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "version": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber"
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "review_trigger": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "enforced_by": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "version",
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "rubric",
+        "active_rules"
+      ],
+      "additionalProperties": false
+    },
+    "presentation": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        },
+        "question": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "options": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "token": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "consequence": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "token",
+              "label",
+              "consequence"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "title",
+        "summary",
+        "question",
+        "options"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "task_id",
+    "condition",
+    "headline",
+    "detail",
+    "resources",
+    "next_action"
+  ],
+  "additionalProperties": false
+}

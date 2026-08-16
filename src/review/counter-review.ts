@@ -93,6 +93,8 @@ export type RunCounterReviewDependencies = Readonly<{
     measuredAtRevision: SafeInteger,
   ) => Promise<ProjectResult<PreparedEvidenceResult>>;
   reobserve_projection_digest: () => Promise<ProjectResult<ReviewEvidence["subject_digest"]>>;
+  /** The default process-wide FIFO, or a direct runner when the caller already owns that FIFO. */
+  serialize_dispatch?: <T>(operation: () => Promise<T>) => Promise<T>;
 }>;
 
 /**
@@ -280,7 +282,8 @@ export async function runCounterReview(
     attempt: input.authority.context.attempt,
   });
   const envelope = buildReviewEnvelopeWithCap({ ...input.envelope, subject });
-  const dispatched = await serializeDispatch(() =>
+  const serialize = dependencies.serialize_dispatch ?? serializeDispatch;
+  const dispatched = await serialize(() =>
     dependencies.dispatch(route, envelope, reviewOutputSchema as PlainJsonValue));
   const currentProjection = await dependencies.reobserve_projection_digest();
   if (!currentProjection.ok) return currentProjection;
@@ -344,7 +347,7 @@ export async function runCounterReview(
       workspace: plan.workspace,
       subject: constitutionSubject,
     });
-    const constitutionDispatched = await serializeDispatch(() =>
+    const constitutionDispatched = await serialize(() =>
       plan.dispatch(constitutionRoute, constitutionEnvelope, adjudicationOutputSchema as PlainJsonValue));
     try {
       const observedConstitution = mintAdjudicationObservation({

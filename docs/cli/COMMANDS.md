@@ -1,6 +1,6 @@
 # cli/COMMANDS
 
-**Explored:** 2026-08-13 · **Commit:** `247df34` · **Covers:** `src/local/`, `src/init/`, `install.sh`
+**Explored:** 2026-08-16 · **Commit:** `3a190c1` · **Covers:** `src/local/`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
 
 `archflow-local` is the agent's local helper: it composes requests and reads status — including a read-only classification of where a task stands when the MCP server is unavailable. It is deliberately *not* the authority — with one narrow exception (task initialization staging inside `build-request`), it derives and verifies rather than writes.
 
@@ -60,11 +60,11 @@ Initialization diagnostics also list generated ArchFlow assets hidden by an ance
 
 Every ArchFlow MCP call is a large object whose fields the server checks byte-for-byte. Hand-assembling those fields was measured to be the dominant failure mode — in a full PRD loop, 8 of 10 requests were mechanical transcription, with only findings and dispositions being genuine judgment. Transcription can only *introduce* errors (`TRANSITION_INVALID`, `INPUT_FINGERPRINT_MISMATCH`); it can never add value.
 
-So `build-request` inverts the contract: **the caller supplies only judgment; the tool derives everything mechanical** from the same durable authorities the server will check against.
+So `build-request` inverts the contract: **the caller supplies only judgment; the tool derives everything mechanical** from the same durable authorities the server will check against. The derivation now lives in transport-neutral `src/state/request-composition.ts`; `src/local/build-request.ts` is a thin adapter that opens production services, calls `composeRequest`, and renders the result. Internal semantic action planning calls the same service, so the CLI and future MCP façade do not maintain parallel request builders.
 
 ```mermaid
 flowchart LR
-    J["Judgment only:<br/>findings, dispositions,<br/>rationales, summaries"] --> BR["build-request<br/>kind: initialize | produce | running | advance |<br/>triage | counter-review | gate"]
+    J["Judgment only:<br/>findings, dispositions,<br/>rationales, summaries"] --> BR["build-request<br/>kind: initialize | produce | failed | running | advance |<br/>triage | counter-review | gate | planning-restart | waiver"]
     DS[("durable state,<br/>pinned config,<br/>retained evidence")] --> BR
     BR --> ENV["call envelope:<br/>fingerprint + request digest"]
     ENV --> STG["staged request in ignored runtime:<br/>transient/intents/&lt;intent-id&gt;.request.json"]
@@ -81,8 +81,12 @@ Properties worth knowing:
 - `counter-review` takes no rubric or artifact-path facts. The composer derives the artifact path from the durable phase, and the server selects the immutable rubric for that phase kind.
 - `triage` enforces exactly one disposition per current finding — unknown IDs, duplicates, and gaps are rejected before the server ever sees them.
 - `gate` composes a pending constitution gate mechanically for PRD and implementation. For task design and phase design it instead composes one `design-approval`, binding every constitution finding, eligible waiver, current subject, target ref, baseline commit, and commit message. Otherwise it picks the mandatory kind from the phase (`phase-impl` → `commit-authorization`, PRD → `artifact-approval`). The author always writes only the human summary.
+- `planning-restart` accepts the exact human reason and a semantic skill invocation. It derives the strictly earlier planning target, current revision/fingerprint, invalidation behavior, and PRD ask-prefix digest; the state handler and semantic action use the same bounded restart service.
+- `waiver` accepts no gate facts. It reconstructs the pending waiver request from the authenticated gate request and human decision archives, including rule, scope, subject, evidence, origin, and rationale.
 - `initialize` is the documented exception: the only composer that writes (it must stage the task before a fingerprint can resolve), legal only before durable state exists. Its envelope carries **no** `staged` block — there is no durable task directory yet to hold a staged file — so the create-task call is the one place `request.input` is passed verbatim by design, as typed JSON (`artifact` an object, `expected_revision` the number `0`).
 - A contract test pins that every prefill the server emits maps onto a composer kind — "the one door" is literally true, not aspirational.
+
+The Phase 1 semantic contracts do not add CLI commands. `build-request` retains the legacy composition kinds and adds bounded `failed`, `planning-restart`, and no-submission `waiver` kinds used by the internal semantic executor. The low-level `archflow_state` planning-restart arm remains an additive migration adapter, not a fifth MCP tool. Only direct human-decision archive/settlement remains deferred to Phase 2.
 
 For a pending hand-off, `next_action` keeps `phase_instance` honest as the current durable predecessor while adding the derived `target_phase_instance` and exact `skill_args`. Human-facing status renders both `Claude: /<skill> <task> <args...>` and `Codex: $<skill> <task> <args...>` from those fields; it never routes the user back to the skill that already finished and emits no command at terminal completion. Design approval also introduces `commit-artifacts` with its exact task path, message, target ref, and baseline; that action is nonhuman because the resolved gate already supplied authority.
 

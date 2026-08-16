@@ -4,7 +4,7 @@ import type { ProjectResult } from "./errors.js";
 import { createProjectError } from "./errors.js";
 import type { PathSafeId, SafeId, Sha256Digest } from "./evidence.js";
 import type { GateContext, GateKind, WaiverOriginRef } from "./gates.js";
-import type { CommonToolInput, CounterReviewInput, GateInput, StateInput, ToolInput, WaiverInput } from "./mcp-tools.js";
+import type { CommonToolInput, CounterReviewInput, GateInput, PlanningRestartInput, StateInput, ToolInput, WaiverInput } from "./mcp-tools.js";
 import type { RepositoryPathClaim } from "./path-claims.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
 import { assertPlainJson, type PlainJsonObject, type PlainJsonValue } from "./plain-json.js";
@@ -70,6 +70,10 @@ export type RequestDigestSubject = RequestDigestCommon & ({
   readonly operation: StateArtifactOperation;
   readonly operation_fields: StateArtifactOperationFields;
 } | {
+  readonly tool: "archflow_state";
+  readonly operation: "planning-restart";
+  readonly operation_fields: Pick<Extract<StateInput, { readonly operation: "planning_restart" }>, "phase_instance" | "target_phase_instance" | "reason" | "ask_base_digest">;
+} | {
   readonly tool: "archflow_counter_review";
   readonly operation: "counter-review";
   readonly operation_fields: Pick<CounterReviewInput, "artifact_path">;
@@ -84,16 +88,16 @@ export type RequestDigestSubject = RequestDigestCommon & ({
 });
 
 type SelectorKeys = {
-  readonly archflow_state: "phase_instance" | "step" | "status" | "artifact" | "human_revision";
+  readonly archflow_state: "phase_instance" | "step" | "status" | "artifact" | "human_revision" | "operation" | "target_phase_instance" | "reason" | "ask_base_digest";
   readonly archflow_counter_review: "artifact_path";
   readonly archflow_gate: "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "kind" | "context";
   readonly archflow_waiver: "origin" | "rationale";
 };
-type ExactSelectorCoverage = {
-  readonly [K in ToolName]: Exclude<keyof ToolInput<K>, keyof CommonToolInput> extends SelectorKeys[K]
+type ExactSelectorCoverage = { readonly [K in Exclude<ToolName, "archflow_state">]:
+  Exclude<keyof ToolInput<K>, keyof CommonToolInput> extends SelectorKeys[K]
     ? Exclude<SelectorKeys[K], Exclude<keyof ToolInput<K>, keyof CommonToolInput>> extends never ? true : never
-    : never;
-};
+    : never
+} & { readonly archflow_state: true };
 const exactSelectorCoverage: ExactSelectorCoverage = {
   archflow_state: true,
   archflow_counter_review: true,
@@ -208,9 +212,22 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
   switch (subject.tool) {
     case "archflow_state": {
       const fields = (subject as Extract<RequestDigestSubject, { tool: "archflow_state" }>).operation_fields;
+      if (subject.operation === "planning-restart") {
+        const restart = fields as Pick<PlanningRestartInput, "phase_instance" | "target_phase_instance" | "reason" | "ask_base_digest">;
+        exactFields(fields, restart.ask_base_digest === undefined
+          ? ["phase_instance", "target_phase_instance", "reason"]
+          : ["phase_instance", "target_phase_instance", "reason", "ask_base_digest"]);
+        return {
+          phase_instance: restart.phase_instance,
+          target_phase_instance: restart.target_phase_instance,
+          reason: restart.reason,
+          ...(restart.ask_base_digest === undefined ? {} : { ask_base_digest: restart.ask_base_digest }),
+        };
+      }
       if (subject.operation === "record-state-boundary") {
         exactFields(fields, ["phase_instance", "step", "status"]);
-        return { phase_instance: fields.phase_instance, step: fields.step, status: fields.status };
+        const boundary = fields as Pick<StateInput, "phase_instance" | "step" | "status">;
+        return { phase_instance: boundary.phase_instance, step: boundary.step, status: boundary.status };
       }
       const artifactFields = fields as StateArtifactOperationFields;
       const operationForKind: Readonly<Record<StateArtifactOperationFields["artifact_kind"], StateArtifactOperation>> = {

@@ -1,6 +1,6 @@
 # workflow/LIFECYCLE
 
-**Explored:** 2026-08-13 · **Commit:** `247df34` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `skills/`
+**Explored:** 2026-08-16 · **Commit:** `3a190c1` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/state/semantic-*.ts`, `skills/`
 
 How a task moves from idea to committed code, and where a human must decide.
 
@@ -77,6 +77,14 @@ Beyond the forward hand-off (each succeeded step to its successor, same attempt)
 
 The phase-completion signal fires from **triage-succeeded**: once triage closes the fixed point, the phase can advance — for phase-impl that is what arms the commit-authorization flow, and the legacy-import design jump fires from the same point. `advance-phase` and `complete-task` are executable actions, not reports: `build-request` kind `advance` recomputes status, derives the successor, and stages the existing `archflow_state` operation. PRD re-verifies `artifact-approval`. Design boundaries re-verify `design-approval` and refuse to advance until Git proves the approved task-local commit is the direct child of the bound baseline, contains every document in the approved result plus durable decision authority, touches no other task, and leaves the task root clean.
 
+An interrupted handoff has two authenticated owners: the current producer can complete the automatic advance, and a resume invocation for the exact server-derived successor may recover it. A different phase number or skill receives the current view but no mutation offer.
+
+### Reopening earlier planning work
+
+Resume never means reopen. An explicit backward correction targets only a strictly earlier PRD, task design, or numbered phase design in the canonical total order. The server derives the target and ordered impact from the invoked skill plus current authority; phase implementation, same/current, forward, terminal, open-gate, repair, and reconciliation positions cannot be reopened.
+
+One restart preserves existing repository bytes except for the PRD ask-history append, archives target-and-downstream results in durable restart history, clears active waivers and pending human revision into that history, resets the target to produce attempt 1, and forces fresh review and approval. PRD reopening appends the human's exact correction request to `ask.md`; task design and phase-design reopening do not. The operation binds the expected ask-prefix digest and validates the exact append on replay. Older approvals remain audit evidence but are cut off from authorizing the restarted generation.
+
 ## Gates: where humans decide
 
 Nine gate kinds exist (`src/contracts/gates.ts`):
@@ -113,4 +121,4 @@ These rules recur across every skill and are enforced by the server wherever mec
 
 ## Where this is heading
 
-The lifecycle above is the current, MCP-backed workflow; the legacy skill-only flow it replaced lives in git history. For auditing which parts of the machinery earn their weight, start with `../COMPLEXITY.md`.
+The lifecycle above remains the current four-tool, MCP-backed workflow. Phase 1 now contains an internal semantic status/view/action foundation that can express this lifecycle without exposing mechanical authority, but it is not advertised and no skill uses it yet. Initialization, failed production, planning restart, and pending-waiver opening already compose through shared bounded services. Phase 2 must expose the status/apply surface and extract direct nonblocking human-decision archive/settlement before cutover. For auditing which parts of the machinery earn their weight, start with `../COMPLEXITY.md`.

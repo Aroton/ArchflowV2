@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 
 import { canonicalDocument, canonicalJsonDigest, type CanonicalDocument } from "../contracts/canonical.js";
+import { computeInputFingerprint } from "../contracts/fingerprints.js";
 import {
   parseActiveGate,
   parseArchivedGateDecisionRecord,
@@ -11,12 +12,19 @@ import {
   type GateRequestV1,
   type WaiverGateContext,
 } from "../contracts/durable-gate.js";
-import type { ApprovalRef, LastTransition, TaskStateV1, WaiverRef } from "../contracts/durable-state.js";
+import {
+  planningRestartHumanProvenanceV1Schema,
+  type ApprovalRef,
+  type LastTransition,
+  type TaskStateV1,
+  type WaiverRef,
+} from "../contracts/durable-state.js";
 import { intentOutcomeDigest, parseIntentReceipt, type IntentReceiptV1 } from "../contracts/durable-intent.js";
 import { createCommittedIntentSubject, createPreparedIntentSubject, openGateFrozenStateDigest, validateDurableSemantics } from "../contracts/durable.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parseSafeCode, parseSafeId, parseSafeInteger, type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
 import { decodePhaseInstance } from "../contracts/phase-instance.js";
+import { parseToolCall } from "../contracts/mcp-tools.js";
 import { computeGateContextDigest, computeGateId } from "../contracts/fingerprints.js";
 import { gateDecisionEffect } from "../contracts/gates.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
@@ -55,6 +63,9 @@ import { loadLegacyImportInitialization, loadLegacyImportResumePhase } from "./l
 import { TaskLockError } from "./lock.js";
 import { loadApprovedDesignFinalPhase } from "./planned-final-phase.js";
 import { planStateTransition } from "./transitions.js";
+import { planPlanningRestart } from "./transitions.js";
+import { expectedProduceUpstreamBindings, loadProduceUpstreamSubject, type ProduceUpstreamSubject } from "./produce-subject.js";
+import { approvalIsEligibleAfterLatestRestart } from "./restart-authority.js";
 import { applyProjectionPlan, captureProjectionTarget, prepareProjectionPlan, projectionGenerationDigest, type ProjectionSource } from "./snapshots.js";
 import { cleanTaskWorkspace } from "./workspace-cleanup.js";
 
@@ -317,7 +328,8 @@ export async function openDurableGate(
         }
         const traditionallyApproved = current.value.approvals.some((approval) =>
           (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") &&
-          approval.subject_digest === subject);
+          approval.subject_digest === subject &&
+          approvalIsEligibleAfterLatestRestart(current.value, approval, current.value.phase_instance));
         if (
           input.subject_digest !== subject ||
           (!traditionallyApproved && !reviewedMigration)
@@ -464,6 +476,35 @@ function exactOpenGateMatches(state: TaskStateV1, request: GateRequestV1): boole
   return open.frozen_state_digest === openGateFrozenStateDigest(base as TaskStateV1);
 }
 
+function completedMaterialDriftRestartMatches(
+  state: TaskStateV1,
+  request: GateRequestV1,
+  record: GateDecisionRecordV1,
+): boolean {
+  if (
+    request.kind !== "material-drift" || record.outcome !== "decided" ||
+    record.kind !== "material-drift" || record.envelope.payload.decision !== "amend-upstream"
+  ) return false;
+  const restart = state.restart_history?.find((entry) => entry.restart_id === record.gate_id);
+  return restart !== undefined &&
+    restart.source_phase_instance === request.phase_instance &&
+    restart.target_phase_instance === state.phase_instance &&
+    restart.reason === record.envelope.payload.reason &&
+    restart.restarted_at_revision === request.opened_at_revision + 1 &&
+    state.revision >= restart.restarted_at_revision &&
+    isDeepStrictEqual(restart.human_provenance, record.envelope.human_provenance);
+}
+
+/** One affected digest may authorize exactly one producer phase; conflicting ownership fails closed. */
+export function uniqueMaterialDriftUpstream(
+  subjects: readonly ProduceUpstreamSubject[],
+  affectedDigest: Sha256Digest,
+): ProduceUpstreamSubject | undefined {
+  const matching = subjects.filter((subject) => subject.artifact_digest === affectedDigest);
+  const phases = new Set(matching.map((subject) => subject.artifact.phase_instance));
+  return phases.size === 1 ? matching[0] : undefined;
+}
+
 async function planGateAuthorizedReentry(
   dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
@@ -540,6 +581,69 @@ async function closedStateForRecord(
   record: GateDecisionRecordV1,
   digest: Sha256Digest,
 ): Promise<ProjectResult<CanonicalDocument<TaskStateV1>>> {
+  if (
+    record.outcome === "decided" && record.kind === "material-drift" &&
+    record.envelope.payload.decision === "amend-upstream" && request.kind === "material-drift"
+  ) {
+    if (!exactOpenGateMatches(current.value, request)) {
+      return issue("STATE_INVALID", current.value, "material-drift-restart-predecessor-mismatch");
+    }
+    const subjects: ProduceUpstreamSubject[] = [];
+    for (const binding of expectedProduceUpstreamBindings(current.value)) {
+      const loaded = await loadProduceUpstreamSubject(dependencies, authority, current.value, binding);
+      if (!loaded.ok) return loaded;
+      subjects.push(loaded.value);
+    }
+    const upstream = uniqueMaterialDriftUpstream(subjects, request.context.affected_upstream.digest);
+    if (upstream === undefined) {
+      return issue("STATE_INVALID", current.value, "material-drift-upstream-subject-unavailable");
+    }
+    if (record.envelope.human_provenance.actor_class !== "human") {
+      return issue("STATE_INVALID", current.value, "material-drift-restart-human-provenance-required");
+    }
+    const humanProvenance = planningRestartHumanProvenanceV1Schema.safeParse(
+      record.envelope.human_provenance,
+    );
+    if (!humanProvenance.success) {
+      return issue("STATE_INVALID", current.value, "material-drift-restart-human-provenance-required");
+    }
+    const targetPhase = upstream.artifact.phase_instance;
+    const { open_gate: _open, last_transition: _transition, ...predecessor } = current.value;
+    const restartPredecessor = predecessor as TaskStateV1;
+    const liveConfig = await dependencies.read_config(authority.config);
+    if (liveConfig.kind !== "valid") return issue("STATE_INVALID", current.value, "material-drift-restart-config-unavailable");
+    const targetCall = parseToolCall("archflow_state", {
+      schema_version: "1",
+      task_id: authority.task_id,
+      intent_id: record.gate_id,
+      expected_revision: current.value.revision,
+      input_fingerprint: current.value.input_fingerprint,
+      phase_instance: targetPhase,
+      step: "produce",
+      status: "running",
+    });
+    const fingerprintSubject = await dependencies.resolve_input_fingerprint({
+      runner: dependencies.runner,
+      authority,
+      state: canonicalDocument(restartPredecessor),
+      call: targetCall,
+      live_config: liveConfig.snapshot,
+      context: authority.context,
+    });
+    if (!fingerprintSubject.ok) return fingerprintSubject;
+    const fingerprint = computeInputFingerprint(fingerprintSubject.value);
+    const planned = planPlanningRestart({
+      current: restartPredecessor,
+      restart_id: record.gate_id,
+      target_phase_instance: targetPhase,
+      reason: record.envelope.payload.reason,
+      recomputed_input_fingerprint: fingerprint,
+      human_provenance: humanProvenance.data,
+    });
+    return planned.ok
+      ? ok(canonicalDocument({ ...planned.value, revision: parseSafeInteger(current.value.revision + 1) } as TaskStateV1))
+      : planned;
+  }
   if (enactsReentry(record)) {
     return planGateAuthorizedReentry(dependencies, authority, current, request, record);
   }
@@ -773,6 +877,11 @@ export async function resolveDurableGate(
             );
             if (!replay.ok) return replay;
           }
+          if (
+            archived.value.outcome === "decided" && archived.value.kind === "material-drift" &&
+            archived.value.envelope.payload.decision === "amend-upstream" &&
+            !completedMaterialDriftRestartMatches(current.value, request.value, archived.value)
+          ) return issue("STATE_INVALID", current.value, "material-drift-restart-replay-mismatch");
           return ok({ state: current, record: archived, effect, replayed: true });
         }
         const closure = await closedStateForRecord(

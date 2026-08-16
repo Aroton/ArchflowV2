@@ -19,7 +19,7 @@ import { createAtomicWriter } from "../../src/state/atomic.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
 import { assessCurrentEvidence } from "../../src/review/fixed-point.js";
 import { deriveCurrentEvidenceSet, type RetainedEvidenceSet } from "../../src/state/evidence-results.js";
-import { loadAuthenticatedGateApproval, runDurableGate } from "../../src/state/gates.js";
+import { loadAuthenticatedGateApproval, runDurableGate, uniqueMaterialDriftUpstream } from "../../src/state/gates.js";
 import { createTaskLock } from "../../src/state/lock.js";
 import { readIntentReceipt, readTaskConfig, readTaskState } from "../../src/state/read.js";
 import { planStateTransition } from "../../src/state/transitions.js";
@@ -66,6 +66,16 @@ const EFFECT_CASES = [
 ] as const satisfies readonly Readonly<{ kind: GateKind; context: object; allowed: readonly string[]; payload: Readonly<{ decision: string } & Record<string, unknown>>; effect: GateEffect }>[];
 
 describe("durable gate decisions", () => {
+  it("rejects one affected digest claimed by conflicting producer phases", () => {
+    const digest = D("a");
+    const subject = (phase: string) => ({
+      artifact_digest: digest,
+      artifact: { phase_instance: phase },
+    }) as never;
+    expect(uniqueMaterialDriftUpstream([subject("design"), subject("phase-design-1")], digest)).toBeUndefined();
+    expect(uniqueMaterialDriftUpstream([subject("design"), subject("design")], digest)).toBeDefined();
+  });
+
   it("maps every decision-effect arm to its movement outcome", () => {
     expect(new Set(EFFECT_CASES.map(({ payload }) => payload.decision)).size).toBe(14);
     for (const entry of EFFECT_CASES) {

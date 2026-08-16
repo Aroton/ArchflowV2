@@ -15,6 +15,7 @@ import {
 } from "../repository/paths.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
 import type { TransactionDependencies } from "./transaction.js";
+import { retainedResultDigests } from "./retained-result-graph.js";
 
 export type WorkspaceCleanupReport = Readonly<{
   removed_files: SafeInteger;
@@ -116,10 +117,8 @@ async function shouldRetainWorkspaceEntry(
   if (currentPhase !== undefined && entry.relative.startsWith(`cache/phases/${currentPhase}/`)) return true;
   if (entry.relative.startsWith("cache/results/")) {
     const digest = entry.relative.split("/")[2];
-    return decisionProtectedResults.has(digest ?? "") || state.authoritative_results.some((reference) =>
-      reference.result_digest === digest && reference.phase_instance === state.phase_instance) ||
-      (state.human_revision_history ?? []).some((revision) => revision.evidence.some((reference) =>
-        reference.result_digest === digest));
+    return decisionProtectedResults.has(digest ?? "") ||
+      retainedResultDigests(state).has((digest ?? "") as Sha256Digest);
   }
   return false;
 }
@@ -190,11 +189,7 @@ async function unreferencedAuthorityResults(
   decisionProtectedResults: ReadonlySet<string>,
 ): Promise<readonly FileEntry[]> {
   const root = join(authority.task_root, "authority", "results");
-  const live = new Set([
-    ...state.authoritative_results.map((reference) => reference.result_digest),
-    ...(state.human_revision_history ?? []).flatMap((revision) =>
-      revision.evidence.map((reference) => reference.result_digest)),
-  ]);
+  const live = retainedResultDigests(state);
   if (decisionProtectedResults.has("*")) return Object.freeze([]);
   let files: readonly FileEntry[];
   try {
@@ -228,6 +223,12 @@ async function unreferencedAuthorityDecisions(
   const live = new Set<string>([
     ...state.approvals.map((entry) => entry.gate_id),
     ...state.waivers.map((entry) => entry.gate_id),
+    ...(state.restart_history ?? []).flatMap((restart) => [
+      ...restart.cleared_waivers.map((entry) => entry.gate_id),
+      ...(restart.cleared_pending_human_revision === undefined
+        ? []
+        : [restart.cleared_pending_human_revision.gate_id]),
+    ]),
     ...openGateIds,
     ...(state.pending_human_revision === undefined ? [] : [state.pending_human_revision.gate_id]),
     ...(state.human_revision_history ?? []).map((entry) => entry.gate_id),

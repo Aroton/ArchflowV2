@@ -252,6 +252,19 @@
                   "rationale"
                 ],
                 "additionalProperties": false
+              },
+              "operation": {
+                "type": "string",
+                "const": "planning_restart"
+              },
+              "target_phase_instance": {
+                "$ref": "#/$defs/phase"
+              },
+              "reason": {
+                "$ref": "#/$defs/text"
+              },
+              "ask_base_digest": {
+                "$ref": "#/$defs/digest"
               }
             },
             "required": [

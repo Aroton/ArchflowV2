@@ -36098,6 +36098,20 @@ function nextPhaseInstance(instance) {
       });
   }
 }
+function comparePhaseInstances(left, right) {
+  const a = decodePhaseInstance(left);
+  const b = decodePhaseInstance(right);
+  if (a.kind === "prd") return b.kind === "prd" ? 0 : -1;
+  if (b.kind === "prd") return 1;
+  if (a.kind === "design") return b.kind === "design" ? 0 : -1;
+  if (b.kind === "design") return 1;
+  if (a.phase !== b.phase) return a.phase - b.phase;
+  if (a.kind === b.kind) return 0;
+  return a.kind === "phase-design" ? -1 : 1;
+}
+function isStrictlyEarlierPlanningPhase(target2, current) {
+  return decodePhaseInstance(target2).kind !== "phase-impl" && comparePhaseInstances(target2, current) < 0;
+}
 var phaseInstanceIdV1Schema = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u).refine((value) => {
   try {
     decodePhaseInstance(value);
@@ -37646,6 +37660,44 @@ var humanRevisionRecordV1Schema = external_exports.object({
     context2.addIssue({ code: "custom", path: ["evidence"], message: "human revision evidence must belong to its phase" });
   }
 });
+var planningRestartConnectedHostProvenanceV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  actor_class: external_exports.literal("human"),
+  assurance: external_exports.literal("declared-local-trace"),
+  channel: external_exports.literal("connected-host"),
+  decision_event_id: safeIdV1Schema,
+  connection_id: safeIdV1Schema,
+  request_id_digest: sha256Digest5,
+  recorded_at: external_exports.string().datetime({ offset: false, local: false, precision: 3 })
+}).strict();
+var planningRestartLocalProvenanceV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  actor_class: external_exports.literal("human"),
+  assurance: external_exports.literal("declared-local-trace"),
+  channel: external_exports.literal("archflow-local"),
+  decision_event_id: safeIdV1Schema,
+  helper_invocation_id: safeIdV1Schema,
+  recorded_at: external_exports.string().datetime({ offset: false, local: false, precision: 3 })
+}).strict();
+var planningRestartHumanProvenanceV1Schema = external_exports.union([
+  planningRestartConnectedHostProvenanceV1Schema,
+  planningRestartLocalProvenanceV1Schema
+]);
+var planningRestartRecordV1Schema = external_exports.object({
+  restart_id: pathSafeIdV1Schema,
+  source_phase_instance: phaseInstanceIdV1Schema,
+  target_phase_instance: phaseInstanceIdV1Schema,
+  reason: external_exports.string().min(1).max(4096).regex(/\S/u),
+  restarted_at_revision: positiveSafeInteger,
+  superseded_results: external_exports.array(authoritativeResultRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "superseded_results must be sorted by (phase_instance, step) with no duplicates"),
+  cleared_waivers: external_exports.array(waiverRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "cleared_waivers must be sorted by gate_id with no duplicates"),
+  cleared_pending_human_revision: pendingHumanRevisionV1Schema.optional(),
+  human_provenance: planningRestartHumanProvenanceV1Schema
+}).strict().superRefine((record2, context2) => {
+  if (!isStrictlyEarlierPlanningPhase(record2.target_phase_instance, record2.source_phase_instance)) {
+    context2.addIssue({ code: "custom", path: ["target_phase_instance"], message: "restart target must be a strictly earlier planning phase" });
+  }
+});
 var lastTransitionOutcomeV1Schema = external_exports.json();
 var lastTransitionV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
@@ -37682,9 +37734,15 @@ var taskStateV1Schema = external_exports.object({
   open_gate: openGateRefV1Schema.optional(),
   pending_human_revision: pendingHumanRevisionV1Schema.optional(),
   human_revision_history: external_exports.array(humanRevisionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "human_revision_history must be sorted by gate_id with no duplicates").optional(),
+  restart_history: external_exports.array(planningRestartRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("restart_id")), "restart_history must be sorted by restart_id with no duplicates").optional(),
   last_transition: lastTransitionV1Schema.optional(),
   terminal: external_exports.enum(TERMINAL_STATES).optional()
 }).strict().superRefine((state, context2) => {
+  state.restart_history?.forEach((restart, index) => {
+    if (restart.restarted_at_revision > state.revision) {
+      context2.addIssue({ code: "custom", path: ["restart_history", index, "restarted_at_revision"], message: "restart revision cannot exceed the current state revision" });
+    }
+  });
   const pending = state.pending_human_revision;
   if (pending === void 0) return;
   if (state.open_gate !== void 0 || state.terminal !== void 0 || state.step !== "produce" || state.status === "succeeded" || state.attempt !== pending.attempt || pending.requested_at_revision > state.revision || pending.evidence.some((reference) => reference.phase_instance !== state.phase_instance)) {
@@ -38031,10 +38089,44 @@ var humanRevisionDeclarationSchema = external_exports.object({
     context2.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
   }
 });
-var stateInputSchema = external_exports.object({ ...common2, phase_instance: phase, step: external_exports.enum(["produce", "counter_review", "triage"]), status: external_exports.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional(), human_revision: humanRevisionDeclarationSchema.optional() }).strict().superRefine((input, context2) => {
+var stateBoundaryInputSchema = external_exports.object({ ...common2, phase_instance: phase, step: external_exports.enum(["produce", "counter_review", "triage"]), status: external_exports.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional(), human_revision: humanRevisionDeclarationSchema.optional() }).strict().superRefine((input, context2) => {
   if (input.human_revision !== void 0 && (input.step !== "produce" || input.status !== "succeeded")) {
     context2.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
   }
+});
+var planningRestartInputSchema = external_exports.object({
+  ...common2,
+  operation: external_exports.literal("planning_restart"),
+  phase_instance: phase,
+  target_phase_instance: phase,
+  reason: text2,
+  ask_base_digest: digest6.optional(),
+  step: external_exports.literal("produce"),
+  status: external_exports.literal("running")
+}).strict();
+var stateInputSchema = external_exports.object({
+  ...common2,
+  phase_instance: phase,
+  step: external_exports.enum(["produce", "counter_review", "triage"]),
+  status: external_exports.enum(["running", "succeeded", "failed"]),
+  artifact: durableArtifact.optional(),
+  human_revision: humanRevisionDeclarationSchema.optional(),
+  operation: external_exports.literal("planning_restart").optional(),
+  target_phase_instance: phase.optional(),
+  reason: text2.optional(),
+  ask_base_digest: digest6.optional()
+}).strict().superRefine((input, context2) => {
+  if (input.operation === "planning_restart") {
+    if (input.target_phase_instance === void 0) context2.addIssue({ code: "custom", path: ["target_phase_instance"], message: "planning_restart requires target_phase_instance" });
+    if (input.reason === void 0) context2.addIssue({ code: "custom", path: ["reason"], message: "planning_restart requires reason" });
+    if (input.step !== "produce" || input.status !== "running") context2.addIssue({ code: "custom", path: ["step"], message: "planning_restart lands at produce/running" });
+    if (input.artifact !== void 0 || input.human_revision !== void 0) context2.addIssue({ code: "custom", path: ["artifact"], message: "planning_restart cannot carry an artifact or human revision" });
+    if (input.target_phase_instance === "prd" && input.ask_base_digest === void 0) context2.addIssue({ code: "custom", path: ["ask_base_digest"], message: "PRD planning_restart requires ask_base_digest" });
+    if (input.target_phase_instance !== "prd" && input.ask_base_digest !== void 0) context2.addIssue({ code: "custom", path: ["ask_base_digest"], message: "ask_base_digest is PRD-only" });
+    return;
+  }
+  if (input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "restart fields require planning_restart" });
+  if (input.human_revision !== void 0 && (input.step !== "produce" || input.status !== "succeeded")) context2.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
 });
 var stagedReferenceInput = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, request_digest: digest6 }).strict();
 var counterReviewInputSchema = external_exports.object({ ...common2, artifact_path: taskPathClaimV1Schema }).strict();
@@ -38131,7 +38223,11 @@ var mcpToolsSchemaDefs = Object.freeze({
 });
 function successFor(call, value) {
   const parsed = toolSuccessSchemas[call.name].parse(value);
-  if (call.name === "archflow_state" && parsed.status !== call.input.status) throw new TypeError("state status mismatch");
+  if (call.name === "archflow_state") {
+    const input = call.input;
+    const expectedStatus = input.operation === "planning_restart" ? "running" : input.status;
+    if (parsed.status !== expectedStatus) throw new TypeError("state status mismatch");
+  }
   if (call.name === "archflow_gate") {
     const input = call.input;
     const result = parsed;
@@ -39527,9 +39623,20 @@ function closedOperationFields(subject) {
   switch (subject.tool) {
     case "archflow_state": {
       const fields = subject.operation_fields;
+      if (subject.operation === "planning-restart") {
+        const restart = fields;
+        exactFields(fields, restart.ask_base_digest === void 0 ? ["phase_instance", "target_phase_instance", "reason"] : ["phase_instance", "target_phase_instance", "reason", "ask_base_digest"]);
+        return {
+          phase_instance: restart.phase_instance,
+          target_phase_instance: restart.target_phase_instance,
+          reason: restart.reason,
+          ...restart.ask_base_digest === void 0 ? {} : { ask_base_digest: restart.ask_base_digest }
+        };
+      }
       if (subject.operation === "record-state-boundary") {
         exactFields(fields, ["phase_instance", "step", "status"]);
-        return { phase_instance: fields.phase_instance, step: fields.step, status: fields.status };
+        const boundary = fields;
+        return { phase_instance: boundary.phase_instance, step: boundary.step, status: boundary.status };
       }
       const artifactFields = fields;
       const operationForKind = {
@@ -39619,6 +39726,10 @@ function computeGateContextDigest(kind, context2) {
 import { randomUUID } from "node:crypto";
 import { link, open as open2, rename, symlink, unlink } from "node:fs/promises";
 import { basename as basename2, dirname as dirname2, join as join3 } from "node:path";
+async function replaceTaskAsk(writer, path2, bytes) {
+  if (path2.path_class !== "task-ask") throw new TypeError("task ask replacement requires task-ask authority");
+  await writer.replaceTaskAsk(path2, bytes);
+}
 var AtomicReplaceError = class extends Error {
   operation;
   target_may_have_changed;
@@ -39707,8 +39818,12 @@ async function removeGateInterface(path2) {
     }
   }
 }
+async function replaceResolvedTaskAsk(path2, bytes) {
+  if (path2.path_class !== "task-ask") throw new TypeError("replaceTaskAsk requires a task-ask resolved path");
+  await replaceRegularBytes(path2.absolute, bytes, 420);
+}
 function createAtomicWriter() {
-  return Object.freeze({ createExclusive, replace, removeGateInterface });
+  return Object.freeze({ createExclusive, replace, replaceTaskAsk: replaceResolvedTaskAsk, removeGateInterface });
 }
 var PROJECTABLE = /* @__PURE__ */ new Set([
   "document",
@@ -39902,6 +40017,8 @@ var failure = (state, issueCode) => Object.freeze({
 function phaseInstance3(call, context2) {
   switch (call.name) {
     case "archflow_state":
+      if (call.input.operation === "planning_restart") return call.input.target_phase_instance;
+      return call.input.phase_instance;
     case "archflow_gate":
       return call.input.phase_instance;
     case "archflow_waiver":
@@ -39915,7 +40032,7 @@ function phaseInstance3(call, context2) {
   }
 }
 function rubricDigest(call, phase3) {
-  const reviewCycle = call.name === "archflow_counter_review" || call.name === "archflow_state" && (call.input.step === "counter_review" || call.input.step === "triage");
+  const reviewCycle = call.name === "archflow_counter_review" || call.name === "archflow_state" && call.input.operation !== "planning_restart" && (call.input.step === "counter_review" || call.input.step === "triage");
   return reviewCycle ? canonicalRubricForPhaseKind(decodePhaseInstance(phase3).kind).rubric_digest : canonicalJsonDigest({});
 }
 function createInternalInputFingerprintResolver(input) {
@@ -46796,6 +46913,26 @@ async function rollback(writer, applied, collisionPath) {
   return Object.freeze({ outcome: "rolled-back", path: collisionPath });
 }
 
+// src/state/retained-result-graph.ts
+function retainedResultReferences(state) {
+  const restartHistory = state.restart_history ?? [];
+  const roots = [
+    ...state.authoritative_results,
+    ...state.pending_human_revision?.evidence ?? [],
+    ...(state.human_revision_history ?? []).flatMap((revision) => revision.evidence),
+    ...restartHistory.flatMap((restart) => restart.superseded_results),
+    ...restartHistory.flatMap((restart) => restart.cleared_pending_human_revision?.evidence ?? [])
+  ];
+  const byDigest = /* @__PURE__ */ new Map();
+  for (const reference of roots) {
+    if (!byDigest.has(reference.result_digest)) byDigest.set(reference.result_digest, reference);
+  }
+  return Object.freeze([...byDigest.values()].sort((left, right) => left.result_digest.localeCompare(right.result_digest)));
+}
+function retainedResultDigests(state) {
+  return new Set(retainedResultReferences(state).map((reference) => reference.result_digest));
+}
+
 // src/state/production.ts
 var ok8 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail10 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
@@ -47017,10 +47154,7 @@ async function createProductionServices(input) {
       const current = await readTaskState(authority.state);
       if (current.kind !== "canonical") return parseSafeInteger(0);
       let total = 0;
-      const retainedReferences = [
-        ...current.document.value.authoritative_results,
-        ...(current.document.value.human_revision_history ?? []).flatMap((revision) => revision.evidence)
-      ].filter((reference, index, references) => references.findIndex((candidate) => candidate.result_digest === reference.result_digest) === index);
+      const retainedReferences = retainedResultReferences(current.document.value);
       for (const reference of retainedReferences) {
         if (reference.result_digest === excluded?.result_digest) continue;
         const retained = await readRetainedResult(discovered.value, authority, reference);
@@ -47073,6 +47207,19 @@ function subjectFor(call, authority, inputFingerprint) {
   };
   switch (call.name) {
     case "archflow_state":
+      if (call.input.operation === "planning_restart") {
+        return {
+          ...common3,
+          tool: call.name,
+          operation: "planning-restart",
+          operation_fields: {
+            phase_instance: call.input.phase_instance,
+            target_phase_instance: call.input.target_phase_instance,
+            reason: call.input.reason,
+            ...call.input.ask_base_digest === void 0 ? {} : { ask_base_digest: call.input.ask_base_digest }
+          }
+        };
+      }
       if (call.input.artifact === void 0) {
         return { ...common3, tool: call.name, operation: "record-state-boundary", operation_fields: { phase_instance: call.input.phase_instance, step: call.input.step, status: call.input.status } };
       }
@@ -50283,6 +50430,19 @@ var mcp_tools_schema_default = {
                   "rationale"
                 ],
                 additionalProperties: false
+              },
+              operation: {
+                type: "string",
+                const: "planning_restart"
+              },
+              target_phase_instance: {
+                $ref: "#/$defs/phase"
+              },
+              reason: {
+                $ref: "#/$defs/text"
+              },
+              ask_base_digest: {
+                $ref: "#/$defs/digest"
               }
             },
             required: [
@@ -55734,6 +55894,152 @@ var task_state_schema_default = {
       ],
       additionalProperties: false
     },
+    planningRestartHumanProvenance: {
+      anyOf: [
+        {
+          type: "object",
+          properties: {
+            schema_version: {
+              type: "string",
+              const: "1"
+            },
+            actor_class: {
+              type: "string",
+              const: "human"
+            },
+            assurance: {
+              type: "string",
+              const: "declared-local-trace"
+            },
+            channel: {
+              type: "string",
+              const: "connected-host"
+            },
+            decision_event_id: {
+              $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId"
+            },
+            connection_id: {
+              $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId"
+            },
+            request_id_digest: {
+              $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+            },
+            recorded_at: {
+              type: "string",
+              format: "date-time",
+              pattern: "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}(?:Z))$"
+            }
+          },
+          required: [
+            "schema_version",
+            "actor_class",
+            "assurance",
+            "channel",
+            "decision_event_id",
+            "connection_id",
+            "request_id_digest",
+            "recorded_at"
+          ],
+          additionalProperties: false
+        },
+        {
+          type: "object",
+          properties: {
+            schema_version: {
+              type: "string",
+              const: "1"
+            },
+            actor_class: {
+              type: "string",
+              const: "human"
+            },
+            assurance: {
+              type: "string",
+              const: "declared-local-trace"
+            },
+            channel: {
+              type: "string",
+              const: "archflow-local"
+            },
+            decision_event_id: {
+              $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId"
+            },
+            helper_invocation_id: {
+              $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId"
+            },
+            recorded_at: {
+              type: "string",
+              format: "date-time",
+              pattern: "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}(?:Z))$"
+            }
+          },
+          required: [
+            "schema_version",
+            "actor_class",
+            "assurance",
+            "channel",
+            "decision_event_id",
+            "helper_invocation_id",
+            "recorded_at"
+          ],
+          additionalProperties: false
+        }
+      ]
+    },
+    planningRestartRecord: {
+      type: "object",
+      properties: {
+        restart_id: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        source_phase_instance: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+        },
+        target_phase_instance: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+        },
+        reason: {
+          type: "string",
+          minLength: 1,
+          maxLength: 4096,
+          pattern: "\\S"
+        },
+        restarted_at_revision: {
+          type: "integer",
+          minimum: 1,
+          maximum: 9007199254740991
+        },
+        superseded_results: {
+          type: "array",
+          items: {
+            $ref: "#/$defs/authoritativeResultRef"
+          }
+        },
+        cleared_waivers: {
+          type: "array",
+          items: {
+            $ref: "#/$defs/waiverRef"
+          }
+        },
+        cleared_pending_human_revision: {
+          $ref: "#/$defs/pendingHumanRevision"
+        },
+        human_provenance: {
+          $ref: "#/$defs/planningRestartHumanProvenance"
+        }
+      },
+      required: [
+        "restart_id",
+        "source_phase_instance",
+        "target_phase_instance",
+        "reason",
+        "restarted_at_revision",
+        "superseded_results",
+        "cleared_waivers",
+        "human_provenance"
+      ],
+      additionalProperties: false
+    },
     lastTransition: {
       type: "object",
       properties: {
@@ -55912,6 +56218,12 @@ var task_state_schema_default = {
       type: "array",
       items: {
         $ref: "#/$defs/humanRevisionRecord"
+      }
+    },
+    restart_history: {
+      type: "array",
+      items: {
+        $ref: "#/$defs/planningRestartRecord"
       }
     },
     last_transition: {
@@ -58635,6 +58947,72 @@ async function loadLegacyImportResumePhase(dependencies, authority, state) {
   return found.value === void 0 ? issue2("STATE_INVALID", state, "legacy-import-manifest-missing") : ok10(found.value);
 }
 
+// src/state/restart-authority.ts
+import { isDeepStrictEqual as isDeepStrictEqual8 } from "node:util";
+function compareWorkflowPositions(left, right) {
+  return comparePhaseInstances(left, right);
+}
+function latestRestartRevisionAffectingPhase(state, authorityPhase) {
+  let latest;
+  for (const restart of state.restart_history ?? []) {
+    if (compareWorkflowPositions(restart.target_phase_instance, authorityPhase) > 0) continue;
+    if (latest === void 0 || restart.restarted_at_revision > latest) {
+      latest = restart.restarted_at_revision;
+    }
+  }
+  return latest;
+}
+function approvalIsEligibleAfterLatestRestart(state, approval, authorityPhase) {
+  const cutoff = latestRestartRevisionAffectingPhase(state, authorityPhase);
+  return cutoff === void 0 || approval.resolved_at_revision > cutoff;
+}
+function approvalRequestAuthorityPhase(authenticated) {
+  return authenticated.request.phase_instance;
+}
+function authenticatedApprovalIsEligibleAfterLatestRestart(state, authenticated, authorityPhase = approvalRequestAuthorityPhase(authenticated)) {
+  return approvalIsEligibleAfterLatestRestart(state, authenticated.approval, authorityPhase);
+}
+function isExactPlanningRestartDraft(current, next) {
+  if (current.terminal !== void 0 || current.open_gate !== void 0 || next.open_gate !== void 0) return false;
+  const previous = current.restart_history ?? [];
+  const following = next.restart_history ?? [];
+  if (following.length !== previous.length + 1) return false;
+  const previousById = new Map(previous.map((record2) => [record2.restart_id, record2]));
+  const additions = following.filter((record2) => !previousById.has(record2.restart_id));
+  if (additions.length !== 1 || previous.some((record2) => !isDeepStrictEqual8(record2, following.find((candidate) => candidate.restart_id === record2.restart_id)))) return false;
+  const restart = additions[0];
+  if (restart.source_phase_instance !== current.phase_instance || restart.target_phase_instance !== next.phase_instance || restart.restarted_at_revision !== current.revision + 1 || restart.reason.trim() === "" || comparePhaseInstances(restart.target_phase_instance, current.phase_instance) >= 0 || decodePhaseInstance(restart.target_phase_instance).kind === "phase-impl" || next.step !== "produce" || next.status !== "running" || next.attempt !== 1 || !isDeepStrictEqual8(restart.cleared_waivers, current.waivers) || next.waivers.length !== 0 || !isDeepStrictEqual8(restart.cleared_pending_human_revision, current.pending_human_revision) || next.pending_human_revision !== void 0 || !isDeepStrictEqual8(next.approvals, current.approvals)) return false;
+  const retained = current.authoritative_results.filter((reference) => comparePhaseInstances(reference.phase_instance, restart.target_phase_instance) < 0);
+  const superseded = current.authoritative_results.filter((reference) => comparePhaseInstances(reference.phase_instance, restart.target_phase_instance) >= 0);
+  if (!isDeepStrictEqual8(next.authoritative_results, retained) || !isDeepStrictEqual8(restart.superseded_results, superseded)) return false;
+  const targetKind = decodePhaseInstance(restart.target_phase_instance).kind;
+  if (targetKind === "prd" || targetKind === "design" ? next.planned_final_phase !== void 0 : next.planned_final_phase !== current.planned_final_phase) return false;
+  const {
+    revision: _revision,
+    last_transition: _lastTransition,
+    pending_human_revision: _pendingHumanRevision,
+    planned_final_phase: plannedFinalPhase,
+    ...preserved
+  } = current;
+  const expectedHistory = Object.freeze(
+    [...previous, restart].sort((left, right) => left.restart_id.localeCompare(right.restart_id))
+  );
+  if (!isDeepStrictEqual8(following, expectedHistory)) return false;
+  const expected = {
+    ...preserved,
+    phase_instance: restart.target_phase_instance,
+    step: "produce",
+    status: "running",
+    attempt: 1,
+    input_fingerprint: next.input_fingerprint,
+    authoritative_results: retained,
+    waivers: [],
+    restart_history: expectedHistory,
+    ...targetKind === "prd" || targetKind === "design" || plannedFinalPhase === void 0 ? {} : { planned_final_phase: plannedFinalPhase }
+  };
+  return isDeepStrictEqual8(next, expected);
+}
+
 // src/state/produce-subject.ts
 var fatalUtf8 = new TextDecoder("utf-8", { fatal: true });
 function expectedProduceUpstreamBindings(state) {
@@ -58668,7 +59046,7 @@ async function loadProduceUpstreamSubject(dependencies, authority, state, bindin
       const artifact2 = manifest.source_artifact;
       const ownsPath = artifact2.artifact_kind === "document" && documentProjectionDescriptors(artifact2).some((entry) => entry.document_path === binding.path);
       if (ownsPath) retainedOwnerExists = true;
-      if (artifact2.artifact_kind !== "document" || canonicalJsonDigest(artifact2) !== manifest.artifact_digest || !ownsPath || !state.approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === manifest.artifact_digest)) continue;
+      if (artifact2.artifact_kind !== "document" || canonicalJsonDigest(artifact2) !== manifest.artifact_digest || !ownsPath || !state.approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === manifest.artifact_digest && approvalIsEligibleAfterLatestRestart(state, approval, artifact2.phase_instance))) continue;
       approvedOwners.push(Object.freeze({
         measured_at_revision: manifest.accounting.measured_at_revision,
         subject: Object.freeze({
@@ -59159,7 +59537,7 @@ async function loadCurrentReviewSet(dependencies, authority, phase_instance) {
 }
 
 // src/state/transaction.ts
-import { isDeepStrictEqual as isDeepStrictEqual8 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual9 } from "node:util";
 import { isAbsolute as isAbsolute4, relative as relative5 } from "node:path";
 
 // src/state/workspace-cleanup.ts
@@ -59244,7 +59622,7 @@ async function shouldRetainWorkspaceEntry(entry, state, decisionProtectedResults
   if (currentPhase !== void 0 && entry.relative.startsWith(`cache/phases/${currentPhase}/`)) return true;
   if (entry.relative.startsWith("cache/results/")) {
     const digest10 = entry.relative.split("/")[2];
-    return decisionProtectedResults.has(digest10 ?? "") || state.authoritative_results.some((reference) => reference.result_digest === digest10 && reference.phase_instance === state.phase_instance) || (state.human_revision_history ?? []).some((revision) => revision.evidence.some((reference) => reference.result_digest === digest10));
+    return decisionProtectedResults.has(digest10 ?? "") || retainedResultDigests(state).has(digest10 ?? "");
   }
   return false;
 }
@@ -59301,10 +59679,7 @@ async function decisionProtectedAuthorityResults(authority) {
 }
 async function unreferencedAuthorityResults(authority, state, decisionProtectedResults) {
   const root = join7(authority.task_root, "authority", "results");
-  const live = /* @__PURE__ */ new Set([
-    ...state.authoritative_results.map((reference) => reference.result_digest),
-    ...(state.human_revision_history ?? []).flatMap((revision) => revision.evidence.map((reference) => reference.result_digest))
-  ]);
+  const live = retainedResultDigests(state);
   if (decisionProtectedResults.has("*")) return Object.freeze([]);
   let files;
   try {
@@ -59333,6 +59708,10 @@ async function unreferencedAuthorityDecisions(authority, state) {
   const live = /* @__PURE__ */ new Set([
     ...state.approvals.map((entry) => entry.gate_id),
     ...state.waivers.map((entry) => entry.gate_id),
+    ...(state.restart_history ?? []).flatMap((restart) => [
+      ...restart.cleared_waivers.map((entry) => entry.gate_id),
+      ...restart.cleared_pending_human_revision === void 0 ? [] : [restart.cleared_pending_human_revision.gate_id]
+    ]),
     ...openGateIds,
     ...state.pending_human_revision === void 0 ? [] : [state.pending_human_revision.gate_id],
     ...(state.human_revision_history ?? []).map((entry) => entry.gate_id),
@@ -59609,7 +59988,9 @@ function assertPreserved(current, next) {
   if (next.task_id !== current.task_id || next.repository_identity_digest !== current.repository_identity_digest || next.initialization_digest !== current.initialization_digest || next.config_digest !== current.config_digest || next.workflow_digest !== current.workflow_digest || next.constitution_digest !== current.constitution_digest || next.policy_base_commit !== current.policy_base_commit) {
     throw new TypeError("next state draft changed a transaction-substrate identity or pin");
   }
-  if (!isDeepStrictEqual8(next.open_gate, current.open_gate) || !isDeepStrictEqual8(next.approvals, current.approvals) || !isDeepStrictEqual8(next.waivers, current.waivers)) {
+  const gateAuthorityPreserved = isDeepStrictEqual9(next.open_gate, current.open_gate) && isDeepStrictEqual9(next.approvals, current.approvals) && isDeepStrictEqual9(next.waivers, current.waivers);
+  const restartHistoryChanged = !isDeepStrictEqual9(next.restart_history, current.restart_history);
+  if ((!gateAuthorityPreserved || restartHistoryChanged) && !isExactPlanningRestartDraft(current, next)) {
     throw new TypeError("next state draft changed gate authority");
   }
 }
@@ -59808,7 +60189,7 @@ function materializePlan(value) {
   if (hasInstallation) expected.push("result_installation");
   expected.sort();
   const keys = Reflect.ownKeys(value);
-  if (keys.some((key) => typeof key !== "string") || !isDeepStrictEqual8(keys.sort(), expected)) {
+  if (keys.some((key) => typeof key !== "string") || !isDeepStrictEqual9(keys.sort(), expected)) {
     throw new TypeError("prepared transaction has unexpected or missing slots");
   }
   const expectation = ownDataField2(value, "expectation", "prepared transaction");
@@ -59858,7 +60239,7 @@ function validateInstallationFacts(request, current, identified, nextState, fact
   const manifest = facts.prepared.manifest.value;
   const reference = facts.reference;
   const nextReference = nextState.authoritative_results.find((entry) => entry.phase_instance === reference.phase_instance && entry.step === reference.step);
-  if (!isDeepStrictEqual8(nextReference, reference)) {
+  if (!isDeepStrictEqual9(nextReference, reference)) {
     throw new TypeError("result installation reference does not match the prepared transaction");
   }
   if (reference.input_fingerprint !== identified.input_fingerprint) {
@@ -59932,6 +60313,9 @@ function buildPlan(request, current, identified, preparedValue, authenticatedWor
   if (!correlated.ok) return correlated;
   if (plan.expectation.resulting_revision !== resultingRevision || correlated.value.revision !== resultingRevision) {
     throw new TypeError("prepared transaction revision is not the immediate successor");
+  }
+  if (plan.next_state.input_fingerprint !== identified.input_fingerprint) {
+    return fingerprintMismatch(identified.input_fingerprint, plan.next_state.input_fingerprint);
   }
   assertPreserved(current.value, plan.next_state);
   const installation = validateResultInstallationBinding(
@@ -60327,7 +60711,7 @@ async function runStateTransaction(dependencies, request, prepare) {
 }
 
 // src/state/transitions.ts
-import { isDeepStrictEqual as isDeepStrictEqual10 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual11 } from "node:util";
 
 // src/contracts/workflow.ts
 var phaseSchema2 = external_exports.object({
@@ -60357,7 +60741,7 @@ function sameJson(left, right) {
 }
 
 // src/state/gate-approvals.ts
-import { isDeepStrictEqual as isDeepStrictEqual9 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual10 } from "node:util";
 var authenticatedGateApprovals = /* @__PURE__ */ new WeakSet();
 var authenticatedGateApprovalBrand = /* @__PURE__ */ Symbol("AuthenticatedGateApproval");
 function assertAuthenticatedGateApproval(value) {
@@ -60379,7 +60763,7 @@ async function loadAuthenticatedGateApproval(dependencies, authority, approval) 
     authority.repository_identity
   ).ok) return issue2("STATE_INVALID", current.value.value, "gate-approval-state-authority-mismatch");
   const durable = current.value.value.approvals.find((entry) => entry.gate_id === claimed.gate_id);
-  if (durable === void 0 || !isDeepStrictEqual9(durable, claimed)) {
+  if (durable === void 0 || !isDeepStrictEqual10(durable, claimed)) {
     return issue2("STATE_INVALID", current.value.value, "gate-approval-not-current");
   }
   const requestPath = await resolvePath7(
@@ -60430,6 +60814,64 @@ async function loadAuthenticatedGateApproval(dependencies, authority, approval) 
 
 // src/state/transitions.ts
 var ok14 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+function restartInvalid(input, issue4) {
+  void issue4;
+  return Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("TRANSITION_INVALID", {
+      phase_instance: input.target_phase_instance,
+      from: `${input.current.step}-${input.current.status}`,
+      to: "planning-restart"
+    })
+  });
+}
+function planPlanningRestart(value) {
+  assertPlainJson(value, "planning restart input");
+  const input = structuredClone(value);
+  const current = input.current;
+  if (current.terminal !== void 0 || current.open_gate !== void 0 || input.reason.trim() === "" || !isStrictlyEarlierPlanningPhase(input.target_phase_instance, current.phase_instance)) return restartInvalid(input, "target-not-strictly-earlier-planning-phase");
+  if ((current.restart_history ?? []).some((record3) => record3.restart_id === input.restart_id)) {
+    return restartInvalid(input, "restart-id-already-recorded");
+  }
+  const retained = current.authoritative_results.filter((reference) => comparePhaseInstances(reference.phase_instance, input.target_phase_instance) < 0);
+  const superseded = current.authoritative_results.filter((reference) => comparePhaseInstances(reference.phase_instance, input.target_phase_instance) >= 0);
+  const restartedAtRevision = parseSafeInteger(current.revision + 1);
+  const record2 = Object.freeze({
+    restart_id: input.restart_id,
+    source_phase_instance: current.phase_instance,
+    target_phase_instance: input.target_phase_instance,
+    reason: input.reason,
+    restarted_at_revision: restartedAtRevision,
+    superseded_results: Object.freeze(superseded),
+    cleared_waivers: Object.freeze([...current.waivers]),
+    ...current.pending_human_revision === void 0 ? {} : { cleared_pending_human_revision: current.pending_human_revision },
+    human_provenance: input.human_provenance
+  });
+  const history = Object.freeze(
+    [...current.restart_history ?? [], record2].sort((left, right) => left.restart_id.localeCompare(right.restart_id))
+  );
+  const targetKind = decodePhaseInstance(input.target_phase_instance).kind;
+  const {
+    revision: _revision,
+    last_transition: _lastTransition,
+    pending_human_revision: _pendingHumanRevision,
+    planned_final_phase: plannedFinalPhase,
+    ...preserved
+  } = current;
+  return ok14(Object.freeze({
+    ...preserved,
+    phase_instance: input.target_phase_instance,
+    step: "produce",
+    status: "running",
+    attempt: parseSafeInteger(1),
+    input_fingerprint: input.recomputed_input_fingerprint,
+    authoritative_results: Object.freeze(retained),
+    waivers: Object.freeze([]),
+    restart_history: history,
+    ...targetKind === "prd" || targetKind === "design" || plannedFinalPhase === void 0 ? {} : { planned_final_phase: plannedFinalPhase }
+  }));
+}
 function invalid(input, from, to) {
   return Object.freeze({
     schema_version: "1",
@@ -60554,7 +60996,7 @@ function pendingHumanRevisionMatches(input) {
   if (input.current.attempt !== pending.attempt) return false;
   if (input.target.status !== "succeeded") return declaration === void 0;
   if (declaration === void 0 || input.result_reference === void 0 || input.resulting_subject_digest === void 0 || input.resulting_subject_digest === pending.predecessor_subject_digest) return false;
-  return pending.evidence.every((expected) => input.current.authoritative_results.some((observed) => isDeepStrictEqual10(expected, observed)));
+  return pending.evidence.every((expected) => input.current.authoritative_results.some((observed) => isDeepStrictEqual11(expected, observed)));
 }
 function withResultReference(current, reference) {
   if (reference === void 0) return current;
@@ -60648,7 +61090,7 @@ function planStateTransition(value) {
     ...humanRevisionHistory === void 0 ? {} : { human_revision_history: humanRevisionHistory },
     ...!completingHumanRevision && pendingHumanRevision !== void 0 ? { pending_human_revision: pendingHumanRevision } : {}
   });
-  if (input.result_reference === void 0 && input.constitution_result_reference === void 0 && !isDeepStrictEqual10(draft.authoritative_results, input.current.authoritative_results)) {
+  if (input.result_reference === void 0 && input.constitution_result_reference === void 0 && !isDeepStrictEqual11(draft.authoritative_results, input.current.authoritative_results)) {
     throw new TypeError("transition planning changed authoritative results");
   }
   return ok14(draft);
@@ -61543,7 +61985,8 @@ async function runCounterReview(dependencies, input) {
     attempt: input.authority.context.attempt
   });
   const envelope = buildReviewEnvelopeWithCap({ ...input.envelope, subject });
-  const dispatched = await serializeDispatch(() => dependencies.dispatch(route, envelope, review_schema_default));
+  const serialize = dependencies.serialize_dispatch ?? serializeDispatch;
+  const dispatched = await serialize(() => dependencies.dispatch(route, envelope, review_schema_default));
   const currentProjection = await dependencies.reobserve_projection_digest();
   if (!currentProjection.ok) return currentProjection;
   if (currentProjection.value !== input.projection_digest) {
@@ -61602,7 +62045,7 @@ async function runCounterReview(dependencies, input) {
       workspace: plan.workspace,
       subject: constitutionSubject
     });
-    const constitutionDispatched = await serializeDispatch(() => plan.dispatch(constitutionRoute, constitutionEnvelope, adjudication_schema_default));
+    const constitutionDispatched = await serialize(() => plan.dispatch(constitutionRoute, constitutionEnvelope, adjudication_schema_default));
     try {
       const observedConstitution = mintAdjudicationObservation({
         subject: constitutionSubject,
@@ -61702,7 +62145,7 @@ function requireApprovedUpstreamDigests(approvals, upstreamDigests) {
 }
 
 // src/state/gates.ts
-import { isDeepStrictEqual as isDeepStrictEqual11 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual12 } from "node:util";
 
 // src/state/gate-wait.ts
 import { constants as fsConstants6 } from "node:fs";
@@ -61886,7 +62329,7 @@ async function authenticateWaiverOrigin(dependencies, authority, context2) {
   if (!validateDurableSemantics({ gate_request: request, gate_decision: decision2 }).ok || decision2.digest !== context2.origin.origin_decision_digest || decision2.value.outcome !== "decided" || decision2.value.envelope.payload.decision !== "waiver-requested" || request.value.kind !== "constitution-review" && request.value.kind !== "design-approval") return issue2("CONTRACT_INVALID", void 0, "waiver-origin-decision-invalid");
   const payload = decision2.value.envelope.payload;
   const requestContext = request.value.context;
-  if (!("eligible_waivers" in requestContext) || request.value.gate_id !== context2.origin.origin_gate_id || request.value.context_digest !== context2.origin.origin_context_digest || request.value.task_id !== context2.origin.task_id || request.value.phase_instance !== context2.origin.phase_instance || request.value.subject_digest !== context2.origin.subject_digest || request.value.current_evidence.set_digest !== context2.origin.current_evidence_set_digest || !isDeepStrictEqual11(payload.rule, context2.origin.rule) || payload.operation !== context2.origin.scope.operation || !requestContext.eligible_waivers.some((eligible) => isDeepStrictEqual11(eligible.rule, context2.origin.rule) && isDeepStrictEqual11(eligible.scope, context2.origin.scope))) return issue2("CONTRACT_INVALID", void 0, "waiver-origin-binding-invalid");
+  if (!("eligible_waivers" in requestContext) || request.value.gate_id !== context2.origin.origin_gate_id || request.value.context_digest !== context2.origin.origin_context_digest || request.value.task_id !== context2.origin.task_id || request.value.phase_instance !== context2.origin.phase_instance || request.value.subject_digest !== context2.origin.subject_digest || request.value.current_evidence.set_digest !== context2.origin.current_evidence_set_digest || !isDeepStrictEqual12(payload.rule, context2.origin.rule) || payload.operation !== context2.origin.scope.operation || !requestContext.eligible_waivers.some((eligible) => isDeepStrictEqual12(eligible.rule, context2.origin.rule) && isDeepStrictEqual12(eligible.scope, context2.origin.scope))) return issue2("CONTRACT_INVALID", void 0, "waiver-origin-binding-invalid");
   return ok10(void 0);
 }
 async function cleanupResolvedInterfaces(dependencies, authority, request, record2) {
@@ -61955,7 +62398,7 @@ async function openDurableGate(dependencies, input) {
           const expectedTool = archived.value.outcome === "waiver-decided" ? "archflow_waiver" : "archflow_gate";
           const expectedOperation = archived.value.outcome === "waiver-decided" ? "waiver" : "gate";
           const expectedOutcome = archived.value.outcome === "cancelled" ? void 0 : receiptOutcome(archived.value, current.value.revision);
-          if (expectedOutcome === void 0 || transition.tool !== expectedTool || transition.operation !== expectedOperation || transition.request_digest !== requestRead.value.request_digest || transition.input_fingerprint !== input.input_fingerprint || String(transition.result_id) !== String(archived.value.gate_id) || transition.resulting_revision !== current.value.revision || transition.prior_revision + 1 !== transition.resulting_revision || !isDeepStrictEqual11(transition.outcome, expectedOutcome) || transition.outcome_digest !== intentOutcomeDigest(expectedOutcome)) {
+          if (expectedOutcome === void 0 || transition.tool !== expectedTool || transition.operation !== expectedOperation || transition.request_digest !== requestRead.value.request_digest || transition.input_fingerprint !== input.input_fingerprint || String(transition.result_id) !== String(archived.value.gate_id) || transition.resulting_revision !== current.value.revision || transition.prior_revision + 1 !== transition.resulting_revision || !isDeepStrictEqual12(transition.outcome, expectedOutcome) || transition.outcome_digest !== intentOutcomeDigest(expectedOutcome)) {
             return issue2("STATE_INVALID", current.value, "gate-replay-transition-invalid");
           }
           return ok10({ gate_id: gateId, state: current, request: requestRead, replay: archived });
@@ -62007,7 +62450,7 @@ async function openDurableGate(dependencies, input) {
         const manifest = retained.value.prepared.manifest.value;
         const artifact = manifest.source_artifact;
         const context2 = input.context;
-        if (artifact.artifact_kind !== "implementation-output" || artifact.diff_digest !== context2.diff_digest || !isDeepStrictEqual11(context2.current_artifact_digests, [manifest.artifact_digest]) || !isDeepStrictEqual11(context2.parent_document_digests, artifact.parent_documents.map((item) => item.content_digest).sort())) return issue2("STATE_INVALID", current.value, "commit-authorization-manifest-mismatch");
+        if (artifact.artifact_kind !== "implementation-output" || artifact.diff_digest !== context2.diff_digest || !isDeepStrictEqual12(context2.current_artifact_digests, [manifest.artifact_digest]) || !isDeepStrictEqual12(context2.parent_document_digests, artifact.parent_documents.map((item) => item.content_digest).sort())) return issue2("STATE_INVALID", current.value, "commit-authorization-manifest-mismatch");
       }
       if (input.kind === "restore-collision") {
         const reference = [...current.value.authoritative_results].reverse().find((item) => item.phase_instance === input.phase_instance && item.step === "produce");
@@ -62021,7 +62464,7 @@ async function openDurableGate(dependencies, input) {
         if (projectionGenerationDigest((await captureProjectionTarget(entry.target)).observation) !== context2.current_generation_digest) return issue2("STATE_INVALID", current.value, "restore-current-generation-stale");
         if (entry.rename_pair !== void 0) {
           const peer = retained.value.projection_plan.entries.find((item) => item.path === entry.rename_pair.peer_path && item.rename_pair?.peer_path === entry.path);
-          if (peer === void 0 || !isDeepStrictEqual11((await captureProjectionTarget(peer.target)).observation, peer.observed_before)) return issue2("STATE_INVALID", current.value, "restore-rename-peer-changed");
+          if (peer === void 0 || !isDeepStrictEqual12((await captureProjectionTarget(peer.target)).observation, peer.observed_before)) return issue2("STATE_INVALID", current.value, "restore-rename-peer-changed");
         }
         const changed = input.input_fingerprint !== reference.input_fingerprint;
         if (!changed && context2.adoption_candidate !== void 0 || context2.adoption_candidate !== void 0 && (context2.adoption_candidate.changed_input_fingerprint !== input.input_fingerprint || context2.adoption_candidate.proposed_generation_digest !== context2.current_generation_digest)) return issue2("CONTRACT_INVALID", void 0, "restore-adoption-candidate-invalid");
@@ -62047,7 +62490,7 @@ async function openDurableGate(dependencies, input) {
           const triageArtifact = triage.value.prepared.manifest.value.source_artifact;
           reviewedMigration = reviewArtifact.artifact_kind === "review-evidence" && reviewArtifact.evidence.subject_digest === subject && triageArtifact.artifact_kind === "triage" && triageArtifact.evidence.subject_digest === subject;
         }
-        const traditionallyApproved = current.value.approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === subject);
+        const traditionallyApproved = current.value.approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === subject && approvalIsEligibleAfterLatestRestart(current.value, approval, current.value.phase_instance));
         if (input.subject_digest !== subject || !traditionallyApproved && !reviewedMigration) return issue2("STATE_INVALID", current.value, "migration-audit-design-not-approved");
         const resume = await loadLegacyImportResumePhase(dependencies, input.authority, current.value);
         if (!resume.ok) return resume;
@@ -62057,7 +62500,7 @@ async function openDurableGate(dependencies, input) {
           path: entry.destination_path,
           content_digest: imported.value.staged_payload_refs.find((reference2) => reference2.legacy_path === entry.legacy_path).digest
         })).sort((left, right) => left.path.localeCompare(right.path));
-        const contextMatchesImport = context2.source_identity_digest === imported.value.source_identity_digest && context2.import_digest === imported.value.import_digest && context2.destination_identity_digest === input.authority.task_identity_digest && context2.code_baseline_digest === canonicalJsonDigest({ schema_version: "1", digest_kind: "code-baseline-commit", commit: imported.value.code_baseline_commit }) && context2.policy_baseline_digest === canonicalJsonDigest({ schema_version: "1", digest_kind: "policy-base-commit", commit: imported.value.policy_base_commit }) && context2.baseline_commit === imported.value.code_baseline_commit && context2.resume_phase === imported.value.resume_phase && context2.planned_final_phase === imported.value.planned_final_phase && context2.target_ref === imported.value.target_ref && context2.commit_message === imported.value.commit_message && isDeepStrictEqual11(context2.imported_documents, expectedDocuments);
+        const contextMatchesImport = context2.source_identity_digest === imported.value.source_identity_digest && context2.import_digest === imported.value.import_digest && context2.destination_identity_digest === input.authority.task_identity_digest && context2.code_baseline_digest === canonicalJsonDigest({ schema_version: "1", digest_kind: "code-baseline-commit", commit: imported.value.code_baseline_commit }) && context2.policy_baseline_digest === canonicalJsonDigest({ schema_version: "1", digest_kind: "policy-base-commit", commit: imported.value.policy_base_commit }) && context2.baseline_commit === imported.value.code_baseline_commit && context2.resume_phase === imported.value.resume_phase && context2.planned_final_phase === imported.value.planned_final_phase && context2.target_ref === imported.value.target_ref && context2.commit_message === imported.value.commit_message && isDeepStrictEqual12(context2.imported_documents, expectedDocuments);
         const decoded = decodePhaseInstance(resume.value);
         if (!contextMatchesImport || decoded.kind !== "phase-design" && decoded.kind !== "phase-impl" || context2.resume_phase !== void 0 && context2.resume_phase !== resume.value || (context2.planned_final_phase ?? current.value.planned_final_phase) === void 0 || Number(decoded.phase) > Number(context2.planned_final_phase ?? current.value.planned_final_phase)) return issue2("STATE_INVALID", current.value, "migration-audit-phase-plan-insufficient");
       }
@@ -62151,6 +62594,16 @@ function exactOpenGateMatches(state, request) {
   const { open_gate: _open, last_transition: _transition, ...base2 } = state;
   return open5.frozen_state_digest === openGateFrozenStateDigest(base2);
 }
+function completedMaterialDriftRestartMatches(state, request, record2) {
+  if (request.kind !== "material-drift" || record2.outcome !== "decided" || record2.kind !== "material-drift" || record2.envelope.payload.decision !== "amend-upstream") return false;
+  const restart = state.restart_history?.find((entry) => entry.restart_id === record2.gate_id);
+  return restart !== void 0 && restart.source_phase_instance === request.phase_instance && restart.target_phase_instance === state.phase_instance && restart.reason === record2.envelope.payload.reason && restart.restarted_at_revision === request.opened_at_revision + 1 && state.revision >= restart.restarted_at_revision && isDeepStrictEqual12(restart.human_provenance, record2.envelope.human_provenance);
+}
+function uniqueMaterialDriftUpstream(subjects, affectedDigest) {
+  const matching = subjects.filter((subject) => subject.artifact_digest === affectedDigest);
+  const phases = new Set(matching.map((subject) => subject.artifact.phase_instance));
+  return phases.size === 1 ? matching[0] : void 0;
+}
 async function planGateAuthorizedReentry(dependencies, authority, current, request, record2) {
   if (!enactsReentry(record2)) throw new TypeError("gate record does not authorize re-entry");
   if (!exactOpenGateMatches(current.value, request)) {
@@ -62202,6 +62655,64 @@ async function planGateAuthorizedReentry(dependencies, authority, current, reque
   }));
 }
 async function closedStateForRecord(dependencies, authority, current, request, record2, digest10) {
+  if (record2.outcome === "decided" && record2.kind === "material-drift" && record2.envelope.payload.decision === "amend-upstream" && request.kind === "material-drift") {
+    if (!exactOpenGateMatches(current.value, request)) {
+      return issue2("STATE_INVALID", current.value, "material-drift-restart-predecessor-mismatch");
+    }
+    const subjects = [];
+    for (const binding of expectedProduceUpstreamBindings(current.value)) {
+      const loaded = await loadProduceUpstreamSubject(dependencies, authority, current.value, binding);
+      if (!loaded.ok) return loaded;
+      subjects.push(loaded.value);
+    }
+    const upstream = uniqueMaterialDriftUpstream(subjects, request.context.affected_upstream.digest);
+    if (upstream === void 0) {
+      return issue2("STATE_INVALID", current.value, "material-drift-upstream-subject-unavailable");
+    }
+    if (record2.envelope.human_provenance.actor_class !== "human") {
+      return issue2("STATE_INVALID", current.value, "material-drift-restart-human-provenance-required");
+    }
+    const humanProvenance = planningRestartHumanProvenanceV1Schema.safeParse(
+      record2.envelope.human_provenance
+    );
+    if (!humanProvenance.success) {
+      return issue2("STATE_INVALID", current.value, "material-drift-restart-human-provenance-required");
+    }
+    const targetPhase = upstream.artifact.phase_instance;
+    const { open_gate: _open, last_transition: _transition, ...predecessor } = current.value;
+    const restartPredecessor = predecessor;
+    const liveConfig = await dependencies.read_config(authority.config);
+    if (liveConfig.kind !== "valid") return issue2("STATE_INVALID", current.value, "material-drift-restart-config-unavailable");
+    const targetCall = parseToolCall("archflow_state", {
+      schema_version: "1",
+      task_id: authority.task_id,
+      intent_id: record2.gate_id,
+      expected_revision: current.value.revision,
+      input_fingerprint: current.value.input_fingerprint,
+      phase_instance: targetPhase,
+      step: "produce",
+      status: "running"
+    });
+    const fingerprintSubject = await dependencies.resolve_input_fingerprint({
+      runner: dependencies.runner,
+      authority,
+      state: canonicalDocument(restartPredecessor),
+      call: targetCall,
+      live_config: liveConfig.snapshot,
+      context: authority.context
+    });
+    if (!fingerprintSubject.ok) return fingerprintSubject;
+    const fingerprint = computeInputFingerprint(fingerprintSubject.value);
+    const planned = planPlanningRestart({
+      current: restartPredecessor,
+      restart_id: record2.gate_id,
+      target_phase_instance: targetPhase,
+      reason: record2.envelope.payload.reason,
+      recomputed_input_fingerprint: fingerprint,
+      human_provenance: humanProvenance.data
+    });
+    return planned.ok ? ok10(canonicalDocument({ ...planned.value, revision: parseSafeInteger(current.value.revision + 1) })) : planned;
+  }
   if (enactsReentry(record2)) {
     return planGateAuthorizedReentry(dependencies, authority, current, request, record2);
   }
@@ -62384,6 +62895,7 @@ async function resolveDurableGate(dependencies, authority, gateId, inputFingerpr
             );
             if (!replay.ok) return replay;
           }
+          if (archived.value.outcome === "decided" && archived.value.kind === "material-drift" && archived.value.envelope.payload.decision === "amend-upstream" && !completedMaterialDriftRestartMatches(current.value, request.value, archived.value)) return issue2("STATE_INVALID", current.value, "material-drift-restart-replay-mismatch");
           return ok10({ state: current, record: archived, effect: effect2, replayed: true });
         }
         const closure2 = await closedStateForRecord(
@@ -62571,7 +63083,7 @@ async function resolveAdvancingGate(dependencies, authority, gateId, inputFinger
         if (originalGeneration !== context2.current_generation_digest && originalGeneration !== desiredGenerationDigest(original.desired)) return issue2("STATE_INVALID", current.value, "restore-current-generation-stale");
         if (selected.slice(1).some((entry) => {
           const observation = captures.get(entry.path).observation;
-          return !isDeepStrictEqual11(observation, entry.observed_before) && projectionGenerationDigest(observation) !== desiredGenerationDigest(entry.desired);
+          return !isDeepStrictEqual12(observation, entry.observed_before) && projectionGenerationDigest(observation) !== desiredGenerationDigest(entry.desired);
         })) return issue2("STATE_INVALID", current.value, "restore-rename-peer-changed");
         if (!alreadyApplied) {
           const pending = selected.filter((entry) => projectionGenerationDigest(captures.get(entry.path).observation) !== desiredGenerationDigest(entry.desired));
@@ -62712,7 +63224,7 @@ async function openHandlerSession(call, context2) {
     }));
   }
   let configRead = await services.value.dependencies.read_config(services.value.authority.config);
-  if (configRead.kind === "missing" && state === void 0 && call.name === "archflow_state" && call.input.artifact?.artifact_kind === "legacy-import-initialization") {
+  if (configRead.kind === "missing" && state === void 0 && call.name === "archflow_state" && call.input.operation !== "planning_restart" && call.input.artifact?.artifact_kind === "legacy-import-initialization") {
     const staged = await readStagedLegacyConfig(services.value.authority, call.input.artifact);
     if (staged !== void 0) configRead = Object.freeze({ kind: "valid", snapshot: staged });
   }
@@ -62806,6 +63318,7 @@ async function deriveApprovedUpstreams(services, toolName, durable, subject) {
       for (const approval of durable.approvals.filter((candidate) => candidate.gate_kind === "migration-audit")) {
         const authenticated = await loadAuthenticatedGateApproval(services.dependencies, services.authority, approval);
         if (!authenticated.ok) return authenticated;
+        if (!authenticatedApprovalIsEligibleAfterLatestRestart(durable, authenticated.value)) continue;
         if (authenticated.value.request.kind === "migration-audit" && authenticated.value.decision.envelope.payload.decision === "accept-import-audit" && authenticated.value.request.context.imported_documents?.some((document2) => document2.path === repositoryPath && document2.content_digest === importedContentDigest)) {
           approved = true;
           break;
@@ -62819,6 +63332,11 @@ async function deriveApprovedUpstreams(services, toolName, durable, subject) {
         approval
       );
       if (!authenticated.ok) return authenticated;
+      if (!authenticatedApprovalIsEligibleAfterLatestRestart(
+        durable,
+        authenticated.value,
+        upstream.value.artifact.phase_instance
+      )) continue;
       const request = authenticated.value.request;
       const ownerKind = decodePhaseInstance(upstream.value.artifact.phase_instance).kind;
       if ((request.kind === "artifact-approval" || request.kind === "design-approval") && request.context.artifact_kind === ownerKind) {
@@ -62869,7 +63387,7 @@ async function reobserveProjectionDigest(services, phaseInstance4, expectedArtif
   );
   return observed.ok ? Object.freeze({ schema_version: "1", ok: true, value: produceProjectionSetDigest(observed.value) }) : observed;
 }
-async function handleCounterReview(call, context2) {
+async function handleCounterReview(call, context2, dispatchAlreadySerialized = false) {
   return mapHandlerErrors(context2.invocation_id, async () => {
     const session = await openHandlerSession(call, context2);
     if (!session.ok) return session;
@@ -63006,6 +63524,7 @@ async function handleCounterReview(call, context2) {
     const result = await runCounterReview({
       transaction: services.dependencies,
       dispatch: coordinator,
+      ...dispatchAlreadySerialized ? { serialize_dispatch: async (operation) => operation() } : {},
       prepare_evidence: (evidence, measuredAtRevision) => prepareDispatchEvidence(
         services,
         retainedBytes,
@@ -63522,6 +64041,7 @@ async function runStateInitialization(dependencies, request) {
 }
 
 // src/state/phase-documents.ts
+import { readFile as readFile8 } from "node:fs/promises";
 var STATUS_RESOURCE_ROLES = Object.freeze([
   "current-artifact",
   "user-ask",
@@ -63616,6 +64136,79 @@ function phaseDocumentDefaults(taskId, phaseInstance4) {
     case "phase-impl":
       return void 0;
   }
+}
+async function validatePlanningRestartAskAppend(input) {
+  if (input.target.path_class !== "task-ask") return false;
+  const existing = new Uint8Array(await readFile8(input.target.absolute));
+  const suffix = restartAskSuffix(input.restart_id, input.request);
+  if (!bytesEndWith(existing, suffix)) return false;
+  return sha256Bytes(existing.subarray(0, existing.byteLength - suffix.byteLength)) === input.expected_base_digest;
+}
+function restartAskSuffix(restartId, request) {
+  const requestBytes = new TextEncoder().encode(request);
+  const framing = new TextEncoder().encode(
+    `
+
+## Reopening and corrections
+
+<!-- archflow-restart:${restartId};request-bytes:${requestBytes.byteLength};request-sha256:${sha256Bytes(requestBytes)} -->
+
+`
+  );
+  const suffix = new Uint8Array(framing.byteLength + requestBytes.byteLength);
+  suffix.set(framing);
+  suffix.set(requestBytes, framing.byteLength);
+  return suffix;
+}
+function bytesEndWith(bytes, suffix) {
+  if (suffix.byteLength > bytes.byteLength) return false;
+  const offset = bytes.byteLength - suffix.byteLength;
+  return suffix.every((byte, index) => bytes[offset + index] === byte);
+}
+async function installPlanningRestartAskAppend(writer, input) {
+  if (input.target.path_class !== "task-ask") {
+    throw new TypeError("planning restart ask append requires the canonical ask document");
+  }
+  if (input.request.trim() === "") throw new TypeError("planning restart request must not be blank");
+  const existing = new Uint8Array(await readFile8(input.target.absolute));
+  const suffix = restartAskSuffix(input.restart_id, input.request);
+  const existingDigest = sha256Bytes(existing);
+  if (bytesEndWith(existing, suffix)) {
+    const prefix = existing.subarray(0, existing.byteLength - suffix.byteLength);
+    if (input.expected_base_digest === void 0 || sha256Bytes(prefix) === input.expected_base_digest) {
+      return Object.freeze({
+        status: "replayed",
+        content_digest: sha256Bytes(existing),
+        byte_count: existing.byteLength
+      });
+    }
+  }
+  if (input.expected_base_digest === void 0 || existingDigest === input.expected_base_digest) {
+    const combined = new Uint8Array(existing.byteLength + suffix.byteLength);
+    combined.set(existing);
+    combined.set(suffix, existing.byteLength);
+    await replaceTaskAsk(writer, input.target, combined);
+    return Object.freeze({
+      status: "appended",
+      content_digest: sha256Bytes(combined),
+      byte_count: combined.byteLength
+    });
+  }
+  throw new TypeError("planning restart ask append conflicts with current ask bytes");
+}
+
+// src/state/planning-restart.ts
+var SEMANTIC_REOPEN_INTENT = /^afop-([0-9a-f]{64})-reopen$/u;
+function semanticPlanningRestartId(intentId) {
+  const match = SEMANTIC_REOPEN_INTENT.exec(intentId);
+  return match === null ? void 0 : parsePathSafeId(`planning-restart-${match[1].slice(0, 32)}`);
+}
+function planningRestartId(requestDigest, intentId) {
+  return intentId === void 0 ? parsePathSafeId(`planning-restart-${requestDigest.slice(0, 32)}`) : semanticPlanningRestartId(intentId) ?? parsePathSafeId(`planning-restart-${requestDigest.slice(0, 32)}`);
+}
+function completedPlanningRestartMatches(state, input) {
+  const restart = state.restart_history?.find((record2) => record2.restart_id === input.restart_id);
+  return restart !== void 0 && restart.source_phase_instance === input.source_phase_instance && restart.target_phase_instance === input.target_phase_instance && restart.reason === input.reason && state.revision === restart.restarted_at_revision && state.phase_instance === restart.target_phase_instance && state.step === "produce" && state.status === "running" && state.attempt === 1 && state.input_fingerprint === input.input_fingerprint;
 }
 
 // src/mcp/handlers/state-results.ts
@@ -63916,13 +64509,71 @@ async function handleState(call, context2) {
     const session = await openHandlerSession(call, context2);
     if (!session.ok) return session;
     const { services } = session.value;
-    const artifact = call.input.artifact;
+    const restartInput = call.input.operation === "planning_restart" ? call.input : void 0;
+    const artifact = restartInput === void 0 ? call.input.artifact : void 0;
     if (services.state === void 0) {
+      if (restartInput !== void 0) {
+        return fail23(createProjectError("STATE_MISSING", { phase_instance: restartInput.phase_instance }));
+      }
       const initialized = await runStateInitialization(services.dependencies, {
         authority: services.authority,
         call
       });
       return initialized.ok ? Object.freeze({ schema_version: "1", ok: true, value: initialized.value.outcome }) : initialized;
+    }
+    if (restartInput !== void 0) {
+      const identified2 = identifyTransactionRequest(
+        call,
+        services.authority,
+        restartInput.input_fingerprint
+      );
+      const restartId = planningRestartId(identified2.request_digest, restartInput.intent_id);
+      const existing = services.state.value.restart_history?.find((record2) => record2.restart_id === restartId);
+      if (existing !== void 0) {
+        if (!completedPlanningRestartMatches(services.state.value, {
+          restart_id: restartId,
+          source_phase_instance: restartInput.phase_instance,
+          target_phase_instance: restartInput.target_phase_instance,
+          reason: restartInput.reason,
+          input_fingerprint: restartInput.input_fingerprint
+        })) {
+          return fail23(createProjectError("STATE_INVALID", {
+            phase_instance: services.state.value.phase_instance,
+            issue_code: "planning-restart-replay-mismatch"
+          }));
+        }
+        if (existing.target_phase_instance === "prd") {
+          const ask = await resolveTaskPath({
+            runner: services.runner,
+            taskId: services.authority.task_id,
+            claim: parseTaskPathClaim("ask.md"),
+            expectedClass: "task-ask",
+            context: services.authority.context
+          });
+          if (!ask.ok) return ask;
+          if (restartInput.ask_base_digest === void 0 || !await validatePlanningRestartAskAppend({
+            target: ask.value,
+            expected_base_digest: restartInput.ask_base_digest,
+            restart_id: restartId,
+            request: restartInput.reason
+          })) {
+            return fail23(createProjectError("STATE_INVALID", {
+              phase_instance: services.state.value.phase_instance,
+              issue_code: "planning-restart-ask-replay-mismatch"
+            }));
+          }
+        }
+        return Object.freeze({
+          schema_version: "1",
+          ok: true,
+          value: Object.freeze({
+            path: parseTaskPathClaim("state.json"),
+            revision: existing.restarted_at_revision,
+            status: "running",
+            request_digest: identified2.request_digest
+          })
+        });
+      }
     }
     const identified = identifyTransactionRequest(
       call,
@@ -63935,6 +64586,94 @@ async function handleState(call, context2) {
       services.dependencies,
       { authority: services.authority, call },
       async (current, identifiedCall) => {
+        if (restartInput !== void 0) {
+          const revision2 = parseSafeInteger(current.value.revision + 1);
+          const restartId = planningRestartId(identified.request_digest, restartInput.intent_id);
+          let landingFingerprint = identified.input_fingerprint;
+          const planInput = {
+            current: current.value,
+            restart_id: restartId,
+            target_phase_instance: restartInput.target_phase_instance,
+            reason: restartInput.reason,
+            recomputed_input_fingerprint: landingFingerprint,
+            human_provenance: {
+              schema_version: "1",
+              actor_class: "human",
+              assurance: "declared-local-trace",
+              channel: "connected-host",
+              decision_event_id: restartId,
+              connection_id: context2.connection.connection_id,
+              request_id_digest: canonicalJsonDigest({
+                schema_version: "1",
+                request_id: context2.transport_metadata.request_id
+              }),
+              recorded_at: (/* @__PURE__ */ new Date()).toISOString()
+            }
+          };
+          let planned = planPlanningRestart(planInput);
+          if (!planned.ok) return planned;
+          if (restartInput.target_phase_instance === "prd") {
+            const writer = services.dependencies.atomic;
+            const ask = await resolveTaskPath({
+              runner: services.runner,
+              taskId: services.authority.task_id,
+              claim: parseTaskPathClaim("ask.md"),
+              expectedClass: "task-ask",
+              context: services.authority.context
+            });
+            if (!ask.ok) return ask;
+            await installPlanningRestartAskAppend(writer, {
+              target: ask.value,
+              expected_base_digest: restartInput.ask_base_digest,
+              restart_id: restartId,
+              request: restartInput.reason
+            });
+            const liveConfig = await services.dependencies.read_config(services.authority.config);
+            if (liveConfig.kind !== "valid") {
+              return fail23(createProjectError("CONFIG_INVALID", { issue_code: `config-${liveConfig.kind}` }));
+            }
+            const landingSubject = await services.dependencies.resolve_input_fingerprint({
+              runner: services.runner,
+              authority: services.authority,
+              state: current,
+              call,
+              live_config: liveConfig.snapshot,
+              context: services.authority.context
+            });
+            if (!landingSubject.ok) return landingSubject;
+            landingFingerprint = computeInputFingerprint(landingSubject.value);
+            planned = planPlanningRestart({ ...planInput, recomputed_input_fingerprint: landingFingerprint });
+            if (!planned.ok) return planned;
+          }
+          const success3 = Object.freeze({
+            path: parseTaskPathClaim("state.json"),
+            revision: revision2,
+            status: "running",
+            request_digest: identified.request_digest
+          });
+          const resultId = parseSafeId(restartId);
+          const expectation2 = createInternalResultExpectation({
+            schema_version: "1",
+            tool: "archflow_state",
+            task_id: services.authority.task_id,
+            intent_id: restartInput.intent_id,
+            input_fingerprint: restartInput.input_fingerprint,
+            request_digest: identified.request_digest,
+            result_id: resultId,
+            resulting_revision: revision2,
+            success: success3
+          });
+          const result2 = validateProjectResultStructure(identifiedCall, {
+            schema_version: "1",
+            ok: true,
+            value: success3
+          });
+          return Object.freeze({
+            schema_version: "1",
+            ok: true,
+            value: Object.freeze({ expectation: expectation2, result: result2, next_state: planned.value })
+          });
+        }
         let preparedResult;
         if (artifact?.artifact_kind === "document" || artifact?.artifact_kind === "implementation-output") {
           if (retainedBytes === void 0 || scanner === void 0) {
@@ -64046,6 +64785,7 @@ async function handleState(call, context2) {
               approval
             );
             if (!loaded.ok) return loaded;
+            if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
             authenticatedGateApprovals2.push(loaded.value);
           }
           if (designExit && currentProduce?.artifact.artifact_kind === "document") {
@@ -64073,6 +64813,7 @@ async function handleState(call, context2) {
               approval
             );
             if (!loaded.ok) return loaded;
+            if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
             authenticatedGateApprovals2.push(loaded.value);
           }
           const source = currentProduce.artifact;
@@ -64109,6 +64850,7 @@ async function handleState(call, context2) {
                 approval
               );
               if (!loaded.ok) return loaded;
+              if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
               authenticatedGateApprovals2.push(loaded.value);
               if (loaded.value.request.kind === "migration-audit" && loaded.value.request.context.target_ref !== void 0 && loaded.value.request.context.baseline_commit !== void 0 && loaded.value.request.context.commit_message !== void 0 && currentProduce?.artifact.artifact_kind === "document") {
                 commitObserved = await designArtifactCommittedAtCurrentTarget(
@@ -64170,12 +64912,12 @@ async function handleState(call, context2) {
 }
 
 // src/mcp/handlers/waiver.ts
-import { isDeepStrictEqual as isDeepStrictEqual12 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual13 } from "node:util";
 var fail24 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function authenticWaiverOriginArchive(request, decision2, origin2) {
   const payload = decision2.value.outcome === "decided" ? decision2.value.envelope.payload : void 0;
-  return request.value.gate_id === origin2.origin_gate_id && request.value.task_id === origin2.task_id && request.value.phase_instance === origin2.phase_instance && request.value.subject_digest === origin2.subject_digest && request.value.context_digest === origin2.origin_context_digest && request.value.current_evidence.set_digest === origin2.current_evidence_set_digest && (request.value.kind === "constitution-review" || request.value.kind === "design-approval") && decision2.digest === origin2.origin_decision_digest && payload?.decision === "waiver-requested" && isDeepStrictEqual12(payload.rule, origin2.rule) && payload.operation === origin2.scope.operation && // The origin gate must actually have offered this rule on this axis.
-  "eligible_waivers" in request.value.context && request.value.context.eligible_waivers.some((eligible) => isDeepStrictEqual12(eligible.rule, origin2.rule) && isDeepStrictEqual12(eligible.scope, origin2.scope)) && validateDurableSemantics({ gate_request: request, gate_decision: decision2 }).ok;
+  return request.value.gate_id === origin2.origin_gate_id && request.value.task_id === origin2.task_id && request.value.phase_instance === origin2.phase_instance && request.value.subject_digest === origin2.subject_digest && request.value.context_digest === origin2.origin_context_digest && request.value.current_evidence.set_digest === origin2.current_evidence_set_digest && (request.value.kind === "constitution-review" || request.value.kind === "design-approval") && decision2.digest === origin2.origin_decision_digest && payload?.decision === "waiver-requested" && isDeepStrictEqual13(payload.rule, origin2.rule) && payload.operation === origin2.scope.operation && // The origin gate must actually have offered this rule on this axis.
+  "eligible_waivers" in request.value.context && request.value.context.eligible_waivers.some((eligible) => isDeepStrictEqual13(eligible.rule, origin2.rule) && isDeepStrictEqual13(eligible.scope, origin2.scope)) && validateDurableSemantics({ gate_request: request, gate_decision: decision2 }).ok;
 }
 async function handleWaiver(call, context2) {
   return mapHandlerErrors(context2.invocation_id, async () => {
