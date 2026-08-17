@@ -1,6 +1,6 @@
 # OVERVIEW
 
-**Explored:** 2026-08-13 · **Commit:** `247df34` · **Covers:** the whole repository
+**Explored:** 2026-08-16 · **Commit:** `d60da73` · **Covers:** the whole repository
 
 ArchFlow is a governed development workflow for AI coding agents. A *task* moves through fixed stages — PRD → design → per-phase design → per-phase implementation — and at every stage the agent must produce an artifact, review it, survive an adversarial review by a **different model family**, and then stop and ask a human. The system's core belief, stated plainly:
 
@@ -16,7 +16,7 @@ The system is one codebase with three faces. Understanding which face does what 
 |---|---|---|
 | **Skills** (`skills/archflow-*`) | Prose playbooks the agent follows (`/archflow-prd`, `/archflow-phase-impl`, …) | Nothing. They are instructions, not enforcement. |
 | **`archflow-local` CLI** (`src/local/`) | A local helper that *composes* requests and reads status — including a read-only classification when the server is down | Deriving mechanical fields correctly. It writes almost nothing. |
-| **`archflow-mcp` MCP server** (`src/mcp/`, `src/state/`, …) | A stdio MCP server exposing four tools | Everything. It is the sole writer of durable state and the sole judge of validity. |
+| **`archflow-mcp` MCP server** (`src/mcp/`, `src/state/`, …) | A stdio MCP server advertising six purpose-described tools: two semantic workflow tools over four durable low-level tools | Everything. It is the sole writer of durable state and the sole judge of validity. |
 
 A subtlety worth naming immediately: the `archflow-mcp` binary has **no CLI mode** — it is always a stdio MCP server. The word "CLI" appears in two other senses: `archflow-local` (the helper above), and `src/dispatch/cli.ts`, which spawns the *external* `claude` and `codex` command-line tools as child processes to run counter-reviews.
 
@@ -27,7 +27,7 @@ flowchart TB
     Human([Human])
     Agent["Agent session<br/>(Claude Code or Codex)<br/>following a skill"]
     Local["archflow-local CLI<br/>composes requests, reads status"]
-    MCP["archflow-mcp server<br/>4 MCP tools — the authority"]
+    MCP["archflow-mcp server<br/>6 advertised / 4 durable tools"]
     State[("tracked .archflow authority<br/>state, decisions, manifests,<br/>canonical documents")]
     Work[("ignored .archflow/runtime<br/>requests, cache, diagnostics")]
     Child["Opposite-family reviewer<br/>claude or codex child process,<br/>sealed envelope + read-only checkout"]
@@ -42,7 +42,9 @@ flowchart TB
     Child -->|"verdict + findings"| MCP
 ```
 
-The loop the agent lives in is simple: run `archflow-local status --task <task>`, get **exactly one** `next_action`, compose the request for it with `archflow-local build-request`, call the matching MCP tool with the returned four-field staged reference (`{schema_version, task_id, intent_id, request_digest}` — the server rehydrates the staged bytes and fails closed on any mismatch; copying `request.input` verbatim is the fallback), repeat. The agent supplies judgment (findings, rationales, prose); the tooling supplies every mechanical field (digests, fingerprints, revisions, routing). Phase boundaries use the same loop: human approval is recorded first, task design and phase design then make the recoverable task-local milestone commit already authorized by that approval, and the producer automatically composes the separate `advance` request and verifies the successor phase before returning. If a session ended between those facts, status names the exact pending action and renders the destination skill in both Claude (`/archflow-*`) and Codex (`$archflow-*`) syntax.
+Two client loops coexist during the API migration. PRD, task design, and phase design use `archflow_status` for one reconciled, read-only view and `archflow_apply` for exactly one server-offered document action. The offer hides revisions, digests, gate bindings, and request composition while keeping the client responsible for authored production and triage submissions. Phase implementation and `/archflow-status` still use `archflow-local status` / `build-request` and the four low-level tools. Git also remains client-owned: the semantic façade can expose an exact commit instruction, but it does not stage or commit repository bytes.
+
+The boundary is intentionally exact. Generic `archflow_status` is a common read-only view and mints no mutation offer. A producing invocation can own only its current document phase, except that the exact server-named successor skill may finish an authenticated hand-off. One `archflow_apply` call executes one bounded offered action and returns a fresh view; it never chooses or loops into the next action.
 
 ## The evidence pipeline
 

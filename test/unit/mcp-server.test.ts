@@ -33,6 +33,15 @@ const stateSuccess = {
   ok: true,
   value: { path: "phases/3/result.json", revision: 3, status: "succeeded" }
 } as const;
+const semanticView = {
+  schema_version: "1",
+  task_id: "task-1",
+  condition: "ready",
+  headline: "Ready",
+  detail: "Inspect the current workflow.",
+  resources: [],
+  next_action: { kind: "inspect", instruction: "Inspect status." },
+} as const;
 const counterReviewInput = {
   schema_version: "1",
   task_id: "task-1",
@@ -188,6 +197,31 @@ describe("SDK-free MCP tool boundary", () => {
     });
     expect(() => assertAuthenticToolBoundaryOutcome({ ...disabled })).toThrow(/authentic tool boundary outcome/);
     expect(() => assertAuthenticToolBoundaryOutcome(structuredClone(disabled) as never)).toThrow(/authentic tool boundary outcome/);
+  });
+
+  it("parses semantic inputs and validates compact semantic results on a separate boundary branch", async () => {
+    let observed: unknown;
+    const boundary = createToolBoundary({
+      archflow_status: (input) => {
+        observed = input;
+        return { schema_version: "1", ok: true, value: semanticView };
+      },
+    });
+    const invocation = context("semantic-boundary-1");
+    const input = { schema_version: "1", task_id: "task-1" };
+    const success = await boundary.invoke("archflow_status", input, invocation);
+    expect(success).toMatchObject({ kind: "semantic-result", tool: "archflow_status", result: { ok: true, value: semanticView } });
+    expect(observed).toEqual(input);
+    expect(observed).not.toBe(input);
+    expect(() => assertAuthenticToolBoundaryOutcome(success)).not.toThrow();
+
+    const invalid = await boundary.invoke("archflow_status", { ...input, intent_id: "mechanical-field" }, invocation);
+    expect(invalid).toMatchObject({ kind: "semantic-result", tool: "archflow_status", result: { ok: false, error: { code: "CONTRACT_INVALID" } } });
+    const disabled = await createToolBoundary({}).invoke("archflow_apply", {
+      schema_version: "1", task_id: "task-1", invocation: { skill: "archflow-prd", intent: "resume" },
+      action: { offer: `af1_${"a".repeat(64)}` },
+    }, invocation);
+    expect(disabled).toMatchObject({ kind: "protocol-error", error: { value: { code: "TOOL_DISABLED", diagnostic: { parameters: { tool: "archflow_apply" } } } } });
   });
 
   it("classifies missing, non-object, and portable-shaped runtime-invalid known input before inert availability", async () => {

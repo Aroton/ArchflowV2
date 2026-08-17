@@ -134,6 +134,24 @@ describe("MCP SDK adapter", () => {
     await runtime.handle.close();
   });
 
+  it("serves an injected semantic handler through the compact result envelope", async () => {
+    const view = {
+      schema_version: "1", task_id: "task-1", condition: "ready", headline: "Ready", detail: "Continue.", resources: [],
+      next_action: { kind: "inspect", instruction: "Inspect status." },
+    } as const;
+    const runtime = await harness({
+      archflow_status: () => ({ schema_version: "1", ok: true, value: view }),
+    });
+    await ready(runtime);
+    runtime.send({ jsonrpc: "2.0", id: "semantic", method: "tools/call", params: { name: "archflow_status", arguments: { schema_version: "1", task_id: "task-1" } } });
+    await runtime.waitForLines(2);
+    expect(JSON.parse(runtime.lines[1]!)).toMatchObject({
+      id: "semantic",
+      result: { structuredContent: { schema_version: "1", ok: true, value: view }, isError: false },
+    });
+    await runtime.handle.close();
+  });
+
   it("captures the connection only through the SDK initialized hook and answers -32603 before it", async () => {
     const runtime = await harness();
     runtime.send(initialize("init"));

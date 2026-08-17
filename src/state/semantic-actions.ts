@@ -41,7 +41,11 @@ export class SemanticActionPlanError extends TypeError {
   }
 }
 
-export type SemanticExecutionKind = "compose-request" | "counter-review-handler" | "deferred";
+export type SemanticExecutionKind =
+  | "compose-request"
+  | "counter-review-handler"
+  | "decision-archive"
+  | "decision-settle";
 export type SemanticActionPlanV1 = Readonly<{
   action_kind: SemanticActionKindV1;
   /** Present on the starting offer; a fresh continuation recovers the authenticated digest instead. */
@@ -55,7 +59,7 @@ export type SemanticActionPlanV1 = Readonly<{
   request_facts?: PlainJsonValue;
   task_ask?: string;
   reopening_request?: string;
-  deferred_reason?: string;
+  decision_submission?: Extract<ApplySubmissionV1, { readonly kind: "decision" }>;
   revision_checkpoint?: true;
 }>;
 
@@ -104,6 +108,12 @@ function operationKey(
     ...(offer.subject_digest === undefined ? {} : { subject_digest: offer.subject_digest }),
     submission_digest: submissionDigest,
   });
+}
+
+function markerField(value: PlainJsonValue | undefined, field: string): unknown {
+  if (value === undefined || value === null || Array.isArray(value) || typeof value !== "object") return undefined;
+  const descriptor = Object.getOwnPropertyDescriptor(value, field);
+  return descriptor?.enumerable === true && "value" in descriptor ? descriptor.value : undefined;
 }
 
 export function semanticOperationDigest(key: SemanticOperationKeyV1): Sha256Digest {
@@ -173,6 +183,65 @@ function authenticatedSemanticReviewContinuation(state: TaskStateV1, expectedSub
   return identity.operation_digest;
 }
 
+function authenticatedSemanticTriageContinuation(state: TaskStateV1): Sha256Digest | undefined {
+  if (state.step !== "triage" || state.status !== "running") return undefined;
+  const transition = state.last_transition;
+  if (transition === undefined || !transition.intent_id.startsWith("afop-")) return undefined;
+  let identity: ReturnType<typeof parseSemanticSubstepIntentId>;
+  try { identity = parseSemanticSubstepIntentId(transition.intent_id); }
+  catch { throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "semantic triage entry has an invalid intent identity"); }
+  if (identity.substep !== "triage-enter" || !authenticateSemanticLastTransition(
+    state, identity.operation_digest, identity.substep,
+    { tool: "archflow_state", operation: "record-state-boundary", input_fingerprint: state.input_fingerprint },
+  )) throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "triage continuation does not authenticate its entry boundary");
+  return identity.operation_digest;
+}
+
+function authenticatedSemanticRevisionContinuation(
+  state: TaskStateV1,
+): Readonly<{ operation_digest: Sha256Digest; entry_kind: "state" | "gate"; predecessor_attempts: readonly number[] }> | undefined {
+  if (state.step !== "produce" || state.status !== "running") return undefined;
+  const transition = state.last_transition;
+  if (transition === undefined || !transition.intent_id.startsWith("afop-")) return undefined;
+  let identity: ReturnType<typeof parseSemanticSubstepIntentId>;
+  try { identity = parseSemanticSubstepIntentId(transition.intent_id); }
+  catch { throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "semantic revision entry has an invalid intent identity"); }
+  if (identity.substep !== "revise-enter") return undefined;
+  if (transition.resulting_revision !== state.revision) {
+    throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "revision continuation does not authenticate its entry boundary");
+  }
+  const gateEntry = authenticateSemanticLastTransition(state, identity.operation_digest, identity.substep, {
+    tool: "archflow_gate", operation: "semantic-revision-enter", input_fingerprint: state.input_fingerprint,
+  });
+  const stateEntry = authenticateSemanticLastTransition(state, identity.operation_digest, identity.substep, {
+    tool: "archflow_state", operation: "record-state-boundary", input_fingerprint: state.input_fingerprint,
+  });
+  if (!gateEntry && !stateEntry) {
+    throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "revision continuation does not authenticate its entry boundary");
+  }
+  if (gateEntry) {
+    const predecessor = markerField(transition.outcome, "predecessor_attempt");
+    if (!Number.isSafeInteger(predecessor) || Number(predecessor) < 1 ||
+        (predecessor !== state.attempt && predecessor !== state.attempt - 1)) {
+      throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "revision entry does not authenticate its predecessor attempt");
+    }
+    return Object.freeze({
+      operation_digest: identity.operation_digest, entry_kind: "gate",
+      predecessor_attempts: Object.freeze([Number(predecessor)]),
+    });
+  }
+  // A legal state-boundary revise either preserves the attempt or increments it once. The
+  // operation digest authenticates which predecessor offer was actually used; trying this closed
+  // pair does not grant either candidate unless its complete operation key hashes to that digest.
+  return Object.freeze({
+    operation_digest: identity.operation_digest, entry_kind: "state",
+    predecessor_attempts: Object.freeze([
+      state.attempt,
+      ...(state.attempt > 1 ? [state.attempt - 1] : []),
+    ]),
+  });
+}
+
 function reviewSubsteps(snapshot: SemanticStatusSnapshotV1): readonly SemanticSubstepV1[] {
   const state = snapshot.state;
   if (state === undefined) throw new SemanticActionPlanError("SEMANTIC_ACTION_UNSUPPORTED", "review requires active durable state");
@@ -182,6 +251,10 @@ function reviewSubsteps(snapshot: SemanticStatusSnapshotV1): readonly SemanticSu
   }
   if (state.step === "counter_review" && state.status === "succeeded" && snapshot.full_findings.length === 0) {
     authenticatedSemanticReviewContinuation(state, "review-run");
+    return Object.freeze(["review-empty-triage"]);
+  }
+  if (state.step === "triage" && state.status === "running" && snapshot.full_findings.length === 0) {
+    authenticatedSemanticTriageContinuation(state);
     return Object.freeze(["review-empty-triage"]);
   }
   return Object.freeze(["review-enter", "review-run", "review-empty-triage"]);
@@ -220,7 +293,7 @@ function requestFacts(
   substep: SemanticSubstepV1,
   intentId: PathSafeId,
   submission: ApplySubmissionV1 | undefined,
-): Readonly<{ execution: SemanticExecutionKind; facts?: PlainJsonValue; reason?: string }> {
+): Readonly<{ execution: SemanticExecutionKind; facts?: PlainJsonValue }> {
   switch (action) {
     case "initialize-task":
       if (submission?.kind !== "task-ask") throw new TypeError("validated task ask is unavailable");
@@ -251,9 +324,12 @@ function requestFacts(
     case "reopen":
       return { execution: "compose-request" };
     case "decide":
-      if (submission?.kind === "decision") return { execution: "deferred", reason: "decision archive and settlement execution is deferred until the nonblocking decision service is extracted in Phase 2" };
-      if (submission === undefined) return { execution: "deferred", reason: "decision settlement is deferred until the nonblocking decision service is extracted in Phase 2" };
-      if (submission.kind !== "gate-summary") throw new TypeError("validated gate summary is unavailable");
+      if (substep === "decision-archive") {
+        if (submission?.kind !== "decision") throw new TypeError("validated decision submission is unavailable");
+        return { execution: "decision-archive" };
+      }
+      if (substep === "decision-settle") return { execution: "decision-settle" };
+      if (submission?.kind !== "gate-summary") throw new TypeError("validated gate summary is unavailable");
       return { execution: "compose-request", facts: { kind: "gate", intent_id: intentId, summary: submission.summary } };
     case "open-waiver":
       return { execution: "compose-request", facts: { kind: "waiver", intent_id: intentId } };
@@ -279,9 +355,46 @@ export function planSemanticAction(
     throw new SemanticActionPlanError("SEMANTIC_OFFER_STALE", "authenticated current action has no mutation offer for this invocation");
   }
   const expectedToken = semanticOfferToken(offer);
-  assertSubmissionMatches(offer.expected_submission, input.action.submission);
-  const key = operationKey(input.action.offer, offer, input.action.submission);
+  const archivedOperation = offer.action_kind === "decide" && markerField(snapshot.archived_decision, "status") === "exact"
+    ? markerField(snapshot.archived_decision, "operation_digest") as Sha256Digest | undefined
+    : undefined;
+  const revisionContinuation = snapshot.state === undefined ? undefined : authenticatedSemanticRevisionContinuation(snapshot.state);
+  if (revisionContinuation !== undefined && input.action.submission === undefined) {
+    const replay = revisionContinuation.predecessor_attempts.map((attempt) => {
+      const replayOffer = Object.freeze({
+        ...offer, action_kind: "revise" as const, expected_submission: "none" as const, attempt,
+      });
+      const key = operationKey(input.action.offer, replayOffer, undefined);
+      return Object.freeze({ key, digest: semanticOperationDigest(key) });
+    }).find((candidate) => candidate.digest === revisionContinuation.operation_digest);
+    if (replay !== undefined) {
+      const intentId = semanticSubstepIntentId(revisionContinuation.operation_digest, "revise-enter");
+      return Object.freeze({
+        action_kind: "revise", operation_key: replay.key, operation_digest: revisionContinuation.operation_digest,
+        invocation: input.invocation, substeps: Object.freeze(["revise-enter"] as const), next_substep: "revise-enter",
+        intent_id: intentId, execution: "compose-request",
+        request_facts: Object.freeze({ kind: "running", step: "produce", intent_id: intentId }),
+        ...(revisionContinuation.entry_kind === "gate" ? { revision_checkpoint: true as const } : {}),
+      });
+    }
+  }
+  const isArchivedDecisionRetry = archivedOperation !== undefined && input.action.submission?.kind === "decision";
+  if (!isArchivedDecisionRetry) assertSubmissionMatches(offer.expected_submission, input.action.submission);
+  let operationOffer = offer;
+  if (isArchivedDecisionRetry) {
+    const { archived_decision: _archive, ...beforeArchive } = snapshot;
+    const originalProjection = projectSemanticStatus(beforeArchive, input.invocation);
+    const originalOffer = originalProjection.internal_offer;
+    if (originalOffer === undefined || input.action.offer !== semanticOfferToken(originalOffer)) {
+      throw new SemanticActionPlanError("SEMANTIC_OFFER_STALE", "decision retry does not carry the original authenticated offer");
+    }
+    operationOffer = originalOffer;
+  }
+  const key = operationKey(input.action.offer, operationOffer, input.action.submission);
   const candidateOperationDigest = semanticOperationDigest(key);
+  if (isArchivedDecisionRetry && candidateOperationDigest !== archivedOperation) {
+    throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "decision retry does not reproduce the archived operation identity");
+  }
   let operationDigest = candidateOperationDigest;
   const substeps = fixedSubsteps(offer.action_kind, snapshot, offer.expected_submission);
   const nextSubstep = substeps[0]!;
@@ -291,21 +404,38 @@ export function planSemanticAction(
       ? "review-enter"
       : nextSubstep === "review-empty-triage" ? "review-run" : undefined;
     if (predecessor !== undefined) {
-      const recovered = authenticatedSemanticReviewContinuation(snapshot.state, predecessor);
+      const recovered = nextSubstep === "review-empty-triage" && snapshot.state.step === "triage"
+        ? authenticatedSemanticTriageContinuation(snapshot.state)
+        : authenticatedSemanticReviewContinuation(snapshot.state, predecessor);
       if (recovered !== undefined) {
         operationDigest = recovered;
         recoveredOperationDigest = recovered;
       }
     }
   }
+  if (offer.action_kind === "decide" && nextSubstep === "decision-settle" && archivedOperation !== undefined) {
+    operationDigest = archivedOperation;
+    recoveredOperationDigest = archivedOperation;
+  }
+  if (offer.action_kind === "triage" && snapshot.state !== undefined) {
+    const recovered = authenticatedSemanticTriageContinuation(snapshot.state);
+    if (recovered !== undefined) {
+      operationDigest = recovered;
+      recoveredOperationDigest = recovered;
+    }
+  }
   const currentOfferMatches = input.action.offer === expectedToken && projection.view.next_action.offer === expectedToken;
   const authenticatedOldReviewRetry = offer.action_kind === "review" &&
     recoveredOperationDigest !== undefined && candidateOperationDigest === recoveredOperationDigest;
-  if (!currentOfferMatches && !authenticatedOldReviewRetry) {
+  const authenticatedOldTriageRetry = offer.action_kind === "triage" &&
+    recoveredOperationDigest !== undefined && candidateOperationDigest === recoveredOperationDigest;
+  if (!currentOfferMatches && !authenticatedOldReviewRetry && !authenticatedOldTriageRetry && !isArchivedDecisionRetry) {
     throw new SemanticActionPlanError("SEMANTIC_OFFER_STALE", "semantic offer is stale or does not match the authenticated current action and invocation");
   }
   const intentId = semanticSubstepIntentId(operationDigest, nextSubstep);
-  const request = requestFacts(offer.action_kind, nextSubstep, intentId, input.action.submission);
+  const effectiveSubstep = isArchivedDecisionRetry ? "decision-archive" as const : nextSubstep;
+  const effectiveIntentId = semanticSubstepIntentId(operationDigest, effectiveSubstep);
+  const request = requestFacts(offer.action_kind, effectiveSubstep, effectiveIntentId, input.action.submission);
   const requestFactsValue = offer.action_kind === "reopen"
     ? {
         kind: "planning-restart",
@@ -323,13 +453,13 @@ export function planSemanticAction(
     operation_digest: operationDigest,
     invocation: input.invocation,
     substeps,
-    next_substep: nextSubstep,
-    intent_id: intentId,
+    next_substep: effectiveSubstep,
+    intent_id: effectiveIntentId,
     execution,
     ...(requestFactsValue === undefined ? {} : { request_facts: requestFactsValue }),
     ...(input.action.submission?.kind !== "task-ask" ? {} : { task_ask: input.action.submission.text }),
     ...(input.action.submission?.kind !== "reopening-request" ? {} : { reopening_request: input.action.submission.request }),
-    ...(request.reason === undefined ? {} : { deferred_reason: request.reason }),
+    ...(input.action.submission?.kind !== "decision" ? {} : { decision_submission: input.action.submission }),
   });
 }
 
@@ -342,7 +472,11 @@ export type SemanticActionExecutorCapabilities = Readonly<{
   stage_task_ask?: (input: StageTaskAskInput) => ReturnType<typeof stageTaskAsk>;
   /** Direct non-queued review handler service; the semantic action owns the outer FIFO. */
   run_counter_review?: (plan: SemanticActionPlanV1) => Promise<unknown>;
-  /** Recomputes one authenticated semantic snapshot after a completed durable substep. */
+  archive_decision?: (plan: SemanticActionPlanV1) => Promise<unknown>;
+  settle_decision?: (plan: SemanticActionPlanV1) => Promise<unknown>;
+  /** Reopens production services and status from one newly authenticated repository read. */
+  refresh_services?: () => Promise<Readonly<{ services: ProductionServices; snapshot: SemanticStatusSnapshotV1 }>>;
+  /** Compatibility seam for callers whose services are immutable test doubles. */
   refresh_snapshot?: () => Promise<SemanticStatusSnapshotV1>;
   /** Authenticates and consumes the Phase 2 close-only revision checkpoint. */
   enter_revision_checkpoint?: (plan: SemanticActionPlanV1) => Promise<unknown>;
@@ -411,8 +545,14 @@ export async function executeSemanticActionSubstep(
       outcome = await capabilities.run_counter_review(plan);
       break;
     }
-    case "deferred":
-      throw new SemanticActionPlanError("SEMANTIC_ACTION_UNSUPPORTED", plan.deferred_reason ?? "semantic action execution is deferred");
+    case "decision-archive":
+      if (capabilities.archive_decision === undefined) throw new SemanticActionPlanError("SEMANTIC_ACTION_UNSUPPORTED", "decision archive execution requires the direct decision capability");
+      outcome = await capabilities.archive_decision(plan);
+      break;
+    case "decision-settle":
+      if (capabilities.settle_decision === undefined) throw new SemanticActionPlanError("SEMANTIC_ACTION_UNSUPPORTED", "decision settlement execution requires the direct decision capability");
+      outcome = await capabilities.settle_decision(plan);
+      break;
   }
   return Object.freeze({ substep: plan.next_substep, intent_id: plan.intent_id, outcome });
 }
@@ -437,7 +577,23 @@ function substepPlan(original: SemanticActionPlanV1, substep: SemanticSubstepV1)
     intent_id: intentId,
     execution: request.execution,
     ...(request.facts === undefined ? {} : { request_facts: request.facts }),
-    ...(request.reason === undefined ? {} : { deferred_reason: request.reason }),
+  });
+}
+
+function triageEntryPlan(
+  original: SemanticActionPlanV1,
+): SemanticActionPlanV1 {
+  const substep = "triage-enter" as const;
+  const intentId = semanticSubstepIntentId(original.operation_digest, substep);
+  return Object.freeze({
+    action_kind: original.action_kind,
+    operation_digest: original.operation_digest,
+    invocation: original.invocation,
+    substeps: original.substeps,
+    next_substep: substep,
+    intent_id: intentId,
+    execution: "compose-request",
+    request_facts: Object.freeze({ kind: "running", step: "triage", intent_id: intentId }),
   });
 }
 
@@ -446,6 +602,31 @@ function requireRefresh(capabilities: SemanticActionExecutorCapabilities): NonNu
     throw new SemanticActionPlanError("SEMANTIC_ACTION_UNSUPPORTED", "semantic action execution requires authenticated post-substep status refresh");
   }
   return capabilities.refresh_snapshot;
+}
+
+async function refreshExecution(
+  currentServices: ProductionServices,
+  capabilities: SemanticActionExecutorCapabilities,
+): Promise<Readonly<{ services: ProductionServices; snapshot: SemanticStatusSnapshotV1 }>> {
+  if (capabilities.refresh_services !== undefined) return capabilities.refresh_services();
+  return Object.freeze({ services: currentServices, snapshot: await requireRefresh(capabilities)() });
+}
+
+function failedProjectResult(value: unknown): value is ProjectResult<never> & { readonly ok: false } {
+  return value !== null && typeof value === "object" &&
+    Object.getOwnPropertyDescriptor(value, "ok")?.value === false &&
+    Object.getOwnPropertyDescriptor(value, "schema_version")?.value === "1";
+}
+
+export class SemanticActionExecutionError extends Error {
+  public constructor(public readonly result: ProjectResult<never> & { readonly ok: false }) {
+    super(`${result.error.code}: ${JSON.stringify(result.error.diagnostic.parameters)}`);
+    this.name = "SemanticActionExecutionError";
+  }
+}
+
+function assertSubstepSucceeded(result: SemanticSubstepExecutionResult): void {
+  if (failedProjectResult(result.outcome)) throw new SemanticActionExecutionError(result.outcome);
 }
 
 function assertCompletedReviewSubstep(snapshot: SemanticStatusSnapshotV1, digestValue: Sha256Digest, substep: "review-enter" | "review-run" | "review-empty-triage"): void {
@@ -461,17 +642,28 @@ function assertCompletedReviewSubstep(snapshot: SemanticStatusSnapshotV1, digest
   }
 }
 
+function assertEmptyTriageEntered(snapshot: SemanticStatusSnapshotV1, digestValue: Sha256Digest): void {
+  const state = snapshot.state;
+  if (state === undefined || state.step !== "triage" || state.status !== "running" ||
+      !authenticateSemanticLastTransition(state, digestValue, "triage-enter", {
+        tool: "archflow_state", operation: "record-state-boundary", input_fingerprint: state.input_fingerprint,
+      })) {
+    throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "empty triage did not enter its authenticated running boundary");
+  }
+}
+
 async function executeReviewAction(
   services: ProductionServices,
   initial: SemanticActionPlanV1,
   capabilities: SemanticActionExecutorCapabilities,
 ): Promise<WorkflowViewV1> {
-  const refresh = requireRefresh(capabilities);
+  let currentServices = services;
   let current = initial;
   let snapshot: SemanticStatusSnapshotV1 | undefined;
   if (current.next_substep === "review-enter") {
-    await executeSemanticActionSubstep(services, current, capabilities);
-    snapshot = await refresh();
+    const executed = await executeSemanticActionSubstep(currentServices, current, capabilities);
+    assertSubstepSucceeded(executed);
+    ({ services: currentServices, snapshot } = await refreshExecution(currentServices, capabilities));
     assertCompletedReviewSubstep(snapshot, initial.operation_digest, "review-enter");
     if (projectSemanticStatus(snapshot, initial.invocation).view.next_action.kind !== "review") {
       throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "review-enter did not land at the review-run continuation");
@@ -479,8 +671,9 @@ async function executeReviewAction(
     current = substepPlan(initial, "review-run");
   }
   if (current.next_substep === "review-run") {
-    await executeSemanticActionSubstep(services, current, capabilities);
-    snapshot = await refresh();
+    const executed = await executeSemanticActionSubstep(currentServices, current, capabilities);
+    assertSubstepSucceeded(executed);
+    ({ services: currentServices, snapshot } = await refreshExecution(currentServices, capabilities));
     assertCompletedReviewSubstep(snapshot, initial.operation_digest, "review-run");
     const postReview = projectSemanticStatus(snapshot, initial.invocation).view;
     if (snapshot.full_findings.length > 0) {
@@ -491,11 +684,69 @@ async function executeReviewAction(
     current = substepPlan(initial, "review-empty-triage");
   }
   if (current.next_substep === "review-empty-triage") {
-    await executeSemanticActionSubstep(services, current, capabilities);
-    snapshot = await refresh();
+    if (snapshot === undefined) ({ services: currentServices, snapshot } = await refreshExecution(currentServices, capabilities));
+    if (snapshot.state?.step === "counter_review" && snapshot.state.status === "succeeded") {
+      const entered = await executeSemanticActionSubstep(currentServices, triageEntryPlan(initial), capabilities);
+      assertSubstepSucceeded(entered);
+      ({ services: currentServices, snapshot } = await refreshExecution(currentServices, capabilities));
+      assertEmptyTriageEntered(snapshot, initial.operation_digest);
+    }
+    const executed = await executeSemanticActionSubstep(currentServices, current, capabilities);
+    assertSubstepSucceeded(executed);
+    ({ services: currentServices, snapshot } = await refreshExecution(currentServices, capabilities));
     assertCompletedReviewSubstep(snapshot, initial.operation_digest, "review-empty-triage");
   }
-  if (snapshot === undefined) snapshot = await refresh();
+  if (snapshot === undefined) ({ snapshot } = await refreshExecution(currentServices, capabilities));
+  return projectSemanticStatus(snapshot, initial.invocation).view;
+}
+
+async function executeTriageAction(
+  services: ProductionServices,
+  snapshot: SemanticStatusSnapshotV1,
+  plan: SemanticActionPlanV1,
+  capabilities: SemanticActionExecutorCapabilities,
+): Promise<WorkflowViewV1> {
+  let currentServices = services;
+  let currentSnapshot = snapshot;
+  if (currentSnapshot.state?.step === "counter_review" && currentSnapshot.state.status === "succeeded") {
+    const entered = await executeSemanticActionSubstep(
+      currentServices, triageEntryPlan(plan), capabilities,
+    );
+    assertSubstepSucceeded(entered);
+    ({ services: currentServices, snapshot: currentSnapshot } = await refreshExecution(currentServices, capabilities));
+    const state = currentSnapshot.state;
+    if (state === undefined || state.step !== "triage" || state.status !== "running" ||
+        !authenticateSemanticLastTransition(state, plan.operation_digest, "triage-enter", {
+          tool: "archflow_state", operation: "record-state-boundary", input_fingerprint: state.input_fingerprint,
+        })) throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "triage did not enter its authenticated running boundary");
+  }
+  const completed = await executeSemanticActionSubstep(currentServices, plan, capabilities);
+  assertSubstepSucceeded(completed);
+  ({ snapshot: currentSnapshot } = await refreshExecution(currentServices, capabilities));
+  return projectSemanticStatus(currentSnapshot, plan.invocation).view;
+}
+
+async function executeDecisionAction(
+  services: ProductionServices,
+  initial: SemanticActionPlanV1,
+  capabilities: SemanticActionExecutorCapabilities,
+): Promise<WorkflowViewV1> {
+  let currentServices = services;
+  let snapshot: SemanticStatusSnapshotV1;
+  let current = initial;
+  if (current.next_substep === "decision-archive") {
+    const archived = await executeSemanticActionSubstep(currentServices, current, capabilities);
+    assertSubstepSucceeded(archived);
+    ({ services: currentServices, snapshot } = await refreshExecution(currentServices, capabilities));
+    const continuation = projectSemanticStatus(snapshot, initial.invocation);
+    if (continuation.view.next_action.kind !== "decide" || continuation.internal_offer?.expected_submission !== "none") {
+      throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "decision archive did not land at authenticated settlement");
+    }
+    current = substepPlan(initial, "decision-settle");
+  }
+  const settled = await executeSemanticActionSubstep(currentServices, current, capabilities);
+  assertSubstepSucceeded(settled);
+  ({ snapshot } = await refreshExecution(currentServices, capabilities));
   return projectSemanticStatus(snapshot, initial.invocation).view;
 }
 
@@ -519,9 +770,14 @@ export async function executeSemanticAction(
     // replay check, dispatch, and commit as one critical section and must never nest the queue.
     return serializeDispatch(() => executeReviewAction(services, plan, capabilities));
   }
-  await executeSemanticActionSubstep(services, plan, capabilities);
-  const refreshed = await requireRefresh(capabilities)();
-  return projectSemanticStatus(refreshed, plan.invocation).view;
+  if (plan.action_kind === "triage") return executeTriageAction(services, snapshot, plan, capabilities);
+  if (plan.action_kind === "decide" && (plan.next_substep === "decision-archive" || plan.next_substep === "decision-settle")) {
+    return executeDecisionAction(services, plan, capabilities);
+  }
+  const executed = await executeSemanticActionSubstep(services, plan, capabilities);
+  assertSubstepSucceeded(executed);
+  const refreshed = await refreshExecution(services, capabilities);
+  return projectSemanticStatus(refreshed.snapshot, plan.invocation).view;
 }
 
 /** Composes one low-level request; it never invokes a handler or applies a returned offer. */
@@ -530,7 +786,7 @@ export async function composeSemanticActionRequest(
   plan: SemanticActionPlanV1,
 ): Promise<ProjectResult<ComposedRequest>> {
   if (plan.execution !== "compose-request" && plan.execution !== "counter-review-handler") {
-    throw new SemanticActionPlanError("SEMANTIC_ACTION_UNSUPPORTED", plan.deferred_reason ?? `${plan.execution} requires its dedicated service`);
+    throw new SemanticActionPlanError("SEMANTIC_ACTION_UNSUPPORTED", `${plan.execution} requires its dedicated service`);
   }
   if (plan.request_facts === undefined) throw new TypeError("semantic request plan has no request facts");
   return composeRequest(services, plan.request_facts);

@@ -1,8 +1,10 @@
 # cli/COMMANDS
 
-**Explored:** 2026-08-16 · **Commit:** `3a190c1` · **Covers:** `src/local/`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
+**Explored:** 2026-08-16 · **Commit:** `d60da73` · **Covers:** `src/local/`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
 
 `archflow-local` is the agent's local helper: it composes requests and reads status — including a read-only classification of where a task stands when the MCP server is unavailable. It is deliberately *not* the authority — with one narrow exception (task initialization staging inside `build-request`), it derives and verifies rather than writes.
+
+During the semantic API migration this CLI remains the adapter for phase implementation and the `archflow-status` skill. PRD, design, and phase design instead use `archflow_status` and `archflow_apply`, which call the same request-composition and durable services behind a one-action façade. The CLI remains relevant for diagnostics and degraded read-only status; the semantic tools do not turn it into a second authority. Git stays client-owned on both paths.
 
 A packaging note that trips up maintainers: there is no `bin` entry in `package.json`. `install.sh` writes a shell shim into `~/.local/bin` that execs `node dist/archflow-local.mjs`; the source of truth is `src/local/main.ts`.
 
@@ -60,7 +62,7 @@ Initialization diagnostics also list generated ArchFlow assets hidden by an ance
 
 Every ArchFlow MCP call is a large object whose fields the server checks byte-for-byte. Hand-assembling those fields was measured to be the dominant failure mode — in a full PRD loop, 8 of 10 requests were mechanical transcription, with only findings and dispositions being genuine judgment. Transcription can only *introduce* errors (`TRANSITION_INVALID`, `INPUT_FINGERPRINT_MISMATCH`); it can never add value.
 
-So `build-request` inverts the contract: **the caller supplies only judgment; the tool derives everything mechanical** from the same durable authorities the server will check against. The derivation now lives in transport-neutral `src/state/request-composition.ts`; `src/local/build-request.ts` is a thin adapter that opens production services, calls `composeRequest`, and renders the result. Internal semantic action planning calls the same service, so the CLI and future MCP façade do not maintain parallel request builders.
+So `build-request` inverts the contract: **the caller supplies only judgment; the tool derives everything mechanical** from the same durable authorities the server will check against. The derivation now lives in transport-neutral `src/state/request-composition.ts`; `src/local/build-request.ts` is a thin adapter that opens production services, calls `composeRequest`, and renders the result. Semantic action planning calls the same service, so the CLI and live MCP façade do not maintain parallel request builders.
 
 ```mermaid
 flowchart LR
@@ -86,7 +88,7 @@ Properties worth knowing:
 - `initialize` is the documented exception: the only composer that writes (it must stage the task before a fingerprint can resolve), legal only before durable state exists. Its envelope carries **no** `staged` block — there is no durable task directory yet to hold a staged file — so the create-task call is the one place `request.input` is passed verbatim by design, as typed JSON (`artifact` an object, `expected_revision` the number `0`).
 - A contract test pins that every prefill the server emits maps onto a composer kind — "the one door" is literally true, not aspirational.
 
-The Phase 1 semantic contracts do not add CLI commands. `build-request` retains the legacy composition kinds and adds bounded `failed`, `planning-restart`, and no-submission `waiver` kinds used by the internal semantic executor. The low-level `archflow_state` planning-restart arm remains an additive migration adapter, not a fifth MCP tool. Only direct human-decision archive/settlement remains deferred to Phase 2.
+The semantic façade adds no CLI commands. `build-request` retains the legacy composition kinds and the bounded `failed`, `planning-restart`, and no-submission `waiver` kinds shared with semantic execution. The low-level `archflow_state` planning-restart arm remains an additive migration adapter, not a new durable tool identity. Direct human decisions now use nonblocking server-owned archive and settlement services on the semantic path.
 
 For a pending hand-off, `next_action` keeps `phase_instance` honest as the current durable predecessor while adding the derived `target_phase_instance` and exact `skill_args`. Human-facing status renders both `Claude: /<skill> <task> <args...>` and `Codex: $<skill> <task> <args...>` from those fields; it never routes the user back to the skill that already finished and emits no command at terminal completion. Design approval also introduces `commit-artifacts` with its exact task path, message, target ref, and baseline; that action is nonhuman because the resolved gate already supplied authority.
 

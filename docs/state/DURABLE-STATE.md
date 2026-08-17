@@ -1,6 +1,6 @@
 # state/DURABLE-STATE
 
-**Explored:** 2026-08-16 · **Commit:** `3a190c1` · **Covers:** `src/state/`, `src/repository/`, `src/init/`, `src/local/`
+**Explored:** 2026-08-16 · **Commit:** `d60da73` · **Covers:** `src/state/`, `src/repository/`, `src/init/`, `src/local/`, `src/mcp/handlers/semantic.ts`
 
 Durable state is ArchFlow's memory and authority, but not every file the workflow uses deserves that status. The repository now separates tracked, reviewable authority from an ignored workspace containing bytes that are transient, reconstructible, or useful only for diagnosis.
 
@@ -57,6 +57,8 @@ Gate archives are append-only authority across compatible software updates. The 
 
 ## Transactions and exact replay
 
+Semantic human decisions preserve append-only gate authority without a blocking file wait. `decision-archive` writes the immutable connected-host decision under an operation-bound identity, and `decision-settle` re-authenticates the request and archive before changing state. Revision settlement is close-only and leaves a durable checkpoint; it does not reopen the write window, so `revise-enter` must commit before writable document resources reappear.
+
 All state changes still pass through the transaction kernel under a task-local lock and revision compare-and-swap. Before state replacement, request staging and crash receipts live below ignored `runtime/tasks/<task>/transient/`; they are recovery buffers, not long-lived records.
 
 ```mermaid
@@ -97,6 +99,8 @@ Cleanup runs at explicit lifecycle boundaries:
 A cleanup failure never rolls back committed authority. Full status reports the non-blocking `workspace.cleanup_pending` condition; brief status includes workspace only while it is pending. The next mutation retries cleanup, and `archflow-local clean --task <id>` provides an input-free manual retry that reports removed and retained file/byte counts. It removes only unreferenced authority and stale or reconstructible runtime data.
 
 ## State machine, gates, and Git boundary
+
+The semantic façade preserves the pipeline entry edges rather than collapsing them. Both submitted triage and review's zero-finding continuation record `triage: running` before terminal triage. Semantic review serializes replay, dispatch, and commit under one outer FIFO while using the counter-review handler's direct inner seam.
 
 The pipeline remains `produce → counter_review → triage`; accepted findings return to produce, and successful triage advances only after required human gates. Gate resolution and phase advancement are separate state commits. Design adds a third recoverable fact between them: the task-local milestone commit authorized by the combined gate. Status exposes `commit-artifacts` until Git proves that exact commit, then exposes the successor and the producer composes the judgment-free `advance` request. If the session ended in between, the same skill resumes the pending commit or the exact destination skill completes the authenticated hand-off. No code is written before phase-design approval. Implementation commits still require durable `commit-authorization` plus their separate explicit Git confirmation; design milestone commits require no second prompt because the one `design-approval` explicitly authorizes them.
 

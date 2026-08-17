@@ -1,6 +1,6 @@
 # workflow/LIFECYCLE
 
-**Explored:** 2026-08-16 · **Commit:** `3a190c1` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/state/semantic-*.ts`, `skills/`
+**Explored:** 2026-08-16 · **Commit:** `d60da73` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/state/semantic-*.ts`, `src/mcp/handlers/semantic.ts`, `skills/`
 
 How a task moves from idea to committed code, and where a human must decide.
 
@@ -51,6 +51,8 @@ Every gated stage runs the same evidence pipeline to a fixed point:
 
    The constitution verdict is never triaged. For PRD and phase implementation, a failing or uncertain rule, matched `review_trigger`, or material drift opens a human gate after triage. For task design and phase design, those same findings are carried into the final `design-approval` presentation with their rationale and evidence, so the human gets one self-contained decision rather than a constitution decision followed by document approval.
 
+On the semantic document path, both an explicit triage submission and review's empty-finding fast path first record `triage: running` through the authenticated `triage-enter` substep. Terminal triage therefore never appears without its normal state-machine entry boundary.
+
 Editing the artifact changes the subject digest, which normally invalidates all downstream evidence — the pipeline re-runs until everything agrees about the same bytes. Re-entry is bounded (`max_attempts`, default 3); exhaustion opens an `attempts-exhausted` gate rather than looping forever. A significant human revision begins a new cycle at attempt 1, so exhaustion counts only attempts since the latest such revision.
 
 **What actually ends the loop is triage, not the finding count.** The exit condition is `accepted_count === 0` — a plain `accepted` disposition is the only thing that forces another round (`src/review/fixed-point.ts`). A model-labeled blocker that triage rejects does not continue the loop. The producer accepts every material defect and rejects anything that cannot show a concrete downstream consequence. On later rounds the sealed instruction makes remediation verification primary and permits a new issue only when leaving it unchanged is reasonably likely to change behavior, verification, delivery, approval, or important risk.
@@ -77,7 +79,7 @@ Beyond the forward hand-off (each succeeded step to its successor, same attempt)
 
 The phase-completion signal fires from **triage-succeeded**: once triage closes the fixed point, the phase can advance — for phase-impl that is what arms the commit-authorization flow, and the legacy-import design jump fires from the same point. `advance-phase` and `complete-task` are executable actions, not reports: `build-request` kind `advance` recomputes status, derives the successor, and stages the existing `archflow_state` operation. PRD re-verifies `artifact-approval`. Design boundaries re-verify `design-approval` and refuse to advance until Git proves the approved task-local commit is the direct child of the bound baseline, contains every document in the approved result plus durable decision authority, touches no other task, and leaves the task root clean.
 
-An interrupted handoff has two authenticated owners: the current producer can complete the automatic advance, and a resume invocation for the exact server-derived successor may recover it. A different phase number or skill receives the current view but no mutation offer.
+An interrupted handoff has two authenticated owners: the current producer can complete the automatic advance, and a resume invocation for the exact server-derived successor may recover it. Semantic ownership implements that literally: `start-next-skill` is offerable only to the exact successor invocation, while ordinary actions belong only to the current document owner. A different phase number or skill receives the common view but no mutation offer.
 
 ### Reopening earlier planning work
 
@@ -101,7 +103,7 @@ Nine gate kinds exist (`src/contracts/gates.ts`):
 | `restore-collision` | a drift repair would overwrite conflicting bytes |
 | `migration-audit` | an atomically adopted legacy import has completed its automatic design review and triage; one decision binds every imported document digest, phase plan, commit authority, and the derived phase-design or phase-implementation resume point |
 
-Every gate is a durable pair of canonical documents (request + decision record) bound to a gate ID, context digest, subject digest, and the current evidence set. Decisions carry human provenance. Two properties keep them honest:
+Every gate is a durable pair of canonical documents (request + decision record) bound to a gate ID, context digest, subject digest, and the current evidence set. Decisions carry human provenance. The semantic path archives a connected-host decision immutably and settles it in a separate nonblocking substep. A revision settlement closes the gate only; writable document resources stay hidden until `revise-enter` separately opens production. Two properties keep decisions honest:
 
 - **Supersession**: if the subject changes while a gate is open, the gate returns `GATE_SUPERSEDED` and approves nothing — the work re-enters the pipeline and a fresh gate opens.
 - **Re-verification**: later code never trusts a recorded approval reference alone; it re-reads and re-validates the underlying documents.
@@ -121,4 +123,4 @@ These rules recur across every skill and are enforced by the server wherever mec
 
 ## Where this is heading
 
-The lifecycle above remains the current four-tool, MCP-backed workflow. Phase 1 now contains an internal semantic status/view/action foundation that can express this lifecycle without exposing mechanical authority, but it is not advertised and no skill uses it yet. Initialization, failed production, planning restart, and pending-waiver opening already compose through shared bounded services. Phase 2 must expose the status/apply surface and extract direct nonblocking human-decision archive/settlement before cutover. For auditing which parts of the machinery earn their weight, start with `../COMPLEXITY.md`.
+The lifecycle now has a transitional six-tool public catalogue over four durable low-level identities. PRD, design, and phase design use the semantic status/apply path; phase implementation and the status skill remain legacy. The façade performs one bounded action, never producer work or Git, and returns a fresh view before any successor action can begin. For auditing which parts of the machinery earn their weight, start with `../COMPLEXITY.md`.

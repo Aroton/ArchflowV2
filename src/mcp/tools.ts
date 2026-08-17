@@ -14,10 +14,18 @@ import secretScanResultSchema from "../contracts/schemas/v1/secret-scan-result.s
 import taskInitializationSchema from "../contracts/schemas/v1/task-initialization.schema.json" with { type: "json" };
 import taskStateSchema from "../contracts/schemas/v1/task-state.schema.json" with { type: "json" };
 import triageSchema from "../contracts/schemas/v1/triage.schema.json" with { type: "json" };
-import { TOOL_NAMES, type ToolName } from "../contracts/tool-names.js";
+import semanticWorkflowSchema from "../contracts/schemas/v1/semantic-workflow.schema.json" with { type: "json" };
+import {
+  ADVERTISED_TOOL_NAMES,
+  type AdvertisedToolName,
+  type SemanticToolName,
+  TOOL_NAMES,
+  type ToolName,
+} from "../contracts/tool-names.js";
 
 export interface AdvertisedToolDescriptor {
-  readonly name: ToolName;
+  readonly name: AdvertisedToolName;
+  readonly description: string;
   readonly inputSchema: Readonly<Record<string, unknown>>;
   readonly outputSchema: Readonly<Record<string, unknown>>;
 }
@@ -43,7 +51,8 @@ const schemaDocuments = Object.freeze([
   Object.freeze({ key: "document-artifact", id: "urn:archflow:schema:v1:document-artifact", schema: documentArtifactSchema }),
   Object.freeze({ key: "implementation-output", id: "urn:archflow:schema:v1:implementation-output", schema: implementationOutputSchema }),
   Object.freeze({ key: "secret-scan-result", id: "urn:archflow:schema:v1:secret-scan-result", schema: secretScanResultSchema }),
-  Object.freeze({ key: "triage", id: "urn:archflow:schema:v1:triage", schema: triageSchema })
+  Object.freeze({ key: "triage", id: "urn:archflow:schema:v1:triage", schema: triageSchema }),
+  Object.freeze({ key: "semantic-workflow", id: "urn:archflow:schema:v1:semantic-workflow", schema: semanticWorkflowSchema })
 ] as const);
 
 const documentKeysById = new Map<string, string>(schemaDocuments.map(({ id, key }) => [id, key]));
@@ -74,11 +83,19 @@ function project(value: unknown, sourceKey: string): unknown {
   return projected;
 }
 
-function schemaFragment(name: ToolName, member: "input" | "result"): JsonObject {
+function legacySchemaFragment(name: ToolName, member: "input" | "result"): JsonObject {
   const definitions = (mcpToolsSchema as JsonObject).$defs;
   const tool = isObject(definitions) ? definitions[name] : undefined;
   const fragment = isObject(tool) ? tool[member] : undefined;
   if (!isObject(fragment)) throw new TypeError(`missing normative schema fragment for ${name}/${member}`);
+  return fragment;
+}
+
+function semanticSchemaFragment(name: SemanticToolName, member: "input" | "result"): JsonObject {
+  const definitions = (semanticWorkflowSchema as JsonObject).$defs;
+  const key = member === "result" ? "semanticResult" : name === "archflow_status" ? "statusInput" : "applyInput";
+  const fragment = isObject(definitions) ? definitions[key] : undefined;
+  if (!isObject(fragment)) throw new TypeError(`missing semantic schema fragment for ${name}/${member}`);
   return fragment;
 }
 
@@ -277,17 +294,20 @@ function mergedInputFragment(name: ToolName, fragment: JsonObject, projected: Re
   return { description, additionalProperties: false, required, properties };
 }
 
-function standaloneSchema(name: ToolName, member: "input" | "result"): Readonly<JsonObject> {
+function standaloneSchema(name: AdvertisedToolName, member: "input" | "result"): Readonly<JsonObject> {
+  const legacy = (TOOL_NAMES as readonly string[]).includes(name);
   const projected = new Map<string, unknown>(
     schemaDocuments.map(({ key, schema }) => [
       key,
-      member === "result" && key === "project-error"
+      legacy && member === "result" && key === "project-error"
         ? structuredClone(ADVERTISED_ERROR_SUMMARY)
         : project(schema, key)
     ])
   );
-  const fragment = project(schemaFragment(name, member), "mcp-tools") as JsonObject;
-  const advertised = member === "input" ? mergedInputFragment(name, fragment, projected) : fragment;
+  const fragment = legacy
+    ? project(legacySchemaFragment(name as ToolName, member), "mcp-tools") as JsonObject
+    : project(semanticSchemaFragment(name as SemanticToolName, member), "semantic-workflow") as JsonObject;
+  const advertised = legacy && member === "input" ? mergedInputFragment(name as ToolName, fragment, projected) : fragment;
   return deepFreeze({
     $schema: JSON_SCHEMA_2020_12,
     ...advertised,
@@ -303,8 +323,18 @@ function deepFreeze<T>(value: T): T {
 }
 
 export const ADVERTISED_TOOL_CATALOGUE: readonly AdvertisedToolDescriptor[] = deepFreeze(
-  TOOL_NAMES.map((name) => ({
+  ADVERTISED_TOOL_NAMES.map((name) => ({
     name,
+    description: name === "archflow_status"
+      ? "Read durable ArchFlow status for one task and optional producing-skill invocation without mutation; returns one reconciled workflow view and at most one bounded offer for the current document owner."
+      : name === "archflow_apply"
+        ? "Apply exactly one supplied server offer using only its expected semantic submission; never chooses or loops to another action and returns the newly authenticated workflow view."
+        : {
+            archflow_state: "Record one bounded durable workflow state transition.",
+            archflow_counter_review: "Run the server-owned opposite-family counter-review for the retained artifact.",
+            archflow_gate: "Open or resolve one durable human gate decision.",
+            archflow_waiver: "Open or resolve one constitution waiver decision.",
+          }[name],
     inputSchema: standaloneSchema(name, "input"),
     outputSchema: standaloneSchema(name, "result")
   }))

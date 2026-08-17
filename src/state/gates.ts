@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 
 import { canonicalDocument, canonicalJsonDigest, type CanonicalDocument } from "../contracts/canonical.js";
+import { assertAuthenticInvocationContext, type InvocationContext } from "../contracts/contexts.js";
 import { computeInputFingerprint } from "../contracts/fingerprints.js";
 import {
   parseActiveGate,
@@ -22,11 +23,12 @@ import {
 import { intentOutcomeDigest, parseIntentReceipt, type IntentReceiptV1 } from "../contracts/durable-intent.js";
 import { createCommittedIntentSubject, createPreparedIntentSubject, openGateFrozenStateDigest, validateDurableSemantics } from "../contracts/durable.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
-import { parseSafeCode, parseSafeId, parseSafeInteger, type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
+import { parsePathSafeId, parseSafeCode, parseSafeId, parseSafeInteger, type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
 import { decodePhaseInstance } from "../contracts/phase-instance.js";
 import { parseToolCall } from "../contracts/mcp-tools.js";
 import { computeGateContextDigest, computeGateId } from "../contracts/fingerprints.js";
 import { gateDecisionEffect } from "../contracts/gates.js";
+import type { HumanDecisionProvenance } from "../contracts/gates.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
 import {
   gateDecisionClaim,
@@ -58,6 +60,7 @@ import {
   type GateResolution,
 } from "./gate-core.js";
 import { waitForGateInterface } from "./gate-wait.js";
+import { buildHumanGatePresentation, selectGateDecisionTemplate } from "./gate-decision-interface.js";
 import { ensureDecisionDirectory, ensureIntentDirectory, ensureWorkspaceProjectionParent } from "./layout.js";
 import { loadLegacyImportInitialization, loadLegacyImportResumePhase } from "./legacy-import-resume.js";
 import { TaskLockError } from "./lock.js";
@@ -81,6 +84,29 @@ export {
 export type { HumanGateDecisionOption, HumanGatePresentation } from "./gate-decision-interface.js";
 export type { GateLifecycleDependencies, GateOpenInput } from "./gate-core.js";
 export { findLegacyImportResumePhase } from "./legacy-import-resume.js";
+
+export type DirectSemanticDecisionInput = Readonly<{
+  authority: TransactionAuthority;
+  operation_digest: Sha256Digest;
+  intent_id: PathSafeId;
+  choice: string;
+  reason: string;
+  option_rationale?: string;
+  invocation_context: InvocationContext;
+}>;
+
+export type DirectSemanticDecisionSettlementInput = Readonly<{
+  authority: TransactionAuthority;
+  operation_digest: Sha256Digest;
+  intent_id: PathSafeId;
+}>;
+
+export type DirectSemanticDecisionArchiveResult = Readonly<{
+  state: CanonicalDocument<TaskStateV1>;
+  request: CanonicalDocument<GateRequestV1>;
+  record: CanonicalDocument<GateDecisionRecordV1>;
+  replayed: boolean;
+}>;
 
 /** Cleanup is derived work: a committed state must never be rolled back because it failed. */
 async function cleanupCommittedGateWorkspace(
@@ -842,6 +868,448 @@ async function installReceipt(
     return issue("STATE_INVALID", predecessor.value, "gate-receipt-committed-invalid");
   }
   return ok({ receipt, final });
+}
+
+function directSemanticDecisionIntent(
+  operationDigest: Sha256Digest,
+  substep: "decision-archive" | "decision-settle" | "revise-enter",
+): PathSafeId {
+  return parsePathSafeId(`afop-${operationDigest}-${substep}`);
+}
+
+function directSemanticDecisionRequestDigest(
+  operationDigest: Sha256Digest,
+  request: CanonicalDocument<GateRequestV1>,
+  decision: CanonicalDocument<GateDecisionRecordV1>,
+): Sha256Digest {
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "direct-semantic-decision-settlement",
+    operation_digest: operationDigest,
+    gate_request_digest: request.digest,
+    gate_decision_digest: decision.digest,
+  });
+}
+
+function legacyLocalDecisionSettlementOperationDigest(
+  request: CanonicalDocument<GateRequestV1>,
+  decision: CanonicalDocument<GateDecisionRecordV1>,
+): Sha256Digest {
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "legacy-local-decision-settlement",
+    gate_request_digest: request.digest,
+    gate_decision_digest: decision.digest,
+  });
+}
+
+function directSemanticRevisionEntryRequestDigest(
+  operationDigest: Sha256Digest,
+  checkpointRequestDigest: Sha256Digest,
+  request: CanonicalDocument<GateRequestV1>,
+  record: CanonicalDocument<GateDecisionRecordV1>,
+  inputFingerprint: Sha256Digest,
+): Sha256Digest {
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "direct-semantic-revision-entry",
+    operation_digest: operationDigest,
+    checkpoint_request_digest: checkpointRequestDigest,
+    gate_request_digest: request.digest,
+    gate_decision_digest: record.digest,
+    input_fingerprint: inputFingerprint,
+  });
+}
+
+function equivalentDirectDecision(
+  existing: GateDecisionRecordV1,
+  candidate: GateDecisionRecordV1,
+  operationDigest: Sha256Digest,
+): boolean {
+  const existingProvenance = existing.outcome === "decided"
+    ? existing.envelope.human_provenance
+    : existing.human_provenance;
+  const candidateProvenance = candidate.outcome === "decided"
+    ? candidate.envelope.human_provenance
+    : candidate.human_provenance;
+  const { human_provenance: _existing, ...existingBody } = existing.outcome === "decided"
+    ? existing.envelope
+    : existing;
+  const { human_provenance: _candidate, ...candidateBody } = candidate.outcome === "decided"
+    ? candidate.envelope
+    : candidate;
+  return existingProvenance.channel === "connected-host" &&
+    existingProvenance.decision_event_id === `afdecision-${operationDigest}` &&
+    candidateProvenance.channel === "connected-host" &&
+    candidateProvenance.decision_event_id === existingProvenance.decision_event_id &&
+    isDeepStrictEqual(existingBody, candidateBody);
+}
+
+/**
+ * Creates the immutable server-owned decision archive for one authenticated semantic operation.
+ * The disposable gate.decision projection is deliberately not consulted or written.
+ */
+export async function archiveDirectSemanticGateDecision(
+  dependencies: GateLifecycleDependencies,
+  input: DirectSemanticDecisionInput,
+): Promise<ProjectResult<DirectSemanticDecisionArchiveResult>> {
+  assertInternalTransactionAuthority(input.authority, { runner: dependencies.runner, environment: dependencies.environment });
+  assertAuthenticInvocationContext(input.invocation_context);
+  if (input.intent_id !== directSemanticDecisionIntent(input.operation_digest, "decision-archive")) {
+    throw new TypeError("direct decision archive intent does not bind the semantic operation");
+  }
+  try {
+    return await dependencies.lock.runExclusive(input.authority.workspace_root, async () => {
+      const stateResult = await stateOrFailure(dependencies, input.authority);
+      if (!stateResult.ok) return stateResult;
+      const current = stateResult.value;
+      const live = await validateLiveGateState(dependencies, input.authority, current, current.value.input_fingerprint);
+      if (!live.ok) return live;
+      const open = current.value.open_gate;
+      if (open === undefined) return issue("STATE_INVALID", current.value, "direct-decision-open-gate-missing");
+      const requestPath = await resolvePath(dependencies, input.authority, gateRequestClaim(open.gate_id), "authority-decision");
+      const archivePath = await resolvePath(dependencies, input.authority, gateDecisionClaim(open.gate_id), "authority-decision");
+      if (!requestPath.ok) return requestPath;
+      if (!archivePath.ok) return archivePath;
+      const request = await readCanonical(requestPath.value, "gate request", parseGateRequest);
+      if (request === "missing" || request === "invalid" || !exactOpenGateMatches(current.value, request.value)) {
+        return issue("STATE_INVALID", current.value, "direct-decision-request-invalid");
+      }
+      let selected: PlainJsonValue;
+      try {
+        const active = activeProjection(request.value);
+        if (!buildHumanGatePresentation(active).options.some((option) => option.token === input.choice)) {
+          throw new TypeError("semantic decisions require a server-issued choice token");
+        }
+        selected = selectGateDecisionTemplate(active, {
+          choice: input.choice,
+          reason: input.reason,
+          ...(input.option_rationale === undefined ? {} : { rationale: input.option_rationale }),
+        });
+      } catch {
+        return fail(createProjectError("GATE_DECISION_INVALID", {
+          gate_id: open.gate_id,
+          gate_kind: open.gate_kind,
+          issue_code: "decision-choice-invalid",
+        }));
+      }
+      const provenance: HumanDecisionProvenance = {
+        schema_version: "1",
+        actor_class: "human",
+        assurance: "declared-local-trace",
+        channel: "connected-host",
+        decision_event_id: parseSafeId(`afdecision-${input.operation_digest}`),
+        connection_id: input.invocation_context.connection.connection_id,
+        request_id_digest: canonicalJsonDigest({
+          schema_version: "1",
+          request_id: input.invocation_context.transport_metadata.request_id,
+        }),
+        recorded_at: new Date().toISOString(),
+      };
+      const selectedRecord = selected as Record<string, PlainJsonValue>;
+      let candidate: CanonicalDocument<GateDecisionRecordV1>;
+      try {
+        candidate = canonicalDocument(parseInterface({ ...selectedRecord, human_provenance: provenance }, request.value));
+      } catch {
+        return fail(createProjectError("GATE_DECISION_INVALID", {
+          gate_id: open.gate_id,
+          gate_kind: open.gate_kind,
+          issue_code: "decision-binding-invalid",
+        }));
+      }
+      if (!validateDurableSemantics({ gate_request: request, gate_decision: candidate }).ok) {
+        return issue("STATE_INVALID", current.value, "direct-decision-archive-binding-invalid");
+      }
+      const existing = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
+      if (existing === "invalid") return issue("STATE_INVALID", current.value, "direct-decision-archive-invalid");
+      if (existing !== "missing") {
+        if (!validateDurableSemantics({ gate_request: request, gate_decision: existing }).ok ||
+            !equivalentDirectDecision(existing.value, candidate.value, input.operation_digest)) {
+          return issue("STATE_INVALID", current.value, "direct-decision-archive-conflict");
+        }
+        return ok({ state: current, request, record: existing, replayed: true });
+      }
+      if (await dependencies.atomic.createExclusive(archivePath.value, candidate.bytes) !== "created") {
+        const raced = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
+        if (raced === "missing" || raced === "invalid" ||
+            !equivalentDirectDecision(raced.value, candidate.value, input.operation_digest)) {
+          return issue("STATE_INVALID", current.value, "direct-decision-archive-conflict");
+        }
+        return ok({ state: current, request, record: raced, replayed: true });
+      }
+      return ok({ state: current, request, record: candidate, replayed: false });
+    });
+  } catch (error) {
+    return error instanceof TaskLockError ? io(input.authority, `direct-decision-lock-${error.stage}`) : io(input.authority, "direct-decision-archive");
+  }
+}
+
+async function settleDirectReentryCheckpoint(
+  dependencies: GateLifecycleDependencies,
+  input: DirectSemanticDecisionSettlementInput,
+): Promise<ProjectResult<GateResolution>> {
+  try {
+    return await dependencies.lock.runExclusive(input.authority.workspace_root, async () => {
+      const stateResult = await stateOrFailure(dependencies, input.authority);
+      if (!stateResult.ok) return stateResult;
+      const current = stateResult.value;
+      const open = current.value.open_gate;
+      if (open === undefined) return issue("STATE_INVALID", current.value, "direct-decision-open-gate-missing");
+      const requestPath = await resolvePath(dependencies, input.authority, gateRequestClaim(open.gate_id), "authority-decision");
+      const archivePath = await resolvePath(dependencies, input.authority, gateDecisionClaim(open.gate_id), "authority-decision");
+      if (!requestPath.ok) return requestPath;
+      if (!archivePath.ok) return archivePath;
+      const request = await readCanonical(requestPath.value, "gate request", parseGateRequest);
+      const record = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
+      if (request === "missing" || request === "invalid" || record === "missing" || record === "invalid" ||
+          !validateDurableSemantics({ gate_request: request, gate_decision: record }).ok ||
+          !exactOpenGateMatches(current.value, request.value) || !enactsReentry(record.value)) {
+        return issue("STATE_INVALID", current.value, "direct-decision-reentry-authority-invalid");
+      }
+      const provenance = record.value.outcome === "decided" ? record.value.envelope.human_provenance : record.value.human_provenance;
+      const operationMatches = provenance.channel === "connected-host"
+        ? provenance.decision_event_id === `afdecision-${input.operation_digest}`
+        : input.operation_digest === legacyLocalDecisionSettlementOperationDigest(request, record);
+      if (!operationMatches) {
+        return issue("STATE_INVALID", current.value, "direct-decision-operation-mismatch");
+      }
+      const revision = parseSafeInteger(current.value.revision + 1);
+      const outcome = receiptOutcome(record.value, revision);
+      const requestDigest = directSemanticDecisionRequestDigest(input.operation_digest, request, record);
+      const { open_gate: _open, last_transition: _transition, ...base } = current.value;
+      const checkpoint = canonicalDocument({
+        ...base,
+        revision,
+        last_transition: {
+          schema_version: "1",
+          tool: "archflow_gate",
+          operation: parseSafeCode("semantic-revision-requested"),
+          intent_id: input.intent_id,
+          request_digest: requestDigest,
+          input_fingerprint: current.value.input_fingerprint,
+          result_id: parseSafeId(record.value.gate_id),
+          outcome,
+          outcome_digest: intentOutcomeDigest(outcome),
+          prior_revision: current.value.revision,
+          resulting_revision: revision,
+        },
+      } as TaskStateV1);
+      if (!validateDurableSemantics({ state: checkpoint }).ok) {
+        return issue("STATE_INVALID", current.value, "direct-decision-checkpoint-invalid");
+      }
+      await dependencies.atomic.replace(input.authority.state, checkpoint.bytes);
+      await cleanupCommittedGateWorkspace(dependencies, input.authority, checkpoint.value);
+      return ok({ state: checkpoint, record, effect: "retry", replayed: false });
+    });
+  } catch (error) {
+    return error instanceof TaskLockError ? io(input.authority, `direct-decision-settle-lock-${error.stage}`) : io(input.authority, "direct-decision-settle");
+  }
+}
+
+/** Settles an already archived semantic decision; no human submission is accepted here. */
+export async function settleDirectSemanticGateDecision(
+  dependencies: GateLifecycleDependencies,
+  input: DirectSemanticDecisionSettlementInput,
+): Promise<ProjectResult<GateResolution>> {
+  assertInternalTransactionAuthority(input.authority, { runner: dependencies.runner, environment: dependencies.environment });
+  if (input.intent_id !== directSemanticDecisionIntent(input.operation_digest, "decision-settle")) {
+    throw new TypeError("direct decision settlement intent does not bind the semantic operation");
+  }
+  const currentResult = await stateOrFailure(dependencies, input.authority);
+  if (!currentResult.ok) return currentResult;
+  const open = currentResult.value.value.open_gate;
+  if (open === undefined) {
+    const transition = currentResult.value.value.last_transition;
+    if (transition === undefined || transition.tool !== "archflow_gate" ||
+        transition.operation !== "semantic-revision-requested" || transition.intent_id !== input.intent_id ||
+        transition.resulting_revision !== currentResult.value.value.revision) {
+      return issue("STATE_INVALID", currentResult.value.value, "direct-decision-open-gate-missing");
+    }
+    let gateId: PathSafeId;
+    try { gateId = parsePathSafeId(transition.result_id); }
+    catch { return issue("STATE_INVALID", currentResult.value.value, "direct-decision-checkpoint-invalid"); }
+    const requestPath = await resolvePath(dependencies, input.authority, gateRequestClaim(gateId), "authority-decision");
+    const archivePath = await resolvePath(dependencies, input.authority, gateDecisionClaim(gateId), "authority-decision");
+    if (!requestPath.ok) return requestPath;
+    if (!archivePath.ok) return archivePath;
+    const request = await readCanonical(requestPath.value, "gate request", parseGateRequest);
+    const record = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
+    if (request === "missing" || request === "invalid" || record === "missing" || record === "invalid" ||
+        !enactsReentry(record.value) || !validateDurableSemantics({ gate_request: request, gate_decision: record }).ok ||
+        transition.request_digest !== directSemanticDecisionRequestDigest(input.operation_digest, request, record) ||
+        transition.outcome_digest !== intentOutcomeDigest(transition.outcome)) {
+      return issue("STATE_INVALID", currentResult.value.value, "direct-decision-checkpoint-invalid");
+    }
+    return ok({ state: currentResult.value, record, effect: "retry", replayed: true });
+  }
+  const archivePath = await resolvePath(dependencies, input.authority, gateDecisionClaim(open.gate_id), "authority-decision");
+  if (!archivePath.ok) return archivePath;
+  const record = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
+  if (record === "missing" || record === "invalid") return issue("STATE_INVALID", currentResult.value.value, "direct-decision-archive-invalid");
+  const provenance = record.value.outcome === "decided" ? record.value.envelope.human_provenance
+    : record.value.human_provenance;
+  if (provenance?.channel === "connected-host" && provenance.decision_event_id !== `afdecision-${input.operation_digest}`) {
+    return issue("STATE_INVALID", currentResult.value.value, "direct-decision-operation-mismatch");
+  }
+  if (enactsReentry(record.value)) return settleDirectReentryCheckpoint(dependencies, input);
+  return earnsReceipt(record.value)
+    ? resolveAdvancingGate(dependencies, input.authority, open.gate_id, currentResult.value.value.input_fingerprint)
+    : resolveDurableGate(dependencies, input.authority, open.gate_id, currentResult.value.value.input_fingerprint);
+}
+
+/** Enters production from an authenticated close-only semantic revision checkpoint. */
+export async function enterDirectSemanticRevisionCheckpoint(
+  dependencies: GateLifecycleDependencies,
+  input: DirectSemanticDecisionSettlementInput,
+): Promise<ProjectResult<CanonicalDocument<TaskStateV1>>> {
+  assertInternalTransactionAuthority(input.authority, { runner: dependencies.runner, environment: dependencies.environment });
+  if (input.intent_id !== directSemanticDecisionIntent(input.operation_digest, "revise-enter")) {
+    throw new TypeError("direct revision entry intent does not bind the semantic operation");
+  }
+  try {
+    return await dependencies.lock.runExclusive(input.authority.workspace_root, async () => {
+      const stateResult = await stateOrFailure(dependencies, input.authority);
+      if (!stateResult.ok) return stateResult;
+      const current = stateResult.value;
+      const transition = current.value.last_transition;
+      if (current.value.open_gate === undefined && current.value.step === "produce" && current.value.status === "running" &&
+          transition !== undefined &&
+          transition.tool === "archflow_gate" && transition.operation === "semantic-revision-enter" &&
+          transition.intent_id === input.intent_id && transition.resulting_revision === current.value.revision &&
+          transition.input_fingerprint === current.value.input_fingerprint &&
+          transition.outcome_digest === intentOutcomeDigest(transition.outcome)) {
+        let replayGateId: PathSafeId;
+        try { replayGateId = parsePathSafeId(transition.result_id); }
+        catch { return issue("STATE_INVALID", current.value, "direct-revision-entry-replay-invalid"); }
+        const replayRequestPath = await resolvePath(dependencies, input.authority, gateRequestClaim(replayGateId), "authority-decision");
+        const replayArchivePath = await resolvePath(dependencies, input.authority, gateDecisionClaim(replayGateId), "authority-decision");
+        if (!replayRequestPath.ok) return replayRequestPath;
+        if (!replayArchivePath.ok) return replayArchivePath;
+        const replayRequest = await readCanonical(replayRequestPath.value, "gate request", parseGateRequest);
+        const replayRecord = await readCanonical(replayArchivePath.value, "gate decision record", parseGateDecisionRecord);
+        const checkpointRequestDigest = transition.outcome !== null && !Array.isArray(transition.outcome) &&
+          typeof transition.outcome === "object"
+          ? Object.getOwnPropertyDescriptor(transition.outcome, "checkpoint_request_digest")
+          : undefined;
+        const predecessorAttempt = transition.outcome !== null && !Array.isArray(transition.outcome) &&
+          typeof transition.outcome === "object"
+          ? Object.getOwnPropertyDescriptor(transition.outcome, "predecessor_attempt")
+          : undefined;
+        const checkpointDigestValue = checkpointRequestDigest?.enumerable === true && "value" in checkpointRequestDigest
+          ? checkpointRequestDigest.value
+          : undefined;
+        const predecessorAttemptValue = predecessorAttempt?.enumerable === true && "value" in predecessorAttempt
+          ? predecessorAttempt.value
+          : undefined;
+        if (replayRequest === "missing" || replayRequest === "invalid" || replayRecord === "missing" || replayRecord === "invalid" ||
+            typeof checkpointDigestValue !== "string" || !/^[0-9a-f]{64}$/u.test(checkpointDigestValue) || !enactsReentry(replayRecord.value) ||
+            !Number.isSafeInteger(predecessorAttemptValue) || Number(predecessorAttemptValue) < 1 ||
+            predecessorAttemptValue !== (beginsHumanRevision(replayRecord.value)
+              ? current.value.attempt
+              : current.value.attempt - 1) ||
+            !validateDurableSemantics({ state: current, gate_request: replayRequest, gate_decision: replayRecord }).ok ||
+            transition.request_digest !== directSemanticRevisionEntryRequestDigest(
+              input.operation_digest, checkpointDigestValue as Sha256Digest, replayRequest, replayRecord,
+              current.value.input_fingerprint,
+            )) {
+          return issue("STATE_INVALID", current.value, "direct-revision-entry-replay-invalid");
+        }
+        return ok(current);
+      }
+      if (current.value.open_gate !== undefined || transition === undefined ||
+          transition.tool !== "archflow_gate" || transition.operation !== "semantic-revision-requested" ||
+          transition.resulting_revision !== current.value.revision || transition.input_fingerprint !== current.value.input_fingerprint ||
+          transition.outcome_digest !== intentOutcomeDigest(transition.outcome)) {
+        return issue("STATE_INVALID", current.value, "direct-revision-checkpoint-invalid");
+      }
+      let gateId: PathSafeId;
+      try { gateId = parsePathSafeId(transition.result_id); }
+      catch { return issue("STATE_INVALID", current.value, "direct-revision-checkpoint-invalid"); }
+      const requestPath = await resolvePath(dependencies, input.authority, gateRequestClaim(gateId), "authority-decision");
+      const archivePath = await resolvePath(dependencies, input.authority, gateDecisionClaim(gateId), "authority-decision");
+      if (!requestPath.ok) return requestPath;
+      if (!archivePath.ok) return archivePath;
+      const request = await readCanonical(requestPath.value, "gate request", parseGateRequest);
+      const record = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
+      if (request === "missing" || request === "invalid" || record === "missing" || record === "invalid" ||
+          !enactsReentry(record.value) || !validateDurableSemantics({ gate_request: request, gate_decision: record }).ok ||
+          request.value.task_id !== current.value.task_id || request.value.phase_instance !== current.value.phase_instance ||
+          request.value.opened_at_revision + 1 !== current.value.revision) {
+        return issue("STATE_INVALID", current.value, "direct-revision-archive-invalid");
+      }
+      const checkpointIdentity = /^afop-([0-9a-f]{64})-decision-settle$/u.exec(transition.intent_id);
+      if (checkpointIdentity === null || transition.request_digest !== directSemanticDecisionRequestDigest(
+        checkpointIdentity[1] as Sha256Digest, request, record,
+      )) return issue("STATE_INVALID", current.value, "direct-revision-operation-invalid");
+      const provenance = record.value.outcome === "decided" ? record.value.envelope.human_provenance : record.value.human_provenance;
+      if (provenance.channel === "connected-host" && provenance.decision_event_id !== `afdecision-${checkpointIdentity[1]}`) {
+        return issue("STATE_INVALID", current.value, "direct-revision-operation-invalid");
+      }
+      if (dependencies.resolve_gate_reentry_fingerprint === undefined) {
+        return issue("STATE_INVALID", current.value, "gate-reentry-fingerprint-unavailable");
+      }
+      const fingerprint = await dependencies.resolve_gate_reentry_fingerprint({ authority: input.authority, request: request.value, current });
+      if (!fingerprint.ok) return fingerprint;
+      const { last_transition: _last, ...predecessor } = current.value;
+      const planned = planStateTransition({
+        current: predecessor as TaskStateV1,
+        target: {
+          phase_instance: current.value.phase_instance,
+          step: "produce",
+          status: "running",
+          attempt: beginsHumanRevision(record.value) ? current.value.attempt : parseSafeInteger(current.value.attempt + 1),
+          input_fingerprint: fingerprint.value,
+        },
+        recomputed_input_fingerprint: fingerprint.value,
+        human_revision_reentry: beginsHumanRevision(record.value),
+      });
+      if (!planned.ok) return planned;
+      const revision = parseSafeInteger(current.value.revision + 1);
+      const evidence = current.value.authoritative_results.filter((entry) =>
+        entry.phase_instance === current.value.phase_instance &&
+        (entry.step === "counter_review" || entry.step === "adjudicate" || entry.step === "triage"));
+      const entryOutcome = {
+        ok: true,
+        checkpoint_request_digest: transition.request_digest,
+        predecessor_attempt: current.value.attempt,
+      } as const;
+      const entered = canonicalDocument({
+        ...planned.value,
+        revision,
+        ...(beginsHumanRevision(record.value) ? {
+          pending_human_revision: {
+            gate_id: record.value.gate_id,
+            gate_kind: record.value.kind,
+            predecessor_subject_digest: record.value.subject_digest,
+            predecessor_input_fingerprint: current.value.input_fingerprint,
+            requested_at_revision: revision,
+            attempt: current.value.attempt,
+            evidence,
+          },
+        } : {}),
+        last_transition: {
+          schema_version: "1",
+          tool: "archflow_gate",
+          operation: parseSafeCode("semantic-revision-enter"),
+          intent_id: input.intent_id,
+          request_digest: directSemanticRevisionEntryRequestDigest(
+            input.operation_digest, transition.request_digest, request, record, fingerprint.value,
+          ),
+          input_fingerprint: fingerprint.value,
+          result_id: parseSafeId(gateId),
+          outcome: entryOutcome,
+          outcome_digest: intentOutcomeDigest(entryOutcome),
+          prior_revision: current.value.revision,
+          resulting_revision: revision,
+        },
+      } as TaskStateV1);
+      if (!validateDurableSemantics({ state: entered }).ok) return issue("STATE_INVALID", current.value, "direct-revision-entry-invalid");
+      await dependencies.atomic.replace(input.authority.state, entered.bytes);
+      return ok(entered);
+    });
+  } catch (error) {
+    return error instanceof TaskLockError ? io(input.authority, `direct-revision-lock-${error.stage}`) : io(input.authority, "direct-revision-entry");
+  }
 }
 
 export async function resolveDurableGate(

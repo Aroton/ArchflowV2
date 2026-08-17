@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { canonicalDocument, canonicalJsonDigest, parseCanonicalDocument, sha256Bytes, type CanonicalDocument } from "../../src/contracts/canonical.js";
+import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
 import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
 import type { GateDecisionRecordV1, GateRequestV1 } from "../../src/contracts/durable-gate.js";
 import type { IntentReceiptV1 } from "../../src/contracts/durable-intent.js";
@@ -22,8 +23,21 @@ import { discoverWorktree, type RootBoundGitRunner } from "../../src/repository/
 import type { ResolvedPath, ResolvedTaskPath, ResolvedTaskWorkspacePath } from "../../src/repository/paths.js";
 import { AtomicReplaceError, createAtomicWriter, createProjectionWriter } from "../../src/state/atomic.js";
 import { createInternalTransactionAuthority, type TransactionAuthority } from "../../src/state/authority.js";
-import { openDurableGate, resolveDurableGate, runDurableGate, type GateLifecycleDependencies, type GateOpenInput } from "../../src/state/gates.js";
+import {
+  archiveDirectSemanticGateDecision,
+  enterDirectSemanticRevisionCheckpoint,
+  openDurableGate,
+  resolveDurableGate,
+  runDurableGate,
+  settleDirectSemanticGateDecision,
+  type GateLifecycleDependencies,
+  type GateOpenInput,
+} from "../../src/state/gates.js";
 import { readIntentReceipt, readTaskState } from "../../src/state/read.js";
+import { computeAuthoritativeSemanticStatus } from "../../src/state/semantic-status.js";
+import { executeSemanticAction } from "../../src/state/semantic-actions.js";
+import { projectSemanticStatus } from "../../src/state/semantic-view.js";
+import type { ProductionServices } from "../../src/state/production.js";
 import type { TransactionDependencies } from "../../src/state/transaction.js";
 import { captureProjectionTarget, projectionGenerationDigest, type ProjectionPlan } from "../../src/state/snapshots.js";
 import { planStateTransition } from "../../src/state/transitions.js";
@@ -1309,5 +1323,276 @@ describe("durable gate lifecycle", () => {
     expect(replayed.ok, replayed.ok ? undefined : JSON.stringify(replayed.error)).toBe(true);
     expect(existsSync(gatePath(h))).toBe(true);
     expect(existsSync(decisionPath(h))).toBe(true);
+  });
+
+  it("archives a connected-host semantic choice once, closes re-entry first, and enters revision separately", async () => {
+    const h = await harness();
+    writeFileSync(h.authority.state.absolute, canonicalDocument({
+      ...initialState(h.authority), step: "triage", status: "succeeded",
+    } as TaskStateV1).bytes);
+    const dependencies: GateLifecycleDependencies = {
+      ...h.dependencies,
+      resolve_gate_reentry_fingerprint: async () => ({ schema_version: "1", ok: true, value: FINGERPRINT }),
+    };
+    const opened = await openDurableGate(dependencies, gateInput(h, "semantic-reentry-gate"));
+    if (!opened.ok) throw new Error("semantic gate open failed");
+    const connection = connectionContextFactory.captureStartup({
+      connection_id: "semantic-gate-connection",
+      startup_repository_candidate: { working_directory: h.root },
+    }).initialize({ client: { name: "Codex", version: "test" }, host: "codex", protocol_version: "2025-06-18" });
+    const invocation = createInvocationContext(connection, {
+      invocation_id: "semantic-gate-call",
+      transport_metadata: { request_id: 71, operation: "tools/call" },
+    }, new AbortController().signal);
+    const operationDigest = D("e");
+    const archiveInput = {
+      authority: h.authority,
+      operation_digest: operationDigest,
+      intent_id: parsePathSafeId(`afop-${operationDigest}-decision-archive`),
+      choice: "request-changes",
+      reason: "Revise the reviewed work",
+      invocation_context: invocation,
+    } as const;
+    const archived = await archiveDirectSemanticGateDecision(dependencies, archiveInput);
+    expect(archived.ok, archived.ok ? undefined : JSON.stringify(archived.error)).toBe(true);
+    if (!archived.ok) return;
+    expect(archived.value.replayed).toBe(false);
+    expect(existsSync(decisionPath(h))).toBe(false);
+    const connectedStatus = await computeAuthoritativeSemanticStatus(dependencies, h.authority);
+    expect(connectedStatus.ok && connectedStatus.value.archived_decision).toMatchObject({
+      status: "exact", operation_digest: operationDigest,
+    });
+    const replay = await archiveDirectSemanticGateDecision(dependencies, archiveInput);
+    expect(replay.ok && replay.value.replayed).toBe(true);
+    if (!replay.ok) return;
+    expect(replay.value.record.bytes).toEqual(archived.value.record.bytes);
+
+    const settled = await settleDirectSemanticGateDecision(dependencies, {
+      authority: h.authority,
+      operation_digest: operationDigest,
+      intent_id: parsePathSafeId(`afop-${operationDigest}-decision-settle`),
+    });
+    expect(settled.ok, settled.ok ? undefined : JSON.stringify(settled.error)).toBe(true);
+    if (!settled.ok) return;
+    expect(settled.value.state.value).toMatchObject({ step: "triage", status: "succeeded", attempt: 1 });
+    expect(settled.value.state.value.open_gate).toBeUndefined();
+    expect(settled.value.state.value.pending_human_revision).toBeUndefined();
+    expect(settled.value.state.value.last_transition).toMatchObject({
+      tool: "archflow_gate", operation: "semantic-revision-requested",
+      intent_id: `afop-${operationDigest}-decision-settle`,
+    });
+
+    const revisionOperation = D("f");
+    const entered = await enterDirectSemanticRevisionCheckpoint(dependencies, {
+      authority: h.authority,
+      operation_digest: revisionOperation,
+      intent_id: parsePathSafeId(`afop-${revisionOperation}-revise-enter`),
+    });
+    expect(entered.ok, entered.ok ? undefined : JSON.stringify(entered.error)).toBe(true);
+    if (!entered.ok) return;
+    expect(entered.value.value).toMatchObject({ step: "produce", status: "running", attempt: 1 });
+    expect(entered.value.value.pending_human_revision).toMatchObject({
+      gate_id: opened.value.gate_id,
+      predecessor_input_fingerprint: FINGERPRINT,
+      attempt: 1,
+    });
+    expect(entered.value.value.last_transition).toMatchObject({
+      tool: "archflow_gate", operation: "semantic-revision-enter",
+      intent_id: `afop-${revisionOperation}-revise-enter`,
+      result_id: opened.value.gate_id,
+      prior_revision: settled.value.state.value.revision,
+      resulting_revision: entered.value.value.revision,
+    });
+    const replayedEntry = await enterDirectSemanticRevisionCheckpoint(dependencies, {
+      authority: h.authority,
+      operation_digest: revisionOperation,
+      intent_id: parsePathSafeId(`afop-${revisionOperation}-revise-enter`),
+    });
+    expect(replayedEntry.ok, replayedEntry.ok ? undefined : JSON.stringify(replayedEntry.error)).toBe(true);
+    if (replayedEntry.ok) expect(replayedEntry.value.bytes).toEqual(entered.value.bytes);
+  });
+
+  it("settles an archive-before-state local revise through its digest-bound continuation", async () => {
+    const h = await harness();
+    const legacyPhase = encodePhaseInstance({ kind: "prd" });
+    writeFileSync(h.authority.state.absolute, canonicalDocument({
+      ...initialState(h.authority), phase_instance: legacyPhase,
+      step: "triage", status: "succeeded", attempt: parseSafeInteger(3),
+    }).bytes);
+    const liveDependencies: GateLifecycleDependencies = {
+      ...h.dependencies,
+      resolve_gate_reentry_fingerprint: async () => ({ schema_version: "1", ok: true, value: D("e") }),
+    };
+    const input: GateOpenInput = {
+      ...gateInput(h, "legacy-reentry-archive"), phase_instance: legacyPhase, kind: "constitution-review",
+      context: {
+        constitution: "pass", failed_rules: [], uncertain_rules: [],
+        matched_trigger_rules: [{ rule_id: "review-required", rule_version: 1 }],
+        uncertain_trigger_rules: [], eligible_waivers: [],
+      },
+    };
+    const opened = await openDurableGate(liveDependencies, input);
+    expect(opened.ok, opened.ok ? undefined : JSON.stringify(opened.error)).toBe(true);
+    if (!opened.ok) return;
+    const request = opened.value.request.value;
+    writeFileSync(decisionPath(h), canonicalDocument({
+      schema_version: "1", gate_id: request.gate_id, task_id: request.task_id,
+      phase_instance: request.phase_instance, kind: request.kind,
+      subject_digest: request.subject_digest, context_digest: request.context_digest,
+      human_provenance: PROVENANCE,
+      payload: { decision: "revise", reason: "Revise current artifact" },
+    }).bytes);
+    const realAtomic = liveDependencies.atomic;
+    const archiveOnly: GateLifecycleDependencies = { ...liveDependencies, atomic: {
+      ...realAtomic,
+      replace: async (path, bytes) => {
+        if (path.path_class === "task-state") {
+          throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: false, collision: false });
+        }
+        await realAtomic.replace(path, bytes);
+      },
+    } };
+    const crashed = await resolveDurableGate(archiveOnly, h.authority, opened.value.gate_id);
+    expect(crashed.ok).toBe(false);
+    const archived = parseCanonicalDocument<GateDecisionRecordV1>(readFileSync(archivePath(h, opened.value.gate_id)));
+    const operation = canonicalJsonDigest({
+      schema_version: "1", digest_kind: "legacy-local-decision-settlement",
+      gate_request_digest: opened.value.request.digest, gate_decision_digest: archived.digest,
+    });
+    const legacyStatus = await computeAuthoritativeSemanticStatus(liveDependencies, h.authority);
+    expect(legacyStatus.ok && legacyStatus.value.archived_decision).toMatchObject({
+      status: "exact", operation_digest: operation, provenance: "pre-facade",
+    });
+    if (archived.value.outcome !== "decided") throw new Error("fixture archive was not decided");
+    const malformedConnected = canonicalDocument({
+      ...archived.value,
+      envelope: {
+        ...archived.value.envelope,
+        human_provenance: {
+          schema_version: "1", actor_class: "human", assurance: "declared-local-trace",
+          channel: "connected-host", decision_event_id: "malformed-event",
+          connection_id: "malformed-connection", request_id_digest: D("a"),
+          recorded_at: "2026-07-30T12:00:00.000Z",
+        },
+      },
+    } as GateDecisionRecordV1);
+    writeFileSync(archivePath(h, opened.value.gate_id), malformedConnected.bytes);
+    const malformedStatus = await computeAuthoritativeSemanticStatus(liveDependencies, h.authority);
+    expect(malformedStatus.ok && malformedStatus.value.archived_decision).toEqual({ status: "invalid" });
+    writeFileSync(archivePath(h, opened.value.gate_id), archived.bytes);
+    const afterCrash = await readTaskState(h.authority.state);
+    expect(afterCrash.kind === "canonical" && afterCrash.document.value.open_gate?.gate_id).toBe(opened.value.gate_id);
+
+    const forgedOperation = D("0");
+    const forged = await settleDirectSemanticGateDecision(liveDependencies, {
+      authority: h.authority, operation_digest: forgedOperation,
+      intent_id: parsePathSafeId(`afop-${forgedOperation}-decision-settle`),
+    });
+    expect(forged.ok).toBe(false);
+    const settled = await settleDirectSemanticGateDecision(liveDependencies, {
+      authority: h.authority, operation_digest: operation,
+      intent_id: parsePathSafeId(`afop-${operation}-decision-settle`),
+    });
+    expect(settled.ok, settled.ok ? undefined : JSON.stringify(settled.error)).toBe(true);
+    if (!settled.ok) return;
+    expect(settled.value).toMatchObject({
+      replayed: false, effect: "retry",
+      state: { value: {
+        step: "triage", status: "succeeded", attempt: 3,
+        last_transition: {
+          tool: "archflow_gate", operation: "semantic-revision-requested",
+          intent_id: `afop-${operation}-decision-settle`, result_id: opened.value.gate_id,
+        },
+      } },
+      record: { value: { envelope: { human_provenance: { channel: "archflow-local" } } } },
+    });
+    expect(settled.value.state.value.open_gate).toBeUndefined();
+    const replayed = await settleDirectSemanticGateDecision(liveDependencies, {
+      authority: h.authority, operation_digest: operation,
+      intent_id: parsePathSafeId(`afop-${operation}-decision-settle`),
+    });
+    expect(replayed.ok && replayed.value.replayed).toBe(true);
+    const checkpointStatus = await computeAuthoritativeSemanticStatus(liveDependencies, h.authority);
+    expect(checkpointStatus.ok && checkpointStatus.value.revision_checkpoint).toMatchObject({
+      status: "valid", operation_digest: operation, provenance: "pre-facade",
+    });
+    if (!checkpointStatus.ok) return;
+    const invocation = { skill: "archflow-prd" as const, intent: "resume" as const };
+    const ready = projectSemanticStatus(checkpointStatus.value, invocation).view;
+    expect(ready.next_action).toMatchObject({ kind: "revise", expected_submission: "none" });
+    expect(ready.next_action.offer).toBeDefined();
+    const afterRevise = await executeSemanticAction(
+      { authority: h.authority, runner: h.runner } as ProductionServices,
+      checkpointStatus.value,
+      { schema_version: "1", task_id: TASK, invocation, action: { offer: ready.next_action.offer! } },
+      {
+        enter_revision_checkpoint: (plan) => enterDirectSemanticRevisionCheckpoint(liveDependencies, {
+          authority: h.authority, operation_digest: plan.operation_digest, intent_id: plan.intent_id,
+        }),
+        refresh_snapshot: async () => {
+          const refreshed = await computeAuthoritativeSemanticStatus(liveDependencies, h.authority);
+          if (!refreshed.ok) throw new Error(JSON.stringify(refreshed.error));
+          return refreshed.value;
+        },
+      },
+    );
+    expect(afterRevise.position).toEqual({ kind: "prd" });
+    const enteredState = await readTaskState(h.authority.state);
+    expect(enteredState.kind === "canonical" && enteredState.document.value).toMatchObject({
+      phase_instance: legacyPhase, step: "produce", status: "running", attempt: 3,
+    });
+  });
+
+  it("replays direct retry-once revision entry with its authenticated predecessor attempt", async () => {
+    const h = await harness();
+    writeFileSync(h.authority.state.absolute, canonicalDocument({
+      ...initialState(h.authority), step: "triage", status: "succeeded", attempt: parseSafeInteger(3),
+    }).bytes);
+    const dependencies: GateLifecycleDependencies = {
+      ...h.dependencies,
+      resolve_gate_reentry_fingerprint: async () => ({ schema_version: "1", ok: true, value: D("e") }),
+    };
+    const opened = await openDurableGate(dependencies, {
+      ...gateInput(h, "semantic-retry-once"), kind: "attempts-exhausted",
+      context: { step: "triage", attempts: 3, maximum_attempts: 3 },
+    });
+    expect(opened.ok, opened.ok ? undefined : JSON.stringify(opened.error)).toBe(true);
+    if (!opened.ok) return;
+    const connection = connectionContextFactory.captureStartup({
+      connection_id: "semantic-retry-connection", startup_repository_candidate: { working_directory: h.root },
+    }).initialize({ client: { name: "Codex", version: "test" }, host: "codex", protocol_version: "2025-06-18" });
+    const invocation = createInvocationContext(connection, {
+      invocation_id: "semantic-retry-call", transport_metadata: { request_id: 72, operation: "tools/call" },
+    }, new AbortController().signal);
+    const decisionOperation = D("d");
+    const archived = await archiveDirectSemanticGateDecision(dependencies, {
+      authority: h.authority, operation_digest: decisionOperation,
+      intent_id: parsePathSafeId(`afop-${decisionOperation}-decision-archive`),
+      choice: "try-review-again", reason: "Authorize one more attempt", invocation_context: invocation,
+    });
+    expect(archived.ok, archived.ok ? undefined : JSON.stringify(archived.error)).toBe(true);
+    if (!archived.ok) return;
+    const settled = await settleDirectSemanticGateDecision(dependencies, {
+      authority: h.authority, operation_digest: decisionOperation,
+      intent_id: parsePathSafeId(`afop-${decisionOperation}-decision-settle`),
+    });
+    expect(settled.ok, settled.ok ? undefined : JSON.stringify(settled.error)).toBe(true);
+    if (!settled.ok) return;
+    const revisionOperation = D("e");
+    const entered = await enterDirectSemanticRevisionCheckpoint(dependencies, {
+      authority: h.authority, operation_digest: revisionOperation,
+      intent_id: parsePathSafeId(`afop-${revisionOperation}-revise-enter`),
+    });
+    expect(entered.ok, entered.ok ? undefined : JSON.stringify(entered.error)).toBe(true);
+    if (!entered.ok) return;
+    expect(entered.value.value).toMatchObject({ step: "produce", status: "running", attempt: 4 });
+    expect(entered.value.value.pending_human_revision).toBeUndefined();
+    expect(entered.value.value.last_transition?.outcome).toMatchObject({ predecessor_attempt: 3 });
+    const replayed = await enterDirectSemanticRevisionCheckpoint(dependencies, {
+      authority: h.authority, operation_digest: revisionOperation,
+      intent_id: parsePathSafeId(`afop-${revisionOperation}-revise-enter`),
+    });
+    expect(replayed.ok, replayed.ok ? undefined : JSON.stringify(replayed.error)).toBe(true);
+    if (replayed.ok) expect(replayed.value.bytes).toEqual(entered.value.bytes);
   });
 });

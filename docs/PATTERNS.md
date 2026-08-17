@@ -1,6 +1,6 @@
 # PATTERNS
 
-**Explored:** 2026-08-16 · **Commit:** `3a190c1` · **Covers:** `src/`, `test/`, `scripts/`, repository policy
+**Explored:** 2026-08-16 · **Commit:** `d60da73` · **Covers:** `src/`, `test/`, `scripts/`, repository policy
 
 This is a strict TypeScript/Node package whose conventions are enforced primarily by the type checker, runtime validators, and tests. There is no configured linter or formatter. Match the surrounding file: contract registries intentionally use dense declarations, while state, repository, and MCP algorithms favor expanded control flow and rationale-heavy comments.
 
@@ -71,6 +71,8 @@ Digests, safe integers, task slugs, Git OIDs, path claims, and resolved paths ar
 `projectSemanticStatus` receives the full authenticated status join, not brief status. The public `WorkflowViewV1` carries only what the client or human needs: position, condition, resources, full finding prose, review policy text, presentation, commit instruction when exact facts exist, and one ordinary-language action. The internal `SemanticActionOfferV1` carries the revision, fingerprint, repository identity, invocation, current action, and applicable evidence identities. Its public `af1_` token is the canonical digest of that object; no authority fields are encoded for the caller to reconstruct.
 
 Invocation is part of authority. Generic status omits it and can never mint a mutation offer. Resume owns its exact current phase; an exact successor invocation may own only the authenticated `advance-phase` handoff target. Reopen is a distinct intent and can target only a server-derived strictly earlier PRD, design, or numbered phase design impact. A semantic-looking `afop-...` intent is not replay proof by itself: the last transition must also authenticate its operation, fingerprint, request, legal successor, and closed named substep.
+
+Semantic execution keeps compound work explicit. Review owns the outer dispatch FIFO and uses the handler's direct inner seam. Triage enters its ordinary running boundary before terminal disposition recording. Human decisions archive and settle separately; a revision settlement is close-only, and `revise-enter` alone restores writable resources. Refreshing services between these substeps prevents a stale authority object from crossing a committed boundary.
 
 ## Validation and caller-owned objects
 
@@ -171,13 +173,13 @@ Vitest runs in Node with explicit imports (`describe`, `it`, `expect`, hooks); g
 
 | Directory | Files | Role |
 |---|---:|---|
-| `test/unit/` | 106 | Module-level behavior and boundary tests; dependencies are usually injected rather than module-mocked |
-| `test/contracts/` | 21 | JSON Schema/Zod agreement, cross-authority parity, durable structural and semantic corpora |
-| `test/integration/` | 32 | Real Git repositories, process wiring, local CLI, MCP handlers/stdio, initialization, replay, and state lifecycle |
-| `test/crash/` | 4 | Child-process fault injection and recovery/idempotence |
+| `test/unit/` | 104 | Module-level behavior and boundary tests; dependencies are usually injected rather than module-mocked |
+| `test/contracts/` | 26 | JSON Schema/Zod agreement, cross-authority parity, durable structural and semantic corpora |
+| `test/integration/` | 37 | Real Git repositories, process wiring, local CLI, MCP handlers/stdio, initialization, replay, and state lifecycle |
+| `test/crash/` | 3 | Child-process fault injection and recovery/idempotence |
 | `test/real-host/` | 5 | Live host/preflight/terminal journeys and benchmark coverage |
-| `test/helpers/` | 4 | Reusable repository, workspace, constitution, and host harnesses |
-| `test/fixtures/` | 64 | JSON/YAML corpora, fake CLIs, legacy layouts, and crash helpers |
+| `test/helpers/` | 5 | Reusable repository, workspace, constitution, and host harnesses |
+| `test/fixtures/` | 81 | JSON/YAML corpora, fake CLIs, legacy layouts, and crash helpers |
 | `test/types/` | 1 | Compile-only MCP SDK public-surface probe included by `tsc` |
 
 Representative practices:

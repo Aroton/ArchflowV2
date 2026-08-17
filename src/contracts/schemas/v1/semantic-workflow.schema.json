@@ -1064,6 +1064,89 @@
         "action"
       ],
       "additionalProperties": false
+    },
+    "semanticErrorSummary": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "\\S"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "\\S"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "additionalProperties": false
+    },
+    "semanticSuccess": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "value": {
+          "$ref": "#/$defs/workflowView"
+        }
+      },
+      "required": [
+        "schema_version",
+        "ok",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "semanticFailure": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": false
+        },
+        "error": {
+          "$ref": "#/$defs/semanticErrorSummary"
+        },
+        "view": {
+          "$ref": "#/$defs/workflowView"
+        }
+      },
+      "required": [
+        "schema_version",
+        "ok",
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "semanticResult": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/semanticSuccess"
+        },
+        {
+          "$ref": "#/$defs/semanticFailure"
+        }
+      ]
     }
   },
   "type": "object",

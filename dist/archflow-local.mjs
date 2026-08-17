@@ -1219,9 +1219,9 @@ var require_directives = __commonJS({
         this.tags = Object.assign({}, _Directives.defaultTags, tags);
       }
       clone() {
-        const copy = new _Directives(this.yaml, this.tags);
-        copy.docStart = this.docStart;
-        return copy;
+        const copy2 = new _Directives(this.yaml, this.tags);
+        copy2.docStart = this.docStart;
+        return copy2;
       }
       /**
        * During parsing, get a Directives instance for the current document and
@@ -1273,13 +1273,13 @@ var require_directives = __commonJS({
               onError(0, "%YAML directive should contain exactly one part");
               return false;
             }
-            const [version3] = parts;
-            if (version3 === "1.1" || version3 === "1.2") {
-              this.yaml.version = version3;
+            const [version4] = parts;
+            if (version4 === "1.1" || version4 === "1.2") {
+              this.yaml.version = version4;
               return true;
             } else {
-              const isValid = /^\d+\.\d+$/.test(version3);
-              onError(6, `Unsupported YAML version ${version3}`, isValid);
+              const isValid = /^\d+\.\d+$/.test(version4);
+              onError(6, `Unsupported YAML version ${version4}`, isValid);
               return false;
             }
           }
@@ -1530,10 +1530,10 @@ var require_Node = __commonJS({
       }
       /** Create a copy of this node.  */
       clone() {
-        const copy = Object.create(Object.getPrototypeOf(this), Object.getOwnPropertyDescriptors(this));
+        const copy2 = Object.create(Object.getPrototypeOf(this), Object.getOwnPropertyDescriptors(this));
         if (this.range)
-          copy.range = this.range.slice();
-        return copy;
+          copy2.range = this.range.slice();
+        return copy2;
       }
       /** A plain JavaScript representation of this node. */
       toJS(doc, { mapAsMap, maxAliasCount, onAnchor, reviver } = {}) {
@@ -1825,13 +1825,13 @@ var require_Collection = __commonJS({
        * @param schema - If defined, overwrites the original's schema
        */
       clone(schema) {
-        const copy = Object.create(Object.getPrototypeOf(this), Object.getOwnPropertyDescriptors(this));
+        const copy2 = Object.create(Object.getPrototypeOf(this), Object.getOwnPropertyDescriptors(this));
         if (schema)
-          copy.schema = schema;
-        copy.items = copy.items.map((it) => identity.isNode(it) || identity.isPair(it) ? it.clone(schema) : it);
+          copy2.schema = schema;
+        copy2.items = copy2.items.map((it) => identity.isNode(it) || identity.isPair(it) ? it.clone(schema) : it);
         if (this.range)
-          copy.range = this.range.slice();
-        return copy;
+          copy2.range = this.range.slice();
+        return copy2;
       }
       /**
        * Adds a value to the collection. For `!!map` and `!!omap` the value must
@@ -1946,14 +1946,14 @@ var require_foldFlowLines = __commonJS({
     var FOLD_FLOW = "flow";
     var FOLD_BLOCK = "block";
     var FOLD_QUOTED = "quoted";
-    function foldFlowLines(text3, indent, mode = "flow", { indentAtStart, lineWidth = 80, minContentWidth = 20, onFold, onOverflow } = {}) {
+    function foldFlowLines(text4, indent, mode = "flow", { indentAtStart, lineWidth = 80, minContentWidth = 20, onFold, onOverflow } = {}) {
       if (!lineWidth || lineWidth < 0)
-        return text3;
+        return text4;
       if (lineWidth < minContentWidth)
         minContentWidth = 0;
       const endStep = Math.max(1 + minContentWidth, 1 + lineWidth - indent.length);
-      if (text3.length <= endStep)
-        return text3;
+      if (text4.length <= endStep)
+        return text4;
       const folds = [];
       const escapedFolds = {};
       let end = lineWidth - indent.length;
@@ -1970,14 +1970,14 @@ var require_foldFlowLines = __commonJS({
       let escStart = -1;
       let escEnd = -1;
       if (mode === FOLD_BLOCK) {
-        i = consumeMoreIndentedLines(text3, i, indent.length);
+        i = consumeMoreIndentedLines(text4, i, indent.length);
         if (i !== -1)
           end = i + endStep;
       }
-      for (let ch; ch = text3[i += 1]; ) {
+      for (let ch; ch = text4[i += 1]; ) {
         if (mode === FOLD_QUOTED && ch === "\\") {
           escStart = i;
-          switch (text3[i + 1]) {
+          switch (text4[i + 1]) {
             case "x":
               i += 3;
               break;
@@ -1994,12 +1994,12 @@ var require_foldFlowLines = __commonJS({
         }
         if (ch === "\n") {
           if (mode === FOLD_BLOCK)
-            i = consumeMoreIndentedLines(text3, i, indent.length);
+            i = consumeMoreIndentedLines(text4, i, indent.length);
           end = i + indent.length + endStep;
           split = void 0;
         } else {
           if (ch === " " && prev && prev !== " " && prev !== "\n" && prev !== "	") {
-            const next = text3[i + 1];
+            const next = text4[i + 1];
             if (next && next !== " " && next !== "\n" && next !== "	")
               split = i;
           }
@@ -2011,12 +2011,12 @@ var require_foldFlowLines = __commonJS({
             } else if (mode === FOLD_QUOTED) {
               while (prev === " " || prev === "	") {
                 prev = ch;
-                ch = text3[i += 1];
+                ch = text4[i += 1];
                 overflow = true;
               }
               const j = i > escEnd + 1 ? i - 2 : escStart - 1;
               if (escapedFolds[j])
-                return text3;
+                return text4;
               folds.push(j);
               escapedFolds[j] = true;
               end = j + endStep;
@@ -2031,39 +2031,39 @@ var require_foldFlowLines = __commonJS({
       if (overflow && onOverflow)
         onOverflow();
       if (folds.length === 0)
-        return text3;
+        return text4;
       if (onFold)
         onFold();
-      let res = text3.slice(0, folds[0]);
+      let res = text4.slice(0, folds[0]);
       for (let i2 = 0; i2 < folds.length; ++i2) {
         const fold = folds[i2];
-        const end2 = folds[i2 + 1] || text3.length;
+        const end2 = folds[i2 + 1] || text4.length;
         if (fold === 0)
           res = `
-${indent}${text3.slice(0, end2)}`;
+${indent}${text4.slice(0, end2)}`;
         else {
           if (mode === FOLD_QUOTED && escapedFolds[fold])
-            res += `${text3[fold]}\\`;
+            res += `${text4[fold]}\\`;
           res += `
-${indent}${text3.slice(fold + 1, end2)}`;
+${indent}${text4.slice(fold + 1, end2)}`;
         }
       }
       return res;
     }
-    function consumeMoreIndentedLines(text3, i, indent) {
+    function consumeMoreIndentedLines(text4, i, indent) {
       let end = i;
       let start = i + 1;
-      let ch = text3[start];
+      let ch = text4[start];
       while (ch === " " || ch === "	") {
         if (i < start + indent) {
-          ch = text3[++i];
+          ch = text4[++i];
         } else {
           do {
-            ch = text3[++i];
+            ch = text4[++i];
           } while (ch && ch !== "\n");
           end = i;
           start = i + 1;
-          ch = text3[start];
+          ch = text4[start];
         }
       }
       return end;
@@ -4250,9 +4250,9 @@ var require_Schema = __commonJS({
         this.sortMapEntries = typeof sortMapEntries === "function" ? sortMapEntries : sortMapEntries === true ? sortMapEntriesByKey : null;
       }
       clone() {
-        const copy = Object.create(_Schema.prototype, Object.getOwnPropertyDescriptors(this));
-        copy.tags = this.tags.slice();
-        return copy;
+        const copy2 = Object.create(_Schema.prototype, Object.getOwnPropertyDescriptors(this));
+        copy2.tags = this.tags.slice();
+        return copy2;
       }
     };
     exports.Schema = Schema;
@@ -4379,14 +4379,14 @@ var require_Document = __commonJS({
           version: "1.2"
         }, options);
         this.options = opt;
-        let { version: version3 } = opt;
+        let { version: version4 } = opt;
         if (options?._directives) {
           this.directives = options._directives.atDocument();
           if (this.directives.yaml.explicit)
-            version3 = this.directives.yaml.version;
+            version4 = this.directives.yaml.version;
         } else
-          this.directives = new directives.Directives({ version: version3 });
-        this.setSchema(version3, options);
+          this.directives = new directives.Directives({ version: version4 });
+        this.setSchema(version4, options);
         this.contents = value === void 0 ? null : this.createNode(value, _replacer, options);
       }
       /**
@@ -4395,21 +4395,21 @@ var require_Document = __commonJS({
        * Custom Node values that inherit from `Object` still refer to their original instances.
        */
       clone() {
-        const copy = Object.create(_Document.prototype, {
+        const copy2 = Object.create(_Document.prototype, {
           [identity.NODE_TYPE]: { value: identity.DOC }
         });
-        copy.commentBefore = this.commentBefore;
-        copy.comment = this.comment;
-        copy.errors = this.errors.slice();
-        copy.warnings = this.warnings.slice();
-        copy.options = Object.assign({}, this.options);
+        copy2.commentBefore = this.commentBefore;
+        copy2.comment = this.comment;
+        copy2.errors = this.errors.slice();
+        copy2.warnings = this.warnings.slice();
+        copy2.options = Object.assign({}, this.options);
         if (this.directives)
-          copy.directives = this.directives.clone();
-        copy.schema = this.schema.clone();
-        copy.contents = identity.isNode(this.contents) ? this.contents.clone(copy.schema) : this.contents;
+          copy2.directives = this.directives.clone();
+        copy2.schema = this.schema.clone();
+        copy2.contents = identity.isNode(this.contents) ? this.contents.clone(copy2.schema) : this.contents;
         if (this.range)
-          copy.range = this.range.slice();
-        return copy;
+          copy2.range = this.range.slice();
+        return copy2;
       }
       /** Adds a value to the document. */
       add(value) {
@@ -4566,11 +4566,11 @@ var require_Document = __commonJS({
        *
        * Overrides all previously set schema options.
        */
-      setSchema(version3, options = {}) {
-        if (typeof version3 === "number")
-          version3 = String(version3);
+      setSchema(version4, options = {}) {
+        if (typeof version4 === "number")
+          version4 = String(version4);
         let opt;
-        switch (version3) {
+        switch (version4) {
           case "1.1":
             if (this.directives)
               this.directives.yaml.version = "1.1";
@@ -4581,9 +4581,9 @@ var require_Document = __commonJS({
           case "1.2":
           case "next":
             if (this.directives)
-              this.directives.yaml.version = version3;
+              this.directives.yaml.version = version4;
             else
-              this.directives = new directives.Directives({ version: version3 });
+              this.directives = new directives.Directives({ version: version4 });
             opt = { resolveKnownTags: true, schema: "core" };
             break;
           case null:
@@ -4592,7 +4592,7 @@ var require_Document = __commonJS({
             opt = null;
             break;
           default: {
-            const sv = JSON.stringify(version3);
+            const sv = JSON.stringify(version4);
             throw new Error(`Expected '1.1', '1.2' or null as first argument, but found: ${sv}`);
           }
         }
@@ -9910,10 +9910,10 @@ var nanoid = /^[a-zA-Z0-9_-]{21}$/;
 var duration = /^P(?:(\d+W)|(?!.*W)(?=\d|T\d)(\d+Y)?(\d+M)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+([.,]\d+)?S)?)?)$/;
 var extendedDuration = /^[-+]?P(?!$)(?:(?:[-+]?\d+Y)|(?:[-+]?\d+[.,]\d+Y$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:(?:[-+]?\d+W)|(?:[-+]?\d+[.,]\d+W$))?(?:(?:[-+]?\d+D)|(?:[-+]?\d+[.,]\d+D$))?(?:T(?=[\d+-])(?:(?:[-+]?\d+H)|(?:[-+]?\d+[.,]\d+H$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:[-+]?\d+(?:[.,]\d+)?S)?)??$/;
 var guid = /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/;
-var uuid = (version3) => {
-  if (!version3)
+var uuid = (version4) => {
+  if (!version4)
     return /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/;
-  return new RegExp(`^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-${version3}[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$`);
+  return new RegExp(`^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-${version4}[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$`);
 };
 var uuid4 = /* @__PURE__ */ uuid(4);
 var uuid6 = /* @__PURE__ */ uuid(6);
@@ -11408,42 +11408,42 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def2) =
     }
     doc.write(`const newResult = {};`);
     for (const key of normalized.keys) {
-      const id5 = ids[key];
+      const id6 = ids[key];
       const k = esc(key);
       const schema = shape[key];
       const isOptionalIn = schema?._zod?.optin === "optional";
       const isOptionalOut = schema?._zod?.optout === "optional";
-      doc.write(`const ${id5} = ${parseStr(key)};`);
+      doc.write(`const ${id6} = ${parseStr(key)};`);
       if (isOptionalIn && isOptionalOut) {
         doc.write(`
-        if (${id5}.issues.length) {
+        if (${id6}.issues.length) {
           if (${k} in input) {
-            payload.issues = payload.issues.concat(${id5}.issues.map(iss => ({
+            payload.issues = payload.issues.concat(${id6}.issues.map(iss => ({
               ...iss,
               path: iss.path ? [${k}, ...iss.path] : [${k}]
             })));
           }
         }
         
-        if (${id5}.value === undefined) {
+        if (${id6}.value === undefined) {
           if (${k} in input) {
             newResult[${k}] = undefined;
           }
         } else {
-          newResult[${k}] = ${id5}.value;
+          newResult[${k}] = ${id6}.value;
         }
         
       `);
       } else if (!isOptionalIn) {
         doc.write(`
-        const ${id5}_present = ${k} in input;
-        if (${id5}.issues.length) {
-          payload.issues = payload.issues.concat(${id5}.issues.map(iss => ({
+        const ${id6}_present = ${k} in input;
+        if (${id6}.issues.length) {
+          payload.issues = payload.issues.concat(${id6}.issues.map(iss => ({
             ...iss,
             path: iss.path ? [${k}, ...iss.path] : [${k}]
           })));
         }
-        if (!${id5}_present && !${id5}.issues.length) {
+        if (!${id6}_present && !${id6}.issues.length) {
           payload.issues.push({
             code: "invalid_type",
             expected: "nonoptional",
@@ -11452,30 +11452,30 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def2) =
           });
         }
 
-        if (${id5}_present) {
-          if (${id5}.value === undefined) {
+        if (${id6}_present) {
+          if (${id6}.value === undefined) {
             newResult[${k}] = undefined;
           } else {
-            newResult[${k}] = ${id5}.value;
+            newResult[${k}] = ${id6}.value;
           }
         }
 
       `);
       } else {
         doc.write(`
-        if (${id5}.issues.length) {
-          payload.issues = payload.issues.concat(${id5}.issues.map(iss => ({
+        if (${id6}.issues.length) {
+          payload.issues = payload.issues.concat(${id6}.issues.map(iss => ({
             ...iss,
             path: iss.path ? [${k}, ...iss.path] : [${k}]
           })));
         }
         
-        if (${id5}.value === undefined) {
+        if (${id6}.value === undefined) {
           if (${k} in input) {
             newResult[${k}] = undefined;
           }
         } else {
-          newResult[${k}] = ${id5}.value;
+          newResult[${k}] = ${id6}.value;
         }
         
       `);
@@ -15954,8 +15954,8 @@ function ko_default() {
 }
 
 // node_modules/zod/v4/locales/lt.js
-var capitalizeFirstCharacter = (text3) => {
-  return text3.charAt(0).toUpperCase() + text3.slice(1);
+var capitalizeFirstCharacter = (text4) => {
+  return text4.charAt(0).toUpperCase() + text4.slice(1);
 };
 function getUnitTypeFromNumber(number4) {
   const abs = Math.abs(number4);
@@ -19807,26 +19807,26 @@ function extractDefs(ctx, schema) {
     throw new Error("Unprocessed schema. This is a bug in Zod.");
   const idToSchema = /* @__PURE__ */ new Map();
   for (const entry of ctx.seen.entries()) {
-    const id5 = ctx.metadataRegistry.get(entry[0])?.id;
-    if (id5) {
-      const existing = idToSchema.get(id5);
+    const id6 = ctx.metadataRegistry.get(entry[0])?.id;
+    if (id6) {
+      const existing = idToSchema.get(id6);
       if (existing && existing !== entry[0]) {
-        throw new Error(`Duplicate schema id "${id5}" detected during JSON Schema conversion. Two different schemas cannot share the same id when converted together.`);
+        throw new Error(`Duplicate schema id "${id6}" detected during JSON Schema conversion. Two different schemas cannot share the same id when converted together.`);
       }
-      idToSchema.set(id5, entry[0]);
+      idToSchema.set(id6, entry[0]);
     }
   }
   const makeURI = (entry) => {
     const defsSegment = ctx.target === "draft-2020-12" ? "$defs" : "definitions";
     if (ctx.external) {
       const externalId = ctx.external.registry.get(entry[0])?.id;
-      const uriGenerator = ctx.external.uri ?? ((id6) => id6);
+      const uriGenerator = ctx.external.uri ?? ((id7) => id7);
       if (externalId) {
         return { ref: uriGenerator(externalId) };
       }
-      const id5 = entry[1].defId ?? entry[1].schema.id ?? `schema${ctx.counter++}`;
-      entry[1].defId = id5;
-      return { defId: id5, ref: `${uriGenerator("__shared")}#/${defsSegment}/${id5}` };
+      const id6 = entry[1].defId ?? entry[1].schema.id ?? `schema${ctx.counter++}`;
+      entry[1].defId = id6;
+      return { defId: id6, ref: `${uriGenerator("__shared")}#/${defsSegment}/${id6}` };
     }
     if (entry[1] === root) {
       return { ref: "#" };
@@ -19874,8 +19874,8 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
         continue;
       }
     }
-    const id5 = ctx.metadataRegistry.get(entry[0])?.id;
-    if (id5) {
+    const id6 = ctx.metadataRegistry.get(entry[0])?.id;
+    if (id6) {
       extractToDef(entry);
       continue;
     }
@@ -19971,10 +19971,10 @@ function finalize(ctx, schema) {
   } else {
   }
   if (ctx.external?.uri) {
-    const id5 = ctx.external.registry.get(schema)?.id;
-    if (!id5)
+    const id6 = ctx.external.registry.get(schema)?.id;
+    if (!id6)
       throw new Error("Schema is missing an `id` property");
-    result.$id = ctx.external.uri(id5);
+    result.$id = ctx.external.uri(id6);
   }
   Object.assign(result, root.def ?? root.schema);
   const rootMetaId = ctx.metadataRegistry.get(schema)?.id;
@@ -22789,10 +22789,10 @@ function fromJSONSchema(schema, params) {
   } catch {
     throw new Error("fromJSONSchema input is not valid JSON (possibly cyclic); use $defs/$ref for recursive schemas");
   }
-  const version3 = detectVersion(normalized, params?.defaultTarget);
+  const version4 = detectVersion(normalized, params?.defaultTarget);
   const defs = normalized.$defs || normalized.definitions || {};
   const ctx = {
-    version: version3,
+    version: version4,
     defs,
     refs: /* @__PURE__ */ new Map(),
     processing: /* @__PURE__ */ new Set(),
@@ -22963,15 +22963,15 @@ function canonicalDocument(value) {
 }
 function parseCanonicalDocument(bytes, label = "JSON document") {
   if (!(bytes instanceof Uint8Array)) throw new TypeError(`${label} must be bytes`);
-  let text3;
+  let text4;
   try {
-    text3 = decoder.decode(bytes);
+    text4 = decoder.decode(bytes);
   } catch (error51) {
     throw new TypeError(`${label} is not valid UTF-8: ${error51.message}`);
   }
   let value;
   try {
-    value = JSON.parse(text3);
+    value = JSON.parse(text4);
   } catch (error51) {
     throw new TypeError(`${label} is not valid JSON: ${error51.message}`);
   }
@@ -23601,8 +23601,8 @@ function deepFreezeJson(value) {
 }
 var copyFreezeJson = (value) => deepFreezeJson(structuredClone(value));
 function decodeJson(bytes) {
-  const text3 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  return JSON.parse(text3);
+  const text4 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  return JSON.parse(text4);
 }
 var digestBytes = (bytes) => parseSha256Digest(createHash2("sha256").update(bytes).digest("hex"));
 var copiedBytes = (bytes) => Uint8Array.from(bytes);
@@ -24297,6 +24297,11 @@ var TOOL_NAMES = Object.freeze([
   "archflow_gate",
   "archflow_waiver"
 ]);
+var SEMANTIC_TOOL_NAMES = Object.freeze([
+  "archflow_status",
+  "archflow_apply"
+]);
+var ADVERTISED_TOOL_NAMES = Object.freeze([...TOOL_NAMES, ...SEMANTIC_TOOL_NAMES]);
 function isToolName(value) {
   return typeof value === "string" && TOOL_NAMES.includes(value);
 }
@@ -24399,7 +24404,7 @@ var protocolDigest = documentScoped(sha256DigestV1Schema);
 var protocolId = documentScoped(safeIdV1Schema);
 var protocolCode = documentScoped(safeCodeV1Schema);
 var protocolVersion = documentScoped(safeVersionV1Schema);
-var protocolTool = documentScoped(tool);
+var protocolTool = documentScoped(external_exports.enum(ADVERTISED_TOOL_NAMES));
 var PROTOCOL_PARAMETER_SCHEMAS = {
   TOOL_NOT_FOUND: object2({ tool_name_digest: protocolDigest }),
   TOOL_DISABLED: object2({ tool: protocolTool, lifecycle_state: protocolCode }),
@@ -24485,6 +24490,9 @@ function constructError(registry2, code2, parameters) {
 }
 function createProjectError(code2, parameters) {
   return constructError(PROJECT_ERROR_DEFINITIONS, code2, parameters);
+}
+function createProtocolError(code2, parameters) {
+  return constructError(PROTOCOL_ERROR_DEFINITIONS, code2, parameters);
 }
 var internalErrorSchemaTables = Object.freeze({
   project: Object.freeze({
@@ -24952,6 +24960,49 @@ async function openResolved(path2, flags) {
   const noFollow = fsConstants.O_NOFOLLOW ?? 0;
   return open(path2, flags | noFollow);
 }
+
+// src/contracts/contexts.ts
+var authenticConnections = /* @__PURE__ */ new WeakSet();
+var ProtocolContextError = class extends Error {
+  constructor(protocol_error) {
+    super(protocol_error.code);
+    this.protocol_error = protocol_error;
+    this.name = "ProtocolContextError";
+  }
+  protocol_error;
+};
+var id5 = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
+var text2 = external_exports.string().min(1).max(4096).regex(/\S/u);
+var version3 = external_exports.string().regex(/^[A-Za-z0-9.-]{1,64}$/u);
+var requestIdSchema = external_exports.union([external_exports.string(), external_exports.number().int().safe()]);
+var clientImplementationSchema = external_exports.object({ name: external_exports.string(), version: external_exports.string() });
+var startupSchema = external_exports.object({ connection_id: id5, startup_repository_candidate: external_exports.object({ working_directory: text2 }).strict() }).strict();
+var initializationSchema = external_exports.object({ client: clientImplementationSchema, host: external_exports.enum(["claude", "codex", "unknown"]), protocol_version: version3 }).strict();
+var invocationSchema = external_exports.object({ invocation_id: id5, transport_metadata: external_exports.object({ request_id: requestIdSchema, operation: external_exports.literal("tools/call") }).strict() }).strict();
+function deepFreeze2(value) {
+  if (value !== null && typeof value === "object") {
+    for (const nested of Object.values(value)) deepFreeze2(nested);
+    Object.freeze(value);
+  }
+  return value;
+}
+function copy(value) {
+  return structuredClone(value);
+}
+var connectionContextFactory = Object.freeze({ captureStartup(seed) {
+  assertPlainJson(seed, "connection startup");
+  const startup = deepFreeze2(copy(startupSchema.parse(seed)));
+  let initialized = false;
+  return Object.freeze({ initialize(candidates) {
+    if (initialized) throw new ProtocolContextError(createProtocolError("INITIALIZATION_REPEATED", { connection_id: startup.connection_id }));
+    assertPlainJson(candidates, "connection initialization");
+    const initialization = deepFreeze2(copy(initializationSchema.parse(candidates)));
+    initialized = true;
+    const connection = deepFreeze2({ connection_id: startup.connection_id, startup_repository_candidate: startup.startup_repository_candidate, initialization_candidates: initialization });
+    authenticConnections.add(connection);
+    return connection;
+  } });
+} });
 
 // src/contracts/fingerprints.ts
 function materialize(subject, label) {
@@ -25996,7 +26047,7 @@ var parsedCalls = /* @__PURE__ */ new WeakSet();
 var requestDigests = /* @__PURE__ */ new WeakMap();
 var digest7 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var safeId2 = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
-var text2 = external_exports.string().min(1).max(4096).regex(/\S/u);
+var text3 = external_exports.string().min(1).max(4096).regex(/\S/u);
 var safeInteger6 = external_exports.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 var phase2 = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u).refine((v) => {
   try {
@@ -26025,10 +26076,10 @@ var durableArtifact = external_exports.union([
 ]);
 var humanRevisionDeclarationSchema = external_exports.object({
   classification: external_exports.enum(HUMAN_REVISION_CLASSIFICATIONS),
-  rationale: text2,
+  rationale: text3,
   user_override: external_exports.object({
     agent_classification: external_exports.enum(HUMAN_REVISION_CLASSIFICATIONS),
-    rationale: text2
+    rationale: text3
   }).strict().optional()
 }).strict().superRefine((revision, context2) => {
   if (revision.user_override?.agent_classification === revision.classification) {
@@ -26045,7 +26096,7 @@ var planningRestartInputSchema = external_exports.object({
   operation: external_exports.literal("planning_restart"),
   phase_instance: phase2,
   target_phase_instance: phase2,
-  reason: text2,
+  reason: text3,
   ask_base_digest: digest7.optional(),
   step: external_exports.literal("produce"),
   status: external_exports.literal("running")
@@ -26059,7 +26110,7 @@ var stateInputSchema = external_exports.object({
   human_revision: humanRevisionDeclarationSchema.optional(),
   operation: external_exports.literal("planning_restart").optional(),
   target_phase_instance: phase2.optional(),
-  reason: text2.optional(),
+  reason: text3.optional(),
   ask_base_digest: digest7.optional()
 }).strict().superRefine((input, context2) => {
   if (input.operation === "planning_restart") {
@@ -26076,7 +26127,7 @@ var stateInputSchema = external_exports.object({
 });
 var stagedReferenceInput = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, request_digest: digest7 }).strict();
 var counterReviewInputSchema = external_exports.object({ ...common2, artifact_path: taskPathClaimV1Schema }).strict();
-var gateInputSchema = external_exports.object({ ...common2, phase_instance: phase2, summary: text2, subject_digest: digest7, current_evidence: external_exports.unknown(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown() }).strict().superRefine((input, context2) => {
+var gateInputSchema = external_exports.object({ ...common2, phase_instance: phase2, summary: text3, subject_digest: digest7, current_evidence: external_exports.unknown(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown() }).strict().superRefine((input, context2) => {
   try {
     parseGateContext(input.kind, input.context);
   } catch (error51) {
@@ -26089,7 +26140,7 @@ var gateInputSchema = external_exports.object({ ...common2, phase_instance: phas
   }
 });
 var waiverOrigin = external_exports.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest7, origin_context_digest: digest7, task_id: taskSlugV1Schema, phase_instance: phase2, subject_digest: digest7, current_evidence_set_digest: digest7, rule: rule3, scope: scope2 }).strict();
-var waiverInputSchema = external_exports.object({ ...common2, origin: waiverOrigin, rationale: text2 }).strict().superRefine((input, context2) => {
+var waiverInputSchema = external_exports.object({ ...common2, origin: waiverOrigin, rationale: text3 }).strict().superRefine((input, context2) => {
   if (input.task_id !== input.origin.task_id) context2.addIssue({ code: "custom", path: ["task_id"], message: "waiver task_id must match origin task_id" });
 });
 function inputFor(name, value) {
@@ -26100,9 +26151,9 @@ function inputFor(name, value) {
   }
   return parsed;
 }
-function deepFreeze2(value) {
+function deepFreeze3(value) {
   if (value !== null && typeof value === "object") {
-    for (const nested of Object.values(value)) deepFreeze2(nested);
+    for (const nested of Object.values(value)) deepFreeze3(nested);
     Object.freeze(value);
   }
   return value;
@@ -26118,7 +26169,7 @@ function parseToolCall(name, value) {
   const parsed = inputFor(name, structuredClone(value));
   assertPlainJson(parsed, `${name} parsed input`);
   const input = structuredClone(parsed);
-  for (const nested of Object.values(input)) deepFreeze2(nested);
+  for (const nested of Object.values(input)) deepFreeze3(nested);
   Object.defineProperty(input, parsedToolInputBrand, { value: name, enumerable: false, writable: false, configurable: false });
   Object.freeze(input);
   const call = Object.freeze({ name, input });
@@ -26144,13 +26195,13 @@ var toolSuccessSchemas = {
     revision: safeInteger6,
     request_digest: digest7.optional()
   }).strict(),
-  archflow_gate: external_exports.object({ kind: external_exports.enum(GATE_KINDS), decision: gateDecisionEnvelopeV1Schema, notes: text2, revision: safeInteger6, request_digest: digest7.optional() }).strict(),
-  archflow_waiver: external_exports.union([external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest7, current_evidence_set_digest: digest7, scope: scope2, human_provenance: provenance, granted: external_exports.literal(true), expires: external_exports.literal("task-complete"), notes: text2, revision: safeInteger6, request_digest: digest7.optional() }).strict(), external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest7, current_evidence_set_digest: digest7, scope: scope2, human_provenance: provenance, granted: external_exports.literal(false), notes: text2, revision: safeInteger6, request_digest: digest7.optional() }).strict()])
+  archflow_gate: external_exports.object({ kind: external_exports.enum(GATE_KINDS), decision: gateDecisionEnvelopeV1Schema, notes: text3, revision: safeInteger6, request_digest: digest7.optional() }).strict(),
+  archflow_waiver: external_exports.union([external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest7, current_evidence_set_digest: digest7, scope: scope2, human_provenance: provenance, granted: external_exports.literal(true), expires: external_exports.literal("task-complete"), notes: text3, revision: safeInteger6, request_digest: digest7.optional() }).strict(), external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest7, current_evidence_set_digest: digest7, scope: scope2, human_provenance: provenance, granted: external_exports.literal(false), notes: text3, revision: safeInteger6, request_digest: digest7.optional() }).strict()])
 };
 var mcpToolsSchemaDefs = Object.freeze({
   digest: digest7,
   id: safeId2,
-  text: text2,
+  text: text3,
   integer: safeInteger6,
   phase: phase2,
   durableArtifact,
@@ -26296,8 +26347,8 @@ function createGitRunner(options) {
   async function runText(spec) {
     const result = await run(spec);
     if (result.absent) return "";
-    const text3 = decodeFatal(result.stdout, spec.operation);
-    return text3.endsWith("\n") ? text3.slice(0, -1) : text3;
+    const text4 = decodeFatal(result.stdout, spec.operation);
+    return text4.endsWith("\n") ? text4.slice(0, -1) : text4;
   }
   async function runNulFields(spec) {
     const result = await run(spec);
@@ -26511,8 +26562,8 @@ var SAFE_VERSION = /^[A-Za-z0-9.-]{1,64}$/u;
 function safeVersionOf(value) {
   return SAFE_VERSION.test(value) ? value : "unknown";
 }
-function unsupportedRuntime(component, version3) {
-  return createProjectError("RUNTIME_VERSION_UNSUPPORTED", { component, version: version3 });
+function unsupportedRuntime(component, version4) {
+  return createProjectError("RUNTIME_VERSION_UNSUPPORTED", { component, version: version4 });
 }
 var VERSION_OPERATION = "git-version";
 var OBJECT_FORMAT_OPERATION = "git-object-format";
@@ -26528,11 +26579,11 @@ async function preflightGit(runner, context2) {
   }
   const reported = /(?<major>\d+)\.(?<minor>\d+)(?:\.[^\s]*)?/u.exec(versionOutput);
   const token = /^git version (?<token>\S+)/u.exec(versionOutput)?.groups?.["token"] ?? versionOutput.trim();
-  const version3 = safeVersionOf(token);
+  const version4 = safeVersionOf(token);
   const major = Number(reported?.groups?.["major"] ?? Number.NaN);
   const minor = Number(reported?.groups?.["minor"] ?? Number.NaN);
   if (!Number.isInteger(major) || !Number.isInteger(minor) || major < GIT_MAJOR_FLOOR || major === GIT_MAJOR_FLOOR && minor < GIT_MINOR_FLOOR) {
-    return fail4(unsupportedRuntime("git", version3));
+    return fail4(unsupportedRuntime("git", version4));
   }
   let objectFormat;
   try {
@@ -26549,7 +26600,7 @@ async function preflightGit(runner, context2) {
   if (objectFormat !== "sha1") {
     return fail4(unsupportedRuntime("git-object-format", safeVersionOf(objectFormat.trim())));
   }
-  return ok2(Object.freeze({ version: version3, object_format: "sha1" }));
+  return ok2(Object.freeze({ version: version4, object_format: "sha1" }));
 }
 
 // src/repository/identity.ts
@@ -29309,12 +29360,12 @@ function requireRegexpStringMatcher() {
     var isEqualMatchPatternResult = function(a, b) {
       return a.startIndex === b.startIndex && a.endIndex === b.endIndex && a.match === b.match;
     };
-    var matchPatterns = function(text3, regExpLikeStrings) {
+    var matchPatterns = function(text4, regExpLikeStrings) {
       var matchPatternResults = [];
       regExpLikeStrings.map(function(patternString) {
         return (0, exports.createRegExp)(patternString);
       }).forEach(function(regExp) {
-        var results = text3.matchAll(regExp);
+        var results = text4.matchAll(regExp);
         Array.from(results).forEach(function(result) {
           if (result.index === void 0) {
             return;
@@ -29533,11 +29584,11 @@ var MAX_MAC_ITERATIONS = 1e6;
 function parsePkcs12(buf) {
   const pfx = readTlv(buf, 0);
   expectTag(pfx, TAG_SEQUENCE, "PFX SEQUENCE");
-  const version3 = readTlv(pfx.content, 0);
-  if (readInteger(version3) !== 3) {
+  const version4 = readTlv(pfx.content, 0);
+  if (readInteger(version4) !== 3) {
     throw new Error("PKCS12: unsupported version");
   }
-  const authSafeInfo = readTlv(pfx.content, version3.end);
+  const authSafeInfo = readTlv(pfx.content, version4.end);
   expectTag(authSafeInfo, TAG_SEQUENCE, "ContentInfo SEQUENCE");
   const contentType = readTlv(authSafeInfo.content, 0);
   expectTag(contentType, TAG_OID, "contentType OID");
@@ -29587,9 +29638,9 @@ function parsePkcs12(buf) {
   };
 }
 function toBufferSource(data) {
-  const copy = new Uint8Array(data.length);
-  copy.set(data);
-  return copy;
+  const copy2 = new Uint8Array(data.length);
+  copy2.set(data);
+  return copy2;
 }
 async function digest8(hash3, data) {
   return new Uint8Array(await globalThis.crypto.subtle.digest(hash3.name, toBufferSource(data)));
@@ -31547,7 +31598,7 @@ var utf8 = new TextDecoder("utf-8", { fatal: true });
 var ordinal4 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 var enabledCreators = rules.filter((creator) => creator.meta.id !== FILTER_RULE);
 var enabledRuleIds = Object.freeze(enabledCreators.map((creator) => creator.meta.id).sort());
-if (new Set(enabledRuleIds).size !== enabledRuleIds.length || enabledRuleIds.some((id5) => !RULE_ID.test(id5))) {
+if (new Set(enabledRuleIds).size !== enabledRuleIds.length || enabledRuleIds.some((id6) => !RULE_ID.test(id6))) {
   throw new TypeError("Secretlint preset exported duplicate or unsupported public rule identifiers");
 }
 var SECRETLINT_DETECTOR_SET_ID = parseSafeId(`secretlint:v1:${canonicalJsonDigest({
@@ -31564,9 +31615,9 @@ function secretScanText(bytes) {
   try {
     return utf8.decode(materialized);
   } catch {
-    let text3 = "";
-    for (const byte of materialized) text3 += String.fromCharCode(byte);
-    return text3;
+    let text4 = "";
+    for (const byte of materialized) text4 += String.fromCharCode(byte);
+    return text4;
   }
 }
 function secretScanCandidateFromBytes(candidate) {
@@ -32855,6 +32906,10 @@ async function stateOrFailure(dependencies, authority) {
   return read.kind === "canonical" ? ok6(read.document) : read.kind === "unreadable" ? io(authority, "gate-state-read") : issue2("CONTRACT_INVALID", void 0, `gate-state-${read.kind}`);
 }
 
+// src/state/gate-decision-interface.ts
+import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual as isDeepStrictEqual6 } from "node:util";
+
 // src/state/layout.ts
 import { constants as fsConstants3 } from "node:fs";
 import { lstat as lstat4, mkdir } from "node:fs/promises";
@@ -32968,27 +33023,6 @@ async function ensureWorkspaceProjectionParent(authority, target) {
   }
 }
 
-// src/state/legacy-import-resume.ts
-async function loadLegacyImportInitialization(dependencies, authority, state) {
-  const resolved = await resolveTaskPath({
-    runner: dependencies.runner,
-    taskId: authority.task_id,
-    claim: initializationAuthorityClaim(),
-    expectedClass: "authority-initialization",
-    context: authority.context
-  });
-  if (!resolved.ok) return resolved;
-  const document2 = await readCanonical(
-    resolved.value,
-    "legacy import initialization authority",
-    parseLegacyImportInitialization
-  );
-  if (document2 === "missing" || document2 === "invalid" || document2.digest !== state.initialization_digest) {
-    return ok6(void 0);
-  }
-  return ok6(document2.value);
-}
-
 // src/state/lock.ts
 import { AsyncLocalStorage } from "node:async_hooks";
 import { lstat as lstat5, mkdir as mkdir2, open as open2, readdir, realpath as realpath3, rename, rmdir } from "node:fs/promises";
@@ -33052,6 +33086,405 @@ function createTaskLock() {
     return workResult;
   }
   return Object.freeze({ runExclusive });
+}
+
+// src/state/gate-decision-interface.ts
+var TEMPLATE_REASON = "Record the human decision reason.";
+var TEMPLATE_RATIONALE = "Record the human decision rationale.";
+function decisionTemplateBase(active) {
+  return {
+    schema_version: "1",
+    gate_id: active.gate_id,
+    task_id: active.task_id,
+    phase_instance: active.phase_instance,
+    subject_digest: active.subject_digest,
+    context_digest: active.context_digest
+  };
+}
+function buildGateDecisionTemplates(active) {
+  const request2 = parseActiveGate(structuredClone(active));
+  const base2 = decisionTemplateBase(request2);
+  const cancellation = { ...base2, cancelled: true, reason: TEMPLATE_REASON };
+  const waiver = waiverContext(request2.context);
+  if (waiver !== void 0) {
+    return deepFreezeGateJson([
+      {
+        ...base2,
+        granted: true,
+        scope: structuredClone(waiver.origin.scope),
+        origin: structuredClone(waiver.origin),
+        notes: TEMPLATE_REASON
+      },
+      {
+        ...base2,
+        granted: false,
+        scope: structuredClone(waiver.origin.scope),
+        origin: structuredClone(waiver.origin),
+        notes: TEMPLATE_REASON
+      },
+      cancellation
+    ]);
+  }
+  const templates = [];
+  for (const decision3 of request2.allowed_decisions) {
+    if (decision3 === "cancel") {
+      templates.push(cancellation);
+      continue;
+    }
+    const context2 = request2.context;
+    const payloads = [];
+    if (decision3 === "waiver-requested") {
+      const eligible = context2.eligible_waivers;
+      for (const item of eligible) {
+        payloads.push({
+          decision: decision3,
+          reason: TEMPLATE_REASON,
+          rule: structuredClone(item.rule),
+          operation: item.scope.operation,
+          rationale: TEMPLATE_RATIONALE
+        });
+      }
+    } else if (request2.kind === "restore-collision" && decision3 === "adopt-as-new-generation") {
+      if (request2.context.adoption_candidate !== void 0) {
+        payloads.push({
+          decision: decision3,
+          reason: TEMPLATE_REASON,
+          adoption_authority: structuredClone(request2.context.adoption_candidate),
+          rationale: TEMPLATE_RATIONALE
+        });
+      }
+    } else {
+      payloads.push({ decision: decision3, reason: TEMPLATE_REASON });
+    }
+    for (const payload of payloads) {
+      validateGateDecision(request2.kind, request2.context, payload);
+      templates.push({ ...base2, kind: request2.kind, payload });
+    }
+  }
+  return deepFreezeGateJson(templates);
+}
+var PRESENTATION_COPY = Object.freeze({
+  "artifact-approval": Object.freeze({
+    title: "Review the finished work",
+    question: "Does this work meet your expectations, or would you like it changed?"
+  }),
+  "design-approval": Object.freeze({
+    title: "Review and approve the design",
+    question: "Should ArchFlow approve this design, commit its recoverable milestone, and continue?"
+  }),
+  "constitution-review": Object.freeze({
+    title: "Review the policy findings",
+    question: "How would you like to handle the policy review?"
+  }),
+  "material-drift": Object.freeze({
+    title: "Choose how to handle a material change",
+    question: "Should the earlier plan change, should the current work change, or should this version stop?"
+  }),
+  "attempts-exhausted": Object.freeze({
+    title: "Automated review needs your direction",
+    question: "The review did not converge within its normal attempts. What would you like to do next?"
+  }),
+  "constitution-edit": Object.freeze({
+    title: "Review a project policy change",
+    question: "Should the policy edit be undone, moved into the project baseline, or abandoned?"
+  }),
+  "commit-authorization": Object.freeze({
+    title: "Authorize the commit",
+    question: "Do you authorize committing the reviewed changes, or should they be revised first?"
+  }),
+  "restore-collision": Object.freeze({
+    title: "Resolve a workspace conflict",
+    question: "Should ArchFlow restore the saved version, keep the current version, or stop?"
+  }),
+  "migration-audit": Object.freeze({
+    title: "Review the imported task",
+    question: "Is the imported task accurate enough to accept, or should it be revised?"
+  })
+});
+var OPTION_COPY = Object.freeze({
+  approve: Object.freeze({ token: "approve", label: "Approve and continue", consequence: "Accept this review result and continue the workflow." }),
+  revise: Object.freeze({ token: "request-changes", label: "Request changes", consequence: "Return the work for revision. Significant changes will receive a fresh independent review." }),
+  reject: Object.freeze({ token: "reject", label: "Reject this version", consequence: "Do not approve this version; the workflow will not advance." }),
+  "amend-upstream": Object.freeze({ token: "update-earlier-work", label: "Update the earlier work", consequence: "Return to the affected earlier artifact and bring the plan back in line with reality." }),
+  "revise-current": Object.freeze({ token: "change-current-work", label: "Change the current work", consequence: "Keep the earlier plan and revise the current artifact to match it." }),
+  "retry-once": Object.freeze({ token: "try-review-again", label: "Try the review once more", consequence: "Allow one more automated review attempt without changing the work first." }),
+  abort: Object.freeze({ token: "stop-work", label: "Stop this work", consequence: "End this workflow path without approval." }),
+  "revert-edit": Object.freeze({ token: "undo-policy-change", label: "Undo the policy edit", consequence: "Restore the policy version this task originally reviewed against." }),
+  "start-base-amendment": Object.freeze({ token: "update-project-policy", label: "Update the project policy", consequence: "Move the policy change into the project baseline before continuing this task." }),
+  "authorize-commit": Object.freeze({ token: "authorize-commit", label: "Authorize the commit", consequence: "Permit ArchFlow to commit the exact reviewed changes after the required final confirmation." }),
+  "discard-and-restore": Object.freeze({ token: "restore-saved-version", label: "Restore the saved version", consequence: "Discard the conflicting workspace copy and reconstruct it from durable authority." }),
+  "adopt-as-new-generation": Object.freeze({ token: "keep-current-version", label: "Keep the current version", consequence: "Treat the current workspace copy as a new generation of the artifact." }),
+  "accept-import-audit": Object.freeze({ token: "accept-import", label: "Accept the import", consequence: "Confirm that the imported task faithfully represents the legacy source and continue." }),
+  cancel: Object.freeze({ token: "cancel", label: "Cancel this decision", consequence: "Close this decision without approving anything; the workflow will remain stopped here." }),
+  "waiver-grant": Object.freeze({ token: "grant-exception", label: "Grant the exception", consequence: "Allow the narrowly scoped policy exception recorded in this request." }),
+  "waiver-deny": Object.freeze({ token: "deny-exception", label: "Deny the exception", consequence: "Keep the policy requirement in force and do not advance under this exception." })
+});
+function gateDecisionTemplateName(template) {
+  if (template === null || typeof template !== "object" || Array.isArray(template)) return "unknown";
+  const value = template;
+  if (value.cancelled === true) return "cancel";
+  if (typeof value.granted === "boolean") return value.granted ? "waiver-grant" : "waiver-deny";
+  const payload = value.payload;
+  if (payload !== null && typeof payload === "object" && !Array.isArray(payload)) {
+    const decision3 = payload.decision;
+    if (typeof decision3 === "string") return decision3;
+  }
+  return "unknown";
+}
+function waiverOption(template, index) {
+  const payload = template.payload;
+  const axis = payload.operation === "review-trigger" ? "additional review" : "policy finding";
+  return Object.freeze({
+    token: `request-exception-${index}`,
+    label: `Request an exception for ${payload.rule.rule_id}`,
+    consequence: `Ask for a narrowly scoped exception to this rule's ${axis}. A separate human decision will grant or deny it.`
+  });
+}
+function presentationBindings(active) {
+  let waiverIndex = 0;
+  return Object.freeze(buildGateDecisionTemplates(active).flatMap((template) => {
+    const decision3 = gateDecisionTemplateName(template);
+    if (decision3 === "unknown") return [];
+    const option = active.kind === "design-approval" && decision3 === "approve" ? Object.freeze({
+      token: "approve",
+      label: "Approve, commit, and continue",
+      consequence: "Approve the exact reviewed design and policy context, authorize its recoverable task-local commit, and continue the workflow."
+    }) : decision3 === "waiver-requested" ? waiverOption(template, ++waiverIndex) : OPTION_COPY[decision3];
+    return [Object.freeze({ token: option.token, decision: decision3, template, option })];
+  }));
+}
+function buildHumanGatePresentation(active) {
+  const request2 = parseActiveGate(structuredClone(active));
+  const waiver = waiverContext(request2.context);
+  const copy2 = waiver === void 0 ? PRESENTATION_COPY[request2.kind] : Object.freeze({
+    title: "Decide a policy exception",
+    question: "Should this narrowly scoped policy exception be granted?"
+  });
+  return Object.freeze({
+    title: copy2.title,
+    summary: request2.summary,
+    ...request2.kind === "design-approval" ? {
+      details: Object.freeze(request2.context.policy_findings.flatMap((finding) => {
+        const lines = [];
+        if (finding.compliance !== "pass") {
+          lines.push(`${finding.rule_id}: policy compliance is ${finding.compliance}. ${finding.rationale}`);
+        }
+        if (finding.trigger !== "not-matched") {
+          lines.push(`${finding.rule_id}: review trigger is ${finding.trigger}. ${finding.trigger_evidence}`);
+        }
+        return lines;
+      }))
+    } : {},
+    question: `${copy2.question} Choose an option and briefly explain why.`,
+    options: Object.freeze(presentationBindings(request2).map((binding) => binding.option))
+  });
+}
+function choiceRecord(value) {
+  assertPlainJson(value, "gate decision choice");
+  const materialized = structuredClone(value);
+  if (materialized === null || Array.isArray(materialized) || typeof materialized !== "object") {
+    throw new TypeError("gate decision choice must be a JSON object");
+  }
+  const record3 = materialized;
+  const allowed = /* @__PURE__ */ new Set(["choice", "reason", "rationale", "rule", "operation"]);
+  if (Object.keys(record3).some((key) => !allowed.has(key))) {
+    throw new TypeError("gate decision choice contains unsupported fields");
+  }
+  if (typeof record3.choice !== "string" || record3.choice.trim() === "") {
+    throw new TypeError("gate decision choice.choice must be a non-empty string");
+  }
+  if (typeof record3.reason !== "string" || record3.reason.trim() === "") {
+    throw new TypeError("gate decision choice.reason must be a non-empty string");
+  }
+  return record3;
+}
+function selectGateDecisionTemplate(active, value) {
+  const choice = choiceRecord(value);
+  const selectedBinding = presentationBindings(active).find((binding) => binding.token === choice.choice);
+  const presentedDecision = selectedBinding?.decision;
+  const decision3 = presentedDecision === "waiver-grant" ? "grant" : presentedDecision === "waiver-deny" ? "deny" : presentedDecision ?? choice.choice;
+  const reason2 = choice.reason;
+  const templates = buildGateDecisionTemplates(active);
+  if (decision3 === "cancel") {
+    if (choice.rationale !== void 0 || choice.rule !== void 0 || choice.operation !== void 0) {
+      throw new TypeError("cancel accepts only choice and reason");
+    }
+    const template2 = templates.find((candidate) => "cancelled" in candidate);
+    if (template2 === void 0) throw new TypeError("cancel is not allowed for the active gate");
+    return { ...template2, reason: reason2 };
+  }
+  const waiver = waiverContext(active.context);
+  if (waiver !== void 0) {
+    if (!["grant", "deny"].includes(decision3)) {
+      throw new TypeError("choice is not allowed for the active waiver gate");
+    }
+    if (choice.rationale !== void 0 || choice.rule !== void 0 || choice.operation !== void 0) {
+      throw new TypeError("waiver decisions accept only choice and reason");
+    }
+    const granted = decision3 === "grant";
+    const template2 = templates.find((candidate) => candidate.granted === granted);
+    if (template2 === void 0) throw new TypeError("choice is not allowed for the active waiver gate");
+    return { ...template2, notes: reason2 };
+  }
+  let template;
+  if (decision3 === "waiver-requested") {
+    if (selectedBinding !== void 0) {
+      if (choice.rule !== void 0 || choice.operation !== void 0) {
+        throw new TypeError("a server-issued waiver option does not accept rule or operation selectors");
+      }
+      template = selectedBinding.template;
+    } else {
+      if (choice.rule === void 0 || typeof choice.operation !== "string" || choice.operation.trim() === "") {
+        throw new TypeError("waiver-requested requires rule and operation selectors");
+      }
+      template = templates.find((candidate) => {
+        const payload2 = candidate.payload;
+        return payload2?.decision === decision3 && payload2.operation === choice.operation && isDeepStrictEqual6(payload2.rule, choice.rule);
+      });
+    }
+  } else {
+    if (choice.rule !== void 0 || choice.operation !== void 0) {
+      throw new TypeError("rule and operation apply only to waiver-requested");
+    }
+    if (decision3 !== "adopt-as-new-generation" && choice.rationale !== void 0) {
+      throw new TypeError("rationale is not accepted for this decision");
+    }
+    template = selectedBinding?.template ?? templates.find(
+      (candidate) => candidate.payload?.decision === decision3
+    );
+  }
+  if (template === void 0) throw new TypeError("choice is not allowed for the active gate");
+  const payload = template.payload;
+  return {
+    ...template,
+    payload: {
+      ...payload,
+      reason: reason2,
+      ...decision3 === "waiver-requested" || decision3 === "adopt-as-new-generation" ? { rationale: choice.rationale ?? reason2 } : {}
+    }
+  };
+}
+async function writeGateDecisionInterface(dependencies, authority, value) {
+  assertInternalTransactionAuthority(authority, {
+    runner: dependencies.runner,
+    environment: dependencies.environment
+  });
+  assertPlainJson(value, "gate decision template");
+  const selected = structuredClone(value);
+  return writeSelectedGateDecision(dependencies, authority, () => selected);
+}
+async function writeGateDecisionChoice(dependencies, authority, value) {
+  assertInternalTransactionAuthority(authority, {
+    runner: dependencies.runner,
+    environment: dependencies.environment
+  });
+  const selected = structuredClone(choiceRecord(value));
+  return writeSelectedGateDecision(dependencies, authority, (active) => selectGateDecisionTemplate(active, selected));
+}
+async function writeSelectedGateDecision(dependencies, authority, select) {
+  try {
+    await ensureIntentDirectory(authority);
+    return await dependencies.lock.runExclusive(authority.workspace_root, async () => {
+      const stateResult = await stateOrFailure(dependencies, authority);
+      if (!stateResult.ok) return stateResult;
+      const current = stateResult.value;
+      const gate = current.value.open_gate;
+      if (gate === void 0) return issue2("STATE_INVALID", current.value, "gate-interface-open-gate-missing");
+      const requestPath = await resolvePath6(
+        dependencies,
+        authority,
+        gateRequestClaim(gate.gate_id),
+        "authority-decision"
+      );
+      const activePath = await resolvePath6(dependencies, authority, "gate.json", "workspace-gate-interface");
+      const interfacePath = await resolvePath6(dependencies, authority, "gate.decision", "workspace-gate-interface");
+      if (!requestPath.ok) return requestPath;
+      if (!activePath.ok) return activePath;
+      if (!interfacePath.ok) return interfacePath;
+      const durableRequest = await readCanonical(requestPath.value, "gate request", parseGateRequest);
+      if (durableRequest === "missing" || durableRequest === "invalid") {
+        return issue2("STATE_INVALID", current.value, "active-gate-request-invalid");
+      }
+      const projected = await readCanonical(activePath.value, "active gate", parseActiveGate);
+      const active = projected === "missing" || projected === "invalid" ? parseActiveGate(activeProjection(durableRequest.value)) : projected.value;
+      if (active.task_id !== authority.task_id || active.gate_id !== gate.gate_id || active.kind !== gate.gate_kind || active.subject_digest !== gate.subject_digest || active.context_digest !== gate.context_digest) return issue2("STATE_INVALID", current.value, "active-gate-interface-mismatch");
+      if (projected === "missing" || projected === "invalid") {
+        await ensureWorkspaceProjectionParent(authority, activePath.value.absolute);
+        await dependencies.atomic.replace(activePath.value, canonicalDocument(active).bytes);
+      }
+      let selected;
+      try {
+        selected = select(active);
+      } catch {
+        return fail8(createProjectError("GATE_DECISION_INVALID", {
+          gate_id: active.gate_id,
+          gate_kind: active.kind,
+          issue_code: "decision-choice-invalid"
+        }));
+      }
+      const provenance2 = {
+        schema_version: "1",
+        actor_class: "human",
+        assurance: "declared-local-trace",
+        channel: "archflow-local",
+        decision_event_id: randomUUID(),
+        helper_invocation_id: randomUUID(),
+        recorded_at: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      const candidate = selected !== null && typeof selected === "object" && !Array.isArray(selected) ? { ...selected, human_provenance: provenance2 } : selected;
+      try {
+        parseInterface(candidate, active);
+      } catch {
+        return fail8(createProjectError("GATE_DECISION_INVALID", {
+          gate_id: active.gate_id,
+          gate_kind: active.kind,
+          issue_code: "decision-binding-invalid"
+        }));
+      }
+      const existing = await readCanonical(interfacePath.value, "gate decision interface", (raw) => raw);
+      if (existing !== "missing" && existing !== "invalid") {
+        try {
+          parseInterface(existing.value, active);
+          return fail8(createProjectError("GATE_ACTIVE", {
+            gate_id: active.gate_id,
+            gate_kind: active.kind
+          }));
+        } catch {
+        }
+      }
+      const document2 = canonicalDocument(candidate);
+      await ensureWorkspaceProjectionParent(authority, interfacePath.value.absolute);
+      await dependencies.atomic.replace(interfacePath.value, document2.bytes);
+      return ok6({
+        gate_id: active.gate_id,
+        decision_path: interfacePath.value.repositoryRelative,
+        decision_digest: document2.digest
+      });
+    });
+  } catch (error51) {
+    return error51 instanceof TaskLockError ? io(authority, `gate-lock-${error51.stage}`) : io(authority, "gate-interface-write");
+  }
+}
+
+// src/state/legacy-import-resume.ts
+async function loadLegacyImportInitialization(dependencies, authority, state) {
+  const resolved = await resolveTaskPath({
+    runner: dependencies.runner,
+    taskId: authority.task_id,
+    claim: initializationAuthorityClaim(),
+    expectedClass: "authority-initialization",
+    context: authority.context
+  });
+  if (!resolved.ok) return resolved;
+  const document2 = await readCanonical(
+    resolved.value,
+    "legacy import initialization authority",
+    parseLegacyImportInitialization
+  );
+  if (document2 === "missing" || document2 === "invalid" || document2.digest !== state.initialization_digest) {
+    return ok6(void 0);
+  }
+  return ok6(document2.value);
 }
 
 // src/contracts/yaml.ts
@@ -33129,7 +33562,7 @@ function parseWorkflowYaml(source, label = "workflow.yaml") {
 }
 
 // src/state/gate-approvals.ts
-import { isDeepStrictEqual as isDeepStrictEqual6 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual7 } from "node:util";
 var authenticatedGateApprovals = /* @__PURE__ */ new WeakSet();
 var authenticatedGateApprovalBrand = /* @__PURE__ */ Symbol("AuthenticatedGateApproval");
 function assertAuthenticatedGateApproval(value) {
@@ -33151,7 +33584,7 @@ async function loadAuthenticatedGateApproval(dependencies, authority, approval) 
     authority.repository_identity
   ).ok) return issue2("STATE_INVALID", current.value.value, "gate-approval-state-authority-mismatch");
   const durable = current.value.value.approvals.find((entry) => entry.gate_id === claimed.gate_id);
-  if (durable === void 0 || !isDeepStrictEqual6(durable, claimed)) {
+  if (durable === void 0 || !isDeepStrictEqual7(durable, claimed)) {
     return issue2("STATE_INVALID", current.value.value, "gate-approval-not-current");
   }
   const requestPath = await resolvePath6(
@@ -33509,8 +33942,8 @@ async function referencedDecisionDigests(authority) {
   const pattern = /\b[0-9a-f]{64}\b/gu;
   for (const file2 of files) {
     if (file2.symlink) return /* @__PURE__ */ new Set(["*"]);
-    const text3 = await readFile3(file2.absolute, "utf8").catch(() => "");
-    for (const match of text3.matchAll(pattern)) digests.add(match[0]);
+    const text4 = await readFile3(file2.absolute, "utf8").catch(() => "");
+    for (const match of text4.matchAll(pattern)) digests.add(match[0]);
   }
   return digests;
 }
@@ -33600,9 +34033,9 @@ async function unreferencedAuthorityDecisions(authority, state) {
       }
       for (const entry of entries) {
         if (entry.symlink) return Object.freeze([]);
-        const text3 = await readFile3(entry.absolute, "utf8").catch(() => "");
+        const text4 = await readFile3(entry.absolute, "utf8").catch(() => "");
         for (const candidate of known) {
-          if (!live.has(candidate) && text3.includes(`"${candidate}"`)) {
+          if (!live.has(candidate) && text4.includes(`"${candidate}"`)) {
             live.add(candidate);
             changed = true;
           }
@@ -33758,386 +34191,6 @@ async function cleanTerminalTaskWorkspace(dependencies, authority) {
     }));
   } catch {
     return io2(authority, "clean-terminal-task-workspace");
-  }
-}
-
-// src/state/gate-decision-interface.ts
-import { randomUUID } from "node:crypto";
-import { isDeepStrictEqual as isDeepStrictEqual7 } from "node:util";
-var TEMPLATE_REASON = "Record the human decision reason.";
-var TEMPLATE_RATIONALE = "Record the human decision rationale.";
-function decisionTemplateBase(active) {
-  return {
-    schema_version: "1",
-    gate_id: active.gate_id,
-    task_id: active.task_id,
-    phase_instance: active.phase_instance,
-    subject_digest: active.subject_digest,
-    context_digest: active.context_digest
-  };
-}
-function buildGateDecisionTemplates(active) {
-  const request2 = parseActiveGate(structuredClone(active));
-  const base2 = decisionTemplateBase(request2);
-  const cancellation = { ...base2, cancelled: true, reason: TEMPLATE_REASON };
-  const waiver = waiverContext(request2.context);
-  if (waiver !== void 0) {
-    return deepFreezeGateJson([
-      {
-        ...base2,
-        granted: true,
-        scope: structuredClone(waiver.origin.scope),
-        origin: structuredClone(waiver.origin),
-        notes: TEMPLATE_REASON
-      },
-      {
-        ...base2,
-        granted: false,
-        scope: structuredClone(waiver.origin.scope),
-        origin: structuredClone(waiver.origin),
-        notes: TEMPLATE_REASON
-      },
-      cancellation
-    ]);
-  }
-  const templates = [];
-  for (const decision3 of request2.allowed_decisions) {
-    if (decision3 === "cancel") {
-      templates.push(cancellation);
-      continue;
-    }
-    const context2 = request2.context;
-    const payloads = [];
-    if (decision3 === "waiver-requested") {
-      const eligible = context2.eligible_waivers;
-      for (const item of eligible) {
-        payloads.push({
-          decision: decision3,
-          reason: TEMPLATE_REASON,
-          rule: structuredClone(item.rule),
-          operation: item.scope.operation,
-          rationale: TEMPLATE_RATIONALE
-        });
-      }
-    } else if (request2.kind === "restore-collision" && decision3 === "adopt-as-new-generation") {
-      if (request2.context.adoption_candidate !== void 0) {
-        payloads.push({
-          decision: decision3,
-          reason: TEMPLATE_REASON,
-          adoption_authority: structuredClone(request2.context.adoption_candidate),
-          rationale: TEMPLATE_RATIONALE
-        });
-      }
-    } else {
-      payloads.push({ decision: decision3, reason: TEMPLATE_REASON });
-    }
-    for (const payload of payloads) {
-      validateGateDecision(request2.kind, request2.context, payload);
-      templates.push({ ...base2, kind: request2.kind, payload });
-    }
-  }
-  return deepFreezeGateJson(templates);
-}
-var PRESENTATION_COPY = Object.freeze({
-  "artifact-approval": Object.freeze({
-    title: "Review the finished work",
-    question: "Does this work meet your expectations, or would you like it changed?"
-  }),
-  "design-approval": Object.freeze({
-    title: "Review and approve the design",
-    question: "Should ArchFlow approve this design, commit its recoverable milestone, and continue?"
-  }),
-  "constitution-review": Object.freeze({
-    title: "Review the policy findings",
-    question: "How would you like to handle the policy review?"
-  }),
-  "material-drift": Object.freeze({
-    title: "Choose how to handle a material change",
-    question: "Should the earlier plan change, should the current work change, or should this version stop?"
-  }),
-  "attempts-exhausted": Object.freeze({
-    title: "Automated review needs your direction",
-    question: "The review did not converge within its normal attempts. What would you like to do next?"
-  }),
-  "constitution-edit": Object.freeze({
-    title: "Review a project policy change",
-    question: "Should the policy edit be undone, moved into the project baseline, or abandoned?"
-  }),
-  "commit-authorization": Object.freeze({
-    title: "Authorize the commit",
-    question: "Do you authorize committing the reviewed changes, or should they be revised first?"
-  }),
-  "restore-collision": Object.freeze({
-    title: "Resolve a workspace conflict",
-    question: "Should ArchFlow restore the saved version, keep the current version, or stop?"
-  }),
-  "migration-audit": Object.freeze({
-    title: "Review the imported task",
-    question: "Is the imported task accurate enough to accept, or should it be revised?"
-  })
-});
-var OPTION_COPY = Object.freeze({
-  approve: Object.freeze({ token: "approve", label: "Approve and continue", consequence: "Accept this review result and continue the workflow." }),
-  revise: Object.freeze({ token: "request-changes", label: "Request changes", consequence: "Return the work for revision. Significant changes will receive a fresh independent review." }),
-  reject: Object.freeze({ token: "reject", label: "Reject this version", consequence: "Do not approve this version; the workflow will not advance." }),
-  "amend-upstream": Object.freeze({ token: "update-earlier-work", label: "Update the earlier work", consequence: "Return to the affected earlier artifact and bring the plan back in line with reality." }),
-  "revise-current": Object.freeze({ token: "change-current-work", label: "Change the current work", consequence: "Keep the earlier plan and revise the current artifact to match it." }),
-  "retry-once": Object.freeze({ token: "try-review-again", label: "Try the review once more", consequence: "Allow one more automated review attempt without changing the work first." }),
-  abort: Object.freeze({ token: "stop-work", label: "Stop this work", consequence: "End this workflow path without approval." }),
-  "revert-edit": Object.freeze({ token: "undo-policy-change", label: "Undo the policy edit", consequence: "Restore the policy version this task originally reviewed against." }),
-  "start-base-amendment": Object.freeze({ token: "update-project-policy", label: "Update the project policy", consequence: "Move the policy change into the project baseline before continuing this task." }),
-  "authorize-commit": Object.freeze({ token: "authorize-commit", label: "Authorize the commit", consequence: "Permit ArchFlow to commit the exact reviewed changes after the required final confirmation." }),
-  "discard-and-restore": Object.freeze({ token: "restore-saved-version", label: "Restore the saved version", consequence: "Discard the conflicting workspace copy and reconstruct it from durable authority." }),
-  "adopt-as-new-generation": Object.freeze({ token: "keep-current-version", label: "Keep the current version", consequence: "Treat the current workspace copy as a new generation of the artifact." }),
-  "accept-import-audit": Object.freeze({ token: "accept-import", label: "Accept the import", consequence: "Confirm that the imported task faithfully represents the legacy source and continue." }),
-  cancel: Object.freeze({ token: "cancel", label: "Cancel this decision", consequence: "Close this decision without approving anything; the workflow will remain stopped here." }),
-  "waiver-grant": Object.freeze({ token: "grant-exception", label: "Grant the exception", consequence: "Allow the narrowly scoped policy exception recorded in this request." }),
-  "waiver-deny": Object.freeze({ token: "deny-exception", label: "Deny the exception", consequence: "Keep the policy requirement in force and do not advance under this exception." })
-});
-function gateDecisionTemplateName(template) {
-  if (template === null || typeof template !== "object" || Array.isArray(template)) return "unknown";
-  const value = template;
-  if (value.cancelled === true) return "cancel";
-  if (typeof value.granted === "boolean") return value.granted ? "waiver-grant" : "waiver-deny";
-  const payload = value.payload;
-  if (payload !== null && typeof payload === "object" && !Array.isArray(payload)) {
-    const decision3 = payload.decision;
-    if (typeof decision3 === "string") return decision3;
-  }
-  return "unknown";
-}
-function waiverOption(template, index) {
-  const payload = template.payload;
-  const axis = payload.operation === "review-trigger" ? "additional review" : "policy finding";
-  return Object.freeze({
-    token: `request-exception-${index}`,
-    label: `Request an exception for ${payload.rule.rule_id}`,
-    consequence: `Ask for a narrowly scoped exception to this rule's ${axis}. A separate human decision will grant or deny it.`
-  });
-}
-function presentationBindings(active) {
-  let waiverIndex = 0;
-  return Object.freeze(buildGateDecisionTemplates(active).flatMap((template) => {
-    const decision3 = gateDecisionTemplateName(template);
-    if (decision3 === "unknown") return [];
-    const option = active.kind === "design-approval" && decision3 === "approve" ? Object.freeze({
-      token: "approve",
-      label: "Approve, commit, and continue",
-      consequence: "Approve the exact reviewed design and policy context, authorize its recoverable task-local commit, and continue the workflow."
-    }) : decision3 === "waiver-requested" ? waiverOption(template, ++waiverIndex) : OPTION_COPY[decision3];
-    return [Object.freeze({ token: option.token, decision: decision3, template, option })];
-  }));
-}
-function buildHumanGatePresentation(active) {
-  const request2 = parseActiveGate(structuredClone(active));
-  const waiver = waiverContext(request2.context);
-  const copy = waiver === void 0 ? PRESENTATION_COPY[request2.kind] : Object.freeze({
-    title: "Decide a policy exception",
-    question: "Should this narrowly scoped policy exception be granted?"
-  });
-  return Object.freeze({
-    title: copy.title,
-    summary: request2.summary,
-    ...request2.kind === "design-approval" ? {
-      details: Object.freeze(request2.context.policy_findings.flatMap((finding) => {
-        const lines = [];
-        if (finding.compliance !== "pass") {
-          lines.push(`${finding.rule_id}: policy compliance is ${finding.compliance}. ${finding.rationale}`);
-        }
-        if (finding.trigger !== "not-matched") {
-          lines.push(`${finding.rule_id}: review trigger is ${finding.trigger}. ${finding.trigger_evidence}`);
-        }
-        return lines;
-      }))
-    } : {},
-    question: `${copy.question} Choose an option and briefly explain why.`,
-    options: Object.freeze(presentationBindings(request2).map((binding) => binding.option))
-  });
-}
-function choiceRecord(value) {
-  assertPlainJson(value, "gate decision choice");
-  const materialized = structuredClone(value);
-  if (materialized === null || Array.isArray(materialized) || typeof materialized !== "object") {
-    throw new TypeError("gate decision choice must be a JSON object");
-  }
-  const record3 = materialized;
-  const allowed = /* @__PURE__ */ new Set(["choice", "reason", "rationale", "rule", "operation"]);
-  if (Object.keys(record3).some((key) => !allowed.has(key))) {
-    throw new TypeError("gate decision choice contains unsupported fields");
-  }
-  if (typeof record3.choice !== "string" || record3.choice.trim() === "") {
-    throw new TypeError("gate decision choice.choice must be a non-empty string");
-  }
-  if (typeof record3.reason !== "string" || record3.reason.trim() === "") {
-    throw new TypeError("gate decision choice.reason must be a non-empty string");
-  }
-  return record3;
-}
-function selectGateDecisionTemplate(active, value) {
-  const choice = choiceRecord(value);
-  const selectedBinding = presentationBindings(active).find((binding) => binding.token === choice.choice);
-  const presentedDecision = selectedBinding?.decision;
-  const decision3 = presentedDecision === "waiver-grant" ? "grant" : presentedDecision === "waiver-deny" ? "deny" : presentedDecision ?? choice.choice;
-  const reason2 = choice.reason;
-  const templates = buildGateDecisionTemplates(active);
-  if (decision3 === "cancel") {
-    if (choice.rationale !== void 0 || choice.rule !== void 0 || choice.operation !== void 0) {
-      throw new TypeError("cancel accepts only choice and reason");
-    }
-    const template2 = templates.find((candidate) => "cancelled" in candidate);
-    if (template2 === void 0) throw new TypeError("cancel is not allowed for the active gate");
-    return { ...template2, reason: reason2 };
-  }
-  const waiver = waiverContext(active.context);
-  if (waiver !== void 0) {
-    if (!["grant", "deny"].includes(decision3)) {
-      throw new TypeError("choice is not allowed for the active waiver gate");
-    }
-    if (choice.rationale !== void 0 || choice.rule !== void 0 || choice.operation !== void 0) {
-      throw new TypeError("waiver decisions accept only choice and reason");
-    }
-    const granted = decision3 === "grant";
-    const template2 = templates.find((candidate) => candidate.granted === granted);
-    if (template2 === void 0) throw new TypeError("choice is not allowed for the active waiver gate");
-    return { ...template2, notes: reason2 };
-  }
-  let template;
-  if (decision3 === "waiver-requested") {
-    if (selectedBinding !== void 0) {
-      if (choice.rule !== void 0 || choice.operation !== void 0) {
-        throw new TypeError("a server-issued waiver option does not accept rule or operation selectors");
-      }
-      template = selectedBinding.template;
-    } else {
-      if (choice.rule === void 0 || typeof choice.operation !== "string" || choice.operation.trim() === "") {
-        throw new TypeError("waiver-requested requires rule and operation selectors");
-      }
-      template = templates.find((candidate) => {
-        const payload2 = candidate.payload;
-        return payload2?.decision === decision3 && payload2.operation === choice.operation && isDeepStrictEqual7(payload2.rule, choice.rule);
-      });
-    }
-  } else {
-    if (choice.rule !== void 0 || choice.operation !== void 0) {
-      throw new TypeError("rule and operation apply only to waiver-requested");
-    }
-    if (decision3 !== "adopt-as-new-generation" && choice.rationale !== void 0) {
-      throw new TypeError("rationale is not accepted for this decision");
-    }
-    template = selectedBinding?.template ?? templates.find(
-      (candidate) => candidate.payload?.decision === decision3
-    );
-  }
-  if (template === void 0) throw new TypeError("choice is not allowed for the active gate");
-  const payload = template.payload;
-  return {
-    ...template,
-    payload: {
-      ...payload,
-      reason: reason2,
-      ...decision3 === "waiver-requested" || decision3 === "adopt-as-new-generation" ? { rationale: choice.rationale ?? reason2 } : {}
-    }
-  };
-}
-async function writeGateDecisionInterface(dependencies, authority, value) {
-  assertInternalTransactionAuthority(authority, {
-    runner: dependencies.runner,
-    environment: dependencies.environment
-  });
-  assertPlainJson(value, "gate decision template");
-  const selected = structuredClone(value);
-  return writeSelectedGateDecision(dependencies, authority, () => selected);
-}
-async function writeGateDecisionChoice(dependencies, authority, value) {
-  assertInternalTransactionAuthority(authority, {
-    runner: dependencies.runner,
-    environment: dependencies.environment
-  });
-  const selected = structuredClone(choiceRecord(value));
-  return writeSelectedGateDecision(dependencies, authority, (active) => selectGateDecisionTemplate(active, selected));
-}
-async function writeSelectedGateDecision(dependencies, authority, select) {
-  try {
-    await ensureIntentDirectory(authority);
-    return await dependencies.lock.runExclusive(authority.workspace_root, async () => {
-      const stateResult = await stateOrFailure(dependencies, authority);
-      if (!stateResult.ok) return stateResult;
-      const current = stateResult.value;
-      const gate = current.value.open_gate;
-      if (gate === void 0) return issue2("STATE_INVALID", current.value, "gate-interface-open-gate-missing");
-      const requestPath = await resolvePath6(
-        dependencies,
-        authority,
-        gateRequestClaim(gate.gate_id),
-        "authority-decision"
-      );
-      const activePath = await resolvePath6(dependencies, authority, "gate.json", "workspace-gate-interface");
-      const interfacePath = await resolvePath6(dependencies, authority, "gate.decision", "workspace-gate-interface");
-      if (!requestPath.ok) return requestPath;
-      if (!activePath.ok) return activePath;
-      if (!interfacePath.ok) return interfacePath;
-      const durableRequest = await readCanonical(requestPath.value, "gate request", parseGateRequest);
-      if (durableRequest === "missing" || durableRequest === "invalid") {
-        return issue2("STATE_INVALID", current.value, "active-gate-request-invalid");
-      }
-      const projected = await readCanonical(activePath.value, "active gate", parseActiveGate);
-      const active = projected === "missing" || projected === "invalid" ? parseActiveGate(activeProjection(durableRequest.value)) : projected.value;
-      if (active.task_id !== authority.task_id || active.gate_id !== gate.gate_id || active.kind !== gate.gate_kind || active.subject_digest !== gate.subject_digest || active.context_digest !== gate.context_digest) return issue2("STATE_INVALID", current.value, "active-gate-interface-mismatch");
-      if (projected === "missing" || projected === "invalid") {
-        await ensureWorkspaceProjectionParent(authority, activePath.value.absolute);
-        await dependencies.atomic.replace(activePath.value, canonicalDocument(active).bytes);
-      }
-      let selected;
-      try {
-        selected = select(active);
-      } catch {
-        return fail8(createProjectError("GATE_DECISION_INVALID", {
-          gate_id: active.gate_id,
-          gate_kind: active.kind,
-          issue_code: "decision-choice-invalid"
-        }));
-      }
-      const provenance2 = {
-        schema_version: "1",
-        actor_class: "human",
-        assurance: "declared-local-trace",
-        channel: "archflow-local",
-        decision_event_id: randomUUID(),
-        helper_invocation_id: randomUUID(),
-        recorded_at: (/* @__PURE__ */ new Date()).toISOString()
-      };
-      const candidate = selected !== null && typeof selected === "object" && !Array.isArray(selected) ? { ...selected, human_provenance: provenance2 } : selected;
-      try {
-        parseInterface(candidate, active);
-      } catch {
-        return fail8(createProjectError("GATE_DECISION_INVALID", {
-          gate_id: active.gate_id,
-          gate_kind: active.kind,
-          issue_code: "decision-binding-invalid"
-        }));
-      }
-      const existing = await readCanonical(interfacePath.value, "gate decision interface", (raw) => raw);
-      if (existing !== "missing" && existing !== "invalid") {
-        try {
-          parseInterface(existing.value, active);
-          return fail8(createProjectError("GATE_ACTIVE", {
-            gate_id: active.gate_id,
-            gate_kind: active.kind
-          }));
-        } catch {
-        }
-      }
-      const document2 = canonicalDocument(candidate);
-      await ensureWorkspaceProjectionParent(authority, interfacePath.value.absolute);
-      await dependencies.atomic.replace(interfacePath.value, document2.bytes);
-      return ok6({
-        gate_id: active.gate_id,
-        decision_path: interfacePath.value.repositoryRelative,
-        decision_digest: document2.digest
-      });
-    });
-  } catch (error51) {
-    return error51 instanceof TaskLockError ? io(authority, `gate-lock-${error51.stage}`) : io(authority, "gate-interface-write");
   }
 }
 
@@ -34520,8 +34573,8 @@ function parseConstitutionRuleMarkdown(source, label) {
   const close = normalized.indexOf("\n---\n", 4);
   if (close < 0) throw new Error(`${label}: expected closing YAML frontmatter delimiter`);
   const frontmatter = parseSingleYamlDocument(normalized.slice(4, close), `${label} frontmatter`);
-  const text3 = normalized.slice(close + 5).trim();
-  return parseConstitutionRuleV1({ ...frontmatter, text: text3 });
+  const text4 = normalized.slice(close + 5).trim();
+  return parseConstitutionRuleV1({ ...frontmatter, text: text4 });
 }
 function registryFromRules(rules2) {
   const registry2 = /* @__PURE__ */ new Map();
@@ -34547,12 +34600,12 @@ function assertResolvedConstitution(value) {
   }
 }
 function immutableRegistry(rules2) {
-  const entries = [...rules2].map(([id5, rule4]) => {
+  const entries = [...rules2].map(([id6, rule4]) => {
     const frozenRule = Object.freeze({
       ...rule4,
       ...rule4.enforced_by === void 0 ? {} : { enforced_by: Object.freeze([...rule4.enforced_by]) }
     });
-    return Object.freeze([id5, frozenRule]);
+    return Object.freeze([id6, frozenRule]);
   });
   const backing = new Map(entries);
   let registry2;
@@ -34810,10 +34863,10 @@ function parseConfigYaml(source, label = "config.yaml") {
 
 // src/state/read.ts
 var decoder3 = new TextDecoder("utf-8", { fatal: true });
-function deepFreeze3(value) {
+function deepFreeze4(value) {
   if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {
     Object.freeze(value);
-    for (const child of Object.values(value)) deepFreeze3(child);
+    for (const child of Object.values(value)) deepFreeze4(child);
   }
   return value;
 }
@@ -34838,7 +34891,7 @@ async function readTaskState(path2) {
   try {
     const document2 = parseCanonicalDocument(read.bytes, "task state");
     taskStateV1Schema.parse(document2.value);
-    deepFreeze3(document2.value);
+    deepFreeze4(document2.value);
     return Object.freeze({ kind: "canonical", document: document2 });
   } catch {
     return Object.freeze({ kind: "noncanonical" });
@@ -35974,15 +36027,15 @@ var TERMINAL_ARTIFACT_PLACEHOLDERS = {
   produce: "Replace with the complete document or implementation-output artifact; archflow-local build-request emits this entire request already completed and fingerprint-resolved.",
   triage: 'Replace with the complete triage artifact; archflow-local build-request (kind "triage") composes this entire request from the dispositions alone.'
 };
-function deepFreeze4(value) {
+function deepFreeze5(value) {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const nested of Object.values(value)) deepFreeze4(nested);
+    for (const nested of Object.values(value)) deepFreeze5(nested);
     Object.freeze(value);
   }
   return value;
 }
 function request(tool2, input, guidance) {
-  return deepFreeze4({ request: { tool: tool2, input }, guidance });
+  return deepFreeze5({ request: { tool: tool2, input }, guidance });
 }
 function envelopeGuidance(taskId, tool2, detail) {
   return `${detail} Fill every placeholder field, then pipe the completed request as {"tool":"${tool2}","input":<request>} to archflow-local envelope --task ${taskId}; it resolves the fingerprint internally, so call ${tool2} with the returned request.input verbatim \u2014 the envelope output, not this template, is the fingerprint authority.`;
@@ -37310,9 +37363,9 @@ async function appendGitAttributes(workingDirectory) {
     }
     return true;
   }
-  const text3 = new TextDecoder("utf-8", { fatal: true }).decode(current);
-  if (text3.split(/\r?\n/u).includes(ARCHFLOW_GITATTRIBUTES_LINE)) return false;
-  const prefix = current.byteLength === 0 || text3.endsWith("\n") ? "" : "\n";
+  const text4 = new TextDecoder("utf-8", { fatal: true }).decode(current);
+  if (text4.split(/\r?\n/u).includes(ARCHFLOW_GITATTRIBUTES_LINE)) return false;
+  const prefix = current.byteLength === 0 || text4.endsWith("\n") ? "" : "\n";
   const handle = await open4(path2, "a");
   try {
     await handle.writeFile(`${prefix}${ARCHFLOW_GITATTRIBUTES_LINE}
@@ -37764,10 +37817,10 @@ var fail16 = (error51, cliVersion) => {
   throw new CliAdapterError(error51, cliVersion);
 };
 function decodeJson2(bytes, adapter2, issueCode) {
-  let text3;
+  let text4;
   try {
-    text3 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    const value = JSON.parse(text3);
+    text4 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    const value = JSON.parse(text4);
     assertPlainJson(value, "CLI JSON output");
     return value;
   } catch {
@@ -37788,8 +37841,8 @@ function compareVersions(left, right) {
   return 0;
 }
 function exactVersion(adapter2, output) {
-  const text3 = Buffer.from(output).toString("utf8").trim();
-  const match = adapter2 === "claude-cli" ? /^(\d+\.\d+\.\d+) \(Claude Code\)$/u.exec(text3) : /^codex-cli (\d+\.\d+\.\d+)$/u.exec(text3);
+  const text4 = Buffer.from(output).toString("utf8").trim();
+  const match = adapter2 === "claude-cli" ? /^(\d+\.\d+\.\d+) \(Claude Code\)$/u.exec(text4) : /^codex-cli (\d+\.\d+\.\d+)$/u.exec(text4);
   return match?.[1] ?? "unrecognized";
 }
 async function detectManagedPolicyPaths(paths) {
@@ -37824,9 +37877,9 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
     signal,
     cancellationSource
   );
-  const version3 = exactVersion(adapter2, versionResult.stdout);
-  if (versionResult.exit_code !== 0 || version3 === "unrecognized" || compareVersions(version3, minimumVersion) < 0) {
-    return fail16(createProjectError("CLI_VERSION_UNSUPPORTED", { adapter: adapter2, version: version3 }));
+  const version4 = exactVersion(adapter2, versionResult.stdout);
+  if (versionResult.exit_code !== 0 || version4 === "unrecognized" || compareVersions(version4, minimumVersion) < 0) {
+    return fail16(createProjectError("CLI_VERSION_UNSUPPORTED", { adapter: adapter2, version: version4 }));
   }
   const authResult = await runPreflightCommand(
     adapter2,
@@ -37848,10 +37901,10 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
     const successLines = [authResult.stdout, authResult.stderr].flatMap((channel) => channel.toString("utf8").split(/\r?\n/u)).filter((line) => /^Logged in(?:\s|$)/u.test(line.trim()));
     loggedIn = successLines.length >= 1;
   }
-  if (!loggedIn) return fail16(createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 }), version3);
+  if (!loggedIn) return fail16(createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 }), version4);
   const managedPolicyPaths = await detectManagedPolicyPaths(policyPaths);
   return Object.freeze({
-    cli_version: version3,
+    cli_version: version4,
     managed_policy_present: managedPolicyPaths.length > 0,
     managed_policy_paths: managedPolicyPaths
   });
@@ -38316,9 +38369,9 @@ async function registerClaudeProject(input) {
     } catch (error51) {
       return commandFailure("claude-cli", error51);
     }
-    const text3 = `${get.stdout}
+    const text4 = `${get.stdout}
 ${get.stderr}`;
-    const diagnostic = claudeGetDiagnostic(text3);
+    const diagnostic = claudeGetDiagnostic(text4);
     return ok15(Object.freeze({
       schema_version: "1",
       host: "claude",
@@ -38327,7 +38380,7 @@ ${get.stderr}`;
       pending_approval: diagnostic.pending_approval,
       project_trusted: null,
       masked_by_higher_precedence: diagnostic.masked_by_higher_precedence,
-      diagnostic: get.exit_code === 0 ? text3.trim() : "Project registration written; Claude runtime approval remains to be completed."
+      diagnostic: get.exit_code === 0 ? text4.trim() : "Project registration written; Claude runtime approval remains to be completed."
     }));
   } catch {
     return ioFailure3("claude-registration");
@@ -38497,10 +38550,10 @@ async function diagnoseAdapter(adapter2, repository) {
   } catch (caught) {
     const error51 = preflightError(caught);
     const paths = await pathsPromise;
-    const version3 = caught instanceof CliAdapterError ? caught.cli_version ?? unsupportedVersion(caught.project_error) : null;
+    const version4 = caught instanceof CliAdapterError ? caught.cli_version ?? unsupportedVersion(caught.project_error) : null;
     return Object.freeze({
       adapter: adapter2,
-      version: version3,
+      version: version4,
       authenticated: error51?.code === "AUTH_UNAVAILABLE" ? false : null,
       managed_policy_present: paths.length > 0,
       managed_policy_paths: paths,
@@ -39245,6 +39298,14 @@ var reopenImpactV1Schema = external_exports.object({
 var commitInstructionV1Schema = external_exports.object({ path: nonBlank4, message: nonBlank4, target_ref: nonBlank4, baseline: nonBlank4, requires_human_confirmation: external_exports.boolean() }).strict();
 var semanticNextActionV1Schema = external_exports.object({ kind: external_exports.enum(SEMANTIC_ACTION_KINDS), instruction: nonBlank4, offer: external_exports.string().regex(/^af1_[0-9a-f]{64}$/u).optional(), expected_submission: external_exports.enum(APPLY_SUBMISSION_KINDS).optional(), skill: nonBlank4.optional(), skill_args: external_exports.array(external_exports.string()).optional(), commit: commitInstructionV1Schema.optional(), reopen: reopenImpactV1Schema.optional() }).strict();
 var workflowViewV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, condition: external_exports.enum(WORKFLOW_CONDITIONS), headline: nonBlank4, detail: nonBlank4, position: workflowPositionV1Schema.optional(), resources: external_exports.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: external_exports.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), presentation: humanPresentationV1Schema.optional() }).strict();
+var semanticErrorSummaryV1Schema = external_exports.object({
+  code: nonBlank4.max(128),
+  message: nonBlank4.max(4096),
+  retryable: external_exports.boolean()
+}).strict();
+var semanticSuccessV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), ok: external_exports.literal(true), value: workflowViewV1Schema }).strict();
+var semanticFailureV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), ok: external_exports.literal(false), error: semanticErrorSummaryV1Schema, view: workflowViewV1Schema.optional() }).strict();
+var semanticResultV1Schema = external_exports.union([semanticSuccessV1Schema, semanticFailureV1Schema]);
 var humanRevisionDeclarationV1Schema = external_exports.object({ classification: external_exports.enum(["simple", "significant"]), rationale: boundedText2, user_override: external_exports.object({ agent_classification: external_exports.enum(["simple", "significant"]), rationale: boundedText2 }).strict().optional() }).strict().superRefine((revision, context2) => {
   if (revision.user_override?.agent_classification === revision.classification) context2.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
 });
@@ -39683,9 +39744,9 @@ async function identifyStateInitialization(dependencies, request2) {
 // src/local/call-envelope.ts
 var ok20 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail22 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-function deepFreeze5(value) {
+function deepFreeze6(value) {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const nested of Object.values(value)) deepFreeze5(nested);
+    for (const nested of Object.values(value)) deepFreeze6(nested);
     Object.freeze(value);
   }
   return value;
@@ -39754,7 +39815,7 @@ async function computeCallEnvelope(services2, value) {
   const draft = parseToolCall(tool2, Reflect.get(snapshot2, "input"));
   const fingerprint = await fingerprintFor(services2, draft);
   if (!fingerprint.ok) return fingerprint;
-  const resolvedInput = deepFreeze5(resolveCallInput(draft, fingerprint.value));
+  const resolvedInput = deepFreeze6(resolveCallInput(draft, fingerprint.value));
   const call = parseToolCall(tool2, resolvedInput);
   const identified = identifyTransactionRequest(call, services2.authority, fingerprint.value);
   const envelope2 = {

@@ -6,7 +6,7 @@ import type { FormatsPlugin } from "ajv-formats";
 import { describe, expect, it } from "vitest";
 
 import { parseToolCall, validateProjectFailureStructure, validateProjectResultStructure } from "../../src/contracts/mcp-tools.js";
-import { TOOL_NAMES, type ToolName } from "../../src/contracts/tool-names.js";
+import { ADVERTISED_TOOL_NAMES, SEMANTIC_TOOL_NAMES, TOOL_NAMES, type ToolName } from "../../src/contracts/tool-names.js";
 import { ADVERTISED_TOOL_CATALOGUE } from "../../src/mcp/tools.js";
 
 interface CorpusCase {
@@ -239,8 +239,9 @@ describe("advertised MCP tool catalogue", () => {
     expect(validation).not.toHaveProperty("issues");
     expect(validation).toHaveProperty("value");
     expect(listed).not.toHaveProperty("nextCursor");
-    expect(ADVERTISED_TOOL_CATALOGUE.map(({ name }) => name)).toEqual(TOOL_NAMES);
-    expect(ADVERTISED_TOOL_CATALOGUE).toHaveLength(4);
+    expect(ADVERTISED_TOOL_CATALOGUE.map(({ name }) => name)).toEqual(ADVERTISED_TOOL_NAMES);
+    expect(ADVERTISED_TOOL_CATALOGUE).toHaveLength(6);
+    expect(ADVERTISED_TOOL_CATALOGUE.every(({ description }) => description.length > 40)).toBe(true);
   });
 
   it("compiles every standalone input and output with strict Ajv 2020 and standard formats only", () => {
@@ -288,13 +289,18 @@ describe("advertised MCP tool catalogue", () => {
         expect(schema, `${descriptor.name} input root ${combinator}`).not.toHaveProperty(combinator);
       }
       const properties = schema.properties as Record<string, unknown>;
-      expect(Object.keys(properties).length, `${descriptor.name} input properties`).toBeGreaterThan(3);
+      expect(Object.keys(properties).length, `${descriptor.name} input properties`).toBeGreaterThanOrEqual(3);
       for (const field of schema.required as string[]) {
         expect(properties, `${descriptor.name} requires undeclared ${field}`).toHaveProperty(field);
       }
       expect(schema.additionalProperties, `${descriptor.name} input strictness`).toBe(false);
-      expect(schema.description, `${descriptor.name} input description`).toMatch(/Staged reference/u);
-      expect(freshAjv().compile(schema)(stagedReference), `${descriptor.name} staged reference portable`).toBe(true);
+      if ((TOOL_NAMES as readonly string[]).includes(descriptor.name)) {
+        expect(schema.description, `${descriptor.name} input description`).toMatch(/Staged reference/u);
+        expect(freshAjv().compile(schema)(stagedReference), `${descriptor.name} staged reference portable`).toBe(true);
+      } else {
+        expect(schema).not.toHaveProperty("description", expect.stringMatching(/Staged reference/u));
+        expect(freshAjv().compile(schema)(stagedReference), `${descriptor.name} rejects staged reference`).toBe(false);
+      }
     }
 
     // The merge must carry the branch field types through, not collapse them: these are the
@@ -348,7 +354,12 @@ describe("advertised MCP tool catalogue", () => {
       assertExactReachableClosure(descriptor.outputSchema, `${descriptor.name} output`);
       // The error union is a result-envelope concern; no tool input reaches it.
       expect(Object.keys(descriptor.inputSchema.$defs as object)).not.toContain("project-error");
-      expect(Object.keys(descriptor.outputSchema.$defs as object)).toContain("project-error");
+      if ((SEMANTIC_TOOL_NAMES as readonly string[]).includes(descriptor.name)) {
+        expect(Object.keys(descriptor.outputSchema.$defs as object)).not.toContain("project-error");
+        expect(Object.keys(descriptor.outputSchema.$defs as object)).toContain("semantic-workflow");
+      } else {
+        expect(Object.keys(descriptor.outputSchema.$defs as object)).toContain("project-error");
+      }
     }
 
     // Context-budget regression fence, not a precise contract: the unpruned catalogue

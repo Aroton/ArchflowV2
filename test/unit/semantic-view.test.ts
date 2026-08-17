@@ -71,6 +71,15 @@ function snapshot(status: TaskStatusV1, extra: Partial<SemanticStatusSnapshotV1>
 }
 
 describe("semantic status projection", () => {
+  it("suppresses writable resources at a close-only revision checkpoint", () => {
+    const status = fullStatus(action("run-step", { step: "produce" }), { step: "triage", status: "succeeded" });
+    const projected = projectSemanticStatus(snapshot(status, {
+      revision_checkpoint: { status: "valid", choice: "revise-current" },
+    }), invocation);
+    expect(projected.view.next_action.kind).toBe("revise");
+    expect(projected.view.resources).toEqual([]);
+  });
+
   it("maps every current NextActionCode without exposing a protocol action", () => {
     const codes = [
       "initialize-repository", "create-task", "resume-exact-intent", "restore-or-record-new-transition",
@@ -122,21 +131,29 @@ describe("semantic status projection", () => {
   });
 
   it("binds offers to invocation and repository while generic status cannot mutate", () => {
-    const status = fullStatus(action("run-step", { step: "produce" }));
+    const documentPhase = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(1) });
+    const status = fullStatus(action("run-step", { step: "produce", phase_instance: documentPhase }), {
+      phase_instance: documentPhase,
+    });
+    const documentInvocation: WorkflowInvocationV1 = { skill: "archflow-phase-design", phase: 1, intent: "resume" };
     const generic = projectSemanticStatus(snapshot(status));
     expect(generic.view.next_action.kind).toBe("begin-work");
     expect(generic.view.next_action.offer).toBeUndefined();
     expect(generic.internal_offer).toBeUndefined();
 
-    const owned = projectSemanticStatus(snapshot(status), invocation);
+    const owned = projectSemanticStatus(snapshot(status), documentInvocation);
     expect(owned.view.next_action.offer).toMatch(/^af1_[0-9a-f]{64}$/u);
-    const otherRepo = projectSemanticStatus(snapshot(status, { repository_identity_digest: digestB }), invocation);
+    const otherRepo = projectSemanticStatus(snapshot(status, { repository_identity_digest: digestB }), documentInvocation);
     expect(otherRepo.view.next_action.offer).not.toBe(owned.view.next_action.offer);
 
     const wrongInvocation: WorkflowInvocationV1 = { skill: "archflow-design", intent: "resume" };
     const wrong = projectSemanticStatus(snapshot(status), wrongInvocation);
     expect(wrong.view.next_action.offer).toBeUndefined();
     expect(wrong.view.detail).toContain("does not own");
+
+    const implementation = projectSemanticStatus(snapshot(fullStatus(action("run-step", { step: "produce" }))), invocation);
+    expect(implementation.view.next_action.offer).toBeUndefined();
+    expect(implementation.view.detail).toContain("legacy skill workflow");
   });
 
   it("lets only the exact successor invocation recover an authenticated handoff", () => {

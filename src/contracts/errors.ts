@@ -8,7 +8,7 @@ import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
 import { PATH_CLASSES, repositoryPathClaimV1Schema, type RepositoryPathClaim } from "./path-claims.js";
 import { GATE_KINDS, type GateKind } from "./gates.js";
 import type { AdapterId, ModelFamily } from "./review.js";
-import { TOOL_NAMES, type ToolName } from "./tool-names.js";
+import { ADVERTISED_TOOL_NAMES, TOOL_NAMES, type ToolName } from "./tool-names.js";
 
 export type ErrorOwner = "contracts" | "config" | "repository" | "paths" | "policy" | "state" | "intent" | "snapshot" | "gate" | "routing" | "dispatch" | "sandbox" | "protocol" | "integrity";
 export type ErrorProjection = "project" | "protocol";
@@ -106,7 +106,7 @@ const protocolDigest = documentScoped(sha256DigestV1Schema);
 const protocolId = documentScoped(safeIdV1Schema);
 const protocolCode = documentScoped(safeCodeV1Schema);
 const protocolVersion = documentScoped(safeVersionV1Schema);
-const protocolTool = documentScoped(tool);
+const protocolTool = documentScoped(z.enum(ADVERTISED_TOOL_NAMES));
 
 const PROTOCOL_PARAMETER_SCHEMAS = {
   TOOL_NOT_FOUND: object({ tool_name_digest: protocolDigest }), TOOL_DISABLED: object({ tool: protocolTool, lifecycle_state: protocolCode }), UNSUPPORTED_PROTOCOL: object({ offered_version: protocolVersion, supported_version: protocolVersion }), INITIALIZATION_REPEATED: object({ connection_id: protocolId }),

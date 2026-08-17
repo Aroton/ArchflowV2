@@ -14,6 +14,7 @@ import {
   parseSemanticSubstepIntentId,
   planSemanticAction,
   SemanticActionPlanError,
+  SemanticActionExecutionError,
   semanticSubstepIntentId,
 } from "../../src/state/semantic-actions.js";
 import { projectSemanticStatus } from "../../src/state/semantic-view.js";
@@ -21,12 +22,12 @@ import type { TaskStatusV1 } from "../../src/state/status.js";
 import type { ProductionServices } from "../../src/state/production.js";
 
 const digest = (character: string): Sha256Digest => parseSha256Digest(character.repeat(64));
-const invocation: WorkflowInvocationV1 = { skill: "archflow-phase-impl", phase: 1, intent: "resume" };
+const invocation: WorkflowInvocationV1 = { skill: "archflow-phase-design", phase: 1, intent: "resume" };
 
 function state(step: "produce" | "counter_review" | "triage", status: "running" | "succeeded" | "failed" = "succeeded"): TaskStateV1 {
   return {
     schema_version: "1", task_id: "api-refactor" as TaskStateV1["task_id"], repository_identity_digest: digest("1"),
-    revision: 7 as TaskStateV1["revision"], phase_instance: "phase-impl-1" as TaskStateV1["phase_instance"], step, status,
+    revision: 7 as TaskStateV1["revision"], phase_instance: "phase-design-1" as TaskStateV1["phase_instance"], step, status,
     attempt: 1 as TaskStateV1["attempt"], input_fingerprint: digest("2"), initialization_digest: digest("3"),
     config_digest: digest("4"), workflow_digest: digest("5"), constitution_digest: digest("6"),
     policy_base_commit: "a".repeat(40) as TaskStateV1["policy_base_commit"], authoritative_results: [], approvals: [], waivers: [],
@@ -73,7 +74,7 @@ function apply(
 describe("semantic one-action planning", () => {
   it("plans begin-work deterministically as one compose-request substep", () => {
     const current = snapshot(state("produce", "failed"), {
-      code: "run-step", detail: "Retry produce.", human_required: false, phase_instance: "phase-impl-1" as TaskStateV1["phase_instance"], step: "produce",
+      code: "run-step", detail: "Retry produce.", human_required: false, phase_instance: "phase-design-1" as TaskStateV1["phase_instance"], step: "produce",
     });
     const first = apply(current, invocation);
     const retry = apply(current, invocation);
@@ -84,7 +85,7 @@ describe("semantic one-action planning", () => {
 
   it("strictly matches submissions and binds changed work facts to a different operation", () => {
     const current = snapshot(state("produce", "running"), {
-      code: "run-step", detail: "Submit produce.", human_required: false, phase_instance: "phase-impl-1" as TaskStateV1["phase_instance"], step: "produce",
+      code: "run-step", detail: "Submit produce.", human_required: false, phase_instance: "phase-design-1" as TaskStateV1["phase_instance"], step: "produce",
     });
     const work = (base: string): ApplySubmissionV1 => ({ kind: "work-result", outcome: "succeeded", implementation: { base_commit: base, outputs: ["src/a.ts"], restore_targets: ["src/a.ts"], declared_inputs: [] } });
     expect(() => apply(current, invocation)).toThrow(SemanticActionPlanError);
@@ -144,10 +145,13 @@ describe("semantic one-action planning", () => {
     const handoff = snapshot(state("triage", "succeeded"), {
       code: "advance-phase", detail: "Advance.", human_required: false, phase_instance: "phase-impl-1" as TaskStateV1["phase_instance"], target_phase_instance: "phase-design-2" as TaskStateV1["phase_instance"], skill: "archflow-phase-design", skill_args: ["2"],
     });
-    expect(apply(handoff, invocation)).toMatchObject({ action_kind: "start-next-skill", substeps: ["start-next-skill"], request_facts: { kind: "advance" } });
+    expect(projectSemanticStatus(handoff, invocation).view.next_action.offer).toBeUndefined();
+    expect(apply(handoff, { skill: "archflow-phase-design", phase: 2, intent: "resume" })).toMatchObject({
+      action_kind: "start-next-skill", substeps: ["start-next-skill"], request_facts: { kind: "advance" },
+    });
   });
 
-  it("preserves exact reopening bytes and explicitly defers direct decision execution", () => {
+  it("preserves exact reopening bytes and retains direct decision submission for archive execution", () => {
     const currentState = { ...state("produce", "running"), phase_instance: "phase-impl-2" as TaskStateV1["phase_instance"] };
     const impact = { target: { kind: "design" as const }, affected_positions: [{ kind: "design" as const }], authority_effects: ["supersede-results" as const], planned_final_phase: "clear" as const, preserves_existing_git_index_and_worktree_bytes: true as const, appends_prd_ask_history: false, requires_fresh_review_and_approval: true as const };
     const reopenSnapshot = snapshot(currentState, { code: "run-step", detail: "Current work.", human_required: false, phase_instance: currentState.phase_instance, step: "produce" }, { reopen_impacts: [impact] });
@@ -170,7 +174,30 @@ describe("semantic one-action planning", () => {
     });
     (decision.status as unknown as Record<string, unknown>).open_gate = { presentation: { title: "Approve", summary: "Summary", question: "Choose?", options: [{ token: "approve", label: "Approve", consequence: "Advances" }] } };
     const deferred = apply(decision, invocation, { kind: "decision", choice: "approve", reason: "Approved." });
-    expect(deferred).toMatchObject({ substeps: ["decision-archive", "decision-settle"], next_substep: "decision-archive", execution: "deferred" });
+    expect(deferred).toMatchObject({
+      substeps: ["decision-archive", "decision-settle"], next_substep: "decision-archive",
+      execution: "decision-archive", decision_submission: { choice: "approve", reason: "Approved." },
+    });
+
+    const malformedConnected = { ...decision, archived_decision: { status: "invalid" } } as SemanticStatusSnapshotV1;
+    const blocked = projectSemanticStatus(malformedConnected, invocation).view;
+    expect(blocked.next_action).toMatchObject({ kind: "inspect" });
+    expect(blocked.next_action.offer).toBeUndefined();
+    expect(() => planSemanticAction(malformedConnected, {
+      schema_version: "1", task_id: "api-refactor", invocation,
+      action: { offer: `af1_${"a".repeat(64)}` },
+    })).toThrowError(expect.objectContaining({ code: "SEMANTIC_OFFER_STALE" }));
+
+    for (const archivedDecision of [
+      { status: "exact", operation_digest: digest("8") },
+      { status: "exact", operation_digest: digest("9"), provenance: "pre-facade" },
+    ]) {
+      const continuation = { ...decision, archived_decision: archivedDecision } as SemanticStatusSnapshotV1;
+      expect(apply(continuation, invocation)).toMatchObject({
+        action_kind: "decide", next_substep: "decision-settle",
+        operation_digest: archivedDecision.operation_digest,
+      });
+    }
   });
 
   it("authenticates replay from complete transition identity, never an afop prefix alone", () => {
@@ -260,6 +287,9 @@ describe("semantic one-action planning", () => {
       snapshot(state("counter_review", "succeeded"), {
         code: "run-step", detail: "Empty triage.", human_required: false, phase_instance: "phase-impl-1" as never, step: "triage",
       }),
+      snapshot(state("triage", "running"), {
+        code: "run-step", detail: "Finish empty triage.", human_required: false, phase_instance: "phase-impl-1" as never, step: "triage",
+      }),
       snapshot(state("triage", "succeeded"), {
         code: "open-gate", detail: "Approval.", human_required: true, phase_instance: "phase-impl-1" as never, gate_kind: "commit-authorization",
       }),
@@ -274,8 +304,12 @@ describe("semantic one-action planning", () => {
           refreshed[0] = snapshot(withTransition(state("counter_review", "running"), plan, "archflow_state", "record-state-boundary"), {
             code: "run-step", detail: "Run review.", human_required: false, phase_instance: "phase-impl-1" as never, step: "counter_review",
           });
+        } else if (plan.next_substep === "triage-enter") {
+          refreshed[2] = snapshot(withTransition(state("triage", "running"), plan, "archflow_state", "record-state-boundary"), {
+            code: "run-step", detail: "Finish empty triage.", human_required: false, phase_instance: "phase-impl-1" as never, step: "triage",
+          });
         } else if (plan.next_substep === "review-empty-triage") {
-          refreshed[2] = snapshot(withTransition(state("triage", "succeeded"), plan, "archflow_state", "record-triage"), {
+          refreshed[3] = snapshot(withTransition(state("triage", "succeeded"), plan, "archflow_state", "record-triage"), {
             code: "open-gate", detail: "Approval.", human_required: true, phase_instance: "phase-impl-1" as never, gate_kind: "commit-authorization",
           });
         }
@@ -291,10 +325,10 @@ describe("semantic one-action planning", () => {
       refresh_snapshot: async () => refreshed[refreshIndex++]!,
     });
     const view = await viewPromise;
-    expect(executed.map((identity) => identity.substep)).toEqual(["review-enter", "review-run", "review-empty-triage"]);
+    expect(executed.map((identity) => identity.substep)).toEqual(["review-enter", "review-run", "triage-enter", "review-empty-triage"]);
     expect(new Set(executed.map((identity) => identity.operation_digest))).toHaveLength(1);
     expect(view.next_action.kind).toBe("decide");
-    expect(refreshIndex).toBe(3);
+    expect(refreshIndex).toBe(4);
   });
 
   it("recovers the original review operation digest on a fresh continuation offer", () => {
@@ -322,6 +356,80 @@ describe("semantic one-action planning", () => {
     expect(old.intent_id).toBe(fresh.intent_id);
   });
 
+  it("accepts only the exact old triage call after its authenticated entry boundary", () => {
+    const finding = { finding_id: "finding-1", severity: "major" as const, blocking: false, summary: "Issue", evidence: "Evidence", suggested_resolution: "Fix" };
+    const before = snapshot(state("counter_review", "succeeded"), {
+      code: "run-step", detail: "Triage.", human_required: false, phase_instance: "phase-impl-1" as never, step: "triage",
+    }, { full_findings: [finding] });
+    const submission = { kind: "triage" as const, dispositions: [{ finding_id: "finding-1", disposition: "rejected" as const, rationale: "Not material.", evidence: "Current behavior." }] };
+    const originalOffer = projectSemanticStatus(before, invocation).view.next_action.offer!;
+    const originalInput = { schema_version: "1", task_id: "api-refactor", invocation, action: { offer: originalOffer, submission } } as const;
+    const original = planSemanticAction(before, originalInput);
+    const enteredBase = { ...state("triage", "running"), revision: 8 as never, input_fingerprint: digest("7") };
+    const enteredState = { ...enteredBase, last_transition: {
+      schema_version: "1", tool: "archflow_state", operation: "record-state-boundary",
+      intent_id: semanticSubstepIntentId(original.operation_digest, "triage-enter"), request_digest: digest("b"),
+      input_fingerprint: enteredBase.input_fingerprint, result_id: "result-1", outcome: { ok: true }, outcome_digest: digest("c"),
+      prior_revision: 7, resulting_revision: 8,
+    } } as unknown as TaskStateV1;
+    const entered = snapshot(enteredState, {
+      code: "run-step", detail: "Triage.", human_required: false, phase_instance: enteredState.phase_instance, step: "triage",
+    }, { full_findings: [finding] });
+    expect(planSemanticAction(entered, originalInput)).toMatchObject({
+      action_kind: "triage", operation_digest: original.operation_digest, next_substep: "triage",
+    });
+    expect(() => planSemanticAction(entered, { ...originalInput, action: { ...originalInput.action, offer: `af1_${"f".repeat(64)}` } }))
+      .toThrowError(expect.objectContaining({ code: "SEMANTIC_OFFER_STALE" }));
+  });
+
+  it("replays an exact old revise-enter call from its authenticated durable boundary", async () => {
+    const beforeState = { ...state("triage", "succeeded"), attempt: 2 as never };
+    const before = snapshot(beforeState, {
+      code: "run-step", detail: "Revise.", human_required: false, phase_instance: beforeState.phase_instance, step: "produce",
+    });
+    const originalOffer = projectSemanticStatus(before, invocation).view.next_action.offer!;
+    const originalInput = { schema_version: "1", task_id: "api-refactor", invocation, action: { offer: originalOffer } } as const;
+    const original = planSemanticAction(before, originalInput);
+    const enteredBase = { ...state("produce", "running"), revision: 8 as never, attempt: 2 as never, input_fingerprint: digest("7") };
+    const enteredState = { ...enteredBase, last_transition: {
+      schema_version: "1", tool: "archflow_gate", operation: "semantic-revision-enter", intent_id: original.intent_id,
+      request_digest: digest("b"), input_fingerprint: enteredBase.input_fingerprint, result_id: "gate-1",
+      outcome: { ok: true, predecessor_attempt: 2 }, outcome_digest: digest("c"), prior_revision: 7, resulting_revision: 8,
+    } } as unknown as TaskStateV1;
+    const entered = snapshot(enteredState, {
+      code: "run-step", detail: "Submit revision.", human_required: false, phase_instance: enteredState.phase_instance, step: "produce",
+    });
+    const replay = planSemanticAction(entered, originalInput);
+    expect(replay).toMatchObject({ action_kind: "revise", operation_digest: original.operation_digest, revision_checkpoint: true });
+    let replayed = 0;
+    const view = await executeSemanticAction({} as ProductionServices, entered, originalInput, {
+      enter_revision_checkpoint: async () => { replayed += 1; return { ok: true }; },
+      refresh_snapshot: async () => entered,
+    });
+    expect(replayed).toBe(1);
+    expect(view.next_action.kind).toBe("submit-work");
+
+    const stateEntered = { ...enteredState, attempt: 3 as never, last_transition: {
+      ...enteredState.last_transition!, tool: "archflow_state", operation: "record-state-boundary", outcome: { revision: 8 },
+    } } as unknown as TaskStateV1;
+    const stateReplay = planSemanticAction(snapshot(stateEntered, {
+      code: "run-step", detail: "Submit revision.", human_required: false, phase_instance: stateEntered.phase_instance, step: "produce",
+    }), originalInput);
+    expect(stateReplay).toMatchObject({ action_kind: "revise", operation_digest: original.operation_digest });
+    expect(stateReplay.revision_checkpoint).toBeUndefined();
+
+    const retryOnceEntered = { ...enteredState, attempt: 3 as never, last_transition: {
+      ...enteredState.last_transition!, outcome: { ok: true, predecessor_attempt: 2 },
+    } } as unknown as TaskStateV1;
+    const retryOnceReplay = planSemanticAction(snapshot(retryOnceEntered, {
+      code: "run-step", detail: "Submit retry.", human_required: false, phase_instance: retryOnceEntered.phase_instance, step: "produce",
+    }), originalInput);
+    expect(retryOnceReplay).toMatchObject({
+      action_kind: "revise", operation_digest: original.operation_digest, revision_checkpoint: true,
+      operation_key: { attempt: 2 },
+    });
+  });
+
   it("consumes a closed revision checkpoint only through the explicit authenticated capability", async () => {
     const durable = state("triage", "succeeded");
     const current = snapshot(durable, {
@@ -342,5 +450,55 @@ describe("semantic one-action planning", () => {
     await expect(executeSemanticAction({} as ProductionServices, current, input, {
       refresh_snapshot: async () => refreshed,
     })).rejects.toMatchObject({ code: "SEMANTIC_ACTION_UNSUPPORTED" });
+  });
+
+  it("archives, refreshes services, and settles one human decision without consuming a later action", async () => {
+    const durable = state("triage", "succeeded");
+    const open = snapshot(durable, {
+      code: "resolve-open-gate", detail: "Choose.", human_required: true, phase_instance: durable.phase_instance,
+      gate_id: "gate-1" as never, gate_kind: "artifact-approval",
+    });
+    (open.status as unknown as Record<string, unknown>).open_gate = {
+      presentation: { title: "Approve", summary: "Summary", question: "Choose?", options: [{ token: "approve", label: "Approve", consequence: "Advances" }] },
+    };
+    const offer = projectSemanticStatus(open, invocation).view.next_action.offer!;
+    const input = { schema_version: "1", task_id: "api-refactor", invocation, action: {
+      offer, submission: { kind: "decision", choice: "approve", reason: "Approved." },
+    } } as const;
+    const operation = planSemanticAction(open, input).operation_digest;
+    const archived: SemanticStatusSnapshotV1 = {
+      ...open, archived_decision: { status: "exact", operation_digest: operation },
+    };
+    const done = snapshot(durable, { code: "task-complete", detail: "Done.", human_required: false });
+    const serviceA = { authority: { task_id: "api-refactor" } } as unknown as ProductionServices;
+    const serviceB = { authority: { task_id: "api-refactor" } } as unknown as ProductionServices;
+    const order: string[] = [];
+    let refresh = 0;
+    const view = await executeSemanticAction(serviceA, open, input, {
+      archive_decision: async (plan) => { order.push(`archive:${plan.decision_submission?.choice}`); return { schema_version: "1", ok: true, value: {} }; },
+      settle_decision: async (plan) => { order.push(`settle:${plan.next_substep}`); return { schema_version: "1", ok: true, value: {} }; },
+      refresh_services: async () => ++refresh === 1
+        ? { services: serviceB, snapshot: archived }
+        : { services: serviceB, snapshot: done },
+    });
+    expect(order).toEqual(["archive:approve", "settle:decision-settle"]);
+    expect(refresh).toBe(2);
+    expect(view.next_action.kind).toBe("none");
+  });
+
+  it("propagates a failed lower-level project result before projecting success", async () => {
+    const current = snapshot(state("produce", "failed"), {
+      code: "run-step", detail: "Retry produce.", human_required: false, phase_instance: "phase-design-1" as never, step: "produce",
+    });
+    const offer = projectSemanticStatus(current, invocation).view.next_action.offer!;
+    let refreshes = 0;
+    await expect(executeSemanticAction({} as ProductionServices, current, {
+      schema_version: "1", task_id: "api-refactor", invocation, action: { offer },
+    }, {
+      compose_request: async (_services, facts) => ({ schema_version: "1", ok: true, value: { envelope: {} as never, intent_id: (facts as { intent_id: never }).intent_id } }),
+      execute_composed_request: async () => ({ schema_version: "1", ok: false, error: { schema_version: "1", code: "IO_ERROR", diagnostic: { schema_version: "1", parameters: { operation: "test", attempt: 1 } } } }),
+      refresh_snapshot: async () => { refreshes += 1; return current; },
+    })).rejects.toBeInstanceOf(SemanticActionExecutionError);
+    expect(refreshes).toBe(0);
   });
 });

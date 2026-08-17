@@ -63,12 +63,25 @@ function invocationTarget(invocation: WorkflowInvocationV1): PhaseInstanceId {
   }
 }
 
-function invocationOwnsCurrentPosition(invocation: WorkflowInvocationV1, status: TaskStatusV1): boolean {
+/** Phase 2 exposes mutations only for the three document-producing workflows. */
+export function semanticInvocationEnabled(invocation: WorkflowInvocationV1): boolean {
+  return invocation.skill === "archflow-prd" || invocation.skill === "archflow-design" ||
+    invocation.skill === "archflow-phase-design";
+}
+
+function invocationOwnsCurrentPosition(
+  invocation: WorkflowInvocationV1,
+  status: TaskStatusV1,
+  actionKind: SemanticActionKindV1,
+): boolean {
+  if (!semanticInvocationEnabled(invocation)) return false;
   if (status.state === "missing") return invocation.skill === "archflow-prd" && invocation.intent === "resume";
   if (invocation.intent !== "resume") return false;
   const target = invocationTarget(invocation);
-  if (status.phase_instance !== undefined && target === status.phase_instance) return true;
-  return status.next_action.code === "advance-phase" && target === status.next_action.target_phase_instance;
+  if (actionKind === "start-next-skill") {
+    return status.next_action.code === "advance-phase" && target === status.next_action.target_phase_instance;
+  }
+  return status.phase_instance !== undefined && target === status.phase_instance;
 }
 
 function samePosition(left: WorkflowPositionV1, right: WorkflowPositionV1): boolean {
@@ -375,11 +388,15 @@ export function projectSemanticStatus(
   }
 
   const owns = invocation !== undefined && (
-    shape.action_kind === "reopen" ? reopen !== undefined : invocationOwnsCurrentPosition(invocation, status)
+    shape.action_kind === "reopen"
+      ? reopen !== undefined && semanticInvocationEnabled(invocation)
+      : invocationOwnsCurrentPosition(invocation, status, shape.action_kind)
   );
   const offer = owns && canOffer(shape) ? offerFor(snapshot, status, invocation, shape, reopen) : undefined;
   const mismatch = invocation !== undefined && !owns
-    ? ` The invoked skill does not own this current action; continue with the action shown or invoke its owning skill.`
+    ? invocation.skill === "archflow-phase-impl"
+      ? " Phase implementation remains on the supported legacy skill workflow in this release; no semantic mutation is offered."
+      : ` The invoked skill does not own this current action; continue with the action shown or invoke its owning skill.`
     : "";
   const nextAction: SemanticNextActionV1 = Object.freeze({
     kind: shape.action_kind,
@@ -400,9 +417,11 @@ export function projectSemanticStatus(
     headline: shape.headline,
     detail: `${shape.detail}${mismatch}`,
     ...(position === undefined ? {} : { position }),
-    resources: publicResources(status),
+    // A settled re-entry decision is close-only authority. Document write slots become visible
+    // only after the separately offered revision-entry transition commits.
+    resources: snapshot.revision_checkpoint === undefined ? publicResources(status) : Object.freeze([]),
     next_action: nextAction,
-    ...(shape.findings !== true || snapshot.full_findings.length === 0 ? {} : { findings: snapshot.full_findings }),
+    ...(shape.findings !== true ? {} : { findings: snapshot.full_findings }),
     ...(context === undefined ? {} : { review_context: context }),
     ...(shape.presentation === undefined ? {} : { presentation: shape.presentation }),
   });

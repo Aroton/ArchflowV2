@@ -1,6 +1,6 @@
 # TESTING
 
-**Explored:** 2026-08-14 · **Commit:** `9331032` · **Covers:** `test/`, `vitest.config.ts`, `package.json`
+**Explored:** 2026-08-16 · **Commit:** `d60da73` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/smoke-release-bundle.mjs`
 
 ## Test runner and configuration
 
@@ -9,11 +9,11 @@
 - `test/types/mcp-sdk-public-surface.ts` is therefore compile-time coverage exercised by `npm run typecheck`, not by Vitest.
 - The package supports Node `^24.15.0`. Validation is run explicitly by maintainers with the package scripts; the repository does not configure hosted CI.
 
-At this commit, `npm test` passed locally: **165 files discovered, 161 passed, 4 skipped; 1,744 tests discovered, 1,720 passed, 24 skipped**. The skipped groups were the explicitly opt-in real-host suites. Expected failure-path tests write some `INTERNAL_ERROR` diagnostics to stderr while still passing.
+The live semantic document-journey and handler suites pass for this change. The broad suite still treats real-host groups as explicit opt-ins; expected failure-path tests may write `INTERNAL_ERROR` diagnostics to stderr while still passing.
 
 ## Suite inventory by behavior
 
-### Unit: `test/unit/` (101 files)
+### Unit: `test/unit/` (104 files)
 
 The unit layer is broad and normally imports production modules directly.
 
@@ -26,7 +26,7 @@ The unit layer is broad and normally imports production modules directly.
 
 Success cases are paired with representative boundary failures: malformed/non-plain inputs and split-observation getters; digest, revision, task, and phase mismatches; stale or contradictory evidence; traversal/symlink/class-confusion paths; lock and snapshot limits; secret-bearing output; process cancellation/overflow; and unsupported or unauthenticated host classifications.
 
-### Contract: `test/contracts/` (25 files)
+### Contract: `test/contracts/` (26 files)
 
 This layer pins the published contract surface: the Zod shape authority's acceptance/rejection behavior, the generated JSON Schemas (strict-compiled as a third-party consumer would), durable semantics, MCP-advertised schemas, skills, and release metadata. Since the 2026-08-11 generation flip, the committed-bytes fence is `npm run check:schemas`; the former Zod↔schema agreement loops are gone, and per-shape suites assert validation under the Zod authority while pinning where the generated documents are deliberately weaker (retired `x-archflow-*` keywords).
 
@@ -39,13 +39,14 @@ This layer pins the published contract surface: the Zod shape authority's accept
 
 Fixtures under `test/fixtures/contracts/`, `test/fixtures/foundation/`, and `test/fixtures/mcp/` provide known-valid documents plus invalid traversal, contradictory review, malformed state, protocol, and adversarial-byte examples. Several corpus tests explicitly prove error precedence and total ordering, not merely acceptance/rejection.
 
-### Integration: `test/integration/` (31 files)
+### Integration: `test/integration/` (37 files)
 
 Integration tests assemble production services around real temporary repositories, real child processes, stdio framing, or generated bundles. They cover:
 
 - Repository discovery/object proofs/configuration matrices, linked worktrees, relocation, conflicts, and file-kind restore collisions (`repository-git-matrix.test.ts`, `repository-git-object-proofs.test.ts`, `manifest-file-kind-restore-matrix.test.ts`).
 - Durable state concurrency, lifecycle, projection, replay, reconciliation, gates/waivers, automatic phase hand-off, human-revision restart behavior, and fixed-point review (`state-transaction.test.ts`, `state-gate-lifecycle.test.ts`, `mcp-handler-state-replay.test.ts`, `review-fixed-point-live.test.ts`). The public-composer lifecycle also exercises compound design production: task design records and reviews `design.md` with `prd.md`; later phase design records its phase document with both writable parents, survives produce re-entry without falling back to older parent authority, and requires the complete set in the authorized milestone commit while historical phase documents stay outside the result.
 - Full MCP stdio/tool-handler behavior, cancellation, handler isolation, and counter-review replay including the constitution-review result (`mcp-stdio.test.ts`, `mcp-handlers.test.ts`, `isolation-handler-entry.test.ts`, `mcp-handler-counter-replay.test.ts`).
+- Semantic handler and live document journeys (`semantic-handlers.test.ts`, `semantic-document-journeys.test.ts`) cover the six-tool catalogue, read-only status, unsupported phase-implementation offers, exact successor ownership, one-action apply, client-authored production and triage, the `triage-enter` boundary, direct decision archive/settlement, close-only revision followed by `revise-enter`, and semantic review's outer FIFO/direct counter-review seam.
 - Dispatch plumbing/coordinator/CLI behavior through deterministic fake Claude and Codex children (`dispatch-plumbing.test.ts`, `dispatch-coordinator.test.ts`, `dispatch-cli.test.ts`).
 - Repository initialization, project registration, installer behavior, local CLI command/payload/stdin discipline, and legacy upgrade/fault recovery (`init-orchestration.test.ts`, `init-registration.test.ts`, `install-script.test.ts`, `local-cli-stdin-discipline.test.ts`, `legacy-staging-faults.test.ts`).
 - Offline release behavior (`release-offline.test.ts`).
@@ -61,7 +62,7 @@ Representative boundary coverage includes exact-replay versus stale-CAS behavior
 - `preflight.test.ts` probes installed/authenticated Claude and Codex versions, identity/auth shapes, unsolicited pre-initialize recovery, managed-policy reporting, and PII omission.
 - `dispatch.test.ts` makes real opposite-family review and constitution-review calls and requires schema-valid, server-attested evidence; it rejects same-family routing before dispatch. Successful calls leave no diagnostic attempt record, while failed calls retain one bounded forensic record.
 - `failure-classes.test.ts` observes real unsupported-model and cancellation classifications.
-- `terminal-journey.test.ts` installs tracked `dist/` into a scratch home and exercises installed `archflow-local`/`archflow-mcp` slices including initialization, fresh-clone authority recovery, dirty-worktree replay, cleanup, secret rejection, and legacy upgrade.
+- `terminal-journey.test.ts` installs tracked `dist/` into a scratch home and exercises installed `archflow-local`/`archflow-mcp` slices including initialization, fresh-clone authority recovery, dirty-worktree replay, cleanup, secret rejection, and legacy upgrade. The release smoke transcript also pins all six advertised tool names so the semantic façade cannot disappear from a built bundle unnoticed.
 - `review-benchmark.test.ts` pins the benchmark digest/threshold binding in ordinary runs; its actual twelve-call real-model matrix is separately gated.
 
 Real hosts are hermetic by default. `ARCHFLOW_REAL_HOSTS=1 npm run test:real-host` enables the suite and fails if both authenticated host CLIs are unavailable. The benchmark additionally requires `ARCHFLOW_REVIEW_BENCHMARK=1` (`ARCHFLOW_REAL_HOSTS=1 ARCHFLOW_REVIEW_BENCHMARK=1 npm run bench:review`). `test/helpers/real-host.ts` sanitizes package-local host shims from `PATH`, probes versions/authentication, and derives the long timeout from production dispatch. The terminal journey uses a scratch home and needs only the first opt-in; it does not dispatch a model or use credentials.

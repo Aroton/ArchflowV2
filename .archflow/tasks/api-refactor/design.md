@@ -800,8 +800,10 @@ format fits the 128-character `PathSafeId`. For the current compound action, rev
 authenticated `last_transition.intent_id` retain operation correlation after normal cleanup
 deletes transient receipts. Single-step actions continue through their existing transaction or
 immutable gate-archive replay authority. Each action family has a fixed named substep plan—usually
-one substep; review uses `review-enter`, `review-run`, and the conditional `review-empty-triage`;
-Phase 2 decision uses `decision-archive` and `decision-settle`.
+one substep; review uses `review-enter`, `review-run`, and, for a finding-free result, the
+authenticated `triage-enter` boundary followed by `review-empty-triage`; client-authored triage
+uses the same `triage-enter` boundary before terminal `triage`; Phase 2 decision uses
+`decision-archive` and `decision-settle`.
 Receipts remain the existing crash buffer only while one substep is being installed; no design rule
 depends on an earlier substep receipt surviving commit cleanup.
 
@@ -1011,11 +1013,13 @@ composes the ordinary attempt-incrementing produce re-entry; after an authentica
 re-entry fingerprint, preserves the attempt for a human revision (or increments it for
 `retry-once`), and creates `pending_human_revision` only while entering produce/running. Exact replay
 authenticates that transition and returns `submit-work`; it never repeats re-entry. Review is pinned
-to `review-enter`, `review-run`, and, only for a finding-free
-result, `review-empty-triage`; each name has its own deterministic internal intent. `review-enter`
+to `review-enter`, `review-run`, and, only for a finding-free result, `triage-enter` followed by
+`review-empty-triage`; each name has its own deterministic internal intent. `review-enter`
 composes the existing counter-review/running state transition, `review-run` invokes the existing
-counter-review handler/service, and `review-empty-triage` composes the zero-disposition triage result
-only after authenticated review evidence proves there are no findings.
+counter-review handler/service, `triage-enter` records the required triage/running boundary, and
+`review-empty-triage` composes the zero-disposition terminal result only after authenticated review
+evidence proves there are no findings. Client-authored triage uses the same authenticated entry
+boundary before recording its dispositions.
 Interruption after any one of them leaves durable state from which either the old exact call or a
 fresh status offer selects the same next substep: the current substep may use its recovery receipt,
 while every completed substep is correlated by authenticated `last_transition`. The

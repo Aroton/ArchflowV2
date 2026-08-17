@@ -306,8 +306,12 @@ Extend the Phase 1 action plan without changing the public input contract:
   `decision-settle` in one normal apply call. Do not consume the next public offer after
   settlement; a returned `revise`, `open-waiver`, `commit`, or successor action belongs to the next
   client call/action.
-- Keep review as `review-enter` -> `review-run` -> optional `review-empty-triage` under one outer
-  FIFO. Do not generalize this into a dynamic workflow interpreter or a loop over action kinds.
+- Keep review as `review-enter` -> `review-run` -> optional `triage-enter` ->
+  `review-empty-triage` under one outer FIFO. A client-authored triage likewise uses
+  `triage-enter` before its terminal `triage` record. The distinct entry is required by the
+  existing state machine and gives interruption/replay its own authenticated intent instead of
+  weakening transition validation or reusing a receipt identity. Do not generalize this into a
+  dynamic workflow interpreter or a loop over action kinds.
 - Replace snapshot-only refresh with a refresh that returns services and snapshot from the same
   newly authenticated repository/task state. Every later substep composes against those refreshed
   services.
@@ -491,12 +495,14 @@ and existing durable gate contracts, not the public handler registry.
 
 1. Add decision submission retention and archive/settle recovery to semantic planning.
 2. Refresh services plus snapshot between substeps and propagate every failed lower-level result.
-3. Add the Phase 2 document activation fence and exact successor-only hand-off ownership; preserve
+3. Preserve the state machine's authenticated triage-running boundary with a distinct
+   `triage-enter` substep before both client and finding-free terminal triage records.
+4. Add the Phase 2 document activation fence and exact successor-only hand-off ownership; preserve
    current final-implementation ownership for future `finish-task`.
-4. Implement status/apply handlers and bounded capabilities for state, review, gate open, waiver
+5. Implement status/apply handlers and bounded capabilities for state, review, gate open, waiver
    open, direct decision, revision entry, initialization, and fresh projection.
-5. Register/advertise the two tools beside the legacy four.
-6. Prove each apply result equals fresh status and that no handler crosses an actor boundary.
+6. Register/advertise the two tools beside the legacy four.
+7. Prove each apply result equals fresh status and that no handler crosses an actor boundary.
 
 Chunk C begins only after the relevant contracts from A and decision services from B are stable.
 

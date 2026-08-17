@@ -12,7 +12,21 @@ import {
   type StructurallyValidProjectResult
 } from "../contracts/mcp-tools.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
-import { isToolName, type ToolName } from "../contracts/tool-names.js";
+import {
+  parseArchFlowApplyInputV1,
+  parseArchFlowStatusInputV1,
+  parseSemanticResultV1,
+  type SemanticResultV1,
+  type SemanticToolContractMap,
+} from "../contracts/semantic-workflow.js";
+import {
+  isAdvertisedToolName,
+  isSemanticToolName,
+  isToolName,
+  type AdvertisedToolName,
+  type SemanticToolName,
+  type ToolName,
+} from "../contracts/tool-names.js";
 import { rehydrateStagedToolCall } from "../state/staged-requests.js";
 import { reportInternalError } from "./diagnostics.js";
 
@@ -21,8 +35,15 @@ export type ToolHandler<K extends ToolName> = (
   context: InvocationContext
 ) => unknown | Promise<unknown>;
 
+export type SemanticToolHandler<K extends SemanticToolName> = (
+  input: SemanticToolContractMap[K]["input"],
+  context: InvocationContext
+) => unknown | Promise<unknown>;
+
 export type ToolHandlerRegistry = Readonly<Partial<{
   [K in ToolName]: ToolHandler<K>;
+} & {
+  [K in SemanticToolName]: SemanticToolHandler<K>;
 }>>;
 
 declare const authenticatedProtocolErrorBrand: unique symbol;
@@ -39,8 +60,17 @@ export type ToolProjectOutcome = {
   }>;
 }[ToolName];
 
+export type SemanticToolOutcome = {
+  readonly [K in SemanticToolName]: Readonly<{
+    readonly kind: "semantic-result";
+    readonly tool: K;
+    readonly result: SemanticResultV1;
+  }>;
+}[SemanticToolName];
+
 export type ToolBoundaryOutcome =
   | ToolProjectOutcome
+  | SemanticToolOutcome
   | Readonly<{
       readonly kind: "protocol-error";
       readonly error: AuthenticatedProtocolError;
@@ -102,6 +132,25 @@ function projectOutcome<K extends ToolName>(
   return outcome as ToolProjectOutcome;
 }
 
+function semanticOutcome<K extends SemanticToolName>(tool: K, result: SemanticResultV1): ToolBoundaryOutcome {
+  const outcome = deepFreeze({ kind: "semantic-result" as const, tool, result });
+  outcomes.add(outcome);
+  return outcome as SemanticToolOutcome;
+}
+
+function semanticFailure(
+  tool: SemanticToolName,
+  code: string,
+  message: string,
+  retryable = false
+): ToolBoundaryOutcome {
+  return semanticOutcome(tool, parseSemanticResultV1({
+    schema_version: "1",
+    ok: false,
+    error: { code, message, retryable },
+  }));
+}
+
 function projectFailure<K extends ToolName>(
   tool: K,
   code: "CONTRACT_INVALID" | "CONTRACT_VERSION_UNSUPPORTED" | "INTERNAL_ERROR",
@@ -133,18 +182,32 @@ function copyRegistry(handlers: ToolHandlerRegistry): ToolHandlerRegistry {
   if (prototype !== Object.prototype && prototype !== null) {
     throw new TypeError("the handler registry must have a plain prototype");
   }
-  const copied: Partial<Record<ToolName, ToolHandler<ToolName>>> = {};
+  const copied: Partial<Record<AdvertisedToolName, (...args: never[]) => unknown>> = {};
   for (const key of Reflect.ownKeys(handlers)) {
-    if (typeof key !== "string" || !isToolName(key)) throw new TypeError("the handler registry contains an unknown tool");
+    if (typeof key !== "string" || !isAdvertisedToolName(key)) throw new TypeError("the handler registry contains an unknown tool");
     const descriptor = Object.getOwnPropertyDescriptor(handlers, key);
     if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
       throw new TypeError("handler registry entries must be enumerable data properties");
     }
     if (typeof descriptor.value !== "function") throw new TypeError("tool handlers must be functions");
-    const handler = descriptor.value as ToolHandler<ToolName>;
-    copied[key] = Object.freeze((call, context) => handler(call, context));
+    const handler = descriptor.value as (...args: never[]) => unknown;
+    copied[key] = Object.freeze((...args: never[]) => handler(...args));
   }
   return deepFreeze(copied) as ToolHandlerRegistry;
+}
+
+type SemanticInputClassification<K extends SemanticToolName> =
+  | { readonly kind: "input"; readonly input: SemanticToolContractMap[K]["input"] }
+  | { readonly kind: "outcome"; readonly outcome: ToolBoundaryOutcome };
+
+function parseSemanticInput<K extends SemanticToolName>(tool: K, args: unknown): SemanticInputClassification<K> {
+  try {
+    const input = (tool === "archflow_status" ? parseArchFlowStatusInputV1(args) : parseArchFlowApplyInputV1(args)) as SemanticToolContractMap[K]["input"];
+    return { kind: "input", input };
+  } catch (error) {
+    const issues = describeValidationIssues(error);
+    return { kind: "outcome", outcome: semanticFailure(tool, "CONTRACT_INVALID", issues?.join("; ") ?? "The semantic tool input is invalid.") };
+  }
 }
 
 function classifyVersionedArgs<K extends ToolName>(
@@ -201,10 +264,35 @@ export function createToolBoundary(handlers: ToolHandlerRegistry): ToolBoundary 
       if (typeof name !== "string") throw new TypeError("a string tool name is required");
       assertAuthenticInvocationContext(context);
 
-      if (!isToolName(name)) {
+      if (!isAdvertisedToolName(name)) {
         const toolNameDigest = createHash("sha256").update(name, "utf8").digest("hex");
         return protocolOutcome(createProtocolError("TOOL_NOT_FOUND", { tool_name_digest: toolNameDigest }));
       }
+
+
+      if (isSemanticToolName(name)) {
+        const classified = parseSemanticInput(name, args);
+        if (classified.kind === "outcome") return classified.outcome;
+        const handler = registry[name] as SemanticToolHandler<typeof name> | undefined;
+        if (handler === undefined) {
+          return protocolOutcome(createProtocolError("TOOL_DISABLED", { tool: name, lifecycle_state: "inert-no-handler" }));
+        }
+        let returned: unknown;
+        try {
+          returned = await handler(classified.input, context);
+        } catch (error) {
+          reportInternalError(context.invocation_id, error);
+          return semanticFailure(name, "INTERNAL_ERROR", `Internal error (${context.invocation_id}).`);
+        }
+        try {
+          return semanticOutcome(name, parseSemanticResultV1(returned));
+        } catch (error) {
+          reportInternalError(context.invocation_id, error);
+          return semanticFailure(name, "INTERNAL_ERROR", `Internal error (${context.invocation_id}).`);
+        }
+      }
+
+      if (!isToolName(name)) throw new TypeError("advertised tool discrimination is incomplete");
 
       const classified = classifyVersionedArgs(name, args);
       if ("outcome" in classified) return classified.outcome;

@@ -1,6 +1,6 @@
 # COMPLEXITY
 
-**Explored:** 2026-08-16 · **Commit:** `3a190c1` · **Covers:** the whole repository
+**Explored:** 2026-08-16 · **Commit:** `d60da73` · **Covers:** the whole repository
 
 A per-subsystem audit of where the machinery is heaviest, what it buys, and what could be simplified. Written to support iterating on the workflow — each item states the concrete problem the complexity solves so a simplification can be judged against it, per the engineering priorities in CLAUDE.md.
 
@@ -14,9 +14,9 @@ Three categories recur:
 
 ## Current top target: the client orchestration surface
 
-The workflow's durable machinery is more coherent than its public interface. A routine client action still crosses status, one of seven `build-request` kinds, a staged reference, and one of four low-level MCP tools. Gates are especially inverted: the MCP call blocks while the client writes the decision through the separate local CLI.
+The durable machinery remains richer than the intended public interface, but document workflows no longer expose that richness directly. The public catalogue now adds `archflow_status` and `archflow_apply` over the unchanged four-tool durable identity. PRD, task design, and phase design can use a read-only common view plus one bounded action; phase implementation and the status skill remain on the low-level loop while migration is incomplete.
 
-Phase 1 has removed the architectural uncertainty, but not the live surface. It adds strict semantic contracts, a complete human-facing view and repository-bound one-action offer, fixed named action plans, exact-ask initialization staging, a transport-neutral request composer shared by `archflow-local`, and the bounded durable planning-restart kernel. None of this is advertised as `archflow_status` or `archflow_apply`; current skills still use the low-level tools. The intended simplification keeps Claude Code or Codex as producer and orchestrator. The remaining Phase 2 work is choreography: expose the two bounded semantic tools, extract nonblocking decision/archive/settlement and waiver services, finish failed-result composition, and migrate skills without weakening review or human gates.
+Phase 2 has made that semantic foundation live for document journeys. It advertises the two tools, implements nonblocking direct decision archive and settlement, handles revision decisions as a close-only checkpoint followed by a separately authenticated `revise-enter`, and returns structured failures with a refreshed safe view where possible. The simplification does not move authorship into the server: Claude Code or Codex still produces documents, supplies triage and human decisions, and owns Git. Remaining migration work is deliberately narrower: move phase implementation and the status skill only when their contracts can retain those ownership boundaries.
 
 ## Ranked simplification targets
 
@@ -64,11 +64,11 @@ The child-CLI lockdown argvs (long literal flag lists per host) and the regex-ba
 - **Advertised-schema pruning** in `mcp/tools.ts` — a small custom JSON-Schema `$ref` resolver owned forever, motivated by a measured 179 KB saving; worth keeping only while that saving matters.
 - **The `unified-diff` tier** — with 40 context lines it's nearly full-file for most real files; it's fair to ask whether the hand-rolled Myers diff (~200 lines, with an 8 MB worst-case allocation pattern) earns its place over "embed or digest-only."
 
-### 10. The semantic foundation exists beside the legacy surface
+### 10. The semantic façade now coexists with the legacy surface
 
-This duplication is intentionally temporary. `src/state/request-composition.ts` is now the common derivation service and `src/local/build-request.ts` is a thin CLI adapter, so semantic actions do not need a second request builder. `semantic-actions.ts` plans one fixed action and returns; it does not loop into the next workflow action or dispatch producer work. Some plans deliberately return `deferred` because the required nonblocking service does not exist yet. Advertising the semantic tools before those gaps are closed would merely move protocol ambiguity to a newer schema.
+This duplication is intentionally transitional. `src/state/request-composition.ts` is the common derivation service and `src/local/build-request.ts` remains a thin legacy adapter. `semantic-actions.ts` plans one fixed action and returns; it does not dispatch producer work or cross into a newly offered action. Direct gate decisions are archived immutably and then settled in a separate authenticated substep. A revision settlement closes the gate only; `revise-enter` separately opens the write window, preventing decision authority from also becoming document-write authority.
 
-The low-level `archflow_state` planning-restart arm is similarly additive migration plumbing, not the desired public API. It exists so explicit earlier planning corrections use one kernel now; the future semantic reopen action will derive its target and impact rather than accepting those mechanical fields from the client.
+The low-level `archflow_state` planning-restart arm remains migration plumbing, while semantic reopen derives its target and impact rather than accepting those mechanical fields from the client. Keeping the four low-level tool names distinct from the six-name advertised catalogue makes that durable identity stable throughout the cutover.
 
 ## What is genuinely load-bearing (don't soften)
 

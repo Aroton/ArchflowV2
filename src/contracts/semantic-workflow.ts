@@ -203,7 +203,7 @@ export type SemanticActionOfferV1 = {
 
 export const SEMANTIC_SUBSTEPS = [
   "initialize-task", "begin-work", "submit-work", "review-enter", "review-run", "review-empty-triage",
-  "triage", "revise-enter", "reopen", "open-gate", "open-waiver", "decision-archive",
+  "triage-enter", "triage", "revise-enter", "reopen", "open-gate", "open-waiver", "decision-archive",
   "decision-settle", "start-next-skill", "finish-task",
 ] as const;
 export type SemanticSubstepV1 = (typeof SEMANTIC_SUBSTEPS)[number];
@@ -225,6 +225,10 @@ export type SemanticSuccessV1 = { readonly schema_version: "1"; readonly ok: tru
 export type SemanticErrorSummaryV1 = { readonly code: string; readonly message: string; readonly retryable: boolean };
 export type SemanticFailureV1 = { readonly schema_version: "1"; readonly ok: false; readonly error: SemanticErrorSummaryV1; readonly view?: WorkflowViewV1 };
 export type SemanticResultV1 = SemanticSuccessV1 | SemanticFailureV1;
+export type SemanticToolContractMap = {
+  readonly archflow_status: { readonly input: ArchFlowStatusInputV1; readonly result: SemanticResultV1 };
+  readonly archflow_apply: { readonly input: ArchFlowApplyInputV1; readonly result: SemanticResultV1 };
+};
 
 export const workflowResourceV1Schema = z.object({ role: nonBlank, path: nonBlank, access: z.enum(["read", "write", "read-write"]) }).strict();
 const findingDispositionV1Schema = z.discriminatedUnion("disposition", [
@@ -276,6 +280,16 @@ const commitInstructionV1Schema = z.object({ path: nonBlank, message: nonBlank, 
 export const semanticNextActionV1Schema = z.object({ kind: z.enum(SEMANTIC_ACTION_KINDS), instruction: nonBlank, offer: z.string().regex(/^af1_[0-9a-f]{64}$/u).optional(), expected_submission: z.enum(APPLY_SUBMISSION_KINDS).optional(), skill: nonBlank.optional(), skill_args: z.array(z.string()).optional(), commit: commitInstructionV1Schema.optional(), reopen: reopenImpactV1Schema.optional() }).strict();
 export const workflowViewV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, condition: z.enum(WORKFLOW_CONDITIONS), headline: nonBlank, detail: nonBlank, position: workflowPositionV1Schema.optional(), resources: z.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: z.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), presentation: humanPresentationV1Schema.optional() }).strict() as unknown as z.ZodType<WorkflowViewV1>;
 
+export const semanticErrorSummaryV1Schema = z.object({
+  code: nonBlank.max(128),
+  message: nonBlank.max(4096),
+  retryable: z.boolean(),
+}).strict() as unknown as z.ZodType<SemanticErrorSummaryV1>;
+
+export const semanticSuccessV1Schema = z.object({ schema_version: z.literal("1"), ok: z.literal(true), value: workflowViewV1Schema }).strict() as unknown as z.ZodType<SemanticSuccessV1>;
+export const semanticFailureV1Schema = z.object({ schema_version: z.literal("1"), ok: z.literal(false), error: semanticErrorSummaryV1Schema, view: workflowViewV1Schema.optional() }).strict() as unknown as z.ZodType<SemanticFailureV1>;
+export const semanticResultV1Schema = z.union([semanticSuccessV1Schema, semanticFailureV1Schema]) as unknown as z.ZodType<SemanticResultV1>;
+
 const humanRevisionDeclarationV1Schema = z.object({ classification: z.enum(["simple", "significant"]), rationale: boundedText, user_override: z.object({ agent_classification: z.enum(["simple", "significant"]), rationale: boundedText }).strict().optional() }).strict().superRefine((revision, context) => {
   if (revision.user_override?.agent_classification === revision.classification) context.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
 });
@@ -303,3 +317,4 @@ export const parseWorkflowInvocationV1 = (value: unknown): WorkflowInvocationV1 
 export const parseArchFlowStatusInputV1 = (value: unknown): ArchFlowStatusInputV1 => parseMaterialized(archFlowStatusInputV1Schema, value, "archflow status input");
 export const parseArchFlowApplyInputV1 = (value: unknown): ArchFlowApplyInputV1 => parseMaterialized(archFlowApplyInputV1Schema, value, "archflow apply input");
 export const parseApplySubmissionV1 = (value: unknown): ApplySubmissionV1 => parseMaterialized(applySubmissionV1Schema, value, "archflow apply submission");
+export const parseSemanticResultV1 = (value: unknown): SemanticResultV1 => parseMaterialized(semanticResultV1Schema, value, "semantic result");

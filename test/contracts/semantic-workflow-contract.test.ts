@@ -6,6 +6,7 @@ import { taskStateV1Schema } from "../../src/contracts/durable-state.js";
 import {
   archFlowApplyInputV1Schema,
   parseArchFlowApplyInputV1,
+  parseSemanticResultV1,
   parseWorkflowInvocationV1,
 } from "../../src/contracts/semantic-workflow.js";
 import {
@@ -24,6 +25,17 @@ const baseApply = () => ({
 });
 
 describe("semantic workflow contracts", () => {
+  it("strictly materializes the compact semantic result union", () => {
+    const view = {
+      schema_version: "1", task_id: "task-1", condition: "ready", headline: "Ready", detail: "Continue.", resources: [],
+      next_action: { kind: "inspect", instruction: "Inspect status." },
+    } as const;
+    expect(parseSemanticResultV1({ schema_version: "1", ok: true, value: view })).toEqual({ schema_version: "1", ok: true, value: view });
+    expect(parseSemanticResultV1({ schema_version: "1", ok: false, error: { code: "STALE_OFFER", message: "Refresh status.", retryable: true }, view })).toMatchObject({ ok: false, view });
+    expect(() => parseSemanticResultV1({ schema_version: "1", ok: false, error: { code: "BAD", message: "Bad.", retryable: false }, diagnostic: {} })).toThrow();
+    const accessor = Object.defineProperty({}, "schema_version", { enumerable: true, get: () => "1" });
+    expect(() => parseSemanticResultV1(accessor)).toThrow(/accessor/u);
+  });
   it("keeps the public apply schema root a plain object and nests its variants", () => {
     const apply = (semanticWorkflowSchema.$defs as Record<string, Record<string, unknown>>).applyInput;
     expect(apply?.type).toBe("object");

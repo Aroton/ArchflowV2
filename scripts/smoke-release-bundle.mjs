@@ -134,6 +134,8 @@ function assertCallTranscript(bytes, initialize, calls, workingDirectory) {
     "archflow_counter_review",
     "archflow_gate",
     "archflow_waiver",
+    "archflow_status",
+    "archflow_apply",
   ]);
   assert.deepEqual(lines[3], {
     jsonrpc: "2.0",

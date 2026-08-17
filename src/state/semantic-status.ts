@@ -146,6 +146,57 @@ function transitionCarriesDecision(outcome: PlainJsonValue, decision: ArchivedGa
   return descriptor?.enumerable === true && "value" in descriptor && isDeepStrictEqual(descriptor.value, decision.envelope);
 }
 
+function decisionReenters(record: ArchivedGateDecisionRecordV1): boolean {
+  if (record.outcome !== "decided") return false;
+  const choice = record.envelope.payload.decision;
+  return (record.kind === "artifact-approval" && choice === "revise") ||
+    (record.kind === "design-approval" && choice === "revise") ||
+    (record.kind === "constitution-review" && choice === "revise") ||
+    (record.kind === "material-drift" && choice === "revise-current") ||
+    (record.kind === "attempts-exhausted" && (choice === "retry-once" || choice === "revise")) ||
+    (record.kind === "commit-authorization" && choice === "revise") ||
+    (record.kind === "migration-audit" && choice === "revise");
+}
+
+function directDecisionRequestDigest(
+  operationDigest: Sha256Digest,
+  request: CanonicalDocument<ArchivedGateRequestV1>,
+  decision: CanonicalDocument<ArchivedGateDecisionRecordV1>,
+): Sha256Digest {
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "direct-semantic-decision-settlement",
+    operation_digest: operationDigest,
+    gate_request_digest: request.digest,
+    gate_decision_digest: decision.digest,
+  });
+}
+
+function semanticDecisionOperation(decision: ArchivedGateDecisionRecordV1): Sha256Digest | undefined {
+  if (decision.outcome === "superseded") return undefined;
+  const provenance = decision.outcome === "decided" ? decision.envelope.human_provenance : decision.human_provenance;
+  if (provenance.channel !== "connected-host") return undefined;
+  const match = /^afdecision-([0-9a-f]{64})$/u.exec(provenance.decision_event_id);
+  return match?.[1] as Sha256Digest | undefined;
+}
+
+function decisionProvenance(decision: ArchivedGateDecisionRecordV1) {
+  if (decision.outcome === "superseded") return undefined;
+  return decision.outcome === "decided" ? decision.envelope.human_provenance : decision.human_provenance;
+}
+
+function legacyLocalDecisionSettlementOperation(
+  request: CanonicalDocument<ArchivedGateRequestV1>,
+  decision: CanonicalDocument<ArchivedGateDecisionRecordV1>,
+): Sha256Digest {
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "legacy-local-decision-settlement",
+    gate_request_digest: request.digest,
+    gate_decision_digest: decision.digest,
+  });
+}
+
 async function deriveArchiveEnrichments(
   dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
@@ -167,7 +218,20 @@ async function deriveArchiveEnrichments(
         archive.decision.value.outcome === "superseded") {
       return Object.freeze({ archived_decision: Object.freeze({ status: "invalid" }) });
     }
-    return Object.freeze({ archived_decision: Object.freeze({ status: "exact" }) });
+    const provenance = decisionProvenance(archive.decision.value);
+    const semanticOperation = semanticDecisionOperation(archive.decision.value);
+    if (provenance === undefined || (provenance.channel === "connected-host" && semanticOperation === undefined)) {
+      return Object.freeze({ archived_decision: Object.freeze({ status: "invalid" }) });
+    }
+    const operationDigest = semanticOperation ?? legacyLocalDecisionSettlementOperation(archive.request, archive.decision);
+    return Object.freeze({ archived_decision: Object.freeze({
+      status: "exact",
+      gate_id: archive.request.value.gate_id,
+      request_digest: archive.request.digest,
+      decision_digest: archive.decision.digest,
+      operation_digest: operationDigest,
+      ...(semanticOperation === undefined ? { provenance: "pre-facade" } : {}),
+    }) });
   }
 
   const transition = state.last_transition;
@@ -187,20 +251,37 @@ async function deriveArchiveEnrichments(
   }
   const request = (archive.request as CanonicalDocument<ArchivedGateRequestV1>);
   const decision = (archive.decision as CanonicalDocument<ArchivedGateDecisionRecordV1>);
-  if (request.value.request_digest !== transition.request_digest || request.value.intent_id !== transition.intent_id ||
-      request.value.gate_id !== transitionGateId || decision.value.gate_id !== transitionGateId ||
-      canonicalJsonDigest(transition.outcome) !== transition.outcome_digest || decision.value.outcome !== "decided" ||
-      !transitionCarriesDecision(transition.outcome, decision.value)) {
-    return transition.operation === "semantic-revision-requested"
-      ? Object.freeze({ revision_checkpoint: Object.freeze({ status: "invalid" }) })
-      : Object.freeze({ pending_waiver_origin: Object.freeze({ status: "invalid" }) });
-  }
+  if (decision.value.outcome !== "decided") return Object.freeze({});
+  const commonTransitionBinding = request.value.gate_id === transitionGateId && decision.value.gate_id === transitionGateId &&
+    canonicalJsonDigest(transition.outcome) === transition.outcome_digest && decision.value.outcome === "decided" &&
+    transitionCarriesDecision(transition.outcome, decision.value);
   const payload = decision.value.envelope.payload;
   if (transition.operation === "semantic-revision-requested") {
-    const enactsReentry = payload.decision === "revise";
-    return Object.freeze({ revision_checkpoint: Object.freeze({ status: enactsReentry ? "valid" : "invalid" }) });
+    const intent = /^afop-([0-9a-f]{64})-decision-settle$/u.exec(transition.intent_id);
+    const operationDigest = intent?.[1] as Sha256Digest | undefined;
+    const provenance = decisionProvenance(decision.value);
+    const provenanceOperation = semanticDecisionOperation(decision.value);
+    const directBinding = operationDigest !== undefined &&
+      (provenance?.channel === "archflow-local" || provenanceOperation === operationDigest) &&
+      transition.request_digest === directDecisionRequestDigest(operationDigest, request, decision) &&
+      transition.input_fingerprint === state.input_fingerprint &&
+      transition.prior_revision === request.value.opened_at_revision &&
+      transition.resulting_revision === request.value.opened_at_revision + 1;
+    const valid = commonTransitionBinding && decisionReenters(decision.value) && directBinding;
+    return Object.freeze({ revision_checkpoint: Object.freeze({
+      status: valid ? "valid" : "invalid",
+      ...(valid ? {
+        gate_id: transitionGateId,
+        request_digest: request.digest,
+        decision_digest: decision.digest,
+        choice: payload.decision,
+        ...(operationDigest === undefined ? {} : { operation_digest: operationDigest }),
+        ...(provenance?.channel === "archflow-local" ? { provenance: "pre-facade" } : {}),
+      } : {}),
+    }) });
   }
-  if (transition.operation !== "gate" || payload.decision !== "waiver-requested" ||
+  if (!commonTransitionBinding || request.value.request_digest !== transition.request_digest ||
+      request.value.intent_id !== transition.intent_id || transition.operation !== "gate" || payload.decision !== "waiver-requested" ||
       (request.value.kind !== "constitution-review" && request.value.kind !== "design-approval") ||
       !("eligible_waivers" in request.value.context) ||
       !request.value.context.eligible_waivers.some((eligible) =>

@@ -1,8 +1,8 @@
 # review/COUNTER-REVIEW
 
-**Explored:** 2026-08-13 · **Commit:** `66c4c9b` · **Covers:** `src/review/`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
+**Explored:** 2026-08-16 · **Commit:** `d60da73` · **Covers:** `src/review/`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
 
-Counter-review is the system's adversarial check: every artifact is reviewed by the *opposite model family* (Claude ⇄ Codex), dispatched by the server itself so the evidence is something the producer cannot author. One `archflow_counter_review` call covers up to two dispatches: the rubric counter-review, and — only when the pinned constitution has active rules, a decision the server makes alone — the constitution review (see below). This page covers the review envelope, the review flow, the constitution review, and waivers.
+Counter-review is the system's adversarial check: every artifact is reviewed by the *opposite model family* (Claude ⇄ Codex), dispatched by the server itself so the evidence is something the producer cannot author. A low-level `archflow_counter_review` call or one semantic `review` action reaches the same direct handler seam and covers up to two dispatches: the rubric counter-review, and — only when the pinned constitution has active rules, a decision the server makes alone — the constitution review (see below). Semantic review owns the outer process FIFO across replay, dispatch, and commit; the direct inner seam never queues itself again.
 
 ## The dispatch envelope
 

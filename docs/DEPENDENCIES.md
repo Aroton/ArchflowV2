@@ -1,6 +1,6 @@
 # DEPENDENCIES
 
-**Explored:** 2026-08-14 · **Commit:** `9331032` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, `src/init/`, release tooling
+**Explored:** 2026-08-16 · **Commit:** `d60da73` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, `src/init/`, release tooling
 
 ## Runtime and package baseline
 
@@ -46,7 +46,7 @@ There is no ESLint, Prettier, Biome, dotenv loader, web framework, database clie
 - The server identifies itself as `archflow-mcp@0.0.0` and supports MCP protocol `2025-11-25` (`PROTOCOL_VERSION` in `src/mcp/sdk-adapter.ts`).
 - The only SDK import in production is the public root in `src/mcp/sdk-adapter.ts`. `scripts/check-mcp-sdk-boundary.mjs` enforces that boundary; `scripts/test-mcp-sdk-boundary-policy.mjs` mutation-tests the checker.
 - `scripts/probe-mcp-sdk-compatibility.mjs` verifies the installed SDK/core public and behavioral surfaces the adapter relies on.
-- `src/mcp/tools.ts` advertises exactly four tools: `archflow_state`, `archflow_counter_review`, `archflow_gate`, and `archflow_waiver`. Their schemas originate in `src/contracts/schemas/v1/` and `src/contracts/mcp-tools.ts`.
+- `src/mcp/tools.ts` advertises six purpose-described tools. `archflow_status` and `archflow_apply` use the generated semantic-workflow schema; `archflow_state`, `archflow_counter_review`, `archflow_gate`, and `archflow_waiver` retain the generated low-level MCP schema and remain the only durable tool-name identities.
 
 Host identity is derived from MCP `clientInfo.name` in `src/contracts/hosts.ts`: `claude-code` maps to Claude, `codex-mcp-client` maps to Codex, and any unrecognized name maps to `unknown`. Recorded versions are evidence fixtures, not a prefix-based identity fallback.
 
@@ -75,7 +75,7 @@ The repository itself contains current examples in `.mcp.json` and `.codex/confi
 - Claude runs in print/safe mode with tools and slash commands disabled, an empty strict MCP config, no session persistence or setting sources, and a projected JSON output schema.
 - Codex runs `exec --ephemeral` with user config/rules ignored, read-only sandboxing, strict config, a generated output schema/file, and shell, browser, computer, image, apps, plugins, hooks, skill search, and multi-agent features disabled.
 - `src/dispatch/process.ts` uses `spawn` without a shell, caps total output at 8 MiB, times out after 15 minutes by default (a real review of the pinned checkout is legitimately multi-minute), and terminates the process group on non-Windows.
-- A process-wide FIFO in `src/dispatch/cli.ts` limits one MCP server process to one resource-intensive reviewer at a time. Credential concurrency remains the first-party CLI's responsibility; the FIFO does not coordinate separate MCP server or interactive processes.
+- A process-wide FIFO in `src/dispatch/cli.ts` limits one MCP server process to one resource-intensive reviewer at a time. Semantic review holds that FIFO around its entire replay/dispatch/commit operation and calls a direct counter-review inner seam, so it cannot deadlock by entering the same queue twice. Credential concurrency remains the first-party CLI's responsibility; the FIFO does not coordinate separate MCP server or interactive processes.
 
 `src/dispatch/workspace.ts` creates a disposable working directory outside the repository but deliberately does not create a disposable authentication home:
 
