@@ -1,0 +1,57 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 93,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 6304836
+  },
+  "artifact_digest": "b7de5ef74e688828962c01eed22e658ecefd831d2d19073127936d091ac23c34",
+  "input_fingerprint": "469bdda474c3e3bb3096096592481d3cc8e5dc12dcfb7c052202ce1fbd8db465",
+  "outputs": [],
+  "phase_instance": "phase-impl-1",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "result-4d834aa9e55d20809ba62f359622ca02",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "review-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "assurance": "server-attested",
+      "blocking_count": 0,
+      "cli_version": "2.1.233",
+      "effort": "medium",
+      "envelope_input_digest": "8bd87c636a0e52f3b667020a1d2eb4ab3c0c5ac756d30b76b6c1b39a032555d9",
+      "findings": [],
+      "input_fingerprint": "469bdda474c3e3bb3096096592481d3cc8e5dc12dcfb7c052202ce1fbd8db465",
+      "invocation_id": "invocation-c03ee501983cd866b2e7a33a0016ffee",
+      "matched_rule_versions": [],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "c9d2dc80787f8f6c1cbda0d3edf861821d965ccb26ce8e500f1dcd83997fc45a",
+      "phase_instance": "phase-impl-1",
+      "producer_family": "codex",
+      "result_id": "result-4d834aa9e55d20809ba62f359622ca02",
+      "role": "counter-review",
+      "rubric_digest": "68405124576f2bdca2a95003bd13548aa352ea018926faa733fad95a99f39775",
+      "schema_version": "1",
+      "step": "counter_review",
+      "subject_digest": "2b659b48535b34239f312523eeabc3853d72943995a6f9b2f99887692ab3b285",
+      "task_id": "api-refactor",
+      "verdict": "pass"
+    },
+    "schema_version": "1"
+  },
+  "step": "counter_review",
+  "task_id": "api-refactor"
+}
