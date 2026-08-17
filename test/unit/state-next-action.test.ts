@@ -145,6 +145,18 @@ describe("deriveNextAction", () => {
     expect(blocked.detail).toMatch(/running it again cannot resolve this/u);
   });
 
+  it("reaches the import milestone commit from a migration-audit acceptance alone", () => {
+    // A migration-audit acceptance is the combined approval for imported design phases, so an
+    // advancing assessment must land on the import commit, not a second, redundant design approval.
+    const next = deriveNextAction(input({
+      state: state({ phase_instance: encodePhaseInstance({ kind: "design" }) }),
+      assessment: assessment("advance"),
+      authenticated_approvals: [{ gate_kind: "migration-audit" as const, subject_digest: D("a") }],
+      design_commit: designCommit,
+    }));
+    expect(next).toMatchObject({ code: "commit-artifacts", commit_message: designCommit.message });
+  });
+
   it("routes an editorial revision to the produce step with revision-intent wording", () => {
     const editorial = deriveNextAction(input({
       assessment: { ...assessment("produce"), editorial_revision_required: true },

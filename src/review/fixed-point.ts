@@ -344,7 +344,19 @@ function adjudicationGateSatisfied(
         authenticated.request.current_evidence.set_digest === deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest &&
         authenticated.decision.envelope.payload.decision === "approve";
     });
-    if (designApproval) return true;
+    // A migration-audit acceptance is the combined approval for imported design phases:
+    // it replaces the separate PRD and design-approval gates and satisfies this gate alike.
+    const migrationApproval = (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
+      assertAuthenticatedGateApproval(authenticated);
+      return authenticated.approval.gate_kind === "migration-audit" &&
+        authenticated.approval.subject_digest === subject.subject_digest &&
+        authenticated.request.kind === "migration-audit" &&
+        authenticated.request.phase_instance === state.phase_instance &&
+        authenticated.request.subject_digest === subject.subject_digest &&
+        authenticated.request.current_evidence.set_digest === deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest &&
+        authenticated.decision.envelope.payload.decision === "accept-import-audit";
+    });
+    if (designApproval || migrationApproval) return true;
   }
   const contextDigest = computeGateContextDigest(gate.kind, gate.context);
   const evidence: RetainedGateEvidence = Object.freeze({
