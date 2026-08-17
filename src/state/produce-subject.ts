@@ -11,7 +11,7 @@ import { decodePhaseInstance, encodePhaseInstance, type PhaseInstanceId } from "
 import type { RootBoundGitRunner } from "../repository/identity.js";
 import { resolveTaskPath } from "../repository/paths.js";
 import type { TransactionAuthority } from "./authority.js";
-import type { TransactionDependencies, RetainedResultInstallation } from "./transaction.js";
+import type { TransactionDependencies, RetainedManifest } from "./transaction.js";
 import { loadLegacyImportInitialization } from "./legacy-import-resume.js";
 
 /** Throwing decoder for document projections, which must be UTF-8 text — no base64 fallback. */
@@ -19,10 +19,21 @@ const fatalUtf8 = new TextDecoder("utf-8", { fatal: true });
 
 type ProduceArtifact = DocumentArtifactV1 | ImplementationOutputV1;
 
+/**
+ * A produce subject carries only the retained *manifest*, never the full installation.
+ *
+ * Every status, gate, and evidence reader consumes manifest fields (`projections`, `outputs`,
+ * `artifact_digest`). Only review dispatch needs the projection plan, and reconstructing that plan
+ * means re-reading every payload and re-running the secret scan — work that writes nothing and, on
+ * an implementation result with a few hundred outputs, dominates a read. Those two consumers load
+ * the full installation themselves from `reference`; nobody else pays for it.
+ */
 export type CurrentProduceSubject = Readonly<{
   artifact_digest: Sha256Digest;
   artifact: ProduceArtifact;
-  retained: RetainedResultInstallation;
+  /** Addresses the retained result, so a consumer that needs the projection plan can load it. */
+  reference: TaskStateV1["authoritative_results"][number];
+  retained: RetainedManifest;
 }>;
 
 export type ProduceUpstreamSubject = CurrentProduceSubject | Readonly<{
@@ -68,18 +79,20 @@ export function resolveProduceUpstreamBinding(
 
 /** Loads and authenticates the retained document artifact that currently owns an upstream path. */
 export async function loadProduceUpstreamSubject(
-  dependencies: Pick<TransactionDependencies, "load_retained_result" | "load_retained_manifest" | "runner">,
+  dependencies: Pick<TransactionDependencies, "load_retained_manifest" | "runner">,
   authority: TransactionAuthority,
   state: TaskStateV1,
   binding: ProduceUpstreamBinding,
 ): Promise<ProjectResult<ProduceUpstreamSubject>> {
-  // Ownership is decided entirely from manifests. Only the winner is loaded in full, because only
-  // the winner's payload bytes and projection plan are ever read.
+  // Ownership is decided entirely from manifests, and no caller reads an upstream subject's
+  // retained installation — upstream pinning re-hashes the projected file on disk against the
+  // manifest's content digest instead. So the winner is never loaded in full either.
   const approvedOwners: Array<Readonly<{
     reference: TaskStateV1["authoritative_results"][number];
     artifact: DocumentArtifactV1;
     artifact_digest: Sha256Digest;
     measured_at_revision: number;
+    retained: RetainedManifest;
   }>> = [];
   let retainedOwnerExists = false;
   const loadManifest = dependencies.load_retained_manifest;
@@ -106,24 +119,21 @@ export async function loadProduceUpstreamSubject(
         artifact,
         artifact_digest: manifest.artifact_digest,
         measured_at_revision: manifest.accounting.measured_at_revision,
+        retained: retained.value,
       }));
     }
   }
   approvedOwners.sort((left, right) => right.measured_at_revision - left.measured_at_revision);
   const owner = approvedOwners[0];
   if (owner !== undefined) {
-    if (dependencies.load_retained_result === undefined) {
-      return fail(state.phase_instance, "current-upstream-produce-result-missing");
-    }
-    const retained = await dependencies.load_retained_result(owner.reference);
-    if (!retained.ok) return retained;
     return Object.freeze({
       schema_version: "1",
       ok: true,
       value: Object.freeze({
         artifact_digest: owner.artifact_digest,
         artifact: owner.artifact,
-        retained: retained.value,
+        reference: owner.reference,
+        retained: owner.retained,
       }),
     });
   }
@@ -171,17 +181,17 @@ const fail = <T>(phase: TaskStateV1["phase_instance"], issue_code: string): Proj
 
 /** Loads the current phase's retained produce result and authenticates its canonical artifact. */
 export async function loadCurrentProduceSubject(
-  dependencies: Pick<TransactionDependencies, "load_retained_result">,
+  dependencies: Pick<TransactionDependencies, "load_retained_manifest">,
   state: TaskStateV1,
 ): Promise<ProjectResult<CurrentProduceSubject>> {
   const reference = [...state.authoritative_results].reverse().find((candidate) =>
     candidate.phase_instance === state.phase_instance && candidate.step === "produce");
-  if (reference === undefined || dependencies.load_retained_result === undefined) {
+  if (reference === undefined || dependencies.load_retained_manifest === undefined) {
     return fail(state.phase_instance, "current-produce-result-missing");
   }
-  const retained = await dependencies.load_retained_result(reference);
+  const retained = await dependencies.load_retained_manifest(reference);
   if (!retained.ok) return retained;
-  const manifest = retained.value.prepared.manifest.value;
+  const manifest = retained.value.manifest.value;
   const artifact = manifest.source_artifact;
   if (artifact.artifact_kind !== "document" && artifact.artifact_kind !== "implementation-output") {
     return fail(state.phase_instance, "current-produce-artifact-invalid");
@@ -192,7 +202,7 @@ export async function loadCurrentProduceSubject(
   return Object.freeze({
     schema_version: "1",
     ok: true,
-    value: Object.freeze({ artifact_digest: manifest.artifact_digest, artifact, retained: retained.value }),
+    value: Object.freeze({ artifact_digest: manifest.artifact_digest, artifact, reference, retained: retained.value }),
   });
 }
 

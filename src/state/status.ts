@@ -304,7 +304,7 @@ export function partitionExpectedReentryEdits(
   const producePaths = produceSubject === undefined
     ? undefined
     : new Set<string>(
-        produceSubject.retained.prepared.manifest.value.projections.map((projection) => projection.path),
+        produceSubject.retained.manifest.value.projections.map((projection) => projection.path),
       );
   const remaining: ReconciliationFinding[] = [];
   const expected: ProjectionDigestRef["path"][] = [];
@@ -529,7 +529,7 @@ export function buildCommitAuthorizationInput(
   if (subject.artifact.artifact_kind !== "implementation-output") {
     throw new TypeError("commit authorization requires retained implementation output");
   }
-  const manifest = subject.retained.prepared.manifest.value;
+  const manifest = subject.retained.manifest.value;
   if (manifest.artifact_digest !== subject.artifact_digest) {
     throw new TypeError("commit authorization manifest subject disagrees");
   }
@@ -839,7 +839,7 @@ export async function computeTaskStatus(
           dependencies.runner,
           state.task_id,
           produceSubject.artifact,
-          produceSubject.retained.prepared.manifest.value.outputs,
+          produceSubject.retained.manifest.value.outputs,
           authenticated.request.context,
         );
         commitObserved = observation.observed;
@@ -875,7 +875,7 @@ export async function computeTaskStatus(
           dependencies.runner,
           state.task_id,
           produceSubject.artifact,
-          produceSubject.retained.prepared.manifest.value.outputs,
+          produceSubject.retained.manifest.value.outputs,
           {
             target_ref: migration.request.context.target_ref,
             baseline_commit: migration.request.context.baseline_commit,

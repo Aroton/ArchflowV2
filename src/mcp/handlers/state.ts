@@ -127,10 +127,8 @@ export async function handleState(
           preparedResult = prepared.value;
         }
         if (artifact?.artifact_kind === "triage") {
-          const loadRetained = services.dependencies.load_retained_result;
           const loadManifest = services.dependencies.load_retained_manifest;
-          if (retainedBytes === undefined || scanner === undefined ||
-              loadRetained === undefined || loadManifest === undefined) {
+          if (retainedBytes === undefined || scanner === undefined || loadManifest === undefined) {
             throw new TypeError("evidence preparation dependencies are unavailable");
           }
           const produce = await loadCurrentProduceSubject(services.dependencies, current.value);
@@ -144,7 +142,6 @@ export async function handleState(
           const reviews = await loadCurrentReviewSet(
             {
               read_state: services.dependencies.read_state,
-              load_retained_result: loadRetained,
               load_retained_manifest: loadManifest,
             },
             services.authority,
@@ -241,7 +238,7 @@ export async function handleState(
                 services.runner,
                 current.value.task_id,
                 currentProduce.artifact,
-                currentProduce.retained.prepared.manifest.value.outputs,
+                currentProduce.retained.manifest.value.outputs,
                 authenticated.request.context,
               )).observed) {
                 commitObserved = true;
@@ -321,7 +318,7 @@ export async function handleState(
                   services.runner,
                   current.value.task_id,
                   currentProduce.artifact,
-                  currentProduce.retained.prepared.manifest.value.outputs,
+                  currentProduce.retained.manifest.value.outputs,
                   {
                     target_ref: loaded.value.request.context.target_ref,
                     baseline_commit: loaded.value.request.context.baseline_commit,

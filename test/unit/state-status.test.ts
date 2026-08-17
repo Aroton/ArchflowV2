@@ -81,7 +81,7 @@ describe("partitionExpectedReentryEdits", () => {
       next_action: "restore-or-record-new-transition",
     } as unknown as ReconciliationFinding;
     const subject = {
-      retained: { prepared: { manifest: { value: { projections: [{ path }] } } } },
+      retained: { manifest: { value: { projections: [{ path }] } } },
     } as unknown as CurrentProduceSubject;
     // No fixed-point authorization: the durable produce running entry alone is the declared
     // intent that authorizes rewriting the produce projection (the new-information door).
@@ -168,7 +168,7 @@ describe("computeTaskStatus", () => {
           { content_digest: D("d") },
         ],
       },
-      retained: { prepared: { manifest: { value: { artifact_digest: D("b") } } } },
+      retained: { manifest: { value: { artifact_digest: D("b") } } },
     } as unknown as CurrentProduceSubject;
     const input = buildCommitAuthorizationInput(subject, evidence, {
       value: "refs/heads/feature", guidance: "Current symbolic branch ref observed from repository authority.",

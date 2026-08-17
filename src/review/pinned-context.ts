@@ -23,6 +23,7 @@ import {
   readProduceProjection,
   type CurrentProduceSubject,
 } from "../state/produce-subject.js";
+import type { ProjectionPlan } from "../state/snapshots.js";
 import type { TransactionDependencies } from "../state/transaction.js";
 import { loadLegacyImportInitialization } from "../state/legacy-import-resume.js";
 import {
@@ -177,10 +178,16 @@ const fail = <T>(phase: PhaseInstanceId, issue_code: string): ProjectResult<T> =
 export async function assembleReviewContext(input: {
   readonly runner: RootBoundGitRunner;
   readonly authority: TransactionAuthority;
-  readonly dependencies: Pick<TransactionDependencies, "load_retained_result" | "runner">;
+  readonly dependencies: Pick<TransactionDependencies, "load_retained_result" | "load_retained_manifest" | "runner">;
   readonly state: TaskStateV1;
   readonly subject: CurrentProduceSubject;
   readonly projection_bytes: Uint8Array;
+  /**
+   * The subject's retained projection plan, supplied by the caller for implementation outputs.
+   * The subject itself carries only a manifest, and rebuilding the plan re-reads every payload and
+   * re-runs the secret scan, so the dispatching handler — which already loads it — passes it down.
+   */
+  readonly projection_plan?: ProjectionPlan;
 }): Promise<ProjectResult<readonly PinnedContextEntry[]>> {
   const phase = decodePhaseInstance(input.state.phase_instance);
   const priorTriage = await priorTriageEvidence(input.dependencies, input.state);
@@ -192,7 +199,7 @@ export async function assembleReviewContext(input: {
     if (input.subject.artifact.artifact_kind === "implementation-output") {
       mechanical = [
         ...await verificationTranscriptEvidence(input.runner, input.authority, input.state, input.subject),
-        ...await implementationMechanicalEvidence(input.runner, input.subject),
+        ...await implementationMechanicalEvidence(input.runner, input.subject, input.projection_plan),
       ];
     } else {
       const artifactText = decodeUtf8Strict(input.projection_bytes);
@@ -243,7 +250,7 @@ export async function assembleReviewContext(input: {
 async function assembleUpstreamContext(input: {
   readonly runner: RootBoundGitRunner;
   readonly authority: TransactionAuthority;
-  readonly dependencies: Pick<TransactionDependencies, "load_retained_result" | "runner">;
+  readonly dependencies: Pick<TransactionDependencies, "load_retained_result" | "load_retained_manifest" | "runner">;
   readonly state: TaskStateV1;
   readonly subject: CurrentProduceSubject;
 }): Promise<ProjectResult<readonly PinnedContextEntry[]>> {
@@ -458,11 +465,15 @@ export async function verificationTranscriptEvidence(
 async function implementationMechanicalEvidence(
   runner: RootBoundGitRunner,
   subject: CurrentProduceSubject,
+  projectionPlan: ProjectionPlan | undefined,
 ): Promise<readonly PinnedContextEntry[]> {
   if (subject.artifact.artifact_kind !== "implementation-output") return Object.freeze([]);
+  if (projectionPlan === undefined) {
+    return [failedMechanicalEvidence("interface-excerpt", "changed-imports")];
+  }
   const baseCommit = subject.artifact.base_commit;
   try {
-    const planEntries = subject.retained.projection_plan.entries;
+    const planEntries = projectionPlan.entries;
     const changedPaths = new Set(planEntries.map((entry) => entry.path as string));
     const wanted: { specifier: string; fromPath: string; candidates: readonly string[] }[] = [];
     for (const entry of planEntries) {

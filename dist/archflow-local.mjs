@@ -35291,25 +35291,22 @@ async function loadProduceUpstreamSubject(dependencies, authority, state, bindin
         reference,
         artifact: artifact2,
         artifact_digest: manifest.artifact_digest,
-        measured_at_revision: manifest.accounting.measured_at_revision
+        measured_at_revision: manifest.accounting.measured_at_revision,
+        retained: retained.value
       }));
     }
   }
   approvedOwners.sort((left, right) => right.measured_at_revision - left.measured_at_revision);
   const owner = approvedOwners[0];
   if (owner !== void 0) {
-    if (dependencies.load_retained_result === void 0) {
-      return fail13(state.phase_instance, "current-upstream-produce-result-missing");
-    }
-    const retained = await dependencies.load_retained_result(owner.reference);
-    if (!retained.ok) return retained;
     return Object.freeze({
       schema_version: "1",
       ok: true,
       value: Object.freeze({
         artifact_digest: owner.artifact_digest,
         artifact: owner.artifact,
-        retained: retained.value
+        reference: owner.reference,
+        retained: owner.retained
       })
     });
   }
@@ -35367,12 +35364,12 @@ var fail13 = (phase3, issue_code) => Object.freeze({
 });
 async function loadCurrentProduceSubject(dependencies, state) {
   const reference = [...state.authoritative_results].reverse().find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "produce");
-  if (reference === void 0 || dependencies.load_retained_result === void 0) {
+  if (reference === void 0 || dependencies.load_retained_manifest === void 0) {
     return fail13(state.phase_instance, "current-produce-result-missing");
   }
-  const retained = await dependencies.load_retained_result(reference);
+  const retained = await dependencies.load_retained_manifest(reference);
   if (!retained.ok) return retained;
-  const manifest = retained.value.prepared.manifest.value;
+  const manifest = retained.value.manifest.value;
   const artifact = manifest.source_artifact;
   if (artifact.artifact_kind !== "document" && artifact.artifact_kind !== "implementation-output") {
     return fail13(state.phase_instance, "current-produce-artifact-invalid");
@@ -35383,7 +35380,7 @@ async function loadCurrentProduceSubject(dependencies, state) {
   return Object.freeze({
     schema_version: "1",
     ok: true,
-    value: Object.freeze({ artifact_digest: manifest.artifact_digest, artifact, retained: retained.value })
+    value: Object.freeze({ artifact_digest: manifest.artifact_digest, artifact, reference, retained: retained.value })
   });
 }
 function documentProjectionDescriptors(artifact) {
@@ -36636,7 +36633,7 @@ function partitionExpectedReentryEdits(findings, assessment, produceSubject, sta
     return Object.freeze({ remaining: findings, expected_reentry_edits: Object.freeze([]) });
   }
   const producePaths = produceSubject === void 0 ? void 0 : new Set(
-    produceSubject.retained.prepared.manifest.value.projections.map((projection) => projection.path)
+    produceSubject.retained.manifest.value.projections.map((projection) => projection.path)
   );
   const remaining = [];
   const expected = [];
@@ -36786,7 +36783,7 @@ function buildCommitAuthorizationInput(subject, currentEvidence, target, baselin
   if (subject.artifact.artifact_kind !== "implementation-output") {
     throw new TypeError("commit authorization requires retained implementation output");
   }
-  const manifest = subject.retained.prepared.manifest.value;
+  const manifest = subject.retained.manifest.value;
   if (manifest.artifact_digest !== subject.artifact_digest) {
     throw new TypeError("commit authorization manifest subject disagrees");
   }
@@ -37036,7 +37033,7 @@ async function computeTaskStatus(dependencies, authority) {
           dependencies.runner,
           state.task_id,
           produceSubject.artifact,
-          produceSubject.retained.prepared.manifest.value.outputs,
+          produceSubject.retained.manifest.value.outputs,
           authenticated.request.context
         );
         commitObserved = observation.observed;
@@ -37061,7 +37058,7 @@ async function computeTaskStatus(dependencies, authority) {
           dependencies.runner,
           state.task_id,
           produceSubject.artifact,
-          produceSubject.retained.prepared.manifest.value.outputs,
+          produceSubject.retained.manifest.value.outputs,
           {
             target_ref: migration.request.context.target_ref,
             baseline_commit: migration.request.context.baseline_commit,

@@ -636,7 +636,6 @@ else {
       const afterCounter = await createProductionServices({ working_directory: h.root, task_id: task, operation: parseSafeCode("pipeline-after-counter") });
       if (!afterCounter.ok) throw new Error(afterCounter.error.code);
       const directReviews = await loadCurrentReviewSet({ read_state: afterCounter.value.dependencies.read_state,
-        load_retained_result: afterCounter.value.dependencies.load_retained_result!,
         load_retained_manifest: afterCounter.value.dependencies.load_retained_manifest! }, afterCounter.value.authority, phase);
       if (!directReviews.ok) throw new Error(`direct reviews: ${JSON.stringify(directReviews)}`);
       const current = directReviews.value.current_evidence_set;

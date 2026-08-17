@@ -5737,7 +5737,7 @@
       "imports": []
     },
     "src/mcp/handlers/counter-review.ts": {
-      "bytes": 19782,
+      "bytes": 20611,
       "format": "esm",
       "imports": [
         {
@@ -6054,7 +6054,7 @@
       ]
     },
     "src/mcp/handlers/state.ts": {
-      "bytes": 18199,
+      "bytes": 18012,
       "format": "esm",
       "imports": [
         {
@@ -6761,7 +6761,7 @@
       ]
     },
     "src/review/pinned-context.ts": {
-      "bytes": 28570,
+      "bytes": 29214,
       "format": "esm",
       "imports": [
         {
@@ -6987,7 +6987,7 @@
       ]
     },
     "src/state/evidence-results.ts": {
-      "bytes": 26086,
+      "bytes": 25976,
       "format": "esm",
       "imports": [
         {
@@ -7896,7 +7896,7 @@
       ]
     },
     "src/state/produce-subject.ts": {
-      "bytes": 17418,
+      "bytes": 18057,
       "format": "esm",
       "imports": [
         {
@@ -8371,7 +8371,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 60588,
+      "bytes": 60552,
       "format": "esm",
       "imports": [
         {
@@ -8753,7 +8753,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1668679,
+      "bytes": 1668453,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -9956,7 +9956,7 @@
           "bytesInOutput": 4683
         },
         "src/state/produce-subject.ts": {
-          "bytesInOutput": 7871
+          "bytesInOutput": 7681
         },
         "src/state/production.ts": {
           "bytesInOutput": 13691
@@ -9986,7 +9986,7 @@
           "bytesInOutput": 1353
         },
         "src/state/status.ts": {
-          "bytesInOutput": 40076
+          "bytesInOutput": 40040
         },
         "src/state/transitions.ts": {
           "bytesInOutput": 982
@@ -10000,7 +10000,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2534933,
+      "bytes": 2535171,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -11148,7 +11148,7 @@
           "bytesInOutput": 2638
         },
         "src/mcp/handlers/counter-review.ts": {
-          "bytesInOutput": 14324
+          "bytesInOutput": 14779
         },
         "src/mcp/handlers/errors.ts": {
           "bytesInOutput": 908
@@ -11169,7 +11169,7 @@
           "bytesInOutput": 12296
         },
         "src/mcp/handlers/state.ts": {
-          "bytesInOutput": 14555
+          "bytesInOutput": 14385
         },
         "src/mcp/handlers/waiver.ts": {
           "bytesInOutput": 5226
@@ -11214,7 +11214,7 @@
           "bytesInOutput": 658
         },
         "src/review/pinned-context.ts": {
-          "bytesInOutput": 18720
+          "bytesInOutput": 18859
         },
         "src/review/rubrics.ts": {
           "bytesInOutput": 10588
@@ -11229,7 +11229,7 @@
           "bytesInOutput": 3365
         },
         "src/state/evidence-results.ts": {
-          "bytesInOutput": 15291
+          "bytesInOutput": 15295
         },
         "src/state/fingerprint-readers.ts": {
           "bytesInOutput": 3960
@@ -11283,7 +11283,7 @@
           "bytesInOutput": 3015
         },
         "src/state/produce-subject.ts": {
-          "bytesInOutput": 11844
+          "bytesInOutput": 11654
         },
         "src/state/production.ts": {
           "bytesInOutput": 13682

@@ -123,14 +123,10 @@ export type RetainedEvidenceSet = ReadonlyMap<
 >;
 
 type RetainedEvidenceDependencies = Pick<TransactionDependencies, "load_retained_manifest">;
-/** Editorial checks read retained evidence by manifest and the current produce subject in full. */
-type EditorialSubjectDependencies = Pick<
-  TransactionDependencies,
-  "load_retained_manifest" | "load_retained_result"
->;
+/** Editorial checks read retained evidence and the current produce subject entirely by manifest. */
+type EditorialSubjectDependencies = Pick<TransactionDependencies, "load_retained_manifest">;
 type CurrentReviewSetDependencies = Readonly<{
   read_state: TransactionDependencies["read_state"];
-  load_retained_result: NonNullable<TransactionDependencies["load_retained_result"]>;
   load_retained_manifest: NonNullable<TransactionDependencies["load_retained_manifest"]>;
 }>;
 
@@ -478,7 +474,7 @@ type RetainedEditorialTriage = Readonly<{
 // it forces esbuild to wrap the whole cycle (and, transitively, zod) in lazy __esm closures,
 // which reorders bundle initialization and crashes the bundled runtime before main.
 async function currentProduceSubject(
-  dependencies: Pick<TransactionDependencies, "load_retained_result">,
+  dependencies: Pick<TransactionDependencies, "load_retained_manifest">,
   state: TaskStateV1,
 ): ReturnType<typeof loadCurrentProduceSubject> {
   return loadCurrentProduceSubject(dependencies, state);
@@ -639,7 +635,7 @@ export async function loadCurrentReviewSet(
     // bytes. It remains the one current review set exactly when the current produce artifact
     // declares that predecessor — one hop, authenticated from retained authority, no chaining.
     const produced = await currentProduceSubject(
-      { load_retained_result: dependencies.load_retained_result },
+      { load_retained_manifest: dependencies.load_retained_manifest },
       stateDocument.value,
     );
     const predecessor = produced.ok && produced.value.artifact.artifact_kind === "document"

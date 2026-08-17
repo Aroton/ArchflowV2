@@ -105,7 +105,14 @@ function harness(root: string, host: "codex" | "claude" = "codex") {
   return {
     async status(): Promise<TaskStatusV1> {
       const s = await services();
-      const status = await computeTaskStatus(s.dependencies, s.authority);
+      // See status-reentry-edit: a read that writes nothing must stay on manifests, so it never
+      // rebuilds a projection plan or re-runs the secret scan over retained payload bytes.
+      const status = await computeTaskStatus({
+        ...s.dependencies,
+        load_retained_result: () => {
+          throw new Error("status derivation must not load a full retained result");
+        },
+      }, s.authority);
       if (!status.ok) throw new Error(status.error.code);
       return status.value;
     },

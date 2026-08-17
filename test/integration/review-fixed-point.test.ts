@@ -651,7 +651,6 @@ async function reconstruct(
 ): Promise<CurrentReviewSet> {
   const loaded = await loadCurrentReviewSet({
     read_state: readTaskState,
-    load_retained_result: dependencies.load_retained_result!,
     load_retained_manifest: dependencies.load_retained_manifest!,
   }, h.authority, phase);
   if (!loaded.ok) throw new Error(loaded.error.code);

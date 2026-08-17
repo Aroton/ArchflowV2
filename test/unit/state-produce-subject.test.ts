@@ -192,9 +192,6 @@ describe("retained produce review material", () => {
     const retainedManifest = (artifact: DocumentArtifactV1, measured_at_revision: number) => ({
       manifest: { value: manifestValue(artifact, measured_at_revision) },
     });
-    const retained = (artifact: DocumentArtifactV1, measured_at_revision: number) => ({
-      prepared: { manifest: { value: manifestValue(artifact, measured_at_revision) } },
-    });
     const state = {
       task_id: taskId, phase_instance: encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(2) }), authoritative_results: [newRef, oldRef],
       approvals: [
@@ -209,10 +206,6 @@ describe("retained produce review material", () => {
         value: (reference.result_id === newRef.result_id
           ? retainedManifest(compound, 9)
           : retainedManifest(standalone, 4)) as never,
-      }),
-      load_retained_result: async (reference) => ({
-        schema_version: "1", ok: true,
-        value: (reference.result_id === newRef.result_id ? retained(compound, 9) : retained(standalone, 4)) as never,
       }),
     }, {} as TransactionAuthority, state, {
       phase_instance: encodePhaseInstance({ kind: "design" }), path: parseTaskPathClaim("design.md"), artifact_kind: "design",
@@ -291,13 +284,6 @@ describe("retained produce review material", () => {
           source_artifact: compound, artifact_digest: compoundDigest,
           accounting: { measured_at_revision: 9 }, projections: [], outputs: [],
         } } } as never,
-      }),
-      load_retained_result: async () => ({
-        schema_version: "1", ok: true,
-        value: { prepared: { manifest: { value: {
-          source_artifact: compound, artifact_digest: compoundDigest,
-          accounting: { measured_at_revision: 9 }, projections: [], outputs: [],
-        } } } } as never,
       }),
     }, authority, state, {
       phase_instance: encodePhaseInstance({ kind: "design" }),

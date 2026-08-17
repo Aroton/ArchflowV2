@@ -48,6 +48,7 @@ import {
   type ProduceProjection,
 } from "../../state/produce-subject.js";
 import type { ProductionServices } from "../../state/production.js";
+import type { ProjectionPlan } from "../../state/snapshots.js";
 import { mapHandlerErrors } from "./errors.js";
 import { resolvePreDispatchReplay } from "./replay.js";
 import { openHandlerSession } from "./session.js";
@@ -301,11 +302,20 @@ export async function handleCounterReview(
     const repositoryViewCommit = await resolveRepositoryViewCommit(
       services.runner, produce.value.artifact,
     );
+    // Review dispatch is the only consumer of the retained projection plan, so it is also the only
+    // path that reloads the full installation — payload bytes, before-images, and the secret scan.
+    // The subject itself carries a manifest, which is all every other reader needs.
+    let projectionPlan: ProjectionPlan | undefined;
+    if (produce.value.artifact.artifact_kind === "implementation-output") {
+      const loadRetained = services.dependencies.load_retained_result;
+      if (loadRetained === undefined) throw new TypeError("retained result loading is unavailable");
+      const retained = await loadRetained(produce.value.reference);
+      if (!retained.ok) return retained;
+      projectionPlan = retained.value.projection_plan;
+    }
     const repositoryView = Object.freeze({
       base_commit: repositoryViewCommit,
-      ...(produce.value.artifact.artifact_kind === "implementation-output"
-        ? { projection_plan: produce.value.retained.projection_plan }
-        : {}),
+      ...(projectionPlan === undefined ? {} : { projection_plan: projectionPlan }),
     });
     const workspaceBinding = produce.value.artifact.artifact_kind === "implementation-output"
       ? Object.freeze({
@@ -364,6 +374,7 @@ export async function handleCounterReview(
       state: state.value,
       subject: produce.value,
       projection_bytes: projection.value.bytes,
+      ...(projectionPlan === undefined ? {} : { projection_plan: projectionPlan }),
     });
     if (!context_entries.ok) return context_entries;
 

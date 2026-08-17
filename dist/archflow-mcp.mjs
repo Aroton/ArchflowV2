@@ -59170,25 +59170,22 @@ async function loadProduceUpstreamSubject(dependencies, authority, state, bindin
         reference,
         artifact: artifact2,
         artifact_digest: manifest.artifact_digest,
-        measured_at_revision: manifest.accounting.measured_at_revision
+        measured_at_revision: manifest.accounting.measured_at_revision,
+        retained: retained.value
       }));
     }
   }
   approvedOwners.sort((left, right) => right.measured_at_revision - left.measured_at_revision);
   const owner = approvedOwners[0];
   if (owner !== void 0) {
-    if (dependencies.load_retained_result === void 0) {
-      return fail16(state.phase_instance, "current-upstream-produce-result-missing");
-    }
-    const retained = await dependencies.load_retained_result(owner.reference);
-    if (!retained.ok) return retained;
     return Object.freeze({
       schema_version: "1",
       ok: true,
       value: Object.freeze({
         artifact_digest: owner.artifact_digest,
         artifact: owner.artifact,
-        retained: retained.value
+        reference: owner.reference,
+        retained: owner.retained
       })
     });
   }
@@ -59246,12 +59243,12 @@ var fail16 = (phase3, issue_code) => Object.freeze({
 });
 async function loadCurrentProduceSubject(dependencies, state) {
   const reference = [...state.authoritative_results].reverse().find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "produce");
-  if (reference === void 0 || dependencies.load_retained_result === void 0) {
+  if (reference === void 0 || dependencies.load_retained_manifest === void 0) {
     return fail16(state.phase_instance, "current-produce-result-missing");
   }
-  const retained = await dependencies.load_retained_result(reference);
+  const retained = await dependencies.load_retained_manifest(reference);
   if (!retained.ok) return retained;
-  const manifest = retained.value.prepared.manifest.value;
+  const manifest = retained.value.manifest.value;
   const artifact = manifest.source_artifact;
   if (artifact.artifact_kind !== "document" && artifact.artifact_kind !== "implementation-output") {
     return fail16(state.phase_instance, "current-produce-artifact-invalid");
@@ -59262,7 +59259,7 @@ async function loadCurrentProduceSubject(dependencies, state) {
   return Object.freeze({
     schema_version: "1",
     ok: true,
-    value: Object.freeze({ artifact_digest: manifest.artifact_digest, artifact, retained: retained.value })
+    value: Object.freeze({ artifact_digest: manifest.artifact_digest, artifact, reference, retained: retained.value })
   });
 }
 function documentProjectionDescriptors(artifact) {
@@ -59683,7 +59680,7 @@ async function loadCurrentReviewSet(dependencies, authority, phase_instance) {
   }
   if (derived.input_fingerprint !== stateDocument.value.input_fingerprint) {
     const produced = await currentProduceSubject(
-      { load_retained_result: dependencies.load_retained_result },
+      { load_retained_manifest: dependencies.load_retained_manifest },
       stateDocument.value
     );
     const predecessor = produced.ok && produced.value.artifact.artifact_kind === "document" ? produced.value.artifact.editorial_predecessor : void 0;
@@ -61747,7 +61744,7 @@ async function assembleReviewContext(input) {
     if (input.subject.artifact.artifact_kind === "implementation-output") {
       mechanical = [
         ...await verificationTranscriptEvidence(input.runner, input.authority, input.state, input.subject),
-        ...await implementationMechanicalEvidence(input.runner, input.subject)
+        ...await implementationMechanicalEvidence(input.runner, input.subject, input.projection_plan)
       ];
     } else {
       const artifactText = decodeUtf8Strict(input.projection_bytes);
@@ -61965,11 +61962,14 @@ async function verificationTranscriptEvidence(runner, authority, state, subject)
     bytes
   )];
 }
-async function implementationMechanicalEvidence(runner, subject) {
+async function implementationMechanicalEvidence(runner, subject, projectionPlan) {
   if (subject.artifact.artifact_kind !== "implementation-output") return Object.freeze([]);
+  if (projectionPlan === void 0) {
+    return [failedMechanicalEvidence("interface-excerpt", "changed-imports")];
+  }
   const baseCommit = subject.artifact.base_commit;
   try {
-    const planEntries = subject.retained.projection_plan.entries;
+    const planEntries = projectionPlan.entries;
     const changedPaths = new Set(planEntries.map((entry) => entry.path));
     const wanted = [];
     for (const entry of planEntries) {
@@ -63995,9 +63995,17 @@ async function handleCounterReview(call, context2) {
       services.runner,
       produce.value.artifact
     );
+    let projectionPlan;
+    if (produce.value.artifact.artifact_kind === "implementation-output") {
+      const loadRetained = services.dependencies.load_retained_result;
+      if (loadRetained === void 0) throw new TypeError("retained result loading is unavailable");
+      const retained = await loadRetained(produce.value.reference);
+      if (!retained.ok) return retained;
+      projectionPlan = retained.value.projection_plan;
+    }
     const repositoryView = Object.freeze({
       base_commit: repositoryViewCommit,
-      ...produce.value.artifact.artifact_kind === "implementation-output" ? { projection_plan: produce.value.retained.projection_plan } : {}
+      ...projectionPlan === void 0 ? {} : { projection_plan: projectionPlan }
     });
     const workspaceBinding = produce.value.artifact.artifact_kind === "implementation-output" ? Object.freeze({
       kind: "read-only-produced-repository-snapshot",
@@ -64059,7 +64067,8 @@ async function handleCounterReview(call, context2) {
       dependencies: services.dependencies,
       state: state.value,
       subject: produce.value,
-      projection_bytes: projection.value.bytes
+      projection_bytes: projection.value.bytes,
+      ...projectionPlan === void 0 ? {} : { projection_plan: projectionPlan }
     });
     if (!context_entries.ok) return context_entries;
     const resultId = dispatchId("result", call.input.intent_id);
@@ -65163,9 +65172,8 @@ async function handleState(call, context2) {
           preparedResult = prepared.value;
         }
         if (artifact?.artifact_kind === "triage") {
-          const loadRetained = services.dependencies.load_retained_result;
           const loadManifest = services.dependencies.load_retained_manifest;
-          if (retainedBytes === void 0 || scanner === void 0 || loadRetained === void 0 || loadManifest === void 0) {
+          if (retainedBytes === void 0 || scanner === void 0 || loadManifest === void 0) {
             throw new TypeError("evidence preparation dependencies are unavailable");
           }
           const produce = await loadCurrentProduceSubject(services.dependencies, current.value);
@@ -65179,7 +65187,6 @@ async function handleState(call, context2) {
           const reviews = await loadCurrentReviewSet(
             {
               read_state: services.dependencies.read_state,
-              load_retained_result: loadRetained,
               load_retained_manifest: loadManifest
             },
             services.authority,
@@ -65264,7 +65271,7 @@ async function handleState(call, context2) {
                 services.runner,
                 current.value.task_id,
                 currentProduce.artifact,
-                currentProduce.retained.prepared.manifest.value.outputs,
+                currentProduce.retained.manifest.value.outputs,
                 authenticated.request.context
               )).observed) {
                 commitObserved = true;
@@ -65326,7 +65333,7 @@ async function handleState(call, context2) {
                   services.runner,
                   current.value.task_id,
                   currentProduce.artifact,
-                  currentProduce.retained.prepared.manifest.value.outputs,
+                  currentProduce.retained.manifest.value.outputs,
                   {
                     target_ref: loaded.value.request.context.target_ref,
                     baseline_commit: loaded.value.request.context.baseline_commit,

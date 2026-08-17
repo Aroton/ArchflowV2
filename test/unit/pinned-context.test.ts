@@ -161,7 +161,8 @@ describe("verificationTranscriptEvidence", () => {
   const implSubject = (evidence = { transcript_digest: sha256Bytes(TRANSCRIPT), byte_count: TRANSCRIPT.byteLength }): CurrentProduceSubject => ({
     artifact_digest: digest("a"),
     artifact: { artifact_kind: "implementation-output", verification_evidence: evidence } as never,
-    retained: { projection_plan: { entries: [] } } as never,
+    reference: {} as never,
+    retained: {} as never,
   });
 
   it("lifts the digest-bound workspace transcript into a typed pinned entry", async () => {
@@ -196,6 +197,7 @@ describe("verificationTranscriptEvidence", () => {
     const documentSubject = {
       artifact_digest: digest("a"),
       artifact: { artifact_kind: "document" } as never,
+      reference: {} as never,
       retained: {} as never,
     };
     await expect(verificationTranscriptEvidence(h.services.runner, h.services.authority, implState, documentSubject)).resolves.toEqual([]);
