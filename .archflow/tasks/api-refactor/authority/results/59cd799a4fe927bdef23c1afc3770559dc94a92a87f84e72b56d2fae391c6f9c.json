@@ -1,0 +1,109 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 138,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 12486089
+  },
+  "artifact_digest": "86028215d8f07ba030ec3071e78c11ecfb3a575a3647a7e6887bdd9dc2ed9133",
+  "input_fingerprint": "88d3e6b96f68ae37fed1ee5d59a602ce78c0eb7b0939b00ed9a0151cf72c4dfb",
+  "outputs": [],
+  "phase_instance": "phase-impl-2",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-d22429ada3257102d50726a32ac8eca1",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [],
+      "assurance": "server-attested",
+      "cli_version": "2.1.233",
+      "constitution": "pass",
+      "drift": "aligned",
+      "drift_findings": [],
+      "effort": "medium",
+      "envelope_input_digest": "e538190f667786f9071fcecefa76e0776e28354355cc905bf5cea225abbfb9a2",
+      "input_fingerprint": "88d3e6b96f68ae37fed1ee5d59a602ce78c0eb7b0939b00ed9a0151cf72c4dfb",
+      "invocation_id": "adjudication-invocation-11802c6c966bbf7925b2640a8541f755",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "ebb352bbf16cab5b93cdf1389c62dc719778df9f49bc51cddf63092eba0fb926",
+      "phase_instance": "phase-impl-2",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-d22429ada3257102d50726a32ac8eca1",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "The delivered code implements the pinned Phase 2 interfaces: the transitional six-tool split (src/contracts/tool-names.ts:1-30), the document activation fence and exact-successor handoff rule (src/state/semantic-view.ts:66-85, 386-400), the direct decision archive/settle/revision-entry seam (src/state/gates.ts:952-1241), and the live handlers (src/mcp/handlers/semantic.ts). Both recorded deviations were carried back into the governing documents in the same output rather than left implicit: the added triage-enter substep is now written into .archflow/tasks/api-refactor/design.md (section 4.4 substep vocabulary and 5.3 dispatcher plan) and phases/2/design.md (section 4.4 and Chunk C step 3), and the src/mcp/sdk-zod-initialization.ts dependency fence is a build-ordering fix documented in impl-notes and docs/DEPENDENCIES.md. Both are same-phase compound parent updates that the approved design explicitly permits and that re-enter this phase's own review/approval boundary with the produced subject; neither changes public behavior or phase scope, and no dependent phase work (phase implementation, skill retirement, catalogue cutover) was advanced ahead of its own design.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The artifact is a phase-implementation output for phase-impl-2 whose parent_documents pin phases/2/design.md, and .archflow/tasks/api-refactor/phases/2/impl-notes.md contains an explicit \"Deviations from Plan\" section."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Decision authority stays explicit and subject-bound. archiveDirectSemanticGateDecision (src/state/gates.ts:952-1032) requires the choice to be a server-issued token present in the presentation rebuilt from the durable gate request, rejects anything else as decision-choice-invalid, verifies the reloaded request exactly matches the live open_gate, records human provenance with actor_class \"human\" and a decision_event_id deterministically bound to the semantic operation digest, and creates the archive exclusively so an incompatible existing archive is a conflict rather than a replacement. settleDirectSemanticGateDecision (1110-1158) accepts no submission, re-authenticates the archive's provenance against the operation digest, and routes re-entry choices to a close-only checkpoint; enterDirectSemanticRevisionCheckpoint (1161-1241) re-validates request, decision, frozen predecessor, attempt, fingerprint, and digest bindings before entering production. The handlers never author a choice, disposition, or gate summary: capabilities() only forwards the client-supplied choice/reason, and semantic status suppresses the presentation once an exact archive exists so a crash cannot re-prompt or silently self-approve. Successor work is likewise gated on the newly invoked successor invocation (src/state/semantic-view.ts:81-83) rather than inferred from a predecessor's completion.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The output adds the direct nonblocking human-decision path: archiveDirectSemanticGateDecision, settleDirectSemanticGateDecision, and enterDirectSemanticRevisionCheckpoint in src/state/gates.ts, wired through src/mcp/handlers/semantic.ts capabilities()."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Non-success states remain visible with a safe next action. Any failed lower-level ProjectResult is converted into a semantic execution failure before continuation (src/state/semantic-actions.ts:629), so no failed substep can be projected as success; handleSemanticApply catches it and returns a compact code/message plus a freshly recomputed safe view (src/mcp/handlers/semantic.ts:235-246). Missing, unreadable, mismatched, or conflicting gate archives become explicit invalid markers (src/state/semantic-status.ts:211-272) that project blocked/inspect instead of a prompt or an optimistic advance. Capability limits are stated honestly rather than faked: an unauthenticated producing host returns UNSUPPORTED_HOST, phase-implementation invocations receive an explicit \"remains on the supported legacy workflow\" refusal with the current view (semantic.ts:89-94, 232-234; semantic-view.ts:396-400), and the commit projection for phase implementation states plainly that exact commit facts are not available in this read model instead of inventing them (semantic-view.ts:289-291). impl-notes report the verification matrices, the skipped-by-guard files, and the intentional expected-stderr diagnostics rather than claiming an unqualified clean run.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The output adds public failure/blocked projection paths: failure()/freshSafeView in src/mcp/handlers/semantic.ts:51-105, failedProjectResult throwing at src/state/semantic-actions.ts:629, and invalid-marker enrichment in src/state/semantic-status.ts:94-272."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Every durable read/write is resolved through the existing task-scoped path service with an explicit expectedClass of authority-decision and the session's own task id, so no semantic path escapes its task directory. Offers bind repository identity together with task, invocation, action kind, phase, attempt, and subject digest (src/state/semantic-view.ts:337-340; src/state/semantic-actions.ts:88-108), so otherwise identical task bytes in a different repository produce a different token and a stale or foreign token throws SEMANTIC_OFFER_STALE (semantic-actions.ts:346-433) rather than authorizing anything. Decision paths fail closed on mismatched evidence: validateDurableSemantics plus exactOpenGateMatches guard the archive, the settlement checkpoint re-checks request_digest, outcome_digest, resulting_revision, and enactsReentry, and revision entry additionally requires request.task_id, phase_instance, and opened_at_revision+1 to agree with current state (src/state/gates.ts:1234-1239). Malformed or partial archives yield invalid markers and blocked/inspect instead of advancement.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The new semantic surface reads and mutates task-scoped durable authority: openSemanticSession creates services bound to a single task_id (src/mcp/handlers/semantic.ts:59-74) and gate paths are resolved through resolveTaskPath/gateRequestClaim/gateDecisionClaim in src/state/gates.ts and semantic.ts:132-138."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "4849b7b71dfb599308401b0ea25c3b1a46f8d81f96e5f0e955b72ffc3f15a17c",
+      "step": "adjudicate",
+      "subject_digest": "350053e9f8cb3b436ee61d00b7d693947929218c6ba824a8288c80c2177c7c3f",
+      "task_id": "api-refactor",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "api-refactor"
+}

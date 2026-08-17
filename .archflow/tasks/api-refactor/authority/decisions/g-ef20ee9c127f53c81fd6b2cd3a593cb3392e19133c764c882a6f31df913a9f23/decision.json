@@ -1,0 +1,33 @@
+{
+  "context_digest": "9d76aea34cff80be643699083b92edb8af1927fd1d77ddf0fdcfc8ba07745754",
+  "envelope": {
+    "context_digest": "9d76aea34cff80be643699083b92edb8af1927fd1d77ddf0fdcfc8ba07745754",
+    "gate_id": "g-ef20ee9c127f53c81fd6b2cd3a593cb3392e19133c764c882a6f31df913a9f23",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "8bd03c54-8d38-43c0-8b9d-ff4e55181ea0",
+      "recorded_at": "2026-08-17T03:56:57.925Z",
+      "request_id_digest": "082d3d24ac409bccd0f52b6642de53272086472b9f67785088c7570252ac70ef",
+      "schema_version": "1"
+    },
+    "kind": "commit-authorization",
+    "payload": {
+      "decision": "authorize-commit",
+      "reason": "lgtm"
+    },
+    "phase_instance": "phase-impl-2",
+    "schema_version": "1",
+    "subject_digest": "350053e9f8cb3b436ee61d00b7d693947929218c6ba824a8288c80c2177c7c3f",
+    "task_id": "api-refactor"
+  },
+  "gate_id": "g-ef20ee9c127f53c81fd6b2cd3a593cb3392e19133c764c882a6f31df913a9f23",
+  "kind": "commit-authorization",
+  "outcome": "decided",
+  "phase_instance": "phase-impl-2",
+  "schema_version": "1",
+  "subject_digest": "350053e9f8cb3b436ee61d00b7d693947929218c6ba824a8288c80c2177c7c3f",
+  "task_id": "api-refactor"
+}
