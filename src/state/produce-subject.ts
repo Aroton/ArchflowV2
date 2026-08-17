@@ -68,19 +68,27 @@ export function resolveProduceUpstreamBinding(
 
 /** Loads and authenticates the retained document artifact that currently owns an upstream path. */
 export async function loadProduceUpstreamSubject(
-  dependencies: Pick<TransactionDependencies, "load_retained_result" | "runner">,
+  dependencies: Pick<TransactionDependencies, "load_retained_result" | "load_retained_manifest" | "runner">,
   authority: TransactionAuthority,
   state: TaskStateV1,
   binding: ProduceUpstreamBinding,
 ): Promise<ProjectResult<ProduceUpstreamSubject>> {
-  const approvedOwners: Array<Readonly<{ subject: CurrentProduceSubject; measured_at_revision: number }>> = [];
+  // Ownership is decided entirely from manifests. Only the winner is loaded in full, because only
+  // the winner's payload bytes and projection plan are ever read.
+  const approvedOwners: Array<Readonly<{
+    reference: TaskStateV1["authoritative_results"][number];
+    artifact: DocumentArtifactV1;
+    artifact_digest: Sha256Digest;
+    measured_at_revision: number;
+  }>> = [];
   let retainedOwnerExists = false;
-  if (dependencies.load_retained_result !== undefined) {
+  const loadManifest = dependencies.load_retained_manifest;
+  if (loadManifest !== undefined) {
     for (const reference of [...state.authoritative_results].reverse()) {
       if (reference.step !== "produce") continue;
-      const retained = await dependencies.load_retained_result(reference);
+      const retained = await loadManifest(reference);
       if (!retained.ok) return retained;
-      const manifest = retained.value.prepared.manifest.value;
+      const manifest = retained.value.manifest.value;
       const artifact = manifest.source_artifact;
       const ownsPath = artifact.artifact_kind === "document" &&
         documentProjectionDescriptors(artifact).some((entry) => entry.document_path === binding.path);
@@ -94,18 +102,30 @@ export async function loadProduceUpstreamSubject(
           approval.subject_digest === manifest.artifact_digest)
       ) continue;
       approvedOwners.push(Object.freeze({
+        reference,
+        artifact,
+        artifact_digest: manifest.artifact_digest,
         measured_at_revision: manifest.accounting.measured_at_revision,
-        subject: Object.freeze({
-          artifact_digest: manifest.artifact_digest,
-          artifact,
-          retained: retained.value,
-        }),
       }));
     }
   }
   approvedOwners.sort((left, right) => right.measured_at_revision - left.measured_at_revision);
-  if (approvedOwners[0] !== undefined) {
-    return Object.freeze({ schema_version: "1", ok: true, value: approvedOwners[0].subject });
+  const owner = approvedOwners[0];
+  if (owner !== undefined) {
+    if (dependencies.load_retained_result === undefined) {
+      return fail(state.phase_instance, "current-upstream-produce-result-missing");
+    }
+    const retained = await dependencies.load_retained_result(owner.reference);
+    if (!retained.ok) return retained;
+    return Object.freeze({
+      schema_version: "1",
+      ok: true,
+      value: Object.freeze({
+        artifact_digest: owner.artifact_digest,
+        artifact: owner.artifact,
+        retained: retained.value,
+      }),
+    });
   }
   if (retainedOwnerExists) return fail(state.phase_instance, "upstream-approval-missing");
   const initialization = await loadLegacyImportInitialization(

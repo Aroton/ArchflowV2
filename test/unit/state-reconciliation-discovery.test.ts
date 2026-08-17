@@ -147,14 +147,14 @@ describe("discoverReconciliationInput", () => {
     });
     const dependencies = {
       ...h.services.dependencies,
-      load_retained_result: async () => ({
+      load_retained_manifest: async () => ({
         schema_version: "1" as const, ok: true as const,
         value: {
-          prepared: { manifest: { value: {
+          manifest: { value: {
             outputs: [{ path: projectionPath, path_class: "repository-source", operation: "modify" }],
             projections: [{ path: projectionPath, content_digest: projectionDigest }],
             accounting: { measured_at_revision: 4 },
-          } } },
+          } },
         } as never,
       }),
     };
@@ -186,13 +186,13 @@ describe("discoverReconciliationInput", () => {
     } as TaskStateV1["authoritative_results"][number];
     const dependencies = {
       ...h.services.dependencies,
-      load_retained_result: async (reference: typeof older) => ({
+      load_retained_manifest: async (reference: typeof older) => ({
         schema_version: "1" as const, ok: true as const,
-        value: { prepared: { manifest: { value: {
+        value: { manifest: { value: {
           outputs: [{ path, path_class: "repository-source", operation: "modify" }],
           projections: [{ path, content_digest: reference.result_id === older.result_id ? D("a") : currentDigest }],
           accounting: { measured_at_revision: reference.result_id === older.result_id ? 3 : 4 },
-        } } } } as never,
+        } } } as never,
       }),
     };
     const discovered = await discoverReconciliationInput(

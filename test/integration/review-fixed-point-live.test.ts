@@ -636,7 +636,8 @@ else {
       const afterCounter = await createProductionServices({ working_directory: h.root, task_id: task, operation: parseSafeCode("pipeline-after-counter") });
       if (!afterCounter.ok) throw new Error(afterCounter.error.code);
       const directReviews = await loadCurrentReviewSet({ read_state: afterCounter.value.dependencies.read_state,
-        load_retained_result: afterCounter.value.dependencies.load_retained_result! }, afterCounter.value.authority, phase);
+        load_retained_result: afterCounter.value.dependencies.load_retained_result!,
+        load_retained_manifest: afterCounter.value.dependencies.load_retained_manifest! }, afterCounter.value.authority, phase);
       if (!directReviews.ok) throw new Error(`direct reviews: ${JSON.stringify(directReviews)}`);
       const current = directReviews.value.current_evidence_set;
       await invoke("archflow_state", { schema_version: "1", task_id: task, intent_id: "triage-running", expected_revision: 7,
@@ -649,7 +650,7 @@ else {
           dispositions: [], accepted_count: 0, rejected_count: 0, accepted_editorial_count: 0 } } }, "triage-succeeded");
       const finalServices = await createProductionServices({ working_directory: h.root, task_id: task, operation: parseSafeCode("pipeline-final") });
       if (!finalServices.ok) throw new Error(finalServices.error.code);
-      const retained = await loadRetainedEvidence({ load_retained_result: finalServices.value.dependencies.load_retained_result! },
+      const retained = await loadRetainedEvidence({ load_retained_manifest: finalServices.value.dependencies.load_retained_manifest! },
         finalServices.value.state!.value, phase);
       const constitution = await resolvePinnedConstitution(finalServices.value.runner,
         finalServices.value.state!.value.policy_base_commit, finalServices.value.authority.context);

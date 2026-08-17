@@ -705,12 +705,12 @@ export async function computeTaskStatus(
   }
 
   let retained: RetainedEvidenceSet = new Map();
-  if (dependencies.load_retained_result === undefined) {
+  if (dependencies.load_retained_manifest === undefined) {
     blockers.push("retained-evidence-unavailable");
   } else {
     try {
       const loaded = await loadRetainedEvidence(
-        { load_retained_result: dependencies.load_retained_result }, state, state.phase_instance,
+        { load_retained_manifest: dependencies.load_retained_manifest }, state, state.phase_instance,
       );
       if (loaded.ok) retained = loaded.value;
       else blockers.push("retained-evidence-unavailable");

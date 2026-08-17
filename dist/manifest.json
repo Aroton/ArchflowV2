@@ -86,16 +86,16 @@
   ],
   "artifacts": [
     {
-      "digest": "cb21599ec4b59ad9176458c18abeaff805dde52995fb8b1bd769d3003e9733f6",
+      "digest": "20fec7249732610de3383272e537e114f8f62925244227ff115c202a020e08f1",
       "path": "archflow-local.mjs",
       "role": "executable",
-      "size": 1667013
+      "size": 1668679
     },
     {
-      "digest": "ea2e2a6af1898cb5e32c34c658b894bd5510836d38c228e7acea7618ad4ba2de",
+      "digest": "bcfaaa4f7804fa2be35dede96d5b40d92bfcb7af07d8f375639a116f5f4f23fd",
       "path": "archflow-mcp.mjs",
       "role": "executable",
-      "size": 2533103
+      "size": 2534933
     },
     {
       "digest": "b1a2da6bef84f2512ae167c3f0e9f8caee088fed9ac04f4e7022366d83729ca0",
@@ -210,10 +210,10 @@
       "role": "manifest"
     },
     {
-      "digest": "583b3ca9e264f2832894917f7c7bc86a384f382059d4d4ab7762699ab635e259",
+      "digest": "dc9bfe60db535416de5d8d10df803d1ac37dd5a969c56359e771854b793ec410",
       "path": "metafile.json",
       "role": "metafile",
-      "size": 322126
+      "size": 322300
     }
   ],
   "build_entries": [
@@ -232,7 +232,7 @@
       "role": "local-cli"
     }
   ],
-  "bundle_digest": "ea2e2a6af1898cb5e32c34c658b894bd5510836d38c228e7acea7618ad4ba2de",
+  "bundle_digest": "bcfaaa4f7804fa2be35dede96d5b40d92bfcb7af07d8f375639a116f5f4f23fd",
   "bundle_inputs": [
     {
       "bytes_in_output": 34870,
@@ -3161,14 +3161,14 @@
       "size": 7134
     },
     {
-      "bytes_in_output": 25550,
-      "digest": "17d3ce6e14d9aec3bbb15a3c3943ad45145adcf7eb790221aca3b533746af785",
+      "bytes_in_output": 25570,
+      "digest": "7e46091c4871a916a09b12d59dcfc86b5d8272f4f358ddfbc18108900cbfcbb8",
       "key": "src/local/build-request.ts",
       "origin": {
         "kind": "repository",
         "path": "src/local/build-request.ts"
       },
-      "size": 35102
+      "size": 35122
     },
     {
       "bytes_in_output": 4571,
@@ -3331,14 +3331,14 @@
       "size": 15636
     },
     {
-      "bytes_in_output": 14359,
-      "digest": "b99a2419b282e263697313a2a4d0feecd622933d00a387c278ae1c13b813879f",
+      "bytes_in_output": 14555,
+      "digest": "6618cf45848a9bc5867cabeeb67409166b9b3e42dd2eed692dd8c3589001c340",
       "key": "src/mcp/handlers/state.ts",
       "origin": {
         "kind": "repository",
         "path": "src/mcp/handlers/state.ts"
       },
-      "size": 17985
+      "size": 18199
     },
     {
       "bytes_in_output": 5226,
@@ -3541,14 +3541,14 @@
       "size": 8454
     },
     {
-      "bytes_in_output": 21509,
-      "digest": "629bc8f4a19d2551045cbdae3f0c5e1bd6fdfd891c60e9998ea290f4dd767471",
+      "bytes_in_output": 21387,
+      "digest": "f2d581823ab182e30bdc394612a87fe2e948dac123c2e75974ee6ad6d3e81136",
       "key": "src/state/evidence-results.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/evidence-results.ts"
       },
-      "size": 25827
+      "size": 26086
     },
     {
       "bytes_in_output": 7940,
@@ -3731,24 +3731,24 @@
       "size": 3953
     },
     {
-      "bytes_in_output": 18977,
-      "digest": "0f7d17a5c8406f3b7beb5a2c9360f1ed2083fadf64e8c529c43653be30ffaf54",
+      "bytes_in_output": 19715,
+      "digest": "610d9795fcd84ef646afa9021673f5b2734940182c7f598549d099353b19811f",
       "key": "src/state/produce-subject.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/produce-subject.ts"
       },
-      "size": 16749
+      "size": 17418
     },
     {
-      "bytes_in_output": 25460,
-      "digest": "d6cd1809e7163962137c8fd889224c2a991f1b929c0880115f514ac335e51635",
+      "bytes_in_output": 27373,
+      "digest": "4403e01d2dddd3bb57e6e5dff9fec9368b2e32e3676e259218432fe398583d57",
       "key": "src/state/production.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/production.ts"
       },
-      "size": 16881
+      "size": 19235
     },
     {
       "bytes_in_output": 4906,
@@ -3761,14 +3761,14 @@
       "size": 4771
     },
     {
-      "bytes_in_output": 7999,
-      "digest": "46424830f92e4c64618555eaddfd6613e559e9aaa165bc8a069c54a635cd0f5b",
+      "bytes_in_output": 8008,
+      "digest": "e585e86d5dc98801052f02f7b0dab9ee110ea48bd99672b52a8131c72fb87f6d",
       "key": "src/state/reconciliation-discovery.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/reconciliation-discovery.ts"
       },
-      "size": 11011
+      "size": 11020
     },
     {
       "bytes_in_output": 5858,
@@ -3801,14 +3801,14 @@
       "size": 4579
     },
     {
-      "bytes_in_output": 9082,
-      "digest": "265d1a67b4f2b509292363340eb7795a1b8588bf16afc6d7386239372b49eb43",
+      "bytes_in_output": 9818,
+      "digest": "03c04c2c7a4783f87b688d036904ea778f18f5186f1b6d8dc92fdd70653c06aa",
       "key": "src/state/secret-scan.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/secret-scan.ts"
       },
-      "size": 6297
+      "size": 7611
     },
     {
       "bytes_in_output": 48761,
@@ -3831,24 +3831,24 @@
       "size": 7934
     },
     {
-      "bytes_in_output": 40070,
-      "digest": "ec310a57ed330b67ab74ad50c7656d4646ee51c8dea342ccfe07091be59262a1",
+      "bytes_in_output": 40076,
+      "digest": "61151611086352a5d85b9ee74ac0a924b703a4e7ec06373249cf18d8c5338886",
       "key": "src/state/status.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/status.ts"
       },
-      "size": 60582
+      "size": 60588
     },
     {
       "bytes_in_output": 43106,
-      "digest": "eb4d8d955427ea5a744e949cbbbfcbaac1905d272d6d8cdb754f800d6171856d",
+      "digest": "ff43b7f097cfdfdd6b4695e5beac3f4002f66cd9404288c3583dc00af1d33f76",
       "key": "src/state/transaction.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/transaction.ts"
       },
-      "size": 57398
+      "size": 57867
     },
     {
       "bytes_in_output": 18928,
@@ -4794,7 +4794,7 @@
       ],
       "entry_point": "src/main.ts",
       "id": "mcp-stdio",
-      "output_digest": "ea2e2a6af1898cb5e32c34c658b894bd5510836d38c228e7acea7618ad4ba2de",
+      "output_digest": "bcfaaa4f7804fa2be35dede96d5b40d92bfcb7af07d8f375639a116f5f4f23fd",
       "output_path": "archflow-mcp.mjs"
     },
     {
@@ -5090,7 +5090,7 @@
       ],
       "entry_point": "src/local/main.ts",
       "id": "local-cli",
-      "output_digest": "cb21599ec4b59ad9176458c18abeaff805dde52995fb8b1bd769d3003e9733f6",
+      "output_digest": "20fec7249732610de3383272e537e114f8f62925244227ff115c202a020e08f1",
       "output_path": "archflow-local.mjs"
     }
   ],
@@ -5228,14 +5228,14 @@
       "size": 681
     },
     {
-      "digest": "3bb964725defb2b6742ae1753d68d63e94f8a10fe23372414f634cb6573e1c71",
+      "digest": "ce4284d3cb0ae37c5a45c32521b45aa8f46e742bd27caa7ca8164794fae92c72",
       "path": "package-lock.json",
-      "size": 72729
+      "size": 72771
     },
     {
-      "digest": "4514122b0ad2a19d08ab2a9c29912d3bdca90ac7638423857ffc7fe08a27e361",
+      "digest": "8a585896d43a0979743e1fee405f4b5ecfaf4d7df914827015145b9f6b88b198",
       "path": "package.json",
-      "size": 2457
+      "size": 2495
     },
     {
       "digest": "a05350a88e318e4f5f2c2a1ff1e2e88daa4dd38e6e78b71cccae422bdc762cc3",

@@ -40,7 +40,7 @@ import {
   type ProjectionObservation,
   type ProjectionSource,
 } from "./snapshots.js";
-import type { RetainedResultInstallation } from "./transaction.js";
+import type { RetainedManifest, RetainedResultInstallation } from "./transaction.js";
 
 export type ProductionServices = Readonly<{
   runner: RootBoundGitRunner;
@@ -85,11 +85,20 @@ async function resolvePath(
   });
 }
 
-export async function readRetainedResult(
+/**
+ * Reloads and re-authenticates one retained manifest, without its payload bytes.
+ *
+ * `readSnapshot` re-proves the manifest against its own digest, its declared semantics, and the Git
+ * objects it names, so what this returns is as authenticated as the full installation below. It is
+ * the right entry point for readers that only interrogate the manifest — status derivation, evidence
+ * correlation, upstream ownership, byte accounting — none of which touch payload bytes or project
+ * anything. The full load costs a secret scan and a Git round trip per output on top of this.
+ */
+export async function readRetainedManifest(
   runner: RootBoundGitRunner,
   authority: TransactionAuthority,
   reference: TaskStateV1["authoritative_results"][number],
-): Promise<ProjectResult<RetainedResultInstallation>> {
+): Promise<ProjectResult<RetainedManifest>> {
   const manifestTarget = await resolvePath(
     runner,
     authority,
@@ -111,6 +120,19 @@ export async function readRetainedResult(
     manifest.step !== reference.step ||
     manifest.input_fingerprint !== reference.input_fingerprint
   ) return stateFailure(authority.context.phase_instance, "retained-result-reference-mismatch");
+  return ok(Object.freeze({ manifest: read.value, manifest_target: manifestTarget.value }));
+}
+
+export async function readRetainedResult(
+  runner: RootBoundGitRunner,
+  authority: TransactionAuthority,
+  reference: TaskStateV1["authoritative_results"][number],
+): Promise<ProjectResult<RetainedResultInstallation>> {
+  const loaded = await readRetainedManifest(runner, authority, reference);
+  if (!loaded.ok) return loaded;
+  const manifestDocument = loaded.value.manifest;
+  const manifestTarget = loaded.value.manifest_target;
+  const manifest = manifestDocument.value;
 
   const payloads: PreparedSnapshot["payloads"][number][] = [];
   const payloadTargets = new Map<RepositoryPathClaim, ResolvedWorkspacePath>();
@@ -216,7 +238,7 @@ export async function readRetainedResult(
     }
     const desired = cached === undefined
       ? await restoreSnapshotOutput({
-          target: manifestTarget.value,
+          target: manifestTarget,
           expected_result_digest: reference.result_digest,
           runner,
           worktree_root: runner.location.worktreeRoot as ResolvedTaskPath,
@@ -257,8 +279,8 @@ export async function readRetainedResult(
   );
   if (!projectionPlan.ok) return projectionPlan;
   return ok(Object.freeze({
-    prepared: Object.freeze({ manifest: read.value, result_digest: read.value.digest, payloads: Object.freeze(payloads) }),
-    manifest_target: manifestTarget.value,
+    prepared: Object.freeze({ manifest: manifestDocument, result_digest: manifestDocument.digest, payloads: Object.freeze(payloads) }),
+    manifest_target: manifestTarget,
     projection_plan: projectionPlan.value,
     worktree_root: runner.location.worktreeRoot as ResolvedTaskPath,
   }));
@@ -302,6 +324,30 @@ export async function createProductionServices(input: ProductionInput): Promise<
   const authority = authorityResult.value;
   const resolver = createProductionInputFingerprintResolver();
 
+  // Manifests are immutable and content-addressed, and every consumer below walks the same
+  // `authoritative_results` list, so one services instance reloads each at most once. The key spans
+  // every field `readRetainedManifest` cross-checks, not just the digest: two references can carry
+  // the same digest and disagree elsewhere, and that disagreement must still be caught. The full
+  // installation is deliberately not cached — it observes the live worktree, which a transaction
+  // can change under it.
+  const manifestCache = new Map<string, ProjectResult<RetainedManifest>>();
+  const loadRetainedManifest = async (
+    reference: TaskStateV1["authoritative_results"][number],
+  ): Promise<ProjectResult<RetainedManifest>> => {
+    const key = [
+      reference.result_digest,
+      reference.result_id,
+      reference.phase_instance,
+      reference.step,
+      reference.input_fingerprint,
+    ].join(" ");
+    const cached = manifestCache.get(key);
+    if (cached !== undefined) return cached;
+    const loaded = await readRetainedManifest(discovered.value, authority, reference);
+    manifestCache.set(key, loaded);
+    return loaded;
+  };
+
   const dependencies: GateLifecycleDependencies = Object.freeze({
     runner: discovered.value,
     environment: environment.value,
@@ -328,13 +374,14 @@ export async function createProductionServices(input: ProductionInput): Promise<
         candidate.result_digest === reference.result_digest) === index);
       for (const reference of retainedReferences) {
         if (reference.result_digest === excluded?.result_digest) continue;
-        const retained = await readRetainedResult(discovered.value, authority, reference);
+        const retained = await loadRetainedManifest(reference);
         if (!retained.ok) throw new TypeError("retained result accounting is unavailable");
-        total += retained.value.prepared.manifest.value.accounting.result_bytes;
+        total += retained.value.manifest.value.accounting.result_bytes;
       }
       return parseSafeInteger(total);
     },
     load_retained_result: (reference) => readRetainedResult(discovered.value, authority, reference),
+    load_retained_manifest: loadRetainedManifest,
     resolve_gate_reentry_fingerprint: async ({ request, current, target_phase_instance }) => {
       const liveConfig = await readTaskConfig(authority.config);
       if (liveConfig.kind !== "valid") return stateFailure(current.value.phase_instance, "task-config-invalid");

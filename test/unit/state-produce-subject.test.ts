@@ -185,11 +185,15 @@ describe("retained produce review material", () => {
     const newDigest = canonicalJsonDigest(compound);
     const oldRef = { phase_instance: "design", step: "produce", result_id: "old", result_digest: "3".repeat(64), input_fingerprint: "1".repeat(64) } as TaskStateV1["authoritative_results"][number];
     const newRef = { phase_instance: "phase-design-2", step: "produce", result_id: "new", result_digest: "4".repeat(64), input_fingerprint: "1".repeat(64) } as TaskStateV1["authoritative_results"][number];
+    const manifestValue = (artifact: DocumentArtifactV1, measured_at_revision: number) => ({
+      source_artifact: artifact, artifact_digest: canonicalJsonDigest(artifact),
+      accounting: { measured_at_revision }, projections: [], outputs: [],
+    });
+    const retainedManifest = (artifact: DocumentArtifactV1, measured_at_revision: number) => ({
+      manifest: { value: manifestValue(artifact, measured_at_revision) },
+    });
     const retained = (artifact: DocumentArtifactV1, measured_at_revision: number) => ({
-      prepared: { manifest: { value: {
-        source_artifact: artifact, artifact_digest: canonicalJsonDigest(artifact),
-        accounting: { measured_at_revision }, projections: [], outputs: [],
-      } } },
+      prepared: { manifest: { value: manifestValue(artifact, measured_at_revision) } },
     });
     const state = {
       task_id: taskId, phase_instance: encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(2) }), authoritative_results: [newRef, oldRef],
@@ -200,6 +204,12 @@ describe("retained produce review material", () => {
     } as unknown as TaskStateV1;
     const loaded = await loadProduceUpstreamSubject({
       runner: {} as never,
+      load_retained_manifest: async (reference) => ({
+        schema_version: "1", ok: true,
+        value: (reference.result_id === newRef.result_id
+          ? retainedManifest(compound, 9)
+          : retainedManifest(standalone, 4)) as never,
+      }),
       load_retained_result: async (reference) => ({
         schema_version: "1", ok: true,
         value: (reference.result_id === newRef.result_id ? retained(compound, 9) : retained(standalone, 4)) as never,
@@ -275,6 +285,13 @@ describe("retained produce review material", () => {
     } as unknown as TaskStateV1;
     const loaded = await loadProduceUpstreamSubject({
       runner: discovered.value,
+      load_retained_manifest: async () => ({
+        schema_version: "1", ok: true,
+        value: { manifest: { value: {
+          source_artifact: compound, artifact_digest: compoundDigest,
+          accounting: { measured_at_revision: 9 }, projections: [], outputs: [],
+        } } } as never,
+      }),
       load_retained_result: async () => ({
         schema_version: "1", ok: true,
         value: { prepared: { manifest: { value: {

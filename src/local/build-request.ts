@@ -351,10 +351,10 @@ async function composeTriage(
   if (!Array.isArray(snapshot.dispositions)) {
     throw new TypeError('build-request triage facts require "dispositions": one entry per current finding');
   }
-  const loadRetainedResult = services.dependencies.load_retained_result;
-  if (loadRetainedResult === undefined) throw new TypeError("retained evidence loading is unavailable");
+  const loadRetainedManifest = services.dependencies.load_retained_manifest;
+  if (loadRetainedManifest === undefined) throw new TypeError("retained evidence loading is unavailable");
   const loaded = await loadRetainedEvidence(
-    { load_retained_result: loadRetainedResult },
+    { load_retained_manifest: loadRetainedManifest },
     state,
     state.phase_instance,
   );
@@ -501,10 +501,10 @@ async function composeGate(
   }
   const subject = await loadCurrentProduceSubject(services.dependencies, state);
   if (!subject.ok) return subject;
-  const loadRetainedResult = services.dependencies.load_retained_result;
-  if (loadRetainedResult === undefined) throw new TypeError("retained evidence loading is unavailable");
+  const loadRetainedManifest = services.dependencies.load_retained_manifest;
+  if (loadRetainedManifest === undefined) throw new TypeError("retained evidence loading is unavailable");
   const loaded = await loadRetainedEvidence(
-    { load_retained_result: loadRetainedResult },
+    { load_retained_manifest: loadRetainedManifest },
     state,
     state.phase_instance,
   );

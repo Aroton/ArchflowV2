@@ -5189,7 +5189,7 @@
       ]
     },
     "src/local/build-request.ts": {
-      "bytes": 35102,
+      "bytes": 35122,
       "format": "esm",
       "imports": [
         {
@@ -6054,7 +6054,7 @@
       ]
     },
     "src/mcp/handlers/state.ts": {
-      "bytes": 17985,
+      "bytes": 18199,
       "format": "esm",
       "imports": [
         {
@@ -6987,7 +6987,7 @@
       ]
     },
     "src/state/evidence-results.ts": {
-      "bytes": 25827,
+      "bytes": 26086,
       "format": "esm",
       "imports": [
         {
@@ -7896,7 +7896,7 @@
       ]
     },
     "src/state/produce-subject.ts": {
-      "bytes": 16749,
+      "bytes": 17418,
       "format": "esm",
       "imports": [
         {
@@ -7937,7 +7937,7 @@
       ]
     },
     "src/state/production.ts": {
-      "bytes": 16881,
+      "bytes": 19235,
       "format": "esm",
       "imports": [
         {
@@ -8064,7 +8064,7 @@
       ]
     },
     "src/state/reconciliation-discovery.ts": {
-      "bytes": 11011,
+      "bytes": 11020,
       "format": "esm",
       "imports": [
         {
@@ -8203,7 +8203,7 @@
       ]
     },
     "src/state/secret-scan.ts": {
-      "bytes": 6297,
+      "bytes": 7611,
       "format": "esm",
       "imports": [
         {
@@ -8215,6 +8215,11 @@
           "kind": "import-statement",
           "original": "@secretlint/core",
           "path": "node_modules/@secretlint/core/module/index.js"
+        },
+        {
+          "kind": "import-statement",
+          "original": "@secretlint/profiler",
+          "path": "node_modules/@secretlint/profiler/module/node.js"
         },
         {
           "kind": "import-statement",
@@ -8366,7 +8371,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 60582,
+      "bytes": 60588,
       "format": "esm",
       "imports": [
         {
@@ -8522,7 +8527,7 @@
       ]
     },
     "src/state/transaction.ts": {
-      "bytes": 57398,
+      "bytes": 57867,
       "format": "esm",
       "imports": [
         {
@@ -8748,7 +8753,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1667013,
+      "bytes": 1668679,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -9849,7 +9854,7 @@
           "bytesInOutput": 5034
         },
         "src/local/build-request.ts": {
-          "bytesInOutput": 25550
+          "bytesInOutput": 25570
         },
         "src/local/call-envelope.ts": {
           "bytesInOutput": 4571
@@ -9903,7 +9908,7 @@
           "bytesInOutput": 5812
         },
         "src/state/evidence-results.ts": {
-          "bytesInOutput": 6159
+          "bytesInOutput": 6096
         },
         "src/state/fingerprint-readers.ts": {
           "bytesInOutput": 3980
@@ -9951,16 +9956,16 @@
           "bytesInOutput": 4683
         },
         "src/state/produce-subject.ts": {
-          "bytesInOutput": 7502
+          "bytesInOutput": 7871
         },
         "src/state/production.ts": {
-          "bytesInOutput": 12734
+          "bytesInOutput": 13691
         },
         "src/state/read.ts": {
           "bytesInOutput": 2453
         },
         "src/state/reconciliation-discovery.ts": {
-          "bytesInOutput": 7999
+          "bytesInOutput": 8008
         },
         "src/state/reconciliation.ts": {
           "bytesInOutput": 5858
@@ -9972,7 +9977,7 @@
           "bytesInOutput": 3462
         },
         "src/state/secret-scan.ts": {
-          "bytesInOutput": 4541
+          "bytesInOutput": 4909
         },
         "src/state/snapshots.ts": {
           "bytesInOutput": 22435
@@ -9981,7 +9986,7 @@
           "bytesInOutput": 1353
         },
         "src/state/status.ts": {
-          "bytesInOutput": 40070
+          "bytesInOutput": 40076
         },
         "src/state/transitions.ts": {
           "bytesInOutput": 982
@@ -9995,7 +10000,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2533103,
+      "bytes": 2534933,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -11164,7 +11169,7 @@
           "bytesInOutput": 12296
         },
         "src/mcp/handlers/state.ts": {
-          "bytesInOutput": 14359
+          "bytesInOutput": 14555
         },
         "src/mcp/handlers/waiver.ts": {
           "bytesInOutput": 5226
@@ -11224,7 +11229,7 @@
           "bytesInOutput": 3365
         },
         "src/state/evidence-results.ts": {
-          "bytesInOutput": 15350
+          "bytesInOutput": 15291
         },
         "src/state/fingerprint-readers.ts": {
           "bytesInOutput": 3960
@@ -11278,10 +11283,10 @@
           "bytesInOutput": 3015
         },
         "src/state/produce-subject.ts": {
-          "bytesInOutput": 11475
+          "bytesInOutput": 11844
         },
         "src/state/production.ts": {
-          "bytesInOutput": 12726
+          "bytesInOutput": 13682
         },
         "src/state/read.ts": {
           "bytesInOutput": 2453
@@ -11290,7 +11295,7 @@
           "bytesInOutput": 3462
         },
         "src/state/secret-scan.ts": {
-          "bytesInOutput": 4541
+          "bytesInOutput": 4909
         },
         "src/state/snapshots.ts": {
           "bytesInOutput": 26326

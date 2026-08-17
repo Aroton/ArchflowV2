@@ -45265,6 +45265,12 @@ var configRules = enabledCreators.map((creator) => ({
   id: creator.meta.id,
   rule: creator
 }));
+async function releaseSecretlintProfilerEntries() {
+  const entries = await secretLintProfiler.getEntries().catch(() => void 0);
+  const measures = await secretLintProfiler.getMeasures().catch(() => void 0);
+  if (entries !== void 0) entries.length = 0;
+  if (measures !== void 0) measures.length = 0;
+}
 function createSecretlintScanner() {
   const scan = async (suppliedCandidates) => {
     const candidates = suppliedCandidates.map((candidate) => Object.freeze({
@@ -45309,6 +45315,8 @@ function createSecretlintScanner() {
         outcome: "unavailable",
         reason: parseSafeCode("secretlint-unavailable")
       });
+    } finally {
+      await releaseSecretlintProfilerEntries();
     }
     if (findings.length > 0) {
       findings.sort((left, right) => ordinal4(left.virtual_path, right.virtual_path) || left.line - right.line || left.column - right.column || ordinal4(left.detector_id, right.detector_id));
@@ -46972,7 +46980,7 @@ async function resolvePath6(runner, authority, claim, expectedClass) {
     context: authority.context
   });
 }
-async function readRetainedResult(runner, authority, reference) {
+async function readRetainedManifest(runner, authority, reference) {
   const manifestTarget = await resolvePath6(
     runner,
     authority,
@@ -46989,6 +46997,14 @@ async function readRetainedResult(runner, authority, reference) {
   if (!read.ok) return read;
   const manifest = read.value.value;
   if (manifest.result_id !== reference.result_id || manifest.phase_instance !== reference.phase_instance || manifest.step !== reference.step || manifest.input_fingerprint !== reference.input_fingerprint) return stateFailure(authority.context.phase_instance, "retained-result-reference-mismatch");
+  return ok8(Object.freeze({ manifest: read.value, manifest_target: manifestTarget.value }));
+}
+async function readRetainedResult(runner, authority, reference) {
+  const loaded = await readRetainedManifest(runner, authority, reference);
+  if (!loaded.ok) return loaded;
+  const manifestDocument = loaded.value.manifest;
+  const manifestTarget = loaded.value.manifest_target;
+  const manifest = manifestDocument.value;
   const payloads = [];
   const payloadTargets = /* @__PURE__ */ new Map();
   const payloadBytes = /* @__PURE__ */ new Map();
@@ -47085,7 +47101,7 @@ async function readRetainedResult(runner, authority, reference) {
       return stateFailure(authority.context.phase_instance, "retained-result-payload-operation-mismatch");
     }
     const desired = cached2 === void 0 ? await restoreSnapshotOutput({
-      target: manifestTarget.value,
+      target: manifestTarget,
       expected_result_digest: reference.result_digest,
       runner,
       worktree_root: runner.location.worktreeRoot,
@@ -47123,8 +47139,8 @@ async function readRetainedResult(runner, authority, reference) {
   );
   if (!projectionPlan.ok) return projectionPlan;
   return ok8(Object.freeze({
-    prepared: Object.freeze({ manifest: read.value, result_digest: read.value.digest, payloads: Object.freeze(payloads) }),
-    manifest_target: manifestTarget.value,
+    prepared: Object.freeze({ manifest: manifestDocument, result_digest: manifestDocument.digest, payloads: Object.freeze(payloads) }),
+    manifest_target: manifestTarget,
     projection_plan: projectionPlan.value,
     worktree_root: runner.location.worktreeRoot
   }));
@@ -47160,6 +47176,21 @@ async function createProductionServices(input) {
   if (!authorityResult.ok) return authorityResult;
   const authority = authorityResult.value;
   const resolver = createProductionInputFingerprintResolver();
+  const manifestCache = /* @__PURE__ */ new Map();
+  const loadRetainedManifest = async (reference) => {
+    const key = [
+      reference.result_digest,
+      reference.result_id,
+      reference.phase_instance,
+      reference.step,
+      reference.input_fingerprint
+    ].join("\0");
+    const cached2 = manifestCache.get(key);
+    if (cached2 !== void 0) return cached2;
+    const loaded = await readRetainedManifest(discovered.value, authority, reference);
+    manifestCache.set(key, loaded);
+    return loaded;
+  };
   const dependencies = Object.freeze({
     runner: discovered.value,
     environment: environment.value,
@@ -47185,13 +47216,14 @@ async function createProductionServices(input) {
       ].filter((reference, index, references) => references.findIndex((candidate) => candidate.result_digest === reference.result_digest) === index);
       for (const reference of retainedReferences) {
         if (reference.result_digest === excluded?.result_digest) continue;
-        const retained = await readRetainedResult(discovered.value, authority, reference);
+        const retained = await loadRetainedManifest(reference);
         if (!retained.ok) throw new TypeError("retained result accounting is unavailable");
-        total += retained.value.prepared.manifest.value.accounting.result_bytes;
+        total += retained.value.manifest.value.accounting.result_bytes;
       }
       return parseSafeInteger(total);
     },
     load_retained_result: (reference) => readRetainedResult(discovered.value, authority, reference),
+    load_retained_manifest: loadRetainedManifest,
     resolve_gate_reentry_fingerprint: async ({ request, current, target_phase_instance }) => {
       const liveConfig = await readTaskConfig(authority.config);
       if (liveConfig.kind !== "valid") return stateFailure(current.value.phase_instance, "task-config-invalid");
@@ -59123,29 +59155,42 @@ function expectedProduceUpstreamBindings(state) {
 async function loadProduceUpstreamSubject(dependencies, authority, state, binding) {
   const approvedOwners = [];
   let retainedOwnerExists = false;
-  if (dependencies.load_retained_result !== void 0) {
+  const loadManifest = dependencies.load_retained_manifest;
+  if (loadManifest !== void 0) {
     for (const reference of [...state.authoritative_results].reverse()) {
       if (reference.step !== "produce") continue;
-      const retained = await dependencies.load_retained_result(reference);
+      const retained = await loadManifest(reference);
       if (!retained.ok) return retained;
-      const manifest = retained.value.prepared.manifest.value;
+      const manifest = retained.value.manifest.value;
       const artifact2 = manifest.source_artifact;
       const ownsPath = artifact2.artifact_kind === "document" && documentProjectionDescriptors(artifact2).some((entry) => entry.document_path === binding.path);
       if (ownsPath) retainedOwnerExists = true;
       if (artifact2.artifact_kind !== "document" || canonicalJsonDigest(artifact2) !== manifest.artifact_digest || !ownsPath || !state.approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === manifest.artifact_digest)) continue;
       approvedOwners.push(Object.freeze({
-        measured_at_revision: manifest.accounting.measured_at_revision,
-        subject: Object.freeze({
-          artifact_digest: manifest.artifact_digest,
-          artifact: artifact2,
-          retained: retained.value
-        })
+        reference,
+        artifact: artifact2,
+        artifact_digest: manifest.artifact_digest,
+        measured_at_revision: manifest.accounting.measured_at_revision
       }));
     }
   }
   approvedOwners.sort((left, right) => right.measured_at_revision - left.measured_at_revision);
-  if (approvedOwners[0] !== void 0) {
-    return Object.freeze({ schema_version: "1", ok: true, value: approvedOwners[0].subject });
+  const owner = approvedOwners[0];
+  if (owner !== void 0) {
+    if (dependencies.load_retained_result === void 0) {
+      return fail16(state.phase_instance, "current-upstream-produce-result-missing");
+    }
+    const retained = await dependencies.load_retained_result(owner.reference);
+    if (!retained.ok) return retained;
+    return Object.freeze({
+      schema_version: "1",
+      ok: true,
+      value: Object.freeze({
+        artifact_digest: owner.artifact_digest,
+        artifact: owner.artifact,
+        retained: retained.value
+      })
+    });
   }
   if (retainedOwnerExists) return fail16(state.phase_instance, "upstream-approval-missing");
   const initialization = await loadLegacyImportInitialization(
@@ -59482,8 +59527,8 @@ function expectedSourceKind(step) {
   return void 0;
 }
 function validateLoadedEvidence(reference, loaded) {
-  const document2 = canonicalDocument(parseResultManifest(loaded.prepared.manifest.value));
-  if (document2.digest !== loaded.prepared.manifest.digest || !Buffer.from(document2.bytes).equals(Buffer.from(loaded.prepared.manifest.bytes)) || loaded.prepared.result_digest !== document2.digest || reference.result_digest !== document2.digest || loaded.manifest_target.path_class !== "authority-result") {
+  const document2 = canonicalDocument(parseResultManifest(loaded.manifest.value));
+  if (document2.digest !== loaded.manifest.digest || !Buffer.from(document2.bytes).equals(Buffer.from(loaded.manifest.bytes)) || reference.result_digest !== document2.digest || loaded.manifest_target.path_class !== "authority-result") {
     throw new TypeError("loaded evidence result identity disagrees");
   }
   const manifest = document2.value;
@@ -59500,7 +59545,8 @@ function validateLoadedEvidence(reference, loaded) {
   return manifest;
 }
 async function loadRetainedEvidence(dependencies, state, phase_instance) {
-  if (dependencies.load_retained_result === void 0) {
+  const loadManifest = dependencies.load_retained_manifest;
+  if (loadManifest === void 0) {
     throw new TypeError("retained evidence loading is unavailable");
   }
   const retained = /* @__PURE__ */ new Map();
@@ -59511,7 +59557,7 @@ async function loadRetainedEvidence(dependencies, state, phase_instance) {
     if (retained.has(reference.step)) {
       throw new TypeError("phase has duplicate retained evidence for one step");
     }
-    const loaded = await dependencies.load_retained_result(reference);
+    const loaded = await loadManifest(reference);
     if (!loaded.ok) return loaded;
     const manifest = validateLoadedEvidence(reference, loaded.value);
     retained.set(reference.step, Object.freeze({
@@ -59626,7 +59672,7 @@ async function loadCurrentReviewSet(dependencies, authority, phase_instance) {
   const semantics = validateDurableSemantics({ state: stateDocument });
   if (!semantics.ok) return semantics;
   const retained = await loadRetainedEvidence(
-    { load_retained_result: dependencies.load_retained_result },
+    { load_retained_manifest: dependencies.load_retained_manifest },
     stateDocument.value,
     phase_instance
   );
@@ -65118,7 +65164,8 @@ async function handleState(call, context2) {
         }
         if (artifact?.artifact_kind === "triage") {
           const loadRetained = services.dependencies.load_retained_result;
-          if (retainedBytes === void 0 || scanner === void 0 || loadRetained === void 0) {
+          const loadManifest = services.dependencies.load_retained_manifest;
+          if (retainedBytes === void 0 || scanner === void 0 || loadRetained === void 0 || loadManifest === void 0) {
             throw new TypeError("evidence preparation dependencies are unavailable");
           }
           const produce = await loadCurrentProduceSubject(services.dependencies, current.value);
@@ -65130,7 +65177,11 @@ async function handleState(call, context2) {
             }));
           }
           const reviews = await loadCurrentReviewSet(
-            { read_state: services.dependencies.read_state, load_retained_result: loadRetained },
+            {
+              read_state: services.dependencies.read_state,
+              load_retained_result: loadRetained,
+              load_retained_manifest: loadManifest
+            },
             services.authority,
             call.input.phase_instance
           );

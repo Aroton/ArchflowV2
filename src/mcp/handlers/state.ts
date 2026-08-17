@@ -128,7 +128,9 @@ export async function handleState(
         }
         if (artifact?.artifact_kind === "triage") {
           const loadRetained = services.dependencies.load_retained_result;
-          if (retainedBytes === undefined || scanner === undefined || loadRetained === undefined) {
+          const loadManifest = services.dependencies.load_retained_manifest;
+          if (retainedBytes === undefined || scanner === undefined ||
+              loadRetained === undefined || loadManifest === undefined) {
             throw new TypeError("evidence preparation dependencies are unavailable");
           }
           const produce = await loadCurrentProduceSubject(services.dependencies, current.value);
@@ -140,7 +142,11 @@ export async function handleState(
             }));
           }
           const reviews = await loadCurrentReviewSet(
-            { read_state: services.dependencies.read_state, load_retained_result: loadRetained },
+            {
+              read_state: services.dependencies.read_state,
+              load_retained_result: loadRetained,
+              load_retained_manifest: loadManifest,
+            },
             services.authority,
             call.input.phase_instance,
           );

@@ -82,7 +82,7 @@ import {
   type ProjectionSource,
 } from "./snapshots.js";
 import type {
-  RetainedResultInstallation,
+  RetainedManifest,
   TransactionDependencies,
 } from "./transaction.js";
 
@@ -122,10 +122,16 @@ export type RetainedEvidenceSet = ReadonlyMap<
   }>
 >;
 
-type RetainedEvidenceDependencies = Pick<TransactionDependencies, "load_retained_result">;
+type RetainedEvidenceDependencies = Pick<TransactionDependencies, "load_retained_manifest">;
+/** Editorial checks read retained evidence by manifest and the current produce subject in full. */
+type EditorialSubjectDependencies = Pick<
+  TransactionDependencies,
+  "load_retained_manifest" | "load_retained_result"
+>;
 type CurrentReviewSetDependencies = Readonly<{
   read_state: TransactionDependencies["read_state"];
   load_retained_result: NonNullable<TransactionDependencies["load_retained_result"]>;
+  load_retained_manifest: NonNullable<TransactionDependencies["load_retained_manifest"]>;
 }>;
 
 export type DerivedCurrentEvidenceSet = Readonly<{
@@ -330,13 +336,12 @@ function expectedSourceKind(step: PipelineStep): EvidenceArtifactV1["artifact_ki
 
 function validateLoadedEvidence(
   reference: AuthoritativeResultRef,
-  loaded: RetainedResultInstallation,
+  loaded: RetainedManifest,
 ): ResultManifestV1 {
-  const document = canonicalDocument(parseResultManifest(loaded.prepared.manifest.value));
+  const document = canonicalDocument(parseResultManifest(loaded.manifest.value));
   if (
-    document.digest !== loaded.prepared.manifest.digest ||
-    !Buffer.from(document.bytes).equals(Buffer.from(loaded.prepared.manifest.bytes)) ||
-    loaded.prepared.result_digest !== document.digest ||
+    document.digest !== loaded.manifest.digest ||
+    !Buffer.from(document.bytes).equals(Buffer.from(loaded.manifest.bytes)) ||
     reference.result_digest !== document.digest ||
     loaded.manifest_target.path_class !== "authority-result"
   ) {
@@ -377,7 +382,8 @@ export async function loadRetainedEvidence(
   state: TaskStateV1,
   phase_instance: PhaseInstanceId,
 ): Promise<ProjectResult<RetainedEvidenceSet>> {
-  if (dependencies.load_retained_result === undefined) {
+  const loadManifest = dependencies.load_retained_manifest;
+  if (loadManifest === undefined) {
     throw new TypeError("retained evidence loading is unavailable");
   }
   const retained = new Map<
@@ -392,7 +398,7 @@ export async function loadRetainedEvidence(
     if (retained.has(reference.step)) {
       throw new TypeError("phase has duplicate retained evidence for one step");
     }
-    const loaded = await dependencies.load_retained_result(reference);
+    const loaded = await loadManifest(reference);
     if (!loaded.ok) return loaded;
     const manifest = validateLoadedEvidence(reference, loaded.value);
     retained.set(reference.step, Object.freeze({
@@ -472,7 +478,7 @@ type RetainedEditorialTriage = Readonly<{
 // it forces esbuild to wrap the whole cycle (and, transitively, zod) in lazy __esm closures,
 // which reorders bundle initialization and crashes the bundled runtime before main.
 async function currentProduceSubject(
-  dependencies: RetainedEvidenceDependencies,
+  dependencies: Pick<TransactionDependencies, "load_retained_result">,
   state: TaskStateV1,
 ): ReturnType<typeof loadCurrentProduceSubject> {
   return loadCurrentProduceSubject(dependencies, state);
@@ -512,7 +518,7 @@ function retainedEditorialTriage(retained: RetainedEvidenceSet): RetainedEditori
  * accepts, or is already bound to a predecessor rather than to the retained artifact itself.
  */
 export async function derivePendingEditorialPredecessor(
-  dependencies: RetainedEvidenceDependencies,
+  dependencies: EditorialSubjectDependencies,
   state: TaskStateV1,
 ): Promise<EditorialPredecessorRef | undefined> {
   const retained = await loadRetainedEvidence(dependencies, state, state.phase_instance);
@@ -539,7 +545,7 @@ export async function derivePendingEditorialPredecessor(
  * accepts only, result digest as declared), and the bytes actually changed.
  */
 export async function validateEditorialPredecessorDeclaration(
-  dependencies: RetainedEvidenceDependencies,
+  dependencies: EditorialSubjectDependencies,
   state: TaskStateV1,
   artifact: DocumentArtifactV1,
 ): Promise<ProjectResult<undefined>> {
@@ -616,7 +622,7 @@ export async function loadCurrentReviewSet(
   if (!semantics.ok) return semantics;
 
   const retained = await loadRetainedEvidence(
-    { load_retained_result: dependencies.load_retained_result },
+    { load_retained_manifest: dependencies.load_retained_manifest },
     stateDocument.value,
     phase_instance,
   );

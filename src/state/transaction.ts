@@ -92,6 +92,8 @@ export type TransactionDependencies = Readonly<{
   /** Returns retained bytes excluding `reference`, when supplied, so replay never double-counts its generation. */
   read_retained_task_bytes?: (reference?: AuthoritativeResultRef) => Promise<SafeInteger>;
   load_retained_result?: (reference: AuthoritativeResultRef) => Promise<ProjectResult<RetainedResultInstallation>>;
+  /** Manifest-only reload for readers that never project; memoized per services instance. */
+  load_retained_manifest?: (reference: AuthoritativeResultRef) => Promise<ProjectResult<RetainedManifest>>;
 }>;
 
 export type NextStateDraft = Omit<TaskStateV1, "revision" | "last_transition"> & {
@@ -114,6 +116,12 @@ export type ResultInstallationPlan = Readonly<{
 }>;
 
 export type RetainedResultInstallation = Readonly<Omit<ResultInstallationPlan, "reference">>;
+
+/** The authenticated half of a retained result that costs no payload bytes to reload. */
+export type RetainedManifest = Readonly<{
+  manifest: RetainedResultInstallation["prepared"]["manifest"];
+  manifest_target: RetainedResultInstallation["manifest_target"];
+}>;
 
 export type InternalResultInstallation = Readonly<{ readonly kind: "archflow-result-installation" }>;
 

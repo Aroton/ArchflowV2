@@ -1,3 +1,4 @@
+import { secretLintProfiler } from "@secretlint/profiler";
 import { describe, expect, it } from "vitest";
 
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
@@ -56,5 +57,32 @@ describe("Secretlint adapter", () => {
       }),
     ]);
     expect(result.outcome).toBe("clean");
+  });
+
+  // Secretlint's profiler retains every mark it observes and rescans that list for each later
+  // mark, so an unreleased timeline made scanning cost quadratic time: one status call over a
+  // task with many retained results spent ~2 minutes here. Output assertions cannot see this.
+  it("does not accumulate profiler entries across scans", async () => {
+    const scanner = createSecretlintScanner();
+    const scanBatch = async (label: string): Promise<void> => {
+      const result = await scanner.scan([
+        secretScanCandidateFromBytes({
+          virtual_path: parseRepositoryPathClaim(`src/${label}.ts`),
+          path_class: "repository-source",
+          bytes: new TextEncoder().encode(`export const ${label} = "ordinary source";\n`),
+        }),
+      ]);
+      expect(result.outcome).toBe("clean");
+      // The observer delivers on a macrotask, so let the timeline settle as a real caller would.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+
+    await scanBatch("first");
+    const afterFirst = (await secretLintProfiler.getEntries()).length;
+    for (let index = 0; index < 8; index += 1) await scanBatch(`batch${index}`);
+    const afterMany = (await secretLintProfiler.getEntries()).length;
+
+    // One batch's worth of in-flight marks may still land; nine batches' worth may not.
+    expect(afterMany).toBeLessThanOrEqual(afterFirst + 1);
   });
 });
