@@ -527,7 +527,9 @@
               "subject_digest",
               "current_evidence",
               "kind",
-              "context"
+              "context",
+              "preview_digest",
+              "decision"
             ],
             "properties": {
               "schema_version": {
@@ -572,6 +574,25 @@
               },
               "context": {
                 "type": "object"
+              },
+              "preview_digest": {
+                "$ref": "#/$defs/digest"
+              },
+              "decision": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "choice",
+                  "reason"
+                ],
+                "properties": {
+                  "choice": {
+                    "$ref": "#/$defs/text"
+                  },
+                  "reason": {
+                    "$ref": "#/$defs/text"
+                  }
+                }
               }
             },
             "allOf": [
@@ -812,6 +833,25 @@
               },
               "rationale": {
                 "$ref": "#/$defs/text"
+              },
+              "preview_digest": {
+                "$ref": "#/$defs/digest"
+              },
+              "decision": {
+                "type": "object",
+                "properties": {
+                  "choice": {
+                    "$ref": "#/$defs/text"
+                  },
+                  "reason": {
+                    "$ref": "#/$defs/text"
+                  }
+                },
+                "required": [
+                  "choice",
+                  "reason"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [

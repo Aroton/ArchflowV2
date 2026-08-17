@@ -159,7 +159,6 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host preflight", () => {
         phase_instance: PHASE,
         signal: new AbortController().signal,
         cancellation_source: "client",
-        allow_claude_dispatch: true,
       });
       await expect(dispatch(route, envelope, reviewSchema as PlainJsonValue)).rejects.toSatisfy((error: unknown) =>
         error instanceof CliAdapterError && error.project_error.code === "PROCESS_FAILED");

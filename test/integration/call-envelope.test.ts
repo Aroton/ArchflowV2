@@ -107,7 +107,7 @@ describe("local call envelopes", () => {
     const currentEvidence = {
       set_digest: D("a"),
       slots: [
-        { role: "counter-review" as const, evidence_digest: D("c"), assurance: "server-attested" as const, producer_family: "claude" as const, reviewer_family: "codex" as const, independence: "opposite-family" as const },
+        { role: "counter-review" as const, evidence_digest: D("c"), assurance: "server-attested" as const, producer_family: "claude" as const, reviewer_family: "codex" as const },
       ] as const,
     };
     const rubric = { schema_version: "1" as const, kind: "artifact" as const, mode: "adversarial" as const, criteria: [{ id: "scope", text: "Check scope.", blocking: true }] };
@@ -138,6 +138,8 @@ describe("local call envelopes", () => {
       current_evidence: currentEvidence,
       kind: "artifact-approval" as const,
       context: { artifact_kind: "prd" as const },
+      preview_digest: D("9"),
+      decision: { choice: "approve", reason: "Reviewed." },
     };
     const gate = await computeCallEnvelope(production.value, { tool: "archflow_gate", input: gateInput });
     expect(gate.ok).toBe(true);
@@ -181,6 +183,8 @@ describe("local call envelopes", () => {
         scope,
       },
       rationale: "The rule does not apply.",
+      preview_digest: D("9"),
+      decision: { choice: "grant", reason: "Reviewed." },
     };
     const waiver = await computeCallEnvelope(production.value, { tool: "archflow_waiver", input: waiverInput });
     expect(waiver.ok).toBe(true);

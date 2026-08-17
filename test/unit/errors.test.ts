@@ -24,6 +24,14 @@ describe("error registries", () => {
     expect(parseProjectError(reordered)).toBe(reordered);
   });
 
+  it("routes heterogeneous invalid state to inspection instead of a nonexistent universal repair", () => {
+    const invalid = createProjectError("STATE_INVALID", {
+      phase_instance: "phase-impl-2",
+      issue_code: "produce-projection-not-current",
+    });
+    expect(invalid.next_action).toBe("inspect-current-state");
+  });
+
   it("pins the retired immutable intent outcome", () => {
     const error = createProjectError("INTENT_NOT_CURRENT", {
       intent_id: "intent-0001",

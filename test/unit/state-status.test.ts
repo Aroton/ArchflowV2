@@ -36,10 +36,11 @@ const gitEnv = {
 };
 const configText = `schema_version: "1"
 roles:
-  producer: { model: claude-opus-4-6, effort: high }
+  counter-reviewer: { model: claude-opus-4-6, effort: high }
+  adjudicator: { model: claude-opus-4-6, effort: high }
 overrides:
   phase-impl:
-    producer: { model: gpt-5.4, effort: high }
+    counter-reviewer: { model: gpt-5.4, effort: high }
 `;
 
 async function harness() {
@@ -81,7 +82,7 @@ describe("partitionExpectedReentryEdits", () => {
       next_action: "restore-or-record-new-transition",
     } as unknown as ReconciliationFinding;
     const subject = {
-      retained: { prepared: { manifest: { value: { projections: [{ path }] } } } },
+      retained: { manifest: { value: { projections: [{ path }] } } },
     } as unknown as CurrentProduceSubject;
     // No fixed-point authorization: the durable produce running entry alone is the declared
     // intent that authorizes rewriting the produce projection (the new-information door).
@@ -149,28 +150,36 @@ describe("computeTaskStatus", () => {
     const evidence = {
       set_digest: D("8"),
       slots: [
-        { role: "counter-review", evidence_digest: D("a"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+        { role: "counter-review", evidence_digest: D("a"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" },
       ],
     } as const;
     const subject = {
       artifact_digest: D("b"),
       artifact: {
         artifact_kind: "implementation-output",
+        task_id: TASK,
+        phase_instance: PHASE,
         diff_digest: D("c"),
+        outputs: [
+          { operation: "delete", path: "removed.txt" },
+          { operation: "rename", path: "renamed.txt", previous_path: "old-name.txt" },
+        ],
         parent_documents: [
           { content_digest: D("f") },
           { content_digest: D("d") },
         ],
       },
-      retained: { prepared: { manifest: { value: { artifact_digest: D("b") } } } },
+      retained: { manifest: { value: { artifact_digest: D("b") } } },
     } as unknown as CurrentProduceSubject;
     const input = buildCommitAuthorizationInput(subject, evidence, {
       value: "refs/heads/feature", guidance: "Current symbolic branch ref observed from repository authority.",
-    });
+    }, "1".repeat(40));
     expect(input).toEqual({
       kind: "commit-authorization", subject_digest: D("b"), current_evidence: evidence,
       context: {
-        target_ref: "refs/heads/feature", diff_digest: D("c"),
+        target_ref: "refs/heads/feature", baseline_commit: "1".repeat(40),
+        commit_message: "ArchFlow: Implement status-task phase 17",
+        paths: ["old-name.txt", "removed.txt", "renamed.txt"], diff_digest: D("c"),
         current_artifact_digests: [D("b")], parent_document_digests: [D("d"), D("f")],
       },
       target_ref_guidance: "Current symbolic branch ref observed from repository authority.",
@@ -212,7 +221,7 @@ describe("computeTaskStatus", () => {
     expect(status).toMatchObject({ ok: true, value: { state: "missing", next_action: { code: "create-task" } } });
   });
 
-  it("uses override-aware same-family routes and commit-pinned rules", async () => {
+  it("uses override-aware dispatched routes and commit-pinned rules", async () => {
     const h = await harness();
     writeFileSync(h.services.authority.state.absolute, canonicalDocument(h.state()).bytes);
     writeFileSync(join(h.root, ".archflow", "constitution", "01-trust.md"),
@@ -222,7 +231,10 @@ describe("computeTaskStatus", () => {
       ok: true,
       value: {
         config: { verified: true },
-        routes: { producer: { family: "codex", model: "gpt-5.4" } },
+        routes: {
+          counter_reviewer: { family: "codex", model: "gpt-5.4" },
+          adjudicator: { family: "claude", model: "claude-opus-4-6" },
+        },
         constitution: { active_rules: [{ id: "trust", version: 1, text: "Pinned rule text." }] },
         resources: [
           { role: "current-artifact", path: `.archflow/tasks/${TASK}/phases/17/impl-notes.md`, access: "write" },
@@ -294,7 +306,7 @@ describe("computeTaskStatus", () => {
           error: {
             code: "STATE_INVALID",
             diagnostic: { parameters: { issue_code: "gate-approval-request-invalid" } },
-            next_action: "repair-state",
+            next_action: "inspect-current-state",
           },
         }],
       },
@@ -311,7 +323,7 @@ describe("computeTaskStatus", () => {
       task_id: TASK, phase_instance: PHASE, summary: "Approve", subject_digest: D("8"),
       context_digest: computeGateContextDigest("artifact-approval", context),
       current_evidence: { set_digest: D("9"), slots: [
-        { role: "counter-review", evidence_digest: D("b"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+        { role: "counter-review", evidence_digest: D("b"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" },
       ] },
       kind: "artifact-approval", context, allowed_decisions: ["approve", "revise", "reject", "cancel"],
       opened_at_revision: 4, status: "awaiting-human",
@@ -363,7 +375,7 @@ describe("computeTaskStatus", () => {
       task_id: TASK, phase_instance: PHASE, summary: "Approve revised implementation", subject_digest: D("8"),
       context_digest: computeGateContextDigest("artifact-approval", context),
       current_evidence: { set_digest: D("9"), slots: [
-        { role: "counter-review", evidence_digest: D("b"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+        { role: "counter-review", evidence_digest: D("b"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" },
       ] },
       kind: "artifact-approval", context, allowed_decisions: ["approve", "revise", "reject", "cancel"],
       opened_at_revision: 4, status: "awaiting-human",

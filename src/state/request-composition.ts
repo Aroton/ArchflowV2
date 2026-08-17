@@ -3,8 +3,14 @@ import { readFile } from "node:fs/promises";
 
 import { sha256Bytes } from "../contracts/canonical.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
-import { parsePathSafeId, type PathSafeId } from "../contracts/evidence.js";
-import { parseTaskPathClaim } from "../contracts/path-claims.js";
+import { parsePathSafeId, parseSha256Digest, type PathSafeId } from "../contracts/evidence.js";
+import type { GateKind } from "../contracts/gates.js";
+import {
+  parseRepositoryPathClaim,
+  parseTaskPathClaim,
+  toRepositoryPathClaim,
+  type RepositoryPathClaim,
+} from "../contracts/path-claims.js";
 import { decodePhaseInstance, isStrictlyEarlierPlanningPhase } from "../contracts/phase-instance.js";
 import { parseWorkflowInvocationV1 } from "../contracts/semantic-workflow.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
@@ -12,6 +18,7 @@ import { parseTriageCandidate, type TriageDisposition } from "../contracts/triag
 import { PIPELINE_STEPS, type PipelineStep } from "../contracts/vocabulary.js";
 import { parseDocumentArtifact } from "../contracts/durable-document.js";
 import { stageTaskInitialization } from "../init/task-initialization.js";
+import { readChangedGitPaths, resolveCommit } from "../repository/git.js";
 import { buildDocumentArtifact, type DocumentArtifactInput } from "./document-artifact.js";
 import {
   deriveCurrentEvidenceSet,
@@ -24,7 +31,9 @@ import {
   phaseImplParentDocumentDefaults,
   phaseReviewPaths,
   planningRestartAskBaseDigest,
+  type PhaseImplParentDocument,
 } from "./phase-documents.js";
+import { buildGatePreview, previewHasChoice, type GateDecisionChoice, type ProspectiveGate } from "./gate-preview.js";
 import { loadCurrentProduceSubject } from "./produce-subject.js";
 import type { ProductionServices } from "./production.js";
 import { resolvePinnedConstitution } from "./constitution.js";
@@ -34,6 +43,7 @@ import { buildCommitAuthorizationInput, buildDesignApprovalInput, computeTaskSta
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { legalRunStepStatus } from "./transitions.js";
 import { computeCallEnvelope, type CallEnvelope } from "../local/call-envelope.js";
+import { computeLocalGatePreview } from "../local/gate-preview.js";
 import { planningRestartTarget, semanticPlanningRestartId } from "./planning-restart.js";
 import { resolveTaskPath } from "../repository/paths.js";
 import { derivePendingWaiverRequest } from "./pending-waiver.js";
@@ -54,13 +64,103 @@ const PAYLOAD_SHAPE =
   '"document"?:{...},"implementation"?:{...},' +
   '"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},' +
   '"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],' +
-  '"summary"?:<gate summary text>}';
+  '"summary"?:<gate summary text>,"preview_digest"?:<gate-preview digest>,"decision"?:{"choice":<option token>,"reason":<human reason}>,' +
+  '"origin"?:<waiver origin>,"rationale"?:<waiver rationale>}';
 
 function record(value: unknown, name: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${name} must be an object; expected ${PAYLOAD_SHAPE}`);
   }
   return value as Record<string, unknown>;
+}
+
+/**
+ * The bounded-decision pair is optional and all-or-nothing: present together when the caller has
+ * already collected the human choice (the single-call settle path), absent when the request should
+ * merely open the gate and await the human decision through the disposable interface.
+ */
+function optionalGateDecision(snapshot: Record<string, unknown>, label: string): Readonly<{
+  preview_digest: ReturnType<typeof parseSha256Digest>;
+  decision: GateDecisionChoice;
+}> | undefined {
+  if (snapshot.decision === undefined && snapshot.preview_digest === undefined) return undefined;
+  if (snapshot.decision === undefined || snapshot.preview_digest === undefined) {
+    throw new TypeError(`${label} decision and preview_digest must be supplied together or both omitted; expected ${PAYLOAD_SHAPE}`);
+  }
+  const raw = record(snapshot.decision, `${label} decision`);
+  const choice = String(raw.choice ?? "");
+  const reason = String(raw.reason ?? "");
+  if (choice.trim() === "" || reason.trim() === "") {
+    throw new TypeError(`${label} decision requires non-empty "choice" and "reason" fields`);
+  }
+  return Object.freeze({
+    preview_digest: parseSha256Digest(snapshot.preview_digest),
+    decision: Object.freeze({ choice, reason }),
+  });
+}
+
+const ordinal = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
+
+/**
+ * Extends an implementation declaration with every canonical task document that is currently
+ * changed. These documents are writable during implementation, but they live outside the
+ * repository snapshot exposed to review children. Making them ordinary outputs both retains
+ * their reviewed bytes and ensures rollback covers them without relying on the caller to notice
+ * that a plan edit needs special treatment.
+ */
+export function includeChangedImplementationDocuments(input: {
+  readonly task_id: TaskStateV1["task_id"];
+  readonly phase_instance: TaskStateV1["phase_instance"];
+  readonly changed_paths: readonly string[];
+  readonly outputs: readonly RepositoryPathClaim[];
+  readonly restore_targets: readonly RepositoryPathClaim[];
+  readonly parent_documents: readonly PhaseImplParentDocument[];
+}): Readonly<{
+  outputs: readonly RepositoryPathClaim[];
+  restore_targets: readonly RepositoryPathClaim[];
+  parent_documents: readonly PhaseImplParentDocument[];
+}> {
+  const defaults = phaseImplParentDocumentDefaults(input.phase_instance);
+  if (defaults === undefined) throw new TypeError("implementation document capture requires a phase-impl phase");
+  const changed = new Set(input.changed_paths);
+  const outputs = new Set(input.outputs);
+  const restoreTargets = new Set(input.restore_targets);
+  const parents = new Map(input.parent_documents.map((parent) => [parent.document_path, parent]));
+  for (const parent of defaults) {
+    const taskPath = parseTaskPathClaim(parent.document_path);
+    const repositoryPath = toRepositoryPathClaim(input.task_id, taskPath);
+    if (!changed.has(repositoryPath)) continue;
+    outputs.add(repositoryPath);
+    restoreTargets.add(repositoryPath);
+    if (!parents.has(parent.document_path)) parents.set(parent.document_path, parent);
+  }
+  return Object.freeze({
+    outputs: Object.freeze([...outputs].sort(ordinal)),
+    restore_targets: Object.freeze([...restoreTargets].sort(ordinal)),
+    parent_documents: Object.freeze([...parents.values()].sort((left, right) =>
+      ordinal(left.document_path, right.document_path))),
+  });
+}
+
+function implementationPathList(value: unknown, name: string): readonly RepositoryPathClaim[] {
+  if (!Array.isArray(value)) throw new TypeError(`implementation ${name} must be an array`);
+  return value.map((path) => parseRepositoryPathClaim(path));
+}
+
+function implementationParentDocuments(
+  value: unknown,
+  defaults: readonly PhaseImplParentDocument[],
+): readonly PhaseImplParentDocument[] {
+  if (value === undefined) return defaults;
+  if (!Array.isArray(value)) throw new TypeError("implementation parent_documents must be an array");
+  return value.map((candidate) => {
+    const parent = record(candidate, "implementation parent document");
+    const role = parent.role;
+    if (role !== "prd" && role !== "design" && role !== "phase-design" && role !== "impl-notes") {
+      throw new TypeError("implementation parent document role is invalid");
+    }
+    return Object.freeze({ document_path: parseTaskPathClaim(parent.document_path), role });
+  });
 }
 
 function transitionInvalid(state: TaskStateV1, to: string): ProjectResult<never> {
@@ -148,16 +248,26 @@ async function composeProduce(
       snapshot.implementation,
       "build-request implementation facts (required for phase-impl)",
     );
+    const parentDefaults = phaseImplParentDocumentDefaults(state.phase_instance);
+    if (parentDefaults === undefined) throw new TypeError("phase-impl parent document defaults are unavailable");
+    const changed = await readChangedGitPaths(services.runner);
+    const captured = includeChangedImplementationDocuments({
+      task_id: services.authority.task_id,
+      phase_instance: state.phase_instance,
+      changed_paths: changed.paths,
+      outputs: implementationPathList(implementation.outputs, "outputs"),
+      restore_targets: implementationPathList(implementation.restore_targets, "restore_targets"),
+      parent_documents: implementationParentDocuments(implementation.parent_documents, parentDefaults),
+    });
     const built = await buildImplementationOutput(
       services.dependencies,
       services.authority,
       services.state!,
       {
         ...implementation,
+        ...captured,
         phase_instance: state.phase_instance,
         step: "produce",
-        parent_documents: implementation.parent_documents ??
-          phaseImplParentDocumentDefaults(state.phase_instance),
         declared_inputs: implementation.declared_inputs ?? [],
         input_fingerprint: state.input_fingerprint,
       } as unknown as ImplementationOutputInput,
@@ -275,10 +385,10 @@ async function composeTriage(
   if (!Array.isArray(snapshot.dispositions)) {
     throw new TypeError('build-request triage facts require "dispositions": one entry per current finding');
   }
-  const loadRetainedResult = services.dependencies.load_retained_result;
-  if (loadRetainedResult === undefined) throw new TypeError("retained evidence loading is unavailable");
+  const loadRetainedManifest = services.dependencies.load_retained_manifest;
+  if (loadRetainedManifest === undefined) throw new TypeError("retained evidence loading is unavailable");
   const loaded = await loadRetainedEvidence(
-    { load_retained_result: loadRetainedResult },
+    { load_retained_manifest: loadRetainedManifest },
     state,
     state.phase_instance,
   );
@@ -413,6 +523,7 @@ async function composeGate(
   if (summary.trim() === "") {
     throw new TypeError('build-request gate facts require a non-empty "summary" written for the human reviewer');
   }
+  const requested = optionalGateDecision(snapshot, "build-request gate");
   const phaseKind = decodePhaseInstance(state.phase_instance).kind;
   const gateKind = phaseKind === "phase-impl"
     ? "commit-authorization"
@@ -424,10 +535,10 @@ async function composeGate(
   }
   const subject = await loadCurrentProduceSubject(services.dependencies, state);
   if (!subject.ok) return subject;
-  const loadRetainedResult = services.dependencies.load_retained_result;
-  if (loadRetainedResult === undefined) throw new TypeError("retained evidence loading is unavailable");
+  const loadRetainedManifest = services.dependencies.load_retained_manifest;
+  if (loadRetainedManifest === undefined) throw new TypeError("retained evidence loading is unavailable");
   const loaded = await loadRetainedEvidence(
-    { load_retained_result: loadRetainedResult },
+    { load_retained_manifest: loadRetainedManifest },
     state,
     state.phase_instance,
   );
@@ -479,7 +590,12 @@ async function composeGate(
     };
   } else if (gateKind === "commit-authorization") {
     const target = await currentTargetRef(services.dependencies);
-    const authorization = buildCommitAuthorizationInput(subject.value, derived.current_evidence_set, target);
+    const authorization = buildCommitAuthorizationInput(
+      subject.value,
+      derived.current_evidence_set,
+      target,
+      await resolveCommit(services.runner, "HEAD"),
+    );
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
@@ -499,6 +615,25 @@ async function composeGate(
       kind: "artifact-approval",
       context: { artifact_kind: APPROVAL_ARTIFACT_KINDS[phaseKind] },
     };
+  }
+  if (requested !== undefined) {
+    const preview = buildGatePreview({
+      task_id: services.authority.task_id,
+      revision: state.revision,
+      phase_instance: state.phase_instance,
+      summary,
+      subject_digest: input.subject_digest as ProspectiveGate["subject_digest"],
+      current_evidence: derived.current_evidence_set,
+      kind: input.kind as GateKind,
+      context: input.context as ProspectiveGate["context"],
+    });
+    if (preview.preview_digest !== requested.preview_digest || !previewHasChoice(preview, requested.decision)) {
+      return transitionInvalid(state, preview.preview_digest !== requested.preview_digest
+        ? "gate-preview-stale"
+        : "gate-decision-choice-invalid");
+    }
+    input.preview_digest = requested.preview_digest;
+    input.decision = requested.decision as unknown as PlainJsonValue;
   }
   return computeCallEnvelope(services, { tool: "archflow_gate", input });
 }
@@ -583,11 +718,37 @@ export async function composePendingWaiverRequest(
   services: ProductionServices,
   state: TaskStateV1,
   intentId: string,
+  snapshot: Record<string, unknown>,
 ): Promise<ProjectResult<CallEnvelope>> {
+  if (state.terminal !== undefined || state.open_gate !== undefined) {
+    return transitionInvalid(state, "waiver-gate");
+  }
   const pending = await derivePendingWaiverRequest(services);
   if (!pending.ok) return pending;
+  const requested = optionalGateDecision(snapshot, "build-request waiver");
+  const decisionFields = requested === undefined ? {} : {
+    preview_digest: requested.preview_digest as PlainJsonValue,
+    decision: requested.decision as unknown as PlainJsonValue,
+  };
+  if (requested !== undefined) {
+    const preview = await computeLocalGatePreview(services, {
+      kind: "waiver",
+      origin: pending.value.origin as unknown as PlainJsonValue,
+      rationale: pending.value.rationale,
+    });
+    if (!preview.ok) return preview;
+    if (preview.value.preview_digest !== requested.preview_digest ||
+        !previewHasChoice(preview.value, requested.decision)) {
+      return transitionInvalid(state, preview.value.preview_digest !== requested.preview_digest
+        ? "waiver-preview-stale"
+        : "waiver-decision-choice-invalid");
+    }
+  }
   return computeCallEnvelope(services, { tool: "archflow_waiver", input: {
-    ...mechanicalInput(services, state, intentId), origin: pending.value.origin, rationale: pending.value.rationale,
+    ...mechanicalInput(services, state, intentId),
+    origin: pending.value.origin as unknown as PlainJsonValue,
+    rationale: pending.value.rationale,
+    ...decisionFields,
   } });
 }
 
@@ -682,7 +843,7 @@ export async function composeRequest(
       return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
     }
     case "waiver": {
-      const composed = await composePendingWaiverRequest(services, state, intentId);
+      const composed = await composePendingWaiverRequest(services, state, intentId, snapshot);
       return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
     }
     default:

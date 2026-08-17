@@ -31,10 +31,12 @@ import { BUILD_REQUEST_KINDS, runBuildRequest } from "./build-request.js";
 import { computeCallEnvelope } from "./call-envelope.js";
 import { classifyWorkflowStatus } from "./status-classification.js";
 import { cleanTaskWorkspace, cleanTerminalTaskWorkspace } from "../state/workspace-cleanup.js";
+import { commitCurrentAuthorizedAction } from "./commit.js";
+import { computeLocalGatePreview } from "./gate-preview.js";
 
 export const LOCAL_COMMANDS = Object.freeze([
-  "validate", "hash", "render", "snapshot", "restore", "clean", "decide",
-  "status", "reconcile", "init", "envelope", "build-request",
+  "validate", "hash", "render", "snapshot", "restore", "clean", "commit", "decide",
+  "status", "gate-preview", "reconcile", "init", "envelope", "build-request",
   "manual-status", "upgrade",
 ] as const);
 export type LocalCommand = typeof LOCAL_COMMANDS[number];
@@ -51,8 +53,10 @@ export const LOCAL_COMMAND_CONTRACTS: Readonly<Record<LocalCommand, LocalCommand
   snapshot: { payload: '{"manifest":<result manifest>,"payloads":[...],"retained_task_bytes":<n>}', task: "required" },
   restore: { payload: '{"result_digest":<sha256>,"output_path":<path>}', task: "required" },
   clean: { payload: null, task: "required" },
+  commit: { payload: null, task: "required" },
   decide: { payload: '{"kind":"choice","choice":<presentation option token>,"reason":<human reason>} (legacy interface payload remains accepted)', task: "required" },
   status: { payload: null, task: "required" },
+  "gate-preview": { payload: '{"kind"?:"gate"|"waiver","summary"?:<human summary>,"origin"?:<waiver origin>,"rationale"?:<waiver rationale>}', task: "required" },
   reconcile: { payload: '{"recorded_projections":[...],"current_projections":[...],"active_heads":{...}}', task: "required" },
   init: { payload: null, task: "ignored" },
   envelope: { payload: '{"tool":<tool name>,"input":<tool input>}', task: "required" },
@@ -185,6 +189,12 @@ async function clean(input: CommandInput): Promise<PlainJsonValue | ProjectResul
   });
 }
 
+async function commit(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
+  const created = await services(input);
+  if (!created.ok) return created;
+  return commitCurrentAuthorizedAction(created.value);
+}
+
 async function manualStatus(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
   return classifyWorkflowStatus({
     working_directory: input.working_directory,
@@ -198,6 +208,12 @@ async function status(input: CommandInput): Promise<PlainJsonValue | ProjectResu
   const computed = await computeTaskStatus(created.value.dependencies, created.value.authority);
   if (!computed.ok || input.brief !== true) return computed;
   return Object.freeze({ schema_version: "1", ok: true, value: projectBriefStatus(computed.value) });
+}
+
+async function gatePreview(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
+  const created = await services(input);
+  if (!created.ok) return created;
+  return computeLocalGatePreview(created.value, requireValue(input));
 }
 
 async function envelope(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
@@ -284,8 +300,8 @@ async function reconcile(input: CommandInput): Promise<PlainJsonValue | ProjectR
 }
 
 const LOCAL_COMMAND_HANDLERS: Readonly<Record<LocalCommand, (input: CommandInput) => Promise<PlainJsonValue | ProjectResult<unknown>>>> = Object.freeze({
-  validate, hash, render, snapshot, restore, clean, decide,
-  status, reconcile, init, envelope,
+  validate, hash, render, snapshot, restore, clean, commit, decide,
+  status, "gate-preview": gatePreview, reconcile, init, envelope,
   "build-request": buildRequest, "manual-status": manualStatus, upgrade,
 });
 

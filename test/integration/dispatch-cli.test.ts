@@ -51,7 +51,7 @@ describe("CLI adapter preflight", () => {
   it("parses exact current Claude and Codex versions and authenticates under the workspace env", async () => {
     const [claude, codex] = await Promise.all([fakeWorkspace("claude"), fakeWorkspace("codex")]);
     const [claudeResult, codexResult] = await Promise.all([
-      selectCliAdapter("codex", { allow_claude_dispatch: true }).preflight(claude),
+      selectCliAdapter("codex").preflight(claude),
       selectCliAdapter("claude").preflight(codex),
     ]);
     expect(claudeResult).toMatchObject({ cli_version: "2.1.220", managed_policy_present: expect.any(Boolean) });
@@ -64,7 +64,7 @@ describe("CLI adapter preflight", () => {
   ] as const)("drives the no-network %s fixture with the pinned invocation", async (kind, route) => {
     const target = await fakeWorkspace(kind);
     const adapter = kind === "claude"
-      ? selectCliAdapter("codex", { allow_claude_dispatch: true })
+      ? selectCliAdapter("codex")
       : selectCliAdapter("claude");
     const envelope: DispatchEnvelope = Object.freeze({
       result_kind: "review",
@@ -83,7 +83,7 @@ describe("CLI adapter preflight", () => {
   it.each(["claude", "codex"] as const)("rejects below-gate %s versions", async (kind) => {
     const target = await fakeWorkspace(kind, "old-version");
     const adapter = kind === "claude"
-      ? selectCliAdapter("codex", { allow_claude_dispatch: true })
+      ? selectCliAdapter("codex")
       : selectCliAdapter("claude");
     expect(await rejectedCode(adapter.preflight(target))).toBe("CLI_VERSION_UNSUPPORTED");
   });
@@ -91,7 +91,7 @@ describe("CLI adapter preflight", () => {
   it.each(["claude", "codex"] as const)("rejects logged-out %s credential stores", async (kind) => {
     const target = await fakeWorkspace(kind, "logged-out");
     const adapter = kind === "claude"
-      ? selectCliAdapter("codex", { allow_claude_dispatch: true })
+      ? selectCliAdapter("codex")
       : selectCliAdapter("claude");
     expect(await rejectedCode(adapter.preflight(target))).toBe("AUTH_UNAVAILABLE");
   });

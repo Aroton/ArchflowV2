@@ -11,7 +11,7 @@ import { decodePhaseInstance, encodePhaseInstance, type PhaseInstanceId } from "
 import type { RootBoundGitRunner } from "../repository/identity.js";
 import { resolveTaskPath } from "../repository/paths.js";
 import type { TransactionAuthority } from "./authority.js";
-import type { TransactionDependencies, RetainedResultInstallation } from "./transaction.js";
+import type { TransactionDependencies, RetainedManifest } from "./transaction.js";
 import { loadLegacyImportInitialization } from "./legacy-import-resume.js";
 import { approvalIsEligibleAfterLatestRestart } from "./restart-authority.js";
 
@@ -20,10 +20,21 @@ const fatalUtf8 = new TextDecoder("utf-8", { fatal: true });
 
 type ProduceArtifact = DocumentArtifactV1 | ImplementationOutputV1;
 
+/**
+ * A produce subject carries only the retained *manifest*, never the full installation.
+ *
+ * Every status, gate, and evidence reader consumes manifest fields (`projections`, `outputs`,
+ * `artifact_digest`). Only review dispatch needs the projection plan, and reconstructing that plan
+ * means re-reading every payload and re-running the secret scan — work that writes nothing and, on
+ * an implementation result with a few hundred outputs, dominates a read. Those two consumers load
+ * the full installation themselves from `reference`; nobody else pays for it.
+ */
 export type CurrentProduceSubject = Readonly<{
   artifact_digest: Sha256Digest;
   artifact: ProduceArtifact;
-  retained: RetainedResultInstallation;
+  /** Addresses the retained result, so a consumer that needs the projection plan can load it. */
+  reference: TaskStateV1["authoritative_results"][number];
+  retained: RetainedManifest;
 }>;
 
 export type ProduceUpstreamSubject = CurrentProduceSubject | Readonly<{
@@ -69,19 +80,29 @@ export function resolveProduceUpstreamBinding(
 
 /** Loads and authenticates the retained document artifact that currently owns an upstream path. */
 export async function loadProduceUpstreamSubject(
-  dependencies: Pick<TransactionDependencies, "load_retained_result" | "runner">,
+  dependencies: Pick<TransactionDependencies, "load_retained_manifest" | "runner">,
   authority: TransactionAuthority,
   state: TaskStateV1,
   binding: ProduceUpstreamBinding,
 ): Promise<ProjectResult<ProduceUpstreamSubject>> {
-  const approvedOwners: Array<Readonly<{ subject: CurrentProduceSubject; measured_at_revision: number }>> = [];
+  // Ownership is decided entirely from manifests, and no caller reads an upstream subject's
+  // retained installation — upstream pinning re-hashes the projected file on disk against the
+  // manifest's content digest instead. So the winner is never loaded in full either.
+  const approvedOwners: Array<Readonly<{
+    reference: TaskStateV1["authoritative_results"][number];
+    artifact: DocumentArtifactV1;
+    artifact_digest: Sha256Digest;
+    measured_at_revision: number;
+    retained: RetainedManifest;
+  }>> = [];
   let retainedOwnerExists = false;
-  if (dependencies.load_retained_result !== undefined) {
+  const loadManifest = dependencies.load_retained_manifest;
+  if (loadManifest !== undefined) {
     for (const reference of [...state.authoritative_results].reverse()) {
       if (reference.step !== "produce") continue;
-      const retained = await dependencies.load_retained_result(reference);
+      const retained = await loadManifest(reference);
       if (!retained.ok) return retained;
-      const manifest = retained.value.prepared.manifest.value;
+      const manifest = retained.value.manifest.value;
       const artifact = manifest.source_artifact;
       const ownsPath = artifact.artifact_kind === "document" &&
         documentProjectionDescriptors(artifact).some((entry) => entry.document_path === binding.path);
@@ -96,18 +117,27 @@ export async function loadProduceUpstreamSubject(
           approvalIsEligibleAfterLatestRestart(state, approval, artifact.phase_instance))
       ) continue;
       approvedOwners.push(Object.freeze({
+        reference,
+        artifact,
+        artifact_digest: manifest.artifact_digest,
         measured_at_revision: manifest.accounting.measured_at_revision,
-        subject: Object.freeze({
-          artifact_digest: manifest.artifact_digest,
-          artifact,
-          retained: retained.value,
-        }),
+        retained: retained.value,
       }));
     }
   }
   approvedOwners.sort((left, right) => right.measured_at_revision - left.measured_at_revision);
-  if (approvedOwners[0] !== undefined) {
-    return Object.freeze({ schema_version: "1", ok: true, value: approvedOwners[0].subject });
+  const owner = approvedOwners[0];
+  if (owner !== undefined) {
+    return Object.freeze({
+      schema_version: "1",
+      ok: true,
+      value: Object.freeze({
+        artifact_digest: owner.artifact_digest,
+        artifact: owner.artifact,
+        reference: owner.reference,
+        retained: owner.retained,
+      }),
+    });
   }
   if (retainedOwnerExists) return fail(state.phase_instance, "upstream-approval-missing");
   const initialization = await loadLegacyImportInitialization(
@@ -153,17 +183,17 @@ const fail = <T>(phase: TaskStateV1["phase_instance"], issue_code: string): Proj
 
 /** Loads the current phase's retained produce result and authenticates its canonical artifact. */
 export async function loadCurrentProduceSubject(
-  dependencies: Pick<TransactionDependencies, "load_retained_result">,
+  dependencies: Pick<TransactionDependencies, "load_retained_manifest">,
   state: TaskStateV1,
 ): Promise<ProjectResult<CurrentProduceSubject>> {
   const reference = [...state.authoritative_results].reverse().find((candidate) =>
     candidate.phase_instance === state.phase_instance && candidate.step === "produce");
-  if (reference === undefined || dependencies.load_retained_result === undefined) {
+  if (reference === undefined || dependencies.load_retained_manifest === undefined) {
     return fail(state.phase_instance, "current-produce-result-missing");
   }
-  const retained = await dependencies.load_retained_result(reference);
+  const retained = await dependencies.load_retained_manifest(reference);
   if (!retained.ok) return retained;
-  const manifest = retained.value.prepared.manifest.value;
+  const manifest = retained.value.manifest.value;
   const artifact = manifest.source_artifact;
   if (artifact.artifact_kind !== "document" && artifact.artifact_kind !== "implementation-output") {
     return fail(state.phase_instance, "current-produce-artifact-invalid");
@@ -174,7 +204,7 @@ export async function loadCurrentProduceSubject(
   return Object.freeze({
     schema_version: "1",
     ok: true,
-    value: Object.freeze({ artifact_digest: manifest.artifact_digest, artifact, retained: retained.value }),
+    value: Object.freeze({ artifact_digest: manifest.artifact_digest, artifact, reference, retained: retained.value }),
   });
 }
 
@@ -204,14 +234,30 @@ export function documentProjectionDescriptors(
   ]);
 }
 
+/** Task-document paths whose current bytes are owned by one produce subject. */
+export function produceOwnedTaskDocumentPaths(
+  artifact: ProduceArtifact,
+): readonly TaskPathClaim[] {
+  if (artifact.artifact_kind === "document") {
+    return Object.freeze(documentProjectionDescriptors(artifact)
+      .map((entry) => entry.document_path));
+  }
+  const prefix = `.archflow/tasks/${artifact.task_id}/`;
+  return Object.freeze([...new Set(artifact.outputs
+    .map((entry) => String(entry.path))
+    .filter((path) => path.startsWith(prefix))
+    .map((path) => parseTaskPathClaim(path.slice(prefix.length))))]
+    .sort((left, right) => left.localeCompare(right)));
+}
+
 /** Canonical upstream bindings exclude parent documents co-produced by the current subject. */
 export function produceUpstreamBindingsForSubject(
   state: TaskStateV1,
   artifact: ProduceArtifact,
 ): readonly ProduceUpstreamBinding[] {
-  if (artifact.artifact_kind !== "document") return expectedProduceUpstreamBindings(state);
-  const owned = new Set(documentProjectionDescriptors(artifact).map((entry) => entry.document_path));
-  return Object.freeze(expectedProduceUpstreamBindings(state).filter((binding) => !owned.has(binding.path)));
+  const bindings = expectedProduceUpstreamBindings(state);
+  const owned = new Set(produceOwnedTaskDocumentPaths(artifact));
+  return Object.freeze(bindings.filter((binding) => !owned.has(binding.path)));
 }
 
 /**
@@ -255,16 +301,38 @@ export async function readProduceProjection(
   return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ path: artifactPath, bytes, digest }) });
 }
 
-/** Re-hashes every retained document projection (or the selected implementation log). */
+/**
+ * Re-hashes every applicable retained document projection (or the selected implementation log).
+ *
+ * A compound upstream owner may also retain a path that the current subject co-produces. Callers
+ * pass those paths in `excludedPaths` so a surviving sibling binding cannot pull superseded bytes
+ * back into upstream authentication. The selected path remains mandatory.
+ */
 export async function readProduceProjectionSet(
   runner: RootBoundGitRunner,
   authority: TransactionAuthority,
   subject: ProduceUpstreamSubject,
   selectedPath: TaskPathClaim,
+  excludedPaths: readonly TaskPathClaim[] = [],
 ): Promise<ProjectResult<readonly ProduceProjection[]>> {
-  const paths = "imported_projection" in subject || subject.artifact.artifact_kind === "implementation-output"
-    ? [selectedPath]
-    : documentProjectionDescriptors(subject.artifact).map((entry) => entry.document_path);
+  let paths: readonly TaskPathClaim[];
+  if ("imported_projection" in subject) {
+    paths = [selectedPath];
+  } else if (subject.artifact.artifact_kind === "implementation-output") {
+    const prefix = `.archflow/tasks/${subject.artifact.task_id}/`;
+    const outputPaths = new Set(subject.artifact.outputs.map((entry) => String(entry.path)));
+    paths = Object.freeze([...new Set([
+      selectedPath,
+      ...subject.artifact.parent_documents
+        .filter((parent) => outputPaths.has(`${prefix}${parent.document_path}`))
+        .map((parent) => parent.document_path),
+    ])]);
+  } else {
+    const excluded = new Set(excludedPaths);
+    paths = documentProjectionDescriptors(subject.artifact)
+      .map((entry) => entry.document_path)
+      .filter((path) => path === selectedPath || !excluded.has(path));
+  }
   const projections: ProduceProjection[] = [];
   for (const path of paths) {
     const projection = await readProduceProjection(runner, authority, subject, path);
@@ -295,10 +363,22 @@ export function renderProduceReviewMaterial(
       `## Document: ${projection.path}\n\n${fatalUtf8.decode(projection.bytes)}`,
     ).join("\n\n");
   }
+  const prefix = `.archflow/tasks/${subject.artifact.task_id}/`;
+  const outputPaths = new Set(subject.artifact.outputs.map((entry) => String(entry.path)));
+  const coProducedDocuments = projections
+    .filter((projection) => outputPaths.has(`${prefix}${projection.path}`))
+    .map((projection) => ({
+      path: projection.path,
+      content_digest: projection.digest,
+      content: fatalUtf8.decode(projection.bytes),
+    }));
   return `${JSON.stringify({
     schema_version: "1",
     subject_kind: "retained-implementation-output",
     artifact_digest: subject.artifact_digest,
     implementation_output: subject.artifact,
+    ...(coProducedDocuments.length === 0 ? {} : {
+      co_produced_documents: coProducedDocuments,
+    }),
   }, null, 2)}\n`;
 }

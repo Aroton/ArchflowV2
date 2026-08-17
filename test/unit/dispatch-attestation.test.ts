@@ -178,17 +178,19 @@ describe("review observation attestation mint", () => {
     expect(() => mint("claude", bytes({ ...rawReview(dispatchSubject), [field]: wrongValue }))).toThrow();
   });
 
-  it("keeps the opposite-family assertion live and returns no evidence for a same-family route", () => {
+  it("attests a same-family review when the route names the producer's own family", () => {
     const dispatchSubject = subject("claude");
     const route = routeFor("claude");
-    expect(() => mintReviewObservation({
+    const observed = mintReviewObservation({
       subject: dispatchSubject,
       adapter: route.adapter,
       cli_version: "2.1.220",
       route,
       envelope_input_digest: digest("d"),
       extracted_output_bytes: bytes(rawReview(dispatchSubject)),
-    })).toThrow(/opposite-family/);
+    });
+    expect(observed.evidence.model_family).toBe("claude");
+    expect(observed.evidence.producer_family).toBe("claude");
   });
 
   it.each(["not JSON", JSON.stringify({ schema_version: "1" })])("rejects malformed output without returning evidence", (output) => {

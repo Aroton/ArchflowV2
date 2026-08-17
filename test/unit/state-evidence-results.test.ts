@@ -217,8 +217,7 @@ describe("evidence result preparation", () => {
         assurance: "degraded",
         producer_family: "claude",
         reviewer_family: "codex",
-        independence: "opposite-family",
-      },
+              },
     ] as const;
     const current = authorityQualifier.currentReviews(
       createTestCurrentReviewSetAuthority({
@@ -297,14 +296,12 @@ describe("evidence result preparation", () => {
     if (!prepared.ok) throw new Error("evidence preparation failed");
     const state = stateWithResults(h.authority, [prepared.value.reference]);
     const loaded = await loadRetainedEvidence({
-      load_retained_result: async () => ({
+      load_retained_manifest: async () => ({
         schema_version: "1",
         ok: true,
         value: {
-          prepared: prepared.value.prepared,
+          manifest: prepared.value.prepared.manifest,
           manifest_target: prepared.value.manifest_target,
-          projection_plan: prepared.value.projection_plan,
-          worktree_root: h.runner.location.worktreeRoot as never,
         },
       }),
     }, state, phase);
@@ -321,14 +318,12 @@ describe("evidence result preparation", () => {
       step: "triage" as const,
     };
     await expect(loadRetainedEvidence({
-      load_retained_result: async () => ({
+      load_retained_manifest: async () => ({
         schema_version: "1",
         ok: true,
         value: {
-          prepared: prepared.value.prepared,
+          manifest: prepared.value.prepared.manifest,
           manifest_target: prepared.value.manifest_target,
-          projection_plan: prepared.value.projection_plan,
-          worktree_root: h.runner.location.worktreeRoot as never,
         },
       }),
     }, stateWithResults(h.authority, [wrongReference]), phase)).rejects.toThrow(/correlation/);

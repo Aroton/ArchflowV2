@@ -60,7 +60,7 @@ describe("anti-spoofing renderers", () => {
   it("renders only identity-authenticated validated triage", () => {
     const counter = qualifyReview(digest("2"));
     const slots = [
-      { role: "counter-review", evidence_digest: digest("2"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+      { role: "counter-review", evidence_digest: digest("2"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex" },
     ] as const;
     const set = authorityQualifier.currentReviews(createTestCurrentReviewSetAuthority({ task_id: TASK, phase_instance: phase, subject_digest: digest("a"), input_fingerprint: digest("b"), slots }), [counter]);
     const candidate = { schema_version: "1", task_id: TASK, phase_instance: phase, step: "triage", subject_digest: digest("a"), input_fingerprint: digest("b"), current_evidence_set_digest: set.current_evidence_set.set_digest, source_evidence_digests: [digest("2")], dispositions: [{ review_evidence_digest: digest("2"), finding_id: "spoof", disposition: "rejected", rationale: "not applicable", evidence: "source confirms" }], accepted_count: 0, rejected_count: 1, accepted_editorial_count: 0 };

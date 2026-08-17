@@ -63,11 +63,22 @@ function subjectFor(call: ParsedToolCall, authority: TransactionAuthority, input
         current_evidence: call.input.current_evidence,
         kind: call.input.kind,
         context: call.input.context,
+        // assertPlainJson rejects undefined property values, so the optional bounded-decision
+        // pair is omitted entirely on the open-and-wait arm rather than passed as undefined.
+        ...(call.input.preview_digest === undefined || call.input.decision === undefined
+          ? {}
+          : { preview_digest: call.input.preview_digest, decision: call.input.decision }),
       };
       return { ...common, tool: call.name, operation: "gate", operation_fields };
     }
     case "archflow_waiver":
-      return { ...common, tool: call.name, operation: "waiver", operation_fields: { origin: call.input.origin, rationale: call.input.rationale } };
+      return { ...common, tool: call.name, operation: "waiver", operation_fields: {
+        origin: call.input.origin,
+        rationale: call.input.rationale,
+        ...(call.input.preview_digest === undefined || call.input.decision === undefined
+          ? {}
+          : { preview_digest: call.input.preview_digest, decision: call.input.decision }),
+      } };
     default: {
       const exhaustive: never = call;
       throw new TypeError(`unknown tool ${String((exhaustive as { name?: unknown }).name)}`);

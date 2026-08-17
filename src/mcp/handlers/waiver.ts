@@ -4,48 +4,22 @@ import { createProjectError, type ProjectResult } from "../../contracts/errors.j
 import {
   parseArchivedGateDecisionRecord,
   parseArchivedGateRequest,
-  type ArchivedGateDecisionRecordV1,
-  type ArchivedGateRequestV1,
   type WaiverGateContext,
 } from "../../contracts/durable-gate.js";
-import { validateDurableSemantics } from "../../contracts/durable.js";
-import type { CanonicalDocument } from "../../contracts/canonical.js";
-import type { WaiverOriginRef } from "../../contracts/gates.js";
-import { isDeepStrictEqual } from "node:util";
 import type { ParsedToolCall, ToolSuccess } from "../../contracts/mcp-tools.js";
 import { gateDecisionClaim, gateRequestClaim, openResolved, resolveTaskPath } from "../../repository/paths.js";
+import { runConnectedGateDecision } from "../../state/gate-direct.js";
 import { runDurableGate } from "../../state/gates.js";
+import { buildGatePreview, previewHasChoice } from "../../state/gate-preview.js";
 import { identifyTransactionRequest } from "../../state/request.js";
 import { mapHandlerErrors } from "./errors.js";
 import { openHandlerSession } from "./session.js";
+import { authenticWaiverOriginArchive } from "../../state/waiver-origin.js";
+
+export { authenticWaiverOriginArchive } from "../../state/waiver-origin.js";
 
 const fail = <T>(error: ReturnType<typeof createProjectError>): ProjectResult<T> =>
   Object.freeze({ schema_version: "1", ok: false, error });
-
-export function authenticWaiverOriginArchive(
-  request: CanonicalDocument<ArchivedGateRequestV1>,
-  decision: CanonicalDocument<ArchivedGateDecisionRecordV1>,
-  origin: WaiverOriginRef,
-): boolean {
-  const payload = decision.value.outcome === "decided" ? decision.value.envelope.payload : undefined;
-  return request.value.gate_id === origin.origin_gate_id &&
-    request.value.task_id === origin.task_id &&
-    request.value.phase_instance === origin.phase_instance &&
-    request.value.subject_digest === origin.subject_digest &&
-    request.value.context_digest === origin.origin_context_digest &&
-    request.value.current_evidence.set_digest === origin.current_evidence_set_digest &&
-    (request.value.kind === "constitution-review" || request.value.kind === "design-approval") &&
-    decision.digest === origin.origin_decision_digest &&
-    payload?.decision === "waiver-requested" &&
-    isDeepStrictEqual(payload.rule, origin.rule) &&
-    payload.operation === origin.scope.operation &&
-    // The origin gate must actually have offered this rule on this axis.
-    "eligible_waivers" in request.value.context &&
-    request.value.context.eligible_waivers.some((eligible) =>
-      isDeepStrictEqual(eligible.rule, origin.rule) &&
-      isDeepStrictEqual(eligible.scope, origin.scope)) &&
-    validateDurableSemantics({ gate_request: request, gate_decision: decision }).ok;
-}
 
 export async function handleWaiver(
   call: Extract<ParsedToolCall, { name: "archflow_waiver" }>,
@@ -92,9 +66,53 @@ export async function handleWaiver(
       return fail(createProjectError("CONTRACT_INVALID", { issue_code: "waiver-origin-decision-invalid" }));
     }
 
+    // The bounded-decision pair is all-or-nothing: both present settles the waiver in this one
+    // call through the validated preview; both absent opens the waiver gate and waits for the
+    // human decision written through the disposable interface. Anything in between fails closed.
+    const bounded = call.input.preview_digest !== undefined && call.input.decision !== undefined;
+    if (!bounded && (call.input.preview_digest !== undefined || call.input.decision !== undefined)) {
+      return fail(createProjectError("STATE_INVALID", {
+        phase_instance: call.input.origin.phase_instance,
+        issue_code: "waiver-decision-required",
+      }));
+    }
+
     const identified = identifyTransactionRequest(call, services.authority, call.input.input_fingerprint);
     const waiverContext: WaiverGateContext = Object.freeze({ origin: call.input.origin, rationale: call.input.rationale });
-    const resolved = await runDurableGate(services.dependencies, {
+    if (bounded) {
+      const preview = buildGatePreview({
+        task_id: call.input.task_id,
+        revision: call.input.expected_revision,
+        phase_instance: call.input.origin.phase_instance,
+        summary: `Waiver request for ${call.input.origin.rule.rule_id}`,
+        subject_digest: call.input.origin.subject_digest,
+        current_evidence: originRequest.value.current_evidence,
+        kind: "constitution-review",
+        context: waiverContext,
+      });
+      if (preview.preview_digest !== call.input.preview_digest || !previewHasChoice(preview, call.input.decision)) {
+        return fail(createProjectError("STATE_INVALID", {
+          phase_instance: call.input.origin.phase_instance,
+          issue_code: preview.preview_digest !== call.input.preview_digest
+            ? "waiver-preview-stale"
+            : "waiver-decision-choice-invalid",
+        }));
+      }
+    }
+    const resolved = await (bounded ? runConnectedGateDecision(services.dependencies, {
+      authority: services.authority,
+      expected_revision: call.input.expected_revision,
+      intent_id: call.input.intent_id,
+      request_digest: identified.request_digest,
+      input_fingerprint: call.input.input_fingerprint,
+      phase_instance: call.input.origin.phase_instance,
+      summary: `Waiver request for ${call.input.origin.rule.rule_id}`,
+      subject_digest: call.input.origin.subject_digest,
+      current_evidence: originRequest.value.current_evidence,
+      kind: "constitution-review",
+      context: waiverContext,
+      waiver_origin_gate_id: call.input.origin.origin_gate_id,
+    }, call.input.decision!, context) : runDurableGate(services.dependencies, {
       authority: services.authority,
       expected_revision: call.input.expected_revision,
       intent_id: call.input.intent_id,
@@ -108,7 +126,7 @@ export async function handleWaiver(
       context: waiverContext,
       waiver_origin_gate_id: call.input.origin.origin_gate_id,
       signal: context.signal,
-    });
+    }));
     if (!resolved.ok) return resolved;
     if (!("record" in resolved.value) || resolved.value.record.value.outcome !== "waiver-decided") {
       return fail(createProjectError("STATE_INVALID", {

@@ -4831,8 +4831,8 @@ var require_resolve_flow_scalar = __commonJS({
     };
     function parseCharCode(source, offset, length, onError) {
       const cc = source.substr(offset, length);
-      const ok26 = cc.length === length && /^[0-9a-fA-F]+$/.test(cc);
-      const code2 = ok26 ? parseInt(cc, 16) : NaN;
+      const ok27 = cc.length === length && /^[0-9a-fA-F]+$/.test(cc);
+      const code2 = ok27 ? parseInt(cc, 16) : NaN;
       try {
         return String.fromCodePoint(code2);
       } catch {
@@ -32168,8 +32168,8 @@ var require_multipleOf = /* @__PURE__ */ __commonJSMin(((exports) => {
       const { gen, data, schemaCode, it } = cxt;
       const prec = it.opts.multipleOfPrecision;
       const res = gen.let("res");
-      const invalid2 = prec ? (0, codegen_1._)`Math.abs(Math.round(${res}) - ${res}) > 1e-${prec}` : (0, codegen_1._)`${res} !== parseInt(${res})`;
-      cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid2}))`);
+      const invalid3 = prec ? (0, codegen_1._)`Math.abs(Math.round(${res}) - ${res}) > 1e-${prec}` : (0, codegen_1._)`${res} !== parseInt(${res})`;
+      cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid3}))`);
     }
   };
   exports.default = def2;
@@ -36208,9 +36208,9 @@ function ordinal(a, b) {
 function sortCanonical(value) {
   if (Array.isArray(value)) return value.map(sortCanonical);
   if (value !== null && typeof value === "object") {
-    const record3 = value;
+    const record4 = value;
     return Object.fromEntries(
-      Object.keys(record3).sort(ordinal).map((key) => [key, sortCanonical(record3[key])])
+      Object.keys(record4).sort(ordinal).map((key) => [key, sortCanonical(record4[key])])
     );
   }
   if (value === void 0) throw new TypeError("canonical JSON cannot contain undefined");
@@ -36337,7 +36337,15 @@ var contexts = {
   "material-drift": external_exports.object({ affected_upstream: external_exports.object({ kind: external_exports.enum(["prd", "architecture", "phase-design", "implementation-result", "review", "adjudication", "constitution", "workflow", "import"]), digest }).strict(), drift: external_exports.literal("material"), affected_claim_ids: canonicalStrings.min(1) }).strict(),
   "attempts-exhausted": external_exports.object({ step: external_exports.enum(PIPELINE_STEPS), attempts: safeInteger, maximum_attempts: safeInteger }).strict().refine((value) => value.attempts >= value.maximum_attempts, "attempts must be at least maximum_attempts"),
   "constitution-edit": external_exports.object({ pinned_constitution_digest: digest, current_constitution_digest: digest, changed_path_class: external_exports.literal("task-branch-constitution") }).strict(),
-  "commit-authorization": external_exports.object({ target_ref: boundedText, diff_digest: digest, current_artifact_digests: canonicalDigests.min(1), parent_document_digests: canonicalDigests.min(1) }).strict(),
+  "commit-authorization": external_exports.object({
+    target_ref: boundedText,
+    baseline_commit: gitOidV1Schema,
+    commit_message: boundedText,
+    paths: external_exports.array(repositoryPathClaimV1Schema).min(1).refine((items) => sortedUnique(items, (a, b) => a.localeCompare(b)), "paths must be sorted with no duplicates"),
+    diff_digest: digest,
+    current_artifact_digests: canonicalDigests.min(1),
+    parent_document_digests: canonicalDigests.min(1)
+  }).strict(),
   "restore-collision": external_exports.object({ path: taskPathClaimV1Schema, recorded_generation_digest: digest, current_generation_digest: digest, adoption_candidate: authorityLink.optional() }).strict(),
   "migration-audit": external_exports.object({
     source_identity_digest: digest,
@@ -36353,6 +36361,11 @@ var contexts = {
     commit_message: boundedText.optional()
   }).strict()
 };
+var archivedCommitAuthorizationContextSchema = external_exports.union([
+  contexts["commit-authorization"],
+  contexts["commit-authorization"].omit({ baseline_commit: true, commit_message: true, paths: true })
+]);
+var archivedContexts = { ...contexts, "commit-authorization": archivedCommitAuthorizationContextSchema };
 var decisions = {
   "artifact-approval": decision(["approve", "revise", "reject"]),
   "design-approval": external_exports.union([decision(["approve", "revise", "reject"]), external_exports.object({ decision: external_exports.literal("waiver-requested"), reason, rule, operation: external_exports.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
@@ -36467,8 +36480,9 @@ function parseGateDecisionEnvelope(value) {
   if (parsed.kind === "restore-collision" && parsed.payload.decision === "adopt-as-new-generation") return parsed;
   return parsed;
 }
-function validateGateDecision(kind, context2, payload) {
-  parseGateContext(kind, context2);
+function validateDecisionAgainst(contextSchemas, kind, context2, payload) {
+  assertPlainJson(context2, `${kind} gate context`);
+  contextSchemas[kind].parse(context2);
   assertPlainJson(payload, `${kind} gate decision`);
   const parsed = decisions[kind].parse(payload);
   if ((kind === "constitution-review" || kind === "design-approval") && parsed.decision === "waiver-requested") {
@@ -36481,6 +36495,12 @@ function validateGateDecision(kind, context2, payload) {
     if (candidate === void 0 || !isDeepStrictEqual(candidate, adoptionPayload.adoption_authority)) throw new TypeError("restore adoption authority must exactly match the context candidate");
   }
   return parsed;
+}
+function validateGateDecision(kind, context2, payload) {
+  return validateDecisionAgainst(contexts, kind, context2, payload);
+}
+function validateArchivedGateDecision(kind, context2, payload) {
+  return validateDecisionAgainst(archivedContexts, kind, context2, payload);
 }
 function gateDecisionEffect(payload) {
   return effects[payload.decision];
@@ -36656,7 +36676,7 @@ var PROJECT_ERROR_DEFINITIONS = Object.freeze({
   PINNED_CONFIG_MISMATCH: defineError("policy", false, PROJECT_PARAMETER_SCHEMAS.PINNED_CONFIG_MISMATCH, "restore-pinned-config", "project"),
   STALE_SKILLS: defineError("policy", false, PROJECT_PARAMETER_SCHEMAS.STALE_SKILLS, "refresh-skills", "project"),
   STATE_MISSING: defineError("state", false, PROJECT_PARAMETER_SCHEMAS.STATE_MISSING, "initialize-state", "project"),
-  STATE_INVALID: defineError("state", false, PROJECT_PARAMETER_SCHEMAS.STATE_INVALID, "repair-state", "project"),
+  STATE_INVALID: defineError("state", false, PROJECT_PARAMETER_SCHEMAS.STATE_INVALID, "inspect-current-state", "project"),
   TRANSITION_INVALID: defineError("state", false, PROJECT_PARAMETER_SCHEMAS.TRANSITION_INVALID, "select-valid-transition", "project"),
   INPUT_FINGERPRINT_MISMATCH: defineError("state", false, PROJECT_PARAMETER_SCHEMAS.INPUT_FINGERPRINT_MISMATCH, "create-fresh-intent", "project"),
   STATE_CONFLICT: defineError("state", true, PROJECT_PARAMETER_SCHEMAS.STATE_CONFLICT, "reread-and-retry-intent", "project"),
@@ -37180,10 +37200,7 @@ var serverAttestedReviewSchema = provenanceBase.safeExtend({
   envelope_input_digest: digest3,
   observed_output_digest: digest3,
   result_id: id3
-}).strict().superRefine((review, context2) => {
-  const expectedReviewer = review.producer_family === "claude" ? "codex" : "claude";
-  if (review.model_family !== expectedReviewer) context2.addIssue({ code: "custom", path: ["model_family"], message: "server-attested review must be opposite-family" });
-});
+}).strict();
 var degradedReviewSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank }).strict();
 var reviewEvidenceSchema = external_exports.discriminatedUnion("assurance", [serverAttestedReviewSchema, degradedReviewSchema]);
 function parseReviewEvidence(value) {
@@ -37663,20 +37680,20 @@ var humanRevisionRecordV1Schema = external_exports.object({
   previous_attempt: positiveSafeInteger,
   resulting_attempt: positiveSafeInteger,
   evidence: humanRevisionEvidenceV1Schema
-}).strict().superRefine((record3, context2) => {
-  if (record3.user_override?.agent_classification === record3.classification) {
+}).strict().superRefine((record4, context2) => {
+  if (record4.user_override?.agent_classification === record4.classification) {
     context2.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
   }
-  if (record3.classification === "simple" && record3.previous_attempt !== record3.resulting_attempt) {
+  if (record4.classification === "simple" && record4.previous_attempt !== record4.resulting_attempt) {
     context2.addIssue({ code: "custom", path: ["resulting_attempt"], message: "a simple revision preserves its attempt" });
   }
-  if (record3.classification === "significant" && record3.resulting_attempt !== 1) {
+  if (record4.classification === "significant" && record4.resulting_attempt !== 1) {
     context2.addIssue({ code: "custom", path: ["resulting_attempt"], message: "a significant revision resets to attempt 1" });
   }
-  if (record3.predecessor_subject_digest === record3.resulting_subject_digest) {
+  if (record4.predecessor_subject_digest === record4.resulting_subject_digest) {
     context2.addIssue({ code: "custom", path: ["resulting_subject_digest"], message: "a human revision must change the subject" });
   }
-  if (record3.evidence.some((reference) => reference.phase_instance !== record3.phase_instance)) {
+  if (record4.evidence.some((reference) => reference.phase_instance !== record4.phase_instance)) {
     context2.addIssue({ code: "custom", path: ["evidence"], message: "human revision evidence must belong to its phase" });
   }
 });
@@ -37699,9 +37716,20 @@ var planningRestartLocalProvenanceV1Schema = external_exports.object({
   helper_invocation_id: safeIdV1Schema,
   recorded_at: external_exports.string().datetime({ offset: false, local: false, precision: 3 })
 }).strict();
+var planningRestartServerAttestedProvenanceV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  actor_class: external_exports.literal("human"),
+  assurance: external_exports.literal("connected-request-trace"),
+  channel: external_exports.literal("connected-host"),
+  connection_id: safeIdV1Schema,
+  invocation_id: safeIdV1Schema,
+  request_id_digest: sha256Digest5,
+  request_digest: sha256Digest5
+}).strict();
 var planningRestartHumanProvenanceV1Schema = external_exports.union([
   planningRestartConnectedHostProvenanceV1Schema,
-  planningRestartLocalProvenanceV1Schema
+  planningRestartLocalProvenanceV1Schema,
+  planningRestartServerAttestedProvenanceV1Schema
 ]);
 var planningRestartRecordV1Schema = external_exports.object({
   restart_id: pathSafeIdV1Schema,
@@ -37713,8 +37741,8 @@ var planningRestartRecordV1Schema = external_exports.object({
   cleared_waivers: external_exports.array(waiverRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "cleared_waivers must be sorted by gate_id with no duplicates"),
   cleared_pending_human_revision: pendingHumanRevisionV1Schema.optional(),
   human_provenance: planningRestartHumanProvenanceV1Schema
-}).strict().superRefine((record3, context2) => {
-  if (!isStrictlyEarlierPlanningPhase(record3.target_phase_instance, record3.source_phase_instance)) {
+}).strict().superRefine((record4, context2) => {
+  if (!isStrictlyEarlierPlanningPhase(record4.target_phase_instance, record4.source_phase_instance)) {
     context2.addIssue({ code: "custom", path: ["target_phase_instance"], message: "restart target must be a strictly earlier planning phase" });
   }
 });
@@ -37859,7 +37887,6 @@ var observationSource = Object.freeze({
     const bytes = copiedBytes(observedOutputBytes);
     const derived = parseAndDeriveReview(decodeJson(bytes));
     for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["role", binding.role], ["step", "counter_review"], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["rubric_digest", binding.rubric_digest], ["producer_family", binding.producer_family]]) assertEqual2(derived[key], expected, key);
-    if (binding.family === binding.producer_family) throw new TypeError("review observation must be opposite-family");
     const raw_output_digest = digestBytes(bytes);
     const observation = createObservation(binding, bytes, raw_output_digest);
     const evidence = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id });
@@ -37894,9 +37921,7 @@ var authorityLinkDataSchema = external_exports.object({ schema_version: external
   if (link2.authority.kind !== expectedAuthorityKind) context2.addIssue({ code: "custom", path: ["authority", "kind"], message: "authority references must match assurance" });
 });
 var slotBase = { evidence_digest: digestSchema, producer_family: familySchema, reviewer_family: familySchema };
-var counterSlotSchema = external_exports.object({ ...slotBase, role: external_exports.literal("counter-review"), assurance: external_exports.enum(["server-attested", "degraded"]), independence: external_exports.literal("opposite-family") }).strict().superRefine((slot, context2) => {
-  if (slot.producer_family === slot.reviewer_family) context2.addIssue({ code: "custom", message: "counter-review families must differ" });
-});
+var counterSlotSchema = external_exports.object({ ...slotBase, role: external_exports.literal("counter-review"), assurance: external_exports.enum(["server-attested", "degraded"]), independence: external_exports.literal("opposite-family").optional() }).strict();
 var counterOnlySlotsSchema = external_exports.tuple([counterSlotSchema]);
 var requiredReviewSlotsSchema = counterOnlySlotsSchema.superRefine((slots, context2) => {
   try {
@@ -37942,9 +37967,6 @@ function assertLinkMatches(kind, link2, value) {
 }
 function validateSlots(slots) {
   if (slots.length !== 1 || slots[0]?.role !== "counter-review") throw new TypeError("review slots must contain exactly the counter-review");
-  for (const slot of slots) {
-    if (slot.independence !== "opposite-family" || slot.producer_family === slot.reviewer_family) throw new TypeError("invalid opposite-family review slot");
-  }
   if (new Set(slots.map((slot) => slot.evidence_digest)).size !== slots.length) throw new TypeError("review slot evidence digests must be unique");
 }
 function currentEvidenceSetRef(slots) {
@@ -38150,7 +38172,8 @@ var stateInputSchema = external_exports.object({
 });
 var stagedReferenceInput = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, request_digest: digest6 }).strict();
 var counterReviewInputSchema = external_exports.object({ ...common2, artifact_path: taskPathClaimV1Schema }).strict();
-var gateInputSchema = external_exports.object({ ...common2, phase_instance: phase, summary: text2, subject_digest: digest6, current_evidence: external_exports.unknown(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown() }).strict().superRefine((input, context2) => {
+var humanGateChoiceSchema = external_exports.object({ choice: text2, reason: text2 }).strict();
+var gateInputSchema = external_exports.object({ ...common2, phase_instance: phase, summary: text2, subject_digest: digest6, current_evidence: external_exports.unknown(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown(), preview_digest: digest6.optional(), decision: humanGateChoiceSchema.optional() }).strict().superRefine((input, context2) => {
   try {
     parseGateContext(input.kind, input.context);
   } catch (error51) {
@@ -38161,10 +38184,16 @@ var gateInputSchema = external_exports.object({ ...common2, phase_instance: phas
   } catch (error51) {
     context2.addIssue({ code: "custom", path: ["current_evidence"], message: error51 instanceof Error ? error51.message : "invalid current evidence" });
   }
+  if (input.preview_digest === void 0 !== (input.decision === void 0)) {
+    context2.addIssue({ code: "custom", path: ["preview_digest"], message: "preview_digest and decision must be supplied together (bounded single-call decision) or both omitted (gate opens and awaits the human decision)" });
+  }
 });
 var waiverOrigin = external_exports.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest6, origin_context_digest: digest6, task_id: taskSlugV1Schema, phase_instance: phase, subject_digest: digest6, current_evidence_set_digest: digest6, rule: rule2, scope }).strict();
-var waiverInputSchema = external_exports.object({ ...common2, origin: waiverOrigin, rationale: text2 }).strict().superRefine((input, context2) => {
+var waiverInputSchema = external_exports.object({ ...common2, origin: waiverOrigin, rationale: text2, preview_digest: digest6.optional(), decision: humanGateChoiceSchema.optional() }).strict().superRefine((input, context2) => {
   if (input.task_id !== input.origin.task_id) context2.addIssue({ code: "custom", path: ["task_id"], message: "waiver task_id must match origin task_id" });
+  if (input.preview_digest === void 0 !== (input.decision === void 0)) {
+    context2.addIssue({ code: "custom", path: ["preview_digest"], message: "preview_digest and decision must be supplied together (bounded single-call waiver decision) or both omitted (waiver gate opens and awaits the human decision)" });
+  }
 });
 function inputFor(name, value) {
   const parsed = name === "archflow_state" ? stateInputSchema.parse(value) : name === "archflow_counter_review" ? counterReviewInputSchema.parse(value) : name === "archflow_waiver" ? waiverInputSchema.parse(value) : gateInputSchema.parse(value);
@@ -38610,6 +38639,14 @@ function errnoOf(error51) {
 function classifyIn(rules2, claim) {
   for (const rule4 of rules2) if (rule4.pattern.test(claim)) return rule4.path_class;
   return void 0;
+}
+var DOCUMENT_RULE = (() => {
+  const rule4 = TASK_CLASS_RULES.find((entry) => entry.path_class === "document");
+  if (rule4 === void 0) throw new TypeError("the task path table lost its document rule");
+  return rule4;
+})();
+function isTaskDocumentPath(taskRelativePath) {
+  return DOCUMENT_RULE.pattern.test(taskRelativePath);
 }
 function classifyTaskPath(taskId, claim) {
   const matched = classifyIn(TASK_CLASS_RULES, claim);
@@ -39090,9 +39127,15 @@ async function hashGitBlobIdentity(runner, bytes, path2) {
   if (!GIT_OID.test(oid)) throw new TypeError("git hash-object returned an invalid SHA-1 object id");
   return Object.freeze({ oid, size_bytes: await readGitBlobSize(runner, oid) });
 }
-async function readChangedGitPaths(runner) {
+async function readChangedGitPaths(runner, pathspecs = []) {
   const result = await runner.run({
-    argv: ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+    argv: [
+      "status",
+      "--porcelain=v1",
+      "-z",
+      "--untracked-files=all",
+      ...pathspecs.length === 0 ? [] : ["--", ...pathspecs]
+    ],
     operation: "git-status-declared-scope"
   });
   const fields = [];
@@ -39443,12 +39486,12 @@ async function resolveRepositoryIdentity(runner, environment, context2) {
     throw error51;
   }
 }
-function verifyRepositoryIdentity(expected, observed) {
-  if (expected === observed.digest) return ok3(observed);
+function verifyRepositoryIdentity(expected, observed2) {
+  if (expected === observed2.digest) return ok3(observed2);
   return fail4(
     createProjectError("REPOSITORY_MISMATCH", {
       expected_digest: expected,
-      observed_digest: observed.digest
+      observed_digest: observed2.digest
     })
   );
 }
@@ -39814,6 +39857,12 @@ function closedOperationFields(subject) {
       const fields = subject.operation_fields;
       if (subject.operation !== "gate") throw new TypeError("invalid archflow_gate operation");
       const expected = ["phase_instance", "summary", "subject_digest", "current_evidence", "kind", "context"];
+      if (fields.preview_digest !== void 0 || fields.decision !== void 0) {
+        if (fields.preview_digest === void 0 || fields.decision === void 0) {
+          throw new TypeError("gate preview_digest and decision must appear together");
+        }
+        expected.push("preview_digest", "decision");
+      }
       exactFields(fields, expected);
       const selected = {
         phase_instance: fields.phase_instance,
@@ -39821,15 +39870,27 @@ function closedOperationFields(subject) {
         subject_digest: fields.subject_digest,
         current_evidence: fields.current_evidence,
         kind: fields.kind,
-        context: fields.context
+        context: fields.context,
+        ...fields.preview_digest === void 0 || fields.decision === void 0 ? {} : { preview_digest: fields.preview_digest, decision: fields.decision }
       };
       return selected;
     }
     case "archflow_waiver": {
       const fields = subject.operation_fields;
       if (subject.operation !== "waiver") throw new TypeError("invalid archflow_waiver operation");
-      exactFields(fields, ["origin", "rationale"]);
-      return { origin: fields.origin, rationale: fields.rationale };
+      const expected = ["origin", "rationale"];
+      if (fields.preview_digest !== void 0 || fields.decision !== void 0) {
+        if (fields.preview_digest === void 0 || fields.decision === void 0) {
+          throw new TypeError("waiver preview_digest and decision must appear together");
+        }
+        expected.push("preview_digest", "decision");
+      }
+      exactFields(fields, expected);
+      return {
+        origin: fields.origin,
+        rationale: fields.rationale,
+        ...fields.preview_digest === void 0 || fields.decision === void 0 ? {} : { preview_digest: fields.preview_digest, decision: fields.decision }
+      };
     }
     default: {
       const exhaustive = subject;
@@ -39868,12 +39929,12 @@ function computePinnedConfigDigest(configBytes) {
   return sha256Bytes(configBytes);
 }
 function verifyPinnedConfig(expected, observedBytes) {
-  const observed = computePinnedConfigDigest(observedBytes);
-  if (observed === expected) return { schema_version: "1", ok: true, value: observed };
+  const observed2 = computePinnedConfigDigest(observedBytes);
+  if (observed2 === expected) return { schema_version: "1", ok: true, value: observed2 };
   return {
     schema_version: "1",
     ok: false,
-    error: createProjectError("PINNED_CONFIG_MISMATCH", { expected_digest: expected, observed_digest: observed })
+    error: createProjectError("PINNED_CONFIG_MISMATCH", { expected_digest: expected, observed_digest: observed2 })
   };
 }
 
@@ -40356,7 +40417,7 @@ async function readConstitutionTreeFiles(runner, commit) {
     oid: parseGitOid(entry.oid)
   })).sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
 }
-function invalidPolicyBase(policyBaseCommit, observed) {
+function invalidPolicyBase(policyBaseCommit, observed2) {
   const expected = canonicalJsonDigest({
     schema_version: "1",
     digest_kind: "policy-base-commit",
@@ -40364,7 +40425,7 @@ function invalidPolicyBase(policyBaseCommit, observed) {
   });
   return createProjectError("POLICY_BASE_INVALID", {
     expected_digest: expected,
-    ...observed === void 0 ? {} : { observed_digest: observed }
+    ...observed2 === void 0 ? {} : { observed_digest: observed2 }
   });
 }
 async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
@@ -40584,10 +40645,12 @@ import { constants as fsConstants3 } from "node:fs";
 var REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"];
 var configRouteSchema = external_exports.object({
   model: external_exports.string().min(1).regex(/\S/, "model must contain a non-whitespace character"),
-  effort: external_exports.enum(REASONING_EFFORTS)
+  effort: external_exports.enum(REASONING_EFFORTS),
+  // Optional cc-switch provider id; claude routes only. Unset means a direct
+  // CLI launch with no wrapper.
+  provider: external_exports.string().trim().min(1).regex(/\S/, "provider must contain a non-whitespace character").optional()
 }).strict();
 var configRolesSchema = external_exports.object({
-  producer: configRouteSchema.optional(),
   "counter-reviewer": configRouteSchema.optional(),
   adjudicator: configRouteSchema.optional()
 }).strict();
@@ -45418,6 +45481,12 @@ var configRules = enabledCreators.map((creator) => ({
   id: creator.meta.id,
   rule: creator
 }));
+async function releaseSecretlintProfilerEntries() {
+  const entries = await secretLintProfiler.getEntries().catch(() => void 0);
+  const measures = await secretLintProfiler.getMeasures().catch(() => void 0);
+  if (entries !== void 0) entries.length = 0;
+  if (measures !== void 0) measures.length = 0;
+}
 function createSecretlintScanner() {
   const scan = async (suppliedCandidates) => {
     const candidates = suppliedCandidates.map((candidate) => Object.freeze({
@@ -45462,6 +45531,8 @@ function createSecretlintScanner() {
         outcome: "unavailable",
         reason: parseSafeCode("secretlint-unavailable")
       });
+    } finally {
+      await releaseSecretlintProfilerEntries();
     }
     if (findings.length > 0) {
       findings.sort((left, right) => ordinal4(left.virtual_path, right.virtual_path) || left.line - right.line || left.column - right.column || ordinal4(left.detector_id, right.detector_id));
@@ -45835,7 +45906,7 @@ function validateDurableSemantics(subject) {
       }
       if ("origin" in gateRequest.context) return fail7(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionPayloadInvalid));
       try {
-        validateGateDecision(gateRequest.kind, gateRequest.context, envelope.payload);
+        validateArchivedGateDecision(gateRequest.kind, gateRequest.context, envelope.payload);
       } catch {
         return fail7(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionPayloadInvalid));
       }
@@ -46047,8 +46118,8 @@ function validateDurableSemantics(subject) {
     const stepped = artifact === void 0 ? void 0 : durableSteppedPayload(artifact);
     if (stepped !== void 0 && stepped.phase_instance === state.phase_instance && stepped.step === state.step && stepped.input_fingerprint !== state.input_fingerprint) {
       const expected = state.input_fingerprint;
-      const observed = stepped.input_fingerprint;
-      return fail7(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest: expected, observed_digest: observed }));
+      const observed2 = stepped.input_fingerprint;
+      return fail7(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest: expected, observed_digest: observed2 }));
     }
   }
   if (relation !== void 0 && receipt !== void 0 && intentState !== void 0) {
@@ -46212,17 +46283,30 @@ async function readIndexEntries(runner, paths, context2) {
 }
 
 // src/state/implementation-manifest.ts
-async function implementationOutputCommittedAtCurrentTarget(runner, output, targetRef) {
+async function implementationOutputCommittedAtCurrentTarget(runner, output, context2) {
   const symbolicRef = await runner.runText({
     argv: ["symbolic-ref", "--quiet", "HEAD"],
     operation: "git-current-commit-target",
     expectedAbsence: [{ code: 1, stderrIncludes: "" }]
   });
-  if (targetRef === "HEAD" ? symbolicRef !== "" : symbolicRef !== targetRef) return false;
+  if (context2.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== context2.target_ref) return false;
   const headCommit = await resolveCommit(runner, "HEAD");
-  const targetCommit = await resolveCommit(runner, targetRef);
+  const targetCommit = await resolveCommit(runner, context2.target_ref);
   if (headCommit !== targetCommit) return false;
-  if (!await isCommitAncestor(runner, output.base_commit, headCommit)) return false;
+  if (context2.baseline_commit !== output.base_commit || headCommit === context2.baseline_commit) return false;
+  if (await resolveCommit(runner, `${headCommit}^`) !== context2.baseline_commit) return false;
+  const message = await runner.runText({
+    argv: ["log", "-1", "--format=%s", headCommit],
+    operation: "git-implementation-commit-message"
+  });
+  if (message !== context2.commit_message) return false;
+  const authorizedPaths = [...context2.paths].sort(ordinal5);
+  if (JSON.stringify(authorizedPaths) !== JSON.stringify(sortedUniquePaths(output))) return false;
+  const changedPaths = [...new Set(await runner.runNulFields({
+    argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", context2.baseline_commit, headCommit, "--"],
+    operation: "git-implementation-commit-paths"
+  }))].sort(ordinal5);
+  if (JSON.stringify(changedPaths) !== JSON.stringify(authorizedPaths)) return false;
   for (const entry of output.outputs) {
     const committed2 = await readCommitTreeBlob(runner, headCommit, entry.path);
     if (entry.operation === "delete") {
@@ -46232,7 +46316,16 @@ async function implementationOutputCommittedAtCurrentTarget(runner, output, targ
     if (committed2?.mode !== entry.after.mode || committed2.oid !== entry.after.oid) return false;
     if (entry.operation === "rename" && await readCommitTreeBlob(runner, headCommit, entry.previous_path) !== void 0) return false;
   }
-  return true;
+  return await resolveCommit(runner, "HEAD") === headCommit && await resolveCommit(runner, context2.target_ref) === headCommit;
+}
+var observed = Object.freeze({ observed: true });
+function missed(reason2, paths) {
+  return Object.freeze({
+    observed: false,
+    reason: reason2,
+    blocking: reason2 !== "not-committed",
+    ...paths === void 0 ? {} : { paths: Object.freeze([...paths]) }
+  });
 }
 async function designArtifactCommittedAtCurrentTarget(runner, taskId, artifact, outputs, context2) {
   const symbolicRef = await runner.runText({
@@ -46240,53 +46333,65 @@ async function designArtifactCommittedAtCurrentTarget(runner, taskId, artifact, 
     operation: "git-current-design-target",
     expectedAbsence: [{ code: 1, stderrIncludes: "" }]
   });
-  if (context2.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== context2.target_ref) return false;
+  if (context2.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== context2.target_ref) {
+    return missed("target-moved");
+  }
   const head = await resolveCommit(runner, "HEAD");
-  if (await resolveCommit(runner, context2.target_ref) !== head) return false;
-  if (head === context2.baseline_commit) return false;
-  if (await resolveCommit(runner, `${head}^`) !== context2.baseline_commit) return false;
-  const message = await runner.runText({
-    argv: ["log", "-1", "--format=%s", head],
-    operation: "git-design-commit-message"
-  });
-  if (message !== context2.commit_message) return false;
+  if (await resolveCommit(runner, context2.target_ref) !== head) return missed("target-moved");
   const prefix = `.archflow/tasks/${taskId}/`;
-  const changed = await runner.runNulFields({
-    argv: ["diff-tree", "--no-commit-id", "--name-only", "-z", "-r", context2.baseline_commit, head, "--"],
-    operation: "git-design-commit-paths"
-  });
-  if (changed.length === 0 || changed.some((path2) => !path2.startsWith(prefix))) return false;
-  if (!changed.includes(`${prefix}state.json`)) return false;
-  if (!changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/request.json")) || !changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/decision.json"))) return false;
   const additional = artifact.additional_documents ?? [];
   const approvedDocumentPaths = /* @__PURE__ */ new Set([
     artifact.projection_target,
     ...additional.map((entry) => entry.projection_target)
   ]);
-  for (const path2 of approvedDocumentPaths) {
-    const output = outputs.find((entry) => entry.path === path2);
-    if (output === void 0 || output.operation === "delete") return false;
-    const committed2 = await readCommitTreeBlob(runner, head, path2);
-    if (committed2?.mode !== output.after.mode || committed2.oid !== output.after.oid) return false;
-    const baseline = await readCommitTreeBlob(runner, context2.baseline_commit, path2);
-    const differsFromBaseline = baseline?.mode !== output.after.mode || baseline.oid !== output.after.oid;
-    if (differsFromBaseline && !changed.includes(path2)) return false;
-  }
   const authorizedDocumentPaths = /* @__PURE__ */ new Set([
     ...approvedDocumentPaths,
     ...context2.authorized_document_paths ?? []
   ]);
-  const taskDocumentPath = /^(?:prd\.md|design\.md|phases\/[1-9][0-9]*\/(?:design|impl-notes)\.md)$/u;
-  if (changed.some((path2) => {
-    const taskRelative = path2.startsWith(prefix) ? path2.slice(prefix.length) : path2;
-    return taskDocumentPath.test(taskRelative) && !authorizedDocumentPaths.has(path2);
-  })) return false;
-  const dirty = await runner.runNulFields({
-    argv: ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", prefix.slice(0, -1)],
-    operation: "git-design-task-clean"
+  const unauthorizedDocuments = (paths) => paths.filter((path2) => path2.startsWith(prefix) && isTaskDocumentPath(path2.slice(prefix.length)) && !authorizedDocumentPaths.has(path2));
+  if (head === context2.baseline_commit) {
+    const pending = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
+    const unauthorized2 = unauthorizedDocuments(pending.paths);
+    if (unauthorized2.length > 0) return missed("unauthorized-task-document", unauthorized2);
+    return missed("not-committed");
+  }
+  if (await resolveCommit(runner, `${head}^`) !== context2.baseline_commit) {
+    return missed("parent-not-baseline");
+  }
+  const message = await runner.runText({
+    argv: ["log", "-1", "--format=%s", head],
+    operation: "git-design-commit-message"
   });
-  if (dirty.length !== 0) return false;
-  return await resolveCommit(runner, "HEAD") === head && await resolveCommit(runner, context2.target_ref) === head;
+  if (message !== context2.commit_message) return missed("message-mismatch");
+  const changed = await runner.runNulFields({
+    argv: ["diff-tree", "--no-commit-id", "--name-only", "-z", "-r", context2.baseline_commit, head, "--"],
+    operation: "git-design-commit-paths"
+  });
+  if (changed.length === 0) return missed("paths-outside-task");
+  const outsideTask = changed.filter((path2) => !path2.startsWith(prefix));
+  if (outsideTask.length > 0) return missed("paths-outside-task", outsideTask);
+  if (!changed.includes(`${prefix}state.json`)) return missed("missing-recovery-authority");
+  if (!changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/request.json")) || !changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/decision.json"))) {
+    return missed("missing-recovery-authority");
+  }
+  for (const path2 of approvedDocumentPaths) {
+    const output = outputs.find((entry) => entry.path === path2);
+    if (output === void 0 || output.operation === "delete") return missed("approved-document-mismatch", [path2]);
+    const committed2 = await readCommitTreeBlob(runner, head, path2);
+    if (committed2?.mode !== output.after.mode || committed2.oid !== output.after.oid) {
+      return missed("approved-document-mismatch", [path2]);
+    }
+    const baseline = await readCommitTreeBlob(runner, context2.baseline_commit, path2);
+    const differsFromBaseline = baseline?.mode !== output.after.mode || baseline.oid !== output.after.oid;
+    if (differsFromBaseline && !changed.includes(path2)) return missed("approved-document-mismatch", [path2]);
+  }
+  const unauthorized = unauthorizedDocuments(changed);
+  if (unauthorized.length > 0) return missed("unauthorized-task-document", unauthorized);
+  const dirty = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
+  if (dirty.paths.length !== 0 || dirty.unrepresentable_count !== 0) {
+    return missed("task-tree-dirty", dirty.paths);
+  }
+  return await resolveCommit(runner, "HEAD") === head && await resolveCommit(runner, context2.target_ref) === head ? observed : missed("target-moved");
 }
 var ordinal5 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 function ownEnumerableData(value, key) {
@@ -46355,8 +46460,8 @@ function deriveWorktreeIdentityDigest(entries, undeclaredChanges) {
     undeclared_changes: undeclaredChanges
   });
 }
-function sameIdentity(observed, expected) {
-  return observed.state === "present" && observed.oid === expected.oid && observed.mode === expected.mode && observed.size_bytes === expected.size_bytes;
+function sameIdentity(observed2, expected) {
+  return observed2.state === "present" && observed2.oid === expected.oid && observed2.mode === expected.mode && observed2.size_bytes === expected.size_bytes;
 }
 async function observePath(runner, resolved) {
   const lexicalPath = resolvePath4(runner.location.worktreeRoot, resolved.repositoryRelative);
@@ -46686,14 +46791,14 @@ async function buildImplementationOutput(dependencies, authority, state, supplie
   }
   const scanCandidates = outputs.flatMap((output) => {
     if (output.operation === "delete") return [];
-    const observed = observations.get(output.path);
-    if (observed.observation.state !== "present" || observed.bytes === void 0) {
+    const observed2 = observations.get(output.path);
+    if (observed2.observation.state !== "present" || observed2.bytes === void 0) {
       throw new TypeError("present output bytes are unavailable");
     }
     return [secretScanCandidateFromBytes({
       virtual_path: output.path,
       path_class: output.path_class,
-      bytes: observed.bytes
+      bytes: observed2.bytes
     })];
   });
   const secretScan = await createSecretlintScanner().scan(scanCandidates);
@@ -46818,17 +46923,17 @@ async function verifyImplementationManifest(runner, supplied, context2, supplied
     throw new TypeError("undeclared change report does not match the live Git working set");
   }
   const resolved = await resolveAll(runner, output, context2);
-  const observed = /* @__PURE__ */ new Map();
+  const observed2 = /* @__PURE__ */ new Map();
   for (const path2 of scope3) {
     const target2 = resolved.get(path2);
     if (target2 === void 0) throw new TypeError("declared scope path was not resolved");
-    observed.set(path2, await observePath(runner, target2));
+    observed2.set(path2, await observePath(runner, target2));
   }
   const ancestryRetained = await isCommitAncestorOfHead(runner, output.base_commit);
   const rawPayloads = /* @__PURE__ */ new Map();
   const snapshot = /* @__PURE__ */ new Map();
   for (const entry of output.outputs) {
-    const after = observed.get(entry.path);
+    const after = observed2.get(entry.path);
     if (after === void 0) throw new TypeError("missing output observation");
     const beforePath = entry.operation === "rename" ? entry.previous_path : entry.path;
     const currentBefore = currentSources.get(beforePath);
@@ -46847,7 +46952,7 @@ async function verifyImplementationManifest(runner, supplied, context2, supplied
         throw new TypeError("delete identity does not match base/worktree state");
       }
     } else {
-      const previous = observed.get(entry.previous_path)?.observation;
+      const previous = observed2.get(entry.previous_path)?.observation;
       if (before === void 0 || destinationBefore !== void 0 || previous?.state !== "absent" || !sameIdentity(after.observation, entry.after) || before.oid !== entry.before.oid || before.mode !== entry.before.mode || before.size_bytes !== entry.before.size_bytes) {
         throw new TypeError("rename identity or non-overwrite condition does not match base/worktree state");
       }
@@ -46874,8 +46979,8 @@ async function verifyImplementationManifest(runner, supplied, context2, supplied
     }
     snapshot.set(entry.path, after.observation);
   }
-  const worktreeEntries = Object.freeze(scope3.map((path2) => observed.get(path2)?.observation));
-  const snapshotEntries = Object.freeze(scope3.map((path2) => snapshot.get(path2) ?? observed.get(path2)?.observation));
+  const worktreeEntries = Object.freeze(scope3.map((path2) => observed2.get(path2)?.observation));
+  const snapshotEntries = Object.freeze(scope3.map((path2) => snapshot.get(path2) ?? observed2.get(path2)?.observation));
   const indexResult = await readIndexEntries(runner, scope3, context2);
   if (!indexResult.ok) throw indexResult.error;
   const byIndexPath = new Map(indexResult.value.map((entry) => [entry.path, entry]));
@@ -47309,7 +47414,7 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
   }
   const entries = [];
   for (const source of materialized) {
-    const observed = await observe(source.target);
+    const observed2 = await observe(source.target);
     if (source.authenticated_before.state === "present") {
       if (source.rollback === void 0 || !isDeepStrictEqual6(desiredObservation(source.rollback), source.authenticated_before)) {
         throw new TypeError("present authenticated before-image requires matching rollback bytes");
@@ -47317,13 +47422,13 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
     } else if (source.rollback !== void 0 && source.rollback.state !== "absent") {
       throw new TypeError("absent authenticated before-image cannot carry present rollback bytes");
     }
-    const exact = isDeepStrictEqual6(observed, desiredObservation(source.desired));
-    const before = isDeepStrictEqual6(observed, source.authenticated_before);
-    const renameDestinationBlocked = source.rename_pair?.role === "destination" && observed.state !== "absent" && !exact;
+    const exact = isDeepStrictEqual6(observed2, desiredObservation(source.desired));
+    const before = isDeepStrictEqual6(observed2, source.authenticated_before);
+    const renameDestinationBlocked = source.rename_pair?.role === "destination" && observed2.state !== "absent" && !exact;
     entries.push(Object.freeze({
       path: source.path,
       target: source.target,
-      observed_before: observed,
+      observed_before: observed2,
       desired: source.desired,
       ...source.rollback === void 0 ? {} : { rollback: source.rollback },
       git_tracked: source.git_tracked,
@@ -47415,7 +47520,7 @@ async function resolvePath6(runner, authority, claim, expectedClass) {
     context: authority.context
   });
 }
-async function readRetainedResult(runner, authority, reference) {
+async function readRetainedManifest(runner, authority, reference) {
   const manifestTarget = await resolvePath6(
     runner,
     authority,
@@ -47432,6 +47537,14 @@ async function readRetainedResult(runner, authority, reference) {
   if (!read.ok) return read;
   const manifest = read.value.value;
   if (manifest.result_id !== reference.result_id || manifest.phase_instance !== reference.phase_instance || manifest.step !== reference.step || manifest.input_fingerprint !== reference.input_fingerprint) return stateFailure(authority.context.phase_instance, "retained-result-reference-mismatch");
+  return ok8(Object.freeze({ manifest: read.value, manifest_target: manifestTarget.value }));
+}
+async function readRetainedResult(runner, authority, reference) {
+  const loaded = await readRetainedManifest(runner, authority, reference);
+  if (!loaded.ok) return loaded;
+  const manifestDocument = loaded.value.manifest;
+  const manifestTarget = loaded.value.manifest_target;
+  const manifest = manifestDocument.value;
   const payloads = [];
   const payloadTargets = /* @__PURE__ */ new Map();
   const payloadBytes = /* @__PURE__ */ new Map();
@@ -47528,7 +47641,7 @@ async function readRetainedResult(runner, authority, reference) {
       return stateFailure(authority.context.phase_instance, "retained-result-payload-operation-mismatch");
     }
     const desired = cached2 === void 0 ? await restoreSnapshotOutput({
-      target: manifestTarget.value,
+      target: manifestTarget,
       expected_result_digest: reference.result_digest,
       runner,
       worktree_root: runner.location.worktreeRoot,
@@ -47566,8 +47679,8 @@ async function readRetainedResult(runner, authority, reference) {
   );
   if (!projectionPlan.ok) return projectionPlan;
   return ok8(Object.freeze({
-    prepared: Object.freeze({ manifest: read.value, result_digest: read.value.digest, payloads: Object.freeze(payloads) }),
-    manifest_target: manifestTarget.value,
+    prepared: Object.freeze({ manifest: manifestDocument, result_digest: manifestDocument.digest, payloads: Object.freeze(payloads) }),
+    manifest_target: manifestTarget,
     projection_plan: projectionPlan.value,
     worktree_root: runner.location.worktreeRoot
   }));
@@ -47588,13 +47701,13 @@ async function createProductionServices(input) {
     context: provisionalContext
   });
   if (!provisionalAuthority.ok) return provisionalAuthority;
-  const observed = await readTaskState(provisionalAuthority.value.state);
-  if (observed.kind === "unreadable") {
+  const observed2 = await readTaskState(provisionalAuthority.value.state);
+  if (observed2.kind === "unreadable") {
     return fail10(createProjectError("IO_ERROR", { operation: input.operation, attempt: provisionalContext.attempt }));
   }
-  if (observed.kind === "noncanonical") return stateFailure(provisionalPhase, "task-state-noncanonical");
-  const resolvedContext = observed.kind === "canonical" ? context(input, observed.document.value.phase_instance, observed.document.value.attempt) : provisionalContext;
-  const authorityResult = observed.kind === "canonical" ? await createInternalTransactionAuthority({
+  if (observed2.kind === "noncanonical") return stateFailure(provisionalPhase, "task-state-noncanonical");
+  const resolvedContext = observed2.kind === "canonical" ? context(input, observed2.document.value.phase_instance, observed2.document.value.attempt) : provisionalContext;
+  const authorityResult = observed2.kind === "canonical" ? await createInternalTransactionAuthority({
     runner: discovered.value,
     environment: environment.value,
     task_id: input.task_id,
@@ -47603,6 +47716,21 @@ async function createProductionServices(input) {
   if (!authorityResult.ok) return authorityResult;
   const authority = authorityResult.value;
   const resolver = createProductionInputFingerprintResolver();
+  const manifestCache = /* @__PURE__ */ new Map();
+  const loadRetainedManifest = async (reference) => {
+    const key = [
+      reference.result_digest,
+      reference.result_id,
+      reference.phase_instance,
+      reference.step,
+      reference.input_fingerprint
+    ].join("\0");
+    const cached2 = manifestCache.get(key);
+    if (cached2 !== void 0) return cached2;
+    const loaded = await readRetainedManifest(discovered.value, authority, reference);
+    manifestCache.set(key, loaded);
+    return loaded;
+  };
   const dependencies = Object.freeze({
     runner: discovered.value,
     environment: environment.value,
@@ -47621,14 +47749,15 @@ async function createProductionServices(input) {
       const retainedReferences = retainedResultReferences(current.document.value);
       for (const reference of retainedReferences) {
         if (reference.result_digest === excluded?.result_digest) continue;
-        const retained = await readRetainedResult(discovered.value, authority, reference);
+        const retained = await loadRetainedManifest(reference);
         if (!retained.ok) throw new TypeError("retained result accounting is unavailable");
-        total += retained.value.prepared.manifest.value.accounting.result_bytes;
+        total += retained.value.manifest.value.accounting.result_bytes;
       }
       return parseSafeInteger(total);
     },
     load_retained_result: (reference) => readRetainedResult(discovered.value, authority, reference),
-    resolve_gate_reentry_fingerprint: async ({ request: request2, current }) => {
+    load_retained_manifest: loadRetainedManifest,
+    resolve_gate_reentry_fingerprint: async ({ request: request2, current, target_phase_instance }) => {
       const liveConfig = await readTaskConfig(authority.config);
       if (liveConfig.kind !== "valid") return stateFailure(current.value.phase_instance, "task-config-invalid");
       const call = parseToolCall("archflow_state", {
@@ -47637,7 +47766,7 @@ async function createProductionServices(input) {
         intent_id: request2.intent_id,
         expected_revision: current.value.revision,
         input_fingerprint: current.value.input_fingerprint,
-        phase_instance: request2.phase_instance,
+        phase_instance: target_phase_instance ?? request2.phase_instance,
         step: "produce",
         status: "running"
       });
@@ -47656,7 +47785,7 @@ async function createProductionServices(input) {
     runner: discovered.value,
     environment: environment.value,
     authority,
-    ...observed.kind === "canonical" ? { state: observed.document } : {},
+    ...observed2.kind === "canonical" ? { state: observed2.document } : {},
     dependencies
   }));
 }
@@ -47715,12 +47844,19 @@ function subjectFor(call, authority, inputFingerprint) {
         subject_digest: call.input.subject_digest,
         current_evidence: call.input.current_evidence,
         kind: call.input.kind,
-        context: call.input.context
+        context: call.input.context,
+        // assertPlainJson rejects undefined property values, so the optional bounded-decision
+        // pair is omitted entirely on the open-and-wait arm rather than passed as undefined.
+        ...call.input.preview_digest === void 0 || call.input.decision === void 0 ? {} : { preview_digest: call.input.preview_digest, decision: call.input.decision }
       };
       return { ...common3, tool: call.name, operation: "gate", operation_fields };
     }
     case "archflow_waiver":
-      return { ...common3, tool: call.name, operation: "waiver", operation_fields: { origin: call.input.origin, rationale: call.input.rationale } };
+      return { ...common3, tool: call.name, operation: "waiver", operation_fields: {
+        origin: call.input.origin,
+        rationale: call.input.rationale,
+        ...call.input.preview_digest === void 0 || call.input.decision === void 0 ? {} : { preview_digest: call.input.preview_digest, decision: call.input.decision }
+      } };
     default: {
       const exhaustive = call;
       throw new TypeError(`unknown tool ${String(exhaustive.name)}`);
@@ -47788,18 +47924,18 @@ async function rehydrateStagedToolCall(name, reference, workingDirectory) {
   } finally {
     await handle?.close().catch(() => void 0);
   }
-  let record3;
+  let record4;
   try {
     const parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     assertPlainJson(parsed, "staged request record");
-    record3 = stagedRecordSchema.parse(parsed);
+    record4 = stagedRecordSchema.parse(parsed);
   } catch {
     return mismatch(reference.intent_id, "staged-record-invalid");
   }
-  if (record3.request.tool !== name) return mismatch(reference.intent_id, "staged-tool-mismatch");
+  if (record4.request.tool !== name) return mismatch(reference.intent_id, "staged-tool-mismatch");
   let call;
   try {
-    call = parseToolCall(name, record3.request.input);
+    call = parseToolCall(name, record4.request.input);
   } catch (error51) {
     return mismatch(reference.intent_id, "staged-input-invalid", void 0, describeValidationIssues(error51));
   }
@@ -47810,9 +47946,9 @@ async function rehydrateStagedToolCall(name, reference, workingDirectory) {
     return mismatch(reference.intent_id, "staged-task-mismatch");
   }
   const identified = identifyTransactionRequest(call, services.value.authority, call.input.input_fingerprint);
-  if (identified.request_digest !== record3.request_digest) {
+  if (identified.request_digest !== record4.request_digest) {
     return mismatch(reference.intent_id, "staged-digest-mismatch", {
-      expected: record3.request_digest,
+      expected: record4.request_digest,
       observed: identified.request_digest
     });
   }
@@ -48108,8 +48244,7 @@ var evidence_slots_schema_default = {
         "producer_family",
         "reviewer_family",
         "role",
-        "assurance",
-        "independence"
+        "assurance"
       ],
       additionalProperties: false
     },
@@ -49469,6 +49604,19 @@ var gate_contract_schema_default = {
         target_ref: {
           $ref: "#/$defs/text"
         },
+        baseline_commit: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+        },
+        commit_message: {
+          $ref: "#/$defs/text"
+        },
+        paths: {
+          minItems: 1,
+          type: "array",
+          items: {
+            $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+          }
+        },
         diff_digest: {
           $ref: "#/$defs/digest"
         },
@@ -49489,6 +49637,9 @@ var gate_contract_schema_default = {
       },
       required: [
         "target_ref",
+        "baseline_commit",
+        "commit_message",
+        "paths",
         "diff_digest",
         "current_artifact_digests",
         "parent_document_digests"
@@ -51212,7 +51363,9 @@ var mcp_tools_schema_default = {
               "subject_digest",
               "current_evidence",
               "kind",
-              "context"
+              "context",
+              "preview_digest",
+              "decision"
             ],
             properties: {
               schema_version: {
@@ -51257,6 +51410,25 @@ var mcp_tools_schema_default = {
               },
               context: {
                 type: "object"
+              },
+              preview_digest: {
+                $ref: "#/$defs/digest"
+              },
+              decision: {
+                type: "object",
+                additionalProperties: false,
+                required: [
+                  "choice",
+                  "reason"
+                ],
+                properties: {
+                  choice: {
+                    $ref: "#/$defs/text"
+                  },
+                  reason: {
+                    $ref: "#/$defs/text"
+                  }
+                }
               }
             },
             allOf: [
@@ -51497,6 +51669,25 @@ var mcp_tools_schema_default = {
               },
               rationale: {
                 $ref: "#/$defs/text"
+              },
+              preview_digest: {
+                $ref: "#/$defs/digest"
+              },
+              decision: {
+                type: "object",
+                properties: {
+                  choice: {
+                    $ref: "#/$defs/text"
+                  },
+                  reason: {
+                    $ref: "#/$defs/text"
+                  }
+                },
+                required: [
+                  "choice",
+                  "reason"
+                ],
+                additionalProperties: false
               }
             },
             required: [
@@ -53686,7 +53877,7 @@ var project_error_schema_default = {
         },
         next_action: {
           type: "string",
-          const: "repair-state"
+          const: "inspect-current-state"
         }
       },
       required: [
@@ -56490,6 +56681,50 @@ var task_state_schema_default = {
             "recorded_at"
           ],
           additionalProperties: false
+        },
+        {
+          type: "object",
+          properties: {
+            schema_version: {
+              type: "string",
+              const: "1"
+            },
+            actor_class: {
+              type: "string",
+              const: "human"
+            },
+            assurance: {
+              type: "string",
+              const: "connected-request-trace"
+            },
+            channel: {
+              type: "string",
+              const: "connected-host"
+            },
+            connection_id: {
+              $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId"
+            },
+            invocation_id: {
+              $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId"
+            },
+            request_id_digest: {
+              $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+            },
+            request_digest: {
+              $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+            }
+          },
+          required: [
+            "schema_version",
+            "actor_class",
+            "assurance",
+            "channel",
+            "connection_id",
+            "invocation_id",
+            "request_id_digest",
+            "request_digest"
+          ],
+          additionalProperties: false
         }
       ]
     },
@@ -59139,6 +59374,15 @@ var CODEX_DISABLED_FEATURES = Object.freeze([
   "plugin_sharing",
   "skill_search"
 ]);
+function withLocalBinOnPath(workspace) {
+  const home = workspace.env.HOME;
+  if (home === void 0 || home === "") return workspace.env;
+  const localBin = join5(home, ".local", "bin");
+  const path2 = workspace.env.PATH;
+  if (path2 === void 0) return Object.freeze({ ...workspace.env, PATH: localBin });
+  if (path2.split(":").includes(localBin)) return workspace.env;
+  return Object.freeze({ ...workspace.env, PATH: `${localBin}:${path2}` });
+}
 var HOST_SCHEMA_METADATA = /* @__PURE__ */ new Set(["$schema", "$id"]);
 var CLAUDE_UNSUPPORTED_SCHEMA_KEYWORDS = /* @__PURE__ */ new Set([
   "minimum",
@@ -59433,9 +59677,9 @@ function claudeFailureMessage(result) {
   try {
     const value = JSON.parse(result.stdout.toString("utf8"));
     if (value === null || typeof value !== "object") return void 0;
-    const record3 = value;
-    if (record3.is_error !== true && record3.type !== "error") return void 0;
-    return typeof record3.result === "string" ? record3.result : typeof record3.error === "string" ? record3.error : void 0;
+    const record4 = value;
+    if (record4.is_error !== true && record4.type !== "error") return void 0;
+    return typeof record4.result === "string" ? record4.result : typeof record4.error === "string" ? record4.error : void 0;
   } catch {
     return void 0;
   }
@@ -59489,32 +59733,43 @@ var claudeAdapter = Object.freeze({
     }
     const mcpConfigPath = join5(workspace.root, "empty-mcp.json");
     await writeFile(mcpConfigPath, '{"mcpServers":{}}\n', { encoding: "utf8", mode: 384 });
+    const argv = Object.freeze([
+      "-p",
+      "--safe-mode",
+      "--tools",
+      workspace.repository_view_root === void 0 ? "" : "Read,Grep,Glob",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--mcp-config",
+      mcpConfigPath,
+      "--no-session-persistence",
+      "--setting-sources",
+      "",
+      "--output-format",
+      "json",
+      "--json-schema",
+      JSON.stringify(schema),
+      "--model",
+      route.model,
+      "--effort",
+      route.effort
+    ]);
+    if (route.provider === void 0) {
+      return Object.freeze({
+        adapter: "claude-cli",
+        command: "claude",
+        argv,
+        cwd: workspace.repository_view_root ?? workspace.root,
+        env: workspace.env,
+        stdin: envelope.bytes
+      });
+    }
     return Object.freeze({
       adapter: "claude-cli",
-      command: "claude",
-      argv: Object.freeze([
-        "-p",
-        "--safe-mode",
-        "--tools",
-        workspace.repository_view_root === void 0 ? "" : "Read,Grep,Glob",
-        "--disable-slash-commands",
-        "--strict-mcp-config",
-        "--mcp-config",
-        mcpConfigPath,
-        "--no-session-persistence",
-        "--setting-sources",
-        "",
-        "--output-format",
-        "json",
-        "--json-schema",
-        JSON.stringify(schema),
-        "--model",
-        route.model,
-        "--effort",
-        route.effort
-      ]),
+      command: "cc-switch",
+      argv: Object.freeze(["start", "claude", route.provider, "--", ...argv]),
       cwd: workspace.repository_view_root ?? workspace.root,
-      env: workspace.env,
+      env: withLocalBinOnPath(workspace),
       stdin: envelope.bytes
     });
   },
@@ -59567,6 +59822,9 @@ var codexAdapter = Object.freeze({
   ),
   async buildInvocation(envelope, route, workspace, outputSchema) {
     assertRoute("codex-cli", route);
+    if (route.provider !== void 0) {
+      return fail13(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
+    }
     const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "codex-cli", envelopeSubject(envelope));
     const schemaPath = join5(workspace.root, `${envelope.result_kind}.schema.json`);
     const outputPath = join5(workspace.root, "final-output.json");
@@ -59625,13 +59883,10 @@ var codexAdapter = Object.freeze({
     return classifyNonzero("codex-cli", result, codexFailureMessages(result.stdout));
   }
 });
-function selectCliAdapter(host, options = {}) {
+function selectCliAdapter(host, route) {
   if (host === "unknown") return fail13(createProjectError("UNSUPPORTED_HOST", { host: "unknown" }));
-  if (host === "claude") return codexAdapter;
-  if (options.allow_claude_dispatch !== true) {
-    return fail13(createProjectError("CONFIG_FAMILY_UNSUPPORTED", { family: "claude" }));
-  }
-  return claudeAdapter;
+  if (route !== void 0) return route.adapter === "claude-cli" ? claudeAdapter : codexAdapter;
+  return host === "claude" ? codexAdapter : claudeAdapter;
 }
 function mintReviewObservation(input) {
   assertRoute(input.adapter, input.route);
@@ -59862,7 +60117,7 @@ async function writeAttemptRecord(input, attemptId, route, preflight2, error51, 
   const channels = telemetry.child_result ?? (error51 instanceof DispatchProcessError ? error51.channels : void 0);
   const stdoutTail = channels === void 0 ? "" : channelTail(channels.stdout);
   const stderrTail = channels === void 0 ? "" : channelTail(channels.stderr);
-  const record3 = {
+  const record4 = {
     schema_version: "1",
     attempt_id: attemptId,
     task_id: input.authority.task_id,
@@ -59871,6 +60126,7 @@ async function writeAttemptRecord(input, attemptId, route, preflight2, error51, 
     family: route.family,
     model: route.model,
     effort: route.effort,
+    ...route.provider === void 0 ? {} : { provider: route.provider },
     status: "failed",
     failure_stage: telemetry.failure_stage,
     started_at: telemetry.started_at,
@@ -59888,7 +60144,7 @@ async function writeAttemptRecord(input, attemptId, route, preflight2, error51, 
     ...stdoutTail === "" ? {} : { stdout_tail: stdoutTail },
     ...stderrTail === "" ? {} : { stderr_tail: stderrTail }
   };
-  await writer.replaceRegular(target2.value, canonicalJsonBytes(record3), false);
+  await writer.replaceRegular(target2.value, canonicalJsonBytes(record4), false);
 }
 function createDispatchCoordinator(input) {
   assertInternalTransactionAuthority(input.authority, {
@@ -59896,9 +60152,7 @@ function createDispatchCoordinator(input) {
     environment: input.dependencies.environment
   });
   return async (route, envelope, outputSchema) => {
-    const adapter2 = selectCliAdapter(input.host, {
-      allow_claude_dispatch: input.allow_claude_dispatch
-    });
+    const adapter2 = selectCliAdapter(input.host, route);
     const attemptId = randomUUID2();
     const startedAt = /* @__PURE__ */ new Date();
     let preflight2;
@@ -60431,7 +60685,7 @@ function assertSupportedEffort(adapter2, effort) {
     fail14(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
   }
 }
-function resolveDispatchRoute(config2, phaseKind2, role, producer_family) {
+function resolveDispatchRoute(config2, phaseKind2, role) {
   const configured = config2.overrides?.[phaseKind2]?.[role] ?? config2.roles[role];
   if (configured === void 0) {
     return fail14(createProjectError("CONFIG_INVALID", { issue_code: "route-missing" }));
@@ -60439,15 +60693,20 @@ function resolveDispatchRoute(config2, phaseKind2, role, producer_family) {
   if (!safeIdV1Schema.safeParse(configured.model).success) {
     return fail14(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
   }
-  const family2 = deriveModelFamily(configured.model);
+  if (configured.provider !== void 0 && configured.model.startsWith("gpt-")) {
+    return fail14(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
+  }
+  const family2 = configured.provider !== void 0 ? "claude" : deriveModelFamily(configured.model);
   const adapter2 = adapterForFamily(family2);
   assertAdapterFamily(adapter2, family2);
   assertSupportedEffort(adapter2, configured.effort);
-  if ((role === "counter-reviewer" || role === "adjudicator") && family2 === producer_family) {
-    const expected_family = producer_family === "claude" ? "codex" : "claude";
-    return fail14(createProjectError("FAMILY_MISMATCH", { expected_family, observed_family: family2 }));
-  }
-  return Object.freeze({ adapter: adapter2, family: family2, model: configured.model, effort: configured.effort });
+  return Object.freeze({
+    adapter: adapter2,
+    family: family2,
+    model: configured.model,
+    effort: configured.effort,
+    ...configured.provider === void 0 ? {} : { provider: configured.provider }
+  });
 }
 
 // src/contracts/renderers.ts
@@ -60559,6 +60818,9 @@ import { constants as fsConstants5 } from "node:fs";
 import { isDeepStrictEqual as isDeepStrictEqual7 } from "node:util";
 
 // src/contracts/durable-gate.ts
+function exactCommitAuthorizationContext(context2) {
+  return "baseline_commit" in context2 && "commit_message" in context2 && "paths" in context2 ? context2 : void 0;
+}
 var digest9 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var pathSafeId2 = pathSafeIdV1Schema;
 var taskSlug4 = taskSlugV1Schema;
@@ -60666,6 +60928,9 @@ var armUnion = (arms) => external_exports.union(Object.values(arms));
 var gateRequestArms = gateArms({});
 var gateRequestV1Schema = armUnion(gateRequestArms);
 var legacyGateRequestV1Schema = armUnion(gateArms({ supersedes: legacySupersession }));
+var archivedCommitAuthorizationArm = (extra) => gateArm("commit-authorization", archivedCommitAuthorizationContextSchema, allowedDecisionTuples["commit-authorization"], extra);
+var archivedCommitAuthorizationRequestV1Schema = archivedCommitAuthorizationArm({});
+var archivedLegacyCommitAuthorizationRequestV1Schema = archivedCommitAuthorizationArm({ supersedes: legacySupersession });
 var PAYLOAD_REQUIRED_FIELDS = ["payload", "human_provenance"];
 var WAIVER_REQUIRED_FIELDS = ["granted", "scope", "origin", "notes", "human_provenance"];
 var CANCELLATION_FIELDS = ["cancelled", "reason", "human_provenance"];
@@ -60740,8 +61005,11 @@ function parseGateDecisionRecord(value) {
 }
 function parseArchivedGateRequest(value) {
   assertPlainJson(value, "archived gate request");
-  const current = gateRequestV1Schema.safeParse(value);
-  return current.success ? current.data : legacyGateRequestV1Schema.parse(value);
+  for (const candidate of [gateRequestV1Schema, archivedCommitAuthorizationRequestV1Schema, archivedLegacyCommitAuthorizationRequestV1Schema]) {
+    const parsed = candidate.safeParse(value);
+    if (parsed.success) return parsed.data;
+  }
+  return legacyGateRequestV1Schema.parse(value);
 }
 function parseArchivedGateDecisionRecord(value) {
   assertPlainJson(value, "archived gate decision record");
@@ -60962,9 +61230,9 @@ function isExactPlanningRestartDraft(current, next) {
   const previous = current.restart_history ?? [];
   const following = next.restart_history ?? [];
   if (following.length !== previous.length + 1) return false;
-  const previousById = new Map(previous.map((record3) => [record3.restart_id, record3]));
-  const additions = following.filter((record3) => !previousById.has(record3.restart_id));
-  if (additions.length !== 1 || previous.some((record3) => !isDeepStrictEqual8(record3, following.find((candidate) => candidate.restart_id === record3.restart_id)))) return false;
+  const previousById = new Map(previous.map((record4) => [record4.restart_id, record4]));
+  const additions = following.filter((record4) => !previousById.has(record4.restart_id));
+  if (additions.length !== 1 || previous.some((record4) => !isDeepStrictEqual8(record4, following.find((candidate) => candidate.restart_id === record4.restart_id)))) return false;
   const restart = additions[0];
   if (restart.source_phase_instance !== current.phase_instance || restart.target_phase_instance !== next.phase_instance || restart.restarted_at_revision !== current.revision + 1 || restart.reason.trim() === "" || comparePhaseInstances(restart.target_phase_instance, current.phase_instance) >= 0 || decodePhaseInstance(restart.target_phase_instance).kind === "phase-impl" || next.step !== "produce" || next.status !== "running" || next.attempt !== 1 || !isDeepStrictEqual8(restart.cleared_waivers, current.waivers) || next.waivers.length !== 0 || !isDeepStrictEqual8(restart.cleared_pending_human_revision, current.pending_human_revision) || next.pending_human_revision !== void 0 || !isDeepStrictEqual8(next.approvals, current.approvals)) return false;
   const retained = current.authoritative_results.filter((reference) => comparePhaseInstances(reference.phase_instance, restart.target_phase_instance) < 0);
@@ -61022,29 +61290,39 @@ function expectedProduceUpstreamBindings(state) {
 async function loadProduceUpstreamSubject(dependencies, authority, state, binding) {
   const approvedOwners = [];
   let retainedOwnerExists = false;
-  if (dependencies.load_retained_result !== void 0) {
+  const loadManifest = dependencies.load_retained_manifest;
+  if (loadManifest !== void 0) {
     for (const reference of [...state.authoritative_results].reverse()) {
       if (reference.step !== "produce") continue;
-      const retained = await dependencies.load_retained_result(reference);
+      const retained = await loadManifest(reference);
       if (!retained.ok) return retained;
-      const manifest = retained.value.prepared.manifest.value;
+      const manifest = retained.value.manifest.value;
       const artifact2 = manifest.source_artifact;
       const ownsPath = artifact2.artifact_kind === "document" && documentProjectionDescriptors(artifact2).some((entry) => entry.document_path === binding.path);
       if (ownsPath) retainedOwnerExists = true;
       if (artifact2.artifact_kind !== "document" || canonicalJsonDigest(artifact2) !== manifest.artifact_digest || !ownsPath || !state.approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === manifest.artifact_digest && approvalIsEligibleAfterLatestRestart(state, approval, artifact2.phase_instance))) continue;
       approvedOwners.push(Object.freeze({
+        reference,
+        artifact: artifact2,
+        artifact_digest: manifest.artifact_digest,
         measured_at_revision: manifest.accounting.measured_at_revision,
-        subject: Object.freeze({
-          artifact_digest: manifest.artifact_digest,
-          artifact: artifact2,
-          retained: retained.value
-        })
+        retained: retained.value
       }));
     }
   }
   approvedOwners.sort((left, right) => right.measured_at_revision - left.measured_at_revision);
-  if (approvedOwners[0] !== void 0) {
-    return Object.freeze({ schema_version: "1", ok: true, value: approvedOwners[0].subject });
+  const owner = approvedOwners[0];
+  if (owner !== void 0) {
+    return Object.freeze({
+      schema_version: "1",
+      ok: true,
+      value: Object.freeze({
+        artifact_digest: owner.artifact_digest,
+        artifact: owner.artifact,
+        reference: owner.reference,
+        retained: owner.retained
+      })
+    });
   }
   if (retainedOwnerExists) return fail16(state.phase_instance, "upstream-approval-missing");
   const initialization = await loadLegacyImportInitialization(
@@ -61100,12 +61378,12 @@ var fail16 = (phase3, issue_code) => Object.freeze({
 });
 async function loadCurrentProduceSubject(dependencies, state) {
   const reference = [...state.authoritative_results].reverse().find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "produce");
-  if (reference === void 0 || dependencies.load_retained_result === void 0) {
+  if (reference === void 0 || dependencies.load_retained_manifest === void 0) {
     return fail16(state.phase_instance, "current-produce-result-missing");
   }
-  const retained = await dependencies.load_retained_result(reference);
+  const retained = await dependencies.load_retained_manifest(reference);
   if (!retained.ok) return retained;
-  const manifest = retained.value.prepared.manifest.value;
+  const manifest = retained.value.manifest.value;
   const artifact = manifest.source_artifact;
   if (artifact.artifact_kind !== "document" && artifact.artifact_kind !== "implementation-output") {
     return fail16(state.phase_instance, "current-produce-artifact-invalid");
@@ -61116,7 +61394,7 @@ async function loadCurrentProduceSubject(dependencies, state) {
   return Object.freeze({
     schema_version: "1",
     ok: true,
-    value: Object.freeze({ artifact_digest: manifest.artifact_digest, artifact, retained: retained.value })
+    value: Object.freeze({ artifact_digest: manifest.artifact_digest, artifact, reference, retained: retained.value })
   });
 }
 function documentProjectionDescriptors(artifact) {
@@ -61129,10 +61407,17 @@ function documentProjectionDescriptors(artifact) {
     ...artifact.additional_documents ?? []
   ]);
 }
+function produceOwnedTaskDocumentPaths(artifact) {
+  if (artifact.artifact_kind === "document") {
+    return Object.freeze(documentProjectionDescriptors(artifact).map((entry) => entry.document_path));
+  }
+  const prefix = `.archflow/tasks/${artifact.task_id}/`;
+  return Object.freeze([...new Set(artifact.outputs.map((entry) => String(entry.path)).filter((path2) => path2.startsWith(prefix)).map((path2) => parseTaskPathClaim(path2.slice(prefix.length))))].sort((left, right) => left.localeCompare(right)));
+}
 function produceUpstreamBindingsForSubject(state, artifact) {
-  if (artifact.artifact_kind !== "document") return expectedProduceUpstreamBindings(state);
-  const owned = new Set(documentProjectionDescriptors(artifact).map((entry) => entry.document_path));
-  return Object.freeze(expectedProduceUpstreamBindings(state).filter((binding) => !owned.has(binding.path)));
+  const bindings = expectedProduceUpstreamBindings(state);
+  const owned = new Set(produceOwnedTaskDocumentPaths(artifact));
+  return Object.freeze(bindings.filter((binding) => !owned.has(binding.path)));
 }
 async function readProduceProjection(runner, authority, subject, artifactPath) {
   const target2 = await resolveTaskPath({
@@ -61156,8 +61441,21 @@ async function readProduceProjection(runner, authority, subject, artifactPath) {
   }
   return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ path: artifactPath, bytes, digest: digest10 }) });
 }
-async function readProduceProjectionSet(runner, authority, subject, selectedPath) {
-  const paths = "imported_projection" in subject || subject.artifact.artifact_kind === "implementation-output" ? [selectedPath] : documentProjectionDescriptors(subject.artifact).map((entry) => entry.document_path);
+async function readProduceProjectionSet(runner, authority, subject, selectedPath, excludedPaths = []) {
+  let paths;
+  if ("imported_projection" in subject) {
+    paths = [selectedPath];
+  } else if (subject.artifact.artifact_kind === "implementation-output") {
+    const prefix = `.archflow/tasks/${subject.artifact.task_id}/`;
+    const outputPaths = new Set(subject.artifact.outputs.map((entry) => String(entry.path)));
+    paths = Object.freeze([.../* @__PURE__ */ new Set([
+      selectedPath,
+      ...subject.artifact.parent_documents.filter((parent) => outputPaths.has(`${prefix}${parent.document_path}`)).map((parent) => parent.document_path)
+    ])]);
+  } else {
+    const excluded = new Set(excludedPaths);
+    paths = documentProjectionDescriptors(subject.artifact).map((entry) => entry.document_path).filter((path2) => path2 === selectedPath || !excluded.has(path2));
+  }
   const projections = [];
   for (const path2 of paths) {
     const projection = await readProduceProjection(runner, authority, subject, path2);
@@ -61182,11 +61480,21 @@ function renderProduceReviewMaterial(subject, selectedProjection, projections = 
 ${fatalUtf8.decode(projection.bytes)}`
     ).join("\n\n");
   }
+  const prefix = `.archflow/tasks/${subject.artifact.task_id}/`;
+  const outputPaths = new Set(subject.artifact.outputs.map((entry) => String(entry.path)));
+  const coProducedDocuments = projections.filter((projection) => outputPaths.has(`${prefix}${projection.path}`)).map((projection) => ({
+    path: projection.path,
+    content_digest: projection.digest,
+    content: fatalUtf8.decode(projection.bytes)
+  }));
   return `${JSON.stringify({
     schema_version: "1",
     subject_kind: "retained-implementation-output",
     artifact_digest: subject.artifact_digest,
-    implementation_output: subject.artifact
+    implementation_output: subject.artifact,
+    ...coProducedDocuments.length === 0 ? {} : {
+      co_produced_documents: coProducedDocuments
+    }
   }, null, 2)}
 `;
 }
@@ -61351,8 +61659,8 @@ function expectedSourceKind(step) {
   return void 0;
 }
 function validateLoadedEvidence(reference, loaded) {
-  const document2 = canonicalDocument(parseResultManifest(loaded.prepared.manifest.value));
-  if (document2.digest !== loaded.prepared.manifest.digest || !Buffer.from(document2.bytes).equals(Buffer.from(loaded.prepared.manifest.bytes)) || loaded.prepared.result_digest !== document2.digest || reference.result_digest !== document2.digest || loaded.manifest_target.path_class !== "authority-result") {
+  const document2 = canonicalDocument(parseResultManifest(loaded.manifest.value));
+  if (document2.digest !== loaded.manifest.digest || !Buffer.from(document2.bytes).equals(Buffer.from(loaded.manifest.bytes)) || reference.result_digest !== document2.digest || loaded.manifest_target.path_class !== "authority-result") {
     throw new TypeError("loaded evidence result identity disagrees");
   }
   const manifest = document2.value;
@@ -61369,7 +61677,8 @@ function validateLoadedEvidence(reference, loaded) {
   return manifest;
 }
 async function loadRetainedEvidence(dependencies, state, phase_instance) {
-  if (dependencies.load_retained_result === void 0) {
+  const loadManifest = dependencies.load_retained_manifest;
+  if (loadManifest === void 0) {
     throw new TypeError("retained evidence loading is unavailable");
   }
   const retained = /* @__PURE__ */ new Map();
@@ -61380,7 +61689,7 @@ async function loadRetainedEvidence(dependencies, state, phase_instance) {
     if (retained.has(reference.step)) {
       throw new TypeError("phase has duplicate retained evidence for one step");
     }
-    const loaded = await dependencies.load_retained_result(reference);
+    const loaded = await loadManifest(reference);
     if (!loaded.ok) return loaded;
     const manifest = validateLoadedEvidence(reference, loaded.value);
     retained.set(reference.step, Object.freeze({
@@ -61406,7 +61715,7 @@ function deriveCurrentEvidenceSet(retained) {
   return derived;
 }
 function deriveEvidenceSetFromCounter(counter) {
-  if (counter.role !== "counter-review" || counter.assurance !== "server-attested" && counter.assurance !== "degraded" || counter.model_family === counter.producer_family) {
+  if (counter.role !== "counter-review" || counter.assurance !== "server-attested" && counter.assurance !== "degraded") {
     throw new TypeError("retained reviews do not form one current review set");
   }
   const verifiedCounter = createVerifiedEvidenceReference(counter);
@@ -61415,8 +61724,7 @@ function deriveEvidenceSetFromCounter(counter) {
     evidence_digest: verifiedCounter.evidence_digest,
     assurance: counter.assurance,
     producer_family: counter.producer_family,
-    reviewer_family: counter.model_family,
-    independence: "opposite-family"
+    reviewer_family: counter.model_family
   }]);
   return Object.freeze({
     task_id: counter.task_id,
@@ -61464,7 +61772,7 @@ async function derivePendingEditorialPredecessor(dependencies, state) {
 async function validateEditorialPredecessorDeclaration(dependencies, state, artifact) {
   const declared = artifact.editorial_predecessor;
   if (declared === void 0) return ok11(void 0);
-  const invalid2 = (issue4) => Object.freeze({
+  const invalid3 = (issue4) => Object.freeze({
     schema_version: "1",
     ok: false,
     error: createProjectError("STATE_INVALID", {
@@ -61473,13 +61781,13 @@ async function validateEditorialPredecessorDeclaration(dependencies, state, arti
     })
   });
   const produced = await currentProduceSubject(dependencies, state);
-  if (!produced.ok || produced.value.artifact.artifact_kind !== "document" || produced.value.artifact_digest !== declared.subject_digest) return invalid2("editorial-predecessor-not-current-produce");
+  if (!produced.ok || produced.value.artifact.artifact_kind !== "document" || produced.value.artifact_digest !== declared.subject_digest) return invalid3("editorial-predecessor-not-current-produce");
   const retained = await loadRetainedEvidence(dependencies, state, state.phase_instance);
-  if (!retained.ok) return invalid2("editorial-authorizing-triage-invalid");
+  if (!retained.ok) return invalid3("editorial-authorizing-triage-invalid");
   const editorial = retainedEditorialTriage(retained.value);
-  if (editorial === void 0 || editorial.triage.subject_digest !== declared.subject_digest || editorial.triage.input_fingerprint !== declared.input_fingerprint || editorial.triage_result_digest !== declared.triage_result_digest) return invalid2("editorial-authorizing-triage-invalid");
+  if (editorial === void 0 || editorial.triage.subject_digest !== declared.subject_digest || editorial.triage.input_fingerprint !== declared.input_fingerprint || editorial.triage_result_digest !== declared.triage_result_digest) return invalid3("editorial-authorizing-triage-invalid");
   if (artifact.content_digest === produced.value.artifact.content_digest) {
-    return invalid2("editorial-revision-unchanged-bytes");
+    return invalid3("editorial-revision-unchanged-bytes");
   }
   const companionSet = (document2) => JSON.stringify(
     (document2.additional_documents ?? []).map((entry) => ({
@@ -61489,7 +61797,7 @@ async function validateEditorialPredecessorDeclaration(dependencies, state, arti
     }))
   );
   if (companionSet(artifact) !== companionSet(produced.value.artifact)) {
-    return invalid2("editorial-revision-companion-changed");
+    return invalid3("editorial-revision-companion-changed");
   }
   return ok11(void 0);
 }
@@ -61509,7 +61817,7 @@ async function loadCurrentReviewSet(dependencies, authority, phase_instance) {
   const semantics = validateDurableSemantics({ state: stateDocument });
   if (!semantics.ok) return semantics;
   const retained = await loadRetainedEvidence(
-    { load_retained_result: dependencies.load_retained_result },
+    { load_retained_manifest: dependencies.load_retained_manifest },
     stateDocument.value,
     phase_instance
   );
@@ -61520,7 +61828,7 @@ async function loadCurrentReviewSet(dependencies, authority, phase_instance) {
   }
   if (derived.input_fingerprint !== stateDocument.value.input_fingerprint) {
     const produced = await currentProduceSubject(
-      { load_retained_result: dependencies.load_retained_result },
+      { load_retained_manifest: dependencies.load_retained_manifest },
       stateDocument.value
     );
     const predecessor = produced.ok && produced.value.artifact.artifact_kind === "document" ? produced.value.artifact.editorial_predecessor : void 0;
@@ -61714,6 +62022,11 @@ async function unreferencedAuthorityDecisions(authority, state) {
     ...openGateIds,
     ...state.pending_human_revision === void 0 ? [] : [state.pending_human_revision.gate_id],
     ...(state.human_revision_history ?? []).map((entry) => entry.gate_id),
+    ...(state.restart_history ?? []).flatMap((restart) => [
+      restart.restart_id,
+      ...restart.cleared_waivers.map((entry) => entry.gate_id),
+      ...restart.cleared_pending_human_revision === void 0 ? [] : [restart.cleared_pending_human_revision.gate_id]
+    ]),
     ...state.last_transition !== void 0 && known.has(state.last_transition.result_id) ? [state.last_transition.result_id] : []
   ]);
   let changed = true;
@@ -61870,6 +62183,39 @@ async function cleanTaskWorkspace(dependencies, authority, state) {
   } catch {
     return io2(authority, "clean-task-workspace");
   }
+}
+async function removeSupersededPhaseDocuments(dependencies, authority, targetPhaseInstance) {
+  const planning = /^phase-design-([1-9][0-9]*)$/u.exec(targetPhaseInstance);
+  const target2 = targetPhaseInstance === "prd" || targetPhaseInstance === "design" ? 0 : planning === null ? NaN : Number(planning[1]);
+  if (!Number.isInteger(target2)) return Object.freeze([]);
+  const prefix = `.archflow/tasks/${authority.task_id}/`;
+  const untracked = await dependencies.runner.runNulFields({
+    argv: [
+      "ls-files",
+      "--others",
+      "--exclude-standard",
+      "-z",
+      "--",
+      `:(top,literal)${prefix}phases`
+    ],
+    operation: "git-restart-superseded-documents"
+  });
+  const removed = [];
+  for (const path2 of untracked) {
+    if (!path2.startsWith(prefix)) continue;
+    const relative7 = path2.slice(prefix.length);
+    const document2 = /^phases\/([1-9][0-9]*)\/(design|impl-notes)\.md$/u.exec(relative7);
+    if (document2 === null) continue;
+    const phase3 = Number(document2[1]);
+    const superseded = document2[2] === "impl-notes" ? phase3 >= target2 : phase3 > target2;
+    if (!superseded) continue;
+    const absolute = join7(authority.task_root, ...relative7.split("/"));
+    if (!inside(authority.task_root, absolute)) throw new TypeError("superseded document escaped its task root");
+    await unlink2(absolute).catch(() => void 0);
+    await removeEmptyParents(dirname4(absolute), join7(authority.task_root, "phases"));
+    removed.push(relative7);
+  }
+  return Object.freeze(removed.sort());
 }
 async function cleanTerminalTaskWorkspace(dependencies, authority) {
   const target2 = await cleanupTarget(dependencies, authority);
@@ -62532,6 +62878,10 @@ async function installResultFacts(dependencies, authority, current, facts, repla
 }
 async function cleanupCommittedWorkspace(dependencies, authority, committed2) {
   try {
+    const restart = (committed2.restart_history ?? []).find((record4) => record4.restarted_at_revision === committed2.revision);
+    if (restart !== void 0) {
+      await removeSupersededPhaseDocuments(dependencies, authority, restart.target_phase_instance);
+    }
     await cleanTaskWorkspace(dependencies, authority, committed2);
   } catch {
   }
@@ -62599,14 +62949,14 @@ async function installPlan(dependencies, request2, intentPath, current, plan, re
     }
     return io3(request2.authority, "task-state-replace");
   }
-  const observed = await dependencies.read_state(request2.authority.state);
-  if (observed.kind !== "canonical") {
-    return observed.kind === "missing" ? issue3("CONTRACT_INVALID", "transaction-outcome-ambiguous") : stateIssue2(current.value, "transaction-outcome-ambiguous");
+  const observed2 = await dependencies.read_state(request2.authority.state);
+  if (observed2.kind !== "canonical") {
+    return observed2.kind === "missing" ? issue3("CONTRACT_INVALID", "transaction-outcome-ambiguous") : stateIssue2(current.value, "transaction-outcome-ambiguous");
   }
-  const committed2 = validateDurableSemantics(createCommittedIntentSubject(observed.document, plan.receipt));
+  const committed2 = validateDurableSemantics(createCommittedIntentSubject(observed2.document, plan.receipt));
   if (!committed2.ok) return committed2;
-  await cleanupCommittedWorkspace(dependencies, request2.authority, observed.document.value);
-  return outcomeResult(observed.document, plan.outcome, false);
+  await cleanupCommittedWorkspace(dependencies, request2.authority, observed2.document.value);
+  return outcomeResult(observed2.document, plan.outcome, false);
 }
 async function handleExisting(dependencies, request2, intentPath, current, receipt, onPlan) {
   const local = validateReceiptLocally(receipt);
@@ -62875,13 +63225,13 @@ function planPlanningRestart(value) {
   const input = structuredClone(value);
   const current = input.current;
   if (current.terminal !== void 0 || current.open_gate !== void 0 || input.reason.trim() === "" || !isStrictlyEarlierPlanningPhase(input.target_phase_instance, current.phase_instance)) return restartInvalid(input, "target-not-strictly-earlier-planning-phase");
-  if ((current.restart_history ?? []).some((record4) => record4.restart_id === input.restart_id)) {
+  if ((current.restart_history ?? []).some((record5) => record5.restart_id === input.restart_id)) {
     return restartInvalid(input, "restart-id-already-recorded");
   }
   const retained = current.authoritative_results.filter((reference) => comparePhaseInstances(reference.phase_instance, input.target_phase_instance) < 0);
   const superseded = current.authoritative_results.filter((reference) => comparePhaseInstances(reference.phase_instance, input.target_phase_instance) >= 0);
   const restartedAtRevision = parseSafeInteger(current.revision + 1);
-  const record3 = Object.freeze({
+  const record4 = Object.freeze({
     restart_id: input.restart_id,
     source_phase_instance: current.phase_instance,
     target_phase_instance: input.target_phase_instance,
@@ -62893,7 +63243,7 @@ function planPlanningRestart(value) {
     human_provenance: input.human_provenance
   });
   const history = Object.freeze(
-    [...current.restart_history ?? [], record3].sort((left, right) => left.restart_id.localeCompare(right.restart_id))
+    [...current.restart_history ?? [], record4].sort((left, right) => left.restart_id.localeCompare(right.restart_id))
   );
   const targetKind = decodePhaseInstance(input.target_phase_instance).kind;
   const {
@@ -62927,13 +63277,13 @@ function invalid(input, from, to) {
     })
   });
 }
-function fingerprintFailure(expected, observed) {
+function fingerprintFailure(expected, observed2) {
   return Object.freeze({
     schema_version: "1",
     ok: false,
     error: createProjectError("INPUT_FINGERPRINT_MISMATCH", {
       expected_digest: expected,
-      observed_digest: observed
+      observed_digest: observed2
     })
   });
 }
@@ -63053,7 +63403,7 @@ function pendingHumanRevisionMatches(input) {
   if (input.current.attempt !== pending.attempt) return false;
   if (input.target.status !== "succeeded") return declaration === void 0;
   if (declaration === void 0 || input.result_reference === void 0 || input.resulting_subject_digest === void 0 || input.resulting_subject_digest === pending.predecessor_subject_digest) return false;
-  return pending.evidence.every((expected) => input.current.authoritative_results.some((observed) => isDeepStrictEqual11(expected, observed)));
+  return pending.evidence.every((expected) => input.current.authoritative_results.some((observed2) => isDeepStrictEqual11(expected, observed2)));
 }
 function withResultReference(current, reference) {
   if (reference === void 0) return current;
@@ -63117,7 +63467,7 @@ function planStateTransition(value) {
   let humanRevisionHistory = preserved.human_revision_history;
   if (completingHumanRevision) {
     const declaration = input.human_revision;
-    const record3 = Object.freeze({
+    const record4 = Object.freeze({
       phase_instance: input.target.phase_instance,
       gate_id: pendingHumanRevision.gate_id,
       gate_kind: pendingHumanRevision.gate_kind,
@@ -63133,7 +63483,7 @@ function planStateTransition(value) {
       evidence: pendingHumanRevision.evidence
     });
     humanRevisionHistory = Object.freeze(
-      [...humanRevisionHistory ?? [], record3].sort((left, right) => left.gate_id.localeCompare(right.gate_id))
+      [...humanRevisionHistory ?? [], record4].sort((left, right) => left.gate_id.localeCompare(right.gate_id))
     );
   }
   const draft = Object.freeze({
@@ -63597,7 +63947,7 @@ async function assembleReviewContext(input) {
     if (input.subject.artifact.artifact_kind === "implementation-output") {
       mechanical = [
         ...await verificationTranscriptEvidence(input.runner, input.authority, input.state, input.subject),
-        ...await implementationMechanicalEvidence(input.runner, input.subject)
+        ...await implementationMechanicalEvidence(input.runner, input.subject, input.projection_plan)
       ];
     } else {
       const artifactText = decodeUtf8Strict(input.projection_bytes);
@@ -63815,11 +64165,14 @@ async function verificationTranscriptEvidence(runner, authority, state, subject)
     bytes
   )];
 }
-async function implementationMechanicalEvidence(runner, subject) {
+async function implementationMechanicalEvidence(runner, subject, projectionPlan) {
   if (subject.artifact.artifact_kind !== "implementation-output") return Object.freeze([]);
+  if (projectionPlan === void 0) {
+    return [failedMechanicalEvidence("interface-excerpt", "changed-imports")];
+  }
   const baseCommit = subject.artifact.base_commit;
   try {
-    const planEntries = subject.retained.projection_plan.entries;
+    const planEntries = projectionPlan.entries;
     const changedPaths = new Set(planEntries.map((entry) => entry.path));
     const wanted = [];
     for (const entry of planEntries) {
@@ -63912,7 +64265,7 @@ async function priorTriageEvidence(dependencies, state) {
       ...typeof recorded.revision_intent === "string" ? { revision_intent: recorded.revision_intent } : {}
     };
   });
-  const record3 = {
+  const record4 = {
     schema_version: "1",
     record_kind: "prior-triage",
     phase_instance: state.phase_instance,
@@ -63920,7 +64273,7 @@ async function priorTriageEvidence(dependencies, state) {
     coverage: "immediately preceding review round only; durable state retains one triage result per phase instance, so earlier rounds are superseded",
     dispositions
   };
-  const bytes = new TextEncoder().encode(`${JSON.stringify(record3, null, 2)}
+  const bytes = new TextEncoder().encode(`${JSON.stringify(record4, null, 2)}
 `);
   return ok15(Object.freeze([excerptContextEntry("prior-triage", "prior-round-triage", bytes)]));
 }
@@ -64031,12 +64384,7 @@ async function runCounterReview(dependencies, input) {
   if (input.producer_family !== input.envelope.subject.producer_family || input.envelope.subject.rubric_digest !== envelopeRubricDigest) {
     throw new TypeError("counter-review subject is not derived from the server-owned request");
   }
-  const route = resolveDispatchRoute(
-    input.config,
-    input.phase_kind,
-    "counter-reviewer",
-    input.producer_family
-  );
+  const route = resolveDispatchRoute(input.config, input.phase_kind, "counter-reviewer");
   const subject = Object.freeze({
     ...input.envelope.subject,
     attempt: input.authority.context.attempt
@@ -64056,7 +64404,7 @@ async function runCounterReview(dependencies, input) {
       })
     };
   }
-  const observed = mintReviewObservation({
+  const observed2 = mintReviewObservation({
     subject,
     adapter: route.adapter,
     cli_version: dispatched.cli_version,
@@ -64065,7 +64413,7 @@ async function runCounterReview(dependencies, input) {
     extracted_output_bytes: dispatched.extracted_output_bytes
   });
   const prepared = await dependencies.prepare_evidence(
-    observed.evidence,
+    observed2.evidence,
     input.measured_at_revision
   );
   if (!prepared.ok) return prepared;
@@ -64073,14 +64421,9 @@ async function runCounterReview(dependencies, input) {
   let constitutionPrepared;
   const plan = input.constitution;
   if (plan !== void 0) {
-    const derivedSet = deriveEvidenceSetFromCounter(observed.evidence);
+    const derivedSet = deriveEvidenceSetFromCounter(observed2.evidence);
     const setDigest = derivedSet.current_evidence_set.set_digest;
-    const constitutionRoute = resolveDispatchRoute(
-      input.config,
-      input.phase_kind,
-      "adjudicator",
-      input.producer_family
-    );
+    const constitutionRoute = resolveDispatchRoute(input.config, input.phase_kind, "adjudicator");
     const constitutionSubject = Object.freeze({
       task_id: input.envelope.subject.task_id,
       phase_instance: input.envelope.subject.phase_instance,
@@ -64162,7 +64505,7 @@ async function runCounterReview(dependencies, input) {
       task_id: input.authority.task_id,
       intent_id: input.call.input.intent_id,
       request_digest: identified.request_digest,
-      review_evidence: observed.evidence,
+      review_evidence: observed2.evidence,
       constitution_evidence: summarizedConstitution,
       result_reference: prepared.value.reference,
       result_installation: installation,
@@ -64176,7 +64519,7 @@ async function runCounterReview(dependencies, input) {
     ok: true,
     value: Object.freeze({
       transaction: committed2.value,
-      evidence: observed.evidence,
+      evidence: observed2.evidence,
       ...constitutionEvidence === void 0 ? {} : { constitution_evidence: constitutionEvidence }
     })
   };
@@ -64496,6 +64839,7 @@ async function waitForGateInterface(input) {
 }
 
 // src/state/gate-decision-interface.ts
+import { randomUUID as randomUUID3 } from "node:crypto";
 import { isDeepStrictEqual as isDeepStrictEqual12 } from "node:util";
 var TEMPLATE_REASON = "Record the human decision reason.";
 var TEMPLATE_RATIONALE = "Record the human decision rationale.";
@@ -64619,7 +64963,7 @@ var OPTION_COPY = Object.freeze({
   abort: Object.freeze({ token: "stop-work", label: "Stop this work", consequence: "End this workflow path without approval." }),
   "revert-edit": Object.freeze({ token: "undo-policy-change", label: "Undo the policy edit", consequence: "Restore the policy version this task originally reviewed against." }),
   "start-base-amendment": Object.freeze({ token: "update-project-policy", label: "Update the project policy", consequence: "Move the policy change into the project baseline before continuing this task." }),
-  "authorize-commit": Object.freeze({ token: "authorize-commit", label: "Authorize the commit", consequence: "Permit ArchFlow to commit the exact reviewed changes after the required final confirmation." }),
+  "authorize-commit": Object.freeze({ token: "authorize-commit", label: "Authorize the commit", consequence: "Permit ArchFlow to commit the exact reviewed changes; this is the final human confirmation." }),
   "discard-and-restore": Object.freeze({ token: "restore-saved-version", label: "Restore the saved version", consequence: "Discard the conflicting workspace copy and reconstruct it from durable authority." }),
   "adopt-as-new-generation": Object.freeze({ token: "keep-current-version", label: "Keep the current version", consequence: "Treat the current workspace copy as a new generation of the artifact." }),
   "accept-import-audit": Object.freeze({ token: "accept-import", label: "Accept the import", consequence: "Confirm that the imported task faithfully represents the legacy source and continue." }),
@@ -64693,18 +65037,18 @@ function choiceRecord(value) {
   if (materialized === null || Array.isArray(materialized) || typeof materialized !== "object") {
     throw new TypeError("gate decision choice must be a JSON object");
   }
-  const record3 = materialized;
+  const record4 = materialized;
   const allowed = /* @__PURE__ */ new Set(["choice", "reason", "rationale", "rule", "operation"]);
-  if (Object.keys(record3).some((key) => !allowed.has(key))) {
+  if (Object.keys(record4).some((key) => !allowed.has(key))) {
     throw new TypeError("gate decision choice contains unsupported fields");
   }
-  if (typeof record3.choice !== "string" || record3.choice.trim() === "") {
+  if (typeof record4.choice !== "string" || record4.choice.trim() === "") {
     throw new TypeError("gate decision choice.choice must be a non-empty string");
   }
-  if (typeof record3.reason !== "string" || record3.reason.trim() === "") {
+  if (typeof record4.reason !== "string" || record4.reason.trim() === "") {
     throw new TypeError("gate decision choice.reason must be a non-empty string");
   }
-  return record3;
+  return record4;
 }
 function selectGateDecisionTemplate(active, value) {
   const choice = choiceRecord(value);
@@ -64772,6 +65116,127 @@ function selectGateDecisionTemplate(active, value) {
     }
   };
 }
+async function writeConnectedGateDecisionChoice(dependencies, authority, value, context2) {
+  assertInternalTransactionAuthority(authority, {
+    runner: dependencies.runner,
+    environment: dependencies.environment
+  });
+  assertAuthenticInvocationContext(context2);
+  const selected = structuredClone(choiceRecord(value));
+  const provenance2 = {
+    schema_version: "1",
+    actor_class: "human",
+    assurance: "declared-local-trace",
+    channel: "connected-host",
+    decision_event_id: randomUUID3(),
+    connection_id: context2.connection.connection_id,
+    request_id_digest: canonicalJsonDigest({
+      schema_version: "1",
+      digest_kind: "transport-request-id",
+      request_id: context2.transport_metadata.request_id
+    }),
+    recorded_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  return writeSelectedGateDecision(
+    dependencies,
+    authority,
+    (active) => selectGateDecisionTemplate(active, selected),
+    provenance2
+  );
+}
+async function writeSelectedGateDecision(dependencies, authority, select, suppliedProvenance) {
+  try {
+    await ensureIntentDirectory(authority);
+    return await dependencies.lock.runExclusive(authority.workspace_root, async () => {
+      const stateResult = await stateOrFailure(dependencies, authority);
+      if (!stateResult.ok) return stateResult;
+      const current = stateResult.value;
+      const gate = current.value.open_gate;
+      if (gate === void 0) return issue2("STATE_INVALID", current.value, "gate-interface-open-gate-missing");
+      const requestPath = await resolvePath7(
+        dependencies,
+        authority,
+        gateRequestClaim(gate.gate_id),
+        "authority-decision"
+      );
+      const activePath = await resolvePath7(dependencies, authority, "gate.json", "workspace-gate-interface");
+      const interfacePath = await resolvePath7(dependencies, authority, "gate.decision", "workspace-gate-interface");
+      if (!requestPath.ok) return requestPath;
+      if (!activePath.ok) return activePath;
+      if (!interfacePath.ok) return interfacePath;
+      const durableRequest = await readCanonical(requestPath.value, "gate request", parseGateRequest);
+      if (durableRequest === "missing" || durableRequest === "invalid") {
+        return issue2("STATE_INVALID", current.value, "active-gate-request-invalid");
+      }
+      const projected = await readCanonical(activePath.value, "active gate", parseActiveGate);
+      const active = projected === "missing" || projected === "invalid" ? parseActiveGate(activeProjection(durableRequest.value)) : projected.value;
+      if (active.task_id !== authority.task_id || active.gate_id !== gate.gate_id || active.kind !== gate.gate_kind || active.subject_digest !== gate.subject_digest || active.context_digest !== gate.context_digest) return issue2("STATE_INVALID", current.value, "active-gate-interface-mismatch");
+      if (projected === "missing" || projected === "invalid") {
+        await ensureWorkspaceProjectionParent(authority, activePath.value.absolute);
+        await dependencies.atomic.replace(activePath.value, canonicalDocument(active).bytes);
+      }
+      let selected;
+      try {
+        selected = select(active);
+      } catch {
+        return fail15(createProjectError("GATE_DECISION_INVALID", {
+          gate_id: active.gate_id,
+          gate_kind: active.kind,
+          issue_code: "decision-choice-invalid"
+        }));
+      }
+      const provenance2 = suppliedProvenance ?? {
+        schema_version: "1",
+        actor_class: "human",
+        assurance: "declared-local-trace",
+        channel: "archflow-local",
+        decision_event_id: randomUUID3(),
+        helper_invocation_id: randomUUID3(),
+        recorded_at: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      const candidate = selected !== null && typeof selected === "object" && !Array.isArray(selected) ? { ...selected, human_provenance: provenance2 } : selected;
+      try {
+        parseInterface(candidate, active);
+      } catch {
+        return fail15(createProjectError("GATE_DECISION_INVALID", {
+          gate_id: active.gate_id,
+          gate_kind: active.kind,
+          issue_code: "decision-binding-invalid"
+        }));
+      }
+      const existing = await readCanonical(interfacePath.value, "gate decision interface", (raw) => raw);
+      if (existing !== "missing" && existing !== "invalid") {
+        try {
+          const boundExisting = parseInterface(existing.value, active);
+          const boundCandidate = parseInterface(candidate, active);
+          const semantics = (record4) => record4.outcome === "decided" ? { outcome: record4.outcome, kind: record4.kind, payload: record4.envelope.payload } : record4.outcome === "waiver-decided" ? { outcome: record4.outcome, granted: record4.granted, scope: record4.scope, origin: record4.origin, notes: record4.notes } : { outcome: record4.outcome, reason: record4.reason };
+          if (canonicalJsonDigest(semantics(boundExisting)) === canonicalJsonDigest(semantics(boundCandidate))) {
+            return ok10({
+              gate_id: active.gate_id,
+              decision_path: interfacePath.value.repositoryRelative,
+              decision_digest: existing.digest
+            });
+          }
+          return fail15(createProjectError("GATE_ACTIVE", {
+            gate_id: active.gate_id,
+            gate_kind: active.kind
+          }));
+        } catch {
+        }
+      }
+      const document2 = canonicalDocument(candidate);
+      await ensureWorkspaceProjectionParent(authority, interfacePath.value.absolute);
+      await dependencies.atomic.replace(interfacePath.value, document2.bytes);
+      return ok10({
+        gate_id: active.gate_id,
+        decision_path: interfacePath.value.repositoryRelative,
+        decision_digest: document2.digest
+      });
+    });
+  } catch (error51) {
+    return error51 instanceof TaskLockError ? io(authority, `gate-lock-${error51.stage}`) : io(authority, "gate-interface-write");
+  }
+}
 
 // src/state/planned-final-phase.ts
 function plannedFinalPhaseFromDesign(bytes) {
@@ -64800,8 +65265,8 @@ function plannedFinalPhaseFromDesign(bytes) {
   }
   return phases.length;
 }
-async function loadApprovedDesignFinalPhase(dependencies, current, record3) {
-  if (record3.outcome !== "decided" || record3.kind !== "artifact-approval" && record3.kind !== "design-approval" || record3.phase_instance !== "design" || record3.envelope.payload.decision !== "approve") return ok10(void 0);
+async function loadApprovedDesignFinalPhase(dependencies, current, record4) {
+  if (record4.outcome !== "decided" || record4.kind !== "artifact-approval" && record4.kind !== "design-approval" || record4.phase_instance !== "design" || record4.envelope.payload.decision !== "approve") return ok10(void 0);
   const reference = current.authoritative_results.find((entry) => entry.phase_instance === "design" && entry.step === "produce");
   if (reference === void 0 || dependencies.load_retained_result === void 0) {
     return issue2("STATE_INVALID", current, "approved-design-result-missing");
@@ -64810,7 +65275,7 @@ async function loadApprovedDesignFinalPhase(dependencies, current, record3) {
   if (!retained.ok) return retained;
   const manifest = retained.value.prepared.manifest.value;
   const artifact = manifest.source_artifact;
-  if (artifact.artifact_kind !== "document" || artifact.phase_instance !== "design" || artifact.step !== "produce" || artifact.document_path !== "design.md" || manifest.artifact_digest !== record3.subject_digest) return issue2("STATE_INVALID", current, "approved-design-authority-mismatch");
+  if (artifact.artifact_kind !== "document" || artifact.phase_instance !== "design" || artifact.step !== "produce" || artifact.document_path !== "design.md" || manifest.artifact_digest !== record4.subject_digest) return issue2("STATE_INVALID", current, "approved-design-authority-mismatch");
   const payload = retained.value.prepared.payloads.find((candidate) => candidate.path === artifact.projection_target);
   if (payload === void 0 || sha256Bytes(payload.bytes) !== artifact.content_digest) {
     return issue2("STATE_INVALID", current, "approved-design-authority-mismatch");
@@ -64853,7 +65318,7 @@ async function authenticateWaiverOrigin(dependencies, authority, context2) {
   if (!("eligible_waivers" in requestContext) || request2.value.gate_id !== context2.origin.origin_gate_id || request2.value.context_digest !== context2.origin.origin_context_digest || request2.value.task_id !== context2.origin.task_id || request2.value.phase_instance !== context2.origin.phase_instance || request2.value.subject_digest !== context2.origin.subject_digest || request2.value.current_evidence.set_digest !== context2.origin.current_evidence_set_digest || !isDeepStrictEqual13(payload.rule, context2.origin.rule) || payload.operation !== context2.origin.scope.operation || !requestContext.eligible_waivers.some((eligible) => isDeepStrictEqual13(eligible.rule, context2.origin.rule) && isDeepStrictEqual13(eligible.scope, context2.origin.scope))) return issue2("CONTRACT_INVALID", void 0, "waiver-origin-binding-invalid");
   return ok10(void 0);
 }
-async function cleanupResolvedInterfaces(dependencies, authority, request2, record3) {
+async function cleanupResolvedInterfaces(dependencies, authority, request2, record4) {
   try {
     await ensureIntentDirectory(authority);
     return await dependencies.lock.runExclusive(authority.workspace_root, async () => {
@@ -64869,7 +65334,7 @@ async function cleanupResolvedInterfaces(dependencies, authority, request2, reco
       if (projected !== "missing" && projected !== "invalid") {
         try {
           const bound = parseInterface(projected.value, request2);
-          if (canonicalJsonDigest(bound) === canonicalJsonDigest(record3)) await dependencies.atomic.removeGateInterface(decision3.value);
+          if (canonicalJsonDigest(bound) === canonicalJsonDigest(record4)) await dependencies.atomic.removeGateInterface(decision3.value);
         } catch {
         }
       }
@@ -64905,7 +65370,7 @@ async function openDurableGate(dependencies, input) {
       if (archived !== "missing") {
         if (archived === "invalid" || requestRead === "missing" || requestRead === "invalid") return issue2("STATE_INVALID", current.value, "gate-archive-invalid");
         if (!validateDurableSemantics({ gate_request: requestRead, gate_decision: archived }).ok) return issue2("STATE_INVALID", current.value, "gate-archive-binding-invalid");
-        if (!enactsReentry(archived.value) && input.input_fingerprint !== current.value.input_fingerprint) {
+        if (!enactsReentry(archived.value) && !enactsPlanningRestart(archived.value) && input.input_fingerprint !== current.value.input_fingerprint) {
           return fail15(createProjectError("INPUT_FINGERPRINT_MISMATCH", {
             expected_digest: current.value.input_fingerprint,
             observed_digest: input.input_fingerprint
@@ -64925,8 +65390,14 @@ async function openDurableGate(dependencies, input) {
           return ok10({ gate_id: gateId, state: current, request: requestRead, replay: archived });
         }
         if (archived.value.outcome === "cancelled" && requestRead.value.intent_id === input.intent_id && requestRead.value.request_digest === input.request_digest) return ok10({ gate_id: gateId, state: current, request: requestRead, replay: archived });
-        if (enactsReentry(archived.value) && requestRead.value.intent_id === input.intent_id && requestRead.value.request_digest === input.request_digest) {
-          const replay = await validateCompletedReentry(
+        if ((enactsReentry(archived.value) || enactsPlanningRestart(archived.value)) && requestRead.value.intent_id === input.intent_id && requestRead.value.request_digest === input.request_digest) {
+          const replay = enactsPlanningRestart(archived.value) ? await validateCompletedPlanningRestart(
+            dependencies,
+            input.authority,
+            current,
+            requestRead.value,
+            archived.value
+          ) : await validateCompletedReentry(
             dependencies,
             input.authority,
             current,
@@ -65082,16 +65553,16 @@ async function openDurableGate(dependencies, input) {
     return error51 instanceof TaskLockError ? io(input.authority, `gate-lock-${error51.stage}`) : io(input.authority, "gate-open");
   }
 }
-function nextStateForRecord(state, record3, digest10, plannedFinalPhase) {
+function nextStateForRecord(state, record4, digest10, plannedFinalPhase) {
   const revision = parseSafeInteger(state.revision + 1);
   const approvals = [...state.approvals];
   const waivers = [...state.waivers];
-  if (record3.outcome === "decided" && gateDecisionEffect(record3.envelope.payload) === "advance") {
-    approvals.push({ gate_id: record3.gate_id, gate_kind: record3.kind, subject_digest: record3.subject_digest, decision_digest: digest10, resolved_at_revision: revision });
+  if (record4.outcome === "decided" && gateDecisionEffect(record4.envelope.payload) === "advance") {
+    approvals.push({ gate_id: record4.gate_id, gate_kind: record4.kind, subject_digest: record4.subject_digest, decision_digest: digest10, resolved_at_revision: revision });
     approvals.sort((a, b) => a.gate_id.localeCompare(b.gate_id));
   }
-  if (record3.outcome === "waiver-decided") {
-    waivers.push({ gate_id: record3.gate_id, rule_id: record3.origin.rule.rule_id, rule_version: record3.origin.rule.rule_version, subject_digest: record3.origin.subject_digest, scope: record3.scope, granted: record3.granted, expires: "task-complete", granted_at_revision: revision });
+  if (record4.outcome === "waiver-decided") {
+    waivers.push({ gate_id: record4.gate_id, rule_id: record4.origin.rule.rule_id, rule_version: record4.origin.rule.rule_version, subject_digest: record4.origin.subject_digest, scope: record4.scope, granted: record4.granted, expires: "task-complete", granted_at_revision: revision });
     waivers.sort((a, b) => a.gate_id.localeCompare(b.gate_id));
   }
   const { open_gate: _open, last_transition: _transition, ...base2 } = state;
@@ -65099,15 +65570,18 @@ function nextStateForRecord(state, record3, digest10, plannedFinalPhase) {
   const preserved = plannedFinalPhase === void 0 ? { ...withoutPlannedFinalPhase, ...existingPlannedFinalPhase === void 0 ? {} : { planned_final_phase: existingPlannedFinalPhase } } : { ...withoutPlannedFinalPhase, ...plannedFinalPhase === null ? {} : { planned_final_phase: parseSafeInteger(plannedFinalPhase) } };
   return canonicalDocument({ ...preserved, revision, approvals, waivers });
 }
-function enactsReentry(record3) {
-  if (record3.outcome !== "decided") return false;
-  const decision3 = record3.envelope.payload.decision;
-  return record3.kind === "artifact-approval" && decision3 === "revise" || record3.kind === "design-approval" && decision3 === "revise" || record3.kind === "constitution-review" && decision3 === "revise" || record3.kind === "material-drift" && decision3 === "revise-current" || record3.kind === "attempts-exhausted" && (decision3 === "retry-once" || decision3 === "revise") || record3.kind === "commit-authorization" && decision3 === "revise" || record3.kind === "migration-audit" && decision3 === "revise";
+function enactsReentry(record4) {
+  if (record4.outcome !== "decided") return false;
+  const decision3 = record4.envelope.payload.decision;
+  return record4.kind === "artifact-approval" && decision3 === "revise" || record4.kind === "design-approval" && decision3 === "revise" || record4.kind === "constitution-review" && decision3 === "revise" || record4.kind === "material-drift" && decision3 === "revise-current" || record4.kind === "attempts-exhausted" && (decision3 === "retry-once" || decision3 === "revise") || record4.kind === "commit-authorization" && decision3 === "revise" || record4.kind === "migration-audit" && decision3 === "revise";
 }
-function beginsHumanRevision(record3) {
-  if (record3.outcome !== "decided") return false;
-  const decision3 = record3.envelope.payload.decision;
-  return record3.kind === "artifact-approval" && decision3 === "revise" || record3.kind === "design-approval" && decision3 === "revise" || record3.kind === "constitution-review" && decision3 === "revise" || record3.kind === "material-drift" && decision3 === "revise-current" || record3.kind === "attempts-exhausted" && decision3 === "revise" || record3.kind === "commit-authorization" && decision3 === "revise" || record3.kind === "migration-audit" && decision3 === "revise";
+function beginsHumanRevision(record4) {
+  if (record4.outcome !== "decided") return false;
+  const decision3 = record4.envelope.payload.decision;
+  return record4.kind === "artifact-approval" && decision3 === "revise" || record4.kind === "design-approval" && decision3 === "revise" || record4.kind === "constitution-review" && decision3 === "revise" || record4.kind === "material-drift" && decision3 === "revise-current" || record4.kind === "attempts-exhausted" && decision3 === "revise" || record4.kind === "commit-authorization" && decision3 === "revise" || record4.kind === "migration-audit" && decision3 === "revise";
+}
+function enactsPlanningRestart(record4) {
+  return record4.outcome === "decided" && record4.kind === "material-drift" && record4.envelope.payload.decision === "amend-upstream";
 }
 function exactOpenGateMatches(state, request2) {
   const open6 = state.open_gate;
@@ -65115,18 +65589,18 @@ function exactOpenGateMatches(state, request2) {
   const { open_gate: _open, last_transition: _transition, ...base2 } = state;
   return open6.frozen_state_digest === openGateFrozenStateDigest(base2);
 }
-function completedMaterialDriftRestartMatches(state, request2, record3) {
-  if (request2.kind !== "material-drift" || record3.outcome !== "decided" || record3.kind !== "material-drift" || record3.envelope.payload.decision !== "amend-upstream") return false;
-  const restart = state.restart_history?.find((entry) => entry.restart_id === record3.gate_id);
-  return restart !== void 0 && restart.source_phase_instance === request2.phase_instance && restart.target_phase_instance === state.phase_instance && restart.reason === record3.envelope.payload.reason && restart.restarted_at_revision === request2.opened_at_revision + 1 && state.revision >= restart.restarted_at_revision && isDeepStrictEqual13(restart.human_provenance, record3.envelope.human_provenance);
+function completedMaterialDriftRestartMatches(state, request2, record4) {
+  if (request2.kind !== "material-drift" || record4.outcome !== "decided" || record4.kind !== "material-drift" || record4.envelope.payload.decision !== "amend-upstream") return false;
+  const restart = state.restart_history?.find((entry) => entry.restart_id === record4.gate_id);
+  return restart !== void 0 && restart.source_phase_instance === request2.phase_instance && restart.target_phase_instance === state.phase_instance && restart.reason === record4.envelope.payload.reason && restart.restarted_at_revision === request2.opened_at_revision + 1 && state.revision >= restart.restarted_at_revision && isDeepStrictEqual13(restart.human_provenance, record4.envelope.human_provenance);
 }
 function uniqueMaterialDriftUpstream(subjects, affectedDigest) {
   const matching = subjects.filter((subject) => subject.artifact_digest === affectedDigest);
   const phases = new Set(matching.map((subject) => subject.artifact.phase_instance));
   return phases.size === 1 ? matching[0] : void 0;
 }
-async function planGateAuthorizedReentry(dependencies, authority, current, request2, record3) {
-  if (!enactsReentry(record3)) throw new TypeError("gate record does not authorize re-entry");
+async function planGateAuthorizedReentry(dependencies, authority, current, request2, record4) {
+  if (!enactsReentry(record4)) throw new TypeError("gate record does not authorize re-entry");
   if (!exactOpenGateMatches(current.value, request2)) {
     return issue2("STATE_INVALID", current.value, "gate-reentry-predecessor-mismatch");
   }
@@ -65150,11 +65624,11 @@ async function planGateAuthorizedReentry(dependencies, authority, current, reque
       phase_instance: current.value.phase_instance,
       step: "produce",
       status: "running",
-      attempt: beginsHumanRevision(record3) ? current.value.attempt : parseSafeInteger(current.value.attempt + 1),
+      attempt: beginsHumanRevision(record4) ? current.value.attempt : parseSafeInteger(current.value.attempt + 1),
       input_fingerprint: fingerprint.value
     },
     recomputed_input_fingerprint: fingerprint.value,
-    human_revision_reentry: beginsHumanRevision(record3)
+    human_revision_reentry: beginsHumanRevision(record4)
   });
   if (!transition.ok) return transition;
   const revision = parseSafeInteger(current.value.revision + 1);
@@ -65162,11 +65636,11 @@ async function planGateAuthorizedReentry(dependencies, authority, current, reque
   return ok10(canonicalDocument({
     ...transition.value,
     revision,
-    ...beginsHumanRevision(record3) ? {
+    ...beginsHumanRevision(record4) ? {
       pending_human_revision: {
-        gate_id: record3.gate_id,
-        gate_kind: record3.kind,
-        predecessor_subject_digest: record3.subject_digest,
+        gate_id: record4.gate_id,
+        gate_kind: record4.kind,
+        predecessor_subject_digest: record4.subject_digest,
         predecessor_input_fingerprint: current.value.input_fingerprint,
         requested_at_revision: revision,
         attempt: current.value.attempt,
@@ -65175,8 +65649,8 @@ async function planGateAuthorizedReentry(dependencies, authority, current, reque
     } : {}
   }));
 }
-async function closedStateForRecord(dependencies, authority, current, request2, record3, digest10) {
-  if (record3.outcome === "decided" && record3.kind === "material-drift" && record3.envelope.payload.decision === "amend-upstream" && request2.kind === "material-drift") {
+async function closedStateForRecord(dependencies, authority, current, request2, record4, digest10) {
+  if (record4.outcome === "decided" && record4.kind === "material-drift" && record4.envelope.payload.decision === "amend-upstream" && request2.kind === "material-drift") {
     if (!exactOpenGateMatches(current.value, request2)) {
       return issue2("STATE_INVALID", current.value, "material-drift-restart-predecessor-mismatch");
     }
@@ -65190,11 +65664,11 @@ async function closedStateForRecord(dependencies, authority, current, request2, 
     if (upstream === void 0) {
       return issue2("STATE_INVALID", current.value, "material-drift-upstream-subject-unavailable");
     }
-    if (record3.envelope.human_provenance.actor_class !== "human") {
+    if (record4.envelope.human_provenance.actor_class !== "human") {
       return issue2("STATE_INVALID", current.value, "material-drift-restart-human-provenance-required");
     }
     const humanProvenance = planningRestartHumanProvenanceV1Schema.safeParse(
-      record3.envelope.human_provenance
+      record4.envelope.human_provenance
     );
     if (!humanProvenance.success) {
       return issue2("STATE_INVALID", current.value, "material-drift-restart-human-provenance-required");
@@ -65207,7 +65681,7 @@ async function closedStateForRecord(dependencies, authority, current, request2, 
     const targetCall = parseToolCall("archflow_state", {
       schema_version: "1",
       task_id: authority.task_id,
-      intent_id: record3.gate_id,
+      intent_id: record4.gate_id,
       expected_revision: current.value.revision,
       input_fingerprint: current.value.input_fingerprint,
       phase_instance: targetPhase,
@@ -65226,18 +65700,18 @@ async function closedStateForRecord(dependencies, authority, current, request2, 
     const fingerprint = computeInputFingerprint(fingerprintSubject.value);
     const planned = planPlanningRestart({
       current: restartPredecessor,
-      restart_id: record3.gate_id,
+      restart_id: record4.gate_id,
       target_phase_instance: targetPhase,
-      reason: record3.envelope.payload.reason,
+      reason: record4.envelope.payload.reason,
       recomputed_input_fingerprint: fingerprint,
       human_provenance: humanProvenance.data
     });
     return planned.ok ? ok10(canonicalDocument({ ...planned.value, revision: parseSafeInteger(current.value.revision + 1) })) : planned;
   }
-  if (enactsReentry(record3)) {
-    return planGateAuthorizedReentry(dependencies, authority, current, request2, record3);
+  if (enactsReentry(record4)) {
+    return planGateAuthorizedReentry(dependencies, authority, current, request2, record4);
   }
-  if (record3.outcome === "decided" && record3.kind === "design-approval" && record3.envelope.payload.decision === "approve" && request2.kind === "design-approval") {
+  if (record4.outcome === "decided" && record4.kind === "design-approval" && record4.envelope.payload.decision === "approve" && request2.kind === "design-approval") {
     const symbolicRef = await dependencies.runner.runText({
       argv: ["symbolic-ref", "--quiet", "HEAD"],
       operation: parseSafeCode("git-design-approval-target"),
@@ -65247,7 +65721,7 @@ async function closedStateForRecord(dependencies, authority, current, request2, 
       return issue2("STATE_INVALID", current.value, "design-approval-git-target-changed");
     }
   }
-  if (record3.outcome === "decided" && record3.kind === "migration-audit" && record3.envelope.payload.decision === "accept-import-audit" && request2.kind === "migration-audit") {
+  if (record4.outcome === "decided" && record4.kind === "migration-audit" && record4.envelope.payload.decision === "accept-import-audit" && request2.kind === "migration-audit") {
     if (request2.context.target_ref === void 0 || request2.context.baseline_commit === void 0) {
       return issue2("STATE_INVALID", current.value, "migration-audit-commit-authority-missing");
     }
@@ -65260,16 +65734,16 @@ async function closedStateForRecord(dependencies, authority, current, request2, 
       return issue2("STATE_INVALID", current.value, "migration-audit-git-target-changed");
     }
   }
-  const plannedFinalPhase = await loadApprovedDesignFinalPhase(dependencies, current.value, record3);
-  if (plannedFinalPhase.ok && plannedFinalPhase.value === void 0 && record3.outcome === "decided" && record3.kind === "migration-audit" && record3.envelope.payload.decision === "accept-import-audit" && request2.kind === "migration-audit" && request2.context.planned_final_phase !== void 0) {
-    return ok10(nextStateForRecord(current.value, record3, digest10, request2.context.planned_final_phase));
+  const plannedFinalPhase = await loadApprovedDesignFinalPhase(dependencies, current.value, record4);
+  if (plannedFinalPhase.ok && plannedFinalPhase.value === void 0 && record4.outcome === "decided" && record4.kind === "migration-audit" && record4.envelope.payload.decision === "accept-import-audit" && request2.kind === "migration-audit" && request2.context.planned_final_phase !== void 0) {
+    return ok10(nextStateForRecord(current.value, record4, digest10, request2.context.planned_final_phase));
   }
-  return plannedFinalPhase.ok ? ok10(nextStateForRecord(current.value, record3, digest10, plannedFinalPhase.value)) : plannedFinalPhase;
+  return plannedFinalPhase.ok ? ok10(nextStateForRecord(current.value, record4, digest10, plannedFinalPhase.value)) : plannedFinalPhase;
 }
-async function validateCompletedReentry(dependencies, authority, current, request2, record3) {
-  if (!enactsReentry(record3) || current.value.revision <= request2.opened_at_revision) return issue2("STATE_INVALID", current.value, "gate-reentry-replay-state-mismatch");
+async function validateCompletedReentry(dependencies, authority, current, request2, record4) {
+  if (!enactsReentry(record4) || current.value.revision <= request2.opened_at_revision) return issue2("STATE_INVALID", current.value, "gate-reentry-replay-state-mismatch");
   if (current.value.revision > request2.opened_at_revision + 1) return ok10(void 0);
-  if (current.value.phase_instance !== request2.phase_instance || current.value.step !== "produce" || current.value.status !== "running" || request2.kind === "attempts-exhausted" && current.value.attempt !== (beginsHumanRevision(record3) ? request2.context.attempts : request2.context.attempts + 1) || beginsHumanRevision(record3) && (current.value.pending_human_revision?.gate_id !== record3.gate_id || current.value.pending_human_revision.attempt !== current.value.attempt)) return issue2("STATE_INVALID", current.value, "gate-reentry-replay-state-mismatch");
+  if (current.value.phase_instance !== request2.phase_instance || current.value.step !== "produce" || current.value.status !== "running" || request2.kind === "attempts-exhausted" && current.value.attempt !== (beginsHumanRevision(record4) ? request2.context.attempts : request2.context.attempts + 1) || beginsHumanRevision(record4) && (current.value.pending_human_revision?.gate_id !== record4.gate_id || current.value.pending_human_revision.attempt !== current.value.attempt)) return issue2("STATE_INVALID", current.value, "gate-reentry-replay-state-mismatch");
   if (dependencies.resolve_gate_reentry_fingerprint === void 0) {
     return issue2("STATE_INVALID", current.value, "gate-reentry-fingerprint-unavailable");
   }
@@ -65281,44 +65755,66 @@ async function validateCompletedReentry(dependencies, authority, current, reques
   if (!fingerprint.ok) return fingerprint;
   return current.value.input_fingerprint === fingerprint.value ? ok10(void 0) : issue2("STATE_INVALID", current.value, "gate-reentry-replay-fingerprint-mismatch");
 }
-function earnsReceipt(record3) {
-  return record3.outcome === "decided" ? gateDecisionEffect(record3.envelope.payload) === "advance" : record3.outcome === "waiver-decided" && record3.granted;
+async function validateCompletedPlanningRestart(dependencies, authority, current, request2, record4) {
+  if (!enactsPlanningRestart(record4) || current.value.revision <= request2.opened_at_revision) {
+    return issue2("STATE_INVALID", current.value, "gate-restart-replay-state-mismatch");
+  }
+  const restart = current.value.restart_history?.find((entry) => entry.restart_id === record4.gate_id);
+  if (restart === void 0 || restart.source_phase_instance !== request2.phase_instance) {
+    return issue2("STATE_INVALID", current.value, "gate-restart-replay-state-mismatch");
+  }
+  if (current.value.revision > request2.opened_at_revision + 1) return ok10(void 0);
+  if (current.value.phase_instance !== restart.target_phase_instance || current.value.step !== "produce" || current.value.status !== "running" || current.value.attempt !== 1) return issue2("STATE_INVALID", current.value, "gate-restart-replay-state-mismatch");
+  if (dependencies.resolve_gate_reentry_fingerprint === void 0) {
+    return issue2("STATE_INVALID", current.value, "gate-reentry-fingerprint-unavailable");
+  }
+  const fingerprint = await dependencies.resolve_gate_reentry_fingerprint({
+    authority,
+    request: request2,
+    current,
+    target_phase_instance: restart.target_phase_instance
+  });
+  if (!fingerprint.ok) return fingerprint;
+  return current.value.input_fingerprint === fingerprint.value ? ok10(void 0) : issue2("STATE_INVALID", current.value, "gate-restart-replay-fingerprint-mismatch");
 }
-function receiptOutcome(record3, revision) {
-  if (record3.outcome === "decided") return {
-    kind: record3.kind,
-    decision: record3.envelope,
-    notes: record3.envelope.payload.reason,
+function earnsReceipt(record4) {
+  return record4.outcome === "decided" ? gateDecisionEffect(record4.envelope.payload) === "advance" : record4.outcome === "waiver-decided" && record4.granted;
+}
+function receiptOutcome(record4, revision) {
+  if (record4.outcome === "decided") return {
+    kind: record4.kind,
+    decision: record4.envelope,
+    notes: record4.envelope.payload.reason,
     revision
   };
-  if (record3.outcome === "waiver-decided") return {
-    origin_gate_id: record3.origin.origin_gate_id,
-    waiver_gate_id: record3.gate_id,
-    task_id: record3.task_id,
-    rule_id: record3.origin.rule.rule_id,
-    rule_version: record3.origin.rule.rule_version,
-    subject_digest: record3.origin.subject_digest,
-    current_evidence_set_digest: record3.origin.current_evidence_set_digest,
-    scope: record3.scope,
-    human_provenance: record3.human_provenance,
-    granted: record3.granted,
-    ...record3.granted ? { expires: "task-complete" } : {},
-    notes: record3.notes,
+  if (record4.outcome === "waiver-decided") return {
+    origin_gate_id: record4.origin.origin_gate_id,
+    waiver_gate_id: record4.gate_id,
+    task_id: record4.task_id,
+    rule_id: record4.origin.rule.rule_id,
+    rule_version: record4.origin.rule.rule_version,
+    subject_digest: record4.origin.subject_digest,
+    current_evidence_set_digest: record4.origin.current_evidence_set_digest,
+    scope: record4.scope,
+    human_provenance: record4.human_provenance,
+    granted: record4.granted,
+    ...record4.granted ? { expires: "task-complete" } : {},
+    notes: record4.notes,
     revision
   };
   throw new TypeError("non-success gate record has no receipt outcome");
 }
-function withGateTransition(authority, request2, record3, predecessor, prepared, inputFingerprint) {
-  if (record3.outcome === "cancelled") return ok10(prepared);
-  const outcome = receiptOutcome(record3, prepared.value.revision);
+function withGateTransition(authority, request2, record4, predecessor, prepared, inputFingerprint) {
+  if (record4.outcome === "cancelled") return ok10(prepared);
+  const outcome = receiptOutcome(record4, prepared.value.revision);
   const transition = {
     schema_version: "1",
-    tool: record3.outcome === "waiver-decided" ? "archflow_waiver" : "archflow_gate",
-    operation: parseSafeCode(record3.outcome === "waiver-decided" ? "waiver" : "gate"),
+    tool: record4.outcome === "waiver-decided" ? "archflow_waiver" : "archflow_gate",
+    operation: parseSafeCode(record4.outcome === "waiver-decided" ? "waiver" : "gate"),
     intent_id: request2.intent_id,
     request_digest: request2.request_digest,
     input_fingerprint: inputFingerprint,
-    result_id: parseSafeId(record3.gate_id),
+    result_id: parseSafeId(record4.gate_id),
     outcome,
     outcome_digest: intentOutcomeDigest(outcome),
     prior_revision: predecessor.value.revision,
@@ -65327,7 +65823,7 @@ function withGateTransition(authority, request2, record3, predecessor, prepared,
   const final = canonicalDocument({ ...prepared.value, last_transition: transition });
   return validateDurableSemantics({ state: final }).ok ? ok10(final) : issue2("STATE_INVALID", predecessor.value, "gate-transition-invalid");
 }
-async function installReceipt(dependencies, authority, request2, record3, predecessor, prepared, inputFingerprint) {
+async function installReceipt(dependencies, authority, request2, record4, predecessor, prepared, inputFingerprint) {
   await ensureIntentDirectory(authority);
   const target2 = await resolveTaskWorkspacePath({
     runner: dependencies.runner,
@@ -65337,19 +65833,19 @@ async function installReceipt(dependencies, authority, request2, record3, predec
     context: authority.context
   });
   if (!target2.ok) return target2;
-  const outcome = receiptOutcome(record3, prepared.value.revision);
+  const outcome = receiptOutcome(record4, prepared.value.revision);
   const receipt = canonicalDocument(parseIntentReceipt({
     schema_version: "1",
     intent_id: request2.intent_id,
     task_id: request2.task_id,
     repository_identity_digest: authority.repository_identity_digest,
-    tool: record3.outcome === "waiver-decided" ? "archflow_waiver" : "archflow_gate",
-    operation: parseSafeCode(record3.outcome === "waiver-decided" ? "waiver" : "gate"),
+    tool: record4.outcome === "waiver-decided" ? "archflow_waiver" : "archflow_gate",
+    operation: parseSafeCode(record4.outcome === "waiver-decided" ? "waiver" : "gate"),
     request_digest: request2.request_digest,
     input_fingerprint: inputFingerprint,
     prior_revision: parseSafeInteger(prepared.value.revision - 1),
     resulting_revision: prepared.value.revision,
-    result_id: parseSafeId(record3.gate_id),
+    result_id: parseSafeId(record4.gate_id),
     outcome_digest: intentOutcomeDigest(outcome),
     outcome,
     prepared_state_digest: prepared.digest,
@@ -65404,14 +65900,14 @@ function legacyLocalDecisionSettlementOperationDigest(request2, decision3) {
     gate_decision_digest: decision3.digest
   });
 }
-function directSemanticRevisionEntryRequestDigest(operationDigest, checkpointRequestDigest, request2, record3, inputFingerprint) {
+function directSemanticRevisionEntryRequestDigest(operationDigest, checkpointRequestDigest, request2, record4, inputFingerprint) {
   return canonicalJsonDigest({
     schema_version: "1",
     digest_kind: "direct-semantic-revision-entry",
     operation_digest: operationDigest,
     checkpoint_request_digest: checkpointRequestDigest,
     gate_request_digest: request2.digest,
-    gate_decision_digest: record3.digest,
+    gate_decision_digest: record4.digest,
     input_fingerprint: inputFingerprint
   });
 }
@@ -65524,18 +66020,18 @@ async function settleDirectReentryCheckpoint(dependencies, input) {
       if (!requestPath.ok) return requestPath;
       if (!archivePath.ok) return archivePath;
       const request2 = await readCanonical(requestPath.value, "gate request", parseGateRequest);
-      const record3 = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
-      if (request2 === "missing" || request2 === "invalid" || record3 === "missing" || record3 === "invalid" || !validateDurableSemantics({ gate_request: request2, gate_decision: record3 }).ok || !exactOpenGateMatches(current.value, request2.value) || !enactsReentry(record3.value)) {
+      const record4 = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
+      if (request2 === "missing" || request2 === "invalid" || record4 === "missing" || record4 === "invalid" || !validateDurableSemantics({ gate_request: request2, gate_decision: record4 }).ok || !exactOpenGateMatches(current.value, request2.value) || !enactsReentry(record4.value)) {
         return issue2("STATE_INVALID", current.value, "direct-decision-reentry-authority-invalid");
       }
-      const provenance2 = record3.value.outcome === "decided" ? record3.value.envelope.human_provenance : record3.value.human_provenance;
-      const operationMatches = provenance2.channel === "connected-host" ? provenance2.decision_event_id === `afdecision-${input.operation_digest}` : input.operation_digest === legacyLocalDecisionSettlementOperationDigest(request2, record3);
+      const provenance2 = record4.value.outcome === "decided" ? record4.value.envelope.human_provenance : record4.value.human_provenance;
+      const operationMatches = provenance2.channel === "connected-host" ? provenance2.decision_event_id === `afdecision-${input.operation_digest}` : input.operation_digest === legacyLocalDecisionSettlementOperationDigest(request2, record4);
       if (!operationMatches) {
         return issue2("STATE_INVALID", current.value, "direct-decision-operation-mismatch");
       }
       const revision = parseSafeInteger(current.value.revision + 1);
-      const outcome = receiptOutcome(record3.value, revision);
-      const requestDigest = directSemanticDecisionRequestDigest(input.operation_digest, request2, record3);
+      const outcome = receiptOutcome(record4.value, revision);
+      const requestDigest = directSemanticDecisionRequestDigest(input.operation_digest, request2, record4);
       const { open_gate: _open, last_transition: _transition, ...base2 } = current.value;
       const checkpoint = canonicalDocument({
         ...base2,
@@ -65547,7 +66043,7 @@ async function settleDirectReentryCheckpoint(dependencies, input) {
           intent_id: input.intent_id,
           request_digest: requestDigest,
           input_fingerprint: current.value.input_fingerprint,
-          result_id: parseSafeId(record3.value.gate_id),
+          result_id: parseSafeId(record4.value.gate_id),
           outcome,
           outcome_digest: intentOutcomeDigest(outcome),
           prior_revision: current.value.revision,
@@ -65559,7 +66055,7 @@ async function settleDirectReentryCheckpoint(dependencies, input) {
       }
       await dependencies.atomic.replace(input.authority.state, checkpoint.bytes);
       await cleanupCommittedGateWorkspace(dependencies, input.authority, checkpoint.value);
-      return ok10({ state: checkpoint, record: record3, effect: "retry", replayed: false });
+      return ok10({ state: checkpoint, record: record4, effect: "retry", replayed: false });
     });
   } catch (error51) {
     return error51 instanceof TaskLockError ? io(input.authority, `direct-decision-settle-lock-${error51.stage}`) : io(input.authority, "direct-decision-settle");
@@ -65589,22 +66085,22 @@ async function settleDirectSemanticGateDecision(dependencies, input) {
     if (!requestPath.ok) return requestPath;
     if (!archivePath2.ok) return archivePath2;
     const request2 = await readCanonical(requestPath.value, "gate request", parseGateRequest);
-    const record4 = await readCanonical(archivePath2.value, "gate decision record", parseGateDecisionRecord);
-    if (request2 === "missing" || request2 === "invalid" || record4 === "missing" || record4 === "invalid" || !enactsReentry(record4.value) || !validateDurableSemantics({ gate_request: request2, gate_decision: record4 }).ok || transition.request_digest !== directSemanticDecisionRequestDigest(input.operation_digest, request2, record4) || transition.outcome_digest !== intentOutcomeDigest(transition.outcome)) {
+    const record5 = await readCanonical(archivePath2.value, "gate decision record", parseGateDecisionRecord);
+    if (request2 === "missing" || request2 === "invalid" || record5 === "missing" || record5 === "invalid" || !enactsReentry(record5.value) || !validateDurableSemantics({ gate_request: request2, gate_decision: record5 }).ok || transition.request_digest !== directSemanticDecisionRequestDigest(input.operation_digest, request2, record5) || transition.outcome_digest !== intentOutcomeDigest(transition.outcome)) {
       return issue2("STATE_INVALID", currentResult.value.value, "direct-decision-checkpoint-invalid");
     }
-    return ok10({ state: currentResult.value, record: record4, effect: "retry", replayed: true });
+    return ok10({ state: currentResult.value, record: record5, effect: "retry", replayed: true });
   }
   const archivePath = await resolvePath7(dependencies, input.authority, gateDecisionClaim(open6.gate_id), "authority-decision");
   if (!archivePath.ok) return archivePath;
-  const record3 = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
-  if (record3 === "missing" || record3 === "invalid") return issue2("STATE_INVALID", currentResult.value.value, "direct-decision-archive-invalid");
-  const provenance2 = record3.value.outcome === "decided" ? record3.value.envelope.human_provenance : record3.value.human_provenance;
+  const record4 = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
+  if (record4 === "missing" || record4 === "invalid") return issue2("STATE_INVALID", currentResult.value.value, "direct-decision-archive-invalid");
+  const provenance2 = record4.value.outcome === "decided" ? record4.value.envelope.human_provenance : record4.value.human_provenance;
   if (provenance2?.channel === "connected-host" && provenance2.decision_event_id !== `afdecision-${input.operation_digest}`) {
     return issue2("STATE_INVALID", currentResult.value.value, "direct-decision-operation-mismatch");
   }
-  if (enactsReentry(record3.value)) return settleDirectReentryCheckpoint(dependencies, input);
-  return earnsReceipt(record3.value) ? resolveAdvancingGate(dependencies, input.authority, open6.gate_id, currentResult.value.value.input_fingerprint) : resolveDurableGate(dependencies, input.authority, open6.gate_id, currentResult.value.value.input_fingerprint);
+  if (enactsReentry(record4.value)) return settleDirectReentryCheckpoint(dependencies, input);
+  return earnsReceipt(record4.value) ? resolveAdvancingGate(dependencies, input.authority, open6.gate_id, currentResult.value.value.input_fingerprint) : resolveDurableGate(dependencies, input.authority, open6.gate_id, currentResult.value.value.input_fingerprint);
 }
 async function enterDirectSemanticRevisionCheckpoint(dependencies, input) {
   assertInternalTransactionAuthority(input.authority, { runner: dependencies.runner, environment: dependencies.environment });
@@ -65659,17 +66155,17 @@ async function enterDirectSemanticRevisionCheckpoint(dependencies, input) {
       if (!requestPath.ok) return requestPath;
       if (!archivePath.ok) return archivePath;
       const request2 = await readCanonical(requestPath.value, "gate request", parseGateRequest);
-      const record3 = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
-      if (request2 === "missing" || request2 === "invalid" || record3 === "missing" || record3 === "invalid" || !enactsReentry(record3.value) || !validateDurableSemantics({ gate_request: request2, gate_decision: record3 }).ok || request2.value.task_id !== current.value.task_id || request2.value.phase_instance !== current.value.phase_instance || request2.value.opened_at_revision + 1 !== current.value.revision) {
+      const record4 = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
+      if (request2 === "missing" || request2 === "invalid" || record4 === "missing" || record4 === "invalid" || !enactsReentry(record4.value) || !validateDurableSemantics({ gate_request: request2, gate_decision: record4 }).ok || request2.value.task_id !== current.value.task_id || request2.value.phase_instance !== current.value.phase_instance || request2.value.opened_at_revision + 1 !== current.value.revision) {
         return issue2("STATE_INVALID", current.value, "direct-revision-archive-invalid");
       }
       const checkpointIdentity = /^afop-([0-9a-f]{64})-decision-settle$/u.exec(transition.intent_id);
       if (checkpointIdentity === null || transition.request_digest !== directSemanticDecisionRequestDigest(
         checkpointIdentity[1],
         request2,
-        record3
+        record4
       )) return issue2("STATE_INVALID", current.value, "direct-revision-operation-invalid");
-      const provenance2 = record3.value.outcome === "decided" ? record3.value.envelope.human_provenance : record3.value.human_provenance;
+      const provenance2 = record4.value.outcome === "decided" ? record4.value.envelope.human_provenance : record4.value.human_provenance;
       if (provenance2.channel === "connected-host" && provenance2.decision_event_id !== `afdecision-${checkpointIdentity[1]}`) {
         return issue2("STATE_INVALID", current.value, "direct-revision-operation-invalid");
       }
@@ -65685,11 +66181,11 @@ async function enterDirectSemanticRevisionCheckpoint(dependencies, input) {
           phase_instance: current.value.phase_instance,
           step: "produce",
           status: "running",
-          attempt: beginsHumanRevision(record3.value) ? current.value.attempt : parseSafeInteger(current.value.attempt + 1),
+          attempt: beginsHumanRevision(record4.value) ? current.value.attempt : parseSafeInteger(current.value.attempt + 1),
           input_fingerprint: fingerprint.value
         },
         recomputed_input_fingerprint: fingerprint.value,
-        human_revision_reentry: beginsHumanRevision(record3.value)
+        human_revision_reentry: beginsHumanRevision(record4.value)
       });
       if (!planned.ok) return planned;
       const revision = parseSafeInteger(current.value.revision + 1);
@@ -65702,11 +66198,11 @@ async function enterDirectSemanticRevisionCheckpoint(dependencies, input) {
       const entered = canonicalDocument({
         ...planned.value,
         revision,
-        ...beginsHumanRevision(record3.value) ? {
+        ...beginsHumanRevision(record4.value) ? {
           pending_human_revision: {
-            gate_id: record3.value.gate_id,
-            gate_kind: record3.value.kind,
-            predecessor_subject_digest: record3.value.subject_digest,
+            gate_id: record4.value.gate_id,
+            gate_kind: record4.value.kind,
+            predecessor_subject_digest: record4.value.subject_digest,
             predecessor_input_fingerprint: current.value.input_fingerprint,
             requested_at_revision: revision,
             attempt: current.value.attempt,
@@ -65722,7 +66218,7 @@ async function enterDirectSemanticRevisionCheckpoint(dependencies, input) {
             input.operation_digest,
             transition.request_digest,
             request2,
-            record3,
+            record4,
             fingerprint.value
           ),
           input_fingerprint: fingerprint.value,
@@ -65820,26 +66316,26 @@ async function resolveDurableGate(dependencies, authority, gateId, inputFingerpr
       if (!interfacePath.ok) return interfacePath;
       const raw = await readCanonical(interfacePath.value, "gate decision interface", (value) => value);
       if (raw === "missing" || raw === "invalid") return fail15(createProjectError("GATE_DECISION_INVALID", { gate_id: gateId, gate_kind: request2.value.kind, issue_code: raw === "missing" ? "decision-missing" : "decision-noncanonical" }));
-      let record3;
+      let record4;
       try {
-        record3 = parseInterface(raw.value, request2.value);
+        record4 = parseInterface(raw.value, request2.value);
       } catch {
         return fail15(createProjectError("GATE_DECISION_INVALID", { gate_id: gateId, gate_kind: request2.value.kind, issue_code: "decision-binding-invalid" }));
       }
-      const document2 = canonicalDocument(record3);
+      const document2 = canonicalDocument(record4);
       if (!validateDurableSemantics({ gate_request: request2, gate_decision: document2 }).ok) return issue2("STATE_INVALID", current.value, "gate-archive-binding-invalid");
       const closure = await closedStateForRecord(
         dependencies,
         authority,
         current,
         request2.value,
-        record3,
+        record4,
         document2.digest
       );
       if (!closure.ok) return closure;
       const created = await dependencies.atomic.createExclusive(archivePath.value, document2.bytes);
       if (created !== "created") return issue2("STATE_INVALID", current.value, "gate-resolution-race");
-      const effect = record3.outcome === "decided" ? gateDecisionEffect(record3.envelope.payload) : "non-advancing";
+      const effect = record4.outcome === "decided" ? gateDecisionEffect(record4.envelope.payload) : "non-advancing";
       const transitioned = withGateTransition(
         authority,
         request2.value,
@@ -65850,13 +66346,13 @@ async function resolveDurableGate(dependencies, authority, gateId, inputFingerpr
       );
       if (!transitioned.ok) return transitioned;
       const final = transitioned.value;
-      if (earnsReceipt(record3)) return issue2("STATE_INVALID", current.value, "gate-success-requires-run-service");
+      if (earnsReceipt(record4)) return issue2("STATE_INVALID", current.value, "gate-success-requires-run-service");
       await dependencies.atomic.replace(authority.state, final.bytes);
       const gateJson = await resolvePath7(dependencies, authority, "gate.json", "workspace-gate-interface");
       if (gateJson.ok) await dependencies.atomic.removeGateInterface(gateJson.value);
       await dependencies.atomic.removeGateInterface(interfacePath.value);
       await cleanupCommittedGateWorkspace(dependencies, authority, final.value);
-      if (record3.outcome === "cancelled") return fail15(createProjectError("GATE_CANCELLED", { gate_id: gateId, gate_kind: record3.kind }));
+      if (record4.outcome === "cancelled") return fail15(createProjectError("GATE_CANCELLED", { gate_id: gateId, gate_kind: record4.kind }));
       return ok10({ state: final, record: document2, effect, replayed: false });
     });
   } catch (error51) {
@@ -65911,20 +66407,20 @@ async function resolveAdvancingGate(dependencies, authority, gateId, inputFinger
       if (archived === "missing") {
         const raw = await readCanonical(interfacePath.value, "gate decision interface", (value) => value);
         if (raw === "missing" || raw === "invalid") return fail15(createProjectError("GATE_DECISION_INVALID", { gate_id: gateId, gate_kind: request2.value.kind, issue_code: "decision-invalid" }));
-        let record3;
+        let record4;
         try {
-          record3 = parseInterface(raw.value, request2.value);
+          record4 = parseInterface(raw.value, request2.value);
         } catch {
           return fail15(createProjectError("GATE_DECISION_INVALID", { gate_id: gateId, gate_kind: request2.value.kind, issue_code: "decision-binding-invalid" }));
         }
-        const document2 = canonicalDocument(record3);
-        if (!earnsReceipt(record3)) return issue2("STATE_INVALID", current.value, "gate-resolution-routing-invalid");
+        const document2 = canonicalDocument(record4);
+        if (!earnsReceipt(record4)) return issue2("STATE_INVALID", current.value, "gate-resolution-routing-invalid");
         const closure2 = await closedStateForRecord(
           dependencies,
           authority,
           current,
           request2.value,
-          record3,
+          record4,
           document2.digest
         );
         if (!closure2.ok) return closure2;
@@ -66120,7 +66616,12 @@ async function openHandlerSession(call, context2) {
   const phaseInstance4 = state?.phase_instance ?? suppliedPhase;
   if (phaseInstance4 === void 0) throw new TypeError("phase instance is unavailable");
   const phase_kind = decodePhaseInstance(phaseInstance4).kind;
-  const config2 = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(configRead.snapshot.bytes));
+  let config2;
+  try {
+    config2 = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(configRead.snapshot.bytes));
+  } catch {
+    return fail19(createProjectError("CONFIG_INVALID", { issue_code: "config-unparseable" }));
+  }
   return Object.freeze({
     schema_version: "1",
     ok: true,
@@ -66150,7 +66651,10 @@ function envelopeOverflowError(error51, subject) {
   if (parameters.issue_code !== "envelope-byte-cap") return void 0;
   if (subject.artifact.artifact_kind !== "implementation-output") return void 0;
   const encoder3 = new TextEncoder();
-  const offending = subject.artifact.outputs.map((entry) => ({ path: entry.path, byte_count: encoder3.encode(JSON.stringify(entry)).byteLength })).sort((left, right) => right.byte_count - left.byte_count).slice(0, 5).map((contributor) => contributor.path).sort((left, right) => left.localeCompare(right));
+  const taskPrefix = `.archflow/tasks/${subject.artifact.task_id}/`;
+  const coProduced = subject.artifact.outputs.filter((entry) => entry.path.startsWith(taskPrefix));
+  const candidates = coProduced.length === 0 ? subject.artifact.outputs : coProduced;
+  const offending = candidates.map((entry) => ({ path: entry.path, byte_count: encoder3.encode(JSON.stringify(entry)).byteLength })).sort((left, right) => right.byte_count - left.byte_count).slice(0, 5).map((contributor) => contributor.path).sort((left, right) => left.localeCompare(right));
   if (offending.length === 0) return void 0;
   return createProjectError("ENVELOPE_OVERFLOW", {
     offending_paths: offending,
@@ -66164,6 +66668,7 @@ async function resolveRepositoryViewCommit(runner, artifact) {
 async function deriveApprovedUpstreams(services, toolName, durable, subject) {
   const derived = [];
   const seenOwners = /* @__PURE__ */ new Set();
+  const coProducedPaths = produceOwnedTaskDocumentPaths(subject.artifact);
   for (const binding of produceUpstreamBindingsForSubject(durable, subject.artifact)) {
     const upstream = await loadProduceUpstreamSubject(services.dependencies, services.authority, durable, binding);
     if (!upstream.ok) return upstream;
@@ -66172,7 +66677,8 @@ async function deriveApprovedUpstreams(services, toolName, durable, subject) {
       services.runner,
       services.authority,
       upstream.value,
-      binding.path
+      binding.path,
+      coProducedPaths
     );
     if (!upstreamProjections.ok) return upstreamProjections;
     let text4;
@@ -66257,13 +66763,13 @@ async function reobserveProjectionDigest(services, phaseInstance4, expectedArtif
     phase_instance: phaseInstance4,
     issue_code: "counter-review-subject-not-current"
   }));
-  const observed = await readProduceProjectionSet(
+  const observed2 = await readProduceProjectionSet(
     services.runner,
     services.authority,
     retained.value,
     artifactPath
   );
-  return observed.ok ? Object.freeze({ schema_version: "1", ok: true, value: produceProjectionSetDigest(observed.value) }) : observed;
+  return observed2.ok ? Object.freeze({ schema_version: "1", ok: true, value: produceProjectionSetDigest(observed2.value) }) : observed2;
 }
 async function handleCounterReview(call, context2, dispatchAlreadySerialized = false) {
   return mapHandlerErrors(context2.invocation_id, async () => {
@@ -66319,9 +66825,17 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
       services.runner,
       produce.value.artifact
     );
+    let projectionPlan;
+    if (produce.value.artifact.artifact_kind === "implementation-output") {
+      const loadRetained = services.dependencies.load_retained_result;
+      if (loadRetained === void 0) throw new TypeError("retained result loading is unavailable");
+      const retained = await loadRetained(produce.value.reference);
+      if (!retained.ok) return retained;
+      projectionPlan = retained.value.projection_plan;
+    }
     const repositoryView = Object.freeze({
       base_commit: repositoryViewCommit,
-      ...produce.value.artifact.artifact_kind === "implementation-output" ? { projection_plan: produce.value.retained.projection_plan } : {}
+      ...projectionPlan === void 0 ? {} : { projection_plan: projectionPlan }
     });
     const workspaceBinding = produce.value.artifact.artifact_kind === "implementation-output" ? Object.freeze({
       kind: "read-only-produced-repository-snapshot",
@@ -66355,7 +66869,6 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
         phase_instance: state.value.phase_instance,
         signal: context2.signal,
         cancellation_source: "client",
-        allow_claude_dispatch: true,
         repository_view: repositoryView
       });
       constitutionPlan = Object.freeze({
@@ -66383,7 +66896,8 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
       dependencies: services.dependencies,
       state: state.value,
       subject: produce.value,
-      projection_bytes: projection.value.bytes
+      projection_bytes: projection.value.bytes,
+      ...projectionPlan === void 0 ? {} : { projection_plan: projectionPlan }
     });
     if (!context_entries.ok) return context_entries;
     const resultId = dispatchId("result", call.input.intent_id);
@@ -66395,8 +66909,6 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
       phase_instance: state.value.phase_instance,
       signal: context2.signal,
       cancellation_source: "client",
-      // Both producer directions are implemented; release authorization remains a separate gate.
-      allow_claude_dispatch: true,
       repository_view: repositoryView
     });
     const result = await runCounterReview({
@@ -66457,17 +66969,174 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
   });
 }
 
+// src/state/gate-preview.ts
+var ZERO_DIGEST = "0".repeat(64);
+function commitFor(input) {
+  if (input.kind === "commit-authorization" && !("origin" in input.context)) {
+    const context2 = input.context;
+    return Object.freeze({
+      target_ref: context2.target_ref,
+      baseline_commit: context2.baseline_commit,
+      message: context2.commit_message,
+      paths: Object.freeze([...context2.paths]),
+      diff_digest: context2.diff_digest
+    });
+  }
+  if (input.kind === "design-approval" && !("origin" in input.context)) {
+    const context2 = input.context;
+    return Object.freeze({
+      target_ref: context2.target_ref,
+      baseline_commit: context2.baseline_commit,
+      message: context2.commit_message,
+      paths: Object.freeze([`.archflow/tasks/${input.task_id}`])
+    });
+  }
+  if (input.kind === "migration-audit" && !("origin" in input.context)) {
+    const context2 = input.context;
+    if (context2.target_ref !== void 0 && context2.baseline_commit !== void 0 && context2.commit_message !== void 0) {
+      return Object.freeze({
+        target_ref: context2.target_ref,
+        baseline_commit: context2.baseline_commit,
+        message: context2.commit_message,
+        paths: Object.freeze([`.archflow/tasks/${input.task_id}`])
+      });
+    }
+  }
+  return void 0;
+}
+function buildGatePreview(input) {
+  const waiver = "origin" in input.context;
+  const request2 = parseGateRequest({
+    schema_version: "1",
+    gate_id: "preview-gate",
+    intent_id: "preview-intent",
+    request_digest: ZERO_DIGEST,
+    task_id: input.task_id,
+    phase_instance: input.phase_instance,
+    summary: input.summary,
+    subject_digest: input.subject_digest,
+    context_digest: waiver ? computeGateContextDigest("waiver", input.context) : computeGateContextDigest(input.kind, input.context),
+    current_evidence: input.current_evidence,
+    kind: input.kind,
+    context: input.context,
+    allowed_decisions: waiver ? ["grant", "deny", "cancel"] : DECISIONS[input.kind],
+    opened_at_revision: parseSafeInteger(input.revision + 1)
+  });
+  const presentation = buildHumanGatePresentation(activeProjection(request2));
+  const commit = commitFor(input);
+  const preview = Object.freeze({
+    schema_version: "1",
+    task_id: input.task_id,
+    revision: input.revision,
+    phase_instance: input.phase_instance,
+    summary: input.summary,
+    subject_digest: input.subject_digest,
+    current_evidence: input.current_evidence,
+    kind: input.kind,
+    context: structuredClone(input.context),
+    options: presentation.options,
+    ...commit === void 0 ? {} : { commit }
+  });
+  const previewDigest = canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "gate-preview",
+    preview
+  });
+  return Object.freeze({ preview_digest: previewDigest, preview, presentation });
+}
+function previewHasChoice(preview, decision3) {
+  return preview.presentation.options.some((option) => option.token === decision3.choice) && decision3.reason.trim() !== "";
+}
+
+// src/state/gate-direct.ts
+async function runConnectedGateDecision(dependencies, input, decision3, context2) {
+  const opened = await openDurableGate(dependencies, input);
+  if (!opened.ok) return opened;
+  if (opened.value.replay === void 0 || opened.value.state.value.open_gate?.gate_id === opened.value.gate_id) {
+    const written = await writeConnectedGateDecisionChoice(
+      dependencies,
+      input.authority,
+      decision3,
+      context2
+    );
+    if (!written.ok) return written;
+  }
+  const resolved = await runDurableGate(dependencies, { ...input, signal: context2.signal });
+  if (!resolved.ok) return resolved;
+  if (!("record" in resolved.value)) {
+    throw new TypeError("bounded gate decision did not resolve a record");
+  }
+  return Object.freeze({ schema_version: "1", ok: true, value: resolved.value });
+}
+
 // src/mcp/handlers/gate.ts
 var fail21 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 async function handleGate(call, context2) {
   return mapHandlerErrors(context2.invocation_id, async () => {
     const session = await openHandlerSession(call, context2);
     if (!session.ok) return session;
+    const bounded = call.input.preview_digest !== void 0 && call.input.decision !== void 0;
+    if (!bounded && (call.input.preview_digest !== void 0 || call.input.decision !== void 0)) {
+      return fail21(createProjectError("STATE_INVALID", {
+        phase_instance: call.input.phase_instance,
+        issue_code: "gate-decision-required"
+      }));
+    }
     const identified = identifyTransactionRequest(
       call,
       session.value.services.authority,
       call.input.input_fingerprint
     );
+    if (bounded) {
+      const preview = buildGatePreview({
+        task_id: call.input.task_id,
+        revision: call.input.expected_revision,
+        phase_instance: call.input.phase_instance,
+        summary: call.input.summary,
+        subject_digest: call.input.subject_digest,
+        current_evidence: call.input.current_evidence,
+        kind: call.input.kind,
+        context: call.input.context
+      });
+      if (preview.preview_digest !== call.input.preview_digest || !previewHasChoice(preview, call.input.decision)) {
+        return fail21(createProjectError("STATE_INVALID", {
+          phase_instance: call.input.phase_instance,
+          issue_code: preview.preview_digest !== call.input.preview_digest ? "gate-preview-stale" : "gate-decision-choice-invalid"
+        }));
+      }
+      const outcome2 = await runConnectedGateDecision(session.value.services.dependencies, {
+        authority: session.value.services.authority,
+        expected_revision: call.input.expected_revision,
+        intent_id: call.input.intent_id,
+        request_digest: identified.request_digest,
+        input_fingerprint: call.input.input_fingerprint,
+        phase_instance: call.input.phase_instance,
+        summary: call.input.summary,
+        subject_digest: call.input.subject_digest,
+        current_evidence: call.input.current_evidence,
+        kind: call.input.kind,
+        context: call.input.context
+      }, call.input.decision, context2);
+      if (!outcome2.ok) return outcome2;
+      if (!("record" in outcome2.value) || outcome2.value.record.value.outcome !== "decided") {
+        return fail21(createProjectError("STATE_INVALID", {
+          phase_instance: call.input.phase_instance,
+          issue_code: "gate-resolution-missing-decision"
+        }));
+      }
+      const decision4 = outcome2.value.record.value.envelope;
+      return Object.freeze({
+        schema_version: "1",
+        ok: true,
+        value: Object.freeze({
+          kind: decision4.kind,
+          decision: decision4,
+          notes: decision4.payload.reason,
+          revision: outcome2.value.state.value.revision,
+          request_digest: identified.request_digest
+        })
+      });
+    }
     const outcome = await runDurableGate(session.value.services.dependencies, {
       authority: session.value.services.authority,
       expected_revision: call.input.expected_revision,
@@ -66579,13 +67248,13 @@ async function validateLiveInitialization(dependencies, request2, initialization
   const commits = initialization.artifact_kind === "task-initialization" ? [initialization.code_baseline_commit, initialization.policy_base_commit] : [initialization.import_baseline_commit, initialization.code_baseline_commit, initialization.policy_base_commit];
   for (const oid of new Set(commits)) {
     try {
-      const observed = await dependencies.runner.run({
+      const observed2 = await dependencies.runner.run({
         argv: ["rev-parse", "--verify", "--quiet", `${oid}^{commit}`],
         operation: parseSafeCode("validate-initialization-commit"),
         expectedAbsence: [{ code: 1, stderrIncludes: "" }]
       });
-      if (observed.absent) return contract("initialization-commit-missing");
-      const resolved = new TextDecoder("utf-8", { fatal: true }).decode(observed.stdout).trim();
+      if (observed2.absent) return contract("initialization-commit-missing");
+      const resolved = new TextDecoder("utf-8", { fatal: true }).decode(observed2.stdout).trim();
       if (resolved !== oid) return contract("initialization-commit-mismatch");
     } catch {
       return io4(request2, "validate-initialization-commit");
@@ -66845,9 +67514,9 @@ async function executeLocked2(dependencies, request2, path2) {
       }
       const installed = await installLegacyDestination(request2, artifact, artifactDocument.bytes, final.bytes);
       if (!installed.ok) return installed;
-      const observed2 = await dependencies.read_state(request2.authority.state);
-      if (observed2.kind !== "canonical" || observed2.document.digest !== final.digest) return contract("transaction-outcome-ambiguous");
-      return ok17(Object.freeze({ state: observed2.document, outcome, replayed: false }));
+      const observed3 = await dependencies.read_state(request2.authority.state);
+      if (observed3.kind !== "canonical" || observed3.document.digest !== final.digest) return contract("transaction-outcome-ambiguous");
+      return ok17(Object.freeze({ state: observed3.document, outcome, replayed: false }));
     }
     await ensureAuthorityDirectory(request2.authority);
     await ensureIntentDirectory(request2.authority);
@@ -66880,17 +67549,17 @@ async function executeLocked2(dependencies, request2, path2) {
   } catch (error51) {
     if (error51 instanceof IntentLayoutError) return io4(request2, "intent-receipt-create");
     if (!(error51 instanceof AtomicReplaceError)) throw error51;
-    const observed2 = await dependencies.read_state(request2.authority.state);
-    if (observed2.kind === "canonical" && observed2.document.digest === final.digest) {
-      return ok17(Object.freeze({ state: observed2.document, outcome, replayed: false }));
+    const observed3 = await dependencies.read_state(request2.authority.state);
+    if (observed3.kind === "canonical" && observed3.document.digest === final.digest) {
+      return ok17(Object.freeze({ state: observed3.document, outcome, replayed: false }));
     }
-    if (observed2.kind === "missing") return io4(request2, error51.operation === "replace" ? "task-state-replace" : "intent-receipt-create");
+    if (observed3.kind === "missing") return io4(request2, error51.operation === "replace" ? "task-state-replace" : "intent-receipt-create");
     return contract("transaction-outcome-ambiguous");
   }
-  const observed = await dependencies.read_state(request2.authority.state);
-  if (observed.kind !== "canonical" || observed.document.digest !== final.digest) return contract("transaction-outcome-ambiguous");
-  await cleanTaskWorkspace(dependencies, request2.authority, observed.document.value).catch(() => void 0);
-  return ok17(Object.freeze({ state: observed.document, outcome, replayed: false }));
+  const observed2 = await dependencies.read_state(request2.authority.state);
+  if (observed2.kind !== "canonical" || observed2.document.digest !== final.digest) return contract("transaction-outcome-ambiguous");
+  await cleanTaskWorkspace(dependencies, request2.authority, observed2.document.value).catch(() => void 0);
+  return ok17(Object.freeze({ state: observed2.document, outcome, replayed: false }));
 }
 async function runStateInitialization(dependencies, request2) {
   assertInternalTransactionAuthority(request2.authority, { runner: dependencies.runner, environment: dependencies.environment });
@@ -67129,7 +67798,7 @@ function planningRestartId(requestDigest, intentId) {
   return intentId === void 0 ? parsePathSafeId(`planning-restart-${requestDigest.slice(0, 32)}`) : semanticPlanningRestartId(intentId) ?? parsePathSafeId(`planning-restart-${requestDigest.slice(0, 32)}`);
 }
 function completedPlanningRestartMatches(state, input) {
-  const restart = state.restart_history?.find((record3) => record3.restart_id === input.restart_id);
+  const restart = state.restart_history?.find((record4) => record4.restart_id === input.restart_id);
   return restart !== void 0 && restart.source_phase_instance === input.source_phase_instance && restart.target_phase_instance === input.target_phase_instance && restart.reason === input.reason && state.revision === restart.restarted_at_revision && state.phase_instance === restart.target_phase_instance && state.step === "produce" && state.status === "running" && state.attempt === 1 && state.input_fingerprint === input.input_fingerprint;
 }
 
@@ -67162,17 +67831,17 @@ async function payloadTarget(services, resultDigest, path2) {
   });
 }
 function scannerCapture(scanner) {
-  let observed;
+  let observed2;
   return {
     scanner: Object.freeze({
       scan: async (candidates) => {
-        observed = parseSecretScanResult(await scanner.scan(candidates));
-        return observed;
+        observed2 = parseSecretScanResult(await scanner.scan(candidates));
+        return observed2;
       }
     }),
     result: () => {
-      if (observed === void 0) throw new TypeError("projection scanner did not run");
-      return observed;
+      if (observed2 === void 0) throw new TypeError("projection scanner did not run");
+      return observed2;
     }
   };
 }
@@ -67370,9 +68039,9 @@ async function prepareImplementationResult(input) {
   const projections = [];
   for (const output of input.artifact.outputs) {
     if (output.operation === "delete") continue;
-    const observed = snapshotByPath.get(output.path);
-    if (observed?.state !== "present") return contractInvalid2("implementation-projection-identity-missing");
-    projections.push({ path: output.path, content_digest: observed.content_digest });
+    const observed2 = snapshotByPath.get(output.path);
+    if (observed2?.state !== "present") return contractInvalid2("implementation-projection-identity-missing");
+    projections.push({ path: output.path, content_digest: observed2.content_digest });
   }
   const manifestValue = {
     schema_version: "1",
@@ -67426,6 +68095,22 @@ var fail23 = (error51) => Object.freeze({ schema_version: "1", ok: false, error:
 function stateResultId(intentId) {
   return parseSafeId(`state-result-${sha256Bytes(new TextEncoder().encode(intentId)).slice(0, 32)}`);
 }
+function restartProvenance(context2, requestDigest) {
+  return Object.freeze({
+    schema_version: "1",
+    actor_class: "human",
+    assurance: "connected-request-trace",
+    channel: "connected-host",
+    connection_id: parseSafeId(context2.connection.connection_id),
+    invocation_id: parseSafeId(context2.invocation_id),
+    request_id_digest: canonicalJsonDigest({
+      schema_version: "1",
+      digest_kind: "transport-request-id",
+      request_id: context2.transport_metadata.request_id
+    }),
+    request_digest: requestDigest
+  });
+}
 async function handleState(call, context2) {
   return mapHandlerErrors(context2.invocation_id, async () => {
     const session = await openHandlerSession(call, context2);
@@ -67450,7 +68135,7 @@ async function handleState(call, context2) {
         restartInput.input_fingerprint
       );
       const restartId = planningRestartId(identified2.request_digest, restartInput.intent_id);
-      const existing = services.state.value.restart_history?.find((record3) => record3.restart_id === restartId);
+      const existing = services.state.value.restart_history?.find((record4) => record4.restart_id === restartId);
       if (existing !== void 0) {
         if (!completedPlanningRestartMatches(services.state.value, {
           restart_id: restartId,
@@ -67518,19 +68203,7 @@ async function handleState(call, context2) {
             target_phase_instance: restartInput.target_phase_instance,
             reason: restartInput.reason,
             recomputed_input_fingerprint: landingFingerprint,
-            human_provenance: {
-              schema_version: "1",
-              actor_class: "human",
-              assurance: "declared-local-trace",
-              channel: "connected-host",
-              decision_event_id: restartId,
-              connection_id: context2.connection.connection_id,
-              request_id_digest: canonicalJsonDigest({
-                schema_version: "1",
-                request_id: context2.transport_metadata.request_id
-              }),
-              recorded_at: (/* @__PURE__ */ new Date()).toISOString()
-            }
+            human_provenance: restartProvenance(context2, identified.request_digest)
           };
           let planned = planPlanningRestart(planInput);
           if (!planned.ok) return planned;
@@ -67621,8 +68294,8 @@ async function handleState(call, context2) {
           preparedResult = prepared.value;
         }
         if (artifact?.artifact_kind === "triage") {
-          const loadRetained = services.dependencies.load_retained_result;
-          if (retainedBytes === void 0 || scanner === void 0 || loadRetained === void 0) {
+          const loadManifest = services.dependencies.load_retained_manifest;
+          if (retainedBytes === void 0 || scanner === void 0 || loadManifest === void 0) {
             throw new TypeError("evidence preparation dependencies are unavailable");
           }
           const produce = await loadCurrentProduceSubject(services.dependencies, current.value);
@@ -67634,7 +68307,10 @@ async function handleState(call, context2) {
             }));
           }
           const reviews = await loadCurrentReviewSet(
-            { read_state: services.dependencies.read_state, load_retained_result: loadRetained },
+            {
+              read_state: services.dependencies.read_state,
+              load_retained_manifest: loadManifest
+            },
             services.authority,
             call.input.phase_instance
           );
@@ -67688,8 +68364,9 @@ async function handleState(call, context2) {
         const authenticatedGateApprovals2 = [];
         const decodedCurrent = decodePhaseInstance(current.value.phase_instance);
         const crossesPhase = call.input.phase_instance !== current.value.phase_instance;
-        const completionSignal = artifact === void 0 && decodedCurrent.kind === "phase-impl" && current.value.step === "triage" && current.value.status === "succeeded";
-        const artifactPhaseExitSignal = artifact === void 0 && crossesPhase && decodedCurrent.kind !== "phase-impl";
+        const planningRestartSignal = restartInput !== void 0;
+        const completionSignal = !planningRestartSignal && artifact === void 0 && decodedCurrent.kind === "phase-impl" && current.value.step === "triage" && current.value.status === "succeeded";
+        const artifactPhaseExitSignal = !planningRestartSignal && artifact === void 0 && crossesPhase && decodedCurrent.kind !== "phase-impl";
         let currentProduce;
         if (completionSignal || artifactPhaseExitSignal) {
           const loadedProduce = await loadCurrentProduceSubject(services.dependencies, current.value);
@@ -67713,13 +68390,13 @@ async function handleState(call, context2) {
           if (designExit && currentProduce?.artifact.artifact_kind === "document") {
             for (const authenticated of authenticatedGateApprovals2) {
               if (authenticated.request.kind !== "design-approval") continue;
-              if (await designArtifactCommittedAtCurrentTarget(
+              if ((await designArtifactCommittedAtCurrentTarget(
                 services.runner,
                 current.value.task_id,
                 currentProduce.artifact,
-                currentProduce.retained.prepared.manifest.value.outputs,
+                currentProduce.retained.manifest.value.outputs,
                 authenticated.request.context
-              )) {
+              )).observed) {
                 commitObserved = true;
                 break;
               }
@@ -67742,10 +68419,12 @@ async function handleState(call, context2) {
           if (source.artifact_kind === "implementation-output") {
             for (const authenticated of authenticatedGateApprovals2) {
               if (authenticated.request.kind !== "commit-authorization") continue;
+              const exact = exactCommitAuthorizationContext(authenticated.request.context);
+              if (exact === void 0) continue;
               if (await implementationOutputCommittedAtCurrentTarget(
                 services.runner,
                 source,
-                authenticated.request.context.target_ref
+                exact
               )) {
                 commitObserved = true;
                 break;
@@ -67754,7 +68433,7 @@ async function handleState(call, context2) {
           }
         }
         const decodedTarget = decodePhaseInstance(call.input.phase_instance);
-        const legacyJumpSignal = artifact === void 0 && current.value.phase_instance === "design" && current.value.step === "triage" && current.value.status === "succeeded" && (decodedTarget.kind === "phase-design" || decodedTarget.kind === "phase-impl") && Number(decodedTarget.phase) >= 1;
+        const legacyJumpSignal = !planningRestartSignal && artifact === void 0 && current.value.phase_instance === "design" && current.value.step === "triage" && current.value.status === "succeeded" && (decodedTarget.kind === "phase-design" || decodedTarget.kind === "phase-impl") && Number(decodedTarget.phase) >= 1;
         if (legacyJumpSignal) {
           const resolved = await findLegacyImportResumePhase(
             services.dependencies,
@@ -67775,11 +68454,11 @@ async function handleState(call, context2) {
               if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
               authenticatedGateApprovals2.push(loaded.value);
               if (loaded.value.request.kind === "migration-audit" && loaded.value.request.context.target_ref !== void 0 && loaded.value.request.context.baseline_commit !== void 0 && loaded.value.request.context.commit_message !== void 0 && currentProduce?.artifact.artifact_kind === "document") {
-                commitObserved = await designArtifactCommittedAtCurrentTarget(
+                commitObserved = (await designArtifactCommittedAtCurrentTarget(
                   services.runner,
                   current.value.task_id,
                   currentProduce.artifact,
-                  currentProduce.retained.prepared.manifest.value.outputs,
+                  currentProduce.retained.manifest.value.outputs,
                   {
                     target_ref: loaded.value.request.context.target_ref,
                     baseline_commit: loaded.value.request.context.baseline_commit,
@@ -67788,7 +68467,7 @@ async function handleState(call, context2) {
                       authorized_document_paths: loaded.value.request.context.imported_documents.map((document2) => document2.path)
                     }
                   }
-                );
+                )).observed;
               }
             }
           }
@@ -67833,14 +68512,15 @@ async function handleState(call, context2) {
   });
 }
 
-// src/mcp/handlers/waiver.ts
+// src/state/waiver-origin.ts
 import { isDeepStrictEqual as isDeepStrictEqual14 } from "node:util";
-var fail24 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function authenticWaiverOriginArchive(request2, decision3, origin2) {
   const payload = decision3.value.outcome === "decided" ? decision3.value.envelope.payload : void 0;
-  return request2.value.gate_id === origin2.origin_gate_id && request2.value.task_id === origin2.task_id && request2.value.phase_instance === origin2.phase_instance && request2.value.subject_digest === origin2.subject_digest && request2.value.context_digest === origin2.origin_context_digest && request2.value.current_evidence.set_digest === origin2.current_evidence_set_digest && (request2.value.kind === "constitution-review" || request2.value.kind === "design-approval") && decision3.digest === origin2.origin_decision_digest && payload?.decision === "waiver-requested" && isDeepStrictEqual14(payload.rule, origin2.rule) && payload.operation === origin2.scope.operation && // The origin gate must actually have offered this rule on this axis.
-  "eligible_waivers" in request2.value.context && request2.value.context.eligible_waivers.some((eligible) => isDeepStrictEqual14(eligible.rule, origin2.rule) && isDeepStrictEqual14(eligible.scope, origin2.scope)) && validateDurableSemantics({ gate_request: request2, gate_decision: decision3 }).ok;
+  return request2.value.gate_id === origin2.origin_gate_id && request2.value.task_id === origin2.task_id && request2.value.phase_instance === origin2.phase_instance && request2.value.subject_digest === origin2.subject_digest && request2.value.context_digest === origin2.origin_context_digest && request2.value.current_evidence.set_digest === origin2.current_evidence_set_digest && (request2.value.kind === "constitution-review" || request2.value.kind === "design-approval") && decision3.digest === origin2.origin_decision_digest && payload?.decision === "waiver-requested" && isDeepStrictEqual14(payload.rule, origin2.rule) && payload.operation === origin2.scope.operation && "eligible_waivers" in request2.value.context && request2.value.context.eligible_waivers.some((eligible) => isDeepStrictEqual14(eligible.rule, origin2.rule) && isDeepStrictEqual14(eligible.scope, origin2.scope)) && validateDurableSemantics({ gate_request: request2, gate_decision: decision3 }).ok;
 }
+
+// src/mcp/handlers/waiver.ts
+var fail24 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 async function handleWaiver(call, context2) {
   return mapHandlerErrors(context2.invocation_id, async () => {
     const session = await openHandlerSession(call, context2);
@@ -67885,9 +68565,47 @@ async function handleWaiver(call, context2) {
     if (!authenticWaiverOriginArchive(originRequest, originDecision, call.input.origin)) {
       return fail24(createProjectError("CONTRACT_INVALID", { issue_code: "waiver-origin-decision-invalid" }));
     }
+    const bounded = call.input.preview_digest !== void 0 && call.input.decision !== void 0;
+    if (!bounded && (call.input.preview_digest !== void 0 || call.input.decision !== void 0)) {
+      return fail24(createProjectError("STATE_INVALID", {
+        phase_instance: call.input.origin.phase_instance,
+        issue_code: "waiver-decision-required"
+      }));
+    }
     const identified = identifyTransactionRequest(call, services.authority, call.input.input_fingerprint);
     const waiverContext2 = Object.freeze({ origin: call.input.origin, rationale: call.input.rationale });
-    const resolved = await runDurableGate(services.dependencies, {
+    if (bounded) {
+      const preview = buildGatePreview({
+        task_id: call.input.task_id,
+        revision: call.input.expected_revision,
+        phase_instance: call.input.origin.phase_instance,
+        summary: `Waiver request for ${call.input.origin.rule.rule_id}`,
+        subject_digest: call.input.origin.subject_digest,
+        current_evidence: originRequest.value.current_evidence,
+        kind: "constitution-review",
+        context: waiverContext2
+      });
+      if (preview.preview_digest !== call.input.preview_digest || !previewHasChoice(preview, call.input.decision)) {
+        return fail24(createProjectError("STATE_INVALID", {
+          phase_instance: call.input.origin.phase_instance,
+          issue_code: preview.preview_digest !== call.input.preview_digest ? "waiver-preview-stale" : "waiver-decision-choice-invalid"
+        }));
+      }
+    }
+    const resolved = await (bounded ? runConnectedGateDecision(services.dependencies, {
+      authority: services.authority,
+      expected_revision: call.input.expected_revision,
+      intent_id: call.input.intent_id,
+      request_digest: identified.request_digest,
+      input_fingerprint: call.input.input_fingerprint,
+      phase_instance: call.input.origin.phase_instance,
+      summary: `Waiver request for ${call.input.origin.rule.rule_id}`,
+      subject_digest: call.input.origin.subject_digest,
+      current_evidence: originRequest.value.current_evidence,
+      kind: "constitution-review",
+      context: waiverContext2,
+      waiver_origin_gate_id: call.input.origin.origin_gate_id
+    }, call.input.decision, context2) : runDurableGate(services.dependencies, {
       authority: services.authority,
       expected_revision: call.input.expected_revision,
       intent_id: call.input.intent_id,
@@ -67901,7 +68619,7 @@ async function handleWaiver(call, context2) {
       context: waiverContext2,
       waiver_origin_gate_id: call.input.origin.origin_gate_id,
       signal: context2.signal
-    });
+    }));
     if (!resolved.ok) return resolved;
     if (!("record" in resolved.value) || resolved.value.record.value.outcome !== "waiver-decided") {
       return fail24(createProjectError("STATE_INVALID", {
@@ -67930,7 +68648,7 @@ async function handleWaiver(call, context2) {
 }
 
 // src/state/request-composition.ts
-import { randomUUID as randomUUID3 } from "node:crypto";
+import { randomUUID as randomUUID4 } from "node:crypto";
 import { readFile as readFile12 } from "node:fs/promises";
 
 // src/init/task-initialization.ts
@@ -68204,9 +68922,9 @@ async function buildDocumentArtifact(runner, authority, input) {
   if (!observedPrimary.ok) return observedPrimary;
   const observedAdditional = [];
   for (const path2 of additionalPaths) {
-    const observed = await observeDocument(path2);
-    if (!observed.ok) return observed;
-    observedAdditional.push(observed.value);
+    const observed2 = await observeDocument(path2);
+    if (!observed2.ok) return observed2;
+    observedAdditional.push(observed2.value);
   }
   const declaredInputs = [];
   for (const declared of materialized.declared_inputs) {
@@ -68221,17 +68939,17 @@ async function buildDocumentArtifact(runner, authority, input) {
   }
   declaredInputs.sort((left, right) => left.input_id < right.input_id ? -1 : left.input_id > right.input_id ? 1 : 0);
   const observations = [observedPrimary.value, ...observedAdditional].sort((left, right) => left.projection_target < right.projection_target ? -1 : left.projection_target > right.projection_target ? 1 : 0);
-  const outputs = Object.freeze(observations.map((observed) => observed.output));
-  const projections = Object.freeze(observations.map((observed) => Object.freeze({
-    path: observed.projection_target,
-    content_digest: observed.content_digest
+  const outputs = Object.freeze(observations.map((observed2) => observed2.output));
+  const projections = Object.freeze(observations.map((observed2) => Object.freeze({
+    path: observed2.projection_target,
+    content_digest: observed2.content_digest
   })));
   const additionalDocuments = Object.freeze(
-    observedAdditional.map((observed) => Object.freeze({
-      document_path: observed.document_path,
-      byte_count: observed.byte_count,
-      content_digest: observed.content_digest,
-      projection_target: observed.projection_target
+    observedAdditional.map((observed2) => Object.freeze({
+      document_path: observed2.document_path,
+      byte_count: observed2.byte_count,
+      content_digest: observed2.content_digest,
+      projection_target: observed2.projection_target
     }))
   );
   return ok20(parseDocumentArtifact({
@@ -68500,6 +69218,14 @@ function advanceAction(input, state) {
     if (input.design_commit === void 0) {
       return action("inspect-state", "Inspect why the approved design commit authority is unavailable.", true, state);
     }
+    if (input.commit_blocked_reason !== void 0) {
+      return action(
+        "inspect-state",
+        "Inspect why the authorized design milestone commit cannot be recognized; running it again cannot resolve this.",
+        true,
+        state
+      );
+    }
     return action("commit-artifacts", "Commit the exact recoverable task-local milestone authorized by design approval.", false, state, {
       commit_path: input.design_commit.path,
       commit_message: input.design_commit.message,
@@ -68508,11 +69234,20 @@ function advanceAction(input, state) {
     });
   }
   if (phase3.kind === "phase-impl" && input.commit_observed !== true) {
+    if (input.implementation_commit === void 0) {
+      return action("inspect-state", "Inspect why the approved implementation commit authority is unavailable.", true, state);
+    }
     return action(
       "commit-phase",
-      "Stage the authorized phase outputs, show and confirm the commit, then commit them to the approved current target ref.",
-      true,
-      state
+      "Commit the exact phase outputs authorized by the human's commit decision.",
+      false,
+      state,
+      {
+        commit_paths: input.implementation_commit.paths,
+        commit_message: input.implementation_commit.message,
+        commit_target_ref: input.implementation_commit.target_ref,
+        commit_baseline: input.implementation_commit.baseline_commit
+      }
     );
   }
   if (phase3.kind === "phase-impl" && state.planned_final_phase !== void 0 && Number(phase3.phase) === Number(state.planned_final_phase)) {
@@ -68685,15 +69420,16 @@ function outputClassFor(manifest, path2) {
   return void 0;
 }
 async function discoverProjections(dependencies, authority, state) {
-  if (dependencies.load_retained_result === void 0) {
+  const loadManifest = dependencies.load_retained_manifest;
+  if (loadManifest === void 0) {
     return stateInvalid2(authority, "reconciliation-result-loader-unavailable");
   }
   const newest = /* @__PURE__ */ new Map();
   try {
     for (const reference of state.value.authoritative_results) {
-      const loaded = await dependencies.load_retained_result(reference);
+      const loaded = await loadManifest(reference);
       if (!loaded.ok) return loaded;
-      const manifest = loaded.value.prepared.manifest.value;
+      const manifest = loaded.value.manifest.value;
       for (const projection of manifest.projections) {
         const pathClass3 = outputClassFor(manifest, projection.path);
         if (pathClass3 === void 0) return stateInvalid2(authority, "reconciliation-projection-unbound");
@@ -68863,9 +69599,9 @@ function ownData(value, field, label) {
 function reconcileCurrentAuthority(value) {
   const input = materialize4(value);
   const findings = [];
-  const observed = new Map(input.current_projections.map((projection) => [projection.path, projection.content_digest]));
+  const observed2 = new Map(input.current_projections.map((projection) => [projection.path, projection.content_digest]));
   for (const recorded of input.recorded_projections) {
-    const digest10 = observed.get(recorded.path);
+    const digest10 = observed2.get(recorded.path);
     if (digest10 !== recorded.content_digest) {
       findings.push(Object.freeze({
         kind: "projection-mismatch",
@@ -68930,7 +69666,7 @@ function partitionExpectedReentryEdits(findings, assessment, produceSubject, sta
     return Object.freeze({ remaining: findings, expected_reentry_edits: Object.freeze([]) });
   }
   const producePaths = produceSubject === void 0 ? void 0 : new Set(
-    produceSubject.retained.prepared.manifest.value.projections.map((projection) => projection.path)
+    produceSubject.retained.manifest.value.projections.map((projection) => projection.path)
   );
   const remaining = [];
   const expected = [];
@@ -68946,11 +69682,11 @@ function partitionExpectedReentryEdits(findings, assessment, produceSubject, sta
     expected_reentry_edits: Object.freeze(expected)
   });
 }
-function unavailableConfig(expected, observed, issue4) {
+function unavailableConfig(expected, observed2, issue4) {
   return Object.freeze({
     verified: false,
     ...expected === void 0 ? {} : { expected_digest: expected },
-    ...observed === void 0 ? {} : { observed_digest: observed },
+    ...observed2 === void 0 ? {} : { observed_digest: observed2 },
     ...issue4 === void 0 ? {} : { issue: issue4 }
   });
 }
@@ -69081,20 +69817,29 @@ async function currentTargetRef(dependencies) {
     guidance: "Repository HEAD is detached or its symbolic branch ref is unavailable; confirm this target before authorizing commit."
   });
 }
-function buildCommitAuthorizationInput(subject, currentEvidence, target2) {
+function buildCommitAuthorizationInput(subject, currentEvidence, target2, baselineCommit) {
   if (subject.artifact.artifact_kind !== "implementation-output") {
     throw new TypeError("commit authorization requires retained implementation output");
   }
-  const manifest = subject.retained.prepared.manifest.value;
+  const manifest = subject.retained.manifest.value;
   if (manifest.artifact_digest !== subject.artifact_digest) {
     throw new TypeError("commit authorization manifest subject disagrees");
   }
+  const paths = /* @__PURE__ */ new Set();
+  for (const output of subject.artifact.outputs) {
+    paths.add(output.path);
+    if (output.operation === "rename") paths.add(output.previous_path);
+  }
+  const phase3 = decodePhaseInstance(subject.artifact.phase_instance);
   return Object.freeze({
     kind: "commit-authorization",
     subject_digest: subject.artifact_digest,
     current_evidence: currentEvidence,
     context: Object.freeze({
       target_ref: target2.value,
+      baseline_commit: baselineCommit,
+      commit_message: `ArchFlow: Implement ${subject.artifact.task_id} phase ${phase3.kind === "phase-impl" ? String(phase3.phase) : subject.artifact.phase_instance}`,
+      paths: Object.freeze([...paths].sort()),
       diff_digest: subject.artifact.diff_digest,
       current_artifact_digests: Object.freeze([manifest.artifact_digest]),
       parent_document_digests: Object.freeze(subject.artifact.parent_documents.map((item) => item.content_digest).sort())
@@ -69182,8 +69927,9 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   if (parsedConfig !== void 0) {
     try {
       const phaseKind2 = decodePhaseInstance(state.phase_instance).kind;
-      const producer = resolveDispatchRoute(parsedConfig, phaseKind2, "producer", "claude");
-      routes = Object.freeze({ producer });
+      const counterReviewer = resolveDispatchRoute(parsedConfig, phaseKind2, "counter-reviewer");
+      const adjudicator = resolveDispatchRoute(parsedConfig, phaseKind2, "adjudicator");
+      routes = Object.freeze({ counter_reviewer: counterReviewer, adjudicator });
     } catch {
       blockers.push("dispatch-routes-invalid");
     }
@@ -69226,12 +69972,12 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     blockers.push("reconciliation-unavailable");
   }
   let retained = /* @__PURE__ */ new Map();
-  if (dependencies.load_retained_result === void 0) {
+  if (dependencies.load_retained_manifest === void 0) {
     blockers.push("retained-evidence-unavailable");
   } else {
     try {
       const loaded = await loadRetainedEvidence(
-        { load_retained_result: dependencies.load_retained_result },
+        { load_retained_manifest: dependencies.load_retained_manifest },
         state,
         state.phase_instance
       );
@@ -69287,14 +70033,24 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     }
   }
   let commitObserved = false;
+  let commitBlockedReason;
+  let implementationCommit;
   if (produceSubject?.artifact.artifact_kind === "implementation-output") {
     for (const authenticated of authenticatedApprovals) {
-      if (authenticated.request.kind !== "commit-authorization" || authenticated.request.phase_instance !== state.phase_instance || authenticated.request.subject_digest !== produceSubject.artifact_digest) continue;
+      if (authenticated.request.kind !== "commit-authorization" || authenticated.request.phase_instance !== state.phase_instance || authenticated.request.subject_digest !== produceSubject.artifact_digest || authenticated.decision.envelope.payload.decision !== "authorize-commit") continue;
+      const exact = exactCommitAuthorizationContext(authenticated.request.context);
+      if (exact === void 0) continue;
+      implementationCommit = Object.freeze({
+        paths: exact.paths,
+        message: exact.commit_message,
+        target_ref: exact.target_ref,
+        baseline_commit: exact.baseline_commit
+      });
       try {
         if (await implementationOutputCommittedAtCurrentTarget(
           dependencies.runner,
           produceSubject.artifact,
-          authenticated.request.context.target_ref
+          exact
         )) {
           commitObserved = true;
           break;
@@ -69315,18 +70071,23 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         baseline_commit: authenticated.request.context.baseline_commit
       });
       try {
-        commitObserved = await designArtifactCommittedAtCurrentTarget(
+        const observation = await designArtifactCommittedAtCurrentTarget(
           dependencies.runner,
           state.task_id,
           produceSubject.artifact,
-          produceSubject.retained.prepared.manifest.value.outputs,
+          produceSubject.retained.manifest.value.outputs,
           authenticated.request.context
         );
+        commitObserved = observation.observed;
+        if (!observation.observed && observation.blocking) {
+          commitBlockedReason = observation.reason;
+          blockers.push(`design-milestone-${observation.reason}`);
+        }
       } catch {
         blockers.push("commit-observation-unavailable");
       }
     }
-    const migration = authenticatedApprovals.find((item) => item.request.kind === "migration-audit" && item.request.phase_instance === state.phase_instance && item.request.subject_digest === produceSubject.artifact_digest && item.decision.envelope.payload.decision === "accept-import-audit");
+    const migration = commitObserved ? void 0 : authenticatedApprovals.find((item) => item.request.kind === "migration-audit" && item.request.phase_instance === state.phase_instance && item.request.subject_digest === produceSubject.artifact_digest && item.decision.envelope.payload.decision === "accept-import-audit");
     if (migration?.request.kind === "migration-audit" && migration.request.context.target_ref !== void 0 && migration.request.context.baseline_commit !== void 0 && migration.request.context.commit_message !== void 0) {
       designCommit = Object.freeze({
         path: `.archflow/tasks/${state.task_id}`,
@@ -69335,11 +70096,11 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         baseline_commit: migration.request.context.baseline_commit
       });
       try {
-        commitObserved = await designArtifactCommittedAtCurrentTarget(
+        const observation = await designArtifactCommittedAtCurrentTarget(
           dependencies.runner,
           state.task_id,
           produceSubject.artifact,
-          produceSubject.retained.prepared.manifest.value.outputs,
+          produceSubject.retained.manifest.value.outputs,
           {
             target_ref: migration.request.context.target_ref,
             baseline_commit: migration.request.context.baseline_commit,
@@ -69349,6 +70110,11 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
             }
           }
         );
+        commitObserved = observation.observed;
+        if (!observation.observed && observation.blocking) {
+          commitBlockedReason = observation.reason;
+          blockers.push(`design-milestone-${observation.reason}`);
+        }
       } catch {
         blockers.push("commit-observation-unavailable");
       }
@@ -69524,7 +70290,9 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     ...subjectDigest === void 0 ? {} : { subject_digest: subjectDigest },
     authenticated_approvals: approvalFacts,
     commit_observed: commitObserved,
+    ...commitBlockedReason === void 0 ? {} : { commit_blocked_reason: commitBlockedReason },
     ...designCommit === void 0 ? {} : { design_commit: designCommit },
+    ...implementationCommit === void 0 ? {} : { implementation_commit: implementationCommit },
     ...adjudicationGateKind === void 0 ? {} : { adjudication_gate_kind: adjudicationGateKind },
     ...pendingGates.length === 0 ? {} : { pending_adjudication_gate_kinds: pendingGates.map((gate) => gate.kind) },
     migration_audit_required: migrationAuditRequired
@@ -69533,7 +70301,12 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   let designGateInput;
   if (nextAction.code === "open-gate" && nextAction.gate_kind === "commit-authorization" && produceSubject?.artifact.artifact_kind === "implementation-output" && evidence.available) {
     const target2 = await currentTargetRef(dependencies);
-    gateInput = buildCommitAuthorizationInput(produceSubject, evidence.current_evidence, target2);
+    gateInput = buildCommitAuthorizationInput(
+      produceSubject,
+      evidence.current_evidence,
+      target2,
+      await resolveCommit(dependencies.runner, "HEAD")
+    );
   }
   if (nextAction.code === "open-gate" && nextAction.gate_kind === "design-approval" && evidence.available) {
     const target2 = await currentTargetRef(dependencies);
@@ -69715,6 +70488,115 @@ async function computeCallEnvelope(services, value) {
   }));
 }
 
+// src/local/gate-preview.ts
+var ok24 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+function record2(value) {
+  assertPlainJson(value, "gate-preview input");
+  if (value === null || Array.isArray(value) || typeof value !== "object") {
+    throw new TypeError("gate-preview input must be an object");
+  }
+  return structuredClone(value);
+}
+function invalid2(services, issueCode) {
+  return Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("STATE_INVALID", {
+      phase_instance: services.state?.value.phase_instance ?? services.authority.context.phase_instance,
+      issue_code: issueCode
+    })
+  });
+}
+async function currentGatePreview(services, summary) {
+  const status = await computeTaskStatus(services.dependencies, services.authority);
+  if (!status.ok) return status;
+  if (status.value.next_action.code !== "open-gate") {
+    return invalid2(services, "gate-preview-action-not-current");
+  }
+  const request2 = status.value.next_action.request;
+  if (request2?.tool !== "archflow_gate" || request2.input === null || Array.isArray(request2.input) || typeof request2.input !== "object") {
+    return invalid2(services, "gate-preview-request-unavailable");
+  }
+  const input = request2.input;
+  const kind = String(input.kind);
+  const context2 = parseGateContext(kind, input.context);
+  const evidence = parseCurrentEvidenceSetRef(input.current_evidence);
+  return ok24(buildGatePreview({
+    task_id: services.authority.task_id,
+    revision: status.value.revision,
+    phase_instance: status.value.phase_instance,
+    summary,
+    subject_digest: String(input.subject_digest),
+    current_evidence: evidence,
+    kind,
+    context: context2
+  }));
+}
+async function readWaiverOrigin(services, origin2) {
+  const requestTarget = await resolveTaskPath({
+    runner: services.runner,
+    taskId: services.authority.task_id,
+    claim: gateRequestClaim(origin2.origin_gate_id),
+    expectedClass: "authority-decision",
+    context: services.authority.context
+  });
+  if (!requestTarget.ok) return requestTarget;
+  const decisionTarget = await resolveTaskPath({
+    runner: services.runner,
+    taskId: services.authority.task_id,
+    claim: gateDecisionClaim(origin2.origin_gate_id),
+    expectedClass: "authority-decision",
+    context: services.authority.context
+  });
+  if (!decisionTarget.ok) return decisionTarget;
+  try {
+    const requestHandle = await openResolved(requestTarget.value.absolute, 0);
+    const request2 = parseCanonicalDocument(
+      new Uint8Array(await requestHandle.readFile().finally(() => requestHandle.close())),
+      "waiver origin request"
+    );
+    const parsedRequest = Object.freeze({ ...request2, value: parseArchivedGateRequest(request2.value) });
+    const decisionHandle = await openResolved(decisionTarget.value.absolute, 0);
+    const decision3 = parseCanonicalDocument(
+      new Uint8Array(await decisionHandle.readFile().finally(() => decisionHandle.close())),
+      "waiver origin decision"
+    );
+    const parsedDecision = Object.freeze({ ...decision3, value: parseArchivedGateDecisionRecord(decision3.value) });
+    if (!authenticWaiverOriginArchive(parsedRequest, parsedDecision, origin2)) {
+      return invalid2(services, "waiver-preview-origin-invalid");
+    }
+    return ok24(Object.freeze({
+      context: Object.freeze({ origin: origin2, rationale: "" }),
+      evidence: parsedRequest.value.current_evidence
+    }));
+  } catch {
+    return invalid2(services, "waiver-preview-origin-invalid");
+  }
+}
+async function waiverPreview(services, value) {
+  if (services.state === void 0) return invalid2(services, "waiver-preview-state-missing");
+  const origin2 = value.origin;
+  const rationale = String(value.rationale ?? "");
+  if (rationale.trim() === "") throw new TypeError("gate-preview waiver requires a non-empty rationale");
+  const loaded = await readWaiverOrigin(services, origin2);
+  if (!loaded.ok) return loaded;
+  const context2 = Object.freeze({ origin: origin2, rationale });
+  return ok24(buildGatePreview({
+    task_id: services.authority.task_id,
+    revision: services.state.value.revision,
+    phase_instance: origin2.phase_instance,
+    summary: `Waiver request for ${origin2.rule.rule_id}`,
+    subject_digest: origin2.subject_digest,
+    current_evidence: loaded.value.evidence,
+    kind: "constitution-review",
+    context: context2
+  }));
+}
+async function computeLocalGatePreview(services, input) {
+  const value = record2(input);
+  return value.kind === "waiver" ? waiverPreview(services, value) : currentGatePreview(services, String(value.summary ?? ""));
+}
+
 // src/state/pending-waiver.ts
 import { isDeepStrictEqual as isDeepStrictEqual15 } from "node:util";
 import { readFile as readFile11 } from "node:fs/promises";
@@ -69774,7 +70656,7 @@ async function derivePendingWaiverRequest(services) {
 }
 
 // src/state/request-composition.ts
-var ok24 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok25 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail29 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 var BUILD_REQUEST_KINDS = Object.freeze([
   "initialize",
@@ -69788,12 +70670,66 @@ var BUILD_REQUEST_KINDS = Object.freeze([
   "planning-restart",
   "waiver"
 ]);
-var PAYLOAD_SHAPE = `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},"step"?:<pipeline step for kind running>,"document"?:{...},"implementation"?:{...},"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],"summary"?:<gate summary text>}`;
-function record2(value, name) {
+var PAYLOAD_SHAPE = `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},"step"?:<pipeline step for kind running>,"document"?:{...},"implementation"?:{...},"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],"summary"?:<gate summary text>,"preview_digest"?:<gate-preview digest>,"decision"?:{"choice":<option token>,"reason":<human reason}>,"origin"?:<waiver origin>,"rationale"?:<waiver rationale>}`;
+function record3(value, name) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${name} must be an object; expected ${PAYLOAD_SHAPE}`);
   }
   return value;
+}
+function optionalGateDecision(snapshot, label) {
+  if (snapshot.decision === void 0 && snapshot.preview_digest === void 0) return void 0;
+  if (snapshot.decision === void 0 || snapshot.preview_digest === void 0) {
+    throw new TypeError(`${label} decision and preview_digest must be supplied together or both omitted; expected ${PAYLOAD_SHAPE}`);
+  }
+  const raw = record3(snapshot.decision, `${label} decision`);
+  const choice = String(raw.choice ?? "");
+  const reason2 = String(raw.reason ?? "");
+  if (choice.trim() === "" || reason2.trim() === "") {
+    throw new TypeError(`${label} decision requires non-empty "choice" and "reason" fields`);
+  }
+  return Object.freeze({
+    preview_digest: parseSha256Digest(snapshot.preview_digest),
+    decision: Object.freeze({ choice, reason: reason2 })
+  });
+}
+var ordinal6 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+function includeChangedImplementationDocuments(input) {
+  const defaults = phaseImplParentDocumentDefaults(input.phase_instance);
+  if (defaults === void 0) throw new TypeError("implementation document capture requires a phase-impl phase");
+  const changed = new Set(input.changed_paths);
+  const outputs = new Set(input.outputs);
+  const restoreTargets = new Set(input.restore_targets);
+  const parents = new Map(input.parent_documents.map((parent) => [parent.document_path, parent]));
+  for (const parent of defaults) {
+    const taskPath = parseTaskPathClaim(parent.document_path);
+    const repositoryPath = toRepositoryPathClaim(input.task_id, taskPath);
+    if (!changed.has(repositoryPath)) continue;
+    outputs.add(repositoryPath);
+    restoreTargets.add(repositoryPath);
+    if (!parents.has(parent.document_path)) parents.set(parent.document_path, parent);
+  }
+  return Object.freeze({
+    outputs: Object.freeze([...outputs].sort(ordinal6)),
+    restore_targets: Object.freeze([...restoreTargets].sort(ordinal6)),
+    parent_documents: Object.freeze([...parents.values()].sort((left, right) => ordinal6(left.document_path, right.document_path)))
+  });
+}
+function implementationPathList(value, name) {
+  if (!Array.isArray(value)) throw new TypeError(`implementation ${name} must be an array`);
+  return value.map((path2) => parseRepositoryPathClaim(path2));
+}
+function implementationParentDocuments(value, defaults) {
+  if (value === void 0) return defaults;
+  if (!Array.isArray(value)) throw new TypeError("implementation parent_documents must be an array");
+  return value.map((candidate) => {
+    const parent = record3(candidate, "implementation parent document");
+    const role = parent.role;
+    if (role !== "prd" && role !== "design" && role !== "phase-design" && role !== "impl-notes") {
+      throw new TypeError("implementation parent document role is invalid");
+    }
+    return Object.freeze({ document_path: parseTaskPathClaim(parent.document_path), role });
+  });
 }
 function transitionInvalid(state, to) {
   return fail29(createProjectError("TRANSITION_INVALID", {
@@ -69849,19 +70785,30 @@ async function composeProduce(services, state, intentId, snapshot) {
     if (snapshot.document !== void 0) {
       throw new TypeError("phase-impl produces an implementation output; supply implementation facts, not document facts");
     }
-    const implementation = record2(
+    const implementation = record3(
       snapshot.implementation,
       "build-request implementation facts (required for phase-impl)"
     );
+    const parentDefaults = phaseImplParentDocumentDefaults(state.phase_instance);
+    if (parentDefaults === void 0) throw new TypeError("phase-impl parent document defaults are unavailable");
+    const changed = await readChangedGitPaths(services.runner);
+    const captured = includeChangedImplementationDocuments({
+      task_id: services.authority.task_id,
+      phase_instance: state.phase_instance,
+      changed_paths: changed.paths,
+      outputs: implementationPathList(implementation.outputs, "outputs"),
+      restore_targets: implementationPathList(implementation.restore_targets, "restore_targets"),
+      parent_documents: implementationParentDocuments(implementation.parent_documents, parentDefaults)
+    });
     const built = await buildImplementationOutput(
       services.dependencies,
       services.authority,
       services.state,
       {
         ...implementation,
+        ...captured,
         phase_instance: state.phase_instance,
         step: "produce",
-        parent_documents: implementation.parent_documents ?? phaseImplParentDocumentDefaults(state.phase_instance),
         declared_inputs: implementation.declared_inputs ?? [],
         input_fingerprint: state.input_fingerprint
       }
@@ -69874,7 +70821,7 @@ async function composeProduce(services, state, intentId, snapshot) {
     }
     const defaults = phaseDocumentDefaults(services.authority.task_id, state.phase_instance);
     if (defaults === void 0) throw new TypeError(`${phaseKind2} has no canonical document defaults`);
-    const document2 = snapshot.document === void 0 ? {} : record2(snapshot.document, "build-request document facts");
+    const document2 = snapshot.document === void 0 ? {} : record3(snapshot.document, "build-request document facts");
     const built = await buildDocumentArtifact(services.runner, services.authority, {
       phase_instance: state.phase_instance,
       step: "produce",
@@ -69895,7 +70842,7 @@ async function composeProduce(services, state, intentId, snapshot) {
     if (snapshot.human_revision === void 0) {
       throw new TypeError("this produce result completes a human-requested revision; human_revision classification and rationale are required");
     }
-    humanRevision = structuredClone(record2(snapshot.human_revision, "build-request human revision"));
+    humanRevision = structuredClone(record3(snapshot.human_revision, "build-request human revision"));
   } else if (snapshot.human_revision !== void 0) {
     throw new TypeError("human_revision is accepted only while durable state has a pending human-requested revision");
   }
@@ -69950,10 +70897,10 @@ async function composeTriage(services, state, intentId, snapshot) {
   if (!Array.isArray(snapshot.dispositions)) {
     throw new TypeError('build-request triage facts require "dispositions": one entry per current finding');
   }
-  const loadRetainedResult = services.dependencies.load_retained_result;
-  if (loadRetainedResult === void 0) throw new TypeError("retained evidence loading is unavailable");
+  const loadRetainedManifest = services.dependencies.load_retained_manifest;
+  if (loadRetainedManifest === void 0) throw new TypeError("retained evidence loading is unavailable");
   const loaded = await loadRetainedEvidence(
-    { load_retained_result: loadRetainedResult },
+    { load_retained_manifest: loadRetainedManifest },
     state,
     state.phase_instance
   );
@@ -69973,7 +70920,7 @@ async function composeTriage(services, state, intentId, snapshot) {
     }
   }
   const dispositions = snapshot.dispositions.map((entry, index) => {
-    const item = record2(entry, `triage disposition ${index}`);
+    const item = record3(entry, `triage disposition ${index}`);
     const findingId = String(item.finding_id ?? "");
     const candidates = digestsByFindingId.get(findingId);
     if (candidates === void 0) {
@@ -70070,6 +71017,7 @@ async function composeGate(services, state, intentId, snapshot) {
   if (summary.trim() === "") {
     throw new TypeError('build-request gate facts require a non-empty "summary" written for the human reviewer');
   }
+  const requested = optionalGateDecision(snapshot, "build-request gate");
   const phaseKind2 = decodePhaseInstance(state.phase_instance).kind;
   const gateKind2 = phaseKind2 === "phase-impl" ? "commit-authorization" : phaseKind2 === "design" || phaseKind2 === "phase-design" ? "design-approval" : "artifact-approval";
   if (state.terminal !== void 0 || state.open_gate !== void 0) {
@@ -70077,10 +71025,10 @@ async function composeGate(services, state, intentId, snapshot) {
   }
   const subject = await loadCurrentProduceSubject(services.dependencies, state);
   if (!subject.ok) return subject;
-  const loadRetainedResult = services.dependencies.load_retained_result;
-  if (loadRetainedResult === void 0) throw new TypeError("retained evidence loading is unavailable");
+  const loadRetainedManifest = services.dependencies.load_retained_manifest;
+  if (loadRetainedManifest === void 0) throw new TypeError("retained evidence loading is unavailable");
   const loaded = await loadRetainedEvidence(
-    { load_retained_result: loadRetainedResult },
+    { load_retained_manifest: loadRetainedManifest },
     state,
     state.phase_instance
   );
@@ -70130,7 +71078,12 @@ async function composeGate(services, state, intentId, snapshot) {
     };
   } else if (gateKind2 === "commit-authorization") {
     const target2 = await currentTargetRef(services.dependencies);
-    const authorization = buildCommitAuthorizationInput(subject.value, derived.current_evidence_set, target2);
+    const authorization = buildCommitAuthorizationInput(
+      subject.value,
+      derived.current_evidence_set,
+      target2,
+      await resolveCommit(services.runner, "HEAD")
+    );
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
@@ -70150,6 +71103,23 @@ async function composeGate(services, state, intentId, snapshot) {
       kind: "artifact-approval",
       context: { artifact_kind: APPROVAL_ARTIFACT_KINDS[phaseKind2] }
     };
+  }
+  if (requested !== void 0) {
+    const preview = buildGatePreview({
+      task_id: services.authority.task_id,
+      revision: state.revision,
+      phase_instance: state.phase_instance,
+      summary,
+      subject_digest: input.subject_digest,
+      current_evidence: derived.current_evidence_set,
+      kind: input.kind,
+      context: input.context
+    });
+    if (preview.preview_digest !== requested.preview_digest || !previewHasChoice(preview, requested.decision)) {
+      return transitionInvalid(state, preview.preview_digest !== requested.preview_digest ? "gate-preview-stale" : "gate-decision-choice-invalid");
+    }
+    input.preview_digest = requested.preview_digest;
+    input.decision = requested.decision;
   }
   return computeCallEnvelope(services, { tool: "archflow_gate", input });
 }
@@ -70211,28 +71181,48 @@ async function composePlanningRestartRequest(services, state, intentId, snapshot
     }
   });
 }
-async function composePendingWaiverRequest(services, state, intentId) {
+async function composePendingWaiverRequest(services, state, intentId, snapshot) {
+  if (state.terminal !== void 0 || state.open_gate !== void 0) {
+    return transitionInvalid(state, "waiver-gate");
+  }
   const pending = await derivePendingWaiverRequest(services);
   if (!pending.ok) return pending;
+  const requested = optionalGateDecision(snapshot, "build-request waiver");
+  const decisionFields = requested === void 0 ? {} : {
+    preview_digest: requested.preview_digest,
+    decision: requested.decision
+  };
+  if (requested !== void 0) {
+    const preview = await computeLocalGatePreview(services, {
+      kind: "waiver",
+      origin: pending.value.origin,
+      rationale: pending.value.rationale
+    });
+    if (!preview.ok) return preview;
+    if (preview.value.preview_digest !== requested.preview_digest || !previewHasChoice(preview.value, requested.decision)) {
+      return transitionInvalid(state, preview.value.preview_digest !== requested.preview_digest ? "waiver-preview-stale" : "waiver-decision-choice-invalid");
+    }
+  }
   return computeCallEnvelope(services, { tool: "archflow_waiver", input: {
     ...mechanicalInput(services, state, intentId),
     origin: pending.value.origin,
-    rationale: pending.value.rationale
+    rationale: pending.value.rationale,
+    ...decisionFields
   } });
 }
 function generateIntentId(kind) {
   const stamp = (/* @__PURE__ */ new Date()).toISOString().replaceAll("-", "").replaceAll(":", "").slice(0, 15);
-  const random = randomUUID3().replaceAll("-", "").slice(0, 4);
+  const random = randomUUID4().replaceAll("-", "").slice(0, 4);
   return parsePathSafeId(`${kind}-${stamp}-${random}`);
 }
 async function composeRequest(services, value) {
   assertPlainJson(value, "build-request input");
-  const snapshot = record2(structuredClone(value), "build-request input");
+  const snapshot = record3(structuredClone(value), "build-request input");
   const kind = snapshot.kind === void 0 ? "produce" : String(snapshot.kind);
   const intentId = snapshot.intent_id === void 0 ? generateIntentId(kind) : parsePathSafeId(String(snapshot.intent_id));
   if (kind === "initialize") {
     const composed = services.state === void 0 ? await composeInitialize(services, intentId) : transitionInvalid(services.state.value, "initialize");
-    return composed.ok ? ok24(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+    return composed.ok ? ok25(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
   }
   if (services.state === void 0) {
     return fail29(createProjectError("STATE_MISSING", {
@@ -70243,39 +71233,39 @@ async function composeRequest(services, value) {
   switch (kind) {
     case "produce": {
       const composed = await composeProduce(services, state, intentId, snapshot);
-      return composed.ok ? ok24(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+      return composed.ok ? ok25(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
     }
     case "failed": {
       const composed = await composeFailedProduce(services, state, intentId);
-      return composed.ok ? ok24(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+      return composed.ok ? ok25(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
     }
     case "running": {
       const composed = await composeRunning(services, state, intentId, snapshot);
-      return composed.ok ? ok24(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+      return composed.ok ? ok25(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
     }
     case "triage": {
       const composed = await composeTriage(services, state, intentId, snapshot);
-      return composed.ok ? ok24(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+      return composed.ok ? ok25(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
     }
     case "counter-review": {
       const composed = await composeCounterReview(services, state, intentId, snapshot);
-      return composed.ok ? ok24(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+      return composed.ok ? ok25(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
     }
     case "gate": {
       const composed = await composeGate(services, state, intentId, snapshot);
-      return composed.ok ? ok24(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+      return composed.ok ? ok25(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
     }
     case "advance": {
       const composed = await composeAdvance(services, state, intentId);
-      return composed.ok ? ok24(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+      return composed.ok ? ok25(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
     }
     case "planning-restart": {
       const composed = await composePlanningRestartRequest(services, state, intentId, snapshot);
-      return composed.ok ? ok24(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+      return composed.ok ? ok25(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
     }
     case "waiver": {
-      const composed = await composePendingWaiverRequest(services, state, intentId);
-      return composed.ok ? ok24(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+      const composed = await composePendingWaiverRequest(services, state, intentId, snapshot);
+      return composed.ok ? ok25(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
     }
     default:
       throw new TypeError(`build-request kind ${JSON.stringify(kind)} is not recognized; expected ${PAYLOAD_SHAPE}`);
@@ -71278,7 +72268,7 @@ async function executeSemanticAction(services, snapshot, value, capabilities2) {
 
 // src/state/semantic-status.ts
 import { isDeepStrictEqual as isDeepStrictEqual16 } from "node:util";
-var ok25 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok26 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function workflowPosition(phase3) {
   const decoded = decodePhaseInstance(phase3);
   return decoded.kind === "prd" || decoded.kind === "design" ? Object.freeze({ kind: decoded.kind }) : Object.freeze({ kind: decoded.kind, phase: Number(decoded.phase) });
@@ -71359,10 +72349,10 @@ function transitionCarriesDecision(outcome, decision3) {
   const descriptor = Object.getOwnPropertyDescriptor(outcome, "decision");
   return descriptor?.enumerable === true && "value" in descriptor && isDeepStrictEqual16(descriptor.value, decision3.envelope);
 }
-function decisionReenters(record3) {
-  if (record3.outcome !== "decided") return false;
-  const choice = record3.envelope.payload.decision;
-  return record3.kind === "artifact-approval" && choice === "revise" || record3.kind === "design-approval" && choice === "revise" || record3.kind === "constitution-review" && choice === "revise" || record3.kind === "material-drift" && choice === "revise-current" || record3.kind === "attempts-exhausted" && (choice === "retry-once" || choice === "revise") || record3.kind === "commit-authorization" && choice === "revise" || record3.kind === "migration-audit" && choice === "revise";
+function decisionReenters(record4) {
+  if (record4.outcome !== "decided") return false;
+  const choice = record4.envelope.payload.decision;
+  return record4.kind === "artifact-approval" && choice === "revise" || record4.kind === "design-approval" && choice === "revise" || record4.kind === "constitution-review" && choice === "revise" || record4.kind === "material-drift" && choice === "revise-current" || record4.kind === "attempts-exhausted" && (choice === "retry-once" || choice === "revise") || record4.kind === "commit-authorization" && choice === "revise" || record4.kind === "migration-audit" && choice === "revise";
 }
 function directDecisionRequestDigest(operationDigest, request2, decision3) {
   return canonicalJsonDigest({
@@ -71425,8 +72415,8 @@ async function deriveArchiveEnrichments(dependencies, authority, details) {
     return Object.freeze({});
   }
   const archive = await archivedGate(dependencies, authority, transitionGateId);
-  const invalid2 = archive.request === "missing" || archive.request === "invalid" || archive.decision === "missing" || archive.decision === "invalid" || !archiveBinds(state, archive.request, archive.decision);
-  if (invalid2) {
+  const invalid3 = archive.request === "missing" || archive.request === "invalid" || archive.decision === "missing" || archive.decision === "invalid" || !archiveBinds(state, archive.request, archive.decision);
+  if (invalid3) {
     return transition.operation === "semantic-revision-requested" ? Object.freeze({ revision_checkpoint: Object.freeze({ status: "invalid" }) }) : transition.operation === "gate" ? Object.freeze({ pending_waiver_origin: Object.freeze({ status: "invalid" }) }) : Object.freeze({});
   }
   const request2 = archive.request;
@@ -71478,7 +72468,7 @@ async function computeAuthoritativeSemanticStatus(dependencies, authority) {
     throw new TypeError("semantic status repository identity does not match durable state");
   }
   const archives = await deriveArchiveEnrichments(dependencies, authority, detailed.value);
-  return ok25(computeSemanticStatusSnapshot(status, {
+  return ok26(computeSemanticStatusSnapshot(status, {
     repository_identity_digest: authority.repository_identity_digest,
     ...state === void 0 ? {} : { state },
     full_findings: fullFindings(detailed.value),

@@ -9,14 +9,14 @@ import { canonicalDocument, canonicalJsonDigest, gitBlobOid, type CanonicalDocum
 import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
 import type { ResultManifestV1 } from "../../src/contracts/durable-result-manifest.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
-import { parseSafeCode, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parsePathSafeId, parseSafeCode, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { parseRepositoryPathClaim, parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import { createGitRunner, preflightGit } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
 import type { TransactionDependencies } from "../../src/state/transaction.js";
-import { cleanTaskWorkspace, cleanTerminalTaskWorkspace, inspectWorkspaceCleanup } from "../../src/state/workspace-cleanup.js";
+import { cleanTaskWorkspace, cleanTerminalTaskWorkspace, inspectWorkspaceCleanup, removeSupersededPhaseDocuments } from "../../src/state/workspace-cleanup.js";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -144,6 +144,7 @@ describe("task workspace cleanup", () => {
       [join(taskRoot, "authority", "results", `${liveDigest}.json`), "{}"],
       [join(taskRoot, "authority", "results", `${staleDigest}.json`), staleManifest.bytes],
       [join(taskRoot, "authority", "decisions", "live-gate", "request.json"), "{}"],
+      [join(taskRoot, "authority", "decisions", "restart-gate", "request.json"), "{}"],
       [join(taskRoot, "authority", "decisions", "stale-gate", "request.json"), "{}"],
     ] as const;
     for (const [path, contents] of files) {
@@ -169,6 +170,25 @@ describe("task workspace cleanup", () => {
       authoritative_results: [{ phase_instance: phase, step: "produce", result_digest: liveDigest, result_id: parseSafeId("live-result"), input_fingerprint: parseSha256Digest("1".repeat(64)) }],
       approvals: [{ gate_id: "live-gate" as never, gate_kind: "artifact-approval", subject_digest: parseSha256Digest("6".repeat(64)), decision_digest: parseSha256Digest("7".repeat(64)), resolved_at_revision: parseSafeInteger(7) }],
       waivers: [],
+      restart_history: [{
+        restart_id: parsePathSafeId("restart-gate"),
+        source_phase_instance: phase,
+        target_phase_instance: parsePhaseInstanceId("phase-design-2"),
+        reason: "Implementation exposed an upstream design flaw.",
+        restarted_at_revision: parseSafeInteger(8),
+        superseded_results: [],
+        cleared_waivers: [],
+        human_provenance: {
+          schema_version: "1",
+          actor_class: "human",
+          assurance: "connected-request-trace",
+          channel: "connected-host",
+          connection_id: parseSafeId("connection-1"),
+          invocation_id: parseSafeId("invocation-1"),
+          request_id_digest: parseSha256Digest("9".repeat(64)),
+          request_digest: parseSha256Digest("8".repeat(64)),
+        },
+      }],
     };
 
     const before = await inspectWorkspaceCleanup(dependencies, authority.value, state);
@@ -182,6 +202,7 @@ describe("task workspace cleanup", () => {
     expect(existsSync(join(taskRoot, "authority", "results", `${liveDigest}.json`))).toBe(true);
     expect(existsSync(join(taskRoot, "authority", "results", `${staleDigest}.json`))).toBe(false);
     expect(existsSync(join(taskRoot, "authority", "decisions", "live-gate", "request.json"))).toBe(true);
+    expect(existsSync(join(taskRoot, "authority", "decisions", "restart-gate", "request.json"))).toBe(true);
     expect(existsSync(join(taskRoot, "authority", "decisions", "stale-gate"))).toBe(false);
 
     const terminal = await cleanTerminalTaskWorkspace(dependencies, authority.value);
@@ -275,5 +296,55 @@ describe("task workspace cleanup", () => {
     expect(existsSync(join(resultsRoot, `${directArtifact.digest}.json`))).toBe(true);
     expect(existsSync(join(resultsRoot, `${incidental.digest}.json`))).toBe(false);
     expect(existsSync(join(resultsRoot, `${malformedDigest}.json`))).toBe(true);
+  });
+
+  it("clears the untracked phase documents a backward restart supersedes", async () => {
+    const root = mkdtempSync(join(tmpdir(), "archflow-restart-documents-"));
+    roots.push(root);
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root, env: gitEnv });
+
+    const taskId = parseTaskSlug("restart-task");
+    const taskPath = `.archflow/tasks/${taskId}`;
+    const taskRoot = join(root, taskPath);
+    mkdirSync(join(taskRoot, "phases", "1"), { recursive: true });
+    mkdirSync(join(taskRoot, "phases", "2"), { recursive: true });
+    mkdirSync(join(taskRoot, "phases", "3"), { recursive: true });
+    writeFileSync(join(taskRoot, "phases", "1", "design.md"), "# Phase 1\n");
+    writeFileSync(join(taskRoot, "phases", "1", "impl-notes.md"), "# Phase 1 log\n");
+    writeFileSync(join(taskRoot, "phases", "2", "design.md"), "# Phase 2\n");
+    execFileSync("git", ["add", "--", taskPath], { cwd: root, env: gitEnv });
+    execFileSync("git", ["commit", "-qm", "base"], { cwd: root, env: gitEnv });
+    // Left behind by the abandoned phase-impl-2 attempt and a speculative later phase design.
+    writeFileSync(join(taskRoot, "phases", "2", "impl-notes.md"), "# Abandoned attempt\n");
+    writeFileSync(join(taskRoot, "phases", "3", "design.md"), "# Never approved\n");
+
+    const context = {
+      task_id: taskId,
+      phase_instance: parsePhaseInstanceId("phase-design-2"),
+      operation: parseSafeCode("restart-documents-test"),
+      attempt: parseSafeInteger(1),
+    };
+    const discovered = await discoverWorktree(createGitRunner({ cwd: root }), context);
+    if (!discovered.ok) throw discovered.error;
+    const environment = await preflightGit(discovered.value, context);
+    if (!environment.ok) throw environment.error;
+    const authority = await createInternalTransactionAuthority({
+      runner: discovered.value, environment: environment.value, task_id: taskId, context,
+    });
+    if (!authority.ok) throw authority.error;
+    const dependencies = { runner: discovered.value, environment: environment.value } as TransactionDependencies;
+
+    expect(await removeSupersededPhaseDocuments(dependencies, authority.value, "phase-design-2"))
+      .toEqual(["phases/2/impl-notes.md", "phases/3/design.md"]);
+    expect(existsSync(join(taskRoot, "phases", "2", "impl-notes.md"))).toBe(false);
+    expect(existsSync(join(taskRoot, "phases", "3"))).toBe(false);
+    // The phase the restart returns to keeps its design, and committed history is never touched.
+    expect(existsSync(join(taskRoot, "phases", "2", "design.md"))).toBe(true);
+    expect(existsSync(join(taskRoot, "phases", "1", "impl-notes.md"))).toBe(true);
+
+    // A tracked document is already in history; removing it would only move the same unauthorized
+    // change into the next commit as a deletion.
+    expect(await removeSupersededPhaseDocuments(dependencies, authority.value, "design")).toEqual([]);
+    expect(existsSync(join(taskRoot, "phases", "1", "impl-notes.md"))).toBe(true);
   });
 });

@@ -1,6 +1,7 @@
 import { extname } from "node:path";
 
 import { lintSource } from "@secretlint/core";
+import { secretLintProfiler } from "@secretlint/profiler";
 import { rules as recommendedRules } from "@secretlint/secretlint-rule-preset-recommend";
 import type { SecretLintCoreConfigRule } from "@secretlint/types";
 
@@ -86,6 +87,26 @@ const configRules: SecretLintCoreConfigRule[] = enabledCreators.map((creator) =>
   rule: creator,
 }));
 
+/**
+ * Empties what `@secretlint/core` accumulates on the performance timeline as it lints.
+ *
+ * Nothing reads those measurements, and the profiler never releases them: it retains every mark and
+ * rescans that retained list linearly for each later mark, so scanning many files costs quadratic
+ * time. `getEntries`/`getMeasures` settle its pending `measure()` calls and hand back its own
+ * arrays, so emptying them resets the profiler through its public surface.
+ *
+ * Deliberately leaves the process-wide mark registry alone. Marks are recorded before their
+ * observer callback runs, so clearing them races: a callback can measure against a mark that was
+ * just removed, which throws `The "..." performance mark has not been set` and takes the process
+ * down. Only the retained-list growth costs time; the registry itself is looked up by name.
+ */
+async function releaseSecretlintProfilerEntries(): Promise<void> {
+  const entries = await secretLintProfiler.getEntries().catch(() => undefined);
+  const measures = await secretLintProfiler.getMeasures().catch(() => undefined);
+  if (entries !== undefined) entries.length = 0;
+  if (measures !== undefined) measures.length = 0;
+}
+
 export function createSecretlintScanner(): SecretScanner {
   const scan = async (suppliedCandidates: readonly SecretScanCandidate[]): Promise<SecretScanResult> => {
       const candidates = suppliedCandidates.map((candidate: SecretScanCandidate) => Object.freeze({
@@ -131,6 +152,8 @@ export function createSecretlintScanner(): SecretScanner {
           outcome: "unavailable" as const,
           reason: parseSafeCode("secretlint-unavailable"),
         });
+      } finally {
+        await releaseSecretlintProfilerEntries();
       }
       if (findings.length > 0) {
         findings.sort((left, right) =>

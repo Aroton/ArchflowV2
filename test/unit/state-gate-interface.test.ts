@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { canonicalDocument, parseGitOid, sha256Bytes } from "../../src/contracts/canonical.js";
+import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
 import { parseActiveGate, parseGateRequest, type ActiveGateV1 } from "../../src/contracts/durable-gate.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parsePathSafeId, parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
@@ -19,6 +20,7 @@ import { createGitRunner, preflightGit } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import { createAtomicWriter } from "../../src/state/atomic.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
+import { runConnectedGateDecision } from "../../src/state/gate-direct.js";
 import {
   buildGateDecisionTemplates,
   buildHumanGatePresentation,
@@ -40,7 +42,7 @@ const RULE_B = { rule_id: "rule-b", rule_version: 2 } as const;
 const AUTHORITY_LINK = {
   link_digest: D("9"), purpose: "restore-adoption", proposed_generation_digest: D("a"), changed_input_fingerprint: D("b"),
 } as const;
-const counter = { role: "counter-review", evidence_digest: D("8"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" } as const;
+const counter = { role: "counter-review", evidence_digest: D("8"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" } as const;
 const evidence = currentEvidenceSetRef([counter]);
 const provenance: HumanDecisionProvenance = {
   schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local",
@@ -68,7 +70,7 @@ const CASES = [
   { kind: "material-drift", context: { affected_upstream: { kind: "architecture", digest: D("a") }, drift: "material", affected_claim_ids: ["claim-one"] }, allowed: ["amend-upstream", "revise-current", "reject", "cancel"] },
   { kind: "attempts-exhausted", context: { step: "produce", attempts: 2, maximum_attempts: 2 }, allowed: ["retry-once", "revise", "abort", "cancel"] },
   { kind: "constitution-edit", context: { pinned_constitution_digest: D("a"), current_constitution_digest: D("b"), changed_path_class: "task-branch-constitution" }, allowed: ["revert-edit", "start-base-amendment", "abort", "cancel"] },
-  { kind: "commit-authorization", context: { target_ref: "refs/heads/task", diff_digest: D("a"), current_artifact_digests: [D("b")], parent_document_digests: [D("c")] }, allowed: ["authorize-commit", "revise", "abort", "cancel"] },
+  { kind: "commit-authorization", context: { target_ref: "refs/heads/task", baseline_commit: "1".repeat(40) as never, commit_message: "ArchFlow: Implement task-1 phase 2", paths: ["tracked.txt" as never], diff_digest: D("a"), current_artifact_digests: [D("b")], parent_document_digests: [D("c")] }, allowed: ["authorize-commit", "revise", "abort", "cancel"] },
   { kind: "restore-collision", context: { path: parseTaskPathClaim("task/file.md"), recorded_generation_digest: D("a"), current_generation_digest: D("b"), adoption_candidate: AUTHORITY_LINK }, allowed: ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"] },
   { kind: "migration-audit", context: { source_identity_digest: D("a"), destination_identity_digest: D("b"), import_digest: D("c"), code_baseline_digest: D("d"), policy_baseline_digest: D("e") }, allowed: ["accept-import-audit", "revise", "abort", "cancel"] },
 ] as const satisfies readonly Readonly<{ kind: GateKind; context: GateContext<GateKind>; allowed: readonly string[] }>[];
@@ -290,6 +292,48 @@ describe("gate decision interface", () => {
       context_digest: h.active.context_digest,
       payload: { decision: "reject", reason: "The artifact needs revision." },
       human_provenance: { channel: "archflow-local" },
+    });
+  });
+
+  it("resolves a connected-host choice in one bounded call with host provenance", async () => {
+    const h = await harness();
+    const connection = connectionContextFactory.captureStartup({
+      connection_id: "connection-direct-gate",
+      startup_repository_candidate: { working_directory: h.root },
+    }).initialize({
+      client: { name: "test-client", version: "1" },
+      host: "codex",
+      protocol_version: "2025-11-25",
+    });
+    const invocation = createInvocationContext(connection, {
+      invocation_id: "invocation-direct-gate",
+      transport_metadata: { request_id: "request-direct-gate", operation: "tools/call" },
+    }, new AbortController().signal);
+
+    const resolved = await runConnectedGateDecision(
+      h.dependencies,
+      h.gateInput,
+      { choice: "approve", reason: "The reviewed implementation meets the phase contract." },
+      invocation,
+    );
+
+    expect(resolved).toMatchObject({
+      ok: true,
+      value: {
+        replayed: false,
+        record: {
+          value: {
+            outcome: "decided",
+            envelope: {
+              payload: { decision: "approve", reason: "The reviewed implementation meets the phase contract." },
+              human_provenance: {
+                channel: "connected-host",
+                connection_id: "connection-direct-gate",
+              },
+            },
+          },
+        },
+      },
     });
   });
 

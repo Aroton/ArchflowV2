@@ -4,9 +4,9 @@ import { canonicalJsonDigest } from "../../src/contracts/canonical.js";
 import { LOCAL_COMMANDS, runLocalCommand } from "../../src/local/commands.js";
 
 describe("archflow-local pure adapters", () => {
-  it("publishes exactly the fourteen local commands", () => {
+  it("publishes exactly the sixteen local commands", () => {
     expect([...LOCAL_COMMANDS].sort()).toEqual([
-      "build-request", "clean", "decide", "envelope", "hash", "init",
+      "build-request", "clean", "commit", "decide", "envelope", "gate-preview", "hash", "init",
       "manual-status", "reconcile", "render", "restore", "snapshot", "status", "upgrade", "validate",
     ]);
   });

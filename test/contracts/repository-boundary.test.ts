@@ -100,6 +100,9 @@ describe("package.json dependencies and scripts", () => {
     expect(manifest.dependencies).toEqual({
       "@modelcontextprotocol/server": "2.0.0",
       "@secretlint/core": "13.0.4",
+      // Direct because src/state/secret-scan.ts releases the profiler timeline `@secretlint/core`
+      // leaves behind; it is core's own transitive dependency, pinned to the same version.
+      "@secretlint/profiler": "13.0.4",
       "@secretlint/secretlint-rule-preset-recommend": "13.0.4",
       "write-file-atomic": "8.0.0",
       yaml: "2.9.0",

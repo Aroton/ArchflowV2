@@ -39,6 +39,7 @@ import { authenticatedApprovalIsEligibleAfterLatestRestart } from "../../state/r
 import {
   loadCurrentProduceSubject,
   loadProduceUpstreamSubject,
+  produceOwnedTaskDocumentPaths,
   produceProjectionSetDigest,
   produceUpstreamBindingsForSubject,
   readProduceProjection,
@@ -48,6 +49,7 @@ import {
   type ProduceProjection,
 } from "../../state/produce-subject.js";
 import type { ProductionServices } from "../../state/production.js";
+import type { ProjectionPlan } from "../../state/snapshots.js";
 import { mapHandlerErrors } from "./errors.js";
 import { resolvePreDispatchReplay } from "./replay.js";
 import { openHandlerSession } from "./session.js";
@@ -80,7 +82,10 @@ export function envelopeOverflowError(
   if (parameters.issue_code !== "envelope-byte-cap") return undefined;
   if (subject.artifact.artifact_kind !== "implementation-output") return undefined;
   const encoder = new TextEncoder();
-  const offending = subject.artifact.outputs
+  const taskPrefix = `.archflow/tasks/${subject.artifact.task_id}/`;
+  const coProduced = subject.artifact.outputs.filter((entry) => entry.path.startsWith(taskPrefix));
+  const candidates = coProduced.length === 0 ? subject.artifact.outputs : coProduced;
+  const offending = candidates
     .map((entry) => ({ path: entry.path, byte_count: encoder.encode(JSON.stringify(entry)).byteLength }))
     .sort((left, right) => right.byte_count - left.byte_count)
     .slice(0, 5)
@@ -122,12 +127,13 @@ async function deriveApprovedUpstreams(
 ): Promise<ProjectResult<readonly AdjudicationUpstreamInput[]>> {
   const derived: AdjudicationUpstreamInput[] = [];
   const seenOwners = new Set<string>();
+  const coProducedPaths = produceOwnedTaskDocumentPaths(subject.artifact);
   for (const binding of produceUpstreamBindingsForSubject(durable, subject.artifact)) {
     const upstream = await loadProduceUpstreamSubject(services.dependencies, services.authority, durable, binding);
     if (!upstream.ok) return upstream;
     if (seenOwners.has(upstream.value.artifact_digest)) continue;
     const upstreamProjections = await readProduceProjectionSet(
-      services.runner, services.authority, upstream.value, binding.path,
+      services.runner, services.authority, upstream.value, binding.path, coProducedPaths,
     );
     if (!upstreamProjections.ok) return upstreamProjections;
     let text: string;
@@ -302,11 +308,20 @@ export async function handleCounterReview(
     const repositoryViewCommit = await resolveRepositoryViewCommit(
       services.runner, produce.value.artifact,
     );
+    // Review dispatch is the only consumer of the retained projection plan, so it is also the only
+    // path that reloads the full installation — payload bytes, before-images, and the secret scan.
+    // The subject itself carries a manifest, which is all every other reader needs.
+    let projectionPlan: ProjectionPlan | undefined;
+    if (produce.value.artifact.artifact_kind === "implementation-output") {
+      const loadRetained = services.dependencies.load_retained_result;
+      if (loadRetained === undefined) throw new TypeError("retained result loading is unavailable");
+      const retained = await loadRetained(produce.value.reference);
+      if (!retained.ok) return retained;
+      projectionPlan = retained.value.projection_plan;
+    }
     const repositoryView = Object.freeze({
       base_commit: repositoryViewCommit,
-      ...(produce.value.artifact.artifact_kind === "implementation-output"
-        ? { projection_plan: produce.value.retained.projection_plan }
-        : {}),
+      ...(projectionPlan === undefined ? {} : { projection_plan: projectionPlan }),
     });
     const workspaceBinding = produce.value.artifact.artifact_kind === "implementation-output"
       ? Object.freeze({
@@ -339,7 +354,7 @@ export async function handleCounterReview(
       const constitutionCoordinator = createDispatchCoordinator({
         authority: services.authority, dependencies: services.dependencies, host: session.value.host,
         repository_root: services.runner.location.worktreeRoot, phase_instance: state.value.phase_instance,
-        signal: context.signal, cancellation_source: "client", allow_claude_dispatch: true,
+        signal: context.signal, cancellation_source: "client",
         repository_view: repositoryView,
       });
       constitutionPlan = Object.freeze({
@@ -365,6 +380,7 @@ export async function handleCounterReview(
       state: state.value,
       subject: produce.value,
       projection_bytes: projection.value.bytes,
+      ...(projectionPlan === undefined ? {} : { projection_plan: projectionPlan }),
     });
     if (!context_entries.ok) return context_entries;
 
@@ -377,8 +393,6 @@ export async function handleCounterReview(
       phase_instance: state.value.phase_instance,
       signal: context.signal,
       cancellation_source: "client",
-      // Both producer directions are implemented; release authorization remains a separate gate.
-      allow_claude_dispatch: true,
       repository_view: repositoryView,
     });
     const result = await runCounterReview({

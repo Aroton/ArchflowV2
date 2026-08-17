@@ -98,7 +98,15 @@ function harness(root: string) {
   return {
     async status(): Promise<TaskStatusV1> {
       const s = await services();
-      const status = await computeTaskStatus(s.dependencies, s.authority);
+      // Status writes nothing, so it must never reload a full retained installation: that re-reads
+      // every payload and re-runs the secret scan to rebuild a projection plan status never looks
+      // at. The recorded `secret_scan` verdict on the manifest is the authority on a read path.
+      const status = await computeTaskStatus({
+        ...s.dependencies,
+        load_retained_result: () => {
+          throw new Error("status derivation must not load a full retained result");
+        },
+      }, s.authority);
       if (!status.ok) throw new Error(status.error.code);
       return status.value;
     },

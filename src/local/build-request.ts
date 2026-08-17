@@ -4,12 +4,13 @@ import type { ProductionServices } from "../state/production.js";
 import {
   BUILD_REQUEST_KINDS,
   composeRequest,
+  includeChangedImplementationDocuments,
   type BuildRequestKind,
 } from "../state/request-composition.js";
 import { writeStagedRequest } from "../state/staged-requests.js";
 import type { CallEnvelope } from "./call-envelope.js";
 
-export { BUILD_REQUEST_KINDS, type BuildRequestKind };
+export { BUILD_REQUEST_KINDS, includeChangedImplementationDocuments, type BuildRequestKind };
 
 const ok = <T>(value: T): ProjectResult<T> =>
   Object.freeze({ schema_version: "1", ok: true, value });

@@ -158,7 +158,7 @@ Planning restart is the one narrow transaction that may clear active gate-relate
 - `runStateTransaction` in `src/state/transaction.ts` is the write coordinator: authenticate request authority, acquire the work-root task lock, recompute fingerprints/digests, prepare a draft that cannot set kernel-owned revision/transition fields, stage recovery bytes, publish canonical state with `last_transition`, install current result authority/projections, clean successful buffers and superseded authority, and arbitrate uncertain outcomes for replay.
 - State readers return classified unions such as canonical/missing/unreadable/noncanonical, leaving policy decisions to callers (`src/state/read.ts`).
 - I/O and state dependencies are injected through explicit dependency records, enabling deterministic unit and crash testing without weakening production boundaries.
-- The gate interface is a reconstructible projection below ignored runtime, not authority. Records under `authority/decisions/` and state remain sufficient if it is missing or corrupt; archive the human decision before deleting the UI.
+- The gate interface is a reconstructible projection below ignored runtime, not authority. Records under `authority/decisions/` and state remain sufficient if it is missing or corrupt. In the normal path the connected handler writes the preview-bound choice and archives it synchronously; the standalone decision-file writer remains recovery machinery, never a prerequisite for resolving already authenticated authority.
 
 ## CLI and MCP conventions
 

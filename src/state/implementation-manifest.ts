@@ -33,7 +33,6 @@ import { assertPlainJson } from "../contracts/plain-json.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
 import {
   hashGitBlobIdentity,
-  isCommitAncestor,
   isCommitAncestorOfHead,
   readCommitTreeBlob,
   readGitBlobBytes,
@@ -48,6 +47,7 @@ import { readIndexEntries } from "../repository/index-entries.js";
 import {
   classifyRepositoryPath,
   classifyTaskPath,
+  isTaskDocumentPath,
   resolveDeclaredOutputPath,
   resolveDeclaredRename,
   resolveRepositoryPath,
@@ -116,25 +116,40 @@ export type CurrentAuthoritativeOutputSource =
   | Readonly<{ path: RepositoryPathClaim; state: "present"; identity: BlobIdentity; bytes?: Uint8Array }>;
 
 /**
- * Proves that the authenticated commit gate's target is still current and that the immutable
- * current HEAD tree contains every after-image (and every required absence) retained by the
- * implementation output. Worktree and index state are deliberately irrelevant after commit.
+ * Proves that HEAD is exactly the commit authorized by the authenticated implementation gate:
+ * the target is current, the approved baseline is its direct parent, its subject/message/path
+ * set are exact, and its tree contains every retained after-image or absence. Unrelated worktree
+ * and index state are deliberately irrelevant after commit.
  */
 export async function implementationOutputCommittedAtCurrentTarget(
   runner: RootBoundGitRunner,
   output: ImplementationOutputV1,
-  targetRef: string,
+  context: GateContext<"commit-authorization">,
 ): Promise<boolean> {
   const symbolicRef = await runner.runText({
     argv: ["symbolic-ref", "--quiet", "HEAD"],
     operation: "git-current-commit-target" as SafeCode,
     expectedAbsence: [{ code: 1, stderrIncludes: "" }],
   });
-  if (targetRef === "HEAD" ? symbolicRef !== "" : symbolicRef !== targetRef) return false;
+  if (context.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== context.target_ref) return false;
   const headCommit = await resolveCommit(runner, "HEAD");
-  const targetCommit = await resolveCommit(runner, targetRef);
+  const targetCommit = await resolveCommit(runner, context.target_ref);
   if (headCommit !== targetCommit) return false;
-  if (!await isCommitAncestor(runner, output.base_commit, headCommit)) return false;
+  if (context.baseline_commit !== output.base_commit || headCommit === context.baseline_commit) return false;
+  if (await resolveCommit(runner, `${headCommit}^`) !== context.baseline_commit) return false;
+  const message = await runner.runText({
+    argv: ["log", "-1", "--format=%s", headCommit],
+    operation: "git-implementation-commit-message" as SafeCode,
+  });
+  if (message !== context.commit_message) return false;
+
+  const authorizedPaths = [...context.paths].sort(ordinal);
+  if (JSON.stringify(authorizedPaths) !== JSON.stringify(sortedUniquePaths(output))) return false;
+  const changedPaths = [...new Set(await runner.runNulFields({
+    argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", context.baseline_commit, headCommit, "--"],
+    operation: "git-implementation-commit-paths" as SafeCode,
+  }))].sort(ordinal);
+  if (JSON.stringify(changedPaths) !== JSON.stringify(authorizedPaths)) return false;
 
   for (const entry of output.outputs) {
     const committed = await readCommitTreeBlob(runner, headCommit, entry.path);
@@ -146,13 +161,63 @@ export async function implementationOutputCommittedAtCurrentTarget(
     if (entry.operation === "rename" &&
         await readCommitTreeBlob(runner, headCommit, entry.previous_path) !== undefined) return false;
   }
-  return true;
+  // Close the observation window after all explicit-commit tree reads.
+  return await resolveCommit(runner, "HEAD") === headCommit &&
+    await resolveCommit(runner, context.target_ref) === headCommit;
+}
+
+/**
+ * Why the design milestone could not be observed. Every value names one predicate the commit failed,
+ * so status can say what is wrong instead of silently re-offering an action that cannot succeed.
+ */
+export type DesignMilestoneMiss =
+  | "target-moved"
+  | "not-committed"
+  | "parent-not-baseline"
+  | "message-mismatch"
+  | "paths-outside-task"
+  | "missing-recovery-authority"
+  | "approved-document-mismatch"
+  | "unauthorized-task-document"
+  | "task-tree-dirty";
+
+/**
+ * `blocking` is false only for `not-committed`, the one miss the authorized commit action can still
+ * resolve by running. Every other miss means the action is unperformable — the local commit path
+ * requires HEAD to still be the baseline — so a human has to intervene.
+ */
+export type DesignMilestoneObservation =
+  | Readonly<{ observed: true }>
+  | Readonly<{
+      observed: false;
+      reason: DesignMilestoneMiss;
+      blocking: boolean;
+      paths?: readonly string[];
+    }>;
+
+const observed: DesignMilestoneObservation = Object.freeze({ observed: true });
+
+function missed(
+  reason: DesignMilestoneMiss,
+  paths?: readonly string[],
+): DesignMilestoneObservation {
+  return Object.freeze({
+    observed: false,
+    reason,
+    blocking: reason !== "not-committed",
+    ...(paths === undefined ? {} : { paths: Object.freeze([...paths]) }),
+  });
 }
 
 /**
  * Proves the automatic design milestone commit authorized by the combined human gate. The commit
  * must be the direct child of the approved baseline, touch only this task, contain the reviewed
  * document plus durable recovery authority, and leave the task root clean.
+ *
+ * The same unauthorized-document rule is also applied *before* the commit exists. A superseded task
+ * document left in the worktree — an abandoned phase's `impl-notes.md`, say — would otherwise be
+ * swept into the whole-task-directory commit and only be rejected afterwards, at a point where the
+ * commit can no longer be retried. Reporting it up front keeps the failure fixable.
  */
 export async function designArtifactCommittedAtCurrentTarget(
   runner: RootBoundGitRunner,
@@ -161,66 +226,87 @@ export async function designArtifactCommittedAtCurrentTarget(
   outputs: readonly OutputEntry[],
   context: Pick<GateContext<"design-approval">, "target_ref" | "baseline_commit" | "commit_message"> &
     Readonly<{ authorized_document_paths?: readonly RepositoryPathClaim[] }>,
-): Promise<boolean> {
+): Promise<DesignMilestoneObservation> {
   const symbolicRef = await runner.runText({
     argv: ["symbolic-ref", "--quiet", "HEAD"],
     operation: "git-current-design-target" as SafeCode,
     expectedAbsence: [{ code: 1, stderrIncludes: "" }],
   });
-  if (context.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== context.target_ref) return false;
+  if (context.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== context.target_ref) {
+    return missed("target-moved");
+  }
   const head = await resolveCommit(runner, "HEAD");
-  if (await resolveCommit(runner, context.target_ref) !== head) return false;
-  if (head === context.baseline_commit) return false;
-  if (await resolveCommit(runner, `${head}^`) !== context.baseline_commit) return false;
-  const message = await runner.runText({
-    argv: ["log", "-1", "--format=%s", head],
-    operation: "git-design-commit-message" as SafeCode,
-  });
-  if (message !== context.commit_message) return false;
+  if (await resolveCommit(runner, context.target_ref) !== head) return missed("target-moved");
 
   const prefix = `.archflow/tasks/${taskId}/`;
-  const changed = await runner.runNulFields({
-    argv: ["diff-tree", "--no-commit-id", "--name-only", "-z", "-r", context.baseline_commit, head, "--"],
-    operation: "git-design-commit-paths" as SafeCode,
-  });
-  if (changed.length === 0 || changed.some((path) => !path.startsWith(prefix))) return false;
-  if (!changed.includes(`${prefix}state.json`)) return false;
-  if (!changed.some((path) => path.startsWith(`${prefix}authority/decisions/`) && path.endsWith("/request.json")) ||
-      !changed.some((path) => path.startsWith(`${prefix}authority/decisions/`) && path.endsWith("/decision.json"))) return false;
-
   const additional = artifact.additional_documents ?? [];
   const approvedDocumentPaths = new Set<RepositoryPathClaim>([
     artifact.projection_target,
     ...additional.map((entry) => entry.projection_target),
   ]);
-  for (const path of approvedDocumentPaths) {
-    const output = outputs.find((entry) => entry.path === path);
-    if (output === undefined || output.operation === "delete") return false;
-    const committed = await readCommitTreeBlob(runner, head, path);
-    if (committed?.mode !== output.after.mode || committed.oid !== output.after.oid) return false;
-    const baseline = await readCommitTreeBlob(runner, context.baseline_commit, path);
-    const differsFromBaseline = baseline?.mode !== output.after.mode || baseline.oid !== output.after.oid;
-    if (differsFromBaseline && !changed.includes(path)) return false;
-  }
-  const authorizedDocumentPaths = new Set([
+  const authorizedDocumentPaths = new Set<RepositoryPathClaim>([
     ...approvedDocumentPaths,
     ...(context.authorized_document_paths ?? []),
   ]);
-  const taskDocumentPath = /^(?:prd\.md|design\.md|phases\/[1-9][0-9]*\/(?:design|impl-notes)\.md)$/u;
-  if (changed.some((path) => {
-    const taskRelative = path.startsWith(prefix) ? path.slice(prefix.length) : path;
-    return taskDocumentPath.test(taskRelative) && !authorizedDocumentPaths.has(path as RepositoryPathClaim);
-  })) return false;
+  const unauthorizedDocuments = (paths: readonly string[]): readonly string[] =>
+    paths.filter((path) =>
+      path.startsWith(prefix) &&
+      isTaskDocumentPath(path.slice(prefix.length)) &&
+      !authorizedDocumentPaths.has(path as RepositoryPathClaim));
 
-  const dirty = await runner.runNulFields({
-    argv: ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", prefix.slice(0, -1)],
-    operation: "git-design-task-clean" as SafeCode,
+  if (head === context.baseline_commit) {
+    const pending = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
+    const unauthorized = unauthorizedDocuments(pending.paths);
+    if (unauthorized.length > 0) return missed("unauthorized-task-document", unauthorized);
+    return missed("not-committed");
+  }
+
+  if (await resolveCommit(runner, `${head}^`) !== context.baseline_commit) {
+    return missed("parent-not-baseline");
+  }
+  const message = await runner.runText({
+    argv: ["log", "-1", "--format=%s", head],
+    operation: "git-design-commit-message" as SafeCode,
   });
-  if (dirty.length !== 0) return false;
+  if (message !== context.commit_message) return missed("message-mismatch");
+
+  const changed = await runner.runNulFields({
+    argv: ["diff-tree", "--no-commit-id", "--name-only", "-z", "-r", context.baseline_commit, head, "--"],
+    operation: "git-design-commit-paths" as SafeCode,
+  });
+  if (changed.length === 0) return missed("paths-outside-task");
+  const outsideTask = changed.filter((path) => !path.startsWith(prefix));
+  if (outsideTask.length > 0) return missed("paths-outside-task", outsideTask);
+  if (!changed.includes(`${prefix}state.json`)) return missed("missing-recovery-authority");
+  if (!changed.some((path) => path.startsWith(`${prefix}authority/decisions/`) && path.endsWith("/request.json")) ||
+      !changed.some((path) => path.startsWith(`${prefix}authority/decisions/`) && path.endsWith("/decision.json"))) {
+    return missed("missing-recovery-authority");
+  }
+
+  for (const path of approvedDocumentPaths) {
+    const output = outputs.find((entry) => entry.path === path);
+    if (output === undefined || output.operation === "delete") return missed("approved-document-mismatch", [path]);
+    const committed = await readCommitTreeBlob(runner, head, path);
+    if (committed?.mode !== output.after.mode || committed.oid !== output.after.oid) {
+      return missed("approved-document-mismatch", [path]);
+    }
+    const baseline = await readCommitTreeBlob(runner, context.baseline_commit, path);
+    const differsFromBaseline = baseline?.mode !== output.after.mode || baseline.oid !== output.after.oid;
+    if (differsFromBaseline && !changed.includes(path)) return missed("approved-document-mismatch", [path]);
+  }
+  const unauthorized = unauthorizedDocuments(changed);
+  if (unauthorized.length > 0) return missed("unauthorized-task-document", unauthorized);
+
+  const dirty = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
+  if (dirty.paths.length !== 0 || dirty.unrepresentable_count !== 0) {
+    return missed("task-tree-dirty", dirty.paths);
+  }
   // Close the observation window: a concurrent target move after the initial pin must not let
   // stale commit evidence authorize the phase transition.
   return await resolveCommit(runner, "HEAD") === head &&
-    await resolveCommit(runner, context.target_ref) === head;
+    await resolveCommit(runner, context.target_ref) === head
+    ? observed
+    : missed("target-moved");
 }
 
 const ordinal = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;

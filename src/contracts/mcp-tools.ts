@@ -68,16 +68,22 @@ export interface StateSuccess { readonly path: TaskPathClaim; readonly revision:
 export interface CounterReviewInput extends CommonToolInput { readonly artifact_path: TaskPathClaim }
 /**
  * The server decides whether the constitution review runs: it is evaluated as a second
- * opposite-family dispatch inside the same archflow_counter_review call whenever the pinned
+ * server-dispatched review inside the same archflow_counter_review call whenever the pinned
  * constitution has active rules, and reported "not-run" explicitly when it has none.
  */
 export type CounterReviewConstitutionOutcome =
   | Readonly<{ status: "evaluated"; path: RepositoryPathClaim; constitution: ConstitutionResult; drift: DriftResult; triggers: readonly RuleVersionRef[] }>
   | Readonly<{ status: "not-run"; reason: "no-active-constitution-rules" }>;
 export interface CounterReviewSuccess { readonly path: RepositoryPathClaim; readonly verdict: "pass" | "advisory" | "fail"; readonly blocking_count: number; readonly constitution: CounterReviewConstitutionOutcome; readonly revision: number; readonly request_digest?: Sha256Digest }
-export type GateInput = { readonly [K in GateKind]: CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly summary: string; readonly subject_digest: Sha256Digest; readonly current_evidence: CurrentEvidenceSetRef; readonly kind: K; readonly context: GateContext<K> } }[GateKind];
+export type HumanGateChoice = { readonly choice: string; readonly reason: string };
+/**
+ * The bounded-decision pair is optional and all-or-nothing: supply `preview_digest` + `decision`
+ * together to settle the gate in one authenticated call, or omit both to open the gate and wait
+ * for the human decision written through the disposable interface.
+ */
+export type GateInput = { readonly [K in GateKind]: CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly summary: string; readonly subject_digest: Sha256Digest; readonly current_evidence: CurrentEvidenceSetRef; readonly kind: K; readonly context: GateContext<K>; readonly preview_digest?: Sha256Digest; readonly decision?: HumanGateChoice } }[GateKind];
 export type GateSuccess = { readonly [K in GateKind]: { readonly kind: K; readonly decision: GateDecisionEnvelope<K>; readonly notes: string; readonly revision: number; readonly request_digest?: Sha256Digest } }[GateKind];
-export interface WaiverInput extends CommonToolInput { readonly origin: WaiverOriginRef; readonly rationale: string }
+export type WaiverInput = CommonToolInput & { readonly origin: WaiverOriginRef; readonly rationale: string; readonly preview_digest?: Sha256Digest; readonly decision?: HumanGateChoice };
 export interface WaiverDecisionBinding { readonly origin_gate_id: PathSafeId; readonly waiver_gate_id: PathSafeId; readonly task_id: TaskSlug; readonly rule_id: string; readonly rule_version: number; readonly subject_digest: Sha256Digest; readonly current_evidence_set_digest: Sha256Digest; readonly scope: WaiverScope; readonly human_provenance: HumanDecisionProvenance }
 export type WaiverSuccess = (WaiverDecisionBinding & { readonly granted: true; readonly expires: "task-complete"; readonly notes: string; readonly revision: number; readonly request_digest?: Sha256Digest }) | (WaiverDecisionBinding & { readonly granted: false; readonly notes: string; readonly revision: number; readonly request_digest?: Sha256Digest });
 export interface ToolContract<Input, Success> { readonly input: Input; readonly success: Success }
@@ -171,13 +177,20 @@ export function parseStagedRequestReference(value: unknown): StagedRequestRefere
   return deepFreeze(stagedReferenceInput.parse(structuredClone(value))) as StagedRequestReference;
 }
 export const counterReviewInputSchema = z.object({ ...common, artifact_path: taskPathClaimV1Schema }).strict();
-export const gateInputSchema = z.object({ ...common, phase_instance: phase, summary: text, subject_digest: digest, current_evidence: z.unknown(), kind: z.enum(GATE_KINDS), context: z.unknown() }).strict().superRefine((input, context) => {
+const humanGateChoiceSchema = z.object({ choice: text, reason: text }).strict();
+export const gateInputSchema = z.object({ ...common, phase_instance: phase, summary: text, subject_digest: digest, current_evidence: z.unknown(), kind: z.enum(GATE_KINDS), context: z.unknown(), preview_digest: digest.optional(), decision: humanGateChoiceSchema.optional() }).strict().superRefine((input, context) => {
   try { parseGateContext(input.kind, input.context); } catch (error) { context.addIssue({ code: "custom", path: ["context"], message: error instanceof Error ? error.message : "invalid gate context" }); }
   try { parseCurrentEvidenceSetRef(input.current_evidence); } catch (error) { context.addIssue({ code: "custom", path: ["current_evidence"], message: error instanceof Error ? error.message : "invalid current evidence" }); }
+  if ((input.preview_digest === undefined) !== (input.decision === undefined)) {
+    context.addIssue({ code: "custom", path: ["preview_digest"], message: "preview_digest and decision must be supplied together (bounded single-call decision) or both omitted (gate opens and awaits the human decision)" });
+  }
 });
 const waiverOrigin = z.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest, origin_context_digest: digest, task_id: taskSlugV1Schema, phase_instance: phase, subject_digest: digest, current_evidence_set_digest: digest, rule, scope }).strict();
-export const waiverInputSchema = z.object({ ...common, origin: waiverOrigin, rationale: text }).strict().superRefine((input, context) => {
+export const waiverInputSchema = z.object({ ...common, origin: waiverOrigin, rationale: text, preview_digest: digest.optional(), decision: humanGateChoiceSchema.optional() }).strict().superRefine((input, context) => {
   if (input.task_id !== input.origin.task_id) context.addIssue({ code: "custom", path: ["task_id"], message: "waiver task_id must match origin task_id" });
+  if ((input.preview_digest === undefined) !== (input.decision === undefined)) {
+    context.addIssue({ code: "custom", path: ["preview_digest"], message: "preview_digest and decision must be supplied together (bounded single-call waiver decision) or both omitted (waiver gate opens and awaits the human decision)" });
+  }
 });
 
 function inputFor<K extends ToolName>(name: K, value: unknown): ToolInput<K> {

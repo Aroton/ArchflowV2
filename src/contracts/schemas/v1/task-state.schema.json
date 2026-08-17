@@ -437,6 +437,50 @@
             "recorded_at"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "type": "string",
+              "const": "1"
+            },
+            "actor_class": {
+              "type": "string",
+              "const": "human"
+            },
+            "assurance": {
+              "type": "string",
+              "const": "connected-request-trace"
+            },
+            "channel": {
+              "type": "string",
+              "const": "connected-host"
+            },
+            "connection_id": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+            },
+            "invocation_id": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+            },
+            "request_id_digest": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+            },
+            "request_digest": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+            }
+          },
+          "required": [
+            "schema_version",
+            "actor_class",
+            "assurance",
+            "channel",
+            "connection_id",
+            "invocation_id",
+            "request_id_digest",
+            "request_digest"
+          ],
+          "additionalProperties": false
         }
       ]
     },

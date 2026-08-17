@@ -77,7 +77,7 @@ const requestCommon = {
 const requestEvidence = {
   set_digest: digest("8"),
   slots: [
-    { role: "counter-review", evidence_digest: digest("6"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+    { role: "counter-review", evidence_digest: digest("6"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" },
   ],
 } as const;
 const requestOrigin = {
@@ -94,8 +94,8 @@ const requestOrigin = {
 const requestSubjects = {
   archflow_state: { ...requestCommon, tool: "archflow_state", operation: "record-state-boundary", operation_fields: { phase_instance: phaseInstance, step: "produce", status: "succeeded" } },
   archflow_counter_review: { ...requestCommon, tool: "archflow_counter_review", operation: "counter-review", operation_fields: { artifact_path: "phases/9/result.md" } },
-  archflow_gate: { ...requestCommon, tool: "archflow_gate", operation: "gate", operation_fields: { phase_instance: phaseInstance, summary: "Approve implementation", subject_digest: digest("7"), current_evidence: requestEvidence, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } } },
-  archflow_waiver: { ...requestCommon, tool: "archflow_waiver", operation: "waiver", operation_fields: { origin: requestOrigin, rationale: "A bounded exception is required" } },
+  archflow_gate: { ...requestCommon, tool: "archflow_gate", operation: "gate", operation_fields: { phase_instance: phaseInstance, summary: "Approve implementation", subject_digest: digest("7"), current_evidence: requestEvidence, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, preview_digest: digest("9"), decision: { choice: "approve", reason: "The reviewed artifact is ready." } } },
+  archflow_waiver: { ...requestCommon, tool: "archflow_waiver", operation: "waiver", operation_fields: { origin: requestOrigin, rationale: "A bounded exception is required", preview_digest: digest("9"), decision: { choice: "grant", reason: "The bounded exception is acceptable." } } },
 } as unknown as Readonly<Record<string, RequestDigestSubject>>;
 
 const configUrl = new URL("../fixtures/contracts/fingerprints/config.yaml", import.meta.url);
@@ -158,8 +158,8 @@ describe("computeRequestDigest", () => {
     expect(Object.fromEntries(Object.entries(requestSubjects).map(([name, value]) => [name, computeRequestDigest(value)]))).toEqual({
       archflow_state: "9e18ce122452f01f99faa4f2b1f2c99364c580049e1cd5296bd295d37b0f7217",
       archflow_counter_review: "f00c61cf8fb83a4d1fab1f0cddf81036e9027c019f4c0285740896db73e6b57c",
-      archflow_gate: "2ad726edb2b970f1066e49ddb7c60518fe15c41b28d254fc51df9a30ea2af399",
-      archflow_waiver: "c1baf879238bc647da60c3ec7cf8655c844d986a79e25306388450a1260e3f38",
+      archflow_gate: "5f7f07061477f4ab21f866c6f2d75752aa3ab7c8d08b7a1e7456eb0f300ef2f3",
+      archflow_waiver: "4e33a76257d46725b8dea7647eb3230651349090d9c63f1e44c66edce4615221",
     });
   });
 
@@ -180,10 +180,14 @@ describe("computeRequestDigest", () => {
         { ...requestSubjects.archflow_gate!, operation_fields: { ...requestSubjects.archflow_gate!.operation_fields, current_evidence: { ...requestEvidence, set_digest: digest("0") } } },
         { ...requestSubjects.archflow_gate!, operation_fields: { ...requestSubjects.archflow_gate!.operation_fields, kind: "commit-authorization" } },
         { ...requestSubjects.archflow_gate!, operation_fields: { ...requestSubjects.archflow_gate!.operation_fields, context: { artifact_kind: "phase-design" } } },
+        { ...requestSubjects.archflow_gate!, operation_fields: { ...requestSubjects.archflow_gate!.operation_fields, preview_digest: digest("0") } },
+        { ...requestSubjects.archflow_gate!, operation_fields: { ...requestSubjects.archflow_gate!.operation_fields, decision: { choice: "revise", reason: "Revise it." } } },
       ] as unknown as RequestDigestSubject[],
       archflow_waiver: [
-        { ...requestSubjects.archflow_waiver!, operation_fields: { origin: { ...requestOrigin, origin_context_digest: digest("0") }, rationale: "A bounded exception is required" } },
-        { ...requestSubjects.archflow_waiver!, operation_fields: { origin: requestOrigin, rationale: "A different exception is required" } },
+        { ...requestSubjects.archflow_waiver!, operation_fields: { ...requestSubjects.archflow_waiver!.operation_fields, origin: { ...requestOrigin, origin_context_digest: digest("0") } } },
+        { ...requestSubjects.archflow_waiver!, operation_fields: { ...requestSubjects.archflow_waiver!.operation_fields, rationale: "A different exception is required" } },
+        { ...requestSubjects.archflow_waiver!, operation_fields: { ...requestSubjects.archflow_waiver!.operation_fields, preview_digest: digest("0") } },
+        { ...requestSubjects.archflow_waiver!, operation_fields: { ...requestSubjects.archflow_waiver!.operation_fields, decision: { choice: "deny", reason: "The exception is not acceptable." } } },
       ] as unknown as RequestDigestSubject[],
     };
     for (const [name, variants] of Object.entries(mutations)) {
@@ -351,7 +355,7 @@ describe("pinned config digest", () => {
         observed_digest: computePinnedConfigDigest(observedBytes),
       });
       const serialized = JSON.stringify(result);
-      for (const secret of ["claude-opus-5", "gpt-5-codex", "producer", "counter-reviewer", "effort"]) {
+      for (const secret of ["claude-opus-5", "gpt-5-codex", "counter-reviewer", "effort"]) {
         expect(serialized).not.toContain(secret);
       }
     }

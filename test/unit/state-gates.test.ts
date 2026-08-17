@@ -37,7 +37,7 @@ rule
 });
 const provenance = { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "decision-1", helper_invocation_id: "helper-1", recorded_at: "2026-07-30T12:00:00.000Z" } as const;
 const RULE = { rule_id: "trust-boundary", rule_version: 1 } as const;
-const counter = { role: "counter-review", evidence_digest: D("8"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" } as const;
+const counter = { role: "counter-review", evidence_digest: D("8"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" } as const;
 const state = (): TaskStateV1 => ({ schema_version: "1", task_id: parseTaskSlug("task-1"), repository_identity_digest: D("1"), revision: parseSafeInteger(4), phase_instance: "phase-impl-2" as TaskStateV1["phase_instance"], step: "produce", status: "running", attempt: parseSafeInteger(1), input_fingerprint: D("2"), initialization_digest: D("3"), config_digest: D("4"), workflow_digest: D("5"), constitution_digest: constitution.digest, policy_base_commit: "abcdef0123456789abcdef0123456789abcdef01" as TaskStateV1["policy_base_commit"], authoritative_results: [], approvals: [], waivers: [] });
 
 const roots: string[] = [];
@@ -59,7 +59,7 @@ const EFFECT_CASES = [
   { kind: "attempts-exhausted", context: { step: "produce", attempts: 2, maximum_attempts: 2 }, allowed: ["retry-once", "revise", "abort", "cancel"], payload: { decision: "abort", reason: "Reviewed" }, effect: "non-advancing" },
   { kind: "constitution-edit", context: { pinned_constitution_digest: D("a"), current_constitution_digest: D("b"), changed_path_class: "task-branch-constitution" }, allowed: ["revert-edit", "start-base-amendment", "abort", "cancel"], payload: { decision: "revert-edit", reason: "Reviewed" }, effect: "retry" },
   { kind: "constitution-edit", context: { pinned_constitution_digest: D("a"), current_constitution_digest: D("b"), changed_path_class: "task-branch-constitution" }, allowed: ["revert-edit", "start-base-amendment", "abort", "cancel"], payload: { decision: "start-base-amendment", reason: "Reviewed" }, effect: "redirect-upstream" },
-  { kind: "commit-authorization", context: { target_ref: "refs/heads/task", diff_digest: D("a"), current_artifact_digests: [D("b")], parent_document_digests: [D("c")] }, allowed: ["authorize-commit", "revise", "abort", "cancel"], payload: { decision: "authorize-commit", reason: "Reviewed" }, effect: "advance" },
+  { kind: "commit-authorization", context: { target_ref: "refs/heads/task", baseline_commit: "1".repeat(40) as never, commit_message: "ArchFlow: Implement task-1 phase 2", paths: ["tracked.txt" as never], diff_digest: D("a"), current_artifact_digests: [D("b")], parent_document_digests: [D("c")] }, allowed: ["authorize-commit", "revise", "abort", "cancel"], payload: { decision: "authorize-commit", reason: "Reviewed" }, effect: "advance" },
   { kind: "restore-collision", context: { path: "task/file.md", recorded_generation_digest: D("a"), current_generation_digest: D("b"), adoption_candidate: AUTHORITY }, allowed: ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"], payload: { decision: "discard-and-restore", reason: "Reviewed" }, effect: "advance" },
   { kind: "restore-collision", context: { path: "task/file.md", recorded_generation_digest: D("a"), current_generation_digest: D("b"), adoption_candidate: AUTHORITY }, allowed: ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"], payload: { decision: "adopt-as-new-generation", reason: "Adopt", adoption_authority: AUTHORITY, rationale: "Reviewed local changes" }, effect: "advance" },
   { kind: "migration-audit", context: { source_identity_digest: D("a"), destination_identity_digest: D("b"), import_digest: D("c"), code_baseline_digest: D("d"), policy_baseline_digest: D("e") }, allowed: ["accept-import-audit", "revise", "abort", "cancel"], payload: { decision: "accept-import-audit", reason: "Reviewed" }, effect: "advance" },
@@ -424,12 +424,42 @@ describe("durable gate decisions", () => {
     };
     writeFileSync(join(taskRoot, "state.json"), canonicalDocument(current).bytes);
     await approve("commit-authorization", implementationArtifactDigest, {
-      target_ref: "refs/heads/task", diff_digest: D("e"), current_artifact_digests: [implementationArtifactDigest], parent_document_digests: [D("f")],
+      target_ref: "refs/heads/task", baseline_commit: "1".repeat(40) as never, commit_message: "ArchFlow: Implement task-1 phase 1", paths: ["tracked.txt" as never], diff_digest: D("e"), current_artifact_digests: [implementationArtifactDigest], parent_document_digests: [D("f")],
     });
     const approval = current.approvals.find((entry) => entry.gate_kind === "commit-authorization")!;
     const authenticated = await loadAuthenticatedGateApproval(dependencies, authority, approval);
     expect(authenticated.ok).toBe(true);
     if (!authenticated.ok) return;
+
+    // Commit authorization gained required `baseline_commit`, `commit_message` and `paths` fields
+    // after these approvals were archived. The human authority they carry is still real, so the
+    // four-key context must keep authenticating rather than wedging the task behind
+    // `gate-approval-request-invalid`. Unlike the decision archive, an approval's digests do not
+    // cover the request, so rewriting request.json needs no matching state.json surgery.
+    const archivedRequestPath = join(taskRoot, "authority", "decisions", approval.gate_id, "request.json");
+    const archivedRequest = JSON.parse(readFileSync(archivedRequestPath, "utf8")) as Record<string, unknown>;
+    const { baseline_commit: _baseline, commit_message: _message, paths: _paths, ...archivedContext } =
+      archivedRequest.context as Record<string, unknown>;
+    writeFileSync(archivedRequestPath, canonicalDocument({ ...archivedRequest, context: archivedContext } as never).bytes);
+    const archivedLoaded = await loadAuthenticatedGateApproval(dependencies, authority, approval);
+    expect(archivedLoaded).toMatchObject({
+      ok: true,
+      value: { request: { kind: "commit-authorization", context: { target_ref: "refs/heads/task" } } },
+    });
+    if (!archivedLoaded.ok) throw new Error("archived approval authentication failed");
+    expect("paths" in archivedLoaded.value.request.context).toBe(false);
+
+    // Still fail-closed: a request malformed in any other way is rejected, not tolerated.
+    const { diff_digest: _diff, ...withoutDiffDigest } = archivedContext;
+    writeFileSync(archivedRequestPath, canonicalDocument({
+      ...archivedRequest,
+      context: withoutDiffDigest,
+    } as never).bytes);
+    expect(await loadAuthenticatedGateApproval(dependencies, authority, approval)).toMatchObject({
+      ok: false,
+      error: { code: "STATE_INVALID", diagnostic: { parameters: { issue_code: "gate-approval-request-invalid" } } },
+    });
+    writeFileSync(archivedRequestPath, canonicalDocument(archivedRequest as never).bytes);
     const completed = planStateTransition({
       current,
       target: { phase_instance: current.phase_instance, step: current.step, status: current.status, attempt: current.attempt, input_fingerprint: current.input_fingerprint },

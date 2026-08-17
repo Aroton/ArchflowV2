@@ -111,7 +111,7 @@ Hard rules — human trust boundaries, never soften:
 
 - Never commit or pass a review gate without explicit user approval.
 - Never write code before phase-design approval.
-- The opposite-client counter-review runs automatically before a human gate. There is no optional review at the end of a gate. A significant human revision starts a fresh automatic review cycle; a simple wording or formatting revision may reuse the prior review for one hop but still requires approval of the final bytes.
+- The server-dispatched counter-review (opposite client family by default) runs automatically before a human gate. There is no optional review at the end of a gate. A significant human revision starts a fresh automatic review cycle; a simple wording or formatting revision may reuse the prior review for one hop but still requires approval of the final bytes.
 - All correspondence at a human gate is conversational and human-readable. Explain what needs attention, why it matters, and the available choices in plain language. Keep gate IDs, digests, JSON, internal paths, protocol codes, and other mechanical bindings out of the default response; show them only when the user explicitly asks for diagnostics or audit detail.
 - Phase state machine: no doc → DESIGNED → IN PROGRESS → COMPLETE.
 - Task isolation: tasks never read each other's files.

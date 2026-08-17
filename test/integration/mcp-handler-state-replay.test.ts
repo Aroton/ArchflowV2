@@ -13,10 +13,12 @@ import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/con
 import { parseRepositoryPathClaim, parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { createToolHandlers } from "../../src/mcp/handlers/index.js";
 import { createToolBoundary } from "../../src/mcp/server.js";
+import { runBuildRequest } from "../../src/local/build-request.js";
 import { createGitRunner, preflightGit } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
 import { resolvePinnedConstitution } from "../../src/state/constitution.js";
+import { createProductionServices } from "../../src/state/production.js";
 import { deriveDeclaredSnapshotDigest } from "../../src/state/snapshots.js";
 import { cleanupTemporaryRepositories, createTempRepository } from "../helpers/temp-repository.js";
 
@@ -155,7 +157,7 @@ Preserve explicit human review gates.
     status: "succeeded",
     artifact,
   } as const;
-  return { args, authority: authority.value, invocation };
+  return { args, authority: authority.value, invocation, repository };
 }
 
 describe("state handler durable integration", () => {
@@ -198,5 +200,71 @@ describe("state handler durable integration", () => {
       kind: "project-result",
       result: { schema_version: "1", ok: false, error: { code: "INTERNAL_ERROR" } },
     });
+  });
+
+  it("restarts directly to PRD without requiring a current implementation result", async () => {
+    const h = await fixture();
+    const services = await createProductionServices({
+      working_directory: h.repository.path,
+      task_id: TASK,
+      operation: parseSafeCode("compose-planning-restart"),
+    });
+    if (!services.ok || services.value.state === undefined) throw new Error("restart services unavailable");
+
+    // The PRD restart appends the human request to the pinned ask record before landing.
+    writeFileSync(join(h.authority.task_root, "ask.md"), "# Original ask\n");
+
+    // Documents the abandoned forward work left behind. The milestone commit that follows the
+    // redone planning covers the whole task directory, so leaving these here would sweep unreviewed
+    // documents into it and make that commit unprovable — with no way to retry it.
+    const phaseRoot = join(h.repository.path, ".archflow", "tasks", TASK, "phases", "15");
+    mkdirSync(phaseRoot, { recursive: true });
+    writeFileSync(join(phaseRoot, "design.md"), "# Superseded phase design\n");
+    writeFileSync(join(phaseRoot, "impl-notes.md"), "# Superseded attempt\n");
+
+    const composed = await runBuildRequest(services.value, {
+      kind: "planning-restart",
+      intent_id: "restart-to-prd",
+      invocation: { skill: "archflow-prd", intent: "reopen" },
+      reason: "Implementation exposed incorrect product requirements.",
+    });
+    expect(composed.ok).toBe(true);
+    if (!composed.ok) return;
+    const boundary = createToolBoundary(createToolHandlers());
+    const first = await boundary.invoke(
+      "archflow_state", composed.value.staged!.reference, h.invocation("restart-to-prd-call"),
+    );
+    expect(first).toMatchObject({
+      kind: "project-result",
+      result: { ok: true, value: { revision: 5, status: "running" } },
+    });
+    const restarted = parseCanonicalDocument<TaskStateV1>(
+      readFileSync(h.authority.state.absolute), "restarted state",
+    ).value;
+    expect(restarted).toMatchObject({
+      phase_instance: "prd",
+      step: "produce",
+      status: "running",
+      attempt: 1,
+      restart_history: [{
+        source_phase_instance: PHASE,
+        target_phase_instance: "prd",
+        reason: "Implementation exposed incorrect product requirements.",
+        human_provenance: {
+          assurance: "connected-request-trace",
+          channel: "connected-host",
+          connection_id: "handler-state-replay-connection",
+          invocation_id: "restart-to-prd-call",
+        },
+      }],
+    });
+    expect(existsSync(join(phaseRoot, "design.md"))).toBe(false);
+    expect(existsSync(join(phaseRoot, "impl-notes.md"))).toBe(false);
+    const replay = await boundary.invoke(
+      "archflow_state",
+      { ...(composed.value.request.input as Record<string, unknown>), expected_revision: 5 },
+      h.invocation("restart-to-prd-replay"),
+    );
+    expect(replay).toEqual(first);
   });
 });

@@ -173,7 +173,6 @@ describe("createDispatchCoordinator", () => {
       phase_instance: PHASE,
       signal: new AbortController().signal,
       cancellation_source: "client",
-      allow_claude_dispatch: false,
     });
 
     const result = await withDispatchEnvironment(h, () =>
@@ -197,7 +196,6 @@ describe("createDispatchCoordinator", () => {
       phase_instance: PHASE,
       signal: new AbortController().signal,
       cancellation_source: "client",
-      allow_claude_dispatch: true,
     });
 
     const result = await withDispatchEnvironment(h, () =>
@@ -221,7 +219,6 @@ describe("createDispatchCoordinator", () => {
       phase_instance: PHASE,
       signal: new AbortController().signal,
       cancellation_source: "client",
-      allow_claude_dispatch: false,
       repository_view: { base_commit: head },
     });
 
@@ -261,7 +258,6 @@ describe("createDispatchCoordinator", () => {
       phase_instance: PHASE,
       signal: new AbortController().signal,
       cancellation_source: "client",
-      allow_claude_dispatch: false,
       repository_view: { base_commit: head },
     });
 
@@ -299,7 +295,6 @@ describe("createDispatchCoordinator", () => {
       phase_instance: PHASE,
       signal: new AbortController().signal,
       cancellation_source: "client",
-      allow_claude_dispatch: false,
       repository_view: { base_commit: "f".repeat(40) as never },
     });
 
@@ -324,7 +319,6 @@ describe("createDispatchCoordinator", () => {
       phase_instance: PHASE,
       signal: controller.signal,
       cancellation_source: "transport",
-      allow_claude_dispatch: false,
     });
 
     const pending = withDispatchEnvironment(h, () =>
@@ -350,7 +344,6 @@ describe("createDispatchCoordinator", () => {
       phase_instance: PHASE,
       signal: controller.signal,
       cancellation_source: "client",
-      allow_claude_dispatch: false,
     });
 
     const pending = withDispatchEnvironment(h, () =>
@@ -384,7 +377,6 @@ describe("createDispatchCoordinator", () => {
       phase_instance: PHASE,
       signal: new AbortController().signal,
       cancellation_source: "client",
-      allow_claude_dispatch: false,
     });
 
     const pending = withDispatchEnvironment(h, () =>
@@ -420,12 +412,13 @@ describe("createDispatchCoordinator", () => {
     const coordinator = createDispatchCoordinator({
       authority: h.authority,
       dependencies: h.dependencies,
-      host: "codex",
+      // Adapter selection refuses an unknown host before any workspace or child
+      // launch, so the classification is deterministic with no CLI involved.
+      host: "unknown",
       repository_root: h.repository,
       phase_instance: PHASE,
       signal: new AbortController().signal,
       cancellation_source: "client",
-      allow_claude_dispatch: false,
     });
     const boundary = createToolBoundary({
       archflow_state: (_call, context) => mapHandlerErrors<"archflow_state">(
@@ -453,7 +446,7 @@ describe("createDispatchCoordinator", () => {
 
     expect(outcome.kind).toBe("project-result");
     if (outcome.kind === "project-result") {
-      expect(outcome.result).toMatchObject({ ok: false, error: { code: "CONFIG_FAMILY_UNSUPPORTED" } });
+      expect(outcome.result).toMatchObject({ ok: false, error: { code: "UNSUPPORTED_HOST" } });
     }
   });
 });

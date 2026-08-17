@@ -90,10 +90,19 @@ export interface CliAdapter {
   classifyFailure(result: DispatchChildResult): ProjectError | undefined;
 }
 
-export type CliDispatchOptions = Readonly<{
-  allow_claude_dispatch?: boolean;
-}>;
-
+/**
+ * Prepends the user's `~/.local/bin` to the child PATH. cc-switch commonly installs there,
+ * and the MCP server process may have been started without it on PATH.
+ */
+function withLocalBinOnPath(workspace: DispatchWorkspace): NodeJS.ProcessEnv {
+  const home = workspace.env.HOME;
+  if (home === undefined || home === "") return workspace.env;
+  const localBin = join(home, ".local", "bin");
+  const path = workspace.env.PATH;
+  if (path === undefined) return Object.freeze({ ...workspace.env, PATH: localBin });
+  if (path.split(":").includes(localBin)) return workspace.env;
+  return Object.freeze({ ...workspace.env, PATH: `${localBin}:${path}` });
+}
 const HOST_SCHEMA_METADATA = new Set(["$schema", "$id"]);
 const CLAUDE_UNSUPPORTED_SCHEMA_KEYWORDS = new Set([
   "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
@@ -555,25 +564,39 @@ const claudeAdapter: CliAdapter = Object.freeze({
     // exactly the read-only tools (no write, bash, or network tools). `--setting-sources ""`,
     // `--disable-slash-commands`, and the empty strict MCP config stay pinned so the view's own
     // CLAUDE.md and settings never become instructions. Without a view, every tool stays disabled.
+    const argv = Object.freeze([
+      "-p",
+      "--safe-mode",
+      "--tools", workspace.repository_view_root === undefined ? "" : "Read,Grep,Glob",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--mcp-config", mcpConfigPath,
+      "--no-session-persistence",
+      "--setting-sources", "",
+      "--output-format", "json",
+      "--json-schema", JSON.stringify(schema),
+      "--model", route.model,
+      "--effort", route.effort,
+    ]);
+    // A cc-switch provider id wraps the launch as `cc-switch start claude <provider> -- <argv>`:
+    // cc-switch supplies the claude binary and runs it with the provider's settings file without
+    // touching the globally selected provider. The argv after `--` is unchanged either way.
+    if (route.provider === undefined) {
+      return Object.freeze({
+        adapter: "claude-cli",
+        command: "claude",
+        argv,
+        cwd: workspace.repository_view_root ?? workspace.root,
+        env: workspace.env,
+        stdin: envelope.bytes,
+      });
+    }
     return Object.freeze({
       adapter: "claude-cli",
-      command: "claude",
-      argv: Object.freeze([
-        "-p",
-        "--safe-mode",
-        "--tools", workspace.repository_view_root === undefined ? "" : "Read,Grep,Glob",
-        "--disable-slash-commands",
-        "--strict-mcp-config",
-        "--mcp-config", mcpConfigPath,
-        "--no-session-persistence",
-        "--setting-sources", "",
-        "--output-format", "json",
-        "--json-schema", JSON.stringify(schema),
-        "--model", route.model,
-        "--effort", route.effort,
-      ]),
+      command: "cc-switch",
+      argv: Object.freeze(["start", "claude", route.provider, "--", ...argv]),
       cwd: workspace.repository_view_root ?? workspace.root,
-      env: workspace.env,
+      env: withLocalBinOnPath(workspace),
       stdin: envelope.bytes,
     });
   },
@@ -630,6 +653,10 @@ const codexAdapter: CliAdapter = Object.freeze({
     outputSchema: PlainJsonValue,
   ) {
     assertRoute("codex-cli", route);
+    if (route.provider !== undefined) {
+      // cc-switch wraps only the claude CLI; routing already rejects this pairing.
+      return fail(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
+    }
     const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "codex-cli", envelopeSubject(envelope));
     const schemaPath = join(workspace.root, `${envelope.result_kind}.schema.json`);
     const outputPath = join(workspace.root, "final-output.json");
@@ -688,17 +715,19 @@ export function preflightAdapter(
     : codexAdapter.preflight(workspace);
 }
 
-/** Selects the opposite-family reviewer in two compile-time-known arms, before any child launch. */
+/**
+ * Selects the reviewer CLI adapter before any child launch: the resolved route's own adapter
+ * when one is known (routes may name either family — or neither, when a cc-switch provider
+ * routes a non-claude model through the claude CLI), and the host's opposite family as the
+ * no-route default.
+ */
 export function selectCliAdapter(
   host: HostIdentity,
-  options: CliDispatchOptions = {},
+  route?: DispatchRoute,
 ): CliAdapter {
   if (host === "unknown") return fail(createProjectError("UNSUPPORTED_HOST", { host: "unknown" }));
-  if (host === "claude") return codexAdapter;
-  if (options.allow_claude_dispatch !== true) {
-    return fail(createProjectError("CONFIG_FAMILY_UNSUPPORTED", { family: "claude" }));
-  }
-  return claudeAdapter;
+  if (route !== undefined) return route.adapter === "claude-cli" ? claudeAdapter : codexAdapter;
+  return host === "claude" ? codexAdapter : claudeAdapter;
 }
 
 /** Binds extracted child output to its validated dispatch provenance. */

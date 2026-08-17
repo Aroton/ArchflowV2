@@ -125,6 +125,21 @@ export type HumanRevisionRecord = {
   readonly evidence: readonly AuthoritativeResultRef[];
 };
 
+/**
+ * Server-attested provenance for a planning restart decided through a connected host: the request
+ * the server actually authenticated is bound by digest, not merely declared.
+ */
+export type PlanningRestartConnectedProvenance = {
+  readonly schema_version: "1";
+  readonly actor_class: "human";
+  readonly assurance: "connected-request-trace";
+  readonly channel: "connected-host";
+  readonly connection_id: SafeId;
+  readonly invocation_id: SafeId;
+  readonly request_id_digest: Sha256Digest;
+  readonly request_digest: Sha256Digest;
+};
+
 /** Human provenance captured for an explicit planning restart through either supported channel. */
 export type PlanningRestartHumanProvenance = {
   readonly schema_version: "1";
@@ -143,7 +158,7 @@ export type PlanningRestartHumanProvenance = {
   readonly decision_event_id: string;
   readonly helper_invocation_id: string;
   readonly recorded_at: string;
-};
+} | PlanningRestartConnectedProvenance;
 
 /** Audit authority moved out of the active graph by one explicit backward planning restart. */
 export type PlanningRestartRecord = {
@@ -398,9 +413,22 @@ const planningRestartLocalProvenanceV1Schema = z.object({
   recorded_at: z.string().datetime({ offset: false, local: false, precision: 3 }),
 }).strict();
 
+/** Server-attested arm: the server binds the authenticated request by digest at record time. */
+const planningRestartServerAttestedProvenanceV1Schema = z.object({
+  schema_version: z.literal("1"),
+  actor_class: z.literal("human"),
+  assurance: z.literal("connected-request-trace"),
+  channel: z.literal("connected-host"),
+  connection_id: safeIdV1Schema,
+  invocation_id: safeIdV1Schema,
+  request_id_digest: sha256Digest,
+  request_digest: sha256Digest,
+}).strict();
+
 export const planningRestartHumanProvenanceV1Schema = z.union([
   planningRestartConnectedHostProvenanceV1Schema,
   planningRestartLocalProvenanceV1Schema,
+  planningRestartServerAttestedProvenanceV1Schema,
 ]) as unknown as z.ZodType<PlanningRestartHumanProvenance>;
 
 export const planningRestartRecordV1Schema = z.object({

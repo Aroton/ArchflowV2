@@ -105,7 +105,8 @@ async function discoverProjections(
   recorded: readonly ProjectionDigestRef[];
   current: readonly ProjectionDigestRef[];
 }>>> {
-  if (dependencies.load_retained_result === undefined) {
+  const loadManifest = dependencies.load_retained_manifest;
+  if (loadManifest === undefined) {
     return stateInvalid(authority, "reconciliation-result-loader-unavailable");
   }
   const newest = new Map<ProjectionDigestRef["path"], Readonly<{
@@ -115,9 +116,9 @@ async function discoverProjections(
   }>>();
   try {
     for (const reference of state.value.authoritative_results) {
-      const loaded = await dependencies.load_retained_result(reference);
+      const loaded = await loadManifest(reference);
       if (!loaded.ok) return loaded;
-      const manifest = loaded.value.prepared.manifest.value;
+      const manifest = loaded.value.manifest.value;
       for (const projection of manifest.projections) {
         const pathClass = outputClassFor(manifest, projection.path);
         if (pathClass === undefined) return stateInvalid(authority, "reconciliation-projection-unbound");

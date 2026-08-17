@@ -64,7 +64,14 @@ export async function openHandlerSession(
   const phaseInstance = state?.phase_instance ?? suppliedPhase;
   if (phaseInstance === undefined) throw new TypeError("phase instance is unavailable");
   const phase_kind = decodePhaseInstance(phaseInstance).kind as RoutingPhaseKind;
-  const config = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(configRead.snapshot.bytes));
+  let config: ConfigV1;
+  try {
+    config = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(configRead.snapshot.bytes));
+  } catch {
+    // E.g. a config pinned before the producer role was removed: surface the
+    // shape failure as a repairable config error instead of an internal one.
+    return fail(createProjectError("CONFIG_INVALID", { issue_code: "config-unparseable" }));
+  }
   return Object.freeze({
     schema_version: "1",
     ok: true,

@@ -153,7 +153,7 @@ describe("dispatch plumbing proof", () => {
     ["claude", "codex-cli"],
     ["codex", "claude-cli"],
   ] as const)("dispatches host %s to a fresh opposite-family %s child", async (host, expectedAdapter) => {
-    const adapter = selectCliAdapter(host, { allow_claude_dispatch: true });
+    const adapter = selectCliAdapter(host);
     expect(adapter.id).toBe(expectedAdapter);
     const { workspace } = await fixtureWorkspace(adapter.id, "observe-input");
     const input = envelope('{"schema_version":"1","artifact":"envelope-only"}\n');
@@ -246,7 +246,7 @@ describe("dispatch plumbing proof", () => {
   });
 
   it.each(["claude", "codex"] as const)("keeps planted canaries out of %s output and diagnostics", async (host) => {
-    const adapter = selectCliAdapter(host, { allow_claude_dispatch: true });
+    const adapter = selectCliAdapter(host);
     const { workspace } = await fixtureWorkspace(adapter.id, "success");
     const canaries = ["credential-canary-7429", "routing-sentinel-1836"];
     try {

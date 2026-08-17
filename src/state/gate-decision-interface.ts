@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 
-import { canonicalDocument } from "../contracts/canonical.js";
+import { canonicalDocument, canonicalJsonDigest } from "../contracts/canonical.js";
+import { assertAuthenticInvocationContext, type InvocationContext } from "../contracts/contexts.js";
 import { parseActiveGate, parseGateRequest, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import type { PathSafeId, Sha256Digest } from "../contracts/evidence.js";
@@ -216,7 +217,7 @@ const OPTION_COPY = Object.freeze({
   abort: Object.freeze({ token: "stop-work", label: "Stop this work", consequence: "End this workflow path without approval." }),
   "revert-edit": Object.freeze({ token: "undo-policy-change", label: "Undo the policy edit", consequence: "Restore the policy version this task originally reviewed against." }),
   "start-base-amendment": Object.freeze({ token: "update-project-policy", label: "Update the project policy", consequence: "Move the policy change into the project baseline before continuing this task." }),
-  "authorize-commit": Object.freeze({ token: "authorize-commit", label: "Authorize the commit", consequence: "Permit ArchFlow to commit the exact reviewed changes after the required final confirmation." }),
+  "authorize-commit": Object.freeze({ token: "authorize-commit", label: "Authorize the commit", consequence: "Permit ArchFlow to commit the exact reviewed changes; this is the final human confirmation." }),
   "discard-and-restore": Object.freeze({ token: "restore-saved-version", label: "Restore the saved version", consequence: "Discard the conflicting workspace copy and reconstruct it from durable authority." }),
   "adopt-as-new-generation": Object.freeze({ token: "keep-current-version", label: "Keep the current version", consequence: "Treat the current workspace copy as a new generation of the artifact." }),
   "accept-import-audit": Object.freeze({ token: "accept-import", label: "Accept the import", consequence: "Confirm that the imported task faithfully represents the legacy source and continue." }),
@@ -442,11 +443,47 @@ export async function writeGateDecisionChoice(
   return writeSelectedGateDecision(dependencies, authority, (active) => selectGateDecisionTemplate(active, selected));
 }
 
+/** Installs a connected-host choice and mints provenance only from a branded MCP invocation. */
+export async function writeConnectedGateDecisionChoice(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  value: PlainJsonValue,
+  context: InvocationContext,
+): Promise<ProjectResult<GateDecisionInterfaceWriteResult>> {
+  assertInternalTransactionAuthority(authority, {
+    runner: dependencies.runner,
+    environment: dependencies.environment,
+  });
+  assertAuthenticInvocationContext(context);
+  const selected = structuredClone(choiceRecord(value));
+  const provenance: HumanDecisionProvenance = {
+    schema_version: "1",
+    actor_class: "human",
+    assurance: "declared-local-trace",
+    channel: "connected-host",
+    decision_event_id: randomUUID(),
+    connection_id: context.connection.connection_id,
+    request_id_digest: canonicalJsonDigest({
+      schema_version: "1",
+      digest_kind: "transport-request-id",
+      request_id: context.transport_metadata.request_id,
+    }),
+    recorded_at: new Date().toISOString(),
+  };
+  return writeSelectedGateDecision(
+    dependencies,
+    authority,
+    (active) => selectGateDecisionTemplate(active, selected),
+    provenance,
+  );
+}
+
 /** Installs a selected template without overwriting a decision that already binds the live gate. */
 async function writeSelectedGateDecision(
   dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
   select: DecisionSelector,
+  suppliedProvenance?: HumanDecisionProvenance,
 ): Promise<ProjectResult<GateDecisionInterfaceWriteResult>> {
 
   try {
@@ -500,7 +537,7 @@ async function writeSelectedGateDecision(
           issue_code: "decision-choice-invalid",
         }));
       }
-      const provenance: HumanDecisionProvenance = {
+      const provenance: HumanDecisionProvenance = suppliedProvenance ?? {
         schema_version: "1",
         actor_class: "human",
         assurance: "declared-local-trace",
@@ -526,7 +563,20 @@ async function writeSelectedGateDecision(
       const existing = await readCanonical(interfacePath.value, "gate decision interface", (raw) => raw as PlainJsonValue);
       if (existing !== "missing" && existing !== "invalid") {
         try {
-          parseInterface(existing.value, active);
+          const boundExisting = parseInterface(existing.value, active);
+          const boundCandidate = parseInterface(candidate, active);
+          const semantics = (record: typeof boundExisting): PlainJsonValue => record.outcome === "decided"
+            ? { outcome: record.outcome, kind: record.kind, payload: record.envelope.payload as unknown as PlainJsonValue }
+            : record.outcome === "waiver-decided"
+              ? { outcome: record.outcome, granted: record.granted, scope: record.scope as unknown as PlainJsonValue, origin: record.origin as unknown as PlainJsonValue, notes: record.notes }
+              : { outcome: record.outcome, reason: record.reason };
+          if (canonicalJsonDigest(semantics(boundExisting)) === canonicalJsonDigest(semantics(boundCandidate))) {
+            return ok({
+              gate_id: active.gate_id,
+              decision_path: interfacePath.value.repositoryRelative,
+              decision_digest: existing.digest,
+            });
+          }
           return fail(createProjectError("GATE_ACTIVE", {
             gate_id: active.gate_id,
             gate_kind: active.kind,

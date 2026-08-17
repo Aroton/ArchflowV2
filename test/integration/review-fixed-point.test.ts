@@ -319,6 +319,17 @@ async function createDependencies(
       return parseSafeInteger(bytes);
     },
     load_retained_result: (reference) => retainedResult(root, reference),
+    load_retained_manifest: async (reference) => {
+      const loaded = await retainedResult(root, reference);
+      return {
+        schema_version: "1",
+        ok: true,
+        value: {
+          manifest: loaded.value.prepared.manifest,
+          manifest_target: loaded.value.manifest_target,
+        },
+      };
+    },
   };
 }
 
@@ -641,7 +652,7 @@ async function reconstruct(
 ): Promise<CurrentReviewSet> {
   const loaded = await loadCurrentReviewSet({
     read_state: readTaskState,
-    load_retained_result: dependencies.load_retained_result!,
+    load_retained_manifest: dependencies.load_retained_manifest!,
   }, h.authority, phase);
   if (!loaded.ok) throw new Error(loaded.error.code);
   return loaded.value;
@@ -1063,7 +1074,7 @@ async function assessment(
 ): Promise<EvidenceAssessment> {
   const state = await durableState(h.authority);
   const loaded = await loadRetainedEvidence({
-    load_retained_result: dependencies.load_retained_result!,
+    load_retained_manifest: dependencies.load_retained_manifest!,
   }, structuredClone(state), phase);
   if (!loaded.ok) throw new Error(loaded.error.code);
   return assessCurrentEvidence(state, loaded.value, {
@@ -1251,7 +1262,7 @@ describe("editorial revision fixed point", () => {
     // recovery path rather than any direct re-adjudication (the step no longer exists).
     const state = await durableState(h.authority);
     const loaded = await loadRetainedEvidence({
-      load_retained_result: dependencies.load_retained_result!,
+      load_retained_manifest: dependencies.load_retained_manifest!,
     }, structuredClone(state), phase);
     if (!loaded.ok) throw new Error(loaded.error.code);
     const setDigest = deriveCurrentEvidenceSet(loaded.value)

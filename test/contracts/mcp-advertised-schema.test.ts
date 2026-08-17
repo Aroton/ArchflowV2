@@ -119,7 +119,7 @@ const RULE_A = Object.freeze({ rule_id: "Rule:A", rule_version: 1 });
 const RULE_B = Object.freeze({ rule_id: "Rule:B", rule_version: 1 });
 const PROVENANCE = Object.freeze({ schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "Decision:1", helper_invocation_id: "Helper:1", recorded_at: "2026-07-27T12:00:00.000Z" });
 const COMMON = Object.freeze({ schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: D("a") });
-const COUNTER = Object.freeze({ role: "counter-review", evidence_digest: D("2"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" });
+const COUNTER = Object.freeze({ role: "counter-review", evidence_digest: D("2"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" });
 const CURRENT_EVIDENCE = Object.freeze({ set_digest: D("3"), slots: [COUNTER] });
 const AUTHORITY = Object.freeze({ link_digest: D("4"), purpose: "restore-adoption", proposed_generation_digest: D("5"), changed_input_fingerprint: D("6") });
 const SCOPE = Object.freeze({ operation: "review-trigger", boundary: "subject" });
@@ -130,8 +130,8 @@ const DOCUMENT_ARTIFACT = JSON.parse(await readFile(
 
 const stateCall = (status = "running") => ({ ...COMMON, phase_instance: "phase-impl-3", step: "produce", status });
 const counterCall = (artifactPath = "phases/phase-3.md") => ({ ...COMMON, artifact_path: artifactPath });
-const gateCall = (kind: string, context: unknown) => ({ ...COMMON, phase_instance: "phase-impl-3", summary: "Review", subject_digest: D("b"), current_evidence: CURRENT_EVIDENCE, kind, context });
-const waiverCall = () => ({ ...COMMON, origin: { origin_gate_id: "gate-1", origin_decision_digest: D("1"), origin_context_digest: D("2"), task_id: COMMON.task_id, phase_instance: "phase-impl-3", subject_digest: D("3"), current_evidence_set_digest: D("4"), rule: RULE_A, scope: SCOPE }, rationale: "Needed" });
+const gateCall = (kind: string, context: unknown) => ({ ...COMMON, phase_instance: "phase-impl-3", summary: "Review", subject_digest: D("b"), current_evidence: CURRENT_EVIDENCE, kind, context, preview_digest: D("c"), decision: { choice: "approve", reason: "Reviewed." } });
+const waiverCall = () => ({ ...COMMON, origin: { origin_gate_id: "gate-1", origin_decision_digest: D("1"), origin_context_digest: D("2"), task_id: COMMON.task_id, phase_instance: "phase-impl-3", subject_digest: D("3"), current_evidence_set_digest: D("4"), rule: RULE_A, scope: SCOPE }, rationale: "Needed", preview_digest: D("c"), decision: { choice: "grant", reason: "Reviewed." } });
 const constitutionContext = () => ({ constitution: "fail", failed_rules: [RULE_A], uncertain_rules: [], matched_trigger_rules: [RULE_A], uncertain_trigger_rules: [], eligible_waivers: [{ rule: RULE_A, scope: { operation: "adjudication-failure", boundary: "subject" } }, { rule: RULE_A, scope: SCOPE }] });
 const restoreContext = () => ({ path: "task/file.md", recorded_generation_digest: D("7"), current_generation_digest: D("8"), adoption_candidate: AUTHORITY });
 const result = (value: unknown) => ({ schema_version: "1", ok: true, value });
@@ -181,8 +181,8 @@ function materialize(entry: CorpusCase): MaterializedCase {
     case "constitution-pass-consistency": return { value: gateCall("constitution-review", { ...constitutionContext(), constitution: "pass" }) };
     case "attempts-exhausted": return { value: gateCall("attempts-exhausted", { step: "produce", attempts: 1, maximum_attempts: 2 }) };
     case "material-drift-order": return { value: gateCall("material-drift", { affected_upstream: { kind: "architecture", digest: D("4") }, drift: "material", affected_claim_ids: ["z", "a"] }) };
-    case "commit-artifact-order": return { value: gateCall("commit-authorization", { target_ref: "HEAD", diff_digest: D("4"), current_artifact_digests: [D("b"), D("a")], parent_document_digests: [D("c")] }) };
-    case "commit-parent-order": return { value: gateCall("commit-authorization", { target_ref: "HEAD", diff_digest: D("4"), current_artifact_digests: [D("a")], parent_document_digests: [D("c"), D("b")] }) };
+    case "commit-artifact-order": return { value: gateCall("commit-authorization", { target_ref: "HEAD", baseline_commit: "1".repeat(40), commit_message: "ArchFlow: Implement task-1 phase 3", paths: ["tracked.txt"], diff_digest: D("4"), current_artifact_digests: [D("b"), D("a")], parent_document_digests: [D("c")] }) };
+    case "commit-parent-order": return { value: gateCall("commit-authorization", { target_ref: "HEAD", baseline_commit: "1".repeat(40), commit_message: "ArchFlow: Implement task-1 phase 3", paths: ["tracked.txt"], diff_digest: D("4"), current_artifact_digests: [D("a")], parent_document_digests: [D("c"), D("b")] }) };
     case "valid-state-success": return { call: stateCall(), value: result({ path: "phases/state.json", revision: 1, status: "running" }) };
     case "valid-counter-success": return { call: counterCall(), value: result({ path: "reviews/counter.md", verdict: "pass", blocking_count: 0, constitution: { status: "not-run", reason: "no-active-constitution-rules" }, revision: 1 }) };
     case "valid-gate-success": return { call: artifactGateCall, value: artifactGateResult };

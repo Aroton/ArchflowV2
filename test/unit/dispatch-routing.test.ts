@@ -25,9 +25,9 @@ function expectRoutingError(run: () => unknown, code: DispatchRoutingError["proj
 
 describe("dispatch routing", () => {
   it("derives family and adapter from configured full model slugs", () => {
-    expect(resolveDispatchRoute(config({ "counter-reviewer": { model: "gpt-5.3-codex", effort: "high" } }), "design", "counter-reviewer", "claude"))
+    expect(resolveDispatchRoute(config({ "counter-reviewer": { model: "gpt-5.3-codex", effort: "high" } }), "design", "counter-reviewer"))
       .toEqual({ adapter: "codex-cli", family: "codex", model: "gpt-5.3-codex", effort: "high" });
-    expect(resolveDispatchRoute(config({ adjudicator: { model: "claude-opus-4-6", effort: "max" } }), "prd", "adjudicator", "codex"))
+    expect(resolveDispatchRoute(config({ adjudicator: { model: "claude-opus-4-6", effort: "max" } }), "prd", "adjudicator"))
       .toEqual({ adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "max" });
   });
 
@@ -36,13 +36,13 @@ describe("dispatch routing", () => {
       { "counter-reviewer": { model: "gpt-5.3-codex", effort: "high" } },
       { design: { "counter-reviewer": { model: "gpt-5.4", effort: "xhigh" } } },
     );
-    expect(resolveDispatchRoute(value, "design", "counter-reviewer", "claude").model).toBe("gpt-5.4");
-    expect(resolveDispatchRoute(value, "prd", "counter-reviewer", "claude").model).toBe("gpt-5.3-codex");
+    expect(resolveDispatchRoute(value, "design", "counter-reviewer").model).toBe("gpt-5.4");
+    expect(resolveDispatchRoute(value, "prd", "counter-reviewer").model).toBe("gpt-5.3-codex");
   });
 
   it("classifies an absent dispatched role without returning a route", () => {
     expectRoutingError(
-      () => resolveDispatchRoute(config({}), "phase-impl", "counter-reviewer", "claude"),
+      () => resolveDispatchRoute(config({}), "phase-impl", "counter-reviewer"),
       "CONFIG_INVALID",
       { issue_code: "route-missing" },
     );
@@ -50,7 +50,7 @@ describe("dispatch routing", () => {
 
   it("rejects Claude ultra effort before dispatch", () => {
     expectRoutingError(
-      () => resolveDispatchRoute(config({ adjudicator: { model: "claude-opus-4-6", effort: "ultra" } }), "design", "adjudicator", "codex"),
+      () => resolveDispatchRoute(config({ adjudicator: { model: "claude-opus-4-6", effort: "ultra" } }), "design", "adjudicator"),
       "CONFIG_INVALID",
       { issue_code: "effort-unsupported" },
     );
@@ -61,14 +61,13 @@ describe("dispatch routing", () => {
       config({ adjudicator: { model: "gpt-5.4", effort } }),
       "design",
       "adjudicator",
-      "claude",
     ).effort).toBe(effort);
   });
 
   it("rejects an unsupported Codex effort before dispatch", () => {
     const invalid = config({ adjudicator: { model: "gpt-5.4", effort: "bogus" as never } });
     expectRoutingError(
-      () => resolveDispatchRoute(invalid, "design", "adjudicator", "claude"),
+      () => resolveDispatchRoute(invalid, "design", "adjudicator"),
       "CONFIG_INVALID",
       { issue_code: "effort-unsupported" },
     );
@@ -80,42 +79,45 @@ describe("dispatch routing", () => {
         config({ "counter-reviewer": { model: "gpt-5.4", effort: "high" } }),
         "design",
         "counter-review" as RoutingRole,
-        "claude",
       ),
       "CONFIG_INVALID",
       { issue_code: "route-missing" },
     );
   });
 
-  it("refuses same-family counter-review with the expected opposite family", () => {
-    expectRoutingError(
-      () => resolveDispatchRoute(config({ "counter-reviewer": { model: "claude-opus-4-6", effort: "high" } }), "design", "counter-reviewer", "claude"),
-      "FAMILY_MISMATCH",
-      { expected_family: "codex", observed_family: "claude" },
-    );
+  it("accepts an explicitly configured same-family counter-reviewer", () => {
+    expect(resolveDispatchRoute(config({ "counter-reviewer": { model: "claude-opus-4-6", effort: "high" } }), "design", "counter-reviewer"))
+      .toEqual({ adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "high" });
   });
 
-  it("refuses automatic same-family adjudication before dispatch", () => {
+  it("accepts an explicitly configured same-family adjudicator", () => {
+    expect(resolveDispatchRoute(config({ adjudicator: { model: "gpt-5.4", effort: "high" } }), "design", "adjudicator"))
+      .toEqual({ adapter: "codex-cli", family: "codex", model: "gpt-5.4", effort: "high" });
+  });
+
+  it("routes a cc-switch provider through the claude CLI regardless of model name", () => {
+    expect(resolveDispatchRoute(config({ "counter-reviewer": { model: "glm-5.3", effort: "high", provider: "zai" } }), "design", "counter-reviewer"))
+      .toEqual({ adapter: "claude-cli", family: "claude", model: "glm-5.3", effort: "high", provider: "zai" });
+    expect(resolveDispatchRoute(config({ "counter-reviewer": { model: "claude-opus-4-6", effort: "high", provider: "zai" } }), "design", "counter-reviewer"))
+      .toEqual({ adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "high", provider: "zai" });
+  });
+
+  it("refuses a cc-switch provider paired with a codex model", () => {
     expectRoutingError(
-      () => resolveDispatchRoute(
-        config({ adjudicator: { model: "gpt-5.4", effort: "high" } }),
-        "design",
-        "adjudicator",
-        "codex",
-      ),
-      "FAMILY_MISMATCH",
-      { expected_family: "claude", observed_family: "codex" },
+      () => resolveDispatchRoute(config({ adjudicator: { model: "gpt-5.4", effort: "high", provider: "zai" } }), "design", "adjudicator"),
+      "CONFIG_INVALID",
+      { issue_code: "provider-unsupported" },
     );
   });
 
   it("guards error construction for unsafe and unsupported configured models", () => {
     expectRoutingError(
-      () => resolveDispatchRoute(config({ adjudicator: { model: "openai/gpt-5", effort: "high" } }), "design", "adjudicator", "claude"),
+      () => resolveDispatchRoute(config({ adjudicator: { model: "openai/gpt-5", effort: "high" } }), "design", "adjudicator"),
       "CONFIG_INVALID",
       { issue_code: "model-not-safe-id" },
     );
     expectRoutingError(
-      () => resolveDispatchRoute(config({ adjudicator: { model: "gemini-3", effort: "high" } }), "design", "adjudicator", "claude"),
+      () => resolveDispatchRoute(config({ adjudicator: { model: "gemini-3", effort: "high" } }), "design", "adjudicator"),
       "CONFIG_MODEL_UNSUPPORTED",
       { model: "gemini-3" },
     );

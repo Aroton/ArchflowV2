@@ -264,27 +264,58 @@ const taskStateRevisionCollections: JsonObject = {
   human_revision_history: [revisionRecord("gate-a", "1"), revisionRecord("gate-b", "2")],
 };
 
-const restartRecord = (restartId: string, revision: number): JsonObject => ({
+const restartResult = (phaseInstance: string, fill: string): JsonObject => ({
+  phase_instance: phaseInstance,
+  step: "produce",
+  result_digest: fill.repeat(64),
+  result_id: `${phaseInstance}:produce:1`,
+  input_fingerprint: "8".repeat(64),
+});
+const restartWaiver = (gateId: string, fill: string): JsonObject => ({
+  gate_id: gateId,
+  rule_id: `constitution:${gateId}`,
+  rule_version: 1,
+  subject_digest: fill.repeat(64),
+  scope: { operation: "review-trigger", boundary: "subject" },
+  granted: true,
+  expires: "task-complete",
+  granted_at_revision: 4,
+});
+const restartRecord = (restartId: string, fromPhase: string, targetPhase: string): JsonObject => ({
   restart_id: restartId,
-  source_phase_instance: "phase-impl-2",
-  target_phase_instance: "design",
-  reason: "Revisit the authenticated design boundary.",
-  restarted_at_revision: revision,
-  superseded_results: taskState.sample.authoritative_results,
-  cleared_waivers: taskStateTwoWaivers.waivers,
-  human_provenance: {
-    schema_version: "1",
-    actor_class: "human",
-    assurance: "declared-local-trace",
-    channel: "archflow-local",
-    decision_event_id: `${restartId}-decision`,
-    helper_invocation_id: `${restartId}-helper`,
-    recorded_at: "2026-08-16T12:00:00.000Z",
-  },
+  source_phase_instance: fromPhase,
+  target_phase_instance: targetPhase,
+  reason: "Planning authority required correction.",
+  restarted_at_revision: 4,
+  superseded_results: [restartResult("design", "a"), restartResult("phase-design-1", "b")],
+  cleared_waivers: [restartWaiver("gate-a", "c"), restartWaiver("gate-b", "d")],
+  human_provenance: restartId === "restart-a"
+    ? {
+        schema_version: "1",
+        actor_class: "human",
+        assurance: "declared-local-trace",
+        channel: "archflow-local",
+        decision_event_id: `${restartId}-decision`,
+        helper_invocation_id: `${restartId}-helper`,
+        recorded_at: "2026-08-16T12:00:00.000Z",
+      }
+    : {
+        schema_version: "1",
+        actor_class: "human",
+        assurance: "connected-request-trace",
+        channel: "connected-host",
+        connection_id: "connection-1",
+        invocation_id: "invocation-1",
+        request_id_digest: "f".repeat(64),
+        request_digest: "e".repeat(64),
+      },
 });
 const taskStateRestartCollections: JsonObject = {
-  ...taskState.sample,
-  restart_history: [restartRecord("restart-a", 6), restartRecord("restart-b", 7)],
+  ...taskStateWithoutOpenGate,
+  restart_history: [
+    restartRecord("restart-a", "phase-impl-1", "design"),
+    restartRecord("restart-b", "phase-impl-2", "phase-design-1"),
+  ],
 };
 
 const documentArtifactAdditionalDocuments: JsonObject = {

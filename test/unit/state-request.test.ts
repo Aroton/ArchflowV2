@@ -45,8 +45,11 @@ const common = {
   expected_revision: 4,
   input_fingerprint: "a".repeat(64),
 } as const;
-const counterEvidence = { role: "counter-review", evidence_digest: "6".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" } as const;
+const counterEvidence = { role: "counter-review", evidence_digest: "6".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" } as const;
 const currentEvidence = { set_digest: "8".repeat(64), slots: [counterEvidence] } as const;
+const previewDigest = "5".repeat(64);
+const gateDecision = { choice: "approve", reason: "Reviewed." } as const;
+const waiverDecision = { choice: "grant", reason: "Reviewed." } as const;
 const waiverOrigin = {
   origin_gate_id: "gate-1",
   origin_decision_digest: "1".repeat(64),
@@ -62,8 +65,8 @@ const waiverOrigin = {
 const rawInputs = () => ({
   archflow_state: { ...common, phase_instance: phase, step: "produce", status: "succeeded" },
   archflow_counter_review: { ...common, artifact_path: "phases/9/result.md" },
-  archflow_gate: { ...common, phase_instance: phase, summary: "Approve implementation", subject_digest: "7".repeat(64), current_evidence: currentEvidence, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } },
-  archflow_waiver: { ...common, origin: waiverOrigin, rationale: "A bounded exception is required" },
+  archflow_gate: { ...common, phase_instance: phase, summary: "Approve implementation", subject_digest: "7".repeat(64), current_evidence: currentEvidence, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, preview_digest: previewDigest, decision: gateDecision },
+  archflow_waiver: { ...common, origin: waiverOrigin, rationale: "A bounded exception is required", preview_digest: previewDigest, decision: waiverDecision },
 } as const);
 
 const durableFixture = (name: string): unknown => JSON.parse(readFileSync(
@@ -82,8 +85,8 @@ function selectorFixtures(): readonly SelectorFixture[] {
   return [
     { call: parseToolCall("archflow_state", raw.archflow_state), operation: "record-state-boundary", operation_fields: { phase_instance: phase, step: "produce", status: "succeeded" } },
     { call: parseToolCall("archflow_counter_review", raw.archflow_counter_review), operation: "counter-review", operation_fields: { artifact_path: "phases/9/result.md" } },
-    { call: parseToolCall("archflow_gate", raw.archflow_gate), operation: "gate", operation_fields: { phase_instance: phase, summary: "Approve implementation", subject_digest: "7".repeat(64), current_evidence: currentEvidence, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } } },
-    { call: parseToolCall("archflow_waiver", raw.archflow_waiver), operation: "waiver", operation_fields: { origin: waiverOrigin, rationale: "A bounded exception is required" } },
+    { call: parseToolCall("archflow_gate", raw.archflow_gate), operation: "gate", operation_fields: { phase_instance: phase, summary: "Approve implementation", subject_digest: "7".repeat(64), current_evidence: currentEvidence, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, preview_digest: previewDigest, decision: gateDecision } },
+    { call: parseToolCall("archflow_waiver", raw.archflow_waiver), operation: "waiver", operation_fields: { origin: waiverOrigin, rationale: "A bounded exception is required", preview_digest: previewDigest, decision: waiverDecision } },
   ] as readonly SelectorFixture[];
 }
 

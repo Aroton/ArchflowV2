@@ -84,6 +84,19 @@ export function nextPhaseInstance(instance: PhaseInstanceId): PhaseInstanceId | 
   }
 }
 
+/** Whether an instance is a planning stage that may be selected as a restart target. */
+export function isPlanningPhaseInstance(instance: PhaseInstanceId): boolean {
+  return decodePhaseInstance(instance).kind !== "phase-impl";
+}
+
+/** A restart target must be a planning stage strictly earlier than current durable work. */
+export function isEarlierPlanningPhase(
+  target: PhaseInstanceId,
+  current: PhaseInstanceId,
+): boolean {
+  return isPlanningPhaseInstance(target) && comparePhaseInstances(target, current) < 0;
+}
+
 /**
  * Compares phase instances in the canonical workflow order:
  * `prd < design < phase-design-1 < phase-impl-1 < phase-design-2 < ...`.

@@ -17,7 +17,7 @@ import { parseRubricV1 } from "../../src/contracts/rubric.js";
 import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 import { mintAdjudicationObservation, mintReviewObservation, serializeDispatch } from "../../src/dispatch/cli.js";
 import { createDispatchCoordinator } from "../../src/dispatch/coordinator.js";
-import { DispatchRoutingError, resolveDispatchRoute } from "../../src/dispatch/routing.js";
+import { resolveDispatchRoute } from "../../src/dispatch/routing.js";
 import { buildAdjudicationEnvelope, buildReviewEnvelope } from "../../src/review/envelopes.js";
 import { REAL_HOST_TEST_TIMEOUT_MS, realHostsAvailable, requireRealHostsAvailable } from "../helpers/real-host.js";
 import { createTaskWorkspace } from "../helpers/task-workspace.js";
@@ -35,13 +35,11 @@ const SENTINELS = Object.freeze([
 
 const CLAUDE_PRODUCER_CONFIG = `schema_version: "1"
 roles:
-  producer: {model: claude-opus-5, effort: high}
   counter-reviewer: {model: gpt-5.6-sol, effort: xhigh}
   adjudicator: {model: gpt-5.6-sol, effort: xhigh}
 `;
 const CODEX_PRODUCER_CONFIG = `schema_version: "1"
 roles:
-  producer: {model: gpt-5.6-sol, effort: xhigh}
   counter-reviewer: {model: claude-opus-5, effort: high}
   adjudicator: {model: claude-opus-5, effort: high}
 `;
@@ -210,7 +208,7 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
       });
       try {
         const config = parseConfigYaml(direction.configSource, `${direction.name} config`);
-        const route = resolveDispatchRoute(config, "phase-impl", "counter-reviewer", direction.producer);
+        const route = resolveDispatchRoute(config, "phase-impl", "counter-reviewer");
         expect(route).toEqual({
           adapter: direction.adapter,
           family: direction.reviewer,
@@ -240,7 +238,6 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
           phase_instance: PHASE,
           signal: new AbortController().signal,
           cancellation_source: "client",
-          allow_claude_dispatch: true,
         });
         const command = route.adapter === "claude-cli" ? "claude" : "codex";
         const result = await withObservedHost(command, async (readObservation) => {
@@ -335,7 +332,7 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
       });
       try {
         const config = parseConfigYaml(direction.configSource, `${direction.name} adjudication config`);
-        const route = resolveDispatchRoute(config, "phase-impl", "adjudicator", direction.producer);
+        const route = resolveDispatchRoute(config, "phase-impl", "adjudicator");
         const artifact = "The implementation preserves explicit human approval before every commit.";
         const sourceEvidenceSetDigest = canonicalJsonDigest({ source: direction.name });
         const subject = {
@@ -371,7 +368,6 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
           phase_instance: PHASE,
           signal: new AbortController().signal,
           cancellation_source: "client",
-          allow_claude_dispatch: true,
         });
         const command = route.adapter === "claude-cli" ? "claude" : "codex";
         const result = await withObservedHost(command, async (readObservation) => {
@@ -442,14 +438,9 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
     }, REAL_HOST_TEST_TIMEOUT_MS);
   }
 
-  it("rejects same-family routing before dispatch", () => {
-    const config = parseConfigYaml(CLAUDE_PRODUCER_CONFIG, "same-family real-host config");
-    expect(() => resolveDispatchRoute(config, "phase-impl", "counter-reviewer", "codex"))
-      .toThrowError(DispatchRoutingError);
-    try {
-      resolveDispatchRoute(config, "phase-impl", "counter-reviewer", "codex");
-    } catch (error) {
-      expect((error as DispatchRoutingError).project_error.code).toBe("FAMILY_MISMATCH");
-    }
+  it("accepts an explicitly configured same-family counter-reviewer route", () => {
+    const config = parseConfigYaml(CODEX_PRODUCER_CONFIG, "same-family real-host config");
+    expect(resolveDispatchRoute(config, "phase-impl", "counter-reviewer"))
+      .toMatchObject({ adapter: "claude-cli", family: "claude" });
   }, REAL_HOST_TEST_TIMEOUT_MS);
 });

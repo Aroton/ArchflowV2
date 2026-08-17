@@ -1,11 +1,11 @@
 # ArchFlow copies this template to .archflow/config.yaml during repository initialization.
 # Task creation copies and byte-pins it at .archflow/tasks/<task>/config.yaml.
 # Changing routing after that point requires creating a new task.
+#
+# The producer is whatever client session connects to the server — it needs no
+# config. These roles describe only the children the server dispatches.
 schema_version: "1"
 roles:
-  producer:
-    model: claude-opus-5
-    effort: high
   counter-reviewer:
     model: gpt-5.6-sol
     effort: xhigh
@@ -13,17 +13,23 @@ roles:
     model: gpt-5.6-sol
     effort: xhigh
 
+# Routes accept an optional `provider`: a cc-switch provider id (claude routes
+# only). When set, the dispatched claude child is launched through
+# `cc-switch start claude <provider> -- ...` instead of directly. Unset or
+# empty means a plain direct launch. Example:
+#   counter-reviewer:
+#     model: glm-5.3
+#     effort: high
+#     provider: zai
+
 # Optional. Caps produce re-entries per phase instance before the attempts-exhausted
 # gate opens; defaults to 3. This is a thrash backstop, not the primary brake — the
 # loop ends when triage accepts nothing, so review convergence is a triage judgment.
 # max_attempts: 3
 
-# Codex-producer orientation (replace the active document above with this block):
+# Codex-host orientation (replace the active document above with this block):
 # schema_version: "1"
 # roles:
-#   producer:
-#     model: gpt-5.6-sol
-#     effort: xhigh
 #   counter-reviewer:
 #     model: claude-opus-5
 #     effort: high

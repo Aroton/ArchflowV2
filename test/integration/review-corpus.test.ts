@@ -168,7 +168,7 @@ async function dispatchScenario(
   resultKind: DispatchEnvelope["result_kind"],
 ): Promise<Uint8Array> {
   const adapter = kind === "claude"
-    ? selectCliAdapter("codex", { allow_claude_dispatch: true })
+    ? selectCliAdapter("codex")
     : selectCliAdapter("claude");
   const workspace = await fakeWorkspace(kind, selection);
   try {

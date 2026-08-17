@@ -80,18 +80,18 @@ export type RequestDigestSubject = RequestDigestCommon & ({
 } | {
   readonly tool: "archflow_gate";
   readonly operation: "gate";
-  readonly operation_fields: Pick<GateInput, "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "kind" | "context">;
+  readonly operation_fields: Pick<GateInput, "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "kind" | "context" | "preview_digest" | "decision">;
 } | {
   readonly tool: "archflow_waiver";
   readonly operation: "waiver";
-  readonly operation_fields: Pick<WaiverInput, "origin" | "rationale">;
+  readonly operation_fields: Pick<WaiverInput, "origin" | "rationale" | "preview_digest" | "decision">;
 });
 
 type SelectorKeys = {
   readonly archflow_state: "phase_instance" | "step" | "status" | "artifact" | "human_revision" | "operation" | "target_phase_instance" | "reason" | "ask_base_digest";
   readonly archflow_counter_review: "artifact_path";
-  readonly archflow_gate: "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "kind" | "context";
-  readonly archflow_waiver: "origin" | "rationale";
+  readonly archflow_gate: "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "kind" | "context" | "preview_digest" | "decision";
+  readonly archflow_waiver: "origin" | "rationale" | "preview_digest" | "decision";
 };
 type ExactSelectorCoverage = { readonly [K in Exclude<ToolName, "archflow_state">]:
   Exclude<keyof ToolInput<K>, keyof CommonToolInput> extends SelectorKeys[K]
@@ -261,7 +261,15 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
     case "archflow_gate": {
       const fields = (subject as Extract<RequestDigestSubject, { tool: "archflow_gate" }>).operation_fields;
       if (subject.operation !== "gate") throw new TypeError("invalid archflow_gate operation");
+      // The bounded-decision pair is all-or-nothing: present together on a single-call decision,
+      // absent on an open-and-wait gate. The digest must differ between the two request shapes.
       const expected = ["phase_instance", "summary", "subject_digest", "current_evidence", "kind", "context"];
+      if (fields.preview_digest !== undefined || fields.decision !== undefined) {
+        if (fields.preview_digest === undefined || fields.decision === undefined) {
+          throw new TypeError("gate preview_digest and decision must appear together");
+        }
+        expected.push("preview_digest", "decision");
+      }
       exactFields(fields, expected);
       const selected = {
         phase_instance: fields.phase_instance,
@@ -270,14 +278,30 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
         current_evidence: fields.current_evidence as unknown as PlainJsonValue,
         kind: fields.kind,
         context: fields.context as unknown as PlainJsonValue,
+        ...(fields.preview_digest === undefined || fields.decision === undefined
+          ? {}
+          : { preview_digest: fields.preview_digest, decision: fields.decision as unknown as PlainJsonValue }),
       } satisfies PlainJsonObject;
       return selected as PlainJsonObject;
     }
     case "archflow_waiver": {
       const fields = (subject as Extract<RequestDigestSubject, { tool: "archflow_waiver" }>).operation_fields;
       if (subject.operation !== "waiver") throw new TypeError("invalid archflow_waiver operation");
-      exactFields(fields, ["origin", "rationale"]);
-      return { origin: fields.origin as unknown as PlainJsonValue, rationale: fields.rationale };
+      const expected = ["origin", "rationale"];
+      if (fields.preview_digest !== undefined || fields.decision !== undefined) {
+        if (fields.preview_digest === undefined || fields.decision === undefined) {
+          throw new TypeError("waiver preview_digest and decision must appear together");
+        }
+        expected.push("preview_digest", "decision");
+      }
+      exactFields(fields, expected);
+      return {
+        origin: fields.origin as unknown as PlainJsonValue,
+        rationale: fields.rationale,
+        ...(fields.preview_digest === undefined || fields.decision === undefined
+          ? {}
+          : { preview_digest: fields.preview_digest, decision: fields.decision as unknown as PlainJsonValue }),
+      };
     }
     default: {
       const exhaustive: never = subject;

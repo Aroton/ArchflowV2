@@ -1582,7 +1582,7 @@
         },
         "next_action": {
           "type": "string",
-          "const": "repair-state"
+          "const": "inspect-current-state"
         }
       },
       "required": [

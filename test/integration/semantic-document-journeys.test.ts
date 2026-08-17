@@ -381,9 +381,9 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
     const first = await createTaskWorkspace({ taskId: "semantic-negative", label: "semantic-negative-a" });
     const second = await createTaskWorkspace({
       taskId: "semantic-negative", label: "semantic-negative-b",
+      // The producer is the connected host, not a config role; only the child routes are configured.
       configBytes: new TextEncoder().encode(`schema_version: "1"
 roles:
-  producer: { model: claude-opus-5, effort: high }
   counter-reviewer: { model: gpt-5.6-sol, effort: high }
   adjudicator: { model: gpt-5.6-sol, effort: high }
 `),

@@ -90,7 +90,7 @@ const GIT_OID = /^[0-9a-f]{40}$/u;
  * `git archive` (NOT `git worktree add`) is deliberate: an archive extraction has
  * no `.git` link back to the repository object database, so after `.archflow/tasks` is removed
  * the tracked task blobs (produce artifacts, triage) are unreachable from the view — the
- * reviewer-independence property of `src/review/envelopes.ts` holds structurally, not by child
+ * reviewer-fresh-context property of `src/review/envelopes.ts` holds structurally, not by child
  * good behavior. Tracked documentation (`docs/**`) stays readable: it is guidance, not authority.
  * The pipeline is a plain POSIX `git archive | tar -x`, matching this module's existing posture.
  */

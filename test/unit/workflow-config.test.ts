@@ -66,7 +66,7 @@ describe("model routing configuration", () => {
       { schema_version: "1", task: "other", roles: {} },
       { schema_version: "1", host: "codex", roles: {} },
       { schema_version: "1", roles: { reviewer: route } },
-      { schema_version: "1", roles: {}, overrides: { release: { producer: route } } },
+      { schema_version: "1", roles: {}, overrides: { release: { "counter-reviewer": route } } },
     ]) expect(() => parseConfigYaml(JSON.stringify(invalid))).toThrow();
   });
 

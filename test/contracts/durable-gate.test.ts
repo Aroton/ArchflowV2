@@ -8,7 +8,7 @@ import { parseSha256Digest } from "../../src/contracts/evidence.js";
 
 const d = (character: string) => parseSha256Digest(character.repeat(64));
 const provenance = { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "decision-1", helper_invocation_id: "helper-1", recorded_at: "2026-07-30T12:00:00.000Z" } as const;
-const counter = { role: "counter-review", evidence_digest: d("2"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" } as const;
+const counter = { role: "counter-review", evidence_digest: d("2"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" } as const;
 const context = { artifact_kind: "phase-implementation" } as const;
 const gateId = computeGateId({ task_identity_digest: d("a"), intent_id: "intent-1" as never, request_digest: d("b") });
 const contextDigest = computeGateContextDigest("artifact-approval", context);

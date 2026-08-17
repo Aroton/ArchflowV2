@@ -6,7 +6,7 @@ import { validateDurableSemantics } from "../contracts/durable.js";
 import { parseIntentReceipt } from "../contracts/durable-intent.js";
 import { parseResultManifest, type ResultManifestV1 } from "../contracts/durable-result-manifest.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
-import { parseSafeInteger, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
+import { parseSafeInteger, type SafeCode, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
 import type { ProjectResult } from "../contracts/errors.js";
 import { createProjectError } from "../contracts/errors.js";
 import {
@@ -232,6 +232,13 @@ async function unreferencedAuthorityDecisions(
     ...openGateIds,
     ...(state.pending_human_revision === undefined ? [] : [state.pending_human_revision.gate_id]),
     ...(state.human_revision_history ?? []).map((entry) => entry.gate_id),
+    ...(state.restart_history ?? []).flatMap((restart) => [
+      restart.restart_id,
+      ...restart.cleared_waivers.map((entry) => entry.gate_id),
+      ...(restart.cleared_pending_human_revision === undefined
+        ? []
+        : [restart.cleared_pending_human_revision.gate_id]),
+    ]),
     ...(state.last_transition !== undefined && known.has(state.last_transition.result_id)
       ? [state.last_transition.result_id]
       : []),
@@ -398,6 +405,59 @@ export async function cleanTaskWorkspace(
   } catch {
     return io(authority, "clean-task-workspace");
   }
+}
+
+/**
+ * Removes the phase documents a backward planning restart just superseded.
+ *
+ * A restart rewinds the phase and supersedes the results of everything after it, but the abandoned
+ * attempt's documents stay in the worktree. The design milestone commit that follows covers the whole
+ * task directory, so a leftover `phases/N/impl-notes.md` is swept into a commit that never reviewed
+ * it — and the milestone observation then, correctly, refuses to recognize that commit. Since the
+ * commit cannot be retried once made, the workflow deadlocks. Clearing the leftover at the restart
+ * removes the cause rather than relaxing the check.
+ *
+ * Only untracked documents are removed. A tracked one is already in history, and deleting it would
+ * simply move the same unauthorized change into the commit as a deletion.
+ */
+export async function removeSupersededPhaseDocuments(
+  dependencies: TransactionDependencies,
+  authority: TransactionAuthority,
+  targetPhaseInstance: string,
+): Promise<readonly string[]> {
+  // Only planning targets supersede documents. A restart never lands on an implementation phase,
+  // and treating one as a target would delete the very notes that phase is meant to keep.
+  const planning = /^phase-design-([1-9][0-9]*)$/u.exec(targetPhaseInstance);
+  const target = targetPhaseInstance === "prd" || targetPhaseInstance === "design"
+    ? 0
+    : planning === null ? NaN : Number(planning[1]);
+  if (!Number.isInteger(target)) return Object.freeze([]);
+  const prefix = `.archflow/tasks/${authority.task_id}/`;
+  const untracked = await dependencies.runner.runNulFields({
+    argv: [
+      "ls-files", "--others", "--exclude-standard", "-z",
+      "--", `:(top,literal)${prefix}phases`,
+    ],
+    operation: "git-restart-superseded-documents" as SafeCode,
+  });
+  const removed: string[] = [];
+  for (const path of untracked) {
+    if (!path.startsWith(prefix)) continue;
+    const relative = path.slice(prefix.length);
+    const document = /^phases\/([1-9][0-9]*)\/(design|impl-notes)\.md$/u.exec(relative);
+    if (document === null) continue;
+    const phase = Number(document[1]);
+    // The target phase's own design is what the restart is about to redo, so it survives; its
+    // implementation notes and every later document belong to work the restart abandoned.
+    const superseded = document[2] === "impl-notes" ? phase >= target : phase > target;
+    if (!superseded) continue;
+    const absolute = join(authority.task_root, ...relative.split("/"));
+    if (!inside(authority.task_root, absolute)) throw new TypeError("superseded document escaped its task root");
+    await unlink(absolute).catch(() => undefined);
+    await removeEmptyParents(dirname(absolute), join(authority.task_root, "phases"));
+    removed.push(relative);
+  }
+  return Object.freeze(removed.sort());
 }
 
 /** Removes all task-local runtime data after terminal authority is durable. */

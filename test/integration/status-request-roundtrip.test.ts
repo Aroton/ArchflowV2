@@ -8,7 +8,7 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -105,7 +105,14 @@ function harness(root: string, host: "codex" | "claude" = "codex") {
   return {
     async status(): Promise<TaskStatusV1> {
       const s = await services();
-      const status = await computeTaskStatus(s.dependencies, s.authority);
+      // See status-reentry-edit: a read that writes nothing must stay on manifests, so it never
+      // rebuilds a projection plan or re-runs the secret scan over retained payload bytes.
+      const status = await computeTaskStatus({
+        ...s.dependencies,
+        load_retained_result: () => {
+          throw new Error("status derivation must not load a full retained result");
+        },
+      }, s.authority);
       if (!status.ok) throw new Error(status.error.code);
       return status.value;
     },
@@ -216,29 +223,33 @@ function derivedRequest(status: TaskStatusV1): RequestShape {
 }
 
 async function approveComposedGate(
-  root: string,
   h: ReturnType<typeof harness>,
   gate: CallEnvelope,
 ): Promise<void> {
-  const pending = h.invoke(gate.request.tool, gate.request.input);
-  let opened = false;
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const status = await h.status();
-    if (status.open_gate !== undefined) {
-      opened = true;
-      break;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  expect(opened, "the composed gate should become visible before its invocation returns").toBe(true);
-  const decision = await runLocalCommand({
-    command: "decide",
+  await h.invoke(gate.request.tool, gate.staged?.reference ?? gate.request.input);
+}
+
+async function composeApprovalGate(
+  root: string,
+  h: ReturnType<typeof harness>,
+  intentId: string,
+  summary: string,
+  choice = "approve",
+): Promise<CallEnvelope> {
+  const preview = await runLocalCommand({
+    command: "gate-preview",
     working_directory: root,
     task_id: task,
-    value: { kind: "choice", choice: "approve", reason: "Approve the reviewed artifact." },
+    value: { summary },
+  }) as { ok: boolean; value?: { preview_digest: string } };
+  expect(preview.ok).toBe(true);
+  return h.buildRequest({
+    intent_id: intentId,
+    kind: "gate",
+    summary,
+    preview_digest: preview.value!.preview_digest,
+    decision: { choice, reason: "Approve the reviewed artifact." },
   });
-  expect(decision).toMatchObject({ ok: true });
-  await pending;
 }
 
 async function completeDocumentPhase(
@@ -268,12 +279,8 @@ async function completeDocumentPhase(
     }],
   });
   await h.invoke(triage.request.tool, triage.staged?.reference ?? triage.request.input);
-  const gate = await h.buildRequest({
-    intent_id: `${label}-gate`,
-    kind: "gate",
-    summary: `${label} is ready for approval.`,
-  });
-  await approveComposedGate(root, h, gate);
+  const gate = await composeApprovalGate(root, h, `${label}-gate`, `${label} is ready for approval.`);
+  await approveComposedGate(h, gate);
   return produced;
 }
 
@@ -449,7 +456,7 @@ describe("status-derived requests execute against the real handlers", () => {
         .rejects.toThrow(/not recognized/u);
 
       // The composed artifact-approval gate is compose-only: invoking it opens a human gate.
-      const gateComposed = await h.buildRequest({ intent_id: "gate-1", kind: "gate", summary: "PRD ready for approval." });
+      const gateComposed = await composeApprovalGate(fixture.root, h, "gate-1", "PRD ready for approval.");
       expect(gateComposed.request.tool).toBe("archflow_gate");
       expect(gateComposed.gate?.gate_id).toBeDefined();
       expect(gateComposed.request.input).toMatchObject({
@@ -511,6 +518,19 @@ describe("status-derived requests execute against the real handlers", () => {
       });
       const approvedRevision = approved.revision;
       expect(approvedRevision).toBeDefined();
+
+      // A task document nobody approved — the shape a backward restart used to leave behind — is
+      // named before the milestone commit sweeps it in, while the commit can still be made to
+      // succeed. Offering `commit-artifacts` here would produce an unrecognizable commit that can
+      // never be retried, because the local commit path requires HEAD to still be the baseline.
+      const strayDocument = join(fixture.root, ".archflow", "tasks", task, "phases", "1", "impl-notes.md");
+      mkdirSync(dirname(strayDocument), { recursive: true });
+      writeFileSync(strayDocument, "# Superseded attempt\n");
+      const stray = await h.status();
+      expect(stray.blocking_reasons).toContain("design-milestone-unauthorized-task-document");
+      expect(stray.next_action).toMatchObject({ code: "inspect-state", human_required: true });
+      rmSync(strayDocument);
+      expect((await h.status()).next_action).toMatchObject({ code: "commit-artifacts" });
 
       git(fixture.root, "add", "-A", "--", approved.next_action.commit_path!);
       git(
@@ -728,10 +748,10 @@ describe("status-derived requests execute against the real handlers", () => {
         }],
       });
       await h.invoke(triage.request.tool, triage.staged?.reference ?? triage.request.input);
-      const gate = await h.buildRequest({
-        intent_id: "compound-phase-gate", kind: "gate", summary: "Approve Phase 4 and its corrected architecture.",
-      });
-      await approveComposedGate(fixture.root, h, gate);
+      const gate = await composeApprovalGate(
+        fixture.root, h, "compound-phase-gate", "Approve Phase 4 and its corrected architecture.",
+      );
+      await approveComposedGate(h, gate);
 
       const approved = await h.status();
       expect(approved).toMatchObject({
@@ -828,9 +848,9 @@ describe("status-derived requests execute against the real handlers", () => {
 
       // build-request kind "gate" composes the same pending gate mechanically — kind, subject,
       // and context all from retained adjudication evidence — in preference to artifact-approval.
-      const gateComposed = await h.buildRequest({
-        intent_id: "gate-1", kind: "gate", summary: "Resolve the matched review trigger.",
-      });
+      const gateComposed = await composeApprovalGate(
+        fixture.root, h, "gate-1", "Resolve the matched review trigger.",
+      );
       expect(gateComposed.request.tool).toBe("archflow_gate");
       expect(gateComposed.gate?.gate_id).toBeDefined();
       expect(gateComposed.request.input).toMatchObject({

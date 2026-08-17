@@ -75,14 +75,17 @@ function projectError(call: () => unknown): CliAdapterError["project_error"] {
 }
 
 describe("CLI adapter selection", () => {
-  it("uses exactly two opposite-family arms and refuses unknown hosts before launch", () => {
+  it("defaults to the host's opposite family and refuses unknown hosts before launch", () => {
     expect(selectCliAdapter("claude").id).toBe("codex-cli");
-    expect(selectCliAdapter("codex", { allow_claude_dispatch: true }).id).toBe("claude-cli");
+    expect(selectCliAdapter("codex").id).toBe("claude-cli");
     expect(projectError(() => selectCliAdapter("unknown" as HostIdentity))).toMatchObject({ code: "UNSUPPORTED_HOST", diagnostic: { parameters: { host: "unknown" } } });
   });
 
-  it("keeps Claude dispatch disabled unless explicitly enabled", () => {
-    expect(projectError(() => selectCliAdapter("codex"))).toMatchObject({ code: "CONFIG_FAMILY_UNSUPPORTED", diagnostic: { parameters: { family: "claude" } } });
+  it("follows the resolved route's adapter for either family", () => {
+    expect(selectCliAdapter("claude", { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "high" }).id).toBe("claude-cli");
+    expect(selectCliAdapter("codex", { adapter: "codex-cli", family: "codex", model: "gpt-5.4", effort: "high" }).id).toBe("codex-cli");
+    expect(projectError(() => selectCliAdapter("unknown" as HostIdentity, { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "high" })))
+      .toMatchObject({ code: "UNSUPPORTED_HOST", diagnostic: { parameters: { host: "unknown" } } });
   });
 });
 
@@ -140,7 +143,7 @@ describe("CLI invocation construction", () => {
   it("builds the pinned Claude argv with inline schema and no implicit defaults", async () => {
     const target = await workspace();
     const route: DispatchRoute = { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "max" };
-    const invocation = await selectCliAdapter("codex", { allow_claude_dispatch: true })
+    const invocation = await selectCliAdapter("codex")
       .buildInvocation(envelope, route, target, reviewSchema);
     expect(invocation.argv.slice(0, 5)).toEqual(["-p", "--safe-mode", "--tools", "", "--disable-slash-commands"]);
     expect(invocation.argv).toContain("--setting-sources");
@@ -152,10 +155,39 @@ describe("CLI invocation construction", () => {
     expect(invocation.stdin).toEqual(envelope.bytes);
   });
 
+  it("wraps the Claude launch through cc-switch only when a route names a provider", async () => {
+    const target = await workspace();
+    const adapter = selectCliAdapter("codex");
+    const plainRoute: DispatchRoute = { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "high" };
+    const providerRoute: DispatchRoute = { ...plainRoute, provider: "zai" };
+
+    const plain = await adapter.buildInvocation(envelope, plainRoute, target, reviewSchema);
+    expect(plain.command).toBe("claude");
+    expect(plain.env).toBe(target.env);
+
+    const wrapped = await adapter.buildInvocation(envelope, providerRoute, target, reviewSchema);
+    expect(wrapped.command).toBe("cc-switch");
+    expect(wrapped.argv.slice(0, 4)).toEqual(["start", "claude", "zai", "--"]);
+    // The full lockdown argv rides unchanged after the `--` separator.
+    expect(wrapped.argv.slice(4)).toEqual([...plain.argv]);
+    expect(wrapped.cwd).toBe(plain.cwd);
+    expect(wrapped.stdin).toEqual(plain.stdin);
+    // The wrap prepends the user's ~/.local/bin so the cc-switch binary stays reachable.
+    const localBin = join(target.env.HOME!, ".local", "bin");
+    expect(wrapped.env.PATH?.split(":")[0]).toBe(localBin);
+    expect(wrapped.env.PATH).not.toBe(plain.env.PATH);
+  });
+
   it("builds the pinned Codex argv with schema/output paths and exact suppressions", async () => {
     const target = await workspace();
     const route: DispatchRoute = { adapter: "codex-cli", family: "codex", model: "gpt-5.3-codex", effort: "xhigh" };
     const invocation = await selectCliAdapter("claude").buildInvocation(envelope, route, target, reviewSchema);
+    await expect(selectCliAdapter("claude").buildInvocation(
+      envelope,
+      { ...route, provider: "zai" } as DispatchRoute,
+      target,
+      reviewSchema,
+    )).rejects.toMatchObject({ project_error: { code: "CONFIG_INVALID", diagnostic: { parameters: { issue_code: "provider-unsupported" } } } });
     expect(invocation.argv.slice(0, 6)).toEqual(["exec", "--ephemeral", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check", "--strict-config"]);
     expect(invocation.argv).toContain("--output-schema");
     expect(invocation.argv).toContain("-o");
@@ -171,7 +203,7 @@ describe("CLI invocation construction", () => {
     const target = await workspace();
     const viewed: DispatchWorkspace = Object.freeze({ ...target, repository_view_root: join(target.root, "repo") });
     const route: DispatchRoute = { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "max" };
-    const adapter = selectCliAdapter("codex", { allow_claude_dispatch: true });
+    const adapter = selectCliAdapter("codex");
 
     const bare = await adapter.buildInvocation(envelope, route, target, reviewSchema);
     expect(bare.cwd).toBe(target.root);
@@ -211,7 +243,7 @@ describe("CLI invocation construction", () => {
   ] as const)("passes the projected adjudication host schema through the %s adapter", async (_name, id) => {
     const target = await workspace();
     const adapter = id === "claude-cli"
-      ? selectCliAdapter("codex", { allow_claude_dispatch: true })
+      ? selectCliAdapter("codex")
       : selectCliAdapter("claude");
     const route: DispatchRoute = id === "claude-cli"
       ? { adapter: id, family: "claude", model: "claude-opus-4-6", effort: "high" }
@@ -409,7 +441,7 @@ describe("CLI invocation construction", () => {
 
 describe("CLI output contracts and failure classification", () => {
   it("extracts and canonically re-encodes only Claude structured_output", () => {
-    const adapter = selectCliAdapter("codex", { allow_claude_dispatch: true });
+    const adapter = selectCliAdapter("codex");
     const structured = { schema_version: "1", verdict: "pass" };
     expect(adapter.parseOutput(result({ stdout: bytes(JSON.stringify({ result: "ignored", structured_output: structured })) })))
       .toEqual(canonicalJsonBytes(structured));
@@ -451,7 +483,7 @@ describe("CLI output contracts and failure classification", () => {
   });
 
   it("ignores Claude stderr warnings and uses only an error wrapper for semantics", () => {
-    const adapter = selectCliAdapter("codex", { allow_claude_dispatch: true });
+    const adapter = selectCliAdapter("codex");
     expect(adapter.classifyFailure(result({ stderr: bytes("deprecated model: rate limit wording") }))).toBeUndefined();
     expect(adapter.classifyFailure(result({ exit_code: 1, stdout: bytes(JSON.stringify({ is_error: true, result: "Login required" })) })))
       .toMatchObject({ code: "AUTH_UNAVAILABLE" });

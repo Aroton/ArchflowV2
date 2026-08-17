@@ -1,7 +1,6 @@
 import type { InvocationContext } from "../../contracts/contexts.js";
 import { createProjectError, type ProjectResult } from "../../contracts/errors.js";
-import { sha256Bytes } from "../../contracts/canonical.js";
-import { canonicalJsonDigest } from "../../contracts/canonical.js";
+import { canonicalJsonDigest, sha256Bytes } from "../../contracts/canonical.js";
 import { computeInputFingerprint } from "../../contracts/fingerprints.js";
 import { parseSafeId, parseSafeInteger } from "../../contracts/evidence.js";
 import {
@@ -26,6 +25,8 @@ import { identifyTransactionRequest } from "../../state/request.js";
 import { loadCurrentProduceSubject, type CurrentProduceSubject } from "../../state/produce-subject.js";
 import { designArtifactCommittedAtCurrentTarget, implementationOutputCommittedAtCurrentTarget } from "../../state/implementation-manifest.js";
 import { decodePhaseInstance } from "../../contracts/phase-instance.js";
+import { exactCommitAuthorizationContext } from "../../contracts/durable-gate.js";
+import type { PlanningRestartConnectedProvenance } from "../../contracts/durable-state.js";
 import {
   prepareResultInstallation,
   runStateTransaction,
@@ -49,6 +50,26 @@ const fail = <T>(error: ReturnType<typeof createProjectError>): ProjectResult<T>
 
 function stateResultId(intentId: string): ReturnType<typeof parseSafeId> {
   return parseSafeId(`state-result-${sha256Bytes(new TextEncoder().encode(intentId)).slice(0, 32)}`);
+}
+
+function restartProvenance(
+  context: InvocationContext,
+  requestDigest: ReturnType<typeof canonicalJsonDigest>,
+): PlanningRestartConnectedProvenance {
+  return Object.freeze({
+    schema_version: "1",
+    actor_class: "human",
+    assurance: "connected-request-trace",
+    channel: "connected-host",
+    connection_id: parseSafeId(context.connection.connection_id),
+    invocation_id: parseSafeId(context.invocation_id),
+    request_id_digest: canonicalJsonDigest({
+      schema_version: "1",
+      digest_kind: "transport-request-id",
+      request_id: context.transport_metadata.request_id,
+    }),
+    request_digest: requestDigest,
+  });
 }
 
 export async function handleState(
@@ -150,19 +171,7 @@ export async function handleState(
             target_phase_instance: restartInput.target_phase_instance,
             reason: restartInput.reason,
             recomputed_input_fingerprint: landingFingerprint,
-            human_provenance: {
-              schema_version: "1",
-              actor_class: "human",
-              assurance: "declared-local-trace",
-              channel: "connected-host",
-              decision_event_id: restartId,
-              connection_id: context.connection.connection_id,
-              request_id_digest: canonicalJsonDigest({
-                schema_version: "1",
-                request_id: context.transport_metadata.request_id,
-              }),
-              recorded_at: new Date().toISOString(),
-            },
+            human_provenance: restartProvenance(context, identified.request_digest),
           } as const;
           // Validate every state precondition before the sole permitted worktree side effect.
           let planned = planPlanningRestart(planInput);
@@ -261,8 +270,8 @@ export async function handleState(
           preparedResult = prepared.value;
         }
         if (artifact?.artifact_kind === "triage") {
-          const loadRetained = services.dependencies.load_retained_result;
-          if (retainedBytes === undefined || scanner === undefined || loadRetained === undefined) {
+          const loadManifest = services.dependencies.load_retained_manifest;
+          if (retainedBytes === undefined || scanner === undefined || loadManifest === undefined) {
             throw new TypeError("evidence preparation dependencies are unavailable");
           }
           const produce = await loadCurrentProduceSubject(services.dependencies, current.value);
@@ -274,7 +283,10 @@ export async function handleState(
             }));
           }
           const reviews = await loadCurrentReviewSet(
-            { read_state: services.dependencies.read_state, load_retained_result: loadRetained },
+            {
+              read_state: services.dependencies.read_state,
+              load_retained_manifest: loadManifest,
+            },
             services.authority,
             call.input.phase_instance,
           );
@@ -328,13 +340,15 @@ export async function handleState(
         const authenticatedGateApprovals: AuthenticatedGateApproval[] = [];
         const decodedCurrent = decodePhaseInstance(current.value.phase_instance);
         const crossesPhase = call.input.phase_instance !== current.value.phase_instance;
+        const planningRestartSignal = restartInput !== undefined;
         const completionSignal =
+          !planningRestartSignal &&
           artifact === undefined &&
           decodedCurrent.kind === "phase-impl" &&
           current.value.step === "triage" &&
           current.value.status === "succeeded";
         const artifactPhaseExitSignal =
-          artifact === undefined && crossesPhase && decodedCurrent.kind !== "phase-impl";
+          !planningRestartSignal && artifact === undefined && crossesPhase && decodedCurrent.kind !== "phase-impl";
         let currentProduce: CurrentProduceSubject | undefined;
         if (completionSignal || artifactPhaseExitSignal) {
           const loadedProduce = await loadCurrentProduceSubject(services.dependencies, current.value);
@@ -364,13 +378,13 @@ export async function handleState(
           ) {
             for (const authenticated of authenticatedGateApprovals) {
               if (authenticated.request.kind !== "design-approval") continue;
-              if (await designArtifactCommittedAtCurrentTarget(
+              if ((await designArtifactCommittedAtCurrentTarget(
                 services.runner,
                 current.value.task_id,
                 currentProduce.artifact,
-                currentProduce.retained.prepared.manifest.value.outputs,
+                currentProduce.retained.manifest.value.outputs,
                 authenticated.request.context,
-              )) {
+              )).observed) {
                 commitObserved = true;
                 break;
               }
@@ -394,10 +408,13 @@ export async function handleState(
           if (source.artifact_kind === "implementation-output") {
             for (const authenticated of authenticatedGateApprovals) {
               if (authenticated.request.kind !== "commit-authorization") continue;
+              // Pre-exact-commit archives bound no baseline, message or path set to compare.
+              const exact = exactCommitAuthorizationContext(authenticated.request.context);
+              if (exact === undefined) continue;
               if (await implementationOutputCommittedAtCurrentTarget(
                 services.runner,
                 source,
-                authenticated.request.context.target_ref,
+                exact,
               )) {
                 commitObserved = true;
                 break;
@@ -407,6 +424,7 @@ export async function handleState(
         }
         const decodedTarget = decodePhaseInstance(call.input.phase_instance);
         const legacyJumpSignal =
+          !planningRestartSignal &&
           artifact === undefined &&
           current.value.phase_instance === "design" &&
           current.value.step === "triage" &&
@@ -442,11 +460,11 @@ export async function handleState(
                 loaded.value.request.context.commit_message !== undefined &&
                 currentProduce?.artifact.artifact_kind === "document"
               ) {
-                commitObserved = await designArtifactCommittedAtCurrentTarget(
+                commitObserved = (await designArtifactCommittedAtCurrentTarget(
                   services.runner,
                   current.value.task_id,
                   currentProduce.artifact,
-                  currentProduce.retained.prepared.manifest.value.outputs,
+                  currentProduce.retained.manifest.value.outputs,
                   {
                     target_ref: loaded.value.request.context.target_ref,
                     baseline_commit: loaded.value.request.context.baseline_commit,
@@ -455,7 +473,7 @@ export async function handleState(
                       authorized_document_paths: loaded.value.request.context.imported_documents.map((document) => document.path),
                     }),
                   },
-                );
+                )).observed;
               }
             }
           }

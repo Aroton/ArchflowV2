@@ -91,7 +91,10 @@ describe("canonical skill contracts", () => {
       expect(source).toContain("`resources`");
       expect(source).toContain("{role,path,access}");
       expect(source).toContain('`{"kind":"counter-review"}`');
-      expect(source).toContain("`archflow-local decide --task <task>`");
+      expect(source).toContain("`gate-preview`");
+      expect(source).toContain("preview_digest");
+      expect(source).toContain("decision");
+      expect(source).not.toContain("`archflow-local decide --task <task>`");
       expect(source).not.toContain("## Stable rubric");
       expect(source).not.toContain('"criteria":[');
       expect(source).not.toContain('"kind":"counter-review","rubric"');
@@ -163,7 +166,7 @@ describe("canonical skill contracts", () => {
       expect(source).toContain("approval of the final bytes");
       expect(source).toMatch(/[Aa] \*\*significant\*\* revision/u);
       expect(source).toContain("resets the attempt count to 1");
-      expect(source).toContain("automatically runs a fresh opposite-client counter-review plus constitution review");
+      expect(source).toMatch(/automatically runs a fresh (?:opposite-client )?counter-review plus constitution review/u);
       expect(source).toMatch(/override(?: it)? in either direction/u);
     }
   });

@@ -15,6 +15,8 @@ import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
 import { stageTaskAsk } from "../../src/init/task-initialization.js";
 import { runBuildRequest } from "../../src/local/build-request.js";
+import { computeLocalGatePreview } from "../../src/local/gate-preview.js";
+import { derivePendingWaiverRequest } from "../../src/state/pending-waiver.js";
 import { createProductionServices, type ProductionServices } from "../../src/state/production.js";
 import { composeRequest } from "../../src/state/request-composition.js";
 import { createTaskWorkspace } from "../helpers/task-workspace.js";
@@ -91,7 +93,13 @@ describe("transport-neutral request composition parity", () => {
       { kind: "running", step: "counter_review", intent_id: "running-parity" },
       { kind: "triage", dispositions: [], intent_id: "triage-parity" },
       { kind: "counter-review", intent_id: "review-parity" },
-      { kind: "gate", summary: "Review the composed request.", intent_id: "gate-parity" },
+      {
+        kind: "gate",
+        summary: "Review the composed request.",
+        preview_digest: "0".repeat(64),
+        decision: { choice: "approve", reason: "Parity probe decision." },
+        intent_id: "gate-parity",
+      },
       { kind: "advance", intent_id: "advance-parity" },
     ] satisfies PlainJsonValue[]) {
       await expectParity(fixture.services, input);
@@ -146,11 +154,27 @@ describe("transport-neutral request composition parity", () => {
     await fixture.services.dependencies.atomic.replace(fixture.services.authority.state, canonicalDocument({ ...state, last_transition: { ...prior, tool: "archflow_gate", operation: parseSafeCode("gate"), result_id: gateId } }).bytes);
     const refreshed = await createProductionServices({ working_directory: fixture.root, task_id: fixture.taskId, operation: parseSafeCode("composition-waiver") });
     if (!refreshed.ok || refreshed.value.state === undefined) throw new Error("waiver services unavailable");
-    const composed = await composeRequest(refreshed.value, { kind: "waiver", intent_id: "waiver-parity" });
+    // The bounded decision path: derive the pending origin, preview it, then decide through it.
+    const pending = await derivePendingWaiverRequest(refreshed.value);
+    if (!pending.ok) throw new Error(pending.error.code);
+    const preview = await computeLocalGatePreview(refreshed.value, {
+      kind: "waiver",
+      origin: pending.value.origin as unknown as PlainJsonValue,
+      rationale: pending.value.rationale,
+    });
+    if (!preview.ok) throw new Error(preview.error.code);
+    const composed = await composeRequest(refreshed.value, {
+      kind: "waiver",
+      intent_id: "waiver-parity",
+      preview_digest: preview.value.preview_digest,
+      decision: { choice: "grant-exception", reason: "The exception is narrowly bounded." },
+    });
     expect(composed.ok, composed.ok ? undefined : composed.error.code).toBe(true);
     if (composed.ok) expect(composed.value.envelope.request.input).toMatchObject({
       origin: { origin_gate_id: gateId, rule, scope, subject_digest: subject, current_evidence_set_digest: currentEvidence.set_digest },
       rationale: "The exception is bounded.",
+      preview_digest: preview.value.preview_digest,
+      decision: { choice: "grant-exception", reason: "The exception is narrowly bounded." },
     });
     fixture.dispose();
     roots.pop();

@@ -20,7 +20,7 @@ function qualify(evidenceDigest: ReturnType<typeof digest>, blocking = false): Q
 
 const reviews = [qualify(digest("1"))] as const;
 const slots = [
-  { role: "counter-review", evidence_digest: digest("1"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+  { role: "counter-review", evidence_digest: digest("1"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex" },
 ] as const;
 const current = authorityQualifier.currentReviews(createTestCurrentReviewSetAuthority({ task_id: TASK, phase_instance: phase, subject_digest: digest("a"), input_fingerprint: digest("b"), slots }), reviews);
 const disposition = (reviewDigest: ReturnType<typeof digest>) => ({ review_evidence_digest: reviewDigest, finding_id: "same-id", disposition: "rejected", rationale: "not applicable", evidence: "source confirms" });

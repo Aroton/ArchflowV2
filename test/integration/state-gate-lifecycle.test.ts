@@ -129,7 +129,7 @@ function gateInput(h: Harness, intent = "gate-intent"): GateOpenInput {
     current_evidence: {
       set_digest: D("a"),
       slots: [
-        { role: "counter-review", evidence_digest: D("c"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+        { role: "counter-review", evidence_digest: D("c"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" },
       ],
     }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" },
   };
@@ -658,14 +658,14 @@ describe("durable gate lifecycle", () => {
       ],
     }).bytes);
     const retained = (artifact: DocumentArtifactV1, measuredAtRevision: number) => ({
-      prepared: { manifest: { value: {
+      manifest: { value: {
         source_artifact: artifact, artifact_digest: canonicalJsonDigest(artifact),
         accounting: { measured_at_revision: measuredAtRevision }, projections: [], outputs: [],
-      } } },
+      } },
     });
     const dependencies: GateLifecycleDependencies = {
       ...h.dependencies,
-      load_retained_result: async (reference) => ({
+      load_retained_manifest: async (reference) => ({
         schema_version: "1", ok: true,
         value: (reference.result_id === compoundRef.result_id
           ? retained(compoundArtifact, 6)
@@ -695,16 +695,14 @@ describe("durable gate lifecycle", () => {
         decision_event_id: firstRequest.gate_id, connection_id: "connection-material-drift",
         request_id_digest: D("f"), recorded_at: "2026-07-30T12:00:00.000Z",
       },
-      payload: { decision: "amend-upstream", reason: "Amend the first upstream" },
-    }).bytes);
+      payload: { decision: "amend-upstream", reason: "Amend the first upstream" },    }).bytes);
     const firstResolved = await resolveDurableGate(
       dependencies, h.authority, firstRequest.gate_id,
     );
     expect(firstResolved, JSON.stringify(firstResolved)).toMatchObject({
       ok: true,
       value: {
-        effect: "redirect-upstream",
-        state: { value: {
+        effect: "redirect-upstream",        state: { value: {
           phase_instance: "phase-design-11", step: "produce", status: "running", attempt: 1,
           restart_history: [{
             restart_id: firstRequest.gate_id,
@@ -718,6 +716,13 @@ describe("durable gate lifecycle", () => {
     if (!firstResolved.ok) return;
     const replay = await resolveDurableGate(dependencies, h.authority, firstRequest.gate_id);
     expect(replay).toMatchObject({ ok: true, value: { replayed: true, effect: "redirect-upstream" } });
+    // Re-opening the same completed restart request replays it too: the archived decision
+    // authenticates the already-landed restart instead of opening a competing gate.
+    const reopened = await openDurableGate(dependencies, firstInput);
+    expect(reopened, reopened.ok ? undefined : JSON.stringify(reopened.error)).toMatchObject({
+      ok: true,
+      value: { replay: { value: { gate_id: firstRequest.gate_id } }, state: { value: { phase_instance: "phase-design-11" } } },
+    });
   });
 
   it("rejects gate re-entry from the wrong step, status, phase, or exhausted-attempt context", async () => {

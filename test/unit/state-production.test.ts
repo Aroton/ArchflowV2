@@ -148,6 +148,51 @@ describe("production dependency assembly", () => {
     expect(retained.value.projection_plan.entries).toEqual([]);
     expect(retained.value.prepared.manifest.value.source_artifact).toEqual(prepared.value.prepared.manifest.value.source_artifact);
     await expect(restarted.value.dependencies.read_retained_task_bytes!()).resolves.toBe(0);
+
+    // The manifest-only reload carries the same authenticated manifest, and repeats of it are
+    // served from one services-scoped memo: status walks the same references several times over.
+    const manifest = await restarted.value.dependencies.load_retained_manifest!(prepared.value.reference);
+    expect(manifest.ok).toBe(true);
+    if (!manifest.ok) return;
+    expect(manifest.value.manifest.digest).toBe(retained.value.prepared.manifest.digest);
+    const again = await restarted.value.dependencies.load_retained_manifest!({ ...prepared.value.reference });
+    expect(again.ok && again.value).toBe(manifest.value);
+  });
+
+  it("does not serve a memoized manifest to a reference that disagrees with it", async () => {
+    const root = repository();
+    const input = { working_directory: root, task_id: task, operation: parseSafeCode("manifest-memo-scope"), phase_instance: committedPhase };
+    const service = await createProductionServices(input);
+    if (!service.ok) throw new Error("production setup failed");
+    const review: DegradedReview = {
+      schema_version: "1", task_id: task, phase_instance: committedPhase, step: "counter_review", role: "counter-review",
+      subject_digest: D("a"), input_fingerprint: D("b"), rubric_digest: D("c"), producer_family: "claude",
+      findings: [], matched_rule_versions: [], verdict: "pass", blocking_count: 0,
+      assurance: "degraded", reason: "manual fallback", model_family: "codex", model: "unknown", effort: "unknown",
+    };
+    const scanner: SecretScanner = { scan: async (candidates) => ({
+      schema_version: "1", outcome: "clean", detector_set_id: parseSafeId("test"),
+      scanned_paths: candidates.map((candidate) => candidate.virtual_path),
+    }) };
+    const prepared = await prepareEvidenceResult({
+      authority: service.value.authority, runner: service.value.runner, result_id: parseSafeId("memo-review"),
+      retained_task_bytes: parseSafeInteger(0), measured_at_revision: parseSafeInteger(4), scanner,
+      value: { kind: "review", evidence: review },
+    });
+    if (!prepared.ok) throw new Error(`preparation failed: ${prepared.error.code}`);
+    await ensureResultDirectory(service.value.authority, prepared.value.reference.result_digest);
+    const installed = await installSnapshot(
+      createAtomicWriter(), prepared.value.prepared, prepared.value.manifest_target,
+      service.value.runner.location.worktreeRoot as never,
+    );
+    expect(installed.ok).toBe(true);
+    const honest = await service.value.dependencies.load_retained_manifest!(prepared.value.reference);
+    expect(honest.ok).toBe(true);
+    // Same result digest, contradicting step: the memo must not answer for it.
+    const contradicting = await service.value.dependencies.load_retained_manifest!({
+      ...prepared.value.reference, step: "triage" as TaskStateV1["step"],
+    });
+    expect(contradicting.ok).toBe(false);
   });
 
   it("reports and removes stale reconstructible workspace files", async () => {
