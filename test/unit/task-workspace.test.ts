@@ -9,9 +9,6 @@ import { createTaskWorkspace } from "../helpers/task-workspace.js";
 
 const CODEX_PRODUCER_CONFIG = new TextEncoder().encode(`schema_version: "1"
 roles:
-  producer:
-    model: gpt-5.6-sol
-    effort: xhigh
   counter-reviewer:
     model: claude-opus-5
     effort: high

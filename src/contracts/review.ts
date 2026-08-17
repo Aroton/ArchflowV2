@@ -174,10 +174,7 @@ const serverAttestedReviewSchema = provenanceBase.safeExtend({
   envelope_input_digest: digest,
   observed_output_digest: digest,
   result_id: id,
-}).strict().superRefine((review, context) => {
-  const expectedReviewer = review.producer_family === "claude" ? "codex" : "claude";
-  if (review.model_family !== expectedReviewer) context.addIssue({ code: "custom", path: ["model_family"], message: "server-attested review must be opposite-family" });
-});
+}).strict();
 const degradedReviewSchema = provenanceBase.safeExtend({ assurance: z.literal("degraded"), reason: nonBlank }).strict();
 export const reviewEvidenceSchema = z.discriminatedUnion("assurance", [serverAttestedReviewSchema, degradedReviewSchema]);
 

@@ -170,7 +170,8 @@ export type TaskStatusV1 = Readonly<{
    */
   subject_digest?: Sha256Digest;
   config: ConfigVerification;
-  routes?: Readonly<{ producer: DispatchRoute }>;
+  /** The dispatched review routes for the current phase kind; the producer is the host, never routed. */
+  routes?: Readonly<{ counter_reviewer: DispatchRoute; adjudicator: DispatchRoute }>;
   constitution?: Readonly<{
     digest: Sha256Digest;
     active_rules: readonly Readonly<{
@@ -653,8 +654,9 @@ export async function computeTaskStatus(
   if (parsedConfig !== undefined) {
     try {
       const phaseKind = decodePhaseInstance(state.phase_instance).kind;
-      const producer = resolveDispatchRoute(parsedConfig, phaseKind, "producer", "claude");
-      routes = Object.freeze({ producer });
+      const counterReviewer = resolveDispatchRoute(parsedConfig, phaseKind, "counter-reviewer");
+      const adjudicator = resolveDispatchRoute(parsedConfig, phaseKind, "adjudicator");
+      routes = Object.freeze({ counter_reviewer: counterReviewer, adjudicator });
     } catch {
       blockers.push("dispatch-routes-invalid");
     }

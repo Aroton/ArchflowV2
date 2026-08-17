@@ -113,7 +113,7 @@ describe("identity-backed authority", () => {
   it("requires authentic qualified reviews and the exact current set", () => {
     const counter = qualifyDegraded();
     const slots = [
-      { role: "counter-review", evidence_digest: digest("9"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+      { role: "counter-review", evidence_digest: digest("9"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex" },
     ] as const;
     const authority = createTestCurrentReviewSetAuthority({ task_id: TASK, phase_instance: phase, subject_digest: digest("a"), input_fingerprint: digest("b"), slots });
     expect(authorityQualifier.currentReviews(authority, [counter]).reviews).toHaveLength(1);
@@ -126,9 +126,9 @@ describe("identity-backed authority", () => {
     for (const taskId of ["Task_1", "Task:1", "TASK-1"]) expect(() => parseAuthorityLinkData({ ...link, task_id: taskId })).toThrow();
     // invocation_id, result_id, and receipt_id are deliberately unchanged.
     expect(parseAuthorityLinkData({ ...link, authority: { kind: "degraded", checkpoint_digest: digest("8"), checkpoint_revision: 1 } }).task_id).toBe("mcp-integration");
-    const slot = { role: "gate-counter-review", evidence_digest: digest("3"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "Gate:1" };
+    const slot = { role: "gate-counter-review", evidence_digest: digest("3"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", gate_id: "Gate:1" };
     expect(() => parseRequiredReviewSlots([
-      { role: "counter-review", evidence_digest: digest("2"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+      { role: "counter-review", evidence_digest: digest("2"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex" },
       slot,
     ])).toThrow();
   });

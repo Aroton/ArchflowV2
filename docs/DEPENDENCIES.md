@@ -67,7 +67,7 @@ The repository itself contains current examples in `.mcp.json` and `.codex/confi
 
 `src/dispatch/` launches authenticated first-party `claude` or `codex` CLIs to perform the independent rubric and constitution reviews. It does not call provider HTTP APIs directly.
 
-`src/dispatch/routing.ts` reads the task-pinned YAML configuration and maps model prefixes to adapters (`claude-*` to `claude-cli`, `gpt-*` to `codex-cli`). Both dispatched reviews — counter-review and the constitution review — must use the opposite family from the producer. The active template at `assets/config.template.yaml` routes the Claude-family producer role to `claude-opus-5` and the Codex-family counter-reviewer/adjudicator roles to `gpt-5.6-sol` (`adjudicator` is now simply the constitution-review route; the producer is the connected host itself and is never dispatched); `.archflow/config.yaml` is the current repository copy. Optional per-workflow overrides exist for `explore`, `prd`, `design`, `phase-design`, and `phase-impl`.
+`src/dispatch/routing.ts` reads the task-pinned YAML configuration and maps model prefixes to adapters (`claude-*` to `claude-cli`, `gpt-*` to `codex-cli`; a route naming a cc-switch `provider` forces the claude CLI). The config describes only the dispatched roles — counter-reviewer and adjudicator (the constitution-review route); the producer is the connected host itself and is never dispatched. The active template at `assets/config.template.yaml` defaults both roles to the claude host's opposite family (`gpt-5.6-sol`); `.archflow/config.yaml` is the current repository copy. Optional per-workflow overrides exist for `explore`, `prd`, `design`, `phase-design`, and `phase-impl`.
 
 `src/dispatch/cli.ts` defines the concrete adapters:
 

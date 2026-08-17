@@ -14,6 +14,7 @@ export type DispatchRoute = Readonly<{
   family: ModelFamily;
   model: string;
   effort: (typeof EFFORT_VALUES)[number];
+  provider?: string;
 }>;
 
 export class DispatchRoutingError extends Error {
@@ -53,7 +54,6 @@ export function resolveDispatchRoute(
   config: ConfigV1,
   phaseKind: RoutingPhaseKind,
   role: RoutingRole,
-  producer_family: ModelFamily,
 ): DispatchRoute {
   const configured = config.overrides?.[phaseKind]?.[role] ?? config.roles[role];
   if (configured === undefined) {
@@ -64,15 +64,22 @@ export function resolveDispatchRoute(
     return fail(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
   }
 
-  const family = deriveModelFamily(configured.model);
+  // A cc-switch provider implies the claude CLI regardless of model name, so
+  // non-claude-prefixed models (e.g. glm-5.3) can be routed through it — but a
+  // codex model paired with one is a misconfiguration, not a silent reroute.
+  if (configured.provider !== undefined && configured.model.startsWith("gpt-")) {
+    return fail(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
+  }
+  const family = configured.provider !== undefined ? "claude" : deriveModelFamily(configured.model);
   const adapter = adapterForFamily(family);
   assertAdapterFamily(adapter, family);
   assertSupportedEffort(adapter, configured.effort);
 
-  if ((role === "counter-reviewer" || role === "adjudicator") && family === producer_family) {
-    const expected_family: ModelFamily = producer_family === "claude" ? "codex" : "claude";
-    return fail(createProjectError("FAMILY_MISMATCH", { expected_family, observed_family: family }));
-  }
-
-  return Object.freeze({ adapter, family, model: configured.model, effort: configured.effort });
+  return Object.freeze({
+    adapter,
+    family,
+    model: configured.model,
+    effort: configured.effort,
+    ...(configured.provider === undefined ? {} : { provider: configured.provider }),
+  });
 }

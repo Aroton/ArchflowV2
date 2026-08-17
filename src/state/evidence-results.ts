@@ -437,8 +437,7 @@ export function deriveCurrentEvidenceSet(
 export function deriveEvidenceSetFromCounter(counter: ReviewEvidence): DerivedCurrentEvidenceSet {
   if (
     counter.role !== "counter-review" ||
-    (counter.assurance !== "server-attested" && counter.assurance !== "degraded") ||
-    counter.model_family === counter.producer_family
+    (counter.assurance !== "server-attested" && counter.assurance !== "degraded")
   ) {
     throw new TypeError("retained reviews do not form one current review set");
   }
@@ -449,7 +448,6 @@ export function deriveEvidenceSetFromCounter(counter: ReviewEvidence): DerivedCu
     assurance: counter.assurance,
     producer_family: counter.producer_family,
     reviewer_family: counter.model_family,
-    independence: "opposite-family",
   }]) as RequiredReviewSlots;
   return Object.freeze({
     task_id: counter.task_id,

@@ -196,7 +196,7 @@ describe("bundled local CLI", () => {
     const evidence = {
       set_digest: digest("a"),
       slots: [
-        { role: "counter-review", evidence_digest: digest("c"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+        { role: "counter-review", evidence_digest: digest("c"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" },
       ],
     };
     const calls = [
@@ -310,7 +310,7 @@ describe("bundled local CLI", () => {
       input: { schema_version: "1", task_id: task, intent_id: "missing-state", expected_revision: 0,
         input_fingerprint: digest("0"), phase_instance: "prd", summary: "Missing", subject_digest: digest("1"),
         current_evidence: { set_digest: digest("2"), slots: [
-          { role: "counter-review", evidence_digest: digest("4"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+          { role: "counter-review", evidence_digest: digest("4"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" },
         ] }, kind: "artifact-approval", context: { artifact_kind: "prd" }, preview_digest: digest("3"),
         decision: { choice: "approve", reason: "Approve the missing-state fixture." } },
     });

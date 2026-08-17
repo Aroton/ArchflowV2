@@ -16,8 +16,7 @@
         "evidence_digest": "2222222222222222222222222222222222222222222222222222222222222222",
         "assurance": "server-attested",
         "producer_family": "claude",
-        "reviewer_family": "codex",
-        "independence": "opposite-family"
+        "reviewer_family": "codex"
       }
     ]
   },

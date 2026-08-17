@@ -138,8 +138,8 @@ export type RunCounterReviewInput = Readonly<{
   projection_digest: ReviewEvidence["subject_digest"];
   /**
    * Present exactly when the pinned constitution has active rules. The server, not the caller,
-   * decides this: with a plan the call runs the constitution review as a second opposite-family
-   * dispatch and commits both results in one transaction; without one the result reports the
+   * decides this: with a plan the call runs the constitution review as a second server-dispatched
+   * review and commits both results in one transaction; without one the result reports the
    * constitution review as not-run.
    */
   constitution?: ConstitutionReviewPlan;
@@ -247,10 +247,10 @@ async function planCounterReviewCommit(
 }
 
 /**
- * Runs a fresh opposite-family review — and, when the pinned constitution has active rules, the
- * opposite-family constitution review bound to that fresh evidence — then retains the validated
- * evidence atomically. A fail verdict remains a successful result: it records blocking findings
- * and never manufactures advancement.
+ * Runs a fresh server-dispatched review (opposite-family by default, same-family only by explicit
+ * config) — and, when the pinned constitution has active rules, the constitution review bound to
+ * that fresh evidence — then retains the validated evidence atomically. A fail verdict remains a
+ * successful result: it records blocking findings and never manufactures advancement.
  */
 export async function runCounterReview(
   dependencies: RunCounterReviewDependencies,
@@ -267,12 +267,7 @@ export async function runCounterReview(
   ) {
     throw new TypeError("counter-review subject is not derived from the server-owned request");
   }
-  const route = resolveDispatchRoute(
-    input.config,
-    input.phase_kind,
-    "counter-reviewer",
-    input.producer_family,
-  );
+  const route = resolveDispatchRoute(input.config, input.phase_kind, "counter-reviewer");
   // The server stamps the durable attempt counter into the child-visible subject from the same
   // transaction authority the dispatch runs under, so the round number is never a caller claim.
   const subject: DispatchSubject = Object.freeze({
@@ -317,12 +312,7 @@ export async function runCounterReview(
     // both are installed by the one transaction below.
     const derivedSet = deriveEvidenceSetFromCounter(observed.evidence);
     const setDigest = derivedSet.current_evidence_set.set_digest;
-    const constitutionRoute = resolveDispatchRoute(
-      input.config,
-      input.phase_kind,
-      "adjudicator",
-      input.producer_family,
-    );
+    const constitutionRoute = resolveDispatchRoute(input.config, input.phase_kind, "adjudicator");
     const constitutionSubject = Object.freeze({
       task_id: input.envelope.subject.task_id,
       phase_instance: input.envelope.subject.phase_instance,

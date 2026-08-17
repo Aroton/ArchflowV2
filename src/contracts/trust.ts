@@ -98,7 +98,6 @@ export const observationSource: ObservationSource = Object.freeze({
     const bytes = copiedBytes(observedOutputBytes);
     const derived = parseAndDeriveReview(decodeJson(bytes));
     for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["role", binding.role], ["step", "counter_review"], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["rubric_digest", binding.rubric_digest], ["producer_family", binding.producer_family]] as const) assertEqual(derived[key], expected, key);
-    if (binding.family === binding.producer_family) throw new TypeError("review observation must be opposite-family");
     const raw_output_digest = digestBytes(bytes);
     const observation = createObservation<"review">(binding, bytes, raw_output_digest);
     const evidence: ServerAttestedReview = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id });
@@ -128,7 +127,7 @@ export type AuthorityLinkData<K extends EvidenceKind = EvidenceKind, A extends A
 export type AuthorityLink<K extends EvidenceKind = EvidenceKind, A extends Assurance = Assurance> = { readonly [P in K]: { readonly [Q in A]: AuthorityLinkBase<P, Q> & { readonly [authorityLinkBrand]: `${P}:${Q}` } }[A] }[K];
 export type VerifiedReferencedEvidence<K extends EvidenceKind = EvidenceKind, A extends Assurance = Assurance> = { readonly [P in K]: { readonly [Q in A]: ReferencedEvidence<EvidenceValueByKindAndAssurance[P][Q]> & { readonly [verifiedReferencedEvidenceBrand]: `${P}:${Q}` } }[A] }[K];
 
-export type ReviewEvidenceSlot = Readonly<{ role: "counter-review"; evidence_digest: Sha256Digest; assurance: "server-attested" | "degraded"; producer_family: ModelFamily; reviewer_family: ModelFamily; independence: "opposite-family" }>;
+export type ReviewEvidenceSlot = Readonly<{ role: "counter-review"; evidence_digest: Sha256Digest; assurance: "server-attested" | "degraded"; producer_family: ModelFamily; reviewer_family: ModelFamily; /** Retired; accepted on read only so pre-removal archives round-trip unchanged. */ readonly independence?: "opposite-family" }>;
 export type RequiredReviewSlots = readonly [ReviewEvidenceSlot];
 export interface CurrentReviewSetAuthority { readonly task_id: TaskSlug; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly input_fingerprint: Sha256Digest; readonly slots: RequiredReviewSlots; readonly [currentReviewSetAuthorityBrand]: true }
 export type CurrentEvidenceSetRef = { readonly set_digest: Sha256Digest; readonly slots: RequiredReviewSlots };
@@ -148,8 +147,8 @@ export const authorityLinkDataSchema = z.object({ schema_version: z.literal("1")
   if (link.authority.kind !== expectedAuthorityKind) context.addIssue({ code: "custom", path: ["authority", "kind"], message: "authority references must match assurance" });
 });
 const slotBase = { evidence_digest: digestSchema, producer_family: familySchema, reviewer_family: familySchema };
-export const counterSlotSchema = z.object({ ...slotBase, role: z.literal("counter-review"), assurance: z.enum(["server-attested", "degraded"]), independence: z.literal("opposite-family") }).strict().superRefine((slot, context) => { if (slot.producer_family === slot.reviewer_family) context.addIssue({ code: "custom", message: "counter-review families must differ" }); });
-/** The one required opposite-family review slot. */
+export const counterSlotSchema = z.object({ ...slotBase, role: z.literal("counter-review"), assurance: z.enum(["server-attested", "degraded"]), independence: z.literal("opposite-family").optional() }).strict();
+/** The one required counter-review slot; families are recorded provenance, not an independence claim. */
 export const counterOnlySlotsSchema = z.tuple([counterSlotSchema]);
 export const requiredReviewSlotsSchema = counterOnlySlotsSchema.superRefine((slots, context) => {
   try { validateSlots(slots); } catch (error) { context.addIssue({ code: "custom", message: error instanceof Error ? error.message : "invalid review slots" }); }
@@ -204,11 +203,10 @@ function assertLinkMatches<K extends EvidenceKind, A extends Assurance>(kind: K,
     }
   }
 }
-function validateSlots(slots: readonly ReviewEvidenceSlot[]): asserts slots is RequiredReviewSlots {
+/** The zod-inferred slot shape, which admits the retired optional `independence` on read. */
+type ParsedCounterSlot = z.infer<typeof counterSlotSchema>;
+function validateSlots(slots: readonly ParsedCounterSlot[]): asserts slots is RequiredReviewSlots {
   if (slots.length !== 1 || slots[0]?.role !== "counter-review") throw new TypeError("review slots must contain exactly the counter-review");
-  for (const slot of slots) {
-    if (slot.independence !== "opposite-family" || slot.producer_family === slot.reviewer_family) throw new TypeError("invalid opposite-family review slot");
-  }
   if (new Set(slots.map((slot) => slot.evidence_digest)).size !== slots.length) throw new TypeError("review slot evidence digests must be unique");
 }
 export function currentEvidenceSetRef(slots: RequiredReviewSlots): CurrentEvidenceSetRef {

@@ -44,8 +44,7 @@
         "producer_family",
         "reviewer_family",
         "role",
-        "assurance",
-        "independence"
+        "assurance"
       ],
       "additionalProperties": false
     },

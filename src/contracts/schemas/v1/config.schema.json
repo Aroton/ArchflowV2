@@ -20,6 +20,11 @@
             "max",
             "ultra"
           ]
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
         }
       },
       "required": [
@@ -31,9 +36,6 @@
     "roles": {
       "type": "object",
       "properties": {
-        "producer": {
-          "$ref": "#/$defs/route"
-        },
         "counter-reviewer": {
           "$ref": "#/$defs/route"
         },

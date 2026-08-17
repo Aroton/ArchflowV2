@@ -37187,10 +37187,7 @@ var serverAttestedReviewSchema = provenanceBase.safeExtend({
   envelope_input_digest: digest3,
   observed_output_digest: digest3,
   result_id: id3
-}).strict().superRefine((review, context2) => {
-  const expectedReviewer = review.producer_family === "claude" ? "codex" : "claude";
-  if (review.model_family !== expectedReviewer) context2.addIssue({ code: "custom", path: ["model_family"], message: "server-attested review must be opposite-family" });
-});
+}).strict();
 var degradedReviewSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank }).strict();
 var reviewEvidenceSchema = external_exports.discriminatedUnion("assurance", [serverAttestedReviewSchema, degradedReviewSchema]);
 function parseReviewEvidence(value) {
@@ -37869,7 +37866,6 @@ var observationSource = Object.freeze({
     const bytes = copiedBytes(observedOutputBytes);
     const derived = parseAndDeriveReview(decodeJson(bytes));
     for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["role", binding.role], ["step", "counter_review"], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["rubric_digest", binding.rubric_digest], ["producer_family", binding.producer_family]]) assertEqual2(derived[key], expected, key);
-    if (binding.family === binding.producer_family) throw new TypeError("review observation must be opposite-family");
     const raw_output_digest = digestBytes(bytes);
     const observation = createObservation(binding, bytes, raw_output_digest);
     const evidence = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id });
@@ -37904,9 +37900,7 @@ var authorityLinkDataSchema = external_exports.object({ schema_version: external
   if (link2.authority.kind !== expectedAuthorityKind) context2.addIssue({ code: "custom", path: ["authority", "kind"], message: "authority references must match assurance" });
 });
 var slotBase = { evidence_digest: digestSchema, producer_family: familySchema, reviewer_family: familySchema };
-var counterSlotSchema = external_exports.object({ ...slotBase, role: external_exports.literal("counter-review"), assurance: external_exports.enum(["server-attested", "degraded"]), independence: external_exports.literal("opposite-family") }).strict().superRefine((slot, context2) => {
-  if (slot.producer_family === slot.reviewer_family) context2.addIssue({ code: "custom", message: "counter-review families must differ" });
-});
+var counterSlotSchema = external_exports.object({ ...slotBase, role: external_exports.literal("counter-review"), assurance: external_exports.enum(["server-attested", "degraded"]), independence: external_exports.literal("opposite-family").optional() }).strict();
 var counterOnlySlotsSchema = external_exports.tuple([counterSlotSchema]);
 var requiredReviewSlotsSchema = counterOnlySlotsSchema.superRefine((slots, context2) => {
   try {
@@ -37952,9 +37946,6 @@ function assertLinkMatches(kind, link2, value) {
 }
 function validateSlots(slots) {
   if (slots.length !== 1 || slots[0]?.role !== "counter-review") throw new TypeError("review slots must contain exactly the counter-review");
-  for (const slot of slots) {
-    if (slot.independence !== "opposite-family" || slot.producer_family === slot.reviewer_family) throw new TypeError("invalid opposite-family review slot");
-  }
   if (new Set(slots.map((slot) => slot.evidence_digest)).size !== slots.length) throw new TypeError("review slot evidence digests must be unique");
 }
 function currentEvidenceSetRef(slots) {
@@ -40431,10 +40422,12 @@ import { constants as fsConstants3 } from "node:fs";
 var REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"];
 var configRouteSchema = external_exports.object({
   model: external_exports.string().min(1).regex(/\S/, "model must contain a non-whitespace character"),
-  effort: external_exports.enum(REASONING_EFFORTS)
+  effort: external_exports.enum(REASONING_EFFORTS),
+  // Optional cc-switch provider id; claude routes only. Unset means a direct
+  // CLI launch with no wrapper.
+  provider: external_exports.string().trim().min(1).regex(/\S/, "provider must contain a non-whitespace character").optional()
 }).strict();
 var configRolesSchema = external_exports.object({
-  producer: configRouteSchema.optional(),
   "counter-reviewer": configRouteSchema.optional(),
   adjudicator: configRouteSchema.optional()
 }).strict();
@@ -47668,8 +47661,7 @@ var evidence_slots_schema_default = {
         "producer_family",
         "reviewer_family",
         "role",
-        "assurance",
-        "independence"
+        "assurance"
       ],
       additionalProperties: false
     },
@@ -57409,6 +57401,15 @@ var CODEX_DISABLED_FEATURES = Object.freeze([
   "plugin_sharing",
   "skill_search"
 ]);
+function withLocalBinOnPath(workspace) {
+  const home = workspace.env.HOME;
+  if (home === void 0 || home === "") return workspace.env;
+  const localBin = join5(home, ".local", "bin");
+  const path2 = workspace.env.PATH;
+  if (path2 === void 0) return Object.freeze({ ...workspace.env, PATH: localBin });
+  if (path2.split(":").includes(localBin)) return workspace.env;
+  return Object.freeze({ ...workspace.env, PATH: `${localBin}:${path2}` });
+}
 var HOST_SCHEMA_METADATA = /* @__PURE__ */ new Set(["$schema", "$id"]);
 var CLAUDE_UNSUPPORTED_SCHEMA_KEYWORDS = /* @__PURE__ */ new Set([
   "minimum",
@@ -57759,32 +57760,43 @@ var claudeAdapter = Object.freeze({
     }
     const mcpConfigPath = join5(workspace.root, "empty-mcp.json");
     await writeFile(mcpConfigPath, '{"mcpServers":{}}\n', { encoding: "utf8", mode: 384 });
+    const argv = Object.freeze([
+      "-p",
+      "--safe-mode",
+      "--tools",
+      workspace.repository_view_root === void 0 ? "" : "Read,Grep,Glob",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--mcp-config",
+      mcpConfigPath,
+      "--no-session-persistence",
+      "--setting-sources",
+      "",
+      "--output-format",
+      "json",
+      "--json-schema",
+      JSON.stringify(schema),
+      "--model",
+      route.model,
+      "--effort",
+      route.effort
+    ]);
+    if (route.provider === void 0) {
+      return Object.freeze({
+        adapter: "claude-cli",
+        command: "claude",
+        argv,
+        cwd: workspace.repository_view_root ?? workspace.root,
+        env: workspace.env,
+        stdin: envelope.bytes
+      });
+    }
     return Object.freeze({
       adapter: "claude-cli",
-      command: "claude",
-      argv: Object.freeze([
-        "-p",
-        "--safe-mode",
-        "--tools",
-        workspace.repository_view_root === void 0 ? "" : "Read,Grep,Glob",
-        "--disable-slash-commands",
-        "--strict-mcp-config",
-        "--mcp-config",
-        mcpConfigPath,
-        "--no-session-persistence",
-        "--setting-sources",
-        "",
-        "--output-format",
-        "json",
-        "--json-schema",
-        JSON.stringify(schema),
-        "--model",
-        route.model,
-        "--effort",
-        route.effort
-      ]),
+      command: "cc-switch",
+      argv: Object.freeze(["start", "claude", route.provider, "--", ...argv]),
       cwd: workspace.repository_view_root ?? workspace.root,
-      env: workspace.env,
+      env: withLocalBinOnPath(workspace),
       stdin: envelope.bytes
     });
   },
@@ -57837,6 +57849,9 @@ var codexAdapter = Object.freeze({
   ),
   async buildInvocation(envelope, route, workspace, outputSchema) {
     assertRoute("codex-cli", route);
+    if (route.provider !== void 0) {
+      return fail13(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
+    }
     const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "codex-cli", envelopeSubject(envelope));
     const schemaPath = join5(workspace.root, `${envelope.result_kind}.schema.json`);
     const outputPath = join5(workspace.root, "final-output.json");
@@ -57895,13 +57910,10 @@ var codexAdapter = Object.freeze({
     return classifyNonzero("codex-cli", result, codexFailureMessages(result.stdout));
   }
 });
-function selectCliAdapter(host, options = {}) {
+function selectCliAdapter(host, route) {
   if (host === "unknown") return fail13(createProjectError("UNSUPPORTED_HOST", { host: "unknown" }));
-  if (host === "claude") return codexAdapter;
-  if (options.allow_claude_dispatch !== true) {
-    return fail13(createProjectError("CONFIG_FAMILY_UNSUPPORTED", { family: "claude" }));
-  }
-  return claudeAdapter;
+  if (route !== void 0) return route.adapter === "claude-cli" ? claudeAdapter : codexAdapter;
+  return host === "claude" ? codexAdapter : claudeAdapter;
 }
 function mintReviewObservation(input) {
   assertRoute(input.adapter, input.route);
@@ -58141,6 +58153,7 @@ async function writeAttemptRecord(input, attemptId, route, preflight2, error51, 
     family: route.family,
     model: route.model,
     effort: route.effort,
+    ...route.provider === void 0 ? {} : { provider: route.provider },
     status: "failed",
     failure_stage: telemetry.failure_stage,
     started_at: telemetry.started_at,
@@ -58166,9 +58179,7 @@ function createDispatchCoordinator(input) {
     environment: input.dependencies.environment
   });
   return async (route, envelope, outputSchema) => {
-    const adapter2 = selectCliAdapter(input.host, {
-      allow_claude_dispatch: input.allow_claude_dispatch
-    });
+    const adapter2 = selectCliAdapter(input.host, route);
     const attemptId = randomUUID2();
     const startedAt = /* @__PURE__ */ new Date();
     let preflight2;
@@ -58621,7 +58632,7 @@ function assertSupportedEffort(adapter2, effort) {
     fail14(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
   }
 }
-function resolveDispatchRoute(config2, phaseKind2, role, producer_family) {
+function resolveDispatchRoute(config2, phaseKind2, role) {
   const configured = config2.overrides?.[phaseKind2]?.[role] ?? config2.roles[role];
   if (configured === void 0) {
     return fail14(createProjectError("CONFIG_INVALID", { issue_code: "route-missing" }));
@@ -58629,15 +58640,20 @@ function resolveDispatchRoute(config2, phaseKind2, role, producer_family) {
   if (!safeIdV1Schema.safeParse(configured.model).success) {
     return fail14(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
   }
-  const family2 = deriveModelFamily(configured.model);
+  if (configured.provider !== void 0 && configured.model.startsWith("gpt-")) {
+    return fail14(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
+  }
+  const family2 = configured.provider !== void 0 ? "claude" : deriveModelFamily(configured.model);
   const adapter2 = adapterForFamily(family2);
   assertAdapterFamily(adapter2, family2);
   assertSupportedEffort(adapter2, configured.effort);
-  if ((role === "counter-reviewer" || role === "adjudicator") && family2 === producer_family) {
-    const expected_family = producer_family === "claude" ? "codex" : "claude";
-    return fail14(createProjectError("FAMILY_MISMATCH", { expected_family, observed_family: family2 }));
-  }
-  return Object.freeze({ adapter: adapter2, family: family2, model: configured.model, effort: configured.effort });
+  return Object.freeze({
+    adapter: adapter2,
+    family: family2,
+    model: configured.model,
+    effort: configured.effort,
+    ...configured.provider === void 0 ? {} : { provider: configured.provider }
+  });
 }
 
 // src/contracts/renderers.ts
@@ -59580,7 +59596,7 @@ function deriveCurrentEvidenceSet(retained) {
   return derived;
 }
 function deriveEvidenceSetFromCounter(counter) {
-  if (counter.role !== "counter-review" || counter.assurance !== "server-attested" && counter.assurance !== "degraded" || counter.model_family === counter.producer_family) {
+  if (counter.role !== "counter-review" || counter.assurance !== "server-attested" && counter.assurance !== "degraded") {
     throw new TypeError("retained reviews do not form one current review set");
   }
   const verifiedCounter = createVerifiedEvidenceReference(counter);
@@ -59589,8 +59605,7 @@ function deriveEvidenceSetFromCounter(counter) {
     evidence_digest: verifiedCounter.evidence_digest,
     assurance: counter.assurance,
     producer_family: counter.producer_family,
-    reviewer_family: counter.model_family,
-    independence: "opposite-family"
+    reviewer_family: counter.model_family
   }]);
   return Object.freeze({
     task_id: counter.task_id,
@@ -62181,12 +62196,7 @@ async function runCounterReview(dependencies, input) {
   if (input.producer_family !== input.envelope.subject.producer_family || input.envelope.subject.rubric_digest !== envelopeRubricDigest) {
     throw new TypeError("counter-review subject is not derived from the server-owned request");
   }
-  const route = resolveDispatchRoute(
-    input.config,
-    input.phase_kind,
-    "counter-reviewer",
-    input.producer_family
-  );
+  const route = resolveDispatchRoute(input.config, input.phase_kind, "counter-reviewer");
   const subject = Object.freeze({
     ...input.envelope.subject,
     attempt: input.authority.context.attempt
@@ -62224,12 +62234,7 @@ async function runCounterReview(dependencies, input) {
   if (plan !== void 0) {
     const derivedSet = deriveEvidenceSetFromCounter(observed2.evidence);
     const setDigest = derivedSet.current_evidence_set.set_digest;
-    const constitutionRoute = resolveDispatchRoute(
-      input.config,
-      input.phase_kind,
-      "adjudicator",
-      input.producer_family
-    );
+    const constitutionRoute = resolveDispatchRoute(input.config, input.phase_kind, "adjudicator");
     const constitutionSubject = Object.freeze({
       task_id: input.envelope.subject.task_id,
       phase_instance: input.envelope.subject.phase_instance,
@@ -63797,7 +63802,12 @@ async function openHandlerSession(call, context2) {
   const phaseInstance4 = state?.phase_instance ?? suppliedPhase;
   if (phaseInstance4 === void 0) throw new TypeError("phase instance is unavailable");
   const phase_kind = decodePhaseInstance(phaseInstance4).kind;
-  const config2 = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(configRead.snapshot.bytes));
+  let config2;
+  try {
+    config2 = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(configRead.snapshot.bytes));
+  } catch {
+    return fail19(createProjectError("CONFIG_INVALID", { issue_code: "config-unparseable" }));
+  }
   return Object.freeze({
     schema_version: "1",
     ok: true,
@@ -64039,7 +64049,6 @@ async function handleCounterReview(call, context2) {
         phase_instance: state.value.phase_instance,
         signal: context2.signal,
         cancellation_source: "client",
-        allow_claude_dispatch: true,
         repository_view: repositoryView
       });
       constitutionPlan = Object.freeze({
@@ -64080,8 +64089,6 @@ async function handleCounterReview(call, context2) {
       phase_instance: state.value.phase_instance,
       signal: context2.signal,
       cancellation_source: "client",
-      // Both producer directions are implemented; release authorization remains a separate gate.
-      allow_claude_dispatch: true,
       repository_view: repositoryView
     });
     const result = await runCounterReview({

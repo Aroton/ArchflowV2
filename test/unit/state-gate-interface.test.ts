@@ -42,7 +42,7 @@ const RULE_B = { rule_id: "rule-b", rule_version: 2 } as const;
 const AUTHORITY_LINK = {
   link_digest: D("9"), purpose: "restore-adoption", proposed_generation_digest: D("a"), changed_input_fingerprint: D("b"),
 } as const;
-const counter = { role: "counter-review", evidence_digest: D("8"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" } as const;
+const counter = { role: "counter-review", evidence_digest: D("8"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" } as const;
 const evidence = currentEvidenceSetRef([counter]);
 const provenance: HumanDecisionProvenance = {
   schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local",

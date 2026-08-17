@@ -348,7 +348,7 @@ export async function handleCounterReview(
       const constitutionCoordinator = createDispatchCoordinator({
         authority: services.authority, dependencies: services.dependencies, host: session.value.host,
         repository_root: services.runner.location.worktreeRoot, phase_instance: state.value.phase_instance,
-        signal: context.signal, cancellation_source: "client", allow_claude_dispatch: true,
+        signal: context.signal, cancellation_source: "client",
         repository_view: repositoryView,
       });
       constitutionPlan = Object.freeze({
@@ -387,8 +387,6 @@ export async function handleCounterReview(
       phase_instance: state.value.phase_instance,
       signal: context.signal,
       cancellation_source: "client",
-      // Both producer directions are implemented; release authorization remains a separate gate.
-      allow_claude_dispatch: true,
       repository_view: repositoryView,
     });
     const result = await runCounterReview({

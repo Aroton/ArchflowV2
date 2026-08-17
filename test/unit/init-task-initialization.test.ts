@@ -87,7 +87,7 @@ describe("task initialization staging", () => {
     const taskRoot = join(root, ".archflow", "tasks", "override-task");
     const { mkdirSync } = await import("node:fs");
     mkdirSync(taskRoot, { recursive: true });
-    const override = Buffer.from('schema_version: "1"\nroles:\n  producer:\n    model: gpt-5.6-sol\n    effort: max\n');
+    const override = Buffer.from('schema_version: "1"\nroles:\n  counter-reviewer:\n    model: gpt-5.6-sol\n    effort: max\n');
     writeFileSync(join(taskRoot, "config.yaml"), override);
 
     const result = await stageTaskInitialization({ working_directory: root, task_id: "override-task" });

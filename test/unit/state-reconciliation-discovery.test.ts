@@ -126,7 +126,6 @@ describe("discoverReconciliationInput", () => {
       assurance: "server-attested" as const,
       producer_family: "claude" as const,
       reviewer_family: "codex" as const,
-      independence: "opposite-family" as const,
     });
     const request = parseGateRequest({
       schema_version: "1", gate_id: gateId, intent_id: "gate-intent", request_digest: D("a"),

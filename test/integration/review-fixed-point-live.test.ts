@@ -50,12 +50,11 @@ const environment: NodeJS.ProcessEnv = {
 const config: ConfigV1 = {
   schema_version: "1",
   roles: {
-    producer: { model: "claude-fixture", effort: "high" },
     "counter-reviewer": { model: "gpt-fixture", effort: "high" },
     adjudicator: { model: "gpt-fixture", effort: "high" },
   },
 };
-const configYaml = `schema_version: "1"\nroles:\n  producer:\n    model: claude-fixture\n    effort: high\n  counter-reviewer:\n    model: gpt-fixture\n    effort: high\n  adjudicator:\n    model: gpt-fixture\n    effort: high\n`;
+const configYaml = `schema_version: "1"\nroles:\n  counter-reviewer:\n    model: gpt-fixture\n    effort: high\n  adjudicator:\n    model: gpt-fixture\n    effort: high\n`;
 const rubric = {
   schema_version: "1",
   kind: "implementation",
@@ -245,7 +244,7 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
       const subjectDigest = canonicalJsonDigest(subject);
       const subjectPhase = subject.phase_instance.slice("phase-impl-".length);
       const evidence = currentEvidenceSetRef([
-          { role: "counter-review" as const, evidence_digest: sha256Bytes(new TextEncoder().encode(`counter-${subjectDigest}`)), assurance: "server-attested" as const, producer_family: "claude" as const, reviewer_family: "codex" as const, independence: "opposite-family" as const },
+          { role: "counter-review" as const, evidence_digest: sha256Bytes(new TextEncoder().encode(`counter-${subjectDigest}`)), assurance: "server-attested" as const, producer_family: "claude" as const, reviewer_family: "codex" as const },
       ]);
       const context = {
         target_ref: "refs/heads/main",
@@ -467,7 +466,7 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
     };
     await writeFile(h.services.authority.state.absolute, canonicalDocument(approvalState).bytes);
     const approvalEvidence = currentEvidenceSetRef([
-      { role: "counter-review", evidence_digest: sha256Bytes(new TextEncoder().encode("upstream-counter")), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+      { role: "counter-review", evidence_digest: sha256Bytes(new TextEncoder().encode("upstream-counter")), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" },
     ]);
     for (const [index, spec] of upstreamSpecs.entries()) {
       const services = await createProductionServices({ working_directory: h.root, task_id: task, operation: parseSafeCode(`upstream-approval-${index}`) });

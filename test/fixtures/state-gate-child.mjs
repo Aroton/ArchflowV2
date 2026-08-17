@@ -70,7 +70,7 @@ try {
     current_evidence: {
       set_digest: evidence.parseSha256Digest("a".repeat(64)),
       slots: [
-        { role: "counter-review", evidence_digest: evidence.parseSha256Digest("c".repeat(64)), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+        { role: "counter-review", evidence_digest: evidence.parseSha256Digest("c".repeat(64)), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" },
       ],
     },
     ...(reentryKind === "constitution-review"

@@ -67,17 +67,16 @@ describe("review and adjudication schema agreement", () => {
     }
   });
 
-  it("rejects duplicate IDs, same-family attestation, and review contradictions in the Zod authority", async () => {
-    // The x-archflow-review-summary keyword, the unique-by finding rule, and the opposite-family
-    // conditional retired from the generated document; the Zod source is the surviving authority
-    // for these, so the compiled JSON Schema now accepts what Zod still rejects.
+  it("rejects duplicate IDs and review contradictions in the Zod authority", async () => {
+    // The x-archflow-review-summary keyword and the unique-by finding rule retired from the
+    // generated document; the Zod source is the surviving authority for these, so the compiled
+    // JSON Schema now accepts what Zod still rejects.
     const review = await json(new URL("../fixtures/contracts/review/valid.json", import.meta.url)) as Record<string, unknown>;
     const evidenceValidator = await validator("review-evidence");
     const base = { ...review, assurance: "degraded", reason: "Manual fallback.", model_family: "unknown", model: "unknown", effort: "unknown" };
     const server = { ...review, assurance: "server-attested", adapter: "codex-cli", cli_version: "1", model_family: "codex", model: "gpt", effort: "high", invocation_id: "invocation-1", envelope_input_digest: "d".repeat(64), observed_output_digest: "e".repeat(64), result_id: "result-1" };
     const cases = [
       { ...base, findings: [...(review.findings as unknown[]), ...(review.findings as unknown[])] },
-      { ...server, model_family: "claude" },
       { ...base, verdict: "pass" },
       { ...base, blocking_count: 2 },
     ];

@@ -107,7 +107,7 @@ describe("local call envelopes", () => {
     const currentEvidence = {
       set_digest: D("a"),
       slots: [
-        { role: "counter-review" as const, evidence_digest: D("c"), assurance: "server-attested" as const, producer_family: "claude" as const, reviewer_family: "codex" as const, independence: "opposite-family" as const },
+        { role: "counter-review" as const, evidence_digest: D("c"), assurance: "server-attested" as const, producer_family: "claude" as const, reviewer_family: "codex" as const },
       ] as const,
     };
     const rubric = { schema_version: "1" as const, kind: "artifact" as const, mode: "adversarial" as const, criteria: [{ id: "scope", text: "Check scope.", blocking: true }] };

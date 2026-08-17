@@ -3,16 +3,20 @@ import { z } from "zod";
 import { assertPlainJson } from "./plain-json.js";
 import { parseSingleYamlDocument } from "./yaml.js";
 
-export const ROUTING_ROLES = ["producer", "counter-reviewer", "adjudicator"] as const;
+// The producer is the connected MCP host, never a config role; routing config
+// describes only the roles the server dispatches.
+export const ROUTING_ROLES = ["counter-reviewer", "adjudicator"] as const;
 export const REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"] as const;
 
 export const configRouteSchema = z.object({
   model: z.string().min(1).regex(/\S/, "model must contain a non-whitespace character"),
   effort: z.enum(REASONING_EFFORTS),
+  // Optional cc-switch provider id; claude routes only. Unset means a direct
+  // CLI launch with no wrapper.
+  provider: z.string().trim().min(1).regex(/\S/, "provider must contain a non-whitespace character").optional(),
 }).strict();
 
 export const configRolesSchema = z.object({
-  producer: configRouteSchema.optional(),
   "counter-reviewer": configRouteSchema.optional(),
   adjudicator: configRouteSchema.optional(),
 }).strict();

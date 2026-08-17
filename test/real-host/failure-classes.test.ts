@@ -50,7 +50,6 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host failure classes", () => {
         phase_instance: PHASE,
         signal: new AbortController().signal,
         cancellation_source: "client",
-        allow_claude_dispatch: false,
       });
       await expect(dispatch(route, ENVELOPE, reviewSchema as PlainJsonValue)).rejects.toSatisfy((error: unknown) =>
         error instanceof CliAdapterError && error.project_error.code === "UNSUPPORTED_MODEL");
@@ -81,7 +80,6 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host failure classes", () => {
         phase_instance: PHASE,
         signal: controller.signal,
         cancellation_source: "client",
-        allow_claude_dispatch: false,
       });
       const pending = dispatch(route, ENVELOPE, reviewSchema as PlainJsonValue);
       setTimeout(() => controller.abort(), 1).unref();

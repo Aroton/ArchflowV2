@@ -13,8 +13,7 @@ const evidence = currentEvidenceSetRef([{
     assurance: "server-attested" as const,
     producer_family: "claude" as const,
     reviewer_family: "codex" as const,
-    independence: "opposite-family" as const,
-}]);
+  }]);
 
 describe("gate preview", () => {
   it("binds the human presentation and exact implementation commit facts", () => {

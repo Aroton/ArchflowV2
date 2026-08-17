@@ -34,7 +34,6 @@ export type DispatchCoordinatorInput = Readonly<{
   phase_instance: PhaseInstanceId;
   signal: AbortSignal;
   cancellation_source: NonNullable<DispatchChildSpec["cancellation_source"]>;
-  allow_claude_dispatch: boolean;
   /** When present, the child gets this sealed repository snapshot as its working directory. */
   repository_view?: Readonly<{
     base_commit: GitOid;
@@ -125,6 +124,7 @@ async function writeAttemptRecord(
     family: route.family,
     model: route.model,
     effort: route.effort,
+    ...(route.provider === undefined ? {} : { provider: route.provider }),
     status: "failed",
     failure_stage: telemetry.failure_stage,
     started_at: telemetry.started_at,
@@ -145,7 +145,7 @@ async function writeAttemptRecord(
   await writer.replaceRegular(target.value, canonicalJsonBytes(record), false);
 }
 
-/** Assembles one fresh opposite-family CLI dispatch without acquiring the process-wide queue. */
+/** Assembles one fresh CLI dispatch without acquiring the process-wide queue. */
 export function createDispatchCoordinator(input: DispatchCoordinatorInput): (
   route: DispatchRoute,
   envelope: DispatchEnvelope,
@@ -157,9 +157,7 @@ export function createDispatchCoordinator(input: DispatchCoordinatorInput): (
   });
 
   return async (route, envelope, outputSchema) => {
-    const adapter = selectCliAdapter(input.host, {
-      allow_claude_dispatch: input.allow_claude_dispatch,
-    });
+    const adapter = selectCliAdapter(input.host, route);
     const attemptId = randomUUID();
     const startedAt = new Date();
     let preflight: CliPreflight | undefined;

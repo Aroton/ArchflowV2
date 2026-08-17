@@ -54,7 +54,7 @@ export interface StateSuccess { readonly path: TaskPathClaim; readonly revision:
 export interface CounterReviewInput extends CommonToolInput { readonly artifact_path: TaskPathClaim }
 /**
  * The server decides whether the constitution review runs: it is evaluated as a second
- * opposite-family dispatch inside the same archflow_counter_review call whenever the pinned
+ * server-dispatched review inside the same archflow_counter_review call whenever the pinned
  * constitution has active rules, and reported "not-run" explicitly when it has none.
  */
 export type CounterReviewConstitutionOutcome =

@@ -54,9 +54,6 @@ const directions = Object.freeze([
 
 const claudeProducerConfig = `schema_version: "1"
 roles:
-  producer:
-    model: claude-opus-5
-    effort: high
   counter-reviewer:
     model: gpt-5.6-sol
     effort: xhigh
@@ -67,9 +64,6 @@ roles:
 
 const codexProducerConfig = `schema_version: "1"
 roles:
-  producer:
-    model: gpt-5.6-sol
-    effort: xhigh
   counter-reviewer:
     model: claude-opus-5
     effort: high
@@ -273,7 +267,7 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
       });
 
       try {
-        const route = resolveDispatchRoute(config, "phase-impl", "counter-reviewer", direction.producer_family);
+        const route = resolveDispatchRoute(config, "phase-impl", "counter-reviewer");
         expect(route.family).toBe(direction.reviewer_family);
         const dispatch = createDispatchCoordinator({
           authority: workspace.services.authority,
@@ -283,7 +277,6 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
           phase_instance: phase,
           signal: new AbortController().signal,
           cancellation_source: "client",
-          allow_claude_dispatch: true,
         });
 
         for (const corpusCase of manifest.value.cases) {

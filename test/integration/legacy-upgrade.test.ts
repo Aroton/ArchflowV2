@@ -238,7 +238,7 @@ describe("bundled legacy upgrade workflow", () => {
     }).bytes);
 
     const evidence = currentEvidenceSetRef([
-      { role: "counter-review", evidence_digest: sha256Bytes(new TextEncoder().encode("legacy-counter")), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+      { role: "counter-review", evidence_digest: sha256Bytes(new TextEncoder().encode("legacy-counter")), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" },
     ]);
     for (const [index, reference] of references.entries()) {
       services = await createProductionServices({ working_directory: root, task_id: task, operation: parseSafeCode(`legacy-approve-${index}`) });

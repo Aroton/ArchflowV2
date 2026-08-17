@@ -192,8 +192,7 @@ function installedEvidence(subjectDigest: string): any {
     {
       role: "counter-review", evidence_digest: sha256Bytes(Buffer.from(`counter:${subjectDigest}`)),
       assurance: "server-attested", producer_family: "claude", reviewer_family: "codex",
-      independence: "opposite-family",
-    },
+          },
   ] as never);
 }
 

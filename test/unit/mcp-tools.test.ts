@@ -38,7 +38,7 @@ describe("correlated MCP tool contracts", () => {
     expect(Object.isFrozen(waiver.input.origin.rule)).toBe(true);
     expect(Object.isFrozen(waiver.input.origin.scope)).toBe(true);
 
-    const counterSlot = { role: "counter-review", evidence_digest: "6".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" };
+    const counterSlot = { role: "counter-review", evidence_digest: "6".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" };
     const gate = parseToolCall("archflow_gate", { schema_version: "1", task_id: "task-1", intent_id: "intent-4", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: "7".repeat(64), current_evidence: { set_digest: "8".repeat(64), slots: [counterSlot] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, ...gateDecisionInput });
     expect(Object.isFrozen(gate.input.current_evidence.slots)).toBe(true);
     expect(Object.isFrozen(gate.input.current_evidence.slots[0])).toBe(true);
@@ -222,8 +222,8 @@ describe("correlated MCP tool contracts", () => {
   });
 
   it("uses the authoritative exact current-evidence tuple parser for gates", () => {
-    const counter = { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" };
-    const gateCounter = { role: "gate-counter-review", evidence_digest: "1".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "gate-1" };
+    const counter = { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" };
+    const gateCounter = { role: "gate-counter-review", evidence_digest: "1".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", gate_id: "gate-1" };
     const base = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: digest, current_evidence: { set_digest: "3".repeat(64), slots: [counter] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, ...gateDecisionInput };
     expect(parseToolCall("archflow_gate", base).input.task_id).toBe("task-1");
     expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [counter, gateCounter] } })).toThrow();
@@ -233,7 +233,7 @@ describe("correlated MCP tool contracts", () => {
   it("revalidates gate success decisions against the authentic call context", () => {
     const ruleA = { rule_id: "Rule:A", rule_version: 1 } as const;
     const ruleB = { rule_id: "Rule:B", rule_version: 1 } as const;
-    const counter = { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" } as const;
+    const counter = { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" } as const;
     const commonInput = {
       schema_version: "1",
       task_id: "task-1",

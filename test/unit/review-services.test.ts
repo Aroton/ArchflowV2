@@ -116,8 +116,7 @@ function retained(
     assurance: counter.assurance,
     producer_family: counter.producer_family,
     reviewer_family: counter.model_family,
-    independence: "opposite-family",
-  }]));
+      }]));
   const triage = {
     ...base,
     step: "triage",
@@ -394,16 +393,14 @@ describe("review services", () => {
     });
   });
 
-  it.each([
-    ["same family as its producer", { model_family: "claude" as const }],
-  ])("rejects a retained counter-review that is %s", (_label, change) => {
+  it("derives a valid set from a retained counter-review in the producer's own family", () => {
     const changed = new Map(retained());
     const entry = changed.get("counter_review")!;
     const source = entry.manifest.source_artifact;
     if (source.artifact_kind !== "review-evidence") {
       throw new Error("expected counter-review evidence");
     }
-    const evidence = { ...source.evidence, ...change };
+    const evidence = { ...source.evidence, model_family: "claude" as const };
     changed.set("counter_review", {
       ...entry,
       manifest: {
@@ -416,8 +413,11 @@ describe("review services", () => {
         },
       },
     });
-    expect(() => deriveCurrentEvidenceSet(changed))
-      .toThrow(/one current review set/u);
+    const derived = deriveCurrentEvidenceSet(changed);
+    expect(derived.current_evidence_set.slots[0]).toMatchObject({
+      producer_family: "claude",
+      reviewer_family: "claude",
+    });
   });
 
   it("requires an authentic constitution matching state and retained adjudication", () => {

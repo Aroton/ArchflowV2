@@ -150,7 +150,7 @@ describe("canonical skill contracts", () => {
       expect(source).toContain("approval of the final bytes");
       expect(source).toContain("A **significant** revision");
       expect(source).toContain("resets the attempt count to 1");
-      expect(source).toContain("automatically runs a fresh opposite-client counter-review plus constitution review");
+      expect(source).toContain("automatically runs a fresh counter-review plus constitution review");
       expect(source).toContain("override it in either direction");
     }
   });

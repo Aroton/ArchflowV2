@@ -45,7 +45,7 @@ const common = {
   expected_revision: 4,
   input_fingerprint: "a".repeat(64),
 } as const;
-const counterEvidence = { role: "counter-review", evidence_digest: "6".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" } as const;
+const counterEvidence = { role: "counter-review", evidence_digest: "6".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" } as const;
 const currentEvidence = { set_digest: "8".repeat(64), slots: [counterEvidence] } as const;
 const previewDigest = "5".repeat(64);
 const gateDecision = { choice: "approve", reason: "Reviewed." } as const;

@@ -217,8 +217,7 @@ describe("evidence result preparation", () => {
         assurance: "degraded",
         producer_family: "claude",
         reviewer_family: "codex",
-        independence: "opposite-family",
-      },
+              },
     ] as const;
     const current = authorityQualifier.currentReviews(
       createTestCurrentReviewSetAuthority({

@@ -36,10 +36,11 @@ const gitEnv = {
 };
 const configText = `schema_version: "1"
 roles:
-  producer: { model: claude-opus-4-6, effort: high }
+  counter-reviewer: { model: claude-opus-4-6, effort: high }
+  adjudicator: { model: claude-opus-4-6, effort: high }
 overrides:
   phase-impl:
-    producer: { model: gpt-5.4, effort: high }
+    counter-reviewer: { model: gpt-5.4, effort: high }
 `;
 
 async function harness() {
@@ -149,7 +150,7 @@ describe("computeTaskStatus", () => {
     const evidence = {
       set_digest: D("8"),
       slots: [
-        { role: "counter-review", evidence_digest: D("a"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+        { role: "counter-review", evidence_digest: D("a"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" },
       ],
     } as const;
     const subject = {
@@ -220,7 +221,7 @@ describe("computeTaskStatus", () => {
     expect(status).toMatchObject({ ok: true, value: { state: "missing", next_action: { code: "create-task" } } });
   });
 
-  it("uses override-aware same-family routes and commit-pinned rules", async () => {
+  it("uses override-aware dispatched routes and commit-pinned rules", async () => {
     const h = await harness();
     writeFileSync(h.services.authority.state.absolute, canonicalDocument(h.state()).bytes);
     writeFileSync(join(h.root, ".archflow", "constitution", "01-trust.md"),
@@ -230,7 +231,10 @@ describe("computeTaskStatus", () => {
       ok: true,
       value: {
         config: { verified: true },
-        routes: { producer: { family: "codex", model: "gpt-5.4" } },
+        routes: {
+          counter_reviewer: { family: "codex", model: "gpt-5.4" },
+          adjudicator: { family: "claude", model: "claude-opus-4-6" },
+        },
         constitution: { active_rules: [{ id: "trust", version: 1, text: "Pinned rule text." }] },
         resources: [
           { role: "current-artifact", path: `.archflow/tasks/${TASK}/phases/17/impl-notes.md`, access: "write" },
@@ -319,7 +323,7 @@ describe("computeTaskStatus", () => {
       task_id: TASK, phase_instance: PHASE, summary: "Approve", subject_digest: D("8"),
       context_digest: computeGateContextDigest("artifact-approval", context),
       current_evidence: { set_digest: D("9"), slots: [
-        { role: "counter-review", evidence_digest: D("b"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+        { role: "counter-review", evidence_digest: D("b"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" },
       ] },
       kind: "artifact-approval", context, allowed_decisions: ["approve", "revise", "reject", "cancel"],
       opened_at_revision: 4, status: "awaiting-human",
@@ -371,7 +375,7 @@ describe("computeTaskStatus", () => {
       task_id: TASK, phase_instance: PHASE, summary: "Approve revised implementation", subject_digest: D("8"),
       context_digest: computeGateContextDigest("artifact-approval", context),
       current_evidence: { set_digest: D("9"), slots: [
-        { role: "counter-review", evidence_digest: D("b"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+        { role: "counter-review", evidence_digest: D("b"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" },
       ] },
       kind: "artifact-approval", context, allowed_decisions: ["approve", "revise", "reject", "cancel"],
       opened_at_revision: 4, status: "awaiting-human",

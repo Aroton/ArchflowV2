@@ -37,7 +37,7 @@ rule
 });
 const provenance = { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "decision-1", helper_invocation_id: "helper-1", recorded_at: "2026-07-30T12:00:00.000Z" } as const;
 const RULE = { rule_id: "trust-boundary", rule_version: 1 } as const;
-const counter = { role: "counter-review", evidence_digest: D("8"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" } as const;
+const counter = { role: "counter-review", evidence_digest: D("8"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" } as const;
 const state = (): TaskStateV1 => ({ schema_version: "1", task_id: parseTaskSlug("task-1"), repository_identity_digest: D("1"), revision: parseSafeInteger(4), phase_instance: "phase-impl-2" as TaskStateV1["phase_instance"], step: "produce", status: "running", attempt: parseSafeInteger(1), input_fingerprint: D("2"), initialization_digest: D("3"), config_digest: D("4"), workflow_digest: D("5"), constitution_digest: constitution.digest, policy_base_commit: "abcdef0123456789abcdef0123456789abcdef01" as TaskStateV1["policy_base_commit"], authoritative_results: [], approvals: [], waivers: [] });
 
 const roots: string[] = [];
