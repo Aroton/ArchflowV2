@@ -634,8 +634,18 @@ export async function computeTaskStatus(
   let parsedConfig: ReturnType<typeof parseConfigYaml> | undefined;
   try {
     const read = await dependencies.read_config(authority.config);
-    if (read.kind !== "valid") {
-      config = unavailableConfig(state.config_digest, undefined, `config-${read.kind}`);
+    if (read.kind === "invalid" && read.digest === state.config_digest) {
+      // The bytes are exactly the pinned ones, so restoring or editing the file cannot help:
+      // this build's schema no longer accepts what the task pinned. That is a different
+      // situation from a changed config and must not be reported as one.
+      config = unavailableConfig(state.config_digest, read.digest, "pinned-config-schema-unsupported");
+      blockers.push("pinned-config-schema-unsupported");
+    } else if (read.kind !== "valid") {
+      config = unavailableConfig(
+        state.config_digest,
+        read.kind === "invalid" ? read.digest : undefined,
+        `config-${read.kind}`,
+      );
       blockers.push(`config-${read.kind}`);
     } else {
       const verified = verifyPinnedConfig(state.config_digest, read.snapshot.bytes);
@@ -1098,6 +1108,9 @@ export async function computeTaskStatus(
     repository_initialized: true,
     state,
     config_verified: config.verified,
+    ...(config.verified !== true && config.issue === "pinned-config-schema-unsupported"
+      ? { config_schema_unsupported: true }
+      : {}),
     ...(statusReconciliation === undefined ? {} : { reconciliation_findings: statusReconciliation.findings }),
     reconciliation_blocking_reasons: Object.freeze([
       ...reconciliationBlockers,

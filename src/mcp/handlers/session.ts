@@ -68,8 +68,9 @@ export async function openHandlerSession(
   try {
     config = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(configRead.snapshot.bytes));
   } catch {
-    // E.g. a config pinned before the producer role was removed: surface the
-    // shape failure as a repairable config error instead of an internal one.
+    // The read above already parsed these bytes but discards the parsed value; this parse obtains
+    // the typed config and stays as a fail-closed guard (e.g. future schema evolution or an
+    // unexpected staged-legacy shape), surfacing a repairable config error instead of an internal one.
     return fail(createProjectError("CONFIG_INVALID", { issue_code: "config-unparseable" }));
   }
   return Object.freeze({

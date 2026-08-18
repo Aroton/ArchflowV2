@@ -184,6 +184,53 @@ describe("pinned-config enforcement sites", () => {
     expectMismatch(result, current, observed);
   });
 
+  it("keeps enforcing the byte pin over a config pinned with the retired producer role", async () => {
+    // A config pinned before the producer role was removed keeps working byte-for-byte, and
+    // the pin still rejects any mutation of it — tolerance for the retired key is not a bypass.
+    const producerBytes = new TextEncoder().encode('schema_version: "1"\nroles:\n  producer:\n    model: gpt-example\n    effort: high\n  counter-reviewer:\n    model: claude-opus-5\n    effort: high\n');
+    const current = await createTaskWorkspace({
+      taskId: "config-pin-retired-producer",
+      label: "retired-producer",
+      configBytes: producerBytes,
+    });
+    workspaces.push(current);
+
+    const read = await current.services.dependencies.read_config(current.services.authority.config);
+    expect(read).toMatchObject({ kind: "valid", snapshot: { digest: sha256Bytes(producerBytes) } });
+    const call = stateCall(current, "retired-producer-envelope");
+    const accepted = await computeCallEnvelope(current.services, {
+      tool: call.name,
+      input: {
+        schema_version: call.input.schema_version,
+        task_id: call.input.task_id,
+        intent_id: call.input.intent_id,
+        expected_revision: call.input.expected_revision,
+        input_fingerprint: call.input.input_fingerprint,
+        phase_instance: call.input.phase_instance,
+        step: call.input.step,
+        status: call.input.status,
+      },
+    });
+    expect(accepted.ok).toBe(true);
+
+    const observed = mutateConfig(current, MODEL_CHANGE);
+    const result = await computeCallEnvelope(current.services, {
+      tool: call.name,
+      input: {
+        schema_version: call.input.schema_version,
+        task_id: call.input.task_id,
+        intent_id: "retired-producer-mismatch",
+        expected_revision: call.input.expected_revision,
+        input_fingerprint: call.input.input_fingerprint,
+        phase_instance: call.input.phase_instance,
+        step: call.input.step,
+        status: call.input.status,
+      },
+    });
+
+    expectMismatch(result, current, observed);
+  });
+
   it("rejects an effort change before opening a durable gate", async () => {
     const current = await workspace("gate");
     const observed = mutateConfig(current, EFFORT_CHANGE);

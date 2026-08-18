@@ -367,6 +367,36 @@ describe("computeTaskStatus", () => {
     if (gateBlocked.ok) expect(gateBlocked.value).not.toHaveProperty("open_gate");
   });
 
+  it("reports a pinned config the installed schema cannot parse as a tooling mismatch, not a change", async () => {
+    const h = await harness();
+    // Bytes the current schema rejects, pinned exactly: restoring or editing the file cannot
+    // help, so the blocker must name the real situation instead of the impossible restore advice.
+    const pinnedBytes = Buffer.from('schema_version: "1"\nroles:\n  reviewer: { model: claude-opus-4-6, effort: high }\n');
+    writeFileSync(h.services.authority.config.absolute, pinnedBytes);
+    writeFileSync(h.services.authority.state.absolute, canonicalDocument(h.state({
+      config_digest: sha256Bytes(pinnedBytes),
+    })).bytes);
+    const status = await computeTaskStatus(h.services.dependencies, h.services.authority);
+    expect(status).toMatchObject({
+      ok: true,
+      value: {
+        config: {
+          verified: false,
+          issue: "pinned-config-schema-unsupported",
+          expected_digest: sha256Bytes(pinnedBytes),
+          observed_digest: sha256Bytes(pinnedBytes),
+        },
+        blocking_reasons: expect.arrayContaining(["pinned-config-schema-unsupported"]),
+        next_action: { code: "upgrade-tooling", human_required: true },
+      },
+    });
+    if (status.ok) {
+      expect(status.value.blocking_reasons).not.toContain("config-invalid");
+      expect(status.value.next_action.detail).not.toMatch(/Restore/u);
+      expect(status.value.next_action.detail).not.toContain("new task or the explicit upgrade flow");
+    }
+  });
+
   it("reports an open gate with its conversational human-resolution interface", async () => {
     const h = await harness();
     const context = { artifact_kind: "phase-implementation" } as const;

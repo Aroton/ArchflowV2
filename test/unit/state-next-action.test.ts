@@ -105,6 +105,7 @@ describe("deriveNextAction", () => {
       ["create-task", { repository_initialized: true }],
       ...reconciliationCases.map(([finding, code]) => [code, input({ reconciliation_findings: [finding] })] as const),
       ["restore-pinned-config", input({ config_verified: false })],
+      ["upgrade-tooling", input({ config_verified: false, config_schema_unsupported: true })],
       ["resolve-open-gate", input({ state: state({ open_gate: gate }) })],
       ["run-step", input({ assessment: assessment("triage") })],
       ["open-gate", input({ assessment: assessment("advance") })],
@@ -195,6 +196,13 @@ describe("deriveNextAction", () => {
     const next = deriveNextAction(input({ config_verified: false }));
     expect(next).toMatchObject({ code: "restore-pinned-config", human_required: true });
     expect(next.detail).toContain("new task or the explicit upgrade flow");
+  });
+
+  it("names the tooling, not the file, when pinned bytes no longer parse", () => {
+    const next = deriveNextAction(input({ config_verified: false, config_schema_unsupported: true }));
+    expect(next).toMatchObject({ code: "upgrade-tooling", human_required: true });
+    expect(next.detail).not.toMatch(/Restore/u);
+    expect(next.detail).not.toContain("new task or the explicit upgrade flow");
   });
 
   it("does not guess between ambiguous retained successor receipts", () => {

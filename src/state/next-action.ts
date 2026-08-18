@@ -18,6 +18,7 @@ export type NextActionCode =
   | "create-fresh-intent"
   | "resolve-current-authority"
   | "restore-pinned-config"
+  | "upgrade-tooling"
   | "open-gate"
   | "resolve-open-gate"
   | "run-step"
@@ -81,6 +82,8 @@ export type NextActionInput = Readonly<{
   repository_initialized: boolean;
   state?: TaskStateV1;
   config_verified?: boolean;
+  /** Set when the config bytes match the pinned digest but this tooling cannot parse their schema. */
+  config_schema_unsupported?: boolean;
   reconciliation_findings?: readonly ReconciliationFinding[];
   reconciliation_blocking_reasons?: readonly string[];
   assessment?: EvidenceAssessment;
@@ -255,6 +258,14 @@ export function deriveNextAction(input: NextActionInput): NextAction {
       : action("initialize-repository", "Initialize ArchFlow in this repository.", false);
   }
   if (input.config_verified !== true) {
+    if (input.config_schema_unsupported === true) {
+      return action(
+        "upgrade-tooling",
+        "The task's pinned configuration bytes are exactly the recorded ones, but this installed ArchFlow version cannot parse their schema; restoring or editing the file cannot fix this. Resume the task with tooling that accepts the pinned configuration, or restart it as a new task under the current schema.",
+        true,
+        state,
+      );
+    }
     return action(
       "restore-pinned-config",
       "Restore the task's digest-pinned configuration before continuing; an intentional configuration change requires a new task or the explicit upgrade flow.",

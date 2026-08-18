@@ -36,6 +36,9 @@
     "roles": {
       "type": "object",
       "properties": {
+        "producer": {
+          "$ref": "#/$defs/route"
+        },
         "counter-reviewer": {
           "$ref": "#/$defs/route"
         },

@@ -40,7 +40,8 @@ export type FingerprintReadContext<K extends ToolName> = Readonly<{
 
 export type ConfigReadResult =
   | Readonly<{ kind: "valid"; snapshot: LiveConfigSnapshot }>
-  | Readonly<{ kind: "missing" | "unreadable" | "invalid" }>;
+  | Readonly<{ kind: "invalid"; digest: Sha256Digest }>
+  | Readonly<{ kind: "missing" | "unreadable" }>;
 
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
@@ -113,6 +114,8 @@ export async function readTaskConfig(path: ResolvedPath): Promise<ConfigReadResu
       snapshot: Object.freeze({ bytes: read.bytes, digest: sha256Bytes(read.bytes) }),
     });
   } catch {
-    return Object.freeze({ kind: "invalid" });
+    // The bytes are in hand even when they will not parse, so the digest travels with the
+    // failure — a reader can tell a schema rejection of the exact pinned bytes from a change.
+    return Object.freeze({ kind: "invalid", digest: sha256Bytes(read.bytes) });
   }
 }
