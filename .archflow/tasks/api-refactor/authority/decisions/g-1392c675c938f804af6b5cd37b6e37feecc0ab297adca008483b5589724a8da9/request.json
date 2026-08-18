@@ -1,0 +1,276 @@
+{
+  "allowed_decisions": [
+    "adopt-current-bytes",
+    "restore-recorded-bytes",
+    "abort",
+    "cancel"
+  ],
+  "context": {
+    "drifted_projections": [
+      {
+        "observed_digest": "29bcc2e02ce994687aa22cc1c02954ecfbda41d449d8e0ae3e33511f5820dcd2",
+        "path": "dist/archflow-local.mjs",
+        "recorded_digest": "fb189f7846d391ae941a914e152d394712e53efd5c1f756a61623b9d5b08c8a1"
+      },
+      {
+        "observed_digest": "45723ae49152e3cc0c4d8440084e7e017099ad4c8fc662ea6ff2b2f82907c485",
+        "path": "dist/archflow-mcp.mjs",
+        "recorded_digest": "113f7657499d4c8fc20d7e94f4b7e58e5c788fecd952d6037d7302a7262a54e8"
+      },
+      {
+        "observed_digest": "bb08d866ff2d7e13db2f7153467c5e275e522b02411a65750b8f85a451e4859f",
+        "path": "dist/manifest.json",
+        "recorded_digest": "951ee67da52e8bf08c2c020b7bb0c4c4248f229de6e6406cef317ab4daf1df6b"
+      },
+      {
+        "observed_digest": "e657a4dcdc6eb6945a1e5d37295fc892fca89a79195d1070509af32748d0226f",
+        "path": "dist/metafile.json",
+        "recorded_digest": "d105b9960caf8088804f3f01af9425cfc27c1a8e52917ebc3ee00df2f095334e"
+      },
+      {
+        "observed_digest": "581ea7b6e729e21e706d3f39e7775261bee2b078da7e2a1eaaa75eda35a29e1e",
+        "path": "docs/cli/COMMANDS.md",
+        "recorded_digest": "33ff2c4a0330315f4a85b93853630b9df48f0f3d36a0785fc00d6ffc6696c7c4"
+      },
+      {
+        "observed_digest": "e277f0c003dec830109679f6e7c46b3d7134ad3147ec29bda7088932dc73c4dd",
+        "path": "docs/COMPLEXITY.md",
+        "recorded_digest": "f36e4a46ccb1d1b044b64d5827107501b98a492187e432119193f4225e4e9db3"
+      },
+      {
+        "observed_digest": "c84914dcc72adf18c59c8a965d382d3f234c7897b9cc22e9b96ac7a117642a36",
+        "path": "docs/contracts/CONTRACTS.md",
+        "recorded_digest": "cb8efc9e083f9469475011246d5adb2b7d59f313e8ece6e42308be2232ce99b2"
+      },
+      {
+        "observed_digest": "cb39bb925fb5b67466e45b2f33592b55ea94ab4a89b5f27234e22348052d31e8",
+        "path": "docs/DEPENDENCIES.md",
+        "recorded_digest": "51351780b053f3ef0fec1de3a7630d889608c9f67b1318cb6f68f2494b19c547"
+      },
+      {
+        "observed_digest": "fbade2f14be1d365ebd529261cf956f89c8ef02192759d146e543455c358a803",
+        "path": "docs/mcp/DISPATCH.md",
+        "recorded_digest": "c9a6a4f0b31788fc793d57c40ba45d85056ab82b7afbfc054461402319dd420d"
+      },
+      {
+        "observed_digest": "024c343449e5f879a752012fbb8745cc4800a3c5776f93002594e994b4b626e5",
+        "path": "docs/mcp/SERVER.md",
+        "recorded_digest": "92d57b3104357e5a5ebfd194ecced5a43b254d97ae1adf694f2c63acf39341af"
+      },
+      {
+        "observed_digest": "39c0362d9d61c6e12c4f0155899acf48aaae40149948a37445e0c922ed555f60",
+        "path": "docs/OVERVIEW.md",
+        "recorded_digest": "387a7176dc5ecbccdb40521faa54e3dd94c0bf8ce8d603eedd3902a4547c0bc0"
+      },
+      {
+        "observed_digest": "b1f37a774459cb82486af176b10f9c1e96d071ae6a08dcf00434c4f04abf8650",
+        "path": "docs/PATTERNS.md",
+        "recorded_digest": "71c53be1d690106bd64a1175f348dfe3a38259e90ba7f598ebf431ddd315b784"
+      },
+      {
+        "observed_digest": "aa2dd4185832d0bf69bdccca6757b6e93f4296897aaaae852f7e2d1e486a7fd5",
+        "path": "docs/review/COUNTER-REVIEW.md",
+        "recorded_digest": "123c525bd43d65448b1e56302276b9b4ab4bac6a366822c467a0ac1d3d5ad1c4"
+      },
+      {
+        "observed_digest": "a1640503b1d08903bca55475bee8c09c05d5973d6981cc6af7697c738512015a",
+        "path": "docs/state/DURABLE-STATE.md",
+        "recorded_digest": "680d32a394aeb72a4634f26c7f0d7fa1298cdb4806f9727ee82405dff38bd6e7"
+      },
+      {
+        "observed_digest": "7ebdddec704ad70770ba38396301b0fde4c89c5d6f9e530669ee27b59eeb3b9b",
+        "path": "docs/TESTING.md",
+        "recorded_digest": "6a38b93fd9bd0e77062c65e8d2da4639fc3ba0eae766c79c8c27b39eaf118137"
+      },
+      {
+        "observed_digest": "132361a2bc4b3c8a81f5d2b59cb361d5bba2e8035abd953e402f0366d37171af",
+        "path": "docs/workflow/LIFECYCLE.md",
+        "recorded_digest": "9867c79268c159aeb8fefc78bdf3a8b265c70a52331e722f3eea830cc4fa1e3a"
+      },
+      {
+        "observed_digest": "aa150ddd26ff60c21403396cf112d772dfd89b4a70964f2e2b06120949965147",
+        "path": "docs/workflow/SKILLS.md",
+        "recorded_digest": "5e8b95334c9a3f23344196b17f2947b3ab17eb99bd1d56cfc38ec0b098a13e6f"
+      },
+      {
+        "observed_digest": "398f6e399510e71ee5198f6d0210147aa23455ab2a7fab9e11c27b3075206a58",
+        "path": "skills/archflow-design/SKILL.md",
+        "recorded_digest": "9547684ff5dfddb8be6a639701c3773ccf71c99953a031df12928355ccfdb197"
+      },
+      {
+        "observed_digest": "b62585ac4b10dc25d81251c571fb5de63469dd1a8fd11f5bab123fbaa7c38d56",
+        "path": "skills/archflow-phase-design/SKILL.md",
+        "recorded_digest": "f46e84360597563e1aa70faf7d0e5bc186fa836a953cbd5a78b75d8de3992e0f"
+      },
+      {
+        "observed_digest": "e1178f28174274cd07191c7a595e18e3595c8ce6f6112eff69c0f58962836f2e",
+        "path": "skills/archflow-prd/SKILL.md",
+        "recorded_digest": "da4231262d6aa6d5787566914dd6b27e51c4ece352941aa6147a7fae6251cdfe"
+      },
+      {
+        "observed_digest": "d2c8fceb2b70bf031251a91fd81a3305d0c2dd8077e32b59315c8b56042bb583",
+        "path": "src/contracts/durable-state.ts",
+        "recorded_digest": "a735450f6bc545f5fa39371f0846d06324d3bf37895b0d6b9ba2c7195b0fc519"
+      },
+      {
+        "observed_digest": "3fe4f9c47eccfcdf58b461f0d21a0ac9c664a2a7fa3111b02a7e7509645b7f69",
+        "path": "src/contracts/errors.ts",
+        "recorded_digest": "6e8004e6c73780736a37402127dc182388bc09facb3387a48781ca035107a079"
+      },
+      {
+        "observed_digest": "dc1e4f97d984c57d2914df83a0bc92e7b41102448448b9cbadb16584b9145b21",
+        "path": "src/contracts/fingerprints.ts",
+        "recorded_digest": "46e50cc45b41c2bef491c66e48b18140d7c021db6f7b9224b2c36562d643062c"
+      },
+      {
+        "observed_digest": "269dda57c6b5f9a7bb4df7e8b543f4d54e486da0505041e82052ae24ca08a6ce",
+        "path": "src/contracts/mcp-tools.ts",
+        "recorded_digest": "e86a8fc0ed194b9518446de51d61df40d4a3290d4c535390bcf21211da4d9c25"
+      },
+      {
+        "observed_digest": "63a19265ddacd13c534a8f9380e3034452ab80332eefd3a2c635e6c126ee30ec",
+        "path": "src/contracts/phase-instance.ts",
+        "recorded_digest": "cc3ea1ce8752304c55c70b401f0e68720debff8236b3661704ee414554d8a95c"
+      },
+      {
+        "observed_digest": "755f87731963a0ae34344269ea34652c58a8876d0e2a24da1df0e61e6dd59f51",
+        "path": "src/contracts/schemas/v1/mcp-tools.schema.json",
+        "recorded_digest": "da129741423cc4b45034086d0d91ec321f9661cd8a104c0f968f4cfb033fe83a"
+      },
+      {
+        "observed_digest": "274f445faf1fab3516fcbad1e2101fe8bbbe22158648e1028baa8cd903752af0",
+        "path": "src/contracts/schemas/v1/task-state.schema.json",
+        "recorded_digest": "33bd273e44e7b4d8aa203a504b33693b202fb2557131463471176fae017a54ca"
+      },
+      {
+        "observed_digest": "a19746706d88c35c7863dc5e7cce38696ae6b10cecca3a3ea60bbdcb28317af4",
+        "path": "src/local/build-request.ts",
+        "recorded_digest": "44120f979e731aa434c3df95a6a48e492d41577177b981eea11a0e90d5f7f233"
+      },
+      {
+        "observed_digest": "7b15b32ec145c777a7c7a2f3d268ba490dbdd2a95ff8287656ae2605646a7bc3",
+        "path": "src/mcp/handlers/counter-review.ts",
+        "recorded_digest": "1b88546ce8b5e620d82d75773ab35c895bb748c766ce01de277e7bb99e6920d9"
+      },
+      {
+        "observed_digest": "aa1de34b63c0e29f81785273b744c3f4e08c07c0295408bc70660de0621647ca",
+        "path": "src/mcp/handlers/session.ts",
+        "recorded_digest": "2db8123f732f71a5c6fa2d1adc6afe5dd6232a686e094696ab8134f9821a2a43"
+      },
+      {
+        "observed_digest": "928e9c9330d847816ad3888f355116d1b8ba201012c0d99d0f4ab1e3cdf4968b",
+        "path": "src/mcp/handlers/state.ts",
+        "recorded_digest": "3ead9866cbd8df5baace901a476d4b6238f03206ac780f38c983bbfadaea4399"
+      },
+      {
+        "observed_digest": "13a19993b0f939d289cef8daf32ce9df6bc323fa40c52be26cf59278048755b0",
+        "path": "src/review/counter-review.ts",
+        "recorded_digest": "ed3c1eedfe333e06c27d7768ac5dd29b902c94c64ec284e0539641cd004b3bf9"
+      },
+      {
+        "observed_digest": "8587fadbbc39ba7e3c975e68759f6096f530b6489d1f65ee0c8b05919eeef79f",
+        "path": "src/state/gates.ts",
+        "recorded_digest": "a6b5a01fe6907c4d3f7d7aa87b4e456f192173b61bbf4ab788441f591927b329"
+      },
+      {
+        "observed_digest": "774de0b83be11c09ac7f1ec06eb8ca626529ceb7a5020c148b57ca9c68f43110",
+        "path": "src/state/produce-subject.ts",
+        "recorded_digest": "1d9dafd82880d95659f3dc40defe83e7ad16c62c3bab4299aaabe973e94ce414"
+      },
+      {
+        "observed_digest": "e5078b31797ca3850f67a0a08b23e0a74c3fea3d73a8b5a310a17d5538127add",
+        "path": "src/state/production.ts",
+        "recorded_digest": "9f13122b78db4d9bbe5d649848b50962bbd7bf844ad98ffc78e5d74f09049e81"
+      },
+      {
+        "observed_digest": "d3328cc16e4df8cc4bbcd84ac5f61d312608d11a575216d55fd84783f9f04cde",
+        "path": "src/state/request-composition.ts",
+        "recorded_digest": "72816730742f4835a820125d5be63eb6d7d5d0adb55219ebc2d77aa7ce675a06"
+      },
+      {
+        "observed_digest": "407ffc2ee95bdce9ac8395f036828f1405383e004f6dcb0fa6425b71d025659c",
+        "path": "src/state/request.ts",
+        "recorded_digest": "a5fad0a586bb5222ba247febb25006d7c9f587e283726ea7dbde7cd8a1ee961c"
+      },
+      {
+        "observed_digest": "3dbe2b18bdcdde459cd3b22d5520518af7845cc522d75d3b43d2870e2215971d",
+        "path": "src/state/status.ts",
+        "recorded_digest": "aafbb2da567bef0f47849757ad8471ed1cc8cb7e48aa1be65c5eeab13a274d85"
+      },
+      {
+        "observed_digest": "ab412f42579ce83f76f22e227441cce1a88d978fe00fd8719a15f088617a1a18",
+        "path": "src/state/transaction.ts",
+        "recorded_digest": "87278118c49d50e2a5fff23cef276ac0f607a6cf6a926f3f0fcce405f26d9617"
+      },
+      {
+        "observed_digest": "3e89d2c87522ebfee75418552fa4affa927616a33c38441fd5332e58b6c1c83f",
+        "path": "src/state/workspace-cleanup.ts",
+        "recorded_digest": "1b061e9ebb1a5e0b94b20236afa49dcdd04c898d8347d07d54a53f040574baeb"
+      },
+      {
+        "observed_digest": "c1b239b9ebf28da3cb84ee90a8bde26aa5a937e9ed52a1c2220adf858e1d8328",
+        "path": "test/contracts/durable-structural-corpus.test.ts",
+        "recorded_digest": "074716c724cdabb78e54dff595750598e33004ad1e73f791ecf2cf43b2cf3e7d"
+      },
+      {
+        "observed_digest": "4519ff52ccbf7ebc1876de085944e5263b3645f770405c774fed1bfe67fd0cb9",
+        "path": "test/contracts/mcp-advertised-schema.test.ts",
+        "recorded_digest": "e97b2162b0b999e84e223fba9e15c75941d5381c360d53e05734c630b2d05b8a"
+      },
+      {
+        "observed_digest": "5c1d8fed3fa983abd9f020d51bb32c6c0f3d814490eadc4c52362ceea3b91a74",
+        "path": "test/contracts/skill-contract-canonical.test.ts",
+        "recorded_digest": "f5dcb53eeda49c93ce8d7636c7233e16c68afa90265f0d970c2320aa8925b9cf"
+      },
+      {
+        "observed_digest": "8af926b4771310a6ca29d40955ded828c6e5c6882aba40d03d8fa95952c04a30",
+        "path": "test/integration/review-fixed-point.test.ts",
+        "recorded_digest": "5b103f072939f9695e4c9682faad1320251bae482eb05efbf9bab172b6d89ea5"
+      },
+      {
+        "observed_digest": "46c811550c06dcd6d6d84a86aa21418b82e790b2957622edc05c02a51e06ddbf",
+        "path": "test/integration/semantic-composition-parity.test.ts",
+        "recorded_digest": "51bbb61d9cbaa1a93b126fd2f6d558518df7b049fff2bcf44669bf311c2fb664"
+      },
+      {
+        "observed_digest": "47b2dd339c688303ab5fb28bae1710653f2f4eda65264089547280584867fb90",
+        "path": "test/integration/semantic-document-journeys.test.ts",
+        "recorded_digest": "a8f397b6020f7b99367c2d53a6e303522308b839426170964a5177f95210ad44"
+      },
+      {
+        "observed_digest": "bcbded5f6bdbb9815a0e6bc67c515118d580d732c7b3b1893d976baf1de65307",
+        "path": "test/integration/state-gate-lifecycle.test.ts",
+        "recorded_digest": "e3f39fd3e02a1fba03987c05717564ef49e2a64587f8df8875bd18c5b0f8a76d"
+      },
+      {
+        "observed_digest": "0ef3c087887b6aaf4f864b1bee2d79cc7eb88e1ff0476e8405f073f2ff32f574",
+        "path": "test/unit/mcp-tools.test.ts",
+        "recorded_digest": "fdb76d40d97ad8629fe7f0e75d4f07e731c51d4534d90315fe1878c1470f9d22"
+      },
+      {
+        "observed_digest": "272304037689fc133c448ae9e659cad146cdb451a5791e20e77bd0f4108ad59d",
+        "path": "test/unit/state-gates.test.ts",
+        "recorded_digest": "044d53c1c5a61714c23715ee978e10c665c8c8e381c66d04626bd2aad1e10337"
+      }
+    ]
+  },
+  "context_digest": "cf1f29aa0553bc911fa3a59f1dc9d6e9832d52fd9e031997ab0220f71c1a4b3f",
+  "current_evidence": {
+    "drift_digest": "e3433b6fc8e3373f6ef3dd69e3b3bbbe4a2a9bdbb9db902142db6697e32b90f8",
+    "observation_kind": "projection-drift",
+    "observed_at_revision": 147,
+    "phase_instance": "phase-design-3",
+    "schema_version": "1",
+    "task_id": "api-refactor"
+  },
+  "gate_id": "g-1392c675c938f804af6b5cd37b6e37feecc0ab297adca008483b5589724a8da9",
+  "intent_id": "gate-20260818T020217-910e",
+  "kind": "baseline-adoption",
+  "opened_at_revision": 148,
+  "phase_instance": "phase-design-3",
+  "request_digest": "ee030f48c154c22a63385ab534ebb0651897506f7daf454a9bf63c1efbf6e3a4",
+  "schema_version": "1",
+  "subject_digest": "e3433b6fc8e3373f6ef3dd69e3b3bbbe4a2a9bdbb9db902142db6697e32b90f8",
+  "summary": "A merge of origin/main into feature/api-refactor (commit ec0b8d1) changed 49 files after their reviewed bytes were recorded: main's dispatch reviewer-route configuration, secret-scan and status performance work, the refreshed docs/ set, skill text updates, matching tests, and rebuilt dist/ artifacts. The human chose to adopt the current merged bytes as the recorded baseline so phase 3 design proceeds from the merged state of the branch.",
+  "task_id": "api-refactor"
+}

@@ -1,0 +1,109 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 156,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 12667035
+  },
+  "artifact_digest": "02eb94966e12b8931ab8d52f280a5bbc102aef4b98f7d2ccc3a7712f1fe685b7",
+  "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+  "outputs": [],
+  "phase_instance": "phase-design-3",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-46c53505ed5159e6febe1c381976c085",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [],
+      "assurance": "server-attested",
+      "cli_version": "2.1.234",
+      "constitution": "pass",
+      "drift": "aligned",
+      "drift_findings": [],
+      "effort": "medium",
+      "envelope_input_digest": "ed0188e595aba4cf4f25c6f5745b987cf92b9e25010c4be5519881c8a951842d",
+      "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+      "invocation_id": "adjudication-invocation-28e762a3e38d5bdff056ce41967d3f1f",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "b514b6e975d213dbd7008bc1ec6eb8856cb9cd4881a7c1e41b9dc4f78666adf1",
+      "phase_instance": "phase-design-3",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-46c53505ed5159e6febe1c381976c085",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "The deviation is disclosed rather than silent, the governing document is updated in the same change (Section 5.1 lists `.archflow/tasks/api-refactor/design.md` in file scope; Chunk A step 1 sequences it), and the rationale is substantive rather than convenient — an authorized implementation commit is an exact sorted path set, which the repository already reflects (`commit_paths: input.implementation_commit.paths` at src/state/next-action.ts:209), so the PRD's R8 requirement of exact authorized scope is satisfied rather than weakened. Scope stays inside the parent design's Phase 3 assignment (design.md Section 10) and explicitly defers Phase 4 items. Section 10 forbids implementation until this design is independently reviewed, explicitly approved, committed under the authorized milestone, and durable status reaches `phase-impl-3`, so no code precedes an approved phase design. One immaterial factual slip: Section 4.2 describes the parent design's Section 4.1 sketch as singular `path`, while the parent design supplied in the pinned context already reads `paths` (and Section 5.6 already says \"carries `paths` as a sorted list\"); this is consistent with the correction being bundled into this same production change and does not create a governing-document divergence.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The artifact is a phase design that records an intentional deviation from the parent design: \"One parent-design correction is required and made in this same production change: the `WorkflowViewV1` commit block carries `paths` (plural) rather than the sketched singular `path`\" (Section 1, elaborated in Section 4.2), which engages the rule's requirement that material deviations update the governing documents."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Durable authority remains an explicitly recorded human choice with a reason through the existing archive/settle machinery (Section 4.5.1), and the second, conversational confirmation binds the exact staged diff and message before the client commits (Section 4.5.2) without inventing a second durable gate. Commit facts are projected only from the authenticated commit-authorization gate context, and missing authority maps to `blocked / inspect` rather than fabricated values (Sections 3.2.2, 4.2) — matching the existing `inspect-state` branch at src/state/next-action.ts:199-202. `waiver-requested` is treated as non-approval (Sections 4.6, 4.7), `request-changes` settles to a close-only checkpoint with no writable resources requiring a separate `revise` (Sections 4.5.1, 4.6), and advancement waits on observed commit proof rather than inference. Section 7 closes with the explicit constraint that \"No acceptance test may infer approval, create a commit, or advance a phase without the exact human and durable authority the workflow already requires,\" and success criterion 6 requires instrumented boundaries proving MCP performs no Git staging/commit or triage judgment.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The artifact designs the commit-authorization gate, the separate explicit commit confirmation, and constitution/material-drift/attempts-exhausted/waiver gates: \"The two human boundaries stay distinct\" (Section 4.5) and \"`requires_human_confirmation: true`\" (Section 4.2)."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Non-success states stay visible with a safe next action: both-direction submission-shape mismatches return a semantic failure plus the fresh safe view, \"never a crash or a false success\" (Sections 3.2.3, 4.3) — a real honesty improvement over the verified current behavior where the throws at src/state/request-composition.ts:239/245/279 escape the handler at src/mcp/handlers/semantic.ts:239-246 as internal errors; missing commit authority blocks with an inspect direction instead of inventing paths; `{outcome: \"failed\", reason}` records produce failure; attempts-exhausted, material-drift, constitution, and waiver branches remain visible human boundaries (Section 4.6). The honest-but-generic Phase 2 commit instruction is replaced only because the authenticated read model now genuinely supplies the facts, and the transitional \"supported legacy workflow\" refusal string is removed only where it stops being true (Section 3.2.1). Human control is preserved throughout: the client stages, confirms, and commits; the skill reports the successor command and stops rather than starting successor work (Sections 4.5.3, 4.7). Documentation honesty is handled in the same change, including the specific stale `docs/OVERVIEW.md` sentences named in Section 5.3.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The artifact governs failure and uncertainty representation, e.g. Section 3.2.3 on `composeProduce` `TypeError`s that \"today escape `handleSemanticApply` as unhandled internal errors\" and Section 4.2 on mapping absent commit authority to `blocked / inspect`."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "No isolation seam is loosened. Offers keep the existing binding to authenticated repository and task identity, durable revision, phase, and subject/evidence identity, and Section 4.1 preserves every existing ownership suppression (open gates, terminal state, reconciliation/repair findings, wrong phase, stale offers, cross-repository reuse) as winning over the invocation. The exact-successor rule keeps a `start-next-skill` hand-off consumable only by the invocation whose `target_phase_instance` matches exactly — consistent with the verified check at src/state/semantic-view.ts:81-84 — so no invocation consumes another position's authority. Commit facts, review subject, and pinned transcript are derived from durable authority for the exact current subject rather than from client input (Sections 4.2, 4.3, 3.1), commit observation is re-derived on every read (Section 4.5), and reopen invalidation of target-and-downstream authority is reused unchanged from Phase 1 with regression coverage that no reopen offer ever targets phase implementation (Sections 4.1, 6 Chunk C.3).",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The artifact governs offer binding, subject/evidence identity, and cross-repository reuse: \"hostile/stale/cross-repository offer reuse at the impl tier\" (Chunk B step 3) and \"stale, forged, wrong-phase, and cross-repository offers fail closed\" (success criterion 7)."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "a0e79db52634b9f6522da5c4bd7a24e4f3ecd941bcfa8bd3417c6cb7e693ed3f",
+      "step": "adjudicate",
+      "subject_digest": "950d82b40f6b4a4068dba6776fb9e9494d553c2ff2ac45d75219eef18f5b7e35",
+      "task_id": "api-refactor",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "api-refactor"
+}

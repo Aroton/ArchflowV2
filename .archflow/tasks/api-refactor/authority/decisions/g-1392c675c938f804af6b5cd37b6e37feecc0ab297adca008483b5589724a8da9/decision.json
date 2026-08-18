@@ -1,0 +1,33 @@
+{
+  "context_digest": "cf1f29aa0553bc911fa3a59f1dc9d6e9832d52fd9e031997ab0220f71c1a4b3f",
+  "envelope": {
+    "context_digest": "cf1f29aa0553bc911fa3a59f1dc9d6e9832d52fd9e031997ab0220f71c1a4b3f",
+    "gate_id": "g-1392c675c938f804af6b5cd37b6e37feecc0ab297adca008483b5589724a8da9",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "766f6ef2-865a-47dc-971f-e0ae60836fe9",
+      "recorded_at": "2026-08-18T02:02:28.398Z",
+      "request_id_digest": "f2353060d76f1aa5850b6248728f43ceaf3755fcd9039904596bf38efad08144",
+      "schema_version": "1"
+    },
+    "kind": "baseline-adoption",
+    "payload": {
+      "decision": "adopt-current-bytes",
+      "reason": "The merge from main was intentional and its contents are trusted; keep the merged versions as the recorded baseline without re-review."
+    },
+    "phase_instance": "phase-design-3",
+    "schema_version": "1",
+    "subject_digest": "e3433b6fc8e3373f6ef3dd69e3b3bbbe4a2a9bdbb9db902142db6697e32b90f8",
+    "task_id": "api-refactor"
+  },
+  "gate_id": "g-1392c675c938f804af6b5cd37b6e37feecc0ab297adca008483b5589724a8da9",
+  "kind": "baseline-adoption",
+  "outcome": "decided",
+  "phase_instance": "phase-design-3",
+  "schema_version": "1",
+  "subject_digest": "e3433b6fc8e3373f6ef3dd69e3b3bbbe4a2a9bdbb9db902142db6697e32b90f8",
+  "task_id": "api-refactor"
+}

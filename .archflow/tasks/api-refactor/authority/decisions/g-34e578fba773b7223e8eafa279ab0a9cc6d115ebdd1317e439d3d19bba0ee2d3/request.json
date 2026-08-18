@@ -1,0 +1,115 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "artifact_kind": "phase-design",
+    "baseline_commit": "ec0b8d1ab6eb12fb1f85470eae2da76f4ea3344e",
+    "commit_message": "ArchFlow: Approve api-refactor phase 3 design",
+    "constitution": "pass",
+    "eligible_waivers": [
+      {
+        "rule": {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      }
+    ],
+    "policy_findings": [
+      {
+        "compliance": "pass",
+        "rationale": "The deviation is disclosed rather than silent, the governing document is updated in the same change (Section 5.1 lists `.archflow/tasks/api-refactor/design.md` in file scope; Chunk A step 1 sequences it), and the rationale is substantive rather than convenient — an authorized implementation commit is an exact sorted path set, which the repository already reflects (`commit_paths: input.implementation_commit.paths` at src/state/next-action.ts:209), so the PRD's R8 requirement of exact authorized scope is satisfied rather than weakened. Scope stays inside the parent design's Phase 3 assignment (design.md Section 10) and explicitly defers Phase 4 items. Section 10 forbids implementation until this design is independently reviewed, explicitly approved, committed under the authorized milestone, and durable status reaches `phase-impl-3`, so no code precedes an approved phase design. One immaterial factual slip: Section 4.2 describes the parent design's Section 4.1 sketch as singular `path`, while the parent design supplied in the pinned context already reads `paths` (and Section 5.6 already says \"carries `paths` as a sorted list\"); this is consistent with the correction being bundled into this same production change and does not create a governing-document divergence.",
+        "rule_id": "approved-design-before-code",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "The artifact is a phase design that records an intentional deviation from the parent design: \"One parent-design correction is required and made in this same production change: the `WorkflowViewV1` commit block carries `paths` (plural) rather than the sketched singular `path`\" (Section 1, elaborated in Section 4.2), which engages the rule's requirement that material deviations update the governing documents."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "Durable authority remains an explicitly recorded human choice with a reason through the existing archive/settle machinery (Section 4.5.1), and the second, conversational confirmation binds the exact staged diff and message before the client commits (Section 4.5.2) without inventing a second durable gate. Commit facts are projected only from the authenticated commit-authorization gate context, and missing authority maps to `blocked / inspect` rather than fabricated values (Sections 3.2.2, 4.2) — matching the existing `inspect-state` branch at src/state/next-action.ts:199-202. `waiver-requested` is treated as non-approval (Sections 4.6, 4.7), `request-changes` settles to a close-only checkpoint with no writable resources requiring a separate `revise` (Sections 4.5.1, 4.6), and advancement waits on observed commit proof rather than inference. Section 7 closes with the explicit constraint that \"No acceptance test may infer approval, create a commit, or advance a phase without the exact human and durable authority the workflow already requires,\" and success criterion 6 requires instrumented boundaries proving MCP performs no Git staging/commit or triage judgment.",
+        "rule_id": "explicit-human-authority",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "The artifact designs the commit-authorization gate, the separate explicit commit confirmation, and constitution/material-drift/attempts-exhausted/waiver gates: \"The two human boundaries stay distinct\" (Section 4.5) and \"`requires_human_confirmation: true`\" (Section 4.2)."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "Non-success states stay visible with a safe next action: both-direction submission-shape mismatches return a semantic failure plus the fresh safe view, \"never a crash or a false success\" (Sections 3.2.3, 4.3) — a real honesty improvement over the verified current behavior where the throws at src/state/request-composition.ts:239/245/279 escape the handler at src/mcp/handlers/semantic.ts:239-246 as internal errors; missing commit authority blocks with an inspect direction instead of inventing paths; `{outcome: \"failed\", reason}` records produce failure; attempts-exhausted, material-drift, constitution, and waiver branches remain visible human boundaries (Section 4.6). The honest-but-generic Phase 2 commit instruction is replaced only because the authenticated read model now genuinely supplies the facts, and the transitional \"supported legacy workflow\" refusal string is removed only where it stops being true (Section 3.2.1). Human control is preserved throughout: the client stages, confirms, and commits; the skill reports the successor command and stops rather than starting successor work (Sections 4.5.3, 4.7). Documentation honesty is handled in the same change, including the specific stale `docs/OVERVIEW.md` sentences named in Section 5.3.",
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "The artifact governs failure and uncertainty representation, e.g. Section 3.2.3 on `composeProduce` `TypeError`s that \"today escape `handleSemanticApply` as unhandled internal errors\" and Section 4.2 on mapping absent commit authority to `blocked / inspect`."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "No isolation seam is loosened. Offers keep the existing binding to authenticated repository and task identity, durable revision, phase, and subject/evidence identity, and Section 4.1 preserves every existing ownership suppression (open gates, terminal state, reconciliation/repair findings, wrong phase, stale offers, cross-repository reuse) as winning over the invocation. The exact-successor rule keeps a `start-next-skill` hand-off consumable only by the invocation whose `target_phase_instance` matches exactly — consistent with the verified check at src/state/semantic-view.ts:81-84 — so no invocation consumes another position's authority. Commit facts, review subject, and pinned transcript are derived from durable authority for the exact current subject rather than from client input (Sections 4.2, 4.3, 3.1), commit observation is re-derived on every read (Section 4.5), and reopen invalidation of target-and-downstream authority is reused unchanged from Phase 1 with regression coverage that no reopen offer ever targets phase implementation (Sections 4.1, 6 Chunk C.3).",
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "The artifact governs offer binding, subject/evidence identity, and cross-repository reuse: \"hostile/stale/cross-repository offer reuse at the impl tier\" (Chunk B step 3) and \"stale, forged, wrong-phase, and cross-repository offers fail closed\" (success criterion 7)."
+      }
+    ],
+    "target_ref": "refs/heads/feature/api-refactor"
+  },
+  "context_digest": "7d9d43dda0facb14326eef8f24dedd488c7f001c0a65c6dc29d648889909abd7",
+  "current_evidence": {
+    "set_digest": "a0e79db52634b9f6522da5c4bd7a24e4f3ecd941bcfa8bd3417c6cb7e693ed3f",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "391906301c2cd2731a574c5319b4aec89a1f146cf2f493f4fbfe98216e8619b9",
+        "producer_family": "claude",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-34e578fba773b7223e8eafa279ab0a9cc6d115ebdd1317e439d3d19bba0ee2d3",
+  "intent_id": "gate-20260818T033256-876c",
+  "kind": "design-approval",
+  "opened_at_revision": 160,
+  "phase_instance": "phase-design-3",
+  "request_digest": "1aabd807939a901ed9387dfe129f755b481d701d7b3771559cb61650255d4e71",
+  "schema_version": "1",
+  "subject_digest": "950d82b40f6b4a4068dba6776fb9e9494d553c2ff2ac45d75219eef18f5b7e35",
+  "summary": "Phase 3 design (Client-Driven Phase Implementation) is ready for approval. It migrates the phase-implementation workflow onto the semantic archflow_status/archflow_apply surface: enabling the archflow-phase-impl invocation, projecting exact implementation commit facts (plural authorized paths with requires_human_confirmation), validating work-result submission shape in both directions before composition, migrating skills/archflow-phase-impl/SKILL.md, updating the affected maintained docs including docs/OVERVIEW.md, and regenerating the tracked release payload. The first counter-review found one blocking contradiction (sections disagreed about whether the finishing implementation skill applies its own successor hand-off offer) plus two material documentation/scope gaps; all three were accepted in triage, the design was revised in favor of the exact-successor ownership rule already enforced in code, the widened submission validation, and the OVERVIEW.md doc scope, and the same-side re-review and the remediation counter-review both came back clean. One parent-design correction is included: the public commit block carries plural paths rather than the sketched singular path, because an authorized implementation commit is an exact sorted set of repository paths. Constitution review passed: all four active rules were evaluated against the reviewed bytes and none conflicts; approval of this gate authorizes the exact task-local milestone commit that preserves the phase-3 design and the corrected parent design.",
+  "task_id": "api-refactor"
+}

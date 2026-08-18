@@ -22,6 +22,13 @@
       "subject_digest": "5e218ea4ed5d6da531cf5940ff9be6c9cce30a12176660032ac5e1727347fc38"
     },
     {
+      "decision_digest": "0da5f9fd770ca02fd8c3e947c28b76e49d3675efdae1fc7d31ce3aaee8e85bab",
+      "gate_id": "g-1392c675c938f804af6b5cd37b6e37feecc0ab297adca008483b5589724a8da9",
+      "gate_kind": "baseline-adoption",
+      "resolved_at_revision": 149,
+      "subject_digest": "e3433b6fc8e3373f6ef3dd69e3b3bbbe4a2a9bdbb9db902142db6697e32b90f8"
+    },
+    {
       "decision_digest": "3807a1b62836f9415bc808263885be743de7676a98fbc37598c140546e088ebd",
       "gate_id": "g-16c6b1f9dced0a1f902cb312e3a146a2aa5a755d9ff547bd517d5ea1c8c960a9",
       "gate_kind": "constitution-review",
@@ -34,6 +41,13 @@
       "gate_kind": "constitution-review",
       "resolved_at_revision": 122,
       "subject_digest": "9ecc52d9350faf99735449abb445ff9e974284b5d3df5772ce1fd68491e55d85"
+    },
+    {
+      "decision_digest": "417f4388f0421a56ec3eaf62913cb1c1b08ccf028ea74317e4b086c0bdc46523",
+      "gate_id": "g-34e578fba773b7223e8eafa279ab0a9cc6d115ebdd1317e439d3d19bba0ee2d3",
+      "gate_kind": "design-approval",
+      "resolved_at_revision": 161,
+      "subject_digest": "950d82b40f6b4a4068dba6776fb9e9494d553c2ff2ac45d75219eef18f5b7e35"
     },
     {
       "decision_digest": "d0f4f6330e54e88a3d24528fffc6c494e2fb47efbdd39ddaf64307e64e570668",
@@ -78,7 +92,7 @@
       "subject_digest": "801652c7f12171429cc26bb6b599864818f4b0867225b00226f21631936b0153"
     }
   ],
-  "attempt": 1,
+  "attempt": 2,
   "authoritative_results": [
     {
       "input_fingerprint": "21230fe376905f962767c385973884ddef7d9aeed77ec2a98b23c52f8fd9ac29",
@@ -162,6 +176,34 @@
       "phase_instance": "phase-design-2",
       "result_digest": "f3e47d239a7015955c6ae4ec68895b5e5acee8b228a81d256cf27a48b6fcbea1",
       "result_id": "state-result-091840fe3f94c56083382ee70b44558e",
+      "step": "triage"
+    },
+    {
+      "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+      "phase_instance": "phase-design-3",
+      "result_digest": "62161cc4b14c91de6dd3916bccbd4264c8547a6caa2cb984a6e3f85bfe9e9274",
+      "result_id": "adjudication-result-46c53505ed5159e6febe1c381976c085",
+      "step": "adjudicate"
+    },
+    {
+      "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+      "phase_instance": "phase-design-3",
+      "result_digest": "5bc9bc614f9094b2e3c657c7ae7bb785debc4805f3fa6444fe9029166c22d9d6",
+      "result_id": "result-ed0ed917dfea034f405e4553fb90c912",
+      "step": "counter_review"
+    },
+    {
+      "input_fingerprint": "67b0ebc4c4874deea70f07f5d22ef5c630f22f31db2b01cf69dfa9f11f03b697",
+      "phase_instance": "phase-design-3",
+      "result_digest": "b2e9a6634c107e7730c9c46e9a26add3171414b23cb1d9ca4ed717bbeb489b31",
+      "result_id": "state-result-26eb04d1564352462f799603e82d59b0",
+      "step": "produce"
+    },
+    {
+      "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+      "phase_instance": "phase-design-3",
+      "result_digest": "e3e2788f36d478d17acc4ef2f0e0eaa8cf24e1b2941dcc7414b4f2b95763c35d",
+      "result_id": "state-result-d249b205d6e62ff440c3cf74c90bb3b2",
       "step": "triage"
     },
     {
@@ -249,6 +291,210 @@
       "step": "triage"
     }
   ],
+  "baseline_adoptions": [
+    {
+      "adopted_at_revision": 149,
+      "adopted_projections": [
+        {
+          "content_digest": "29bcc2e02ce994687aa22cc1c02954ecfbda41d449d8e0ae3e33511f5820dcd2",
+          "path": "dist/archflow-local.mjs"
+        },
+        {
+          "content_digest": "45723ae49152e3cc0c4d8440084e7e017099ad4c8fc662ea6ff2b2f82907c485",
+          "path": "dist/archflow-mcp.mjs"
+        },
+        {
+          "content_digest": "bb08d866ff2d7e13db2f7153467c5e275e522b02411a65750b8f85a451e4859f",
+          "path": "dist/manifest.json"
+        },
+        {
+          "content_digest": "e657a4dcdc6eb6945a1e5d37295fc892fca89a79195d1070509af32748d0226f",
+          "path": "dist/metafile.json"
+        },
+        {
+          "content_digest": "e277f0c003dec830109679f6e7c46b3d7134ad3147ec29bda7088932dc73c4dd",
+          "path": "docs/COMPLEXITY.md"
+        },
+        {
+          "content_digest": "cb39bb925fb5b67466e45b2f33592b55ea94ab4a89b5f27234e22348052d31e8",
+          "path": "docs/DEPENDENCIES.md"
+        },
+        {
+          "content_digest": "39c0362d9d61c6e12c4f0155899acf48aaae40149948a37445e0c922ed555f60",
+          "path": "docs/OVERVIEW.md"
+        },
+        {
+          "content_digest": "b1f37a774459cb82486af176b10f9c1e96d071ae6a08dcf00434c4f04abf8650",
+          "path": "docs/PATTERNS.md"
+        },
+        {
+          "content_digest": "7ebdddec704ad70770ba38396301b0fde4c89c5d6f9e530669ee27b59eeb3b9b",
+          "path": "docs/TESTING.md"
+        },
+        {
+          "content_digest": "581ea7b6e729e21e706d3f39e7775261bee2b078da7e2a1eaaa75eda35a29e1e",
+          "path": "docs/cli/COMMANDS.md"
+        },
+        {
+          "content_digest": "c84914dcc72adf18c59c8a965d382d3f234c7897b9cc22e9b96ac7a117642a36",
+          "path": "docs/contracts/CONTRACTS.md"
+        },
+        {
+          "content_digest": "fbade2f14be1d365ebd529261cf956f89c8ef02192759d146e543455c358a803",
+          "path": "docs/mcp/DISPATCH.md"
+        },
+        {
+          "content_digest": "024c343449e5f879a752012fbb8745cc4800a3c5776f93002594e994b4b626e5",
+          "path": "docs/mcp/SERVER.md"
+        },
+        {
+          "content_digest": "aa2dd4185832d0bf69bdccca6757b6e93f4296897aaaae852f7e2d1e486a7fd5",
+          "path": "docs/review/COUNTER-REVIEW.md"
+        },
+        {
+          "content_digest": "a1640503b1d08903bca55475bee8c09c05d5973d6981cc6af7697c738512015a",
+          "path": "docs/state/DURABLE-STATE.md"
+        },
+        {
+          "content_digest": "132361a2bc4b3c8a81f5d2b59cb361d5bba2e8035abd953e402f0366d37171af",
+          "path": "docs/workflow/LIFECYCLE.md"
+        },
+        {
+          "content_digest": "aa150ddd26ff60c21403396cf112d772dfd89b4a70964f2e2b06120949965147",
+          "path": "docs/workflow/SKILLS.md"
+        },
+        {
+          "content_digest": "398f6e399510e71ee5198f6d0210147aa23455ab2a7fab9e11c27b3075206a58",
+          "path": "skills/archflow-design/SKILL.md"
+        },
+        {
+          "content_digest": "b62585ac4b10dc25d81251c571fb5de63469dd1a8fd11f5bab123fbaa7c38d56",
+          "path": "skills/archflow-phase-design/SKILL.md"
+        },
+        {
+          "content_digest": "e1178f28174274cd07191c7a595e18e3595c8ce6f6112eff69c0f58962836f2e",
+          "path": "skills/archflow-prd/SKILL.md"
+        },
+        {
+          "content_digest": "d2c8fceb2b70bf031251a91fd81a3305d0c2dd8077e32b59315c8b56042bb583",
+          "path": "src/contracts/durable-state.ts"
+        },
+        {
+          "content_digest": "3fe4f9c47eccfcdf58b461f0d21a0ac9c664a2a7fa3111b02a7e7509645b7f69",
+          "path": "src/contracts/errors.ts"
+        },
+        {
+          "content_digest": "dc1e4f97d984c57d2914df83a0bc92e7b41102448448b9cbadb16584b9145b21",
+          "path": "src/contracts/fingerprints.ts"
+        },
+        {
+          "content_digest": "269dda57c6b5f9a7bb4df7e8b543f4d54e486da0505041e82052ae24ca08a6ce",
+          "path": "src/contracts/mcp-tools.ts"
+        },
+        {
+          "content_digest": "63a19265ddacd13c534a8f9380e3034452ab80332eefd3a2c635e6c126ee30ec",
+          "path": "src/contracts/phase-instance.ts"
+        },
+        {
+          "content_digest": "755f87731963a0ae34344269ea34652c58a8876d0e2a24da1df0e61e6dd59f51",
+          "path": "src/contracts/schemas/v1/mcp-tools.schema.json"
+        },
+        {
+          "content_digest": "274f445faf1fab3516fcbad1e2101fe8bbbe22158648e1028baa8cd903752af0",
+          "path": "src/contracts/schemas/v1/task-state.schema.json"
+        },
+        {
+          "content_digest": "a19746706d88c35c7863dc5e7cce38696ae6b10cecca3a3ea60bbdcb28317af4",
+          "path": "src/local/build-request.ts"
+        },
+        {
+          "content_digest": "7b15b32ec145c777a7c7a2f3d268ba490dbdd2a95ff8287656ae2605646a7bc3",
+          "path": "src/mcp/handlers/counter-review.ts"
+        },
+        {
+          "content_digest": "aa1de34b63c0e29f81785273b744c3f4e08c07c0295408bc70660de0621647ca",
+          "path": "src/mcp/handlers/session.ts"
+        },
+        {
+          "content_digest": "928e9c9330d847816ad3888f355116d1b8ba201012c0d99d0f4ab1e3cdf4968b",
+          "path": "src/mcp/handlers/state.ts"
+        },
+        {
+          "content_digest": "13a19993b0f939d289cef8daf32ce9df6bc323fa40c52be26cf59278048755b0",
+          "path": "src/review/counter-review.ts"
+        },
+        {
+          "content_digest": "8587fadbbc39ba7e3c975e68759f6096f530b6489d1f65ee0c8b05919eeef79f",
+          "path": "src/state/gates.ts"
+        },
+        {
+          "content_digest": "774de0b83be11c09ac7f1ec06eb8ca626529ceb7a5020c148b57ca9c68f43110",
+          "path": "src/state/produce-subject.ts"
+        },
+        {
+          "content_digest": "e5078b31797ca3850f67a0a08b23e0a74c3fea3d73a8b5a310a17d5538127add",
+          "path": "src/state/production.ts"
+        },
+        {
+          "content_digest": "d3328cc16e4df8cc4bbcd84ac5f61d312608d11a575216d55fd84783f9f04cde",
+          "path": "src/state/request-composition.ts"
+        },
+        {
+          "content_digest": "407ffc2ee95bdce9ac8395f036828f1405383e004f6dcb0fa6425b71d025659c",
+          "path": "src/state/request.ts"
+        },
+        {
+          "content_digest": "3dbe2b18bdcdde459cd3b22d5520518af7845cc522d75d3b43d2870e2215971d",
+          "path": "src/state/status.ts"
+        },
+        {
+          "content_digest": "ab412f42579ce83f76f22e227441cce1a88d978fe00fd8719a15f088617a1a18",
+          "path": "src/state/transaction.ts"
+        },
+        {
+          "content_digest": "3e89d2c87522ebfee75418552fa4affa927616a33c38441fd5332e58b6c1c83f",
+          "path": "src/state/workspace-cleanup.ts"
+        },
+        {
+          "content_digest": "c1b239b9ebf28da3cb84ee90a8bde26aa5a937e9ed52a1c2220adf858e1d8328",
+          "path": "test/contracts/durable-structural-corpus.test.ts"
+        },
+        {
+          "content_digest": "4519ff52ccbf7ebc1876de085944e5263b3645f770405c774fed1bfe67fd0cb9",
+          "path": "test/contracts/mcp-advertised-schema.test.ts"
+        },
+        {
+          "content_digest": "5c1d8fed3fa983abd9f020d51bb32c6c0f3d814490eadc4c52362ceea3b91a74",
+          "path": "test/contracts/skill-contract-canonical.test.ts"
+        },
+        {
+          "content_digest": "8af926b4771310a6ca29d40955ded828c6e5c6882aba40d03d8fa95952c04a30",
+          "path": "test/integration/review-fixed-point.test.ts"
+        },
+        {
+          "content_digest": "46c811550c06dcd6d6d84a86aa21418b82e790b2957622edc05c02a51e06ddbf",
+          "path": "test/integration/semantic-composition-parity.test.ts"
+        },
+        {
+          "content_digest": "47b2dd339c688303ab5fb28bae1710653f2f4eda65264089547280584867fb90",
+          "path": "test/integration/semantic-document-journeys.test.ts"
+        },
+        {
+          "content_digest": "bcbded5f6bdbb9815a0e6bc67c515118d580d732c7b3b1893d976baf1de65307",
+          "path": "test/integration/state-gate-lifecycle.test.ts"
+        },
+        {
+          "content_digest": "0ef3c087887b6aaf4f864b1bee2d79cc7eb88e1ff0476e8405f073f2ff32f574",
+          "path": "test/unit/mcp-tools.test.ts"
+        },
+        {
+          "content_digest": "272304037689fc133c448ae9e659cad146cdb451a5791e20e77bd0f4108ad59d",
+          "path": "test/unit/state-gates.test.ts"
+        }
+      ],
+      "gate_id": "g-1392c675c938f804af6b5cd37b6e37feecc0ab297adca008483b5589724a8da9"
+    }
+  ],
   "config_digest": "493173957ba07913669e2970f822f501cace89fcbd42b68d0cf7b54185880c08",
   "constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
   "human_revision_history": [
@@ -326,33 +572,55 @@
     }
   ],
   "initialization_digest": "30babbe4e47c17babce8db5b51f4774a68539757589276f7948c8f74ae62b908",
-  "input_fingerprint": "4086d8dd563cd500ae128cdbd261ddb66157b12fcb0fa59795d1690938882a8a",
+  "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
   "last_transition": {
-    "input_fingerprint": "4086d8dd563cd500ae128cdbd261ddb66157b12fcb0fa59795d1690938882a8a",
-    "intent_id": "advance-20260817T035933-de98",
-    "operation": "record-state-boundary",
+    "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+    "intent_id": "gate-20260818T033256-876c",
+    "operation": "gate",
     "outcome": {
-      "path": "state.json",
-      "request_digest": "9ef3a3de0c3804f3af762d87cf13ed5d29982dc381aca12364de0f47ebda2960",
-      "revision": 146,
-      "status": "running"
+      "decision": {
+        "context_digest": "7d9d43dda0facb14326eef8f24dedd488c7f001c0a65c6dc29d648889909abd7",
+        "gate_id": "g-34e578fba773b7223e8eafa279ab0a9cc6d115ebdd1317e439d3d19bba0ee2d3",
+        "human_provenance": {
+          "actor_class": "human",
+          "assurance": "declared-local-trace",
+          "channel": "connected-host",
+          "connection_id": "connection-1",
+          "decision_event_id": "1a1b7dba-6e4c-4cdf-a222-a168d4792455",
+          "recorded_at": "2026-08-18T03:33:05.972Z",
+          "request_id_digest": "00e90de2c65243500d6f849ff463fc2fc64724806848848b0f37ee57ca86409b",
+          "schema_version": "1"
+        },
+        "kind": "design-approval",
+        "payload": {
+          "decision": "approve",
+          "reason": "approved"
+        },
+        "phase_instance": "phase-design-3",
+        "schema_version": "1",
+        "subject_digest": "950d82b40f6b4a4068dba6776fb9e9494d553c2ff2ac45d75219eef18f5b7e35",
+        "task_id": "api-refactor"
+      },
+      "kind": "design-approval",
+      "notes": "approved",
+      "revision": 161
     },
-    "outcome_digest": "95f50056390b73c7be342487c036756f14516a74b6c16714bf897629c6be5306",
-    "prior_revision": 145,
-    "request_digest": "9ef3a3de0c3804f3af762d87cf13ed5d29982dc381aca12364de0f47ebda2960",
-    "result_id": "state-result-64a192b234fb8a96a6fb84f3f93f06ad",
-    "resulting_revision": 146,
+    "outcome_digest": "18bf1fc7bac0aaca8a13aca1e4b21b909140697388437eb5b6dafb2551c435e0",
+    "prior_revision": 160,
+    "request_digest": "1aabd807939a901ed9387dfe129f755b481d701d7b3771559cb61650255d4e71",
+    "result_id": "g-34e578fba773b7223e8eafa279ab0a9cc6d115ebdd1317e439d3d19bba0ee2d3",
+    "resulting_revision": 161,
     "schema_version": "1",
-    "tool": "archflow_state"
+    "tool": "archflow_gate"
   },
   "phase_instance": "phase-design-3",
   "planned_final_phase": 10,
   "policy_base_commit": "8dad5260e31368b45da85bad748704d9a80b9df3",
   "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
-  "revision": 146,
+  "revision": 161,
   "schema_version": "1",
-  "status": "running",
-  "step": "produce",
+  "status": "succeeded",
+  "step": "triage",
   "task_id": "api-refactor",
   "waivers": [],
   "workflow_digest": "3f5f7536f19219fbf4ade78aea07c93d22d03057ce2ed83d532e25a54a8aab9a"

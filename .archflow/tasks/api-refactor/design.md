@@ -587,7 +587,7 @@ type SemanticNextActionV1 = {
   skill?: string;
   skill_args?: readonly string[];
   commit?: {
-    path: string;
+    paths: readonly string[];
     message: string;
     target_ref: string;
     baseline: string;
@@ -1176,7 +1176,9 @@ the authenticated commit facts and the semantic view returns them. Current phase
 status does not expose an equivalent complete fact set, so Phase 1 maps that position to an honest
 generic client-commit instruction with no fabricated `commit` object. Before Phase 3 cuts the
 implementation skill over, it extends the authenticated read model to return the exact authorized
-path, target ref, baseline, message, and confirmation requirement.
+paths, target ref, baseline, message, and confirmation requirement. The public commit block carries
+`paths` as a sorted list because an authorized implementation commit is an exact set of repository
+paths; a design milestone projects its single task-local root as the one-element list.
 
 The client stages only the authorized scope, inspects it, and for implementation obtains the
 separate explicit commit confirmation. After the client commits, read-only `archflow_status`
