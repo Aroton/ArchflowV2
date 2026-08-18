@@ -78,6 +78,11 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 **Why accepted:** Supported first-party CLI processes are expected to keep their ordinary descendants in the adopted group, and the prototype runs under the developer's account on a trusted machine. ArchFlow claims best-effort termination for that ordinary tree, not containment of deliberately detached processes. Stronger coverage requires an OS process namespace, cgroup/job-object equivalent, or another proven containment provider.
 
+## Config schema evolution without migration
+
+**Not provided:** There is no config re-pin, schema migration, or in-task amendment. Retired config keys are individually granted read tolerance (the removed `producer` role, like the retired `independence` evidence field), but a pinned config whose bytes fail to parse under any other future schema change strands the task: status reports `pinned-config-schema-unsupported` with an `upgrade-tooling` action, and the honest exits are resuming with tooling that accepts the pinned bytes or restarting as a new task.
+
+**Existing mitigation:** Every retirement granted so far keeps pre-removal pinned configs working unchanged, unknown keys still fail closed so a typo cannot silently drop a route, and the byte pin still rejects any edit of the pinned file. The `upgrade-tooling` blocker names the real situation instead of impossible `restore-pinned-config` advice, so a human is never told to restore bytes that already match the pin.
 ## One-hop simple revisions that retain an accepted finding
 
 **Not protected:** A produce revision classified `simple` reuses the prior review and triage evidence for one hop. When that retained triage contains an accepted finding, the review fixed point demands a re-triage while durable state sits at `produce-succeeded`, but the fixed pipeline (`[produce, counter_review, triage]`) has no `produce-succeeded → triage` edge. The status projection then offers a `triage` action that no surface — semantic or legacy — can execute; applying it fails with `TRANSITION_INVALID` and the loop wedges at that boundary.

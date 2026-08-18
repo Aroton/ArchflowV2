@@ -68,7 +68,7 @@ async function readCanonical<T extends PlainJsonValue>(
   }
 }
 
-async function currentProjectionDigest(path: ResolvedPath): Promise<"missing" | ProjectionDigestRef["content_digest"]> {
+export async function currentProjectionDigest(path: ResolvedPath): Promise<"missing" | ProjectionDigestRef["content_digest"]> {
   try {
     const metadata = await lstat(path.absolute);
     if (metadata.isSymbolicLink()) return sha256Bytes(Buffer.from(await readlink(path.absolute), "utf8"));
@@ -97,23 +97,29 @@ function outputClassFor(
   return undefined;
 }
 
-async function discoverProjections(
+/**
+ * The newest recorded projection per path, with the worktree target it resolves to and the
+ * retained result that owns it. `reference` is `undefined` when the newest record is a human
+ * baseline adoption — those bytes exist only in the worktree and git, never in a manifest —
+ * which is exactly what a restore needs to know before promising to rewrite them.
+ */
+export type NewestProjection = Readonly<{
+  projection: ProjectionDigestRef;
+  measured_at_revision: number;
+  target: ResolvedPath;
+  reference: import("../contracts/durable-state.js").AuthoritativeResultRef | undefined;
+}>;
+
+export async function discoverNewestProjections(
   dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
   state: CanonicalDocument<TaskStateV1>,
-): Promise<ProjectResult<Readonly<{
-  recorded: readonly ProjectionDigestRef[];
-  current: readonly ProjectionDigestRef[];
-}>>> {
+): Promise<ProjectResult<ReadonlyMap<ProjectionDigestRef["path"], NewestProjection>>> {
   const loadManifest = dependencies.load_retained_manifest;
   if (loadManifest === undefined) {
     return stateInvalid(authority, "reconciliation-result-loader-unavailable");
   }
-  const newest = new Map<ProjectionDigestRef["path"], Readonly<{
-    projection: ProjectionDigestRef;
-    measured_at_revision: number;
-    target: ResolvedPath;
-  }>>();
+  const newest = new Map<ProjectionDigestRef["path"], NewestProjection>();
   try {
     for (const reference of state.value.authoritative_results) {
       const loaded = await loadManifest(reference);
@@ -130,20 +136,55 @@ async function discoverProjections(
           context: authority.context,
         });
         if (!target.ok) return target;
-        const candidate = Object.freeze({
-          projection,
-          measured_at_revision: manifest.accounting.measured_at_revision,
-          target: target.value,
-        });
+        const measuredAtRevision = manifest.accounting.measured_at_revision;
         const prior = newest.get(projection.path);
-        if (prior === undefined || candidate.measured_at_revision > prior.measured_at_revision) {
-          newest.set(projection.path, candidate);
+        if (prior === undefined || measuredAtRevision > prior.measured_at_revision) {
+          newest.set(projection.path, Object.freeze({
+            projection,
+            measured_at_revision: measuredAtRevision,
+            target: target.value,
+            reference,
+          }));
         }
       }
     }
+    // Human-adopted baselines overlay the manifests newest-per-path: an adoption lands at a state
+    // revision strictly later than every manifest measured before it, and a later phase's produce
+    // manifest measures later still and supersedes the adoption for the paths it re-projects.
+    for (const adoption of state.value.baseline_adoptions ?? []) {
+      for (const projection of adoption.adopted_projections) {
+        const prior = newest.get(projection.path);
+        if (prior === undefined) return stateInvalid(authority, "reconciliation-projection-unbound");
+        if (adoption.adopted_at_revision > prior.measured_at_revision) {
+          newest.set(projection.path, Object.freeze({
+            projection,
+            measured_at_revision: adoption.adopted_at_revision,
+            target: prior.target,
+            reference: undefined,
+          }));
+        }
+      }
+    }
+    return ok(newest);
+  } catch {
+    return ioFailure(authority, "discover-reconciliation-projections");
+  }
+}
+
+async function discoverProjections(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  state: CanonicalDocument<TaskStateV1>,
+): Promise<ProjectResult<Readonly<{
+  recorded: readonly ProjectionDigestRef[];
+  current: readonly ProjectionDigestRef[];
+}>>> {
+  const newest = await discoverNewestProjections(dependencies, authority, state);
+  if (!newest.ok) return newest;
+  try {
     const recorded: ProjectionDigestRef[] = [];
     const current: ProjectionDigestRef[] = [];
-    for (const candidate of [...newest.values()]
+    for (const candidate of [...newest.value.values()]
       .sort((left, right) => left.projection.path.localeCompare(right.projection.path))) {
       recorded.push(candidate.projection);
       const digest = await currentProjectionDigest(candidate.target);

@@ -240,11 +240,11 @@ function mapNextAction(status: TaskStatusV1, snapshot: SemanticStatusSnapshotV1)
         expected_submission: "task-ask",
       });
     case "resume-exact-intent":
-    case "restore-or-record-new-transition":
     case "inspect-retained-receipt":
     case "create-fresh-intent":
     case "resolve-current-authority":
     case "restore-pinned-config":
+    case "upgrade-tooling":
       return inspect(action.detail);
     case "open-gate":
       return Object.freeze({

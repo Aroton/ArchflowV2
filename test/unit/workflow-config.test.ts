@@ -55,6 +55,16 @@ describe("model routing configuration", () => {
     expect(config.overrides?.design?.["counter-reviewer"]?.effort).toBe("xhigh");
   });
 
+  it("accepts the retired producer role on read and rejects unknown roles still", () => {
+    // Configs pinned before the producer role was removed round-trip unchanged; the key is
+    // accepted and ignored because the producer is the connected host, never a config role.
+    const retired = parseConfigYaml('schema_version: "1"\nroles:\n  producer:\n    model: gpt-example\n    effort: high\n  counter-reviewer:\n    model: claude-example\n    effort: high\n');
+    expect(retired.roles.producer).toMatchObject({ model: "gpt-example", effort: "high" });
+    expect(() => parseConfigYaml(JSON.stringify({
+      schema_version: "1", roles: { prodcer: { model: "example", effort: "high" } },
+    }))).toThrow();
+  });
+
   it("rejects repository and model-family authority", async () => {
     const source = await fixture("config/invalid-authority.yaml");
     expect(() => parseConfigYaml(source)).toThrow();

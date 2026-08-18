@@ -13,11 +13,11 @@ export type NextActionCode =
   | "initialize-repository"
   | "create-task"
   | "resume-exact-intent"
-  | "restore-or-record-new-transition"
   | "inspect-retained-receipt"
   | "create-fresh-intent"
   | "resolve-current-authority"
   | "restore-pinned-config"
+  | "upgrade-tooling"
   | "open-gate"
   | "resolve-open-gate"
   | "run-step"
@@ -81,6 +81,8 @@ export type NextActionInput = Readonly<{
   repository_initialized: boolean;
   state?: TaskStateV1;
   config_verified?: boolean;
+  /** Set when the config bytes match the pinned digest but this tooling cannot parse their schema. */
+  config_schema_unsupported?: boolean;
   reconciliation_findings?: readonly ReconciliationFinding[];
   reconciliation_blocking_reasons?: readonly string[];
   assessment?: EvidenceAssessment;
@@ -255,6 +257,14 @@ export function deriveNextAction(input: NextActionInput): NextAction {
       : action("initialize-repository", "Initialize ArchFlow in this repository.", false);
   }
   if (input.config_verified !== true) {
+    if (input.config_schema_unsupported === true) {
+      return action(
+        "upgrade-tooling",
+        "The task's pinned configuration bytes are exactly the recorded ones, but this installed ArchFlow version cannot parse their schema; restoring or editing the file cannot fix this. Resume the task with tooling that accepts the pinned configuration, or restart it as a new task under the current schema.",
+        true,
+        state,
+      );
+    }
     return action(
       "restore-pinned-config",
       "Restore the task's digest-pinned configuration before continuing; an intentional configuration change requires a new task or the explicit upgrade flow.",
@@ -264,6 +274,26 @@ export function deriveNextAction(input: NextActionInput): NextAction {
   }
   const finding = input.reconciliation_findings?.[0];
   if (finding !== undefined) {
+    if (finding.kind === "projection-mismatch") {
+      // A projected file absent from the worktree cannot be adopted (there are no current bytes to
+      // keep); the honest recovery is the per-output restore, so route there instead of a gate.
+      if (input.reconciliation_findings?.some((candidate) => candidate.kind === "projection-mismatch" && candidate.observed_digest === undefined)) {
+        return action(
+          "inspect-state",
+          "A file ArchFlow recorded from reviewed work is missing from the worktree; inspect the projection and restore its recorded bytes per output before continuing.",
+          true,
+          state,
+        );
+      }
+      const count = input.reconciliation_findings?.filter((candidate) => candidate.kind === "projection-mismatch").length ?? 1;
+      return action(
+        "open-gate",
+        `${count} file${count === 1 ? "" : "s"} changed after ArchFlow recorded their reviewed bytes (for example by later commits or a merge). Open the baseline decision so a human chooses: keep the current bytes as the new recorded baseline, or restore the recorded bytes.`,
+        true,
+        state,
+        { gate_kind: "baseline-adoption" },
+      );
+    }
     return action(finding.next_action, `Resolve reconciliation finding ${finding.kind}.`, true, state);
   }
   const discoveryBlocker = input.reconciliation_blocking_reasons?.[0];

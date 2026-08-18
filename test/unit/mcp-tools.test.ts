@@ -40,6 +40,7 @@ describe("correlated MCP tool contracts", () => {
 
     const counterSlot = { role: "counter-review", evidence_digest: "6".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" };
     const gate = parseToolCall("archflow_gate", { schema_version: "1", task_id: "task-1", intent_id: "intent-4", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: "7".repeat(64), current_evidence: { set_digest: "8".repeat(64), slots: [counterSlot] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, ...gateDecisionInput });
+    if (gate.input.kind !== "artifact-approval") throw new TypeError("expected artifact-approval gate input");
     expect(Object.isFrozen(gate.input.current_evidence.slots)).toBe(true);
     expect(Object.isFrozen(gate.input.current_evidence.slots[0])).toBe(true);
     expect(Object.isFrozen(gate.input.context)).toBe(true);

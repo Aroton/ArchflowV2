@@ -82,8 +82,9 @@ describe("semantic status projection", () => {
 
   it("maps every current NextActionCode without exposing a protocol action", () => {
     const codes = [
-      "initialize-repository", "create-task", "resume-exact-intent", "restore-or-record-new-transition",
+      "initialize-repository", "create-task", "resume-exact-intent",
       "inspect-retained-receipt", "create-fresh-intent", "resolve-current-authority", "restore-pinned-config",
+      "upgrade-tooling",
       "open-gate", "resolve-open-gate", "run-step", "commit-artifacts", "commit-phase", "advance-phase",
       "complete-task", "task-complete", "inspect-state",
     ] as const satisfies readonly NextActionCode[];

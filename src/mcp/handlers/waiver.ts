@@ -65,6 +65,10 @@ export async function handleWaiver(
     if (!authenticWaiverOriginArchive(originRequest, originDecision, call.input.origin)) {
       return fail(createProjectError("CONTRACT_INVALID", { issue_code: "waiver-origin-decision-invalid" }));
     }
+    // A waiver origin is always a reviewed gate kind; narrowing also fixes the evidence shape.
+    if (originRequest.value.kind === "baseline-adoption") {
+      return fail(createProjectError("CONTRACT_INVALID", { issue_code: "waiver-origin-decision-invalid" }));
+    }
 
     // The bounded-decision pair is all-or-nothing: both present settles the waiver in this one
     // call through the validated preview; both absent opens the waiver gate and waits for the

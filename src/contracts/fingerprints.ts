@@ -358,6 +358,17 @@ export function computeGateContextDigest(
 }
 
 /**
+ * The drift-set digest a `baseline-adoption` gate is bound to: domain-separated over the sorted
+ * drifted-projection list, so the human decision covers exactly those path-and-digest pairs and
+ * nothing else. Doubles as the gate's `subject_digest` and as the `drift_digest` its observation
+ * reference carries, tying the evidence to the same byte set.
+ */
+export function baselineAdoptionDriftDigest(context: GateContext<"baseline-adoption">): Sha256Digest {
+  const snapshot = materialize(context, "baseline adoption drift subject");
+  return canonicalJsonDigest({ schema_version: "1", digest_kind: "baseline-adoption-drift", drifted_projections: snapshot.drifted_projections });
+}
+
+/**
  * Config pinning is `sha256` over the exact whole `config.yaml` bytes. There is no in-task
  * amendment and no re-pin schema: an intentional routing, model, or effort change requires a
  * distinct task or the explicit upgrade flow.

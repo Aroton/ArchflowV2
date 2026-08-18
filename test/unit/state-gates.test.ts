@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { canonicalDocument, canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
 import { computeGateContextDigest, computeGateId, type InputFingerprintSubject } from "../../src/contracts/fingerprints.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
-import { parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parsePathSafeId, parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { gateDecisionEffect, type GateContext, type GateEffect, type GateKind } from "../../src/contracts/gates.js";
 import { parseRepositoryPathClaim, parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { currentEvidenceSetRef } from "../../src/contracts/trust.js";
@@ -262,6 +262,110 @@ describe("durable gate decisions", () => {
       next: "adjudication-gate",
       adjudication_gate_pending: false,
     });
+  }, 5_000);
+
+  it("authenticates a migration-audit acceptance as the combined design-phase approval", async () => {
+    // The migration-audit gate replaces the separate PRD and design-approval gates for an
+    // imported design phase, so its acceptance must satisfy a matched-trigger constitution-review
+    // gate too — otherwise status derivation offers a redundant design approval forever and
+    // never reaches the import milestone commit.
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "archflow-migration-approval-"))); roots.push(root);
+    const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null", GIT_AUTHOR_NAME: "ArchFlow Test", GIT_AUTHOR_EMAIL: "test@example.invalid", GIT_COMMITTER_NAME: "ArchFlow Test", GIT_COMMITTER_EMAIL: "test@example.invalid" };
+    execFileSync("git", ["-c", "init.defaultBranch=main", "init", "-q"], { cwd: root, env });
+    writeFileSync(join(root, "tracked.txt"), "root\n"); execFileSync("git", ["add", "tracked.txt"], { cwd: root, env }); execFileSync("git", ["commit", "-q", "-m", "root"], { cwd: root, env });
+    const taskRoot = join(root, ".archflow", "tasks", "task-1"); mkdirSync(taskRoot, { recursive: true });
+    const configBytes = Buffer.from('schema_version: "1"\nroles:\n  counter-reviewer: {model: gpt-example, effort: high}\n  adjudicator: {model: claude-example, effort: high}\n');
+    writeFileSync(join(taskRoot, "config.yaml"), configBytes);
+    const operation: RepositoryOperationContext = { task_id: parseTaskSlug("task-1"), phase_instance: "design" as never, operation: parseSafeCode("migration-approval"), attempt: parseSafeInteger(1) };
+    const runnerResult = await discoverWorktree(createGitRunner({ cwd: root }), operation); if (!runnerResult.ok) throw new Error("discovery failed");
+    const git = await preflightGit(runnerResult.value, operation); if (!git.ok) throw new Error("preflight failed");
+    const authorityResult = await createInternalTransactionAuthority({ runner: runnerResult.value, environment: git.value, task_id: parseTaskSlug("task-1"), context: operation }); if (!authorityResult.ok) throw new Error("authority failed");
+    const authority = authorityResult.value;
+    const dependencies = { runner: runnerResult.value, environment: git.value, atomic: createAtomicWriter(), lock: createTaskLock(), read_state: readTaskState, read_config: readTaskConfig, read_receipt: readIntentReceipt, resolve_input_fingerprint: async () => ({ schema_version: "1" as const, ok: true as const, value: {} as InputFingerprintSubject }) };
+    const inputFingerprint = D("2");
+    const migrationSubject = D("7");
+    const evidenceBase = { schema_version: "1" as const, task_id: "task-1", phase_instance: "design", subject_digest: migrationSubject, input_fingerprint: inputFingerprint };
+    const designCounter = {
+      ...evidenceBase, step: "counter_review", role: "counter-review",
+      rubric_digest: D("3"), producer_family: "claude", findings: [],
+      matched_rule_versions: [], verdict: "pass", blocking_count: 0,
+      assurance: "server-attested", model_family: "codex", model: "fixture", effort: "high",
+      adapter: "codex-cli", cli_version: "fixture-1", invocation_id: "fixture-invocation",
+      envelope_input_digest: D("4"), observed_output_digest: D("5"), result_id: "fixture-result",
+    };
+    const designSlot = { ...counter, evidence_digest: canonicalJsonDigest(designCounter) };
+    const entry = (artifact_digest: ReturnType<typeof D>, source_artifact: object) =>
+      ({ reference: {}, manifest: { artifact_digest, source_artifact } }) as never;
+    const designEvidence = deriveCurrentEvidenceSet(new Map([
+      ["counter_review", entry(designSlot.evidence_digest, { schema_version: "1", artifact_kind: "review-evidence", evidence: designCounter })],
+    ])).current_evidence_set;
+    const designTriage = {
+      ...evidenceBase, step: "triage", current_evidence_set_digest: designEvidence.set_digest,
+      source_evidence_digests: [designSlot.evidence_digest], dispositions: [], accepted_count: 0, rejected_count: 0,
+    };
+    const designAdjudication = {
+      ...evidenceBase, step: "adjudicate", pinned_constitution_digest: constitution.digest,
+      approved_upstream_digests: [], source_evidence_set_digest: designEvidence.set_digest,
+      rule_findings: [], drift_findings: [], constitution: "pass", drift: "aligned",
+      matched_rule_versions: [RULE], uncertain_rule_versions: [],
+      assurance: "agent-declared", model_family: "codex", model: "fixture", effort: "high",
+    };
+    const designRetained = new Map([
+      ["counter_review", entry(designSlot.evidence_digest, { schema_version: "1", artifact_kind: "review-evidence", evidence: designCounter })],
+      ["triage", entry(D("a"), { schema_version: "1", artifact_kind: "triage", evidence: designTriage })],
+      ["adjudicate", entry(D("b"), { schema_version: "1", artifact_kind: "adjudication-evidence", evidence: designAdjudication })],
+    ]) as RetainedEvidenceSet;
+    const migrationIntent = parsePathSafeId("migration-audit-combined-approval");
+    const migrationContext = {
+      source_identity_digest: D("1"), destination_identity_digest: D("2"), import_digest: D("3"),
+      code_baseline_digest: D("4"), policy_baseline_digest: D("5"),
+    } as const;
+    const migrationGate = computeGateId({ task_identity_digest: authority.task_identity_digest, intent_id: migrationIntent, request_digest: D("6") });
+    const migrationContextDigest = computeGateContextDigest("migration-audit", migrationContext);
+    const migrationDecision = canonicalDocument({
+      schema_version: "1", gate_id: migrationGate, task_id: "task-1", phase_instance: "design",
+      kind: "migration-audit", subject_digest: migrationSubject, context_digest: migrationContextDigest,
+      outcome: "decided" as const,
+      envelope: {
+        schema_version: "1" as const, gate_id: migrationGate, task_id: "task-1", phase_instance: "design",
+        kind: "migration-audit" as const, subject_digest: migrationSubject, context_digest: migrationContextDigest,
+        human_provenance: provenance,
+        payload: { decision: "accept-import-audit" as const, reason: "Reviewed the import" },
+      },
+    });
+    const migrationApprovalRef = {
+      gate_id: migrationGate, gate_kind: "migration-audit" as const, subject_digest: migrationSubject,
+      decision_digest: migrationDecision.digest, resolved_at_revision: parseSafeInteger(4),
+    };
+    const migrationArchive = join(taskRoot, "authority", "decisions", migrationGate);
+    mkdirSync(migrationArchive, { recursive: true });
+    writeFileSync(join(migrationArchive, "request.json"), canonicalDocument({
+      schema_version: "1", gate_id: migrationGate, intent_id: migrationIntent, request_digest: D("6"),
+      task_id: "task-1", phase_instance: "design", summary: "Audit the imported design",
+      subject_digest: migrationSubject, context_digest: migrationContextDigest,
+      current_evidence: designEvidence, opened_at_revision: parseSafeInteger(4),
+      kind: "migration-audit", context: migrationContext,
+      allowed_decisions: ["accept-import-audit", "revise", "abort", "cancel"],
+    }).bytes);
+    writeFileSync(join(migrationArchive, "decision.json"), migrationDecision.bytes);
+    const designState = {
+      ...state(), repository_identity_digest: authority.repository_identity_digest,
+      config_digest: sha256Bytes(configBytes), input_fingerprint: inputFingerprint,
+      phase_instance: "design" as TaskStateV1["phase_instance"], step: "triage" as const, status: "succeeded" as const,
+      approvals: [migrationApprovalRef],
+    };
+    writeFileSync(join(taskRoot, "state.json"), canonicalDocument(designState).bytes);
+    const migrationLoaded = await loadAuthenticatedGateApproval(dependencies, authority, migrationApprovalRef);
+    expect(migrationLoaded, JSON.stringify(migrationLoaded)).toMatchObject({ ok: true });
+    if (!migrationLoaded.ok) throw new Error("migration approval authentication failed");
+
+    expect(assessCurrentEvidence(designState, designRetained, {
+      subject_digest: migrationSubject, input_fingerprint: inputFingerprint, constitution,
+    }).next).toBe("adjudication-gate");
+    expect(assessCurrentEvidence(designState, designRetained, {
+      subject_digest: migrationSubject, input_fingerprint: inputFingerprint, constitution,
+      authenticated_gate_approvals: [migrationLoaded.value],
+    }).next).toBe("advance");
   }, 5_000);
 
   it("records the retained approved design plan and authenticates final completion", async () => {

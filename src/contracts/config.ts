@@ -17,6 +17,9 @@ export const configRouteSchema = z.object({
 }).strict();
 
 export const configRolesSchema = z.object({
+  // Retired; accepted on read only so configs pinned before the producer role was removed
+  // round-trip unchanged. The producer is the connected host; nothing consumes this.
+  producer: configRouteSchema.optional(),
   "counter-reviewer": configRouteSchema.optional(),
   adjudicator: configRouteSchema.optional(),
 }).strict();

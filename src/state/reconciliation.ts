@@ -44,7 +44,7 @@ export type ReconciliationInput = Readonly<{
 }>;
 
 export type ReconciliationFinding =
-  | Readonly<{ kind: "projection-mismatch"; path: ProjectionDigestRef["path"]; recorded_digest: Sha256Digest; observed_digest?: Sha256Digest; next_action: "restore-or-record-new-transition" }>
+  | Readonly<{ kind: "projection-mismatch"; path: ProjectionDigestRef["path"]; recorded_digest: Sha256Digest; observed_digest?: Sha256Digest; next_action: "open-baseline-adoption-gate" }>
   | Readonly<{ kind: "receipt-only"; request_digest: Sha256Digest; receipt_digest: Sha256Digest; next_action: "resume-exact-intent" }>
   | Readonly<{ kind: "receipt-invalid"; receipt_digest: Sha256Digest; next_action: "inspect-retained-receipt" }>
   | Readonly<{ kind: "intent-mismatch"; requested_digest: Sha256Digest; receipt_request_digest: Sha256Digest; next_action: "create-fresh-intent" }>
@@ -113,7 +113,7 @@ export function reconcileCurrentAuthority(value: ReconciliationInput): Reconcili
         path: recorded.path,
         recorded_digest: recorded.content_digest,
         ...(digest === undefined ? {} : { observed_digest: digest }),
-        next_action: "restore-or-record-new-transition",
+        next_action: "open-baseline-adoption-gate",
       }));
     }
   }

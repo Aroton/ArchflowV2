@@ -156,6 +156,8 @@ type PresentedDecision =
   | "authorize-commit"
   | "discard-and-restore"
   | "adopt-as-new-generation"
+  | "adopt-current-bytes"
+  | "restore-recorded-bytes"
   | "accept-import-audit"
   | "cancel"
   | "waiver-grant"
@@ -201,6 +203,10 @@ const PRESENTATION_COPY = Object.freeze({
     title: "Resolve a workspace conflict",
     question: "Should ArchFlow restore the saved version, keep the current version, or stop?",
   }),
+  "baseline-adoption": Object.freeze({
+    title: "Decide what to do with changed files",
+    question: "These files changed after ArchFlow recorded their reviewed bytes (for example by later commits or a merge). Keep the current versions as the new baseline, restore the recorded versions, or stop?",
+  }),
   "migration-audit": Object.freeze({
     title: "Review the imported task",
     question: "Is the imported task accurate enough to accept, or should it be revised?",
@@ -220,6 +226,8 @@ const OPTION_COPY = Object.freeze({
   "authorize-commit": Object.freeze({ token: "authorize-commit", label: "Authorize the commit", consequence: "Permit ArchFlow to commit the exact reviewed changes; this is the final human confirmation." }),
   "discard-and-restore": Object.freeze({ token: "restore-saved-version", label: "Restore the saved version", consequence: "Discard the conflicting workspace copy and reconstruct it from durable authority." }),
   "adopt-as-new-generation": Object.freeze({ token: "keep-current-version", label: "Keep the current version", consequence: "Treat the current workspace copy as a new generation of the artifact." }),
+  "adopt-current-bytes": Object.freeze({ token: "keep-current-versions", label: "Keep the current versions", consequence: "Record the current file versions as the reviewed baseline without re-reviewing them. Nothing is lost, and the next implementation phase still reviews everything it touches." }),
+  "restore-recorded-bytes": Object.freeze({ token: "restore-recorded-versions", label: "Restore the recorded versions", consequence: "Discard the current versions of these files and rewrite the recorded ones. The discarded changes stay in git history." }),
   "accept-import-audit": Object.freeze({ token: "accept-import", label: "Accept the import", consequence: "Confirm that the imported task faithfully represents the legacy source and continue." }),
   cancel: Object.freeze({ token: "cancel", label: "Cancel this decision", consequence: "Close this decision without approving anything; the workflow will remain stopped here." }),
   "waiver-grant": Object.freeze({ token: "grant-exception", label: "Grant the exception", consequence: "Allow the narrowly scoped policy exception recorded in this request." }),
@@ -292,6 +300,13 @@ export function buildHumanGatePresentation(active: ActiveGateV1): HumanGatePrese
         }
         return lines;
       })),
+    } : {}),
+    ...(request.kind === "baseline-adoption" ? {
+      details: Object.freeze([
+        `${request.context.drifted_projections.length} file${request.context.drifted_projections.length === 1 ? "" : "s"} changed, including:`,
+        ...request.context.drifted_projections.slice(0, 10).map((drifted) => drifted.path),
+        ...(request.context.drifted_projections.length > 10 ? [`… and ${request.context.drifted_projections.length - 10} more`] : []),
+      ]),
     } : {}),
     question: `${copy.question} Choose an option and briefly explain why.`,
     options: Object.freeze(presentationBindings(request).map((binding) => binding.option)),

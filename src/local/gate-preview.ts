@@ -6,7 +6,7 @@ import {
 } from "../contracts/durable-gate.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import type { GateContext, GateKind, WaiverOriginRef } from "../contracts/gates.js";
-import { parseGateContext } from "../contracts/gates.js";
+import { parseBaselineObservationRef, parseGateContext } from "../contracts/gates.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { parseCurrentEvidenceSetRef } from "../contracts/trust.js";
 import { gateDecisionClaim, gateRequestClaim, openResolved, resolveTaskPath } from "../repository/paths.js";
@@ -53,7 +53,7 @@ async function currentGatePreview(
   const input = request.input as Record<string, PlainJsonValue>;
   const kind = String(input.kind) as GateKind;
   const context = parseGateContext(kind, input.context) as GateContext<GateKind>;
-  const evidence = parseCurrentEvidenceSetRef(input.current_evidence);
+  const evidence = kind === "baseline-adoption" ? parseBaselineObservationRef(input.current_evidence) : parseCurrentEvidenceSetRef(input.current_evidence);
   return ok(buildGatePreview({
     task_id: services.authority.task_id,
     revision: status.value.revision!,
@@ -103,6 +103,10 @@ async function readWaiverOrigin(
     );
     const parsedDecision = Object.freeze({ ...decision, value: parseArchivedGateDecisionRecord(decision.value) });
     if (!authenticWaiverOriginArchive(parsedRequest, parsedDecision, origin)) {
+      return invalid(services, "waiver-preview-origin-invalid");
+    }
+    // A waiver origin is always a reviewed gate kind; narrowing also fixes the evidence shape.
+    if (parsedRequest.value.kind === "baseline-adoption") {
       return invalid(services, "waiver-preview-origin-invalid");
     }
     return ok(Object.freeze({

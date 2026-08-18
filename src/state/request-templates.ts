@@ -9,7 +9,7 @@ import type { GateContext } from "../contracts/gates.js";
 import type { AdjudicationGateRequest } from "../review/adjudication.js";
 import type { NextAction, NextActionRequest } from "./next-action.js";
 import { phaseReviewPaths, type PhaseReviewPaths } from "./phase-documents.js";
-import type { CommitAuthorizationInput, DesignApprovalInput } from "./status.js";
+import type { BaselineAdoptionInput, CommitAuthorizationInput, DesignApprovalInput } from "./status.js";
 import { legalRunStepStatus } from "./transitions.js";
 
 // Placeholder prose deliberately fails the target field's ingress validation wherever the
@@ -39,6 +39,7 @@ export type NextActionRequestFacts = Readonly<{
   current_evidence?: CurrentEvidenceSetRef;
   commit_authorization?: CommitAuthorizationInput;
   design_approval?: DesignApprovalInput;
+  baseline_adoption?: BaselineAdoptionInput;
   migration_audit?: GateContext<"migration-audit">;
   /**
    * The pending constitution-review gate, derived mechanically from retained adjudication
@@ -214,6 +215,18 @@ export function buildNextActionRequest(next: NextAction, facts: NextActionReques
         "archflow_gate",
         `Write a self-contained design summary for the human reviewer. This is the single approval: every policy conflict and trigger is already bound in the context and must be explained conversationally. Approval also authorizes the automatic task-local milestone commit. ${facts.design_approval.target_ref_guidance}`,
       ));
+    }
+    if (next.gate_kind === "baseline-adoption" && facts.baseline_adoption !== undefined) {
+      const adoption = facts.baseline_adoption;
+      return request("archflow_gate", {
+        ...mechanicalPrefix(facts.task_id, state, state.input_fingerprint),
+        phase_instance: state.phase_instance,
+        summary: TEMPLATE_SUMMARY,
+        subject_digest: adoption.subject_digest,
+        current_evidence: adoption.current_evidence as unknown as PlainJsonValue,
+        kind: "baseline-adoption",
+        context: adoption.context as unknown as PlainJsonValue,
+      }, "Summarize for the human which files changed after their recorded review bytes and why (for example, later commits or a merge from main), naming the kinds of change rather than every path. The human chooses adopt-current-bytes (the current versions become the recorded baseline without re-review), restore-recorded-bytes (the current versions on those files are discarded and the recorded ones rewritten), or abort; say plainly what each choice means for the next implementation phase. This template shows the call's shape but cannot carry a preview digest or the human's decision: after the human chooses, write {\"summary\":<that summary>} to a file, run `archflow-local gate-preview --task " + String(facts.task_id) + " --input <file>`, then pipe {\"kind\":\"gate\",\"summary\":<same summary>,\"preview_digest\":<returned digest>,\"decision\":{\"choice\":<option token>,\"reason\":<human reason>}} to `archflow-local build-request --task " + String(facts.task_id) + "` and call archflow_gate once with the returned staged.reference.");
     }
     if (next.gate_kind === "commit-authorization" && facts.commit_authorization !== undefined) {
       const authorization = facts.commit_authorization;

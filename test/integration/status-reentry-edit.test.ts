@@ -3,7 +3,8 @@
  * finding whose revision intent authorizes editing the produce document, status must route to
  * the produce re-entry with its normal prefilled request instead of dead-ending on the
  * projection-mismatch the edit necessarily causes. Every other drifted path — and the same edit
- * outside re-entry — keeps blocking with `restore-or-record-new-transition`.
+ * outside re-entry — keeps blocking on the projection mismatch, now routed to the human
+ * baseline-adoption decision instead of a dead end.
  */
 import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -18,6 +19,7 @@ import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
 import { stageTaskInitialization } from "../../src/init/task-initialization.js";
 import { runBuildRequest } from "../../src/local/build-request.js";
+import { runLocalCommand } from "../../src/local/commands.js";
 import { computeCallEnvelope, type CallEnvelope } from "../../src/local/call-envelope.js";
 import { createToolHandlers } from "../../src/mcp/handlers/index.js";
 import { createToolBoundary } from "../../src/mcp/server.js";
@@ -238,7 +240,8 @@ describe("post-triage re-entry edits are expected", () => {
       writeFileSync(prdPath, "# PRD\n\nPremature edit before any accepted finding.\n");
       const premature = await h.status();
       expect(premature.next_action).toMatchObject({
-        code: "restore-or-record-new-transition",
+        code: "open-gate",
+        gate_kind: "baseline-adoption",
         human_required: true,
       });
       expect(premature.reconciliation?.classification).toBe("reconciliation-required");
@@ -511,6 +514,180 @@ describe("post-triage re-entry edits are expected", () => {
         }],
       });
       expect(revised.reconciliation?.classification).toBe("consistent");
+    } finally {
+      stub.restore();
+    }
+  }, TIMEOUT);
+
+  it("resolves post-milestone projection drift through the human baseline decision", async () => {
+    const fixture = await repository();
+    const h = harness(fixture.root);
+    const prdPath = join(fixture.root, ".archflow", "tasks", task, "prd.md");
+    const prdClaim = `.archflow/tasks/${task}/prd.md`;
+    const recordedPrd = "# PRD\n\nBaseline requirements.\n";
+    const mergedPrd = "# PRD\n\nBaseline requirements, plus merged changes from main.\n";
+    const postAdoptionDrift = "# PRD\n\nBaseline requirements, plus merged changes, then more.\n";
+
+    // Drive the PRD phase to counter_review-succeeded — past the produce seal, so projection
+    // drift is strict again, exactly like a design phase blocked after a merge from main.
+    const created = await h.status();
+    const createRequest = structuredClone(created.next_action.request) as unknown as {
+      tool: string; input: Record<string, PlainJsonValue>;
+    };
+    createRequest.input.artifact = fixture.initialization as unknown as PlainJsonValue;
+    const createResolved = await h.envelope(createRequest as unknown as PlainJsonValue);
+    await h.invoke(createResolved.request.tool, createResolved.request.input);
+    writeFileSync(join(fixture.root, ".archflow", "tasks", task, "ask.md"), "Build the baseline proof.\n");
+    writeFileSync(prdPath, "# PRD\n\nBaseline requirements.\n");
+    const produceComposed = await h.buildRequest({ intent_id: "produce-1" });
+    await h.invoke(produceComposed.request.tool, produceComposed.request.input);
+    const counterEntry = await h.buildRequest({ intent_id: "counter-entry-1", kind: "running", step: "counter_review" });
+    await h.invoke(counterEntry.request.tool, counterEntry.request.input);
+    const counterComposed = await h.buildRequest({ intent_id: "counter-1", kind: "counter-review" });
+    const stub = installReviewerStub(fixture.root);
+    try {
+      await h.invoke(counterComposed.request.tool, counterComposed.request.input);
+
+      // The drift: the branch legitimately moves past the recorded bytes (a merge, later work).
+      writeFileSync(prdPath, mergedPrd);
+      const drifted = await h.status();
+      expect(drifted.next_action).toMatchObject({
+        code: "open-gate",
+        gate_kind: "baseline-adoption",
+        human_required: true,
+      });
+      const gateInput = drifted.next_action.request?.input as null | {
+        kind: string;
+        current_evidence: { observation_kind: string };
+        context: { drifted_projections: readonly { path: string }[] };
+      };
+      expect(gateInput).toMatchObject({ kind: "baseline-adoption" });
+      expect(gateInput?.current_evidence.observation_kind).toBe("projection-drift");
+      expect(gateInput?.context.drifted_projections).toEqual([
+        expect.objectContaining({ path: prdClaim }),
+      ]);
+
+      // A changed drift set after composition fails closed: the request the human approved is not
+      // the drift that exists, so resolving it must refuse and leave durable state untouched.
+      const racedPreview = await runLocalCommand({
+        command: "gate-preview",
+        working_directory: fixture.root,
+        task_id: task,
+        value: { summary: "Files changed after their recorded review bytes." },
+      }) as { ok: boolean; value?: { preview_digest: string } };
+      expect(racedPreview.ok).toBe(true);
+      const raced = await h.buildRequest({
+        intent_id: "baseline-raced-1", kind: "gate",
+        summary: "Files changed after their recorded review bytes.",
+        preview_digest: racedPreview.value!.preview_digest,
+        decision: { choice: "keep-current-versions", reason: "Keep the merge." },
+      });
+      writeFileSync(prdPath, "# PRD\n\nBaseline requirements, plus different merged changes.\n");
+      const racedResult = await h.invokeRaw(raced.request.tool, raced.request.input);
+      expect(racedResult.ok).toBe(false);
+      expect(racedResult.error?.diagnostic?.parameters).toMatchObject({
+        issue_code: "baseline-adoption-context-mismatch",
+      });
+      writeFileSync(prdPath, mergedPrd);
+      const racedStatus = await h.status();
+      expect(racedStatus.next_action).toMatchObject({ code: "open-gate", gate_kind: "baseline-adoption" });
+      expect(racedStatus.open_gate).toBeUndefined();
+
+      // Restore first: the human discards the drift and takes the recorded bytes back. The
+      // rewrite uses the existing projection-plan machinery, so the file is byte-identical to
+      // the reviewed produce result and reconciliation goes clean on its own.
+      const restorePreview = await runLocalCommand({
+        command: "gate-preview",
+        working_directory: fixture.root,
+        task_id: task,
+        value: { summary: "Discard the merged changes." },
+      }) as { ok: boolean; value?: { preview_digest: string } };
+      expect(restorePreview.ok).toBe(true);
+      const restored = await h.buildRequest({
+        intent_id: "baseline-restore-1", kind: "gate",
+        summary: "Discard the merged changes.",
+        preview_digest: restorePreview.value!.preview_digest,
+        decision: { choice: "restore-recorded-versions", reason: "Rewrite the recorded versions." },
+      });
+      await h.invoke(restored.request.tool, restored.request.input);
+      expect(readFileSync(prdPath, "utf8")).toBe("# PRD\n\nBaseline requirements.\n");
+      const restoredStatus = await h.status();
+      expect(restoredStatus.reconciliation?.classification).toBe("consistent");
+      expect(restoredStatus.next_action).toMatchObject({ code: "run-step", step: "triage" });
+
+      // Adopt: drift again, and this time the human keeps the current bytes. One decision and
+      // the pipeline resumes — this is the resolution the merge deadlock needed.
+      writeFileSync(prdPath, mergedPrd);
+      const driftAgain = await h.status();
+      expect(driftAgain.next_action).toMatchObject({ code: "open-gate", gate_kind: "baseline-adoption" });
+      const adoptPreview = await runLocalCommand({
+        command: "gate-preview",
+        working_directory: fixture.root,
+        task_id: task,
+        value: { summary: "Files changed after their recorded review bytes." },
+      }) as { ok: boolean; value?: { preview_digest: string } };
+      expect(adoptPreview.ok).toBe(true);
+      const adopted = await h.buildRequest({
+        intent_id: "baseline-adopt-1", kind: "gate",
+        summary: "Files changed after their recorded review bytes.",
+        preview_digest: adoptPreview.value!.preview_digest,
+        decision: { choice: "keep-current-versions", reason: "Keep the merge." },
+      });
+      await h.invoke(adopted.request.tool, adopted.request.input);
+      expect(readFileSync(prdPath, "utf8")).toBe(mergedPrd);
+      const adoptedStatus = await h.status();
+      expect(adoptedStatus.reconciliation?.classification).toBe("consistent");
+      expect(adoptedStatus.reconciliation?.findings).toEqual([]);
+      expect(adoptedStatus.next_action).toMatchObject({ code: "run-step", step: "triage" });
+
+      // Drift the same path again: the adopted generation is now the recorded baseline, so new
+      // drift opens a fresh decision — adoption did not silently immunize the path. But the
+      // adopted bytes exist only in the worktree and git, never in a retained manifest, so a
+      // restore can never apply: the choice is refused before the gate opens (a decided
+      // interface is immutable, so opening first would wedge the gate behind it), both at
+      // composition and at a direct MCP call.
+      writeFileSync(prdPath, postAdoptionDrift);
+      const redrifted = await h.status();
+      expect(redrifted.next_action).toMatchObject({ code: "open-gate", gate_kind: "baseline-adoption" });
+      const redriftPreview = await runLocalCommand({
+        command: "gate-preview",
+        working_directory: fixture.root,
+        task_id: task,
+        value: { summary: "Drift after adoption." },
+      }) as { ok: boolean; value?: { preview_digest: string } };
+      expect(redriftPreview.ok).toBe(true);
+      await expect(h.buildRequest({
+        intent_id: "baseline-restore-2", kind: "gate",
+        summary: "Drift after adoption.",
+        preview_digest: redriftPreview.value!.preview_digest,
+        decision: { choice: "restore-recorded-versions", reason: "Try to restore adoption bytes." },
+      })).rejects.toThrow(/TRANSITION_INVALID/u);
+      const adoptComposed = await h.buildRequest({
+        intent_id: "baseline-adopt-2", kind: "gate",
+        summary: "Drift after adoption.",
+        preview_digest: redriftPreview.value!.preview_digest,
+        decision: { choice: "keep-current-versions", reason: "Keep the follow-up work too." },
+      });
+      const directRestore = structuredClone(adoptComposed.request.input) as {
+        intent_id: string;
+        decision: { choice: string; reason: string };
+      } & Record<string, PlainJsonValue>;
+      directRestore.intent_id = "baseline-direct-restore";
+      directRestore.decision = { choice: "restore-recorded-versions", reason: "Try to restore adoption bytes." };
+      const directRestoreResolved = await h.envelope({ tool: "archflow_gate", input: directRestore } as unknown as PlainJsonValue);
+      const directRestoreResult = await h.invokeRaw(directRestoreResolved.request.tool, directRestoreResolved.request.input);
+      expect(directRestoreResult.ok).toBe(false);
+      expect(directRestoreResult.error?.diagnostic?.parameters).toMatchObject({
+        issue_code: "baseline-adoption-restore-source-unavailable",
+      });
+      expect((await h.status()).open_gate).toBeUndefined();
+
+      // The sanctioned exit from post-adoption drift is a second adoption.
+      await h.invoke(adoptComposed.request.tool, adoptComposed.request.input);
+      expect(readFileSync(prdPath, "utf8")).toBe(postAdoptionDrift);
+      const finalStatus = await h.status();
+      expect(finalStatus.reconciliation?.classification).toBe("consistent");
+      expect(finalStatus.next_action).toMatchObject({ code: "run-step", step: "triage" });
     } finally {
       stub.restore();
     }

@@ -87,7 +87,6 @@ const implementationCommit = Object.freeze({
 
 const reconciliationCases: readonly [ReconciliationFinding, string][] = [
   [{ kind: "receipt-only", request_digest: D("a"), receipt_digest: D("b"), next_action: "resume-exact-intent" }, "resume-exact-intent"],
-  [{ kind: "projection-mismatch", path: "design.md" as never, recorded_digest: D("a"), next_action: "restore-or-record-new-transition" }, "restore-or-record-new-transition"],
   [{ kind: "receipt-invalid", receipt_digest: D("a"), next_action: "inspect-retained-receipt" }, "inspect-retained-receipt"],
   [{ kind: "intent-mismatch", requested_digest: D("a"), receipt_request_digest: D("b"), next_action: "create-fresh-intent" }, "create-fresh-intent"],
   [{ kind: "active-gate-mismatch", next_action: "resolve-current-authority" }, "resolve-current-authority"],
@@ -105,6 +104,7 @@ describe("deriveNextAction", () => {
       ["create-task", { repository_initialized: true }],
       ...reconciliationCases.map(([finding, code]) => [code, input({ reconciliation_findings: [finding] })] as const),
       ["restore-pinned-config", input({ config_verified: false })],
+      ["upgrade-tooling", input({ config_verified: false, config_schema_unsupported: true })],
       ["resolve-open-gate", input({ state: state({ open_gate: gate }) })],
       ["run-step", input({ assessment: assessment("triage") })],
       ["open-gate", input({ assessment: assessment("advance") })],
@@ -145,6 +145,18 @@ describe("deriveNextAction", () => {
     expect(blocked.detail).toMatch(/running it again cannot resolve this/u);
   });
 
+  it("reaches the import milestone commit from a migration-audit acceptance alone", () => {
+    // A migration-audit acceptance is the combined approval for imported design phases, so an
+    // advancing assessment must land on the import commit, not a second, redundant design approval.
+    const next = deriveNextAction(input({
+      state: state({ phase_instance: encodePhaseInstance({ kind: "design" }) }),
+      assessment: assessment("advance"),
+      authenticated_approvals: [{ gate_kind: "migration-audit" as const, subject_digest: D("a") }],
+      design_commit: designCommit,
+    }));
+    expect(next).toMatchObject({ code: "commit-artifacts", commit_message: designCommit.message });
+  });
+
   it("routes an editorial revision to the produce step with revision-intent wording", () => {
     const editorial = deriveNextAction(input({
       assessment: { ...assessment("produce"), editorial_revision_required: true },
@@ -183,6 +195,13 @@ describe("deriveNextAction", () => {
     const next = deriveNextAction(input({ config_verified: false }));
     expect(next).toMatchObject({ code: "restore-pinned-config", human_required: true });
     expect(next.detail).toContain("new task or the explicit upgrade flow");
+  });
+
+  it("names the tooling, not the file, when pinned bytes no longer parse", () => {
+    const next = deriveNextAction(input({ config_verified: false, config_schema_unsupported: true }));
+    expect(next).toMatchObject({ code: "upgrade-tooling", human_required: true });
+    expect(next.detail).not.toMatch(/Restore/u);
+    expect(next.detail).not.toContain("new task or the explicit upgrade flow");
   });
 
   it("does not guess between ambiguous retained successor receipts", () => {

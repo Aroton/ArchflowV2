@@ -44,10 +44,14 @@ describe("normative foundational JSON Schemas agree with Zod mirrors", () => {
     const valid = { schema_version: "1", roles: { "counter-reviewer": { model: "example", effort: "high" } }, overrides: { design: { adjudicator: { model: "other", effort: "xhigh" } } } };
     expect(assertZodAgreement(valid, validator, configV1Schema)).toEqual(valid);
     expect(assertZodAgreement({ ...valid, max_attempts: 5 }, validator, configV1Schema)).toEqual({ ...valid, max_attempts: 5 });
+    // The retired producer role is accepted on read; only its shape stays enforced.
+    const retired = { ...valid, roles: { ...valid.roles, producer: { model: "example", effort: "high" } } };
+    expect(assertZodAgreement(retired, validator, configV1Schema)).toEqual(retired);
     for (const invalid of [
       { ...valid, repository: "/tmp/repo" },
       { ...valid, roles: { producer: { model: "x", effort: "high", family: "codex" } } },
       { ...valid, roles: { producer: { model: "   ", effort: "high" } } },
+      { ...valid, roles: { prodcer: { model: "x", effort: "high" } } },
       { ...valid, overrides: { unknown: {} } },
       { ...valid, max_attempts: 0 },
       { ...valid, max_attempts: Number.MAX_SAFE_INTEGER + 1 },

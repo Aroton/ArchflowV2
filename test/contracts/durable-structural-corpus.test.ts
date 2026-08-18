@@ -318,6 +318,28 @@ const taskStateRestartCollections: JsonObject = {
   ],
 };
 
+const taskStateBaselineAdoptionCollections: JsonObject = {
+  ...taskStateWithoutOpenGate,
+  baseline_adoptions: [
+    {
+      gate_id: "gate-adoption-a",
+      adopted_at_revision: 5,
+      adopted_projections: [
+        { path: "src/alpha.ts", content_digest: "a".repeat(64) },
+        { path: "src/beta.ts", content_digest: "b".repeat(64) },
+      ],
+    },
+    {
+      gate_id: "gate-adoption-b",
+      adopted_at_revision: 6,
+      adopted_projections: [
+        { path: "docs/OVERVIEW.md", content_digest: "c".repeat(64) },
+        { path: "src/gamma.ts", content_digest: "d".repeat(64) },
+      ],
+    },
+  ],
+};
+
 const documentArtifactAdditionalDocuments: JsonObject = {
   ...documentArtifact.sample,
   additional_documents: [
@@ -352,6 +374,8 @@ const DECLARED_SETS: readonly { readonly shape: string; readonly path: string; r
   { shape: "task-state", path: "restart_history", base: taskStateRestartCollections },
   { shape: "task-state", path: "restart_history.0.superseded_results", base: taskStateRestartCollections },
   { shape: "task-state", path: "restart_history.0.cleared_waivers", base: taskStateRestartCollections },
+  { shape: "task-state", path: "baseline_adoptions", base: taskStateBaselineAdoptionCollections },
+  { shape: "task-state", path: "baseline_adoptions.0.adopted_projections", base: taskStateBaselineAdoptionCollections },
   { shape: "legacy-import-initialization", path: "mapping" },
   { shape: "legacy-import-initialization", path: "staged_payload_refs" },
   { shape: "document-artifact", path: "declared_inputs" },
@@ -451,6 +475,8 @@ describe("no array in this phase is exempt from set ordering", () => {
         "task-state/$defs/planningRestartRecord/properties/superseded_results",
         "task-state/properties/approvals",
         "task-state/properties/authoritative_results",
+        "task-state/properties/baseline_adoptions",
+        "task-state/properties/baseline_adoptions/items/properties/adopted_projections",
         "task-state/properties/human_revision_history",
         "task-state/properties/restart_history",
         "task-state/properties/waivers",

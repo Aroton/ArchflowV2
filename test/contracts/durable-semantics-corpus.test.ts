@@ -909,6 +909,7 @@ describe("the pinned issue_code literals", () => {
       accountingStoredBytesMismatch: "accounting-stored-bytes-mismatch",
       initializationDigestMismatch: "initialization-digest-mismatch",
       artifactTaskIdMismatch: "artifact-task-id-mismatch",
+      baselineAdoptionApprovalMissing: "baseline-adoption-approval-missing",
       lastTransitionOutcomeDigestMismatch: "last-transition-outcome-digest-mismatch",
       lastTransitionRevisionMismatch: "last-transition-revision-mismatch",
       repositoryIdentityDigestMismatch: "repository-identity-digest-mismatch",
@@ -961,7 +962,7 @@ describe("the pinned issue_code literals", () => {
 
   it("are all SafeCode, and rank 8 has none", () => {
     for (const code of Object.values(DURABLE_ISSUE_CODES)) expect(code).toMatch(SAFE_CODE);
-    expect(Object.values(DURABLE_ISSUE_CODES)).toHaveLength(62);
+    expect(Object.values(DURABLE_ISSUE_CODES)).toHaveLength(63);
     expect(Object.values(DURABLE_ISSUE_CODES)).not.toContain("input-fingerprint-mismatch");
   });
 });

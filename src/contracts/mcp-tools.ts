@@ -10,7 +10,8 @@ import type { DurableArtifact } from "./durable.js";
 import { HUMAN_REVISION_CLASSIFICATIONS, type HumanRevisionClassification, type HumanRevisionOverride } from "./durable-state.js";
 import { parseProjectError, type ProjectResult } from "./errors.js";
 import { pathSafeIdV1Schema, taskSlugV1Schema, type PathSafeId, type Sha256Digest, type TaskSlug } from "./evidence.js";
-import { GATE_KINDS, gateDecisionEnvelopeV1Schema, humanDecisionProvenanceV1Schema, parseGateContext, parseGateDecisionEnvelope, validateGateDecision, type GateContext, type GateDecisionEnvelope, type GateKind, type HumanDecisionProvenance, type RuleVersionRef, type WaiverOriginRef, type WaiverScope } from "./gates.js";
+import { GATE_KINDS, gateDecisionEnvelopeV1Schema, humanDecisionProvenanceV1Schema, parseBaselineObservationRef, parseGateContext, parseGateDecisionEnvelope, validateGateDecision, type GateContext, type GateDecisionEnvelope, type GateKind, type HumanDecisionProvenance, type RuleVersionRef, type WaiverOriginRef, type WaiverScope } from "./gates.js";
+import type { GateEvidenceByKind } from "./durable-gate.js";
 import { assertPlainJson } from "./plain-json.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
 import { repositoryPathClaimV1Schema, taskPathClaimV1Schema, type RepositoryPathClaim, type TaskPathClaim } from "./path-claims.js";
@@ -81,7 +82,7 @@ export type HumanGateChoice = { readonly choice: string; readonly reason: string
  * together to settle the gate in one authenticated call, or omit both to open the gate and wait
  * for the human decision written through the disposable interface.
  */
-export type GateInput = { readonly [K in GateKind]: CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly summary: string; readonly subject_digest: Sha256Digest; readonly current_evidence: CurrentEvidenceSetRef; readonly kind: K; readonly context: GateContext<K>; readonly preview_digest?: Sha256Digest; readonly decision?: HumanGateChoice } }[GateKind];
+export type GateInput = { readonly [K in GateKind]: CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly summary: string; readonly subject_digest: Sha256Digest; readonly current_evidence: GateEvidenceByKind<K>; readonly kind: K; readonly context: GateContext<K>; readonly preview_digest?: Sha256Digest; readonly decision?: HumanGateChoice } }[GateKind];
 export type GateSuccess = { readonly [K in GateKind]: { readonly kind: K; readonly decision: GateDecisionEnvelope<K>; readonly notes: string; readonly revision: number; readonly request_digest?: Sha256Digest } }[GateKind];
 export type WaiverInput = CommonToolInput & { readonly origin: WaiverOriginRef; readonly rationale: string; readonly preview_digest?: Sha256Digest; readonly decision?: HumanGateChoice };
 export interface WaiverDecisionBinding { readonly origin_gate_id: PathSafeId; readonly waiver_gate_id: PathSafeId; readonly task_id: TaskSlug; readonly rule_id: string; readonly rule_version: number; readonly subject_digest: Sha256Digest; readonly current_evidence_set_digest: Sha256Digest; readonly scope: WaiverScope; readonly human_provenance: HumanDecisionProvenance }
@@ -180,7 +181,11 @@ export const counterReviewInputSchema = z.object({ ...common, artifact_path: tas
 const humanGateChoiceSchema = z.object({ choice: text, reason: text }).strict();
 export const gateInputSchema = z.object({ ...common, phase_instance: phase, summary: text, subject_digest: digest, current_evidence: z.unknown(), kind: z.enum(GATE_KINDS), context: z.unknown(), preview_digest: digest.optional(), decision: humanGateChoiceSchema.optional() }).strict().superRefine((input, context) => {
   try { parseGateContext(input.kind, input.context); } catch (error) { context.addIssue({ code: "custom", path: ["context"], message: error instanceof Error ? error.message : "invalid gate context" }); }
-  try { parseCurrentEvidenceSetRef(input.current_evidence); } catch (error) { context.addIssue({ code: "custom", path: ["current_evidence"], message: error instanceof Error ? error.message : "invalid current evidence" }); }
+  try {
+    // Baseline adoption opens pre-review: its evidence is the drift observation, not a review set.
+    if (input.kind === "baseline-adoption") parseBaselineObservationRef(input.current_evidence);
+    else parseCurrentEvidenceSetRef(input.current_evidence);
+  } catch (error) { context.addIssue({ code: "custom", path: ["current_evidence"], message: error instanceof Error ? error.message : "invalid current evidence" }); }
   if ((input.preview_digest === undefined) !== (input.decision === undefined)) {
     context.addIssue({ code: "custom", path: ["preview_digest"], message: "preview_digest and decision must be supplied together (bounded single-call decision) or both omitted (gate opens and awaits the human decision)" });
   }
@@ -195,7 +200,7 @@ export const waiverInputSchema = z.object({ ...common, origin: waiverOrigin, rat
 
 function inputFor<K extends ToolName>(name: K, value: unknown): ToolInput<K> {
   const parsed = name === "archflow_state" ? stateInputSchema.parse(value) : name === "archflow_counter_review" ? counterReviewInputSchema.parse(value) : name === "archflow_waiver" ? waiverInputSchema.parse(value) : gateInputSchema.parse(value);
-  if (name === "archflow_gate") { const v = parsed as z.infer<typeof gateInputSchema>; return { ...v, current_evidence: parseCurrentEvidenceSetRef(v.current_evidence) } as ToolInput<K>; }
+  if (name === "archflow_gate") { const v = parsed as z.infer<typeof gateInputSchema>; return { ...v, current_evidence: v.kind === "baseline-adoption" ? parseBaselineObservationRef(v.current_evidence) : parseCurrentEvidenceSetRef(v.current_evidence) } as ToolInput<K>; }
   return parsed as ToolInput<K>;
 }
 function deepFreeze<T>(value: T): T {

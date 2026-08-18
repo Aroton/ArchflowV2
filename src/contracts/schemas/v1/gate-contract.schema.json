@@ -424,6 +424,39 @@
       ],
       "additionalProperties": false
     },
+    "baselineAdoptionContext": {
+      "type": "object",
+      "properties": {
+        "drifted_projections": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+              },
+              "recorded_digest": {
+                "$ref": "#/$defs/digest"
+              },
+              "observed_digest": {
+                "$ref": "#/$defs/digest"
+              }
+            },
+            "required": [
+              "path",
+              "recorded_digest",
+              "observed_digest"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "drifted_projections"
+      ],
+      "additionalProperties": false
+    },
     "migrationAuditContext": {
       "type": "object",
       "properties": {
@@ -756,6 +789,27 @@
         }
       ]
     },
+    "baselineAdoptionDecision": {
+      "type": "object",
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": [
+            "adopt-current-bytes",
+            "restore-recorded-bytes",
+            "abort"
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "decision",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
     "migrationAuditDecision": {
       "type": "object",
       "properties": {
@@ -945,6 +999,27 @@
       ],
       "additionalProperties": false
     },
+    "baselineAdoption": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "baseline-adoption"
+        },
+        "context": {
+          "$ref": "#/$defs/baselineAdoptionContext"
+        },
+        "payload": {
+          "$ref": "#/$defs/baselineAdoptionDecision"
+        }
+      },
+      "required": [
+        "kind",
+        "context",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
     "migrationAudit": {
       "type": "object",
       "properties": {
@@ -991,6 +1066,9 @@
     },
     {
       "$ref": "#/$defs/restoreCollision"
+    },
+    {
+      "$ref": "#/$defs/baselineAdoption"
     },
     {
       "$ref": "#/$defs/migrationAudit"

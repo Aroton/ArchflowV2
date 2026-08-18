@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { GitOid } from "./canonical.js";
 import { gitOidV1Schema } from "./canonical.js";
 import type { Sha256Digest } from "./evidence.js";
-import { pathSafeIdV1Schema, taskSlugV1Schema, type PathSafeId, type TaskSlug } from "./evidence.js";
+import { pathSafeIdV1Schema, taskSlugV1Schema, type PathSafeId, type SafeInteger, type TaskSlug } from "./evidence.js";
 import { safeIdV1Schema } from "./evidence.js";
 import { assertPlainJson } from "./plain-json.js";
 import { decodePhaseInstance, phaseInstanceIdV1Schema, type PhaseInstanceId } from "./phase-instance.js";
@@ -68,14 +68,45 @@ export interface GateContractByKind {
   readonly "constitution-edit": { readonly context: { readonly pinned_constitution_digest: Sha256Digest; readonly current_constitution_digest: Sha256Digest; readonly changed_path_class: "task-branch-constitution" }; readonly decision: { readonly decision: "revert-edit" | "start-base-amendment" | "abort"; readonly reason: string } };
   readonly "commit-authorization": { readonly context: { readonly target_ref: string; readonly baseline_commit: GitOid; readonly commit_message: string; readonly paths: readonly RepositoryPathClaim[]; readonly diff_digest: Sha256Digest; readonly current_artifact_digests: readonly Sha256Digest[]; readonly parent_document_digests: readonly Sha256Digest[] }; readonly decision: { readonly decision: "authorize-commit" | "revise" | "abort"; readonly reason: string } };
   readonly "restore-collision": { readonly context: { readonly path: TaskPathClaim; readonly recorded_generation_digest: Sha256Digest; readonly current_generation_digest: Sha256Digest; readonly adoption_candidate?: AuthorityLinkRef }; readonly decision: { readonly decision: "discard-and-restore" | "abort"; readonly reason: string } | { readonly decision: "adopt-as-new-generation"; readonly reason: string; readonly adoption_authority: AuthorityLinkRef; readonly rationale: string } };
+  /**
+   * One projection whose recorded review bytes no longer match the worktree. Binding both digests
+   * pins the exact byte set the human decision covers: the adoption records `observed_digest`, the
+   * restore rewrites to `recorded_digest`, and neither can be re-pointed at other bytes.
+   */
+  readonly "baseline-adoption": { readonly context: { readonly drifted_projections: readonly BaselineDriftedProjection[] }; readonly decision: { readonly decision: "adopt-current-bytes" | "restore-recorded-bytes" | "abort"; readonly reason: string } };
   readonly "migration-audit": { readonly context: { readonly source_identity_digest: Sha256Digest; readonly destination_identity_digest: Sha256Digest; readonly import_digest: Sha256Digest; readonly code_baseline_digest: Sha256Digest; readonly policy_baseline_digest: Sha256Digest; readonly resume_phase?: PhaseInstanceId; readonly planned_final_phase?: number; readonly imported_documents?: readonly { readonly path: RepositoryPathClaim; readonly content_digest: Sha256Digest }[]; readonly target_ref?: string; readonly baseline_commit?: GitOid; readonly commit_message?: string }; readonly decision: { readonly decision: "accept-import-audit" | "revise" | "abort"; readonly reason: string } };
 }
 
-export const GATE_KINDS = ["artifact-approval", "design-approval", "constitution-review", "material-drift", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"] as const;
+export const GATE_KINDS = ["artifact-approval", "design-approval", "constitution-review", "material-drift", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "baseline-adoption", "migration-audit"] as const;
 export type GateKind = keyof GateContractByKind;
 export type GateContext<K extends GateKind> = GateContractByKind[K]["context"];
 export type GateDecisionPayload<K extends GateKind> = GateContractByKind[K]["decision"];
 export type GateEffect = "advance" | "retry" | "redirect-waiver" | "redirect-upstream" | "non-advancing";
+
+export type BaselineDriftedProjection = {
+  readonly path: RepositoryPathClaim;
+  /** Digest the newest retained projection records for this path. */
+  readonly recorded_digest: Sha256Digest;
+  /** Digest of the live bytes the human is asked to judge; always differs from `recorded_digest`. */
+  readonly observed_digest: Sha256Digest;
+};
+
+/**
+ * The `current_evidence` of a `baseline-adoption` gate. Every other gate kind opens after a
+ * counter-review exists and cites that evidence set; baseline adoption can open mid-pipeline,
+ * before any review of the current phase, so the observation the human decides on is the drift
+ * set itself — bound to the task, phase, and state revision it was measured at.
+ */
+export type BaselineObservationRef = Readonly<{
+  readonly schema_version: "1";
+  readonly observation_kind: "projection-drift";
+  readonly task_id: TaskSlug;
+  readonly phase_instance: PhaseInstanceId;
+  /** The state revision at which the drift was measured live. */
+  readonly observed_at_revision: SafeInteger;
+  /** Domain-separated digest of the drifted-projection list; equals the gate's `subject_digest`. */
+  readonly drift_digest: Sha256Digest;
+}>;
 
 export type GateDecisionEnvelopeBase = { readonly schema_version: "1"; readonly gate_id: PathSafeId; readonly task_id: TaskSlug; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly context_digest: Sha256Digest; readonly human_provenance: HumanDecisionProvenance };
 export type GateDecisionEnvelope<K extends GateKind = GateKind> = { readonly [P in K]: GateDecisionEnvelopeBase & { readonly kind: P; readonly payload: GateDecisionPayload<P> } }[K];
@@ -161,16 +192,24 @@ const contexts = {
     baseline_commit: gitOidV1Schema,
     commit_message: boundedText,
     paths: z.array(repositoryPathClaimV1Schema).min(1)
-      // Code-unit ordering, the same rule every other sorted-path contract applies (the
-      // implementation output's outputs/restore_targets and the semantic commit instruction).
-      // localeCompare disagrees with code-unit order at mixed-case path boundaries, which would
-      // reject the exact code-unit-sorted path set the composer derives from retained outputs.
-      .refine((items) => sortedUnique(items, (a, b) => (a < b ? -1 : a > b ? 1 : 0)), "paths must be sorted with no duplicates"),
+      // Either ascending order — code-unit or localeCompare — with uniqueness. Composers emit
+      // code-unit (the rule every other sorted-path contract applies), but commit-authorization
+      // archives written by the previous bundle store locale-ordered lists; requiring one order
+      // would strand those archives and block every gate that authenticates them. Rewriting the
+      // archives would break their digest pinning, so both orders parse until the legacy
+      // archives age out.
+      .refine((items) => sortedUnique(items, (a, b) => (a < b ? -1 : a > b ? 1 : 0)) || sortedUnique(items, (a, b) => a.localeCompare(b)), "paths must be sorted with no duplicates"),
     diff_digest: digest,
     current_artifact_digests: canonicalDigests.min(1),
     parent_document_digests: canonicalDigests.min(1),
   }).strict(),
   "restore-collision": z.object({ path: taskPathClaimV1Schema, recorded_generation_digest: digest, current_generation_digest: digest, adoption_candidate: authorityLink.optional() }).strict(),
+  "baseline-adoption": z.object({
+    drifted_projections: z.array(z.object({ path: repositoryPathClaimV1Schema, recorded_digest: digest, observed_digest: digest }).strict()).min(1),
+  }).strict().superRefine((value, context) => {
+    if (!sortedUnique(value.drifted_projections, (left, right) => left.path.localeCompare(right.path))) context.addIssue({ code: "custom", message: "drifted projections must be sorted by path with no duplicates" });
+    if (value.drifted_projections.some((item) => item.recorded_digest === item.observed_digest)) context.addIssue({ code: "custom", message: "a drifted projection must differ between its recorded and observed digests" });
+  }),
   "migration-audit": z.object({
     source_identity_digest: digest,
     destination_identity_digest: digest,
@@ -211,11 +250,12 @@ const decisions = {
   "constitution-edit": decision(["revert-edit", "start-base-amendment", "abort"]),
   "commit-authorization": decision(["authorize-commit", "revise", "abort"]),
   "restore-collision": z.union([decision(["discard-and-restore", "abort"]), z.object({ decision: z.literal("adopt-as-new-generation"), reason, adoption_authority: authorityLink, rationale: boundedText }).strict()]),
+  "baseline-adoption": decision(["adopt-current-bytes", "restore-recorded-bytes", "abort"]),
   "migration-audit": decision(["accept-import-audit", "revise", "abort"]),
 } as const;
 
 const effects = Object.freeze({
-  approve: "advance", revise: "retry", reject: "non-advancing", "waiver-requested": "redirect-waiver", "amend-upstream": "redirect-upstream", "revise-current": "retry", "retry-once": "retry", abort: "non-advancing", "revert-edit": "retry", "start-base-amendment": "redirect-upstream", "authorize-commit": "advance", "discard-and-restore": "advance", "adopt-as-new-generation": "advance", "accept-import-audit": "advance",
+  approve: "advance", revise: "retry", reject: "non-advancing", "waiver-requested": "redirect-waiver", "amend-upstream": "redirect-upstream", "revise-current": "retry", "retry-once": "retry", abort: "non-advancing", "revert-edit": "retry", "start-base-amendment": "redirect-upstream", "authorize-commit": "advance", "discard-and-restore": "advance", "adopt-as-new-generation": "advance", "adopt-current-bytes": "advance", "restore-recorded-bytes": "advance", "accept-import-audit": "advance",
 } as const satisfies Readonly<Record<GateDecisionPayload<GateKind>["decision"], GateEffect>>);
 
 export const GATE_CONTRACTS = Object.freeze(Object.fromEntries(GATE_KINDS.map((kind) => [kind, Object.freeze({ context: contexts[kind], decision: decisions[kind] })]))) as Readonly<{ [K in GateKind]: { readonly context: (typeof contexts)[K]; readonly decision: (typeof decisions)[K] } }>;
@@ -233,6 +273,20 @@ export const gateDecisionSchemaDefs: Readonly<Record<string, z.ZodType>> = Objec
   local: localProvenance,
 });
 const envelopeBase = { schema_version: z.literal("1"), gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, phase_instance: z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u).refine((value) => { try { decodePhaseInstance(value); return true; } catch { return false; } }), subject_digest: digest, context_digest: digest, human_provenance: z.union([connectedProvenance, localProvenance]) } as const;
+
+export const baselineObservationRefV1Schema = z.object({
+  schema_version: z.literal("1"),
+  observation_kind: z.literal("projection-drift"),
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  observed_at_revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+  drift_digest: digest,
+}).strict();
+
+export function parseBaselineObservationRef(value: unknown): BaselineObservationRef {
+  assertPlainJson(value, "baseline observation reference");
+  return baselineObservationRefV1Schema.parse(value) as BaselineObservationRef;
+}
 
 const contractArms = Object.fromEntries(GATE_KINDS.map((kind) => [
   kind,
@@ -260,6 +314,7 @@ export const gateContractSchemaDefs: Readonly<Record<string, z.ZodType>> = Objec
   constitutionEditContext: contexts["constitution-edit"],
   commitAuthorizationContext: contexts["commit-authorization"],
   restoreCollisionContext: contexts["restore-collision"],
+  baselineAdoptionContext: contexts["baseline-adoption"],
   migrationAuditContext: contexts["migration-audit"],
   artifactApprovalDecision: decisions["artifact-approval"],
   designApprovalDecision: decisions["design-approval"],
@@ -269,6 +324,7 @@ export const gateContractSchemaDefs: Readonly<Record<string, z.ZodType>> = Objec
   constitutionEditDecision: decisions["constitution-edit"],
   commitAuthorizationDecision: decisions["commit-authorization"],
   restoreCollisionDecision: decisions["restore-collision"],
+  baselineAdoptionDecision: decisions["baseline-adoption"],
   migrationAuditDecision: decisions["migration-audit"],
   artifactApproval: contractArms["artifact-approval"],
   designApproval: contractArms["design-approval"],
@@ -278,6 +334,7 @@ export const gateContractSchemaDefs: Readonly<Record<string, z.ZodType>> = Objec
   constitutionEdit: contractArms["constitution-edit"],
   commitAuthorization: contractArms["commit-authorization"],
   restoreCollision: contractArms["restore-collision"],
+  baselineAdoption: contractArms["baseline-adoption"],
   migrationAudit: contractArms["migration-audit"],
 });
 
@@ -294,6 +351,7 @@ export const gateDecisionEnvelopeV1Schema = z.discriminatedUnion("kind", [
   z.object({ ...envelopeBase, kind: z.literal("constitution-edit"), payload: decisions["constitution-edit"] }).strict(),
   z.object({ ...envelopeBase, kind: z.literal("commit-authorization"), payload: decisions["commit-authorization"] }).strict(),
   z.object({ ...envelopeBase, kind: z.literal("restore-collision"), payload: decisions["restore-collision"] }).strict(),
+  z.object({ ...envelopeBase, kind: z.literal("baseline-adoption"), payload: decisions["baseline-adoption"] }).strict(),
   z.object({ ...envelopeBase, kind: z.literal("migration-audit"), payload: decisions["migration-audit"] }).strict(),
 ]);
 

@@ -7,6 +7,8 @@ import { pathSafeIdV1Schema, safeCodeV1Schema, safeIdV1Schema, safeIntegerV1Sche
 import type { GateKind, WaiverScope } from "./gates.js";
 import { GATE_KINDS } from "./gates.js";
 import type { PlainJsonValue } from "./plain-json.js";
+import type { ProjectionDigestRef } from "./durable-primitives.js";
+import { repositoryPathClaimV1Schema } from "./path-claims.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
 import { isStrictlyEarlierPlanningPhase, phaseInstanceIdV1Schema } from "./phase-instance.js";
 import { isSortedUniqueBy, tupleKey } from "./validators.js";
@@ -174,6 +176,21 @@ export type PlanningRestartRecord = {
 };
 
 /**
+ * One human-approved re-baseline of drifted projections to their observed bytes. Reconciliation
+ * overlays these newest-per-path over the retained result manifests' own projections, using
+ * `adopted_at_revision` as the ordering key — so a later implementation produce still supersedes
+ * an adoption for the paths it re-projects. `gate_id` must resolve to an archived
+ * `baseline-adoption` decision whose `subject_digest` is the drift digest the human saw.
+ */
+export type BaselineAdoptionRecord = {
+  readonly gate_id: PathSafeId;
+  /** `>= 1` (D8). The revision at which the adoption decision landed. */
+  readonly adopted_at_revision: SafeInteger;
+  /** SET — sorted by `path`, duplicates rejected. The observed digests the human adopted. */
+  readonly adopted_projections: readonly ProjectionDigestRef[];
+};
+
+/**
  * `expires` is the const `"task-complete"` — the narrowest representation of the only expiry this
  * project has. That is a *format* decision. Phase 12 records waiver scope; Phase 14 owns expiry
  * policy enforcement.
@@ -270,6 +287,8 @@ export type TaskStateV1 = {
   readonly human_revision_history?: readonly HumanRevisionRecord[];
   /** Sorted by `restart_id`; absent means no planning restart has occurred. */
   readonly restart_history?: readonly PlanningRestartRecord[];
+  /** Human-approved re-baselines of drifted projections; see `BaselineAdoptionRecord`. */
+  readonly baseline_adoptions?: readonly BaselineAdoptionRecord[];
   readonly last_transition?: LastTransition;
   readonly terminal?: TerminalState;
 };
@@ -431,6 +450,20 @@ export const planningRestartHumanProvenanceV1Schema = z.union([
   planningRestartServerAttestedProvenanceV1Schema,
 ]) as unknown as z.ZodType<PlanningRestartHumanProvenance>;
 
+// Task-state owns its own projection-ref mirror rather than $ref-ing result-manifest's def: this
+// schema catalogue stays self-contained, exactly like the shared reference shapes above.
+const adoptedProjectionRefV1Schema = z.object({
+  path: repositoryPathClaimV1Schema,
+  content_digest: sha256Digest,
+}).strict();
+
+export const baselineAdoptionRecordV1Schema = z.object({
+  gate_id: pathSafeIdV1Schema,
+  adopted_at_revision: positiveSafeInteger,
+  adopted_projections: z.array(adoptedProjectionRefV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("path")), "adopted projections must be sorted by path with no duplicates"),
+}).strict() as unknown as z.ZodType<BaselineAdoptionRecord>;
+
 export const planningRestartRecordV1Schema = z.object({
   restart_id: pathSafeIdV1Schema,
   source_phase_instance: phaseInstanceIdV1Schema,
@@ -502,12 +535,20 @@ export const taskStateV1Schema = z.object({
   restart_history: z.array(planningRestartRecordV1Schema)
     .refine((items) => isSortedUniqueBy(items, tupleKey("restart_id")), "restart_history must be sorted by restart_id with no duplicates")
     .optional(),
+  baseline_adoptions: z.array(baselineAdoptionRecordV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "baseline_adoptions must be sorted by gate_id with no duplicates")
+    .optional(),
   last_transition: lastTransitionV1Schema.optional(),
   terminal: z.enum(TERMINAL_STATES).optional(),
 }).strict().superRefine((state, context) => {
   state.restart_history?.forEach((restart, index) => {
     if (restart.restarted_at_revision > state.revision) {
       context.addIssue({ code: "custom", path: ["restart_history", index, "restarted_at_revision"], message: "restart revision cannot exceed the current state revision" });
+    }
+  });
+  state.baseline_adoptions?.forEach((adoption, index) => {
+    if (adoption.adopted_at_revision > state.revision) {
+      context.addIssue({ code: "custom", path: ["baseline_adoptions", index, "adopted_at_revision"], message: "baseline adoption revision cannot exceed the current state revision" });
     }
   });
   const pending = state.pending_human_revision;

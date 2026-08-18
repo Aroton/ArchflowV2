@@ -40,6 +40,7 @@
             "constitution-edit",
             "commit-authorization",
             "restore-collision",
+            "baseline-adoption",
             "migration-audit"
           ]
         },
@@ -100,6 +101,7 @@
             "constitution-edit",
             "commit-authorization",
             "restore-collision",
+            "baseline-adoption",
             "migration-audit"
           ]
         },
@@ -179,6 +181,7 @@
             "constitution-edit",
             "commit-authorization",
             "restore-collision",
+            "baseline-adoption",
             "migration-audit"
           ]
         },

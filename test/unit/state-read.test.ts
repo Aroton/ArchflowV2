@@ -130,11 +130,23 @@ describe("task config reader", () => {
     await mkdir(directory);
     expect(await readTaskConfig(resolved(directory, "task-config"))).toEqual({ kind: "unreadable" });
     const malformed = join(root, "malformed.yaml");
-    await writeFile(malformed, Uint8Array.from([0xc3, 0x28]));
-    expect(await readTaskConfig(resolved(malformed, "task-config"))).toEqual({ kind: "invalid" });
+    const malformedBytes = Uint8Array.from([0xc3, 0x28]);
+    await writeFile(malformed, malformedBytes);
+    // An unparseable read still carries the bytes' digest so a reader can tell a schema
+    // rejection of the exact pinned bytes from a changed config.
+    expect(await readTaskConfig(resolved(malformed, "task-config")))
+      .toEqual({ kind: "invalid", digest: sha256Bytes(malformedBytes) });
     const invalid = join(root, "invalid.yaml");
-    await writeFile(invalid, "schema_version: '1'\nroles:\n  producer:\n    model: ''\n    effort: low\n");
-    expect(await readTaskConfig(resolved(invalid, "task-config"))).toEqual({ kind: "invalid" });
+    const invalidBytes = new TextEncoder().encode("schema_version: '1'\nroles:\n  producer:\n    model: ''\n    effort: low\n");
+    await writeFile(invalid, invalidBytes);
+    // The retired producer key is accepted on read, but its shape still fails closed.
+    expect(await readTaskConfig(resolved(invalid, "task-config")))
+      .toEqual({ kind: "invalid", digest: sha256Bytes(invalidBytes) });
+    const retired = join(root, "retired-producer.yaml");
+    const retiredBytes = new TextEncoder().encode('schema_version: "1"\nroles:\n  producer:\n    model: gpt-example\n    effort: high\n');
+    await writeFile(retired, retiredBytes);
+    const retiredRead = await readTaskConfig(resolved(retired, "task-config"));
+    expect(retiredRead).toMatchObject({ kind: "valid", snapshot: { digest: sha256Bytes(retiredBytes) } });
     await expect(readTaskConfig(resolved(invalid, "task-state"))).rejects.toThrow(/task-config/u);
   });
 });
