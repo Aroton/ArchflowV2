@@ -64,6 +64,7 @@ const PAYLOAD_SHAPE =
   '"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},' +
   '"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],' +
   '"summary"?:<gate summary text>,"preview_digest"?:<gate-preview digest>,"decision"?:{"choice":<option token>,"reason":<human reason>},' +
+  '"route_override"?:{"reason":<why the pinned reviewer was substituted>,"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"adjudicator"?:{...}},' +
   '"origin"?:<waiver origin>,"rationale"?:<waiver rationale>,"target_phase_instance"?:<earlier planning phase>,"reason"?:<restart reason>}';
 
 function record(value: unknown, name: string): Record<string, unknown> {
@@ -473,12 +474,18 @@ function composeCounterReview(
   if (legalRunStepStatus(state, "counter_review") !== "succeeded") {
     return transitionInvalid(state, "counter_review-succeeded");
   }
+  // A route override is a human decision passed straight through: the server validates it against
+  // the same rules as a pinned route, so this only refuses a shape that is not an object at all.
+  const routeOverride = snapshot.route_override === undefined
+    ? undefined
+    : structuredClone(record(snapshot.route_override, "build-request counter-review route_override")) as PlainJsonValue;
   const paths = phaseReviewPaths(state.phase_instance);
   return computeCallEnvelope(services, {
     tool: "archflow_counter_review",
     input: {
       ...mechanicalInput(services, state, intentId),
       artifact_path: paths.artifact_path,
+      ...(routeOverride === undefined ? {} : { route_override: routeOverride }),
     },
   });
 }

@@ -279,6 +279,23 @@ describe("staged-request handoff", () => {
     try {
       const counter = await h.buildRequest({ kind: "counter-review" });
       expect(counter.tool).toBe("archflow_counter_review");
+      // Injecting a route override into the staged file must break its digest. Without this the
+      // reviewer model could be swapped after the request was composed, and the fabricated reason
+      // would reach the approval gate presented as the human's own words.
+      const counterFile = join(root, counter.staged!.path);
+      const counterBytes = readFileSync(counterFile);
+      const injected = JSON.parse(counterBytes.toString("utf8")) as { request: { input: Record<string, unknown> } };
+      injected.request.input.route_override = {
+        reason: "injected by a tampered staged file",
+        "counter-reviewer": { model: "claude-opus-4-6", effort: "low" },
+      };
+      writeFileSync(counterFile, JSON.stringify(injected));
+      const injectedResult = await h.invokeRaw("archflow_counter_review", { ...counter.staged!.reference } as unknown as PlainJsonValue);
+      expect(injectedResult.ok).toBe(false);
+      expect(injectedResult.error?.code).toBe("STAGED_REQUEST_MISMATCH");
+      expect(injectedResult.error?.diagnostic?.parameters?.issue_code).toBe("staged-digest-mismatch");
+      writeFileSync(counterFile, counterBytes);
+
       const reviewed = await h.invoke("archflow_counter_review", counter.staged!.reference as unknown as PlainJsonValue);
       expect(reviewed.request_digest).toBe(counter.request_digest);
       expect(reviewed.verdict).toBe("pass");

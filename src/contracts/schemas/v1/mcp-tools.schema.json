@@ -365,6 +365,80 @@
               },
               "artifact_path": {
                 "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
+              },
+              "route_override": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "$ref": "#/$defs/text"
+                  },
+                  "counter-reviewer": {
+                    "type": "object",
+                    "properties": {
+                      "model": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "effort": {
+                        "type": "string",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          "xhigh",
+                          "max",
+                          "ultra"
+                        ]
+                      },
+                      "provider": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "model",
+                      "effort"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "adjudicator": {
+                    "type": "object",
+                    "properties": {
+                      "model": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "effort": {
+                        "type": "string",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          "xhigh",
+                          "max",
+                          "ultra"
+                        ]
+                      },
+                      "provider": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "model",
+                      "effort"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ConfigV1 } from "../../src/contracts/config.js";
 import { EFFORT_VALUES } from "../../src/contracts/review.js";
-import { DispatchRoutingError, resolveDispatchRoute, type RoutingRole } from "../../src/dispatch/routing.js";
+import { DispatchRoutingError, resolveDispatchRoute, routeFromConfiguredRoute, type RoutingRole } from "../../src/dispatch/routing.js";
 
 const config = (roles: ConfigV1["roles"], overrides?: ConfigV1["overrides"]): ConfigV1 => ({
   schema_version: "1",
@@ -121,5 +121,21 @@ describe("dispatch routing", () => {
       "CONFIG_MODEL_UNSUPPORTED",
       { model: "gemini-3" },
     );
+  });
+});
+
+describe("route override validation", () => {
+  it("holds a substitute route to the same rules as a pinned one", () => {
+    expect(routeFromConfiguredRoute({ model: "claude-opus-4-6", effort: "high" }))
+      .toEqual({ adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "high" });
+    expect(routeFromConfiguredRoute({ model: "glm-5.3", effort: "high", provider: "zhipu" }))
+      .toEqual({ adapter: "claude-cli", family: "claude", model: "glm-5.3", effort: "high", provider: "zhipu" });
+  });
+
+  it("rejects the same substitute shapes a pinned route rejects", () => {
+    expectRoutingError(() => routeFromConfiguredRoute({ model: "not a safe id", effort: "high" }), "CONFIG_INVALID", { issue_code: "model-not-safe-id" });
+    expectRoutingError(() => routeFromConfiguredRoute({ model: "gpt-5.3-codex", effort: "high", provider: "zhipu" }), "CONFIG_INVALID", { issue_code: "provider-unsupported" });
+    expectRoutingError(() => routeFromConfiguredRoute({ model: "claude-opus-4-6", effort: "ultra" }), "CONFIG_INVALID", { issue_code: "effort-unsupported" });
+    expectRoutingError(() => routeFromConfiguredRoute({ model: "llama-4", effort: "high" }), "CONFIG_MODEL_UNSUPPORTED", { model: "llama-4" });
   });
 });

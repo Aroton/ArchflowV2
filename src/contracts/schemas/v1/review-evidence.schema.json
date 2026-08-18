@@ -127,6 +127,32 @@
         },
         "result_id": {
           "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+        },
+        "route_override": {
+          "type": "object",
+          "properties": {
+            "reason": {
+              "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+            },
+            "pinned_model": {
+              "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+            },
+            "pinned_effort": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+                "ultra"
+              ]
+            }
+          },
+          "required": [
+            "reason"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [

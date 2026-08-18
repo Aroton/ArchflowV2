@@ -114,6 +114,10 @@ function provenanceMetadata(evidence) {
 function renderReviewFinding(finding) {
   return [`### Finding ${visibleJsonString(finding.finding_id)}`, `severity: ${canonical(finding.severity)}`, `blocking: ${canonical(finding.blocking)}`, prose("summary", finding.summary), prose("evidence", finding.evidence), prose("suggested_resolution", finding.suggested_resolution)];
 }
+function renderRouteOverride(override) {
+  const displaced = override.pinned_model === void 0 ? ["pinned_route: none configured for this role"] : [`pinned_model: ${canonical(override.pinned_model)}`, `pinned_effort: ${canonical(override.pinned_effort)}`];
+  return ["", "## Route Override", ...displaced, prose("reason", override.reason)];
+}
 function renderReviewEvidence(value) {
   const evidence = value.evidence;
   const authenticated = authenticQualifiedEvidence(value, "review", evidence.assurance) || authenticVerifiedEvidence(value, { kind: "review", assurance: evidence.assurance });
@@ -134,6 +138,7 @@ function renderReviewEvidence(value) {
   ]), "", "## Findings"];
   for (const finding of evidence.findings) lines.push("", ...renderReviewFinding(finding));
   if (evidence.assurance === "degraded") lines.push("", "## Degraded Assurance", prose("reason", evidence.reason));
+  if (evidence.assurance === "server-attested" && evidence.route_override !== void 0) lines.push(...renderRouteOverride(evidence.route_override));
   return linesToBytes(lines);
 }
 function renderDisposition(disposition) {
@@ -187,6 +192,7 @@ function renderAdjudicationEvidence(value) {
   lines.push("", "## Drift Findings");
   for (const finding of evidence.drift_findings) lines.push("", `### Upstream ${visibleJsonString(finding.upstream_digest)}`, `drift: ${canonical(finding.drift)}`, `affected_claim_ids: ${canonical(finding.affected_claim_ids)}`, prose("rationale", finding.rationale));
   if (evidence.assurance === "degraded") lines.push("", "## Degraded Assurance", prose("reason", evidence.reason));
+  if (evidence.assurance === "server-attested" && evidence.route_override !== void 0) lines.push(...renderRouteOverride(evidence.route_override));
   return linesToBytes(lines);
 }
 var encoder2, ESCAPE, visibleJsonString, canonical, optional2, linesToBytes, metadata, prose;
@@ -23505,6 +23511,11 @@ var provenanceBase = rawReviewSchema.safeExtend({
   model: nonBlank,
   effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")])
 });
+var routeOverrideRecordSchema = external_exports.object({
+  reason: nonBlank,
+  pinned_model: nonBlank.optional(),
+  pinned_effort: external_exports.enum(EFFORT_VALUES).optional()
+}).strict();
 var serverAttestedReviewSchema = provenanceBase.safeExtend({
   assurance: external_exports.literal("server-attested"),
   adapter: external_exports.enum(ADAPTER_IDS),
@@ -23514,7 +23525,8 @@ var serverAttestedReviewSchema = provenanceBase.safeExtend({
   invocation_id: id,
   envelope_input_digest: digest2,
   observed_output_digest: digest2,
-  result_id: id
+  result_id: id,
+  route_override: routeOverrideRecordSchema.optional()
 }).strict();
 var degradedReviewSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank }).strict();
 var reviewEvidenceSchema = external_exports.discriminatedUnion("assurance", [serverAttestedReviewSchema, degradedReviewSchema]);
@@ -23623,7 +23635,7 @@ function parseAndDeriveAdjudication(value) {
 }
 var provenanceBase2 = derivedAdjudicationSchema.safeExtend({ model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]), model: nonBlank2, effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")]) });
 var agentSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("agent-declared") }).strict();
-var serverSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("server-attested"), adapter: external_exports.enum(ADAPTER_IDS), cli_version: nonBlank2, model_family: external_exports.enum(MODEL_FAMILIES), effort: external_exports.enum(EFFORT_VALUES), invocation_id: id2, envelope_input_digest: digest3, observed_output_digest: digest3, result_id: id2 }).strict();
+var serverSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("server-attested"), adapter: external_exports.enum(ADAPTER_IDS), cli_version: nonBlank2, model_family: external_exports.enum(MODEL_FAMILIES), effort: external_exports.enum(EFFORT_VALUES), invocation_id: id2, envelope_input_digest: digest3, observed_output_digest: digest3, result_id: id2, route_override: routeOverrideRecordSchema.optional() }).strict();
 var degradedSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank2 }).strict();
 var adjudicationEvidenceSchema = external_exports.discriminatedUnion("assurance", [agentSchema, serverSchema, degradedSchema]);
 function parseAdjudicationEvidence(value) {
@@ -23671,7 +23683,7 @@ var observationSource = Object.freeze({
     for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["role", binding.role], ["step", "counter_review"], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["rubric_digest", binding.rubric_digest], ["producer_family", binding.producer_family]]) assertEqual2(derived[key], expected, key);
     const raw_output_digest = digestBytes(bytes);
     const observation = createObservation(binding, bytes, raw_output_digest);
-    const evidence = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id });
+    const evidence = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...binding.route_override === void 0 ? {} : { route_override: binding.route_override } });
     return Object.freeze({ observation, evidence });
   },
   observeAdjudication(capability, observedOutputBytes) {
@@ -23684,7 +23696,7 @@ var observationSource = Object.freeze({
     if (!sameArray(derived.approved_upstream_digests, binding.approved_upstream_digests)) throw new TypeError("approved_upstream_digests do not match observation capability");
     const raw_output_digest = digestBytes(bytes);
     const observation = createObservation(binding, bytes, raw_output_digest);
-    const evidence = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id });
+    const evidence = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...binding.route_override === void 0 ? {} : { route_override: binding.route_override } });
     return Object.freeze({ observation, evidence });
   }
 });
@@ -25955,8 +25967,13 @@ function closedOperationFields(subject) {
     case "archflow_counter_review": {
       const fields = subject.operation_fields;
       if (subject.operation !== "counter-review") throw new TypeError("invalid archflow_counter_review operation");
-      exactFields(fields, ["artifact_path"]);
-      return { artifact_path: fields.artifact_path };
+      const expected = ["artifact_path"];
+      if (fields.route_override !== void 0) expected.push("route_override");
+      exactFields(fields, expected);
+      return {
+        artifact_path: fields.artifact_path,
+        ...fields.route_override === void 0 ? {} : { route_override: fields.route_override }
+      };
     }
     case "archflow_gate": {
       const fields = subject.operation_fields;
@@ -34314,6 +34331,43 @@ async function baselineRestoreOffered(dependencies, authority, state, driftedPro
 // src/state/production.ts
 import { lstat as lstat9, readFile as readFile4, readlink as readlink4 } from "node:fs/promises";
 
+// src/contracts/config.ts
+var REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"];
+var configRouteSchema = external_exports.object({
+  model: external_exports.string().min(1).regex(/\S/, "model must contain a non-whitespace character"),
+  effort: external_exports.enum(REASONING_EFFORTS),
+  // Optional cc-switch provider id; claude routes only. Unset means a direct
+  // CLI launch with no wrapper.
+  provider: external_exports.string().trim().min(1).regex(/\S/, "provider must contain a non-whitespace character").optional()
+}).strict();
+var configRolesSchema = external_exports.object({
+  // Retired; accepted on read only so configs pinned before the producer role was removed
+  // round-trip unchanged. The producer is the connected host; nothing consumes this.
+  producer: configRouteSchema.optional(),
+  "counter-reviewer": configRouteSchema.optional(),
+  adjudicator: configRouteSchema.optional()
+}).strict();
+var configOverridesSchema = external_exports.object({
+  explore: configRolesSchema.optional(),
+  prd: configRolesSchema.optional(),
+  design: configRolesSchema.optional(),
+  "phase-design": configRolesSchema.optional(),
+  "phase-impl": configRolesSchema.optional()
+}).strict();
+var configV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  roles: configRolesSchema,
+  overrides: configOverridesSchema.optional(),
+  max_attempts: external_exports.number().int().positive().safe().optional()
+}).strict();
+function parseConfigV1(value) {
+  assertPlainJson(value, "config");
+  return configV1Schema.parse(value);
+}
+function parseConfigYaml(source, label = "config.yaml") {
+  return parseConfigV1(parseSingleYamlDocument(source, label));
+}
+
 // src/contracts/durable-task-initialization.ts
 var sha256Digest6 = sha256DigestV1Schema;
 var taskInitializationV1Schema = external_exports.object({
@@ -34384,7 +34438,17 @@ var stateInputSchema = external_exports.object({ ...common2, phase_instance: pha
   }
 });
 var stagedReferenceInput = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, request_digest: digest8 }).strict();
-var counterReviewInputSchema = external_exports.object({ ...common2, artifact_path: taskPathClaimV1Schema }).strict();
+var overrideRoute = configRouteSchema.clone(configRouteSchema.def);
+var routeOverrideSchema = external_exports.object({
+  reason: text3,
+  "counter-reviewer": overrideRoute.optional(),
+  adjudicator: overrideRoute.optional()
+}).strict().superRefine((override, context2) => {
+  if (override["counter-reviewer"] === void 0 && override.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, adjudicator, or both" });
+  }
+});
+var counterReviewInputSchema = external_exports.object({ ...common2, artifact_path: taskPathClaimV1Schema, route_override: routeOverrideSchema.optional() }).strict();
 var humanGateChoiceSchema = external_exports.object({ choice: text3, reason: text3 }).strict();
 var gateInputSchema = external_exports.object({ ...common2, phase_instance: phase2, summary: text3, subject_digest: digest8, current_evidence: external_exports.unknown(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown(), preview_digest: digest8, decision: humanGateChoiceSchema }).strict().superRefine((input, context2) => {
   try {
@@ -35103,45 +35167,6 @@ function createProductionInputFingerprintResolver() {
 
 // src/state/read.ts
 import { constants as fsConstants5 } from "node:fs";
-
-// src/contracts/config.ts
-var REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"];
-var configRouteSchema = external_exports.object({
-  model: external_exports.string().min(1).regex(/\S/, "model must contain a non-whitespace character"),
-  effort: external_exports.enum(REASONING_EFFORTS),
-  // Optional cc-switch provider id; claude routes only. Unset means a direct
-  // CLI launch with no wrapper.
-  provider: external_exports.string().trim().min(1).regex(/\S/, "provider must contain a non-whitespace character").optional()
-}).strict();
-var configRolesSchema = external_exports.object({
-  // Retired; accepted on read only so configs pinned before the producer role was removed
-  // round-trip unchanged. The producer is the connected host; nothing consumes this.
-  producer: configRouteSchema.optional(),
-  "counter-reviewer": configRouteSchema.optional(),
-  adjudicator: configRouteSchema.optional()
-}).strict();
-var configOverridesSchema = external_exports.object({
-  explore: configRolesSchema.optional(),
-  prd: configRolesSchema.optional(),
-  design: configRolesSchema.optional(),
-  "phase-design": configRolesSchema.optional(),
-  "phase-impl": configRolesSchema.optional()
-}).strict();
-var configV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  roles: configRolesSchema,
-  overrides: configOverridesSchema.optional(),
-  max_attempts: external_exports.number().int().positive().safe().optional()
-}).strict();
-function parseConfigV1(value) {
-  assertPlainJson(value, "config");
-  return configV1Schema.parse(value);
-}
-function parseConfigYaml(source, label = "config.yaml") {
-  return parseConfigV1(parseSingleYamlDocument(source, label));
-}
-
-// src/state/read.ts
 var decoder3 = new TextDecoder("utf-8", { fatal: true });
 function deepFreeze4(value) {
   if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {
@@ -35532,11 +35557,7 @@ function assertSupportedEffort(adapter2, effort) {
     fail12(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
   }
 }
-function resolveDispatchRoute(config2, phaseKind2, role) {
-  const configured = config2.overrides?.[phaseKind2]?.[role] ?? config2.roles[role];
-  if (configured === void 0) {
-    return fail12(createProjectError("CONFIG_INVALID", { issue_code: "route-missing" }));
-  }
+function routeFromConfiguredRoute(configured) {
   if (!safeIdV1Schema.safeParse(configured.model).success) {
     return fail12(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
   }
@@ -35554,6 +35575,16 @@ function resolveDispatchRoute(config2, phaseKind2, role) {
     effort: configured.effort,
     ...configured.provider === void 0 ? {} : { provider: configured.provider }
   });
+}
+function configuredRoute(config2, phaseKind2, role) {
+  return config2.overrides?.[phaseKind2]?.[role] ?? config2.roles[role];
+}
+function resolveDispatchRoute(config2, phaseKind2, role) {
+  const configured = configuredRoute(config2, phaseKind2, role);
+  if (configured === void 0) {
+    return fail12(createProjectError("CONFIG_INVALID", { issue_code: "route-missing" }));
+  }
+  return routeFromConfiguredRoute(configured);
 }
 
 // src/review/adjudication.ts
@@ -37344,7 +37375,11 @@ async function computeTaskStatus(dependencies, authority) {
         producer_family: counter.producer_family,
         model_family: counter.model_family,
         model: counter.model,
-        effort: counter.effort
+        effort: counter.effort,
+        // Present only when a human substituted this review's route for the pinned one. It travels
+        // with the provenance because the gate correspondence is built from this block: without it
+        // the human sees which model reviewed but never that it was not the configured one.
+        ...counter.assurance === "server-attested" && counter.route_override !== void 0 ? { route_override: counter.route_override } : {}
       }),
       assessment
     });
@@ -39797,7 +39832,10 @@ function subjectFor(call, authority, inputFingerprint) {
         }
       };
     case "archflow_counter_review":
-      return { ...common3, tool: call.name, operation: "counter-review", operation_fields: { artifact_path: call.input.artifact_path } };
+      return { ...common3, tool: call.name, operation: "counter-review", operation_fields: {
+        artifact_path: call.input.artifact_path,
+        ...call.input.route_override === void 0 ? {} : { route_override: call.input.route_override }
+      } };
     case "archflow_gate": {
       const operation_fields = {
         phase_instance: call.input.phase_instance,
@@ -40297,7 +40335,7 @@ var BUILD_REQUEST_KINDS = Object.freeze([
   "advance",
   "restart"
 ]);
-var PAYLOAD_SHAPE = `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},"step"?:<pipeline step for kind running>,"document"?:{...},"implementation"?:{...},"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],"summary"?:<gate summary text>,"preview_digest"?:<gate-preview digest>,"decision"?:{"choice":<option token>,"reason":<human reason>},"origin"?:<waiver origin>,"rationale"?:<waiver rationale>,"target_phase_instance"?:<earlier planning phase>,"reason"?:<restart reason>}`;
+var PAYLOAD_SHAPE = `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},"step"?:<pipeline step for kind running>,"document"?:{...},"implementation"?:{...},"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],"summary"?:<gate summary text>,"preview_digest"?:<gate-preview digest>,"decision"?:{"choice":<option token>,"reason":<human reason>},"route_override"?:{"reason":<why the pinned reviewer was substituted>,"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"adjudicator"?:{...}},"origin"?:<waiver origin>,"rationale"?:<waiver rationale>,"target_phase_instance"?:<earlier planning phase>,"reason"?:<restart reason>}`;
 function record3(value, name) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${name} must be an object; expected ${PAYLOAD_SHAPE}`);
@@ -40612,12 +40650,14 @@ function composeCounterReview(services2, state, intentId, snapshot2) {
   if (legalRunStepStatus(state, "counter_review") !== "succeeded") {
     return transitionInvalid(state, "counter_review-succeeded");
   }
+  const routeOverride = snapshot2.route_override === void 0 ? void 0 : structuredClone(record3(snapshot2.route_override, "build-request counter-review route_override"));
   const paths = phaseReviewPaths(state.phase_instance);
   return computeCallEnvelope(services2, {
     tool: "archflow_counter_review",
     input: {
       ...mechanicalInput(services2, state, intentId),
-      artifact_path: paths.artifact_path
+      artifact_path: paths.artifact_path,
+      ...routeOverride === void 0 ? {} : { route_override: routeOverride }
     }
   });
 }
@@ -41112,7 +41152,7 @@ var LOCAL_COMMAND_CONTRACTS = Object.freeze({
   reconcile: { payload: '{"recorded_projections":[...],"current_projections":[...],"active_heads":{...}}', task: "required" },
   init: { payload: null, task: "ignored" },
   envelope: { payload: '{"tool":<tool name>,"input":<tool input>}', task: "required" },
-  "build-request": { payload: `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},...kind facts: none (initialize/counter-review/advance), "step" (running), "document"/"implementation" (produce), "dispositions":[...] (triage), "summary" (gate)}`, task: "required" },
+  "build-request": { payload: `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},...kind facts: none (initialize/advance), "route_override"? (counter-review, for a reviewer outage), "step" (running), "document"/"implementation" (produce), "dispositions":[...] (triage), "summary" (gate)}`, task: "required" },
   "manual-status": { payload: null, task: "required" },
   upgrade: { payload: '{"operation":"preview"|"stage"|"discard-stage",...legacy import facts}', task: "optional" }
 });

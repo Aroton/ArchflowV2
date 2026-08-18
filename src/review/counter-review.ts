@@ -17,13 +17,13 @@ import {
 } from "../contracts/mcp-tools.js";
 import { parseRepositoryPathClaim } from "../contracts/path-claims.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
-import type { ModelFamily, ReviewEvidence } from "../contracts/review.js";
+import type { ModelFamily, ReviewEvidence, RouteOverrideRecord } from "../contracts/review.js";
 import {
   mintAdjudicationObservation,
   mintReviewObservation,
   serializeDispatch,
 } from "../dispatch/cli.js";
-import { resolveDispatchRoute, type DispatchRoute } from "../dispatch/routing.js";
+import { configuredRoute, resolveDispatchRoute, routeFromConfiguredRoute, type DispatchRoute, type RoutingRole } from "../dispatch/routing.js";
 import type { TransactionAuthority } from "../state/authority.js";
 import { adjudicationReviewClaim, counterReviewClaim, type ResolvedTaskPath } from "../repository/paths.js";
 import {
@@ -251,6 +251,10 @@ async function planCounterReviewCommit(
  * config) — and, when the pinned constitution has active rules, the constitution review bound to
  * that fresh evidence — then retains the validated evidence atomically. A fail verdict remains a
  * successful result: it records blocking findings and never manufactures advancement.
+ *
+ * A call may carry a `route_override`, which substitutes the dispatched route for this call only
+ * so a reviewer CLI outage does not strand the task. The pinned config is never amended; the
+ * override is validated exactly like a pinned route and recorded on the evidence it produces.
  */
 export async function runCounterReview(
   dependencies: RunCounterReviewDependencies,
@@ -267,7 +271,31 @@ export async function runCounterReview(
   ) {
     throw new TypeError("counter-review subject is not derived from the server-owned request");
   }
-  const route = resolveDispatchRoute(input.config, input.phase_kind, "counter-reviewer");
+  // The pin is resolved only when no substitute was named for the role. Resolving it first would
+  // throw on exactly the configurations the override exists to relieve — a role the config never
+  // pinned, or one pinned at an effort its adapter rejects — and strand the task on a
+  // "repair-config" action against a file that cannot be repaired in-task.
+  const routeFor = (role: RoutingRole): DispatchRoute => {
+    const substitute = input.call.input.route_override?.[role];
+    return substitute === undefined
+      ? resolveDispatchRoute(input.config, input.phase_kind, role)
+      : routeFromConfiguredRoute(substitute);
+  };
+  // Recorded on the evidence only when the dispatched route actually displaced the pinned one,
+  // so the deviation and the human's reason for it are legible at the gate that reads it.
+  const overrideRecordFor = (role: RoutingRole): RouteOverrideRecord | undefined => {
+    const declared = input.call.input.route_override;
+    if (declared?.[role] === undefined) return undefined;
+    // Read rather than resolve: the displaced route is reported as configured, and a role with no
+    // pinned route at all records the reason alone rather than failing the dispatch.
+    const pinned = configuredRoute(input.config, input.phase_kind, role);
+    return Object.freeze({
+      reason: declared.reason,
+      ...(pinned === undefined ? {} : { pinned_model: pinned.model, pinned_effort: pinned.effort }),
+    });
+  };
+  const route = routeFor("counter-reviewer");
+  const reviewOverride = overrideRecordFor("counter-reviewer");
   // The server stamps the durable attempt counter into the child-visible subject from the same
   // transaction authority the dispatch runs under, so the round number is never a caller claim.
   const subject: DispatchSubject = Object.freeze({
@@ -296,6 +324,7 @@ export async function runCounterReview(
     route,
     envelope_input_digest: envelope.digest,
     extracted_output_bytes: dispatched.extracted_output_bytes,
+    ...(reviewOverride === undefined ? {} : { route_override: reviewOverride }),
   });
   const prepared = await dependencies.prepare_evidence(
     observed.evidence,
@@ -312,7 +341,8 @@ export async function runCounterReview(
     // both are installed by the one transaction below.
     const derivedSet = deriveEvidenceSetFromCounter(observed.evidence);
     const setDigest = derivedSet.current_evidence_set.set_digest;
-    const constitutionRoute = resolveDispatchRoute(input.config, input.phase_kind, "adjudicator");
+    const constitutionRoute = routeFor("adjudicator");
+    const constitutionOverride = overrideRecordFor("adjudicator");
     const constitutionSubject = Object.freeze({
       task_id: input.envelope.subject.task_id,
       phase_instance: input.envelope.subject.phase_instance,
@@ -344,6 +374,7 @@ export async function runCounterReview(
         route: constitutionRoute,
         envelope_input_digest: constitutionEnvelope.digest,
         extracted_output_bytes: constitutionDispatched.extracted_output_bytes,
+        ...(constitutionOverride === undefined ? {} : { route_override: constitutionOverride }),
       });
       constitutionEvidence = crossCheckRuleFindings(
         plan.registry,
