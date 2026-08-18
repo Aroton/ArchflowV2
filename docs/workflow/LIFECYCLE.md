@@ -113,6 +113,17 @@ These rules recur across every skill and are enforced by the server wherever mec
 - **Waivers are narrow.** A `waiver-requested` decision is not approval; a granted waiver covers one rule version + one subject digest + one task, and evaporates on any change.
 - **Fail closed, honestly.** With the MCP server unavailable nothing records progress — degraded mode is a read-only status, not an offline workflow; `repair-required` states never become progress; "task complete" means the last planned phase is committed — it does not imply QA, staging, or release.
 
+## Merging main into a task branch
+
+Task branches live long enough that merging `main` becomes routine, and the design intends it to be a non-event: every pin reads either the task's own files or the immutable `policy_base_commit` tree, never `HEAD`, so a merge that does not touch `.archflow/` changes no pinned digest and trips no baseline check. The workflow graph, constitution, and routing config a task answers to are exactly what they were before the merge; status simply continues the current phase.
+
+Two windows need care, and both are about commit proofs, not pins:
+
+- **Do not merge between an approval and its authorized commit.** Design `design-approval` and implementation `commit-authorization` bind the commit that was `HEAD` when the human decided, and the proof requires the authorized commit to be its direct child with `HEAD` still in place. A merge in that window moves `HEAD`, the milestone can no longer be recognized, and status correctly refuses to re-offer a commit that cannot succeed — the decision is taken again against the new baseline. Merge before opening the gate, or after the authorized commit has landed.
+- **During phase implementation, merged files are ordinary incoming changes.** The implementation proof only requires the approved base to remain an ancestor, so a merge is safe mid-implementation; but merged files surface in the undeclared-change scan and must be folded into the declared outputs (or the phase design revised) before the final diff is authorized.
+
+If a merge does conflict inside `.archflow/` — only possible when both branches carry it, for example two task branches — `.gitattributes` marks those files binary: resolve by taking one side wholesale rather than merging line-by-line, because a hand-merged state file matches no recorded digest.
+
 ## Where this is heading
 
 The lifecycle above is the current, MCP-backed workflow; the legacy skill-only flow it replaced lives in git history. For auditing which parts of the machinery earn their weight, start with `../COMPLEXITY.md`.
