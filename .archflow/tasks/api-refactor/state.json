@@ -85,6 +85,13 @@
       "subject_digest": "58afab86f17dcdf7eaaddb671501306b156048a96e49adb880a8d676bc83fb70"
     },
     {
+      "decision_digest": "7c3a1605089619a3ec264fb5f669144bde5ee4baa65f7853233f72b054859cd5",
+      "gate_id": "g-c8edc096a71bc0e1fd8d21755ad023c29b1182a2d8fa34c1dbc58ef10ee5bb7e",
+      "gate_kind": "design-approval",
+      "resolved_at_revision": 205,
+      "subject_digest": "7c3d6fb873e43b365f59663c74ffa07a0b7c867202ad481d749e2a63a0bad14f"
+    },
+    {
       "decision_digest": "382bd97bcc82a481adeb6bdbe3830530b1fa681f364b909ca1dd547bb42c1c09",
       "gate_id": "g-e1de491346eff8a6d4550d83f924e61c78cdde7da4b3cea08bf5ce70d74534fb",
       "gate_kind": "design-approval",
@@ -113,7 +120,7 @@
       "subject_digest": "801652c7f12171429cc26bb6b599864818f4b0867225b00226f21631936b0153"
     }
   ],
-  "attempt": 1,
+  "attempt": 3,
   "authoritative_results": [
     {
       "input_fingerprint": "21230fe376905f962767c385973884ddef7d9aeed77ec2a98b23c52f8fd9ac29",
@@ -225,6 +232,34 @@
       "phase_instance": "phase-design-3",
       "result_digest": "e3e2788f36d478d17acc4ef2f0e0eaa8cf24e1b2941dcc7414b4f2b95763c35d",
       "result_id": "state-result-d249b205d6e62ff440c3cf74c90bb3b2",
+      "step": "triage"
+    },
+    {
+      "input_fingerprint": "c3995439b1e516197c6c50a101dcfa2712e855a67971726bb14c5ab54bcf1ef4",
+      "phase_instance": "phase-design-4",
+      "result_digest": "e3fe727d7531b6c87fa8302d89f9e87c7c2217338ba3bceb7425ab198f5e1f94",
+      "result_id": "adjudication-result-8d1e05921223e19237f83598328599fd",
+      "step": "adjudicate"
+    },
+    {
+      "input_fingerprint": "c3995439b1e516197c6c50a101dcfa2712e855a67971726bb14c5ab54bcf1ef4",
+      "phase_instance": "phase-design-4",
+      "result_digest": "7ca213c431f89231eb1cb8154a744785403d3fc06b9224b30fce55ccefc8cd5d",
+      "result_id": "result-fb05cd5cf3cb5895d15ad2121a9f874c",
+      "step": "counter_review"
+    },
+    {
+      "input_fingerprint": "448252f3f50c7ba3a14901bb4aec627b34861b2b8e941aa5643d0e0cdf4c6ef7",
+      "phase_instance": "phase-design-4",
+      "result_digest": "a4015b063c796a0763638b2ec806a119831501562dccda3f3a155294bb6735c5",
+      "result_id": "state-result-eeabf3ce2d05b446cddbcf1eec76fd2f",
+      "step": "produce"
+    },
+    {
+      "input_fingerprint": "c3995439b1e516197c6c50a101dcfa2712e855a67971726bb14c5ab54bcf1ef4",
+      "phase_instance": "phase-design-4",
+      "result_digest": "9bbc7296426b221237a54eb22737391d1db7e1b6489914b7865cb70eeaf93598",
+      "result_id": "state-result-a89f364e302e09feb8610b834168bf8b",
       "step": "triage"
     },
     {
@@ -621,33 +656,55 @@
     }
   ],
   "initialization_digest": "30babbe4e47c17babce8db5b51f4774a68539757589276f7948c8f74ae62b908",
-  "input_fingerprint": "4ca201987c3f682ea7eddae386e4aa244a513373c6c978737e782bb236d52259",
+  "input_fingerprint": "c3995439b1e516197c6c50a101dcfa2712e855a67971726bb14c5ab54bcf1ef4",
   "last_transition": {
-    "input_fingerprint": "4ca201987c3f682ea7eddae386e4aa244a513373c6c978737e782bb236d52259",
-    "intent_id": "advance-20260818T065642-2bc5",
-    "operation": "record-state-boundary",
+    "input_fingerprint": "c3995439b1e516197c6c50a101dcfa2712e855a67971726bb14c5ab54bcf1ef4",
+    "intent_id": "gate-20260818T152631-3a08",
+    "operation": "gate",
     "outcome": {
-      "path": "state.json",
-      "request_digest": "b52d1d2c25e9c57d6bb9438cdbee9eb0fdee0fdd48f250b8dfed583cb9ced79e",
-      "revision": 186,
-      "status": "running"
+      "decision": {
+        "context_digest": "965437895ed0ee6e0a5fdc417775c7e3c4df3415fc0165bef7d59c6ba16b6c00",
+        "gate_id": "g-c8edc096a71bc0e1fd8d21755ad023c29b1182a2d8fa34c1dbc58ef10ee5bb7e",
+        "human_provenance": {
+          "actor_class": "human",
+          "assurance": "declared-local-trace",
+          "channel": "connected-host",
+          "connection_id": "connection-1",
+          "decision_event_id": "eabe844b-d1f5-4023-87b2-d35ace92e294",
+          "recorded_at": "2026-08-18T15:26:41.343Z",
+          "request_id_digest": "2db8f98f5fa1bc8cdc6de154722e7b7be3cee21ddd8cf56b2a42e8680efd8ef4",
+          "schema_version": "1"
+        },
+        "kind": "design-approval",
+        "payload": {
+          "decision": "approve",
+          "reason": "approve and commit"
+        },
+        "phase_instance": "phase-design-4",
+        "schema_version": "1",
+        "subject_digest": "7c3d6fb873e43b365f59663c74ffa07a0b7c867202ad481d749e2a63a0bad14f",
+        "task_id": "api-refactor"
+      },
+      "kind": "design-approval",
+      "notes": "approve and commit",
+      "revision": 205
     },
-    "outcome_digest": "27b666b16d28b7e752977d8593f1a25c3a4729480153e3bf33498b27bfec3d68",
-    "prior_revision": 185,
-    "request_digest": "b52d1d2c25e9c57d6bb9438cdbee9eb0fdee0fdd48f250b8dfed583cb9ced79e",
-    "result_id": "state-result-3caa9e1433764df281fba4723cbf6019",
-    "resulting_revision": 186,
+    "outcome_digest": "ad0b0736d239c899cf7ddc46a6edc089d4a6f327193c886923df4473318abbdf",
+    "prior_revision": 204,
+    "request_digest": "400dce8c58f926523a78197caea2a45a013dda67351be66a2caea5f964a5d4b1",
+    "result_id": "g-c8edc096a71bc0e1fd8d21755ad023c29b1182a2d8fa34c1dbc58ef10ee5bb7e",
+    "resulting_revision": 205,
     "schema_version": "1",
-    "tool": "archflow_state"
+    "tool": "archflow_gate"
   },
   "phase_instance": "phase-design-4",
   "planned_final_phase": 10,
   "policy_base_commit": "8dad5260e31368b45da85bad748704d9a80b9df3",
   "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
-  "revision": 186,
+  "revision": 205,
   "schema_version": "1",
-  "status": "running",
-  "step": "produce",
+  "status": "succeeded",
+  "step": "triage",
   "task_id": "api-refactor",
   "waivers": [],
   "workflow_digest": "3f5f7536f19219fbf4ade78aea07c93d22d03057ce2ed83d532e25a54a8aab9a"

@@ -1,0 +1,109 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 200,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 18642320
+  },
+  "artifact_digest": "97b094bdd592dbf1de26650e14d6afde5df32d4a5bde695f7c976d3d3e23790c",
+  "input_fingerprint": "c3995439b1e516197c6c50a101dcfa2712e855a67971726bb14c5ab54bcf1ef4",
+  "outputs": [],
+  "phase_instance": "phase-design-4",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-8d1e05921223e19237f83598328599fd",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [],
+      "assurance": "server-attested",
+      "cli_version": "2.1.234",
+      "constitution": "pass",
+      "drift": "aligned",
+      "drift_findings": [],
+      "effort": "medium",
+      "envelope_input_digest": "f326463f9075ed066d6ec24bb5d64809fa3387741adad264b70b0cac63eed2bd",
+      "input_fingerprint": "c3995439b1e516197c6c50a101dcfa2712e855a67971726bb14c5ab54bcf1ef4",
+      "invocation_id": "adjudication-invocation-4acc681f5d48c9a6cefc9c7504c2a538",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "3fbff39b2994fb9f3a526cfd22e90bc48b9f30448a0a4a40fc27bc7e4afc07e2",
+      "phase_instance": "phase-design-4",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-8d1e05921223e19237f83598328599fd",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "The document writes no implementation code and Section 10 pins that implementation may begin only after this exact design is independently reviewed, explicitly approved by the user, committed through the authorized task-local milestone, and durable status advances to phase-impl-4. Departures from the approved parent plan are surfaced and re-entered rather than taken silently: Section 1.1 records the verified no-constitution-adapter narrowing (confirmed against the repository — skills/archflow-constitution/SKILL.md names no MCP tool or archflow-local command), and Section 4.2 step 4 records the upgrade-commit-confirmation correction with the parent design updated in the same change (Section 5.2 file scope). Chunk ordering (Section 6) keeps dependent work behind its governing authority: the migration-audit composer arm and its journey land in Chunk A before any retirement in Chunk C, and Section 10 requires implementation notes recording any deviation from these pinned interfaces.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The artifact is the Phase 4 phase design; Section 10 governs when implementation may begin, and Sections 1.1, 4.2 step 4, and 5.2 change or narrow parent-document content (the task design's Section 3.5 upgrade flow and the 'narrow constitution adapter' scope statement)."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Authority remains explicitly recorded and bound to the exact subject. Adoption is gated by the human's approval of the exact preview (approved_preview_digest binding before stage) and later by the one migration-audit gate opened through the skill-authored gate-summary and resolved by the existing decision-archive/decision-settle machinery with the server-issued choice and human reason. The absent second commit prompt is not inferred authority: acceptance of the migration-audit gate is itself the explicitly recorded human decision for that exact import subject, matching the established design-milestone rule, while PRD R8's separate pre-commit confirmation continues to govern implementation commits. Section 7 closes the remaining hole by forbidding any acceptance test that infers approval, adopts an import without the staged approved preview, or creates a commit without the exact durable authority the workflow already requires; Section 5.4's crash coverage forbids re-prompting or a second decision. Retirement removes advertisement and handlers only, leaving gate archives and approval re-authentication intact.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "Section 4.2 step 4 makes migration-audit acceptance the import-commit authority with 'requires_human_confirmation: false'; Sections 4.2, 5.4, and 7 govern gate opening, decision recording, and adoption authority."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Non-success states stay visible with a safe next action. Server unavailability and a task reported missing both fall back to read-only manual-status classification, which still surfaces upgrade-staged and upgrade-restart-required; tampered or replaced staged bytes fail closed; conflicting or invalid decision archives keep the existing blocked/inspect projection; crash cuts at the adoption transaction and the gate archive/settle boundary must converge without duplicate effects. The document is honest about its own limits and evidence: Section 1.1 records a verified scope narrowing instead of quietly dropping a parent commitment, Section 3.1 distinguishes internal services that survive retirement from old-surface-only modules, Section 4.6's real-host suite is opt-in and outside npm run check with digest-bound recorded artifacts rather than presented as continuous proof, and Section 7 requires recording any deleted module that turns out to have a live consumer.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "Section 4.2 step 5 and 4.3 pin the degraded manual-status ladder; Sections 5.4, 7, and 9 pin fail-closed behavior for tampered staged bytes, crash cuts, and conflicting authority; Section 4.6 pins opt-in real-host evidence."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Subject and task binding are preserved. Adoption runs 'archflow-local upgrade adopt --task <task>' over the existing runStateInitialization transaction against the staged legacy-import-initialization artifact, with unexpected staged-bytes mismatch failing closed and replay handled by existing transaction machinery. The migration-audit gate reuses openDurableGate's existing deep context validation (verified present in src/state/gates.ts and the durable gate contracts) rather than accepting client-supplied bindings; the composer arm derives the request from the same facts.migration_audit authority the legacy template used. Commit facts project the single task-local root as a one-element paths list, so the authorized scope cannot cross task boundaries. Retirement touches advertisement and handlers only — TOOL_NAMES, gate archives, receipts, and archflow-local provenance channels remain readable history — and Section 8 criterion 5 plus the retained legacy-seeded projection matrix require existing durable tasks and seeded checkpoints to keep projecting and operating.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "Section 4.2 step 2 adopts a staged legacy import into a named task; Section 4.1 and 5.2 retire tools while retaining durable vocabulary; Section 4.3 governs task selection in the status skill; Section 8 criterion 5 pins continued projection of existing durable tasks."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "bc1be731114ac7b5051c96ba887b9e378ff71070920b821b13e0de8c2c7fbf9b",
+      "step": "adjudicate",
+      "subject_digest": "7c3d6fb873e43b365f59663c74ffa07a0b7c867202ad481d749e2a63a0bad14f",
+      "task_id": "api-refactor",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "api-refactor"
+}

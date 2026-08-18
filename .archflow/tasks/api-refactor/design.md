@@ -498,14 +498,17 @@ flowchart TD
     T -- "Revise" --> U(["archflow_apply: enter requested revision write window"])
     U --> O
     T -- "Accept" --> V["Client shows the exact task-local import commit"]
-    V --> W{"Human confirms the commit"}
-    W --> X["Client commits; never pushes automatically"]
+    V --> X["Client commits; never pushes automatically"]
     X --> Y(["archflow_status: observe commit proof"])
     Y --> Z["Report the exact phase-design or phase-impl resume skill"]
 ```
 
-The newly invoked resume skill consumes the offered hand-off. Preview approval, migration-audit
-acceptance, and commit confirmation remain distinct human decisions.
+The newly invoked resume skill consumes the offered hand-off. Preview approval and
+migration-audit acceptance remain distinct human decisions. Migration-audit acceptance is
+the import-commit authority under the same milestone rule as design approval — the client
+shows the exact commit and creates it without a second durable confirmation, matching the
+shipped input-free commit behavior; PRD R8's explicit pre-commit confirmation applies to
+implementation commits, not import milestones.
 
 ## 4. Public contracts
 
