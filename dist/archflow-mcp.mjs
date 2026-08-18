@@ -40428,6 +40428,9 @@ var configRouteSchema = external_exports.object({
   provider: external_exports.string().trim().min(1).regex(/\S/, "provider must contain a non-whitespace character").optional()
 }).strict();
 var configRolesSchema = external_exports.object({
+  // Retired; accepted on read only so configs pinned before the producer role was removed
+  // round-trip unchanged. The producer is the connected host; nothing consumes this.
+  producer: configRouteSchema.optional(),
   "counter-reviewer": configRouteSchema.optional(),
   adjudicator: configRouteSchema.optional()
 }).strict();
@@ -40542,7 +40545,7 @@ async function readTaskConfig(path2) {
       snapshot: Object.freeze({ bytes: read.bytes, digest: sha256Bytes(read.bytes) })
     });
   } catch {
-    return Object.freeze({ kind: "invalid" });
+    return Object.freeze({ kind: "invalid", digest: sha256Bytes(read.bytes) });
   }
 }
 

@@ -34721,6 +34721,9 @@ var configRouteSchema = external_exports.object({
   provider: external_exports.string().trim().min(1).regex(/\S/, "provider must contain a non-whitespace character").optional()
 }).strict();
 var configRolesSchema = external_exports.object({
+  // Retired; accepted on read only so configs pinned before the producer role was removed
+  // round-trip unchanged. The producer is the connected host; nothing consumes this.
+  producer: configRouteSchema.optional(),
   "counter-reviewer": configRouteSchema.optional(),
   adjudicator: configRouteSchema.optional()
 }).strict();
@@ -34804,7 +34807,7 @@ async function readTaskConfig(path2) {
       snapshot: Object.freeze({ bytes: read.bytes, digest: sha256Bytes(read.bytes) })
     });
   } catch {
-    return Object.freeze({ kind: "invalid" });
+    return Object.freeze({ kind: "invalid", digest: sha256Bytes(read.bytes) });
   }
 }
 
@@ -35640,7 +35643,11 @@ function adjudicationGateSatisfied(state, retained, subject, gate) {
       assertAuthenticatedGateApproval(authenticated);
       return authenticated.approval.gate_kind === "design-approval" && authenticated.approval.subject_digest === subject.subject_digest && authenticated.request.kind === "design-approval" && authenticated.request.phase_instance === state.phase_instance && authenticated.request.subject_digest === subject.subject_digest && authenticated.request.current_evidence.set_digest === deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest && authenticated.decision.envelope.payload.decision === "approve";
     });
-    if (designApproval) return true;
+    const migrationApproval = (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
+      assertAuthenticatedGateApproval(authenticated);
+      return authenticated.approval.gate_kind === "migration-audit" && authenticated.approval.subject_digest === subject.subject_digest && authenticated.request.kind === "migration-audit" && authenticated.request.phase_instance === state.phase_instance && authenticated.request.subject_digest === subject.subject_digest && authenticated.request.current_evidence.set_digest === deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest && authenticated.decision.envelope.payload.decision === "accept-import-audit";
+    });
+    if (designApproval || migrationApproval) return true;
   }
   const contextDigest = computeGateContextDigest(gate.kind, gate.context);
   const evidence = Object.freeze({
@@ -35879,6 +35886,14 @@ function deriveNextAction(input) {
     return input.repository_initialized ? action("create-task", "Create durable state for this task.", false) : action("initialize-repository", "Initialize ArchFlow in this repository.", false);
   }
   if (input.config_verified !== true) {
+    if (input.config_schema_unsupported === true) {
+      return action(
+        "upgrade-tooling",
+        "The task's pinned configuration bytes are exactly the recorded ones, but this installed ArchFlow version cannot parse their schema; restoring or editing the file cannot fix this. Resume the task with tooling that accepts the pinned configuration, or restart it as a new task under the current schema.",
+        true,
+        state
+      );
+    }
     return action(
       "restore-pinned-config",
       "Restore the task's digest-pinned configuration before continuing; an intentional configuration change requires a new task or the explicit upgrade flow.",
@@ -36867,8 +36882,15 @@ async function computeTaskStatus(dependencies, authority) {
   let parsedConfig;
   try {
     const read = await dependencies.read_config(authority.config);
-    if (read.kind !== "valid") {
-      config2 = unavailableConfig(state.config_digest, void 0, `config-${read.kind}`);
+    if (read.kind === "invalid" && read.digest === state.config_digest) {
+      config2 = unavailableConfig(state.config_digest, read.digest, "pinned-config-schema-unsupported");
+      blockers.push("pinned-config-schema-unsupported");
+    } else if (read.kind !== "valid") {
+      config2 = unavailableConfig(
+        state.config_digest,
+        read.kind === "invalid" ? read.digest : void 0,
+        `config-${read.kind}`
+      );
       blockers.push(`config-${read.kind}`);
     } else {
       const verified = verifyPinnedConfig(state.config_digest, read.snapshot.bytes);
@@ -37236,6 +37258,7 @@ async function computeTaskStatus(dependencies, authority) {
     repository_initialized: true,
     state,
     config_verified: config2.verified,
+    ...config2.verified !== true && config2.issue === "pinned-config-schema-unsupported" ? { config_schema_unsupported: true } : {},
     ...statusReconciliation === void 0 ? {} : { reconciliation_findings: statusReconciliation.findings },
     reconciliation_blocking_reasons: Object.freeze([
       ...reconciliationBlockers,

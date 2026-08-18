@@ -3508,7 +3508,7 @@
       ]
     },
     "src/contracts/config.ts": {
-      "bytes": 1897,
+      "bytes": 2116,
       "format": "esm",
       "imports": [
         {
@@ -5957,7 +5957,7 @@
       ]
     },
     "src/mcp/handlers/session.ts": {
-      "bytes": 3976,
+      "bytes": 4116,
       "format": "esm",
       "imports": [
         {
@@ -6730,7 +6730,7 @@
       ]
     },
     "src/review/fixed-point.ts": {
-      "bytes": 24533,
+      "bytes": 25470,
       "format": "esm",
       "imports": [
         {
@@ -7853,7 +7853,7 @@
       ]
     },
     "src/state/next-action.ts": {
-      "bytes": 16085,
+      "bytes": 16705,
       "format": "esm",
       "imports": [
         {
@@ -8028,7 +8028,7 @@
       ]
     },
     "src/state/read.ts": {
-      "bytes": 4771,
+      "bytes": 5036,
       "format": "esm",
       "imports": [
         {
@@ -8371,7 +8371,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 60825,
+      "bytes": 61542,
       "format": "esm",
       "imports": [
         {
@@ -8753,7 +8753,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1668872,
+      "bytes": 1670734,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -9722,7 +9722,7 @@
           "bytesInOutput": 2816
         },
         "src/contracts/config.ts": {
-          "bytesInOutput": 1463
+          "bytesInOutput": 1682
         },
         "src/contracts/constitution.ts": {
           "bytesInOutput": 2258
@@ -9890,7 +9890,7 @@
           "bytesInOutput": 3838
         },
         "src/review/fixed-point.ts": {
-          "bytesInOutput": 13091
+          "bytesInOutput": 13798
         },
         "src/review/rubrics.ts": {
           "bytesInOutput": 10588
@@ -9950,7 +9950,7 @@
           "bytesInOutput": 2300
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 9435
+          "bytesInOutput": 9890
         },
         "src/state/phase-documents.ts": {
           "bytesInOutput": 4683
@@ -9962,7 +9962,7 @@
           "bytesInOutput": 13691
         },
         "src/state/read.ts": {
-          "bytesInOutput": 2453
+          "bytesInOutput": 2486
         },
         "src/state/reconciliation-discovery.ts": {
           "bytesInOutput": 8008
@@ -9986,7 +9986,7 @@
           "bytesInOutput": 1353
         },
         "src/state/status.ts": {
-          "bytesInOutput": 40172
+          "bytesInOutput": 40620
         },
         "src/state/transitions.ts": {
           "bytesInOutput": 982
@@ -10000,7 +10000,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2535242,
+      "bytes": 2535494,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -10962,7 +10962,7 @@
           "bytesInOutput": 2816
         },
         "src/contracts/config.ts": {
-          "bytesInOutput": 1463
+          "bytesInOutput": 1682
         },
         "src/contracts/constitution.ts": {
           "bytesInOutput": 2258
@@ -11289,7 +11289,7 @@
           "bytesInOutput": 13682
         },
         "src/state/read.ts": {
-          "bytesInOutput": 2453
+          "bytesInOutput": 2486
         },
         "src/state/request.ts": {
           "bytesInOutput": 3462
