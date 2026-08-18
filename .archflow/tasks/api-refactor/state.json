@@ -50,6 +50,13 @@
       "subject_digest": "950d82b40f6b4a4068dba6776fb9e9494d553c2ff2ac45d75219eef18f5b7e35"
     },
     {
+      "decision_digest": "64bd528a4184d7acd7cb608a4b4a3e837487bb6d7a12d0ab1c9833eb9a30451a",
+      "gate_id": "g-411a45b23b2eab3d55b60ff42f701b5b406d8109a864cba479240ee83e2a2d04",
+      "gate_kind": "commit-authorization",
+      "resolved_at_revision": 185,
+      "subject_digest": "58afab86f17dcdf7eaaddb671501306b156048a96e49adb880a8d676bc83fb70"
+    },
+    {
       "decision_digest": "d0f4f6330e54e88a3d24528fffc6c494e2fb47efbdd39ddaf64307e64e570668",
       "gate_id": "g-7c9286cd2b9efe35e1b4d7e718383f05b68ed611ffe89028b438c7e450a66c20",
       "gate_kind": "design-approval",
@@ -71,11 +78,25 @@
       "subject_digest": "2b659b48535b34239f312523eeabc3853d72943995a6f9b2f99887692ab3b285"
     },
     {
+      "decision_digest": "349f08466f04624b66e631b89f91dab9e37dfed1dec596b140e87201e01e982e",
+      "gate_id": "g-bc529ccc4f8b936b2d699e47338b157be0f2da6c56d92f44a121b026217aeb2b",
+      "gate_kind": "constitution-review",
+      "resolved_at_revision": 183,
+      "subject_digest": "58afab86f17dcdf7eaaddb671501306b156048a96e49adb880a8d676bc83fb70"
+    },
+    {
       "decision_digest": "382bd97bcc82a481adeb6bdbe3830530b1fa681f364b909ca1dd547bb42c1c09",
       "gate_id": "g-e1de491346eff8a6d4550d83f924e61c78cdde7da4b3cea08bf5ce70d74534fb",
       "gate_kind": "design-approval",
       "resolved_at_revision": 114,
       "subject_digest": "26560cd0a5ba139c5fca1249085b70a4cc2324d2fb10f5772a997d3885da9545"
+    },
+    {
+      "decision_digest": "8f867ae83cdd5eadbf89cab1bd07e4337ebc5d0fee191a58cf4bca0e88aa7855",
+      "gate_id": "g-ea1d10cca5bb497cccc79ef77b949afcd5360ebd92fe047eeced4af2978296b4",
+      "gate_kind": "constitution-review",
+      "resolved_at_revision": 175,
+      "subject_digest": "96b8f2f1efd8b9e4e4fae0b935c357d46ce0ac345a411f35f632009b8b0b5ce5"
     },
     {
       "decision_digest": "043ee9e36d423efb749a33315371c218f8764f08b90adaa17f335b3350234c22",
@@ -92,7 +113,7 @@
       "subject_digest": "801652c7f12171429cc26bb6b599864818f4b0867225b00226f21631936b0153"
     }
   ],
-  "attempt": 2,
+  "attempt": 1,
   "authoritative_results": [
     {
       "input_fingerprint": "21230fe376905f962767c385973884ddef7d9aeed77ec2a98b23c52f8fd9ac29",
@@ -260,6 +281,34 @@
       "phase_instance": "phase-impl-2",
       "result_digest": "5b9f8f58798eb6e9eafce280611ce026d1470eb478d4bd9fc2ffcaca88a304ec",
       "result_id": "state-result-03a18aa647e1fc7f8fb81f18ce5284d7",
+      "step": "triage"
+    },
+    {
+      "input_fingerprint": "dbb90487e38f52b4c6fe3f9107295f251c411e78f78b199482f911fa4baaeec4",
+      "phase_instance": "phase-impl-3",
+      "result_digest": "5e5aeef66dc68ef1cbacb1436b13ffc672a83d1044b2e723d3f305db94b571ea",
+      "result_id": "adjudication-result-882002f1a4084a2205ce83fe33610b37",
+      "step": "adjudicate"
+    },
+    {
+      "input_fingerprint": "dbb90487e38f52b4c6fe3f9107295f251c411e78f78b199482f911fa4baaeec4",
+      "phase_instance": "phase-impl-3",
+      "result_digest": "543b7a9ba2f3ee44b0832fa844d38f607b288a1e1f99e308a966bb580fce5f2f",
+      "result_id": "result-369bd82faf9b5c42fe74485f9de7d305",
+      "step": "counter_review"
+    },
+    {
+      "input_fingerprint": "c7d14959b05d7bbe83612e4c37db417e7e330e9f80407ebc4f6b492fb21588bf",
+      "phase_instance": "phase-impl-3",
+      "result_digest": "9eed8bcfa3832c8c94bcde602141fbf20d5c72f0d51ca6116d7c336e1d596b8b",
+      "result_id": "state-result-7c6f38115b9364a2922aebe333616ce2",
+      "step": "produce"
+    },
+    {
+      "input_fingerprint": "dbb90487e38f52b4c6fe3f9107295f251c411e78f78b199482f911fa4baaeec4",
+      "phase_instance": "phase-impl-3",
+      "result_digest": "9c8e27bfa2303dff81d9cf785c0df8e0a2b19cfaa846a3cd9948a20ffd2381d0",
+      "result_id": "state-result-1c3a7b07233ebe6006984e888ee2cc36",
       "step": "triage"
     },
     {
@@ -572,55 +621,33 @@
     }
   ],
   "initialization_digest": "30babbe4e47c17babce8db5b51f4774a68539757589276f7948c8f74ae62b908",
-  "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+  "input_fingerprint": "4ca201987c3f682ea7eddae386e4aa244a513373c6c978737e782bb236d52259",
   "last_transition": {
-    "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
-    "intent_id": "gate-20260818T033256-876c",
-    "operation": "gate",
+    "input_fingerprint": "4ca201987c3f682ea7eddae386e4aa244a513373c6c978737e782bb236d52259",
+    "intent_id": "advance-20260818T065642-2bc5",
+    "operation": "record-state-boundary",
     "outcome": {
-      "decision": {
-        "context_digest": "7d9d43dda0facb14326eef8f24dedd488c7f001c0a65c6dc29d648889909abd7",
-        "gate_id": "g-34e578fba773b7223e8eafa279ab0a9cc6d115ebdd1317e439d3d19bba0ee2d3",
-        "human_provenance": {
-          "actor_class": "human",
-          "assurance": "declared-local-trace",
-          "channel": "connected-host",
-          "connection_id": "connection-1",
-          "decision_event_id": "1a1b7dba-6e4c-4cdf-a222-a168d4792455",
-          "recorded_at": "2026-08-18T03:33:05.972Z",
-          "request_id_digest": "00e90de2c65243500d6f849ff463fc2fc64724806848848b0f37ee57ca86409b",
-          "schema_version": "1"
-        },
-        "kind": "design-approval",
-        "payload": {
-          "decision": "approve",
-          "reason": "approved"
-        },
-        "phase_instance": "phase-design-3",
-        "schema_version": "1",
-        "subject_digest": "950d82b40f6b4a4068dba6776fb9e9494d553c2ff2ac45d75219eef18f5b7e35",
-        "task_id": "api-refactor"
-      },
-      "kind": "design-approval",
-      "notes": "approved",
-      "revision": 161
+      "path": "state.json",
+      "request_digest": "b52d1d2c25e9c57d6bb9438cdbee9eb0fdee0fdd48f250b8dfed583cb9ced79e",
+      "revision": 186,
+      "status": "running"
     },
-    "outcome_digest": "18bf1fc7bac0aaca8a13aca1e4b21b909140697388437eb5b6dafb2551c435e0",
-    "prior_revision": 160,
-    "request_digest": "1aabd807939a901ed9387dfe129f755b481d701d7b3771559cb61650255d4e71",
-    "result_id": "g-34e578fba773b7223e8eafa279ab0a9cc6d115ebdd1317e439d3d19bba0ee2d3",
-    "resulting_revision": 161,
+    "outcome_digest": "27b666b16d28b7e752977d8593f1a25c3a4729480153e3bf33498b27bfec3d68",
+    "prior_revision": 185,
+    "request_digest": "b52d1d2c25e9c57d6bb9438cdbee9eb0fdee0fdd48f250b8dfed583cb9ced79e",
+    "result_id": "state-result-3caa9e1433764df281fba4723cbf6019",
+    "resulting_revision": 186,
     "schema_version": "1",
-    "tool": "archflow_gate"
+    "tool": "archflow_state"
   },
-  "phase_instance": "phase-design-3",
+  "phase_instance": "phase-design-4",
   "planned_final_phase": 10,
   "policy_base_commit": "8dad5260e31368b45da85bad748704d9a80b9df3",
   "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
-  "revision": 161,
+  "revision": 186,
   "schema_version": "1",
-  "status": "succeeded",
-  "step": "triage",
+  "status": "running",
+  "step": "produce",
   "task_id": "api-refactor",
   "waivers": [],
   "workflow_digest": "3f5f7536f19219fbf4ade78aea07c93d22d03057ce2ed83d532e25a54a8aab9a"
