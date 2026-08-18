@@ -4094,7 +4094,7 @@
       ]
     },
     "src/contracts/gates.ts": {
-      "bytes": 32462,
+      "bytes": 32645,
       "format": "esm",
       "imports": [
         {
@@ -8793,7 +8793,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1683982,
+      "bytes": 1684035,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -9810,7 +9810,7 @@
           "bytesInOutput": 7774
         },
         "src/contracts/gates.ts": {
-          "bytesInOutput": 19370
+          "bytesInOutput": 19423
         },
         "src/contracts/internal/trust-brands.ts": {
           "bytesInOutput": 1855
@@ -10040,7 +10040,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2569784,
+      "bytes": 2569837,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -11065,7 +11065,7 @@
           "bytesInOutput": 7271
         },
         "src/contracts/gates.ts": {
-          "bytesInOutput": 19370
+          "bytesInOutput": 19423
         },
         "src/contracts/hosts.ts": {
           "bytesInOutput": 602

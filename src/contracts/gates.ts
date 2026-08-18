@@ -192,11 +192,13 @@ const contexts = {
     baseline_commit: gitOidV1Schema,
     commit_message: boundedText,
     paths: z.array(repositoryPathClaimV1Schema).min(1)
-      // Code-unit ordering, the same rule every other sorted-path contract applies (the
-      // implementation output's outputs/restore_targets and the semantic commit instruction).
-      // localeCompare disagrees with code-unit order at mixed-case path boundaries, which would
-      // reject the exact code-unit-sorted path set the composer derives from retained outputs.
-      .refine((items) => sortedUnique(items, (a, b) => (a < b ? -1 : a > b ? 1 : 0)), "paths must be sorted with no duplicates"),
+      // Either ascending order — code-unit or localeCompare — with uniqueness. Composers emit
+      // code-unit (the rule every other sorted-path contract applies), but commit-authorization
+      // archives written by the previous bundle store locale-ordered lists; requiring one order
+      // would strand those archives and block every gate that authenticates them. Rewriting the
+      // archives would break their digest pinning, so both orders parse until the legacy
+      // archives age out.
+      .refine((items) => sortedUnique(items, (a, b) => (a < b ? -1 : a > b ? 1 : 0)) || sortedUnique(items, (a, b) => a.localeCompare(b)), "paths must be sorted with no duplicates"),
     diff_digest: digest,
     current_artifact_digests: canonicalDigests.min(1),
     parent_document_digests: canonicalDigests.min(1),

@@ -21,23 +21,17 @@ describe("gate catalogue", () => {
     expect(() => parseGateContext("baseline-adoption", { drifted_projections: [{ path: "src/one.ts", recorded_digest: D, observed_digest: D }] })).toThrow();
   });
 
-  it("accepts code-unit-sorted commit paths at mixed-case boundaries", () => {
-    // The composer sorts authorized paths with code-unit order (the rule every other sorted-path
-    // contract applies); localeCompare would reject exactly that set where case changes segment
-    // order, wedging the gate shut on legitimate outputs.
-    const context = parseGateContext("commit-authorization", {
-      target_ref: "refs/heads/main", baseline_commit: "1".repeat(40),
-      commit_message: "Implement the phase",
-      paths: ["docs/COMPLEXITY.md", "docs/cli/COMMANDS.md", "src/state/status.ts"],
-      diff_digest: D, current_artifact_digests: [D], parent_document_digests: [D],
-    });
-    expect(context.paths).toEqual(["docs/COMPLEXITY.md", "docs/cli/COMMANDS.md", "src/state/status.ts"]);
-    expect(() => parseGateContext("commit-authorization", {
-      target_ref: "refs/heads/main", baseline_commit: "1".repeat(40),
-      commit_message: "Implement the phase",
-      paths: ["docs/cli/COMMANDS.md", "docs/COMPLEXITY.md"],
-      diff_digest: D, current_artifact_digests: [D], parent_document_digests: [D],
-    })).toThrow();
+  it("accepts either ascending order for commit paths at mixed-case boundaries", () => {
+    // Composers emit code-unit order (the rule every other sorted-path contract applies), but
+    // archives written by the previous bundle store localeCompare order; both parse so legacy
+    // approvals stay authenticable. Sets sorted in neither order, and duplicates, still throw.
+    const base = { target_ref: "refs/heads/main", baseline_commit: "1".repeat(40), commit_message: "Implement the phase", diff_digest: D, current_artifact_digests: [D], parent_document_digests: [D] };
+    const codeUnit = parseGateContext("commit-authorization", { ...base, paths: ["docs/COMPLEXITY.md", "docs/cli/COMMANDS.md", "src/state/status.ts"] });
+    expect(codeUnit.paths).toEqual(["docs/COMPLEXITY.md", "docs/cli/COMMANDS.md", "src/state/status.ts"]);
+    const locale = parseGateContext("commit-authorization", { ...base, paths: ["docs/cli/COMMANDS.md", "docs/COMPLEXITY.md", "src/state/status.ts"] });
+    expect(locale.paths).toEqual(["docs/cli/COMMANDS.md", "docs/COMPLEXITY.md", "src/state/status.ts"]);
+    expect(() => parseGateContext("commit-authorization", { ...base, paths: ["src/state/status.ts", "docs/COMPLEXITY.md", "docs/cli/COMMANDS.md"] })).toThrow();
+    expect(() => parseGateContext("commit-authorization", { ...base, paths: ["docs/COMPLEXITY.md", "docs/COMPLEXITY.md"] })).toThrow();
   });
 
   it("keeps cancellation outside decisions", () => {
