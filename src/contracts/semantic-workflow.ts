@@ -107,7 +107,7 @@ export type SemanticNextActionV1 = {
   readonly skill?: string;
   readonly skill_args?: readonly string[];
   readonly commit?: {
-    readonly path: string;
+    readonly paths: readonly string[];
     readonly message: string;
     readonly target_ref: string;
     readonly baseline: string;
@@ -276,7 +276,11 @@ const reopenImpactV1Schema = z.object({
   appends_prd_ask_history: z.boolean(),
   requires_fresh_review_and_approval: z.literal(true),
 }).strict();
-const commitInstructionV1Schema = z.object({ path: nonBlank, message: nonBlank, target_ref: nonBlank, baseline: nonBlank, requires_human_confirmation: z.boolean() }).strict();
+const commitInstructionV1Schema = z.object({ paths: z.array(nonBlank).min(1), message: nonBlank, target_ref: nonBlank, baseline: nonBlank, requires_human_confirmation: z.boolean() }).strict().superRefine((commit, context) => {
+  if (commit.paths.some((path, index) => index > 0 && commit.paths[index - 1]! > path)) {
+    context.addIssue({ code: "custom", path: ["paths"], message: "commit paths must be sorted ascending" });
+  }
+});
 export const semanticNextActionV1Schema = z.object({ kind: z.enum(SEMANTIC_ACTION_KINDS), instruction: nonBlank, offer: z.string().regex(/^af1_[0-9a-f]{64}$/u).optional(), expected_submission: z.enum(APPLY_SUBMISSION_KINDS).optional(), skill: nonBlank.optional(), skill_args: z.array(z.string()).optional(), commit: commitInstructionV1Schema.optional(), reopen: reopenImpactV1Schema.optional() }).strict();
 export const workflowViewV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, condition: z.enum(WORKFLOW_CONDITIONS), headline: nonBlank, detail: nonBlank, position: workflowPositionV1Schema.optional(), resources: z.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: z.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), presentation: humanPresentationV1Schema.optional() }).strict() as unknown as z.ZodType<WorkflowViewV1>;
 

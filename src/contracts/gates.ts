@@ -161,7 +161,11 @@ const contexts = {
     baseline_commit: gitOidV1Schema,
     commit_message: boundedText,
     paths: z.array(repositoryPathClaimV1Schema).min(1)
-      .refine((items) => sortedUnique(items, (a, b) => a.localeCompare(b)), "paths must be sorted with no duplicates"),
+      // Code-unit ordering, the same rule every other sorted-path contract applies (the
+      // implementation output's outputs/restore_targets and the semantic commit instruction).
+      // localeCompare disagrees with code-unit order at mixed-case path boundaries, which would
+      // reject the exact code-unit-sorted path set the composer derives from retained outputs.
+      .refine((items) => sortedUnique(items, (a, b) => (a < b ? -1 : a > b ? 1 : 0)), "paths must be sorted with no duplicates"),
     diff_digest: digest,
     current_artifact_digests: canonicalDigests.min(1),
     parent_document_digests: canonicalDigests.min(1),

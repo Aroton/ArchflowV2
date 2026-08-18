@@ -23233,7 +23233,7 @@ var contexts = {
     target_ref: boundedText,
     baseline_commit: gitOidV1Schema,
     commit_message: boundedText,
-    paths: external_exports.array(repositoryPathClaimV1Schema).min(1).refine((items) => sortedUnique(items, (a, b) => a.localeCompare(b)), "paths must be sorted with no duplicates"),
+    paths: external_exports.array(repositoryPathClaimV1Schema).min(1).refine((items) => sortedUnique(items, (a, b) => a < b ? -1 : a > b ? 1 : 0), "paths must be sorted with no duplicates"),
     diff_digest: digest,
     current_artifact_digests: canonicalDigests.min(1),
     parent_document_digests: canonicalDigests.min(1)
@@ -36809,6 +36809,19 @@ async function readArchivedGateRequest(dependencies, authority, gateId) {
     throw error51;
   }
 }
+function currentReviewPredecessor(state, produceSubject) {
+  const midProduce = state.step === "produce" && state.status !== "succeeded";
+  const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document" ? produceSubject.artifact.editorial_predecessor : void 0;
+  const currentProduceReference = state.authoritative_results.find((reference) => reference.phase_instance === state.phase_instance && reference.step === "produce");
+  const simpleHumanRevision = currentProduceReference === void 0 ? void 0 : [...state.human_revision_history ?? []].reverse().find((revision) => revision.phase_instance === state.phase_instance && revision.classification === "simple" && revision.resulting_result_digest === currentProduceReference.result_digest);
+  return declaredPredecessor === void 0 ? simpleHumanRevision === void 0 ? void 0 : Object.freeze({
+    subject_digest: simpleHumanRevision.predecessor_subject_digest,
+    input_fingerprint: simpleHumanRevision.predecessor_input_fingerprint
+  }) : Object.freeze({
+    subject_digest: declaredPredecessor.subject_digest,
+    input_fingerprint: declaredPredecessor.input_fingerprint
+  });
+}
 async function currentApprovedUpstreams(dependencies, authority, state, authenticated, subject) {
   const bindings = subject === void 0 ? expectedProduceUpstreamBindings(state) : produceUpstreamBindingsForSubject(state, subject.artifact);
   const digests = /* @__PURE__ */ new Set();
@@ -37207,15 +37220,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     }
   }
   const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document" ? produceSubject.artifact.editorial_predecessor : void 0;
-  const currentProduceReference = state.authoritative_results.find((reference) => reference.phase_instance === state.phase_instance && reference.step === "produce");
-  const simpleHumanRevision = currentProduceReference === void 0 ? void 0 : [...state.human_revision_history ?? []].reverse().find((revision) => revision.phase_instance === state.phase_instance && revision.classification === "simple" && revision.resulting_result_digest === currentProduceReference.result_digest);
-  const reviewPredecessor = declaredPredecessor === void 0 ? simpleHumanRevision === void 0 ? void 0 : Object.freeze({
-    subject_digest: simpleHumanRevision.predecessor_subject_digest,
-    input_fingerprint: simpleHumanRevision.predecessor_input_fingerprint
-  }) : Object.freeze({
-    subject_digest: declaredPredecessor.subject_digest,
-    input_fingerprint: declaredPredecessor.input_fingerprint
-  });
+  const reviewPredecessor = currentReviewPredecessor(state, produceSubject);
   let assessment;
   if (constitution !== void 0 && subjectDigest !== void 0) {
     const resolvedAssessment = await resolveStatusEvidenceAssessment(
@@ -39547,7 +39552,11 @@ var reopenImpactV1Schema = external_exports.object({
   appends_prd_ask_history: external_exports.boolean(),
   requires_fresh_review_and_approval: external_exports.literal(true)
 }).strict();
-var commitInstructionV1Schema = external_exports.object({ path: nonBlank4, message: nonBlank4, target_ref: nonBlank4, baseline: nonBlank4, requires_human_confirmation: external_exports.boolean() }).strict();
+var commitInstructionV1Schema = external_exports.object({ paths: external_exports.array(nonBlank4).min(1), message: nonBlank4, target_ref: nonBlank4, baseline: nonBlank4, requires_human_confirmation: external_exports.boolean() }).strict().superRefine((commit2, context2) => {
+  if (commit2.paths.some((path2, index) => index > 0 && commit2.paths[index - 1] > path2)) {
+    context2.addIssue({ code: "custom", path: ["paths"], message: "commit paths must be sorted ascending" });
+  }
+});
 var semanticNextActionV1Schema = external_exports.object({ kind: external_exports.enum(SEMANTIC_ACTION_KINDS), instruction: nonBlank4, offer: external_exports.string().regex(/^af1_[0-9a-f]{64}$/u).optional(), expected_submission: external_exports.enum(APPLY_SUBMISSION_KINDS).optional(), skill: nonBlank4.optional(), skill_args: external_exports.array(external_exports.string()).optional(), commit: commitInstructionV1Schema.optional(), reopen: reopenImpactV1Schema.optional() }).strict();
 var workflowViewV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, condition: external_exports.enum(WORKFLOW_CONDITIONS), headline: nonBlank4, detail: nonBlank4, position: workflowPositionV1Schema.optional(), resources: external_exports.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: external_exports.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), presentation: humanPresentationV1Schema.optional() }).strict();
 var semanticErrorSummaryV1Schema = external_exports.object({
@@ -40757,6 +40766,7 @@ async function composeGate(services2, state, intentId, snapshot2) {
     services2.authority.context
   );
   let pendingGate;
+  let exhaustion;
   if (constitution.ok) {
     const authenticated = [];
     for (const approval of state.approvals) {
@@ -40769,9 +40779,45 @@ async function composeGate(services2, state, intentId, snapshot2) {
       authenticated.push(loadedApproval.value);
     }
     pendingGate = pendingAdjudicationGate(state, constitution.value, loaded.value, authenticated);
+    try {
+      const configRead = await services2.dependencies.read_config(services2.authority.config);
+      const configured = configRead.kind === "valid" ? parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(configRead.snapshot.bytes), "task config").max_attempts : void 0;
+      const approvedUpstreams = await currentApprovedUpstreams(
+        services2.dependencies,
+        services2.authority,
+        state,
+        authenticated,
+        subject.value
+      );
+      const predecessor = currentReviewPredecessor(state, subject.value);
+      const assessment = assessCurrentEvidence(state, loaded.value, {
+        subject_digest: subject.value.artifact_digest,
+        input_fingerprint: state.input_fingerprint,
+        constitution: constitution.value,
+        approved_upstream_digests: approvedUpstreams,
+        authenticated_gate_approvals: authenticated,
+        ...predecessor === void 0 ? {} : { review_predecessor: predecessor },
+        ...configured === void 0 ? {} : { max_attempts: configured }
+      });
+      if (assessment.next === "attempts-exhausted") {
+        exhaustion = Object.freeze({ attempts: state.attempt, maximum_attempts: configured ?? DEFAULT_MAX_ATTEMPTS });
+      }
+    } catch {
+      return transitionInvalid(state, "gate-fixed-point-disagreement");
+    }
   }
   let input;
-  if (gateKind2 === "design-approval") {
+  if (exhaustion !== void 0) {
+    input = {
+      ...mechanicalInput(services2, state, intentId),
+      phase_instance: state.phase_instance,
+      summary,
+      subject_digest: subject.value.artifact_digest,
+      current_evidence: derived.current_evidence_set,
+      kind: "attempts-exhausted",
+      context: { ...exhaustion, step: state.step }
+    };
+  } else if (gateKind2 === "design-approval") {
     const target = await currentTargetRef(services2.dependencies);
     const approval = await buildDesignApprovalInput(services2.dependencies, state, loaded.value, target);
     input = {

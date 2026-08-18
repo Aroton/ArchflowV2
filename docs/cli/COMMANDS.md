@@ -4,7 +4,7 @@
 
 `archflow-local` is the agent's local helper: it composes requests and reads status — including a read-only classification of where a task stands when the MCP server is unavailable. It is deliberately *not* the authority — with one narrow exception (task initialization staging inside `build-request`), it derives and verifies rather than writes.
 
-During the semantic API migration this CLI remains the adapter for phase implementation and the `archflow-status` skill. PRD, design, and phase design instead use `archflow_status` and `archflow_apply`, which call the same request-composition and durable services behind a one-action façade. The CLI remains relevant for diagnostics and degraded read-only status; the semantic tools do not turn it into a second authority. Git stays client-owned on both paths.
+During the semantic API migration this CLI remains the adapter for the `archflow-status` skill — the last legacy producer path until the status skill migrates. PRD, design, phase design, and phase implementation instead use `archflow_status` and `archflow_apply`, which call the same request-composition and durable services behind a one-action façade. The CLI remains relevant for diagnostics and degraded read-only status; the semantic tools do not turn it into a second authority. Git stays client-owned on both paths.
 
 A packaging note that trips up maintainers: there is no `bin` entry in `package.json`. `install.sh` writes a shell shim into `~/.local/bin` that execs `node dist/archflow-local.mjs`; the source of truth is `src/local/main.ts`.
 

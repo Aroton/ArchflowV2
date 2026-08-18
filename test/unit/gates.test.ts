@@ -10,6 +10,25 @@ describe("gate catalogue", () => {
     expect(GATE_KINDS).toEqual(["artifact-approval", "design-approval", "constitution-review", "material-drift", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"]);
   });
 
+  it("accepts code-unit-sorted commit paths at mixed-case boundaries", () => {
+    // The composer sorts authorized paths with code-unit order (the rule every other sorted-path
+    // contract applies); localeCompare would reject exactly that set where case changes segment
+    // order, wedging the gate shut on legitimate outputs.
+    const context = parseGateContext("commit-authorization", {
+      target_ref: "refs/heads/main", baseline_commit: "1".repeat(40),
+      commit_message: "Implement the phase",
+      paths: ["docs/COMPLEXITY.md", "docs/cli/COMMANDS.md", "src/state/status.ts"],
+      diff_digest: D, current_artifact_digests: [D], parent_document_digests: [D],
+    });
+    expect(context.paths).toEqual(["docs/COMPLEXITY.md", "docs/cli/COMMANDS.md", "src/state/status.ts"]);
+    expect(() => parseGateContext("commit-authorization", {
+      target_ref: "refs/heads/main", baseline_commit: "1".repeat(40),
+      commit_message: "Implement the phase",
+      paths: ["docs/cli/COMMANDS.md", "docs/COMPLEXITY.md"],
+      diff_digest: D, current_artifact_digests: [D], parent_document_digests: [D],
+    })).toThrow();
+  });
+
   it("keeps cancellation outside decisions", () => {
     expect(() => validateGateDecision("artifact-approval", { artifact_kind: "prd" }, { decision: "approve", reason: "Ready" })).not.toThrow();
     expect(() => validateGateDecision("artifact-approval", { artifact_kind: "prd" }, { decision: "cancelled", reason: "No" } as never)).toThrow();

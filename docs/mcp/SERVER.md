@@ -21,7 +21,7 @@ Every catalogue entry carries a purpose description. Low-level input schemas ret
 
 ## Semantic document façade
 
-`WorkflowViewV1`, semantic status/apply inputs, one-action offers, and action planning live under `src/contracts/semantic-workflow.ts`, `src/state/semantic-*.ts`, and `src/mcp/handlers/semantic.ts`. They are advertised for PRD, task-design, and phase-design production. Phase implementation and the `archflow-status` skill remain on the legacy low-level workflow in this release; a phase-impl invocation may read the common view but receives no semantic mutation offer.
+`WorkflowViewV1`, semantic status/apply inputs, one-action offers, and action planning live under `src/contracts/semantic-workflow.ts`, `src/state/semantic-*.ts`, and `src/mcp/handlers/semantic.ts`. They are advertised for PRD, task-design, phase-design, and phase-implementation production. The `archflow-status` skill remains on the legacy low-level workflow in this release; a generic status invocation may read the common view but receives no mutation offer.
 
 The status projection joins full status—not brief status—with repository identity, complete finding prose, authenticated decision/waiver/revision recovery facts, and server-derived reopen impacts. It exposes one human/client action without exposing revisions, fingerprints, request digests, intent IDs, gate bindings, or routing identity. A generic status invocation has no mutation offer. A skill invocation can receive an opaque `af1_` token bound to repository, task, invocation, state, and action; applying it recomputes current truth before planning one fixed named substep.
 

@@ -1,6 +1,7 @@
 import { canonicalJsonDigest } from "../contracts/canonical.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { parsePathSafeId, type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
+import { decodePhaseInstance } from "../contracts/phase-instance.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
 import {
   parseArchFlowApplyInputV1,
@@ -9,6 +10,7 @@ import {
   type ApplySubmissionV1,
   type ArchFlowApplyInputV1,
   type SemanticActionKindV1,
+  type SemanticActionOfferV1,
   type SemanticOperationKeyV1,
   type SemanticStatusSnapshotV1,
   type SemanticSubstepV1,
@@ -81,6 +83,34 @@ function assertSubmissionMatches(expected: ApplySubmissionKindV1, submission: Ap
   const actual = submissionKind(submission);
   if (expected === "none" ? submission !== undefined : actual !== expected) {
     throw new SemanticActionPlanError("SEMANTIC_SUBMISSION_MISMATCH", expectedSubmissionMessage(expected, actual));
+  }
+}
+
+/**
+ * A succeeded work-result must match its position's produce kind before composition: a phase-impl
+ * position requires the client-owned implementation facts, and a document position refuses them.
+ * This turns both mismatch directions into semantic failures instead of composer crashes.
+ */
+function assertWorkResultFactsMatchPosition(
+  offer: SemanticActionOfferV1,
+  submission: ApplySubmissionV1 | undefined,
+): void {
+  if (offer.action_kind !== "submit-work" || submission?.kind !== "work-result" || submission.outcome !== "succeeded") return;
+  const position = offer.phase_instance === undefined ? undefined : decodePhaseInstance(offer.phase_instance).kind;
+  if (position === "phase-impl") {
+    if (submission.implementation === undefined) {
+      throw new SemanticActionPlanError(
+        "SEMANTIC_SUBMISSION_MISMATCH",
+        "semantic action expects implementation facts on a succeeded work-result at a phase-impl position",
+      );
+    }
+    return;
+  }
+  if (position !== undefined && submission.implementation !== undefined) {
+    throw new SemanticActionPlanError(
+      "SEMANTIC_SUBMISSION_MISMATCH",
+      `semantic action refuses implementation facts on a succeeded work-result at a ${position} position`,
+    );
   }
 }
 
@@ -354,6 +384,7 @@ export function planSemanticAction(
   if (offer === undefined) {
     throw new SemanticActionPlanError("SEMANTIC_OFFER_STALE", "authenticated current action has no mutation offer for this invocation");
   }
+  assertWorkResultFactsMatchPosition(offer, input.action.submission);
   const expectedToken = semanticOfferToken(offer);
   const archivedOperation = offer.action_kind === "decide" && markerField(snapshot.archived_decision, "status") === "exact"
     ? markerField(snapshot.archived_decision, "operation_digest") as Sha256Digest | undefined

@@ -63,10 +63,10 @@ function invocationTarget(invocation: WorkflowInvocationV1): PhaseInstanceId {
   }
 }
 
-/** Phase 2 exposes mutations only for the three document-producing workflows. */
+/** Semantic mutations are exposed for every producing workflow, phase implementation included. */
 export function semanticInvocationEnabled(invocation: WorkflowInvocationV1): boolean {
   return invocation.skill === "archflow-prd" || invocation.skill === "archflow-design" ||
-    invocation.skill === "archflow-phase-design";
+    invocation.skill === "archflow-phase-design" || invocation.skill === "archflow-phase-impl";
 }
 
 function invocationOwnsCurrentPosition(
@@ -279,15 +279,23 @@ function mapNextAction(status: TaskStatusV1, snapshot: SemanticStatusSnapshotV1)
         condition: "awaiting-client", headline: "The authorized design commit is ready", detail: action.detail,
         action_kind: "commit", instruction: "Perform the exact client-side Git commit, then request fresh status.",
         commit: Object.freeze({
-          path: action.commit_path, message: action.commit_message, target_ref: action.commit_target_ref,
+          paths: Object.freeze([action.commit_path]), message: action.commit_message, target_ref: action.commit_target_ref,
           baseline: action.commit_baseline, requires_human_confirmation: false,
         }),
       });
     case "commit-phase":
+      if (action.commit_paths === undefined || action.commit_message === undefined || action.commit_target_ref === undefined || action.commit_baseline === undefined) {
+        return inspect("Inspect why the approved implementation commit authority is unavailable.");
+      }
       return Object.freeze({
         condition: "awaiting-client", headline: "The authorized implementation commit is ready", detail: action.detail,
         action_kind: "commit",
-        instruction: "Use the existing authorized commit procedure, then request fresh status; exact implementation commit facts are not available in this read model.",
+        instruction: "Stage exactly the authorized paths, show the human the staged diff and the exact message and obtain explicit confirmation, create the commit, then request fresh read-only status so the server observes proof.",
+        commit: Object.freeze({
+          paths: Object.freeze([...action.commit_paths].sort()), message: action.commit_message,
+          target_ref: action.commit_target_ref, baseline: action.commit_baseline,
+          requires_human_confirmation: true,
+        }),
       });
     case "advance-phase":
       return Object.freeze({
@@ -394,9 +402,7 @@ export function projectSemanticStatus(
   );
   const offer = owns && canOffer(shape) ? offerFor(snapshot, status, invocation, shape, reopen) : undefined;
   const mismatch = invocation !== undefined && !owns
-    ? invocation.skill === "archflow-phase-impl"
-      ? " Phase implementation remains on the supported legacy skill workflow in this release; no semantic mutation is offered."
-      : ` The invoked skill does not own this current action; continue with the action shown or invoke its owning skill.`
+    ? ` The invoked skill does not own this current action; continue with the action shown or invoke its owning skill.`
     : "";
   const nextAction: SemanticNextActionV1 = Object.freeze({
     kind: shape.action_kind,

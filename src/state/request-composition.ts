@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { sha256Bytes } from "../contracts/canonical.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parsePathSafeId, parseSha256Digest, type PathSafeId } from "../contracts/evidence.js";
+import { parseConfigYaml } from "../contracts/config.js";
 import type { GateKind } from "../contracts/gates.js";
 import {
   parseRepositoryPathClaim,
@@ -39,9 +40,10 @@ import type { ProductionServices } from "./production.js";
 import { resolvePinnedConstitution } from "./constitution.js";
 import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "./gate-approvals.js";
 import { APPROVAL_ARTIFACT_KINDS } from "./request-templates.js";
-import { buildCommitAuthorizationInput, buildDesignApprovalInput, computeTaskStatus, currentTargetRef, pendingAdjudicationGate } from "./status.js";
+import { buildCommitAuthorizationInput, buildDesignApprovalInput, computeTaskStatus, currentApprovedUpstreams, currentReviewPredecessor, currentTargetRef, pendingAdjudicationGate } from "./status.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { legalRunStepStatus } from "./transitions.js";
+import { assessCurrentEvidence, DEFAULT_MAX_ATTEMPTS } from "../review/fixed-point.js";
 import { computeCallEnvelope, type CallEnvelope } from "../local/call-envelope.js";
 import { computeLocalGatePreview } from "../local/gate-preview.js";
 import { planningRestartTarget, semanticPlanningRestartId } from "./planning-restart.js";
@@ -553,6 +555,7 @@ async function composeGate(
     services.runner, state.policy_base_commit, services.authority.context,
   );
   let pendingGate: ReturnType<typeof pendingAdjudicationGate>;
+  let exhaustion: Readonly<{ attempts: number; maximum_attempts: number }> | undefined;
   if (constitution.ok) {
     const authenticated: AuthenticatedGateApproval[] = [];
     for (const approval of state.approvals) {
@@ -563,10 +566,49 @@ async function composeGate(
       authenticated.push(loadedApproval.value);
     }
     pendingGate = pendingAdjudicationGate(state, constitution.value, loaded.value, authenticated);
+    // The attempts-exhausted gate composes exactly when the fixed point says the budget is spent;
+    // deriving the kind from the phase alone would open the phase-default gate instead. The
+    // assessor sees the same subject facts status derives — including the shared review
+    // predecessor, without which one-hop simple-revision states would assess differently here —
+    // so the composed request and the advertised action cannot disagree about exhaustion.
+    try {
+      const configRead = await services.dependencies.read_config(services.authority.config);
+      const configured = configRead.kind === "valid"
+        ? parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(configRead.snapshot.bytes), "task config").max_attempts
+        : undefined;
+      const approvedUpstreams = await currentApprovedUpstreams(
+        services.dependencies, services.authority, state, authenticated, subject.value,
+      );
+      const predecessor = currentReviewPredecessor(state, subject.value);
+      const assessment = assessCurrentEvidence(state, loaded.value, {
+        subject_digest: subject.value.artifact_digest,
+        input_fingerprint: state.input_fingerprint,
+        constitution: constitution.value,
+        approved_upstream_digests: approvedUpstreams,
+        authenticated_gate_approvals: authenticated,
+        ...(predecessor === undefined ? {} : { review_predecessor: predecessor }),
+        ...(configured === undefined ? {} : { max_attempts: configured }),
+      });
+      if (assessment.next === "attempts-exhausted") {
+        exhaustion = Object.freeze({ attempts: state.attempt, maximum_attempts: configured ?? DEFAULT_MAX_ATTEMPTS });
+      }
+    } catch {
+      return transitionInvalid(state, "gate-fixed-point-disagreement");
+    }
   }
 
   let input: Record<string, PlainJsonValue>;
-  if (gateKind === "design-approval") {
+  if (exhaustion !== undefined) {
+    input = {
+      ...mechanicalInput(services, state, intentId),
+      phase_instance: state.phase_instance,
+      summary,
+      subject_digest: subject.value.artifact_digest,
+      current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
+      kind: "attempts-exhausted",
+      context: { ...exhaustion, step: state.step },
+    };
+  } else if (gateKind === "design-approval") {
     const target = await currentTargetRef(services.dependencies);
     const approval = await buildDesignApprovalInput(services.dependencies, state, loaded.value, target);
     input = {

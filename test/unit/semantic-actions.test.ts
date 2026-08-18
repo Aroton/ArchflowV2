@@ -87,14 +87,41 @@ describe("semantic one-action planning", () => {
     const current = snapshot(state("produce", "running"), {
       code: "run-step", detail: "Submit produce.", human_required: false, phase_instance: "phase-design-1" as TaskStateV1["phase_instance"], step: "produce",
     });
-    const work = (base: string): ApplySubmissionV1 => ({ kind: "work-result", outcome: "succeeded", implementation: { base_commit: base, outputs: ["src/a.ts"], restore_targets: ["src/a.ts"], declared_inputs: [] } });
+    const work = (rationale: string): ApplySubmissionV1 => ({
+      kind: "work-result", outcome: "succeeded",
+      human_revision: { classification: "simple", rationale },
+    });
     expect(() => apply(current, invocation)).toThrow(SemanticActionPlanError);
-    const first = apply(current, invocation, work("a".repeat(40)));
-    const changed = apply(current, invocation, work("b".repeat(40)));
+    const first = apply(current, invocation, work("first revision"));
+    const changed = apply(current, invocation, work("second revision"));
     expect(first.operation_digest).not.toBe(changed.operation_digest);
-    expect(first.request_facts).toMatchObject({ kind: "produce", implementation: { outputs: ["src/a.ts"] } });
+    expect(first.request_facts).toMatchObject({ kind: "produce" });
     const offered = projectSemanticStatus(current, invocation).view.next_action.offer!;
     expect(() => planSemanticAction(current, { schema_version: "1", task_id: "api-refactor", invocation, action: { offer: offered, submission: { kind: "gate-summary", summary: "Wrong." } } })).toThrow(/expects work-result/u);
+  });
+
+  it("requires implementation facts at a phase-impl position and refuses them at document positions", () => {
+    const implementationInvocation: WorkflowInvocationV1 = { skill: "archflow-phase-impl", phase: 1, intent: "resume" };
+    const implementationState = { ...state("produce", "running"), phase_instance: "phase-impl-1" as TaskStateV1["phase_instance"] };
+    const implementationPosition = snapshot(implementationState, {
+      code: "run-step", detail: "Submit implementation.", human_required: false, phase_instance: implementationState.phase_instance, step: "produce",
+    });
+    const facts = { base_commit: "a".repeat(40), outputs: ["src/a.ts"], restore_targets: ["src/a.ts"], declared_inputs: [] };
+    expect(() => apply(implementationPosition, implementationInvocation, { kind: "work-result", outcome: "succeeded" }))
+      .toThrowError(expect.objectContaining({ code: "SEMANTIC_SUBMISSION_MISMATCH" }));
+    const declared = apply(implementationPosition, implementationInvocation, { kind: "work-result", outcome: "succeeded", implementation: facts });
+    expect(declared.action_kind).toBe("submit-work");
+    expect(declared.request_facts).toMatchObject({ kind: "produce", implementation: { outputs: ["src/a.ts"] } });
+    expect(apply(implementationPosition, implementationInvocation, { kind: "work-result", outcome: "failed", reason: "verification failed" }))
+      .toMatchObject({ action_kind: "submit-work", request_facts: { kind: "failed" } });
+
+    const documentPosition = snapshot(state("produce", "running"), {
+      code: "run-step", detail: "Submit document.", human_required: false, phase_instance: "phase-design-1" as TaskStateV1["phase_instance"], step: "produce",
+    });
+    expect(() => apply(documentPosition, invocation, { kind: "work-result", outcome: "succeeded", implementation: facts }))
+      .toThrowError(expect.objectContaining({ code: "SEMANTIC_SUBMISSION_MISMATCH" }));
+    expect(apply(documentPosition, invocation, { kind: "work-result", outcome: "failed", reason: "document work failed" }))
+      .toMatchObject({ action_kind: "submit-work", request_facts: { kind: "failed" } });
   });
 
   it("uses fixed review continuations without redispatching a finding-free retained review", () => {

@@ -386,7 +386,42 @@ async function readArchivedGateRequest(
   }
 }
 
-async function currentApprovedUpstreams(
+/**
+ * The review predecessor the fixed-point assessor must see: the current produce artifact's
+ * declared editorial predecessor, or — when a one-hop simple human revision reused the prior
+ * review — the predecessor that revision recorded. Shared by the status projection and the gate
+ * composer so both assess exactly the same subject.
+ */
+export function currentReviewPredecessor(
+  state: TaskStateV1,
+  produceSubject: CurrentProduceSubject | undefined,
+): Readonly<{ subject_digest: Sha256Digest; input_fingerprint: Sha256Digest }> | undefined {
+  const midProduce = state.step === "produce" && state.status !== "succeeded";
+  const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document"
+    ? produceSubject.artifact.editorial_predecessor
+    : undefined;
+  const currentProduceReference = state.authoritative_results.find((reference) =>
+    reference.phase_instance === state.phase_instance && reference.step === "produce");
+  const simpleHumanRevision = currentProduceReference === undefined
+    ? undefined
+    : [...(state.human_revision_history ?? [])].reverse().find((revision) =>
+        revision.phase_instance === state.phase_instance &&
+        revision.classification === "simple" &&
+        revision.resulting_result_digest === currentProduceReference.result_digest);
+  return declaredPredecessor === undefined
+    ? simpleHumanRevision === undefined
+      ? undefined
+      : Object.freeze({
+          subject_digest: simpleHumanRevision.predecessor_subject_digest,
+          input_fingerprint: simpleHumanRevision.predecessor_input_fingerprint,
+        })
+    : Object.freeze({
+        subject_digest: declaredPredecessor.subject_digest,
+        input_fingerprint: declaredPredecessor.input_fingerprint,
+      });
+}
+
+export async function currentApprovedUpstreams(
   dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
   state: TaskStateV1,
@@ -918,25 +953,7 @@ async function computeTaskStatusDetailedInternal(
   const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document"
     ? produceSubject.artifact.editorial_predecessor
     : undefined;
-  const currentProduceReference = state.authoritative_results.find((reference) =>
-    reference.phase_instance === state.phase_instance && reference.step === "produce");
-  const simpleHumanRevision = currentProduceReference === undefined
-    ? undefined
-    : [...(state.human_revision_history ?? [])].reverse().find((revision) =>
-        revision.phase_instance === state.phase_instance &&
-        revision.classification === "simple" &&
-        revision.resulting_result_digest === currentProduceReference.result_digest);
-  const reviewPredecessor = declaredPredecessor === undefined
-    ? simpleHumanRevision === undefined
-      ? undefined
-      : Object.freeze({
-          subject_digest: simpleHumanRevision.predecessor_subject_digest,
-          input_fingerprint: simpleHumanRevision.predecessor_input_fingerprint,
-        })
-    : Object.freeze({
-        subject_digest: declaredPredecessor.subject_digest,
-        input_fingerprint: declaredPredecessor.input_fingerprint,
-      });
+  const reviewPredecessor = currentReviewPredecessor(state, produceSubject);
   let assessment: EvidenceAssessment | undefined;
   if (constitution !== undefined && subjectDigest !== undefined) {
     const resolvedAssessment = await resolveStatusEvidenceAssessment(

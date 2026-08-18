@@ -123,11 +123,41 @@ describe("semantic status projection", () => {
     expect(triage.view.next_action.kind).toBe("triage");
     expect(triage.view.findings).toEqual([finding]);
 
-    const commit = projectSemanticStatus(snapshot(fullStatus(action("commit-phase"))), invocation).view.next_action;
-    expect(commit.kind).toBe("commit");
-    expect(commit.commit).toBeUndefined();
-    expect(commit.offer).toBeUndefined();
-    expect(commit.instruction).toContain("not available");
+    const authorized = projectSemanticStatus(snapshot(fullStatus(action("commit-phase", {
+      commit_paths: ["src/z.ts", "src/a.ts"],
+      commit_message: "Implement the approved phase",
+      commit_target_ref: "refs/heads/main",
+      commit_baseline: "2".repeat(40),
+    }))), invocation).view.next_action;
+    expect(authorized.kind).toBe("commit");
+    expect(authorized.commit).toEqual({
+      paths: ["src/a.ts", "src/z.ts"],
+      message: "Implement the approved phase",
+      target_ref: "refs/heads/main",
+      baseline: "2".repeat(40),
+      requires_human_confirmation: true,
+    });
+    expect(authorized.offer).toBeUndefined();
+    expect(authorized.instruction).toContain("explicit confirmation");
+
+    const missingAuthority = projectSemanticStatus(snapshot(fullStatus(action("commit-phase"))), invocation).view.next_action;
+    expect(missingAuthority.kind).toBe("inspect");
+    expect(missingAuthority.commit).toBeUndefined();
+    expect(missingAuthority.instruction).toContain("implementation commit authority");
+
+    const milestone = projectSemanticStatus(snapshot(fullStatus(action("commit-artifacts", {
+      commit_path: ".archflow/tasks/semantic-test/design.md",
+      commit_message: "Approve design",
+      commit_target_ref: "refs/heads/main",
+      commit_baseline: "1".repeat(40),
+    }))), invocation).view.next_action;
+    expect(milestone.commit).toEqual({
+      paths: [".archflow/tasks/semantic-test/design.md"],
+      message: "Approve design",
+      target_ref: "refs/heads/main",
+      baseline: "1".repeat(40),
+      requires_human_confirmation: false,
+    });
   });
 
   it("binds offers to invocation and repository while generic status cannot mutate", () => {
@@ -152,8 +182,8 @@ describe("semantic status projection", () => {
     expect(wrong.view.detail).toContain("does not own");
 
     const implementation = projectSemanticStatus(snapshot(fullStatus(action("run-step", { step: "produce" }))), invocation);
-    expect(implementation.view.next_action.offer).toBeUndefined();
-    expect(implementation.view.detail).toContain("legacy skill workflow");
+    expect(implementation.view.next_action.kind).toBe("begin-work");
+    expect(implementation.view.next_action.offer).toMatch(/^af1_[0-9a-f]{64}$/u);
   });
 
   it("lets only the exact successor invocation recover an authenticated handoff", () => {

@@ -1,17 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
-import type {
-  ApplySubmissionV1,
-  SemanticResultV1,
-  WorkflowInvocationV1,
-  WorkflowViewV1,
-} from "../../src/contracts/semantic-workflow.js";
-import { handleSemanticApply, handleSemanticStatus } from "../../src/mcp/handlers/semantic.js";
+import { handleSemanticApply } from "../../src/mcp/handlers/semantic.js";
+import {
+  installSemanticReviewStub,
+  semanticJourneyHarness,
+} from "../helpers/semantic-journeys.js";
 import { createTaskWorkspace, type TaskWorkspace } from "../helpers/task-workspace.js";
 
 const TIMEOUT = 60_000;
@@ -23,105 +20,12 @@ afterEach(() => {
   for (const workspace of workspaces.splice(0)) workspace.dispose();
 });
 
-function harness(workspace: TaskWorkspace) {
-  const connection = connectionContextFactory.captureStartup({
-    connection_id: `semantic-journey-${workspace.taskId}`,
-    startup_repository_candidate: { working_directory: workspace.root },
-  }).initialize({
-    client: { name: "claude-code", version: "2.1.220" },
-    host: "claude",
-    protocol_version: "2025-11-25",
-  });
-  let sequence = 0;
-  const context = () => createInvocationContext(connection, {
-    invocation_id: `semantic-journey-${++sequence}`,
-    transport_metadata: { request_id: `semantic-request-${sequence}`, operation: "tools/call" },
-  }, new AbortController().signal);
-
-  async function status(invocation?: WorkflowInvocationV1): Promise<WorkflowViewV1> {
-    const result = await handleSemanticStatus({
-      schema_version: "1", task_id: workspace.taskId, ...(invocation === undefined ? {} : { invocation }),
-    }, context());
-    expect(result.ok, result.ok ? undefined : JSON.stringify(result.error)).toBe(true);
-    if (!result.ok) throw new Error(result.error.code);
-    return result.value;
-  }
-
-  async function apply(
-    invocation: WorkflowInvocationV1,
-    view: WorkflowViewV1,
-    submission?: ApplySubmissionV1,
-  ): Promise<SemanticResultV1> {
-    if (view.next_action.offer === undefined) throw new Error("the current view has no semantic offer");
-    const result = await handleSemanticApply({
-      schema_version: "1", task_id: workspace.taskId, invocation,
-      action: { offer: view.next_action.offer, ...(submission === undefined ? {} : { submission }) },
-    }, context());
-    const fresh = await status(invocation);
-    expect(result.ok ? result.value : result.view).toEqual(fresh);
-    return result;
-  }
-
-  return { status, apply, context };
-}
-
-function installReviewStub(root: string, findingsByReview: readonly (readonly Record<string, unknown>[])[]): void {
-  const bin = join(root, "semantic-stub-bin");
-  const stubHome = join(root, "semantic-stub-home");
-  const countPath = join(root, "semantic-review-count");
-  mkdirSync(join(stubHome, ".codex"), { recursive: true });
-  mkdirSync(bin, { recursive: true });
-  writeFileSync(join(stubHome, ".codex", "auth.json"), "{}\n");
-  writeFileSync(join(bin, "codex"), `#!/usr/bin/env node
-import { readFileSync, writeFileSync } from "node:fs";
-const argv = process.argv.slice(2);
-if (argv.length === 1 && argv[0] === "--version") process.stdout.write("codex-cli 0.146.0\\n");
-else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logged in using ChatGPT\\n");
-else {
-  const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
-  const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8")); const subject = envelope.subject;
-  let output;
-  if (subject.role === "counter-review") {
-    let count = 0; try { count = Number(readFileSync(${JSON.stringify(countPath)}, "utf8")); } catch {}
-    const all = ${JSON.stringify(findingsByReview)}; const findings = all[Math.min(count, all.length - 1)] ?? [];
-    writeFileSync(${JSON.stringify(countPath)}, String(count + 1));
-    output = { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
-      step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
-      input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
-      producer_family: subject.producer_family, findings, matched_rule_versions: [],
-      verdict: findings.some((finding) => finding.blocking === true) ? "fail" : findings.length === 0 ? "pass" : "advisory",
-      blocking_count: findings.filter((finding) => finding.blocking === true).length };
-  } else {
-    output = { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
-      step: "adjudicate", subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
-      pinned_constitution_digest: subject.pinned_constitution_digest,
-      approved_upstream_digests: subject.approved_upstream_digests,
-      source_evidence_set_digest: subject.source_evidence_set_digest,
-      rule_findings: envelope.rules.map((rule) => ({ rule_id: rule.id, rule_version: rule.version,
-        compliance: "pass", rationale: "The document respects this rule.", trigger: "not-matched",
-        trigger_evidence: "No review trigger matched." })),
-      drift_findings: subject.approved_upstream_digests.map((digest) => ({ upstream_digest: digest,
-        drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift." })) };
-  }
-  writeFileSync(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
-  process.stdout.write('{"type":"turn.completed"}\\n');
-}`);
-  chmodSync(join(bin, "codex"), 0o755);
-  const saved = { path: process.env.PATH, home: process.env.HOME };
-  process.env.PATH = `${bin}:${saved.path ?? ""}`;
-  process.env.HOME = stubHome;
-  restorers.push(() => {
-    if (saved.path === undefined) delete process.env.PATH; else process.env.PATH = saved.path;
-    if (saved.home === undefined) delete process.env.HOME; else process.env.HOME = saved.home;
-  });
-}
-
 describe("semantic document journeys", { timeout: TIMEOUT }, () => {
   it("takes a finding-free PRD through client production, one review, a client summary, and a later human decision", async () => {
     const workspace = await createTaskWorkspace({ taskId: "semantic-prd-clean", label: "semantic-prd-clean" });
     workspaces.push(workspace);
-    installReviewStub(workspace.root, [[]]);
-    const h = harness(workspace);
+    restorers.push(installSemanticReviewStub(workspace.root, [[]]));
+    const h = semanticJourneyHarness(workspace);
     const invocation = { skill: "archflow-prd", intent: "resume" } as const;
     const prdPath = join(workspace.services.authority.task_root, "prd.md");
     writeFileSync(join(workspace.services.authority.task_root, "ask.md"), "Describe a small semantic journey.\n");
@@ -186,7 +90,7 @@ describe("semantic document journeys", { timeout: TIMEOUT }, () => {
     const commit = designResult.value.next_action.commit;
     if (commit === undefined) throw new Error("design commit instructions unavailable");
     expect(commit.requires_human_confirmation).toBe(false);
-    execFileSync("git", ["add", "--", commit.path], { cwd: workspace.root });
+    execFileSync("git", ["add", "-A", "--", ...commit.paths], { cwd: workspace.root });
     execFileSync("git", ["-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid", "commit", "-q", "-m", commit.message], { cwd: workspace.root });
 
     const observedByPredecessor = await h.status(designInvocation);
@@ -305,10 +209,10 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
     expect(readFileSync(taskDesignPath, "utf8")).toBe(taskDesignBytes);
     expect(execFileSync("git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" }).trim()).toBe(phaseBaseline);
 
-    execFileSync("git", ["add", "-A", "--", phaseCommit.path], { cwd: workspace.root });
+    execFileSync("git", ["add", "-A", "--", ...phaseCommit.paths], { cwd: workspace.root });
     execFileSync("git", [
       "-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid",
-      "commit", "-q", "-m", phaseCommit.message, "--", phaseCommit.path,
+      "commit", "-q", "-m", phaseCommit.message, "--", ...phaseCommit.paths,
     ], { cwd: workspace.root });
     expect(execFileSync("git", ["rev-parse", "HEAD^"], { cwd: workspace.root, encoding: "utf8" }).trim()).toBe(phaseBaseline);
     expect(execFileSync("git", ["log", "-1", "--pretty=%B"], { cwd: workspace.root, encoding: "utf8" }).trim())
@@ -320,25 +224,31 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
     });
     expect(observedPhaseDesign.next_action.offer).toBeUndefined();
 
+    // The implementation invocation participates semantically: it owns and consumes its exact
+    // start-next-skill hand-off, landing at its own implementation position.
     const phaseImplInvocation = { skill: "archflow-phase-impl", phase: 1, intent: "resume" } as const;
-    const legacyHandoff = await h.status(phaseImplInvocation);
-    expect(legacyHandoff.next_action).toMatchObject({
-      kind: "start-next-skill", skill: "archflow-phase-impl", skill_args: ["1"],
+    const semanticHandoff = await h.status(phaseImplInvocation);
+    expect(semanticHandoff.next_action).toMatchObject({
+      kind: "start-next-skill", skill: "archflow-phase-impl", skill_args: ["1"], expected_submission: "none",
     });
-    expect(legacyHandoff.next_action.offer).toBeUndefined();
-    expect(legacyHandoff.detail).toMatch(/supported legacy skill workflow/i);
+    expect(semanticHandoff.next_action.offer).toBeDefined();
+    const startedImplementation = await h.apply(phaseImplInvocation, semanticHandoff);
+    expect(startedImplementation.ok, JSON.stringify(startedImplementation)).toBe(true);
+    if (!startedImplementation.ok) return;
+    expect(startedImplementation.value.position).toEqual({ kind: "phase-impl", phase: 1 });
+    expect(startedImplementation.value.next_action.kind).toBe("submit-work");
     expect(readFileSync(join(workspace.root, "semantic-review-count"), "utf8")).toBe("3");
   });
 
   it("returns a material finding for client triage and requires an explicit revise action before remediation bytes are accepted", async () => {
     const workspace = await createTaskWorkspace({ taskId: "semantic-prd-remediation", label: "semantic-prd-remediation" });
     workspaces.push(workspace);
-    installReviewStub(workspace.root, [[{
+    restorers.push(installSemanticReviewStub(workspace.root, [[{
       finding_id: "requirement-observable", severity: "major", blocking: false,
       summary: "The success condition is not observable.", evidence: "prd.md names no observable result.",
       suggested_resolution: "Name the result a verifier can observe.",
-    }]]);
-    const h = harness(workspace);
+    }]]));
+    const h = semanticJourneyHarness(workspace);
     const invocation = { skill: "archflow-prd", intent: "resume" } as const;
     const prdPath = join(workspace.services.authority.task_root, "prd.md");
     writeFileSync(join(workspace.services.authority.task_root, "ask.md"), "Define an observable result.\n");
@@ -390,8 +300,8 @@ roles:
     });
     workspaces.push(first, second);
     const invocation = { skill: "archflow-prd", intent: "resume" } as const;
-    const firstHarness = harness(first);
-    const secondHarness = harness(second);
+    const firstHarness = semanticJourneyHarness(first);
+    const secondHarness = semanticJourneyHarness(second);
     const offered = await firstHarness.status(invocation);
     expect(offered.next_action.offer).toBeDefined();
 
@@ -419,11 +329,11 @@ roles:
     const phaseImpl = { skill: "archflow-phase-impl", phase: 1, intent: "resume" } as const;
     const phaseView = await firstHarness.status(phaseImpl);
     expect(phaseView.next_action.offer).toBeUndefined();
-    expect(phaseView.detail).toMatch(/legacy/i);
+    expect(phaseView.detail).not.toMatch(/legacy/i);
     const phaseMutation = await handleSemanticApply({
       schema_version: "1", task_id: first.taskId, invocation: phaseImpl,
-      action: { offer: offered.next_action.offer!, submission: { kind: "work-result", outcome: "failed", reason: "must remain legacy" } },
+      action: { offer: offered.next_action.offer!, submission: { kind: "work-result", outcome: "failed", reason: "another invocation owns this action" } },
     }, firstHarness.context());
-    expect(phaseMutation).toMatchObject({ ok: false, error: { code: "SEMANTIC_ACTION_UNSUPPORTED" }, view: phaseView });
+    expect(phaseMutation).toMatchObject({ ok: false, error: { code: "SEMANTIC_OFFER_STALE", retryable: false }, view: phaseView });
   });
 });

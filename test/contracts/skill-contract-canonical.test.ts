@@ -41,7 +41,12 @@ const semanticDocumentSkills = [
   "archflow-design",
   "archflow-phase-design",
 ] as const;
-const legacyProducerSkills = ["archflow-phase-impl"] as const;
+const semanticProducerSkills = [
+  "archflow-prd",
+  "archflow-design",
+  "archflow-phase-design",
+  "archflow-phase-impl",
+] as const;
 function skill(name: typeof skillNames[number]): string {
   return readFileSync(resolve(root, "skills", name, "SKILL.md"), "utf8");
 }
@@ -83,24 +88,7 @@ describe("canonical skill contracts", () => {
       expect(source).toContain("Claude:");
       expect(source).toContain("Codex:");
     }
-    for (const name of legacyProducerSkills) {
-      const source = skill(name);
-      expect(source).toContain("full status");
-      expect(source).toContain("`review_policy`");
-      expect(source).toContain("`review_policy.rubric`");
-      expect(source).toContain("`resources`");
-      expect(source).toContain("{role,path,access}");
-      expect(source).toContain('`{"kind":"counter-review"}`');
-      expect(source).toContain("`gate-preview`");
-      expect(source).toContain("preview_digest");
-      expect(source).toContain("decision");
-      expect(source).not.toContain("`archflow-local decide --task <task>`");
-      expect(source).not.toContain("## Stable rubric");
-      expect(source).not.toContain('"criteria":[');
-      expect(source).not.toContain('"kind":"counter-review","rubric"');
-      expect(source).not.toContain('kind: "interface"');
-    }
-    for (const name of semanticDocumentSkills) {
+    for (const name of semanticProducerSkills) {
       const source = skill(name);
       expect(source).toContain("`review_context.rubric`");
       expect(source).toContain("`resources`");
@@ -189,8 +177,8 @@ describe("canonical skill contracts", () => {
     expect(source).toContain("ask fidelity");
   });
 
-  it("takes review context from semantic status while the legacy implementation skill keeps full-status policy", () => {
-    for (const name of semanticDocumentSkills) {
+  it("takes review context from semantic status for every producer skill", () => {
+    for (const name of semanticProducerSkills) {
       const source = skill(name);
       expect(source).toContain("`review_context.rubric`");
       expect(source).toContain("active rules");
@@ -203,26 +191,32 @@ describe("canonical skill contracts", () => {
       expect(source).not.toContain("`archflow_gate`");
       expect(source).not.toContain("`archflow_waiver`");
       expect(source).not.toContain("archflow-local decide");
-    }
-    for (const name of legacyProducerSkills) {
-      const source = skill(name);
-      expect(source).toContain("server selects that same policy for the durable counter-review");
-      expect(source).toContain("never copy a rubric from skill text or author one");
-      expect(source).toContain("archflow-local build-request");
-      expect(source).toContain("staged.reference");
+      expect(source).not.toContain("archflow-local commit");
     }
   });
 
-  it("keeps the implementation producer on the legacy durable hand-off", () => {
-    for (const name of legacyProducerSkills) {
-      const source = skill(name);
-      expect(source).toContain('next_action.code: "advance-phase"');
-      expect(source).toContain('`"complete-task"`');
-      expect(source).toContain('`{"kind":"advance"}`');
-      expect(source).toContain("call `archflow_state` with the returned `staged.reference`");
-      expect(source).toContain("Re-run status");
-      expect(source).toContain("do not return until durable status");
-    }
+  it("keeps the implementation producer on semantic commit observation and successor boundaries", () => {
+    const source = skill("archflow-phase-impl");
+    expect(source).toContain('`{"kind":"work-result","outcome":"succeeded","implementation":{...}}`');
+    expect(source).toContain("`base_commit`");
+    expect(source).toContain("`outputs`");
+    expect(source).toContain("`restore_targets`");
+    expect(source).toContain("`declared_inputs`");
+    expect(source).toContain("never author those values");
+    expect(source).toContain("`verification-transcript`");
+    expect(source).toContain("digest-checked transcript");
+    expect(source).toContain('`{"kind":"gate-summary","summary":<summary>}`');
+    expect(source).toContain("selected presentation option token");
+    expect(source).toContain("separate no-submission `open-waiver`");
+    expect(source).toContain("`requires_human_confirmation: true`");
+    expect(source).toContain("`commit.paths`");
+    expect(source).toContain(":(top,literal)<path>");
+    expect(source).toContain("create the commit yourself");
+    expect(source).toContain("read-only `archflow_status`");
+    expect(source).toContain("observes the commit proof");
+    expect(source).toContain("`finish-task`");
+    expect(source).toContain("never apply a `start-next-skill` offer");
+    expect(source).toContain("never start successor work");
   });
 
   it("makes document skills observe and report semantic successors without starting them", () => {
@@ -240,6 +234,7 @@ describe("canonical skill contracts", () => {
     expect(skill("archflow-prd")).toContain('{"skill":"archflow-prd","intent":"resume"}');
     expect(skill("archflow-design")).toContain('{"skill":"archflow-design","intent":"resume"}');
     expect(skill("archflow-phase-design")).toContain('{"skill":"archflow-phase-design","phase":<phase-number>,"intent":"resume"}');
+    expect(skill("archflow-phase-impl")).toContain('{"skill":"archflow-phase-impl","phase":<phase-number>,"intent":"resume"}');
     for (const name of semanticDocumentSkills) {
       const source = skill(name);
       expect(source).toContain('`intent:"reopen"`');
@@ -262,20 +257,22 @@ describe("canonical skill contracts", () => {
       expect(source).toContain("names a successor without an offer");
       expect(source).toContain("completed invocation does not own the hand-off");
       expect(source).toContain("returned `commit` facts");
-      expect(source).toContain("`:(top,literal)<commit.path>`");
+      expect(source).toContain(":(top,literal)<path>");
+      expect(source).toContain("`commit.paths`");
       expect(source).toContain("read-only `archflow_status`");
     }
     expect(skill("archflow-phase-design")).toContain("compound parent update");
   });
 
-  it("limits destination-skill hand-off recovery to the exact server-derived target", () => {
-    for (const name of ["archflow-phase-impl"] as const) {
-      const source = skill(name);
-      expect(source).toContain("immediate predecessor hand-off");
-      expect(source).toContain("`target_phase_instance`");
-      expect(source).toContain("`skill_args`");
-      expect(source).toContain("otherwise refuse the wrong phase");
-    }
+  it("limits destination-skill hand-off recovery to the exact semantic offer", () => {
+    const source = skill("archflow-phase-impl");
+    expect(source).toContain("`start-next-skill` with `next_action.offer`");
+    expect(source).toContain("this exact invocation");
+    expect(source).toContain("names a successor without an offer");
+    expect(source).toContain("completed invocation does not own the hand-off");
+    expect(source).toContain("require the position to be `phase-impl` with the requested phase");
+    expect(source).toContain("report a different phase or an inspection result rather than bypassing it");
+    expect(source).toContain("no reopen");
   });
 
   it("renders pending hand-offs from the exact server-derived destination command", () => {

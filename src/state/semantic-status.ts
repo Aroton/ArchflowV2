@@ -130,12 +130,20 @@ function fullFindings(details: DetailedTaskStatusV1): readonly PublicFindingV1[]
     })) as PublicFindingV1)));
 }
 
+/** Cross-authenticates a readable request/decision pair; false means corrupt or forged bytes. */
+function archiveAuthenticates(
+  request: CanonicalDocument<ArchivedGateRequestV1>,
+  decision: CanonicalDocument<ArchivedGateDecisionRecordV1>,
+): boolean {
+  return validateDurableSemantics({ gate_request: request, gate_decision: decision }).ok;
+}
+
 function archiveBinds(
   state: TaskStateV1,
   request: CanonicalDocument<ArchivedGateRequestV1>,
   decision: CanonicalDocument<ArchivedGateDecisionRecordV1>,
 ): boolean {
-  return validateDurableSemantics({ gate_request: request, gate_decision: decision }).ok &&
+  return archiveAuthenticates(request, decision) &&
     request.value.task_id === state.task_id && request.value.phase_instance === state.phase_instance &&
     decision.value.task_id === state.task_id && decision.value.phase_instance === state.phase_instance;
 }
@@ -240,17 +248,26 @@ async function deriveArchiveEnrichments(
   try { transitionGateId = parsePathSafeId(transition.result_id); }
   catch { return Object.freeze({}); }
   const archive = await archivedGate(dependencies, authority, transitionGateId);
-  const invalid = archive.request === "missing" || archive.request === "invalid" || archive.decision === "missing" || archive.decision === "invalid" ||
-    !archiveBinds(state, archive.request as CanonicalDocument<ArchivedGateRequestV1>, archive.decision as CanonicalDocument<ArchivedGateDecisionRecordV1>);
-  if (invalid) {
-    return transition.operation === "semantic-revision-requested"
+  const unreadable = archive.request === "missing" || archive.request === "invalid" || archive.decision === "missing" || archive.decision === "invalid";
+  // Bytes that cannot be authenticated at all — unreadable, or a readable pair whose request and
+  // decision do not validate against each other (corrupt or forged cross-binding) — keep the
+  // conservative invalid classification.
+  const invalidArchive = () =>
+    transition.operation === "semantic-revision-requested"
       ? Object.freeze({ revision_checkpoint: Object.freeze({ status: "invalid" }) })
       : transition.operation === "gate"
         ? Object.freeze({ pending_waiver_origin: Object.freeze({ status: "invalid" }) })
         : Object.freeze({});
-  }
+  if (unreadable) return invalidArchive();
   const request = (archive.request as CanonicalDocument<ArchivedGateRequestV1>);
   const decision = (archive.decision as CanonicalDocument<ArchivedGateDecisionRecordV1>);
+  if (!archiveAuthenticates(request, decision)) return invalidArchive();
+  // A readable, authenticated archive that no longer binds to the current position was
+  // consumed and superseded by a later authority change — most commonly the planning restart an
+  // amend-upstream choice performs in the same revision the settlement recorded. It is not a
+  // pending waiver origin or an open revision checkpoint for the restarted position; treating it
+  // as invalid would wedge the reopened boundary behind an inspection that cannot resolve it.
+  if (!archiveBinds(state, request, decision)) return Object.freeze({});
   if (decision.value.outcome !== "decided") return Object.freeze({});
   const commonTransitionBinding = request.value.gate_id === transitionGateId && decision.value.gate_id === transitionGateId &&
     canonicalJsonDigest(transition.outcome) === transition.outcome_digest && decision.value.outcome === "decided" &&

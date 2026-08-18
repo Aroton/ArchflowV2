@@ -23,7 +23,7 @@ function context(root: string) {
 }
 
 describe("live semantic handlers", () => {
-  it("keeps phase implementation descriptive and returns a fresh parity view on rejected apply", async () => {
+  it("admits the implementation invocation semantically and fails its unowned apply with a fresh parity view", async () => {
     const workspace = await createTaskWorkspace({ taskId: "semantic-handler", label: "semantic-handler" });
     workspaces.push(workspace);
     const invocation = { skill: "archflow-phase-impl" as const, phase: 1, intent: "resume" as const };
@@ -33,8 +33,10 @@ describe("live semantic handlers", () => {
     }, authenticated);
     expect(status.ok).toBe(true);
     if (!status.ok) return;
+    // The workspace sits at the PRD position, so this invocation owns nothing here — but the
+    // refusal is ordinary non-ownership, never the removed legacy-workflow fence.
     expect(status.value.next_action.offer).toBeUndefined();
-    expect(status.value.detail).toContain("legacy skill workflow");
+    expect(status.value.detail).not.toContain("legacy skill workflow");
 
     const applied = await handleSemanticApply({
       schema_version: "1", task_id: workspace.taskId, invocation,
@@ -42,8 +44,10 @@ describe("live semantic handlers", () => {
     }, authenticated);
     expect(applied).toMatchObject({
       ok: false,
-      error: { code: "SEMANTIC_ACTION_UNSUPPORTED" },
+      error: { code: "SEMANTIC_OFFER_STALE" },
       view: status.value,
     });
+    if (applied.ok) return;
+    expect(applied.error.message).not.toContain("legacy workflow");
   });
 });

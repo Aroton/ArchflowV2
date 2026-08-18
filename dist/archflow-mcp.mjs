@@ -36341,7 +36341,7 @@ var contexts = {
     target_ref: boundedText,
     baseline_commit: gitOidV1Schema,
     commit_message: boundedText,
-    paths: external_exports.array(repositoryPathClaimV1Schema).min(1).refine((items) => sortedUnique(items, (a, b) => a.localeCompare(b)), "paths must be sorted with no duplicates"),
+    paths: external_exports.array(repositoryPathClaimV1Schema).min(1).refine((items) => sortedUnique(items, (a, b) => a < b ? -1 : a > b ? 1 : 0), "paths must be sorted with no duplicates"),
     diff_digest: digest,
     current_artifact_digests: canonicalDigests.min(1),
     parent_document_digests: canonicalDigests.min(1)
@@ -38440,7 +38440,11 @@ var reopenImpactV1Schema = external_exports.object({
   appends_prd_ask_history: external_exports.boolean(),
   requires_fresh_review_and_approval: external_exports.literal(true)
 }).strict();
-var commitInstructionV1Schema = external_exports.object({ path: nonBlank4, message: nonBlank4, target_ref: nonBlank4, baseline: nonBlank4, requires_human_confirmation: external_exports.boolean() }).strict();
+var commitInstructionV1Schema = external_exports.object({ paths: external_exports.array(nonBlank4).min(1), message: nonBlank4, target_ref: nonBlank4, baseline: nonBlank4, requires_human_confirmation: external_exports.boolean() }).strict().superRefine((commit, context2) => {
+  if (commit.paths.some((path2, index) => index > 0 && commit.paths[index - 1] > path2)) {
+    context2.addIssue({ code: "custom", path: ["paths"], message: "commit paths must be sorted ascending" });
+  }
+});
 var semanticNextActionV1Schema = external_exports.object({ kind: external_exports.enum(SEMANTIC_ACTION_KINDS), instruction: nonBlank4, offer: external_exports.string().regex(/^af1_[0-9a-f]{64}$/u).optional(), expected_submission: external_exports.enum(APPLY_SUBMISSION_KINDS).optional(), skill: nonBlank4.optional(), skill_args: external_exports.array(external_exports.string()).optional(), commit: commitInstructionV1Schema.optional(), reopen: reopenImpactV1Schema.optional() }).strict();
 var workflowViewV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, condition: external_exports.enum(WORKFLOW_CONDITIONS), headline: nonBlank4, detail: nonBlank4, position: workflowPositionV1Schema.optional(), resources: external_exports.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: external_exports.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), presentation: humanPresentationV1Schema.optional() }).strict();
 var semanticErrorSummaryV1Schema = external_exports.object({
@@ -57539,10 +57543,14 @@ var semantic_workflow_schema_default = {
         commit: {
           type: "object",
           properties: {
-            path: {
-              type: "string",
-              minLength: 1,
-              pattern: "\\S"
+            paths: {
+              minItems: 1,
+              type: "array",
+              items: {
+                type: "string",
+                minLength: 1,
+                pattern: "\\S"
+              }
             },
             message: {
               type: "string",
@@ -57564,7 +57572,7 @@ var semantic_workflow_schema_default = {
             }
           },
           required: [
-            "path",
+            "paths",
             "message",
             "target_ref",
             "baseline",
@@ -69723,6 +69731,19 @@ async function readArchivedGateRequest(dependencies, authority, gateId) {
     throw error51;
   }
 }
+function currentReviewPredecessor(state, produceSubject) {
+  const midProduce = state.step === "produce" && state.status !== "succeeded";
+  const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document" ? produceSubject.artifact.editorial_predecessor : void 0;
+  const currentProduceReference = state.authoritative_results.find((reference) => reference.phase_instance === state.phase_instance && reference.step === "produce");
+  const simpleHumanRevision = currentProduceReference === void 0 ? void 0 : [...state.human_revision_history ?? []].reverse().find((revision) => revision.phase_instance === state.phase_instance && revision.classification === "simple" && revision.resulting_result_digest === currentProduceReference.result_digest);
+  return declaredPredecessor === void 0 ? simpleHumanRevision === void 0 ? void 0 : Object.freeze({
+    subject_digest: simpleHumanRevision.predecessor_subject_digest,
+    input_fingerprint: simpleHumanRevision.predecessor_input_fingerprint
+  }) : Object.freeze({
+    subject_digest: declaredPredecessor.subject_digest,
+    input_fingerprint: declaredPredecessor.input_fingerprint
+  });
+}
 async function currentApprovedUpstreams(dependencies, authority, state, authenticated, subject) {
   const bindings = subject === void 0 ? expectedProduceUpstreamBindings(state) : produceUpstreamBindingsForSubject(state, subject.artifact);
   const digests = /* @__PURE__ */ new Set();
@@ -70121,15 +70142,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     }
   }
   const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document" ? produceSubject.artifact.editorial_predecessor : void 0;
-  const currentProduceReference = state.authoritative_results.find((reference) => reference.phase_instance === state.phase_instance && reference.step === "produce");
-  const simpleHumanRevision = currentProduceReference === void 0 ? void 0 : [...state.human_revision_history ?? []].reverse().find((revision) => revision.phase_instance === state.phase_instance && revision.classification === "simple" && revision.resulting_result_digest === currentProduceReference.result_digest);
-  const reviewPredecessor = declaredPredecessor === void 0 ? simpleHumanRevision === void 0 ? void 0 : Object.freeze({
-    subject_digest: simpleHumanRevision.predecessor_subject_digest,
-    input_fingerprint: simpleHumanRevision.predecessor_input_fingerprint
-  }) : Object.freeze({
-    subject_digest: declaredPredecessor.subject_digest,
-    input_fingerprint: declaredPredecessor.input_fingerprint
-  });
+  const reviewPredecessor = currentReviewPredecessor(state, produceSubject);
   let assessment;
   if (constitution !== void 0 && subjectDigest !== void 0) {
     const resolvedAssessment = await resolveStatusEvidenceAssessment(
@@ -71040,6 +71053,7 @@ async function composeGate(services, state, intentId, snapshot) {
     services.authority.context
   );
   let pendingGate;
+  let exhaustion;
   if (constitution.ok) {
     const authenticated = [];
     for (const approval of state.approvals) {
@@ -71052,9 +71066,45 @@ async function composeGate(services, state, intentId, snapshot) {
       authenticated.push(loadedApproval.value);
     }
     pendingGate = pendingAdjudicationGate(state, constitution.value, loaded.value, authenticated);
+    try {
+      const configRead = await services.dependencies.read_config(services.authority.config);
+      const configured = configRead.kind === "valid" ? parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(configRead.snapshot.bytes), "task config").max_attempts : void 0;
+      const approvedUpstreams = await currentApprovedUpstreams(
+        services.dependencies,
+        services.authority,
+        state,
+        authenticated,
+        subject.value
+      );
+      const predecessor = currentReviewPredecessor(state, subject.value);
+      const assessment = assessCurrentEvidence(state, loaded.value, {
+        subject_digest: subject.value.artifact_digest,
+        input_fingerprint: state.input_fingerprint,
+        constitution: constitution.value,
+        approved_upstream_digests: approvedUpstreams,
+        authenticated_gate_approvals: authenticated,
+        ...predecessor === void 0 ? {} : { review_predecessor: predecessor },
+        ...configured === void 0 ? {} : { max_attempts: configured }
+      });
+      if (assessment.next === "attempts-exhausted") {
+        exhaustion = Object.freeze({ attempts: state.attempt, maximum_attempts: configured ?? DEFAULT_MAX_ATTEMPTS });
+      }
+    } catch {
+      return transitionInvalid(state, "gate-fixed-point-disagreement");
+    }
   }
   let input;
-  if (gateKind2 === "design-approval") {
+  if (exhaustion !== void 0) {
+    input = {
+      ...mechanicalInput(services, state, intentId),
+      phase_instance: state.phase_instance,
+      summary,
+      subject_digest: subject.value.artifact_digest,
+      current_evidence: derived.current_evidence_set,
+      kind: "attempts-exhausted",
+      context: { ...exhaustion, step: state.step }
+    };
+  } else if (gateKind2 === "design-approval") {
     const target2 = await currentTargetRef(services.dependencies);
     const approval = await buildDesignApprovalInput(services.dependencies, state, loaded.value, target2);
     input = {
@@ -71294,7 +71344,7 @@ function invocationTarget(invocation) {
   }
 }
 function semanticInvocationEnabled(invocation) {
-  return invocation.skill === "archflow-prd" || invocation.skill === "archflow-design" || invocation.skill === "archflow-phase-design";
+  return invocation.skill === "archflow-prd" || invocation.skill === "archflow-design" || invocation.skill === "archflow-phase-design" || invocation.skill === "archflow-phase-impl";
 }
 function invocationOwnsCurrentPosition(invocation, status, actionKind) {
   if (!semanticInvocationEnabled(invocation)) return false;
@@ -71527,7 +71577,7 @@ function mapNextAction(status, snapshot) {
         action_kind: "commit",
         instruction: "Perform the exact client-side Git commit, then request fresh status.",
         commit: Object.freeze({
-          path: action2.commit_path,
+          paths: Object.freeze([action2.commit_path]),
           message: action2.commit_message,
           target_ref: action2.commit_target_ref,
           baseline: action2.commit_baseline,
@@ -71535,12 +71585,22 @@ function mapNextAction(status, snapshot) {
         })
       });
     case "commit-phase":
+      if (action2.commit_paths === void 0 || action2.commit_message === void 0 || action2.commit_target_ref === void 0 || action2.commit_baseline === void 0) {
+        return inspect2("Inspect why the approved implementation commit authority is unavailable.");
+      }
       return Object.freeze({
         condition: "awaiting-client",
         headline: "The authorized implementation commit is ready",
         detail: action2.detail,
         action_kind: "commit",
-        instruction: "Use the existing authorized commit procedure, then request fresh status; exact implementation commit facts are not available in this read model."
+        instruction: "Stage exactly the authorized paths, show the human the staged diff and the exact message and obtain explicit confirmation, create the commit, then request fresh read-only status so the server observes proof.",
+        commit: Object.freeze({
+          paths: Object.freeze([...action2.commit_paths].sort()),
+          message: action2.commit_message,
+          target_ref: action2.commit_target_ref,
+          baseline: action2.commit_baseline,
+          requires_human_confirmation: true
+        })
       });
     case "advance-phase":
       return Object.freeze({
@@ -71632,7 +71692,7 @@ function projectSemanticStatus(snapshot, invocation) {
   }
   const owns = invocation !== void 0 && (shape.action_kind === "reopen" ? reopen !== void 0 && semanticInvocationEnabled(invocation) : invocationOwnsCurrentPosition(invocation, status, shape.action_kind));
   const offer = owns && canOffer(shape) ? offerFor(snapshot, status, invocation, shape, reopen) : void 0;
-  const mismatch3 = invocation !== void 0 && !owns ? invocation.skill === "archflow-phase-impl" ? " Phase implementation remains on the supported legacy skill workflow in this release; no semantic mutation is offered." : ` The invoked skill does not own this current action; continue with the action shown or invoke its owning skill.` : "";
+  const mismatch3 = invocation !== void 0 && !owns ? ` The invoked skill does not own this current action; continue with the action shown or invoke its owning skill.` : "";
   const nextAction = Object.freeze({
     kind: shape.action_kind,
     instruction: shape.instruction,
@@ -71682,6 +71742,25 @@ function assertSubmissionMatches(expected, submission) {
   const actual = submissionKind(submission);
   if (expected === "none" ? submission !== void 0 : actual !== expected) {
     throw new SemanticActionPlanError("SEMANTIC_SUBMISSION_MISMATCH", expectedSubmissionMessage(expected, actual));
+  }
+}
+function assertWorkResultFactsMatchPosition(offer, submission) {
+  if (offer.action_kind !== "submit-work" || submission?.kind !== "work-result" || submission.outcome !== "succeeded") return;
+  const position2 = offer.phase_instance === void 0 ? void 0 : decodePhaseInstance(offer.phase_instance).kind;
+  if (position2 === "phase-impl") {
+    if (submission.implementation === void 0) {
+      throw new SemanticActionPlanError(
+        "SEMANTIC_SUBMISSION_MISMATCH",
+        "semantic action expects implementation facts on a succeeded work-result at a phase-impl position"
+      );
+    }
+    return;
+  }
+  if (position2 !== void 0 && submission.implementation !== void 0) {
+    throw new SemanticActionPlanError(
+      "SEMANTIC_SUBMISSION_MISMATCH",
+      `semantic action refuses implementation facts on a succeeded work-result at a ${position2} position`
+    );
   }
 }
 function operationKey(offerToken, offer, submission) {
@@ -71926,6 +72005,7 @@ function planSemanticAction(snapshot, value) {
   if (offer === void 0) {
     throw new SemanticActionPlanError("SEMANTIC_OFFER_STALE", "authenticated current action has no mutation offer for this invocation");
   }
+  assertWorkResultFactsMatchPosition(offer, input.action.submission);
   const expectedToken = semanticOfferToken(offer);
   const archivedOperation = offer.action_kind === "decide" && markerField(snapshot.archived_decision, "status") === "exact" ? markerField(snapshot.archived_decision, "operation_digest") : void 0;
   const revisionContinuation = snapshot.state === void 0 ? void 0 : authenticatedSemanticRevisionContinuation(snapshot.state);
@@ -72341,8 +72421,11 @@ function fullFindings(details) {
     }
   })))));
 }
+function archiveAuthenticates(request2, decision3) {
+  return validateDurableSemantics({ gate_request: request2, gate_decision: decision3 }).ok;
+}
 function archiveBinds(state, request2, decision3) {
-  return validateDurableSemantics({ gate_request: request2, gate_decision: decision3 }).ok && request2.value.task_id === state.task_id && request2.value.phase_instance === state.phase_instance && decision3.value.task_id === state.task_id && decision3.value.phase_instance === state.phase_instance;
+  return archiveAuthenticates(request2, decision3) && request2.value.task_id === state.task_id && request2.value.phase_instance === state.phase_instance && decision3.value.task_id === state.task_id && decision3.value.phase_instance === state.phase_instance;
 }
 function transitionCarriesDecision(outcome, decision3) {
   if (decision3.outcome !== "decided" || outcome === null || Array.isArray(outcome) || typeof outcome !== "object") return false;
@@ -72415,12 +72498,13 @@ async function deriveArchiveEnrichments(dependencies, authority, details) {
     return Object.freeze({});
   }
   const archive = await archivedGate(dependencies, authority, transitionGateId);
-  const invalid3 = archive.request === "missing" || archive.request === "invalid" || archive.decision === "missing" || archive.decision === "invalid" || !archiveBinds(state, archive.request, archive.decision);
-  if (invalid3) {
-    return transition.operation === "semantic-revision-requested" ? Object.freeze({ revision_checkpoint: Object.freeze({ status: "invalid" }) }) : transition.operation === "gate" ? Object.freeze({ pending_waiver_origin: Object.freeze({ status: "invalid" }) }) : Object.freeze({});
-  }
+  const unreadable = archive.request === "missing" || archive.request === "invalid" || archive.decision === "missing" || archive.decision === "invalid";
+  const invalidArchive = () => transition.operation === "semantic-revision-requested" ? Object.freeze({ revision_checkpoint: Object.freeze({ status: "invalid" }) }) : transition.operation === "gate" ? Object.freeze({ pending_waiver_origin: Object.freeze({ status: "invalid" }) }) : Object.freeze({});
+  if (unreadable) return invalidArchive();
   const request2 = archive.request;
   const decision3 = archive.decision;
+  if (!archiveAuthenticates(request2, decision3)) return invalidArchive();
+  if (!archiveBinds(state, request2, decision3)) return Object.freeze({});
   if (decision3.value.outcome !== "decided") return Object.freeze({});
   const commonTransitionBinding = request2.value.gate_id === transitionGateId && decision3.value.gate_id === transitionGateId && canonicalJsonDigest(transition.outcome) === transition.outcome_digest && decision3.value.outcome === "decided" && transitionCarriesDecision(transition.outcome, decision3.value);
   const payload = decision3.value.envelope.payload;
@@ -72673,9 +72757,6 @@ async function handleSemanticApply(input, context2) {
   if (unsupported !== void 0) return unsupported;
   const session = await openSemanticSession(input.task_id, context2, "archflow-apply");
   if (!session.ok) return failure2(session.error.code, session.error.code, void 0, retryable(session.error));
-  if (!semanticInvocationEnabled(input.invocation)) {
-    return failure2("SEMANTIC_ACTION_UNSUPPORTED", "Phase implementation remains on the supported legacy workflow.", safeView(session.value, input.invocation));
-  }
   try {
     return success2(await executeSemanticAction(
       session.value.services,

@@ -351,10 +351,14 @@
         "commit": {
           "type": "object",
           "properties": {
-            "path": {
-              "type": "string",
-              "minLength": 1,
-              "pattern": "\\S"
+            "paths": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
             },
             "message": {
               "type": "string",
@@ -376,7 +380,7 @@
             }
           },
           "required": [
-            "path",
+            "paths",
             "message",
             "target_ref",
             "baseline",

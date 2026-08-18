@@ -31,7 +31,7 @@ import {
   type SemanticActionPlanV1,
 } from "../../state/semantic-actions.js";
 import { computeAuthoritativeSemanticStatus } from "../../state/semantic-status.js";
-import { projectSemanticStatus, semanticInvocationEnabled } from "../../state/semantic-view.js";
+import { projectSemanticStatus } from "../../state/semantic-view.js";
 import { handleCounterReview } from "./counter-review.js";
 import { handleState } from "./state.js";
 
@@ -220,7 +220,7 @@ function capabilities(
   });
 }
 
-/** Applies one authenticated document-workflow offer and returns at the next actor boundary. */
+/** Applies one authenticated workflow offer and returns at the next actor boundary. */
 export async function handleSemanticApply(
   input: ArchFlowApplyInputV1,
   context: InvocationContext,
@@ -229,9 +229,6 @@ export async function handleSemanticApply(
   if (unsupported !== undefined) return unsupported;
   const session = await openSemanticSession(input.task_id, context, "archflow-apply");
   if (!session.ok) return failure(session.error.code, session.error.code, undefined, retryable(session.error));
-  if (!semanticInvocationEnabled(input.invocation)) {
-    return failure("SEMANTIC_ACTION_UNSUPPORTED", "Phase implementation remains on the supported legacy workflow.", safeView(session.value, input.invocation));
-  }
   try {
     return success(await executeSemanticAction(
       session.value.services, session.value.snapshot, input, capabilities(session.value, input, context),
