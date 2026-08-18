@@ -6,8 +6,19 @@ const D = "a".repeat(64);
 const RULE = { rule_id: "trust-boundary", rule_version: 1 };
 
 describe("gate catalogue", () => {
-  it("contains exactly the nine independent kinds", () => {
-    expect(GATE_KINDS).toEqual(["artifact-approval", "design-approval", "constitution-review", "material-drift", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"]);
+  it("contains exactly the ten independent kinds", () => {
+    expect(GATE_KINDS).toEqual(["artifact-approval", "design-approval", "constitution-review", "material-drift", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "baseline-adoption", "migration-audit"]);
+  });
+
+  it("binds a baseline adoption to its exact drift set", () => {
+    const drifted = [{ path: "src/one.ts", recorded_digest: D, observed_digest: "b".repeat(64) }];
+    const context = parseGateContext("baseline-adoption", { drifted_projections: drifted });
+    expect(validateGateDecision("baseline-adoption", context, { decision: "adopt-current-bytes", reason: "Merge from main" })).toBeTruthy();
+    expect(validateGateDecision("baseline-adoption", context, { decision: "restore-recorded-bytes", reason: "Discard the drift" })).toBeTruthy();
+    // The gate exists to decide real drift: no entries, duplicate paths, or digests that agree all fail.
+    expect(() => parseGateContext("baseline-adoption", { drifted_projections: [] })).toThrow();
+    expect(() => parseGateContext("baseline-adoption", { drifted_projections: [...drifted, ...drifted] })).toThrow(/sorted/);
+    expect(() => parseGateContext("baseline-adoption", { drifted_projections: [{ path: "src/one.ts", recorded_digest: D, observed_digest: D }] })).toThrow();
   });
 
   it("keeps cancellation outside decisions", () => {

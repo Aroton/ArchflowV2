@@ -81,6 +81,7 @@
         "constitution-edit",
         "commit-authorization",
         "restore-collision",
+        "baseline-adoption",
         "migration-audit"
       ]
     },

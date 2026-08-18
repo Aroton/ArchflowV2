@@ -87,7 +87,6 @@ const implementationCommit = Object.freeze({
 
 const reconciliationCases: readonly [ReconciliationFinding, string][] = [
   [{ kind: "receipt-only", request_digest: D("a"), receipt_digest: D("b"), next_action: "resume-exact-intent" }, "resume-exact-intent"],
-  [{ kind: "projection-mismatch", path: "design.md" as never, recorded_digest: D("a"), next_action: "restore-or-record-new-transition" }, "restore-or-record-new-transition"],
   [{ kind: "receipt-invalid", receipt_digest: D("a"), next_action: "inspect-retained-receipt" }, "inspect-retained-receipt"],
   [{ kind: "intent-mismatch", requested_digest: D("a"), receipt_request_digest: D("b"), next_action: "create-fresh-intent" }, "create-fresh-intent"],
   [{ kind: "active-gate-mismatch", next_action: "resolve-current-authority" }, "resolve-current-authority"],

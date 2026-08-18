@@ -67,7 +67,7 @@ An editorial round consumes an attempt slot like any other re-entry. That is del
 
 When the human requests changes at a gate, the producer applies them and classifies the actual diff, explaining the result in plain language. A **simple** revision is strictly typo, formatting, comment, or wording-only work that changes no meaning, behavior, scope, interface, trust boundary, input, verification claim, or parent document. It keeps the attempt count and may retain the predecessor's review and constitution evidence for one hop, but the exact small diff is shown and the final bytes always return to the human for approval. A **significant** revision is anything else; uncertainty defaults to significant. It archives old evidence as history, resets the attempt counter to 1, and automatically dispatches a fresh rubric review and constitution review before another gate. The human may override the producer's classification in either direction, and the override is durable. A design-stage retry always re-records its writable parents with the primary document, preventing an unchanged parent from falling back to an older approval merely because only the primary document changed in the latest revision.
 
-This replaces the former supplemental gate-review loop. There is no optional review after a gate: the ordinary server-dispatched review is automatic before it, and repeats automatically only when a significant human change makes the prior judgment stale.
+This replaces the former supplemental gate-review loop. There is no optional review after a gate: the ordinary server-dispatched review is automatic before it, and repeats automatically only when a significant human change makes the prior judgment stale. The `baseline-adoption` gate opens before any review by design: it is not approval of produced work but a human decision about which bytes are the reviewed baseline after they drifted.
 
 ### The transition edges, precisely
 
@@ -81,7 +81,7 @@ The phase-completion signal fires from **triage-succeeded**: once triage closes 
 
 ## Gates: where humans decide
 
-Nine gate kinds exist (`src/contracts/gates.ts`):
+Ten gate kinds exist (`src/contracts/gates.ts`):
 
 | Gate kind | Opens when |
 |---|---|
@@ -91,6 +91,7 @@ Nine gate kinds exist (`src/contracts/gates.ts`):
 | `constitution-review` | the constitution review found a rule `fail`/`uncertain`, or a rule's `review_trigger` matched, or both (derived after triage; one gate discloses both axes and offers a waiver per rule *and* axis) |
 | `material-drift` | an approved upstream document drifted materially (derived after triage); `amend-upstream` durably restarts at the affected planning document |
 | `attempts-exhausted` | the produce/review loop hit its attempt cap (status prefills its request; `build-request` composes only the approval kinds, so complete it through `archflow-local envelope`) |
+| `baseline-adoption` | files changed after the recorded review bytes they were left at — typically later commits or a merge — block reconciliation outside a produce window; the human either adopts the current bytes as the reviewed baseline (no re-review; the next implementation phase still reviews what it touches) or restores the recorded bytes (status prefills its request; complete it like `attempts-exhausted`) |
 | `constitution-edit` | legacy compatibility for previously opened policy-edit gates; current counter-review does not emit this gate because task policy is already pinned immutably |
 | `restore-collision` | a drift repair would overwrite conflicting bytes |
 | `migration-audit` | an atomically adopted legacy import has completed its automatic design review and triage; one decision binds every imported document digest, phase plan, commit authority, and the derived phase-design or phase-implementation resume point |
@@ -121,6 +122,8 @@ Two windows need care, and both are about commit proofs, not pins:
 
 - **Do not merge between an approval and its authorized commit.** Design `design-approval` and implementation `commit-authorization` bind the commit that was `HEAD` when the human decided, and the proof requires the authorized commit to be its direct child with `HEAD` still in place. A merge in that window moves `HEAD`, the milestone can no longer be recognized, and status correctly refuses to re-offer a commit that cannot succeed — the decision is taken again against the new baseline. Merge before opening the gate, or after the authorized commit has landed.
 - **During phase implementation, merged files are ordinary incoming changes.** The implementation proof only requires the approved base to remain an ancestor, so a merge is safe mid-implementation; but merged files surface in the undeclared-change scan and must be folded into the declared outputs (or the phase design revised) before the final diff is authorized.
+
+One more window matters, after a milestone: files a completed phase projected (its committed sources, docs, dist) keep being re-hashed against their recorded review bytes, so a merge that touches them makes reconciliation drift and blocks the next gate. That drift is resolved by the `baseline-adoption` gate: the human decides once — keep the current versions (they become the reviewed baseline without re-review) or restore the recorded ones — and the pipeline resumes where it stood. Adopting does not immunize the files: later drift opens a fresh decision, and a restore is only offered when a retained manifest still holds the recorded bytes (drift on top of an adoption can only be adopted again, since adopted bytes live in the worktree and git, not in durable authority).
 
 If a merge does conflict inside `.archflow/` — only possible when both branches carry it, for example two task branches — `.gitattributes` marks those files binary: resolve by taking one side wholesale rather than merging line-by-line, because a hand-merged state file matches no recorded digest.
 

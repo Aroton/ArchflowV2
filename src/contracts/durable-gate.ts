@@ -6,10 +6,12 @@ import {
   GATE_CONTRACTS,
   GATE_KINDS,
   archivedCommitAuthorizationContextSchema,
+  baselineObservationRefV1Schema,
   gateDecisionEnvelopeV1Schema,
   gateRuleVersionRefSchema,
   gateWaiverScopeSchema,
   humanDecisionProvenanceV1Schema,
+  type BaselineObservationRef,
   type GateContext,
   type GateDecisionEnvelope,
   type GateDecisionPayload,
@@ -71,8 +73,16 @@ type GateRequestCommon = {
   readonly opened_at_revision: SafeInteger;
 };
 
+/**
+ * `current_evidence` per kind: every gate kind that opens after review cites the current evidence
+ * set; `baseline-adoption` opens pre-review, so it cites the drift observation itself
+ * (`BaselineObservationRef`) — the only evidence a human deciding on drifted projections has.
+ */
+export type GateEvidenceByKind<K extends GateKind> = K extends "baseline-adoption" ? BaselineObservationRef : CurrentEvidenceSetRef;
+
 export type GateRequestV1 = {
-  readonly [K in GateKind]: GateRequestCommon & {
+  readonly [K in GateKind]: Omit<GateRequestCommon, "current_evidence"> & {
+    readonly current_evidence: GateEvidenceByKind<K>;
     readonly kind: K;
     readonly context: GateContext<K> | (K extends "constitution-review" ? WaiverGateContext : never);
     readonly allowed_decisions: readonly (GateDecisionPayload<K>["decision"] | "grant" | "deny" | "cancel")[];
@@ -224,6 +234,7 @@ const GATE_REQUEST_DECISIONS = {
   "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
   "commit-authorization": ["authorize-commit", "revise", "abort", "cancel"],
   "restore-collision": ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"],
+  "baseline-adoption": ["adopt-current-bytes", "restore-recorded-bytes", "abort", "cancel"],
   "migration-audit": ["accept-import-audit", "revise", "abort", "cancel"],
 } as const satisfies Readonly<Record<GateKind, readonly [string, ...string[]]>>;
 
@@ -279,6 +290,7 @@ const gateArms = (extra: Record<string, z.ZodType>) => ({
   constitutionEdit: gateArm("constitution-edit", GATE_CONTRACTS["constitution-edit"].context, allowedDecisionTuples["constitution-edit"], extra),
   commitAuthorization: gateArm("commit-authorization", GATE_CONTRACTS["commit-authorization"].context, allowedDecisionTuples["commit-authorization"], extra),
   restoreCollision: gateArm("restore-collision", GATE_CONTRACTS["restore-collision"].context, allowedDecisionTuples["restore-collision"], extra),
+  baselineAdoption: gateArm("baseline-adoption", GATE_CONTRACTS["baseline-adoption"].context, allowedDecisionTuples["baseline-adoption"], { ...extra, current_evidence: baselineObservationRefV1Schema }),
   migrationAudit: gateArm("migration-audit", GATE_CONTRACTS["migration-audit"].context, allowedDecisionTuples["migration-audit"], extra),
   constitutionWaiver: gateArm("constitution-review", waiverGateContextSchema, waiverDecisionsTuple, extra),
 });
@@ -333,6 +345,7 @@ export const activeGateV1Schema = armUnion(gateArms({
  */
 export const gateRequestSchemaDefs: Readonly<Record<string, z.ZodType>> = Object.freeze({
   currentEvidence: currentEvidenceSetRefSchema,
+  baselineObservation: baselineObservationRefV1Schema,
   origin,
   waiverContext: waiverGateContextSchema,
   artifactApprovalDecisions: allowedDecisionTuples["artifact-approval"],
@@ -343,6 +356,7 @@ export const gateRequestSchemaDefs: Readonly<Record<string, z.ZodType>> = Object
   constitutionEditDecisions: allowedDecisionTuples["constitution-edit"],
   commitAuthorizationDecisions: allowedDecisionTuples["commit-authorization"],
   restoreCollisionDecisions: allowedDecisionTuples["restore-collision"],
+  baselineAdoptionDecisions: allowedDecisionTuples["baseline-adoption"],
   migrationAuditDecisions: allowedDecisionTuples["migration-audit"],
   waiverDecisions: waiverDecisionsTuple,
   ...gateRequestArms,
@@ -362,6 +376,7 @@ export const gateRequestSchemaDefOverrides: Readonly<Record<string, Readonly<Rec
   constitutionEditDecisions: { const: GATE_REQUEST_DECISIONS["constitution-edit"] },
   commitAuthorizationDecisions: { const: GATE_REQUEST_DECISIONS["commit-authorization"] },
   restoreCollisionDecisions: { const: GATE_REQUEST_DECISIONS["restore-collision"] },
+  baselineAdoptionDecisions: { const: GATE_REQUEST_DECISIONS["baseline-adoption"] },
   migrationAuditDecisions: { const: GATE_REQUEST_DECISIONS["migration-audit"] },
   waiverDecisions: { const: WAIVER_DECISIONS },
 });

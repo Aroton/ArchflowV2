@@ -3,6 +3,7 @@ import { createProjectError, type ProjectResult } from "../../contracts/errors.j
 import type { ParsedToolCall, ToolSuccess } from "../../contracts/mcp-tools.js";
 import { buildGatePreview, previewHasChoice } from "../../state/gate-preview.js";
 import { runConnectedGateDecision } from "../../state/gate-direct.js";
+import { baselineRestoreOffered } from "../../state/gates.js";
 import { identifyTransactionRequest } from "../../state/request.js";
 import { mapHandlerErrors } from "./errors.js";
 import { openHandlerSession } from "./session.js";
@@ -40,6 +41,23 @@ export async function handleGate(
       session.value.services.authority,
       call.input.input_fingerprint,
     );
+    // A restore choice that can never apply must be refused before the gate opens: a decided
+    // interface is immutable, so opening first would wedge the gate behind an unapplicable
+    // decision. Adoption-sourced drift has no retained manifest to restore from.
+    if (
+      call.input.kind === "baseline-adoption" && call.input.decision.choice === "restore-recorded-versions" &&
+      (session.value.services.state === undefined || !(await baselineRestoreOffered(
+        session.value.services.dependencies,
+        session.value.services.authority,
+        session.value.services.state,
+        call.input.context.drifted_projections,
+      )))
+    ) {
+      return fail(createProjectError("STATE_INVALID", {
+        phase_instance: call.input.phase_instance,
+        issue_code: "baseline-adoption-restore-source-unavailable",
+      }));
+    }
     const outcome = await runConnectedGateDecision(session.value.services.dependencies, {
       authority: session.value.services.authority,
       expected_revision: call.input.expected_revision,

@@ -118,6 +118,7 @@ export const DURABLE_ISSUE_CODES = Object.freeze({
   /** 7f */ workflowDigestMismatch: "workflow-digest-mismatch",
   /** 7g */ constitutionDigestMismatch: "constitution-digest-mismatch",
   /** 7h */ policyBaseCommitMismatch: "policy-base-commit-mismatch",
+  /** 7i */ baselineAdoptionApprovalMissing: "baseline-adoption-approval-missing",
   /** 3 */ intentReceiptSelfDigestMismatch: "intent-receipt-self-digest-mismatch",
   /** state */ lastTransitionOutcomeDigestMismatch: "last-transition-outcome-digest-mismatch",
   /** state */ lastTransitionRevisionMismatch: "last-transition-revision-mismatch",
@@ -721,6 +722,17 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
       if (state.policy_base_commit !== initialization.policy_base_commit) {
         return fail(stateInvalid(state, DURABLE_ISSUE_CODES.policyBaseCommitMismatch));
       }
+    }
+
+    /*
+     * Rank 7i — a baseline adoption is human authority and must cite the archived decision that
+     * granted it. The approval and the adoption record are appended in the same revision advance,
+     * so an adoption whose gate never decided `adopt-current-bytes` can only be a fabrication.
+     */
+    if (state.baseline_adoptions?.some((adoption) =>
+      !state.approvals.some((approval) => approval.gate_id === adoption.gate_id && approval.gate_kind === "baseline-adoption"),
+    )) {
+      return fail(stateInvalid(state, DURABLE_ISSUE_CODES.baselineAdoptionApprovalMissing));
     }
 
     /*

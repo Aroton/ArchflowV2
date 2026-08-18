@@ -8,10 +8,10 @@ import { exactCommitAuthorizationContext, parseActiveGate, parseGateRequest, typ
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import type { AdjudicationEvidence } from "../contracts/adjudication.js";
 import type { ProjectError, ProjectResult } from "../contracts/errors.js";
-import { computeGateContextDigest, verifyPinnedConfig } from "../contracts/fingerprints.js";
+import { baselineAdoptionDriftDigest, computeGateContextDigest, verifyPinnedConfig } from "../contracts/fingerprints.js";
 import type { PathSafeId, Sha256Digest, TaskSlug } from "../contracts/evidence.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
-import type { GateContext } from "../contracts/gates.js";
+import type { BaselineObservationRef, GateContext } from "../contracts/gates.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
 import type { ReviewEvidence } from "../contracts/review.js";
 import type { CurrentEvidenceSetRef } from "../contracts/trust.js";
@@ -147,6 +147,49 @@ export type DesignApprovalInput = Readonly<{
   target_ref_guidance: string;
 }>;
 
+/**
+ * The mechanically complete baseline-adoption gate subject: every live projection mismatch, bound
+ * by digest, plus the drift observation that serves as the gate's evidence. Unlike the approval
+ * inputs it exists without any review of the current phase — the drift set is the subject.
+ */
+export type BaselineAdoptionInput = Readonly<{
+  kind: "baseline-adoption";
+  subject_digest: Sha256Digest;
+  current_evidence: BaselineObservationRef;
+  context: GateContext<"baseline-adoption">;
+}>;
+
+/** Builds the baseline-adoption gate subject from the blocking reconciliation findings, or nothing. */
+export function baselineAdoptionInputFromFindings(
+  task_id: TaskSlug,
+  state: TaskStateV1,
+  findings: readonly ReconciliationFinding[],
+): BaselineAdoptionInput | undefined {
+  const mismatches = findings.filter((finding): finding is Extract<ReconciliationFinding, { kind: "projection-mismatch" }> => finding.kind === "projection-mismatch");
+  // A missing projected file has no current bytes to adopt; next-action routing sends that case
+  // elsewhere, so here the drift set must be fully observable.
+  if (mismatches.length === 0 || !mismatches.every((finding) => finding.observed_digest !== undefined)) return undefined;
+  const context: GateContext<"baseline-adoption"> = Object.freeze({
+    drifted_projections: Object.freeze(mismatches
+      .map((finding) => Object.freeze({ path: finding.path, recorded_digest: finding.recorded_digest, observed_digest: finding.observed_digest! }))
+      .sort((left, right) => left.path.localeCompare(right.path))),
+  });
+  const subjectDigest = baselineAdoptionDriftDigest(context);
+  return Object.freeze({
+    kind: "baseline-adoption",
+    subject_digest: subjectDigest,
+    current_evidence: Object.freeze({
+      schema_version: "1",
+      observation_kind: "projection-drift",
+      task_id,
+      phase_instance: state.phase_instance,
+      observed_at_revision: state.revision,
+      drift_digest: subjectDigest,
+    }),
+    context,
+  });
+}
+
 export type TaskStatusV1 = Readonly<{
   task_id: TaskSlug;
   state: "missing" | "active" | "complete" | "abandoned";
@@ -201,6 +244,8 @@ export type TaskStatusV1 = Readonly<{
     }>[];
   }>;
   gate_input?: CommitAuthorizationInput;
+  /** The complete baseline-adoption gate subject when status routes to that decision. */
+  baseline_adoption_gate?: BaselineAdoptionInput;
   /** Derived cleanup state. Cleanup debt is non-blocking and never changes workflow routing. */
   workspace?: WorkspaceCleanupReport;
   next_action: NextAction;
@@ -464,6 +509,7 @@ export function pendingAdjudicationGates(
       item.approval.subject_digest === gate.subject_digest &&
       item.request.phase_instance === state.phase_instance &&
       item.request.context_digest === contextDigest &&
+      item.request.kind !== "baseline-adoption" && // narrowed: a drift observation is not an evidence set
       item.request.current_evidence.set_digest === currentSet.set_digest &&
       source.evidence.source_evidence_set_digest === currentSet.set_digest);
     let waived = false;
@@ -1131,6 +1177,7 @@ export async function computeTaskStatus(
 
   let gateInput: CommitAuthorizationInput | undefined;
   let designGateInput: DesignApprovalInput | undefined;
+  let baselineAdoptionInput: BaselineAdoptionInput | undefined;
   if (
     nextAction.code === "open-gate" && nextAction.gate_kind === "commit-authorization" &&
     produceSubject?.artifact.artifact_kind === "implementation-output" && evidence.available
@@ -1142,6 +1189,12 @@ export async function computeTaskStatus(
       target,
       await resolveCommit(dependencies.runner, "HEAD"),
     );
+  }
+  if (
+    nextAction.code === "open-gate" && nextAction.gate_kind === "baseline-adoption" &&
+    statusReconciliation !== undefined
+  ) {
+    baselineAdoptionInput = baselineAdoptionInputFromFindings(authority.task_id, state, statusReconciliation.findings);
   }
   if (
     nextAction.code === "open-gate" && nextAction.gate_kind === "design-approval" && evidence.available
@@ -1163,6 +1216,7 @@ export async function computeTaskStatus(
       : {}),
     ...(gateInput === undefined ? {} : { commit_authorization: gateInput }),
     ...(designGateInput === undefined ? {} : { design_approval: designGateInput }),
+    ...(baselineAdoptionInput === undefined ? {} : { baseline_adoption: baselineAdoptionInput }),
     ...(migrationAuditContext === undefined ? {} : { migration_audit: migrationAuditContext }),
     ...(adjudicationGate === undefined ? {} : { adjudication_gate: adjudicationGate }),
     maximum_attempts: parsedConfig?.max_attempts ?? DEFAULT_MAX_ATTEMPTS,
@@ -1212,6 +1266,7 @@ export async function computeTaskStatus(
     evidence,
     ...(editorialRevision === undefined ? {} : { editorial_revision: editorialRevision }),
     ...(gateInput === undefined ? {} : { gate_input: gateInput }),
+    ...(baselineAdoptionInput === undefined ? {} : { baseline_adoption_gate: baselineAdoptionInput }),
     workspace,
     blocking_reasons: Object.freeze([...new Set(blockers)]),
     next_action: nextActionWithRequest,

@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 
-import { canonicalDocument, canonicalJsonDigest, type CanonicalDocument } from "../contracts/canonical.js";
+import { canonicalDocument, canonicalJsonDigest, sha256Bytes, type CanonicalDocument } from "../contracts/canonical.js";
 import {
   parseActiveGate,
   parseArchivedGateDecisionRecord,
@@ -11,20 +11,21 @@ import {
   type GateRequestV1,
   type WaiverGateContext,
 } from "../contracts/durable-gate.js";
-import type { ApprovalRef, LastTransition, TaskStateV1, WaiverRef } from "../contracts/durable-state.js";
+import type { ApprovalRef, AuthoritativeResultRef, BaselineAdoptionRecord, LastTransition, TaskStateV1, WaiverRef } from "../contracts/durable-state.js";
 import { intentOutcomeDigest, parseIntentReceipt, type IntentReceiptV1 } from "../contracts/durable-intent.js";
 import { createCommittedIntentSubject, createPreparedIntentSubject, openGateFrozenStateDigest, validateDurableSemantics } from "../contracts/durable.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parseSafeCode, parseSafeId, parseSafeInteger, type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
 import { decodePhaseInstance } from "../contracts/phase-instance.js";
-import { computeGateContextDigest, computeGateId } from "../contracts/fingerprints.js";
-import { gateDecisionEffect } from "../contracts/gates.js";
+import { baselineAdoptionDriftDigest, computeGateContextDigest, computeGateId } from "../contracts/fingerprints.js";
+import { gateDecisionEffect, type BaselineObservationRef } from "../contracts/gates.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
 import {
   gateDecisionClaim,
   gateRequestClaim,
   intentReceiptClaim,
   resolveTaskWorkspacePath,
+  type ResolvedTaskPath,
   type ResolvedTaskWorkspacePath,
 } from "../repository/paths.js";
 import { verifyRepositoryIdentity } from "../repository/identity.js";
@@ -55,6 +56,8 @@ import { loadLegacyImportInitialization, loadLegacyImportResumePhase } from "./l
 import { TaskLockError } from "./lock.js";
 import { loadApprovedDesignFinalPhase } from "./planned-final-phase.js";
 import { planPlanningRestart, planStateTransition } from "./transitions.js";
+import { reconcileCurrentAuthority, type ReconciliationFinding } from "./reconciliation.js";
+import { currentProjectionDigest, discoverNewestProjections, discoverReconciliationInput } from "./reconciliation-discovery.js";
 import { applyProjectionPlan, captureProjectionTarget, prepareProjectionPlan, projectionGenerationDigest, type ProjectionSource } from "./snapshots.js";
 import { cleanTaskWorkspace } from "./workspace-cleanup.js";
 
@@ -112,7 +115,9 @@ async function authenticateWaiverOrigin(
   const request = await readCanonical(requestPath.value, "waiver origin request", parseArchivedGateRequest);
   const decision = await readCanonical(decisionPath.value, "waiver origin decision", parseArchivedGateDecisionRecord);
   if (request === "missing" || request === "invalid" || decision === "missing" || decision === "invalid") return issue("CONTRACT_INVALID", undefined, "waiver-origin-archive-invalid");
-  if (!validateDurableSemantics({ gate_request: request, gate_decision: decision }).ok || decision.digest !== context.origin.origin_decision_digest || decision.value.outcome !== "decided" || decision.value.envelope.payload.decision !== "waiver-requested" || (request.value.kind !== "constitution-review" && request.value.kind !== "design-approval")) return issue("CONTRACT_INVALID", undefined, "waiver-origin-decision-invalid");
+  // Checked before the compound binding so the kind narrowing also fixes the evidence shape below.
+  if (request.value.kind !== "constitution-review" && request.value.kind !== "design-approval") return issue("CONTRACT_INVALID", undefined, "waiver-origin-decision-invalid");
+  if (!validateDurableSemantics({ gate_request: request, gate_decision: decision }).ok || decision.digest !== context.origin.origin_decision_digest || decision.value.outcome !== "decided" || decision.value.envelope.payload.decision !== "waiver-requested") return issue("CONTRACT_INVALID", undefined, "waiver-origin-decision-invalid");
   const payload = decision.value.envelope.payload as Extract<typeof decision.value.envelope.payload, { decision: "waiver-requested" }>;
   const requestContext = request.value.context;
   if (!("eligible_waivers" in requestContext) || request.value.gate_id !== context.origin.origin_gate_id || request.value.context_digest !== context.origin.origin_context_digest || request.value.task_id !== context.origin.task_id || request.value.phase_instance !== context.origin.phase_instance || request.value.subject_digest !== context.origin.subject_digest || request.value.current_evidence.set_digest !== context.origin.current_evidence_set_digest || !isDeepStrictEqual(payload.rule, context.origin.rule) || payload.operation !== context.origin.scope.operation || !requestContext.eligible_waivers.some((eligible) => isDeepStrictEqual(eligible.rule, context.origin.rule) && isDeepStrictEqual(eligible.scope, context.origin.scope))) return issue("CONTRACT_INVALID", undefined, "waiver-origin-binding-invalid");
@@ -283,6 +288,43 @@ export async function openDurableGate(
         }
         const changed = input.input_fingerprint !== reference.input_fingerprint;
         if ((!changed && context.adoption_candidate !== undefined) || (context.adoption_candidate !== undefined && (context.adoption_candidate.changed_input_fingerprint !== input.input_fingerprint || context.adoption_candidate.proposed_generation_digest !== context.current_generation_digest))) return issue("CONTRACT_INVALID", undefined, "restore-adoption-candidate-invalid");
+      }
+      if (input.kind === "baseline-adoption") {
+        // Drift while a produce write window is open is expected producer work, already tolerated
+        // by reconciliation; adopting a baseline mid-produce would re-baseline under the producer.
+        if (current.value.step === "produce" && current.value.status !== "succeeded") {
+          return issue("STATE_INVALID", current.value, "baseline-adoption-window-open");
+        }
+        if (dependencies.load_retained_manifest === undefined) {
+          return issue("STATE_INVALID", current.value, "baseline-adoption-loader-unavailable");
+        }
+        // Truth is re-derived under the lock: the gate may only open on exactly the live drift set,
+        // so a partial adoption or a context naming currently-clean paths fails closed here.
+        const discovered = await discoverReconciliationInput(dependencies, input.authority, current);
+        if (!discovered.ok) return discovered;
+        const drift = reconcileCurrentAuthority(discovered.value).findings
+          .filter((finding): finding is Extract<ReconciliationFinding, { kind: "projection-mismatch" }> => finding.kind === "projection-mismatch")
+          .sort((left, right) => left.path.localeCompare(right.path));
+        if (drift.some((finding) => finding.observed_digest === undefined)) {
+          return issue("STATE_INVALID", current.value, "baseline-adoption-missing-projection");
+        }
+        const context = input.context as Extract<GateRequestV1, { kind: "baseline-adoption" }>["context"];
+        const exact = drift.length === context.drifted_projections.length && drift.every((finding, index) => {
+          const declared = context.drifted_projections[index];
+          return declared !== undefined && declared.path === finding.path &&
+            declared.recorded_digest === finding.recorded_digest && declared.observed_digest === finding.observed_digest;
+        });
+        if (!exact) return issue("STATE_INVALID", current.value, drift.length === 0 ? "baseline-adoption-no-drift" : "baseline-adoption-context-mismatch");
+        if (input.subject_digest !== baselineAdoptionDriftDigest(context)) {
+          return issue("STATE_INVALID", current.value, "baseline-adoption-subject-mismatch");
+        }
+        const observation = input.current_evidence as BaselineObservationRef;
+        if (observation.task_id !== input.authority.task_id ||
+            observation.phase_instance !== current.value.phase_instance ||
+            observation.observed_at_revision !== current.value.revision ||
+            observation.drift_digest !== input.subject_digest) {
+          return issue("STATE_INVALID", current.value, "baseline-adoption-observation-stale");
+        }
       }
       if (input.kind === "migration-audit") {
         const reference = [...current.value.authoritative_results].reverse().find((item) =>
@@ -647,6 +689,54 @@ async function closedStateForRecord(
       return issue("STATE_INVALID", current.value, "migration-audit-git-target-changed");
     }
   }
+  if (
+    record.outcome === "decided" && record.kind === "baseline-adoption" &&
+    record.envelope.payload.decision === "adopt-current-bytes" && request.kind === "baseline-adoption"
+  ) {
+    // The decision is bound to exact bytes observed at gate open; any change between the human's
+    // choice and this commit voids it. Replay is naturally idempotent: the adopted bytes remain.
+    const targets = await discoverNewestProjections(dependencies, authority, current);
+    if (!targets.ok) return targets;
+    for (const drifted of request.context.drifted_projections) {
+      const entry = targets.value.get(drifted.path);
+      if (entry === undefined || entry.projection.content_digest !== drifted.recorded_digest) {
+        return issue("STATE_INVALID", current.value, "baseline-adoption-current-stale");
+      }
+      if (await currentProjectionDigest(entry.target) !== drifted.observed_digest) {
+        return issue("STATE_INVALID", current.value, "baseline-adoption-current-stale");
+      }
+    }
+    const plannedFinalPhase = await loadApprovedDesignFinalPhase(dependencies, current.value, record);
+    if (!plannedFinalPhase.ok) return plannedFinalPhase;
+    const next = nextStateForRecord(current.value, record, digest, plannedFinalPhase.value);
+    const baseline_adoptions = [...(next.value.baseline_adoptions ?? []), baselineAdoptionRecord(record.gate_id, next.value.revision, request.context.drifted_projections)]
+      .sort((left, right) => left.gate_id.localeCompare(right.gate_id));
+    return ok(canonicalDocument({ ...next.value, baseline_adoptions: Object.freeze(baseline_adoptions) } as TaskStateV1));
+  }
+  if (
+    record.outcome === "decided" && record.kind === "baseline-adoption" &&
+    record.envelope.payload.decision === "restore-recorded-bytes" && request.kind === "baseline-adoption"
+  ) {
+    // A restore decision must be applicable before it becomes durable. Every drifted path's
+    // recorded bytes must come from a retained manifest that still carries a usable
+    // projection-plan entry; refusing here leaves the still-open interface correctable instead of
+    // archiving a decision that can never apply behind the open gate.
+    if (dependencies.load_retained_result === undefined) {
+      return issue("STATE_INVALID", current.value, "baseline-adoption-restore-unavailable");
+    }
+    const owners = await baselineRestoreOwners(dependencies, authority, current, request.context.drifted_projections);
+    if (!owners.ok) return owners;
+    for (const owner of owners.value) {
+      const retained = await dependencies.load_retained_result(owner.reference);
+      if (!retained.ok) return retained;
+      for (const drifted of owner.drifted) {
+        const entry = retained.value.projection_plan.entries.find((item) => item.path === drifted.path);
+        if (entry === undefined || entry.git_tracked === undefined) {
+          return issue("STATE_INVALID", current.value, "baseline-adoption-restore-path-missing");
+        }
+      }
+    }
+  }
   const plannedFinalPhase = await loadApprovedDesignFinalPhase(dependencies, current.value, record);
   if (
     plannedFinalPhase.ok && plannedFinalPhase.value === undefined &&
@@ -984,6 +1074,82 @@ export async function runDurableGate(
   return resolveAdvancingGate(dependencies, input.authority, opened.value.gate_id, input.input_fingerprint);
 }
 
+export type BaselineDriftedProjection = Extract<GateRequestV1, { kind: "baseline-adoption" }>["context"]["drifted_projections"][number];
+
+/**
+ * Builds one durable adoption record from the gate's drifted set. The projection sort is plain
+ * code-unit ordering — the comparator the durable-state schema's sorted-unique refinement uses —
+ * and deliberately NOT `localeCompare`, which orders mixed-case path sets differently and once
+ * produced a record the receipt parser rejected after the decision was already archived.
+ */
+export function baselineAdoptionRecord(
+  gateId: GateDecisionRecordV1["gate_id"],
+  adoptedAtRevision: TaskStateV1["revision"],
+  driftedProjections: readonly BaselineDriftedProjection[],
+): BaselineAdoptionRecord {
+  const ordinal = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
+  return Object.freeze({
+    gate_id: gateId,
+    adopted_at_revision: adoptedAtRevision,
+    adopted_projections: Object.freeze(driftedProjections
+      .map((drifted) => Object.freeze({ path: drifted.path, content_digest: drifted.observed_digest }))
+      .sort((left, right) => ordinal(left.path, right.path))),
+  });
+}
+
+/**
+ * Groups the drifted projections by the retained result that owns each recorded generation, so a
+ * restore reads each owning manifest exactly once. Fails closed when any drifted path no longer
+ * matches its recorded digest, or when the newest generation is adoption-sourced: adopted bytes
+ * exist only in the worktree and git, never in a manifest, so there is nothing durable whose
+ * re-projection the restore machinery could trust.
+ */
+async function baselineRestoreOwners(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  current: CanonicalDocument<TaskStateV1>,
+  driftedProjections: readonly BaselineDriftedProjection[],
+): Promise<ProjectResult<readonly Readonly<{
+  reference: AuthoritativeResultRef;
+  drifted: readonly BaselineDriftedProjection[];
+}>[]>> {
+  const targets = await discoverNewestProjections(dependencies, authority, current);
+  if (!targets.ok) return targets;
+  const owners = new Map<string, { reference: AuthoritativeResultRef; drifted: BaselineDriftedProjection[] }>();
+  for (const drifted of driftedProjections) {
+    const entry = targets.value.get(drifted.path);
+    if (entry === undefined || entry.projection.content_digest !== drifted.recorded_digest) {
+      return issue("STATE_INVALID", current.value, "baseline-adoption-current-stale");
+    }
+    if (entry.reference === undefined) {
+      return issue("STATE_INVALID", current.value, "baseline-adoption-restore-source-unavailable");
+    }
+    const group = owners.get(entry.reference.result_digest);
+    if (group === undefined) owners.set(entry.reference.result_digest, { reference: entry.reference, drifted: [drifted] });
+    else group.drifted.push(drifted);
+  }
+  return ok(Object.freeze([...owners.values()].map((owner) =>
+    Object.freeze({ reference: owner.reference, drifted: Object.freeze(owner.drifted) }))));
+}
+
+/**
+ * Whether a restore decision can honestly be offered for this drift set: every drifted path's
+ * recorded generation must be held by a retained manifest. Adoption-sourced generations exist
+ * only in the worktree and git, never in a manifest, so restoring them can never succeed — and
+ * a decided interface cannot be corrected, so the choice must be refused before the gate opens
+ * rather than recorded as a decision that can never apply behind it.
+ */
+export async function baselineRestoreOffered(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  state: CanonicalDocument<TaskStateV1>,
+  driftedProjections: readonly BaselineDriftedProjection[],
+): Promise<boolean> {
+  const newest = await discoverNewestProjections(dependencies, authority, state);
+  if (!newest.ok) return false;
+  return driftedProjections.every((drifted) => newest.value.get(drifted.path)?.reference !== undefined);
+}
+
 async function resolveAdvancingGate(
   dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
@@ -1072,6 +1238,52 @@ async function resolveAdvancingGate(
           if (plan.value.collisions.length !== 0) return issue("STATE_INVALID", current.value, "restore-replan-collision");
           const applied = await applyProjectionPlan(dependencies.projection_writer, plan.value);
           if (applied.outcome !== "applied") return issue("STATE_INVALID", current.value, `restore-${applied.outcome}`);
+        }
+      }
+      if (archived.value.outcome === "decided" && archived.value.kind === "baseline-adoption" &&
+          archived.value.envelope.payload.decision === "restore-recorded-bytes") {
+        if (dependencies.load_retained_result === undefined || dependencies.projection_writer === undefined || dependencies.gate_secret_scanner === undefined) {
+          return issue("STATE_INVALID", current.value, "baseline-adoption-restore-unavailable");
+        }
+        const context = request.value.context as Extract<GateRequestV1, { kind: "baseline-adoption" }>["context"];
+        const owners = await baselineRestoreOwners(dependencies, authority, current, context.drifted_projections);
+        if (!owners.ok) return owners;
+        const sources: ProjectionSource[] = [];
+        let worktreeRoot: ResolvedTaskPath | undefined;
+        for (const owner of owners.value) {
+          const retained = await dependencies.load_retained_result(owner.reference);
+          if (!retained.ok) return retained;
+          if (worktreeRoot === undefined) worktreeRoot = retained.value.worktree_root;
+          for (const drifted of owner.drifted) {
+            const entry = retained.value.projection_plan.entries.find((item) => item.path === drifted.path);
+            if (entry === undefined || entry.git_tracked === undefined) return issue("STATE_INVALID", current.value, "baseline-adoption-restore-path-missing");
+            const captured = await captureProjectionTarget(entry.target);
+            const desiredDigest = entry.desired.state === "present" ? sha256Bytes(entry.desired.bytes) : undefined;
+            const liveDigest = captured.observation.state === "present" ? captured.observation.content_digest : undefined;
+            // Stale unless the bytes are still the ones the human judged — or already the restored
+            // generation, which makes an archive replay a no-op.
+            if (liveDigest !== drifted.observed_digest && liveDigest !== desiredDigest) {
+              return issue("STATE_INVALID", current.value, "baseline-adoption-current-stale");
+            }
+            if (liveDigest === desiredDigest) continue;
+            sources.push(Object.freeze({
+              path: entry.path,
+              target: entry.target,
+              desired: entry.desired,
+              authenticated_before: captured.observation,
+              rollback: captured.rollback,
+              git_tracked: entry.git_tracked,
+              ...(entry.rename_pair === undefined ? {} : { rename_pair: entry.rename_pair }),
+            }));
+          }
+        }
+        if (sources.length !== 0) {
+          if (worktreeRoot === undefined) return issue("STATE_INVALID", current.value, "baseline-adoption-restore-unavailable");
+          const plan = await prepareProjectionPlan(sources, dependencies.gate_secret_scanner, worktreeRoot);
+          if (!plan.ok) return plan;
+          if (plan.value.collisions.length !== 0) return issue("STATE_INVALID", current.value, "baseline-adoption-restore-collision");
+          const applied = await applyProjectionPlan(dependencies.projection_writer, plan.value);
+          if (applied.outcome !== "applied") return issue("STATE_INVALID", current.value, `baseline-adoption-restore-${applied.outcome}`);
         }
       }
       const closure = preparedClosure === undefined

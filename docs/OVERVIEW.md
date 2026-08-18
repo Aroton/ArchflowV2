@@ -69,7 +69,7 @@ Editing the artifact changes its digest, which automatically invalidates every d
 ## Why each subsystem exists
 
 - **Skills** — encode the workflow and its human gates as instructions any capable agent can follow. See `workflow/SKILLS.md`.
-- **Workflow lifecycle & gates** — the phase graph, the nine gate kinds, and where a human must decide. See `workflow/LIFECYCLE.md`.
+- **Workflow lifecycle & gates** — the phase graph, the ten gate kinds, and where a human must decide. See `workflow/LIFECYCLE.md`.
 - **MCP server** — validates every request, owns all writes, and treats even the MCP SDK as untrusted for framing and output fidelity. See `mcp/SERVER.md`.
 - **Dispatch** — runs the configured reviewer (opposite family by default, optionally through a cc-switch provider) as a locked-down child process so review evidence is something the producer *cannot author*. See `mcp/DISPATCH.md`.
 - **Local CLI** — exists because hand-transcribing mechanical fields was the dominant source of errors; `build-request` is "the one documented door." See `cli/COMMANDS.md`.

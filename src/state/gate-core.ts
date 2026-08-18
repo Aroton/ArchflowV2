@@ -47,6 +47,7 @@ export const DECISIONS: Readonly<Record<GateKind, readonly string[]>> = Object.f
   "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
   "commit-authorization": ["authorize-commit", "revise", "abort", "cancel"],
   "restore-collision": ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"],
+  "baseline-adoption": ["adopt-current-bytes", "restore-recorded-bytes", "abort", "cancel"],
   "migration-audit": ["accept-import-audit", "revise", "abort", "cancel"],
 });
 

@@ -34,7 +34,11 @@ import type { ProductionServices } from "../state/production.js";
 import { resolvePinnedConstitution } from "../state/constitution.js";
 import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "../state/gate-approvals.js";
 import { APPROVAL_ARTIFACT_KINDS } from "../state/request-templates.js";
-import { buildCommitAuthorizationInput, buildDesignApprovalInput, computeTaskStatus, currentTargetRef, pendingAdjudicationGate } from "../state/status.js";
+import { baselineAdoptionInputFromFindings, buildCommitAuthorizationInput, buildDesignApprovalInput, computeTaskStatus, currentTargetRef, pendingAdjudicationGate } from "../state/status.js";
+import { baselineRestoreOffered } from "../state/gates.js";
+import { canonicalDocument } from "../contracts/canonical.js";
+import { reconcileCurrentAuthority } from "../state/reconciliation.js";
+import { discoverReconciliationInput } from "../state/reconciliation-discovery.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { legalRunStepStatus } from "../state/transitions.js";
 import { buildGatePreview, previewHasChoice, type GateDecisionChoice, type ProspectiveGate } from "../state/gate-preview.js";
@@ -490,6 +494,53 @@ async function composeGate(
     throw new TypeError('build-request gate facts require a non-empty "summary" written for the human reviewer');
   }
   const requested = requestedGateDecision(snapshot, "build-request gate");
+  // Baseline adoption composes ahead of the phase's own approval gates: reconciliation blocking is
+  // ahead of them in status routing too, so an approval composed past unresolved drift could never
+  // resolve honestly. Mid-produce drift is expected producer work and never composes this gate.
+  if (state.step !== "produce" || state.status === "succeeded") {
+    const discovered = await discoverReconciliationInput(services.dependencies, services.authority, canonicalDocument(state));
+    if (!discovered.ok) return discovered;
+    const drift = reconcileCurrentAuthority(discovered.value);
+    if (drift.classification === "reconciliation-required") {
+      const adoption = baselineAdoptionInputFromFindings(services.authority.task_id, state, drift.findings);
+      if (adoption !== undefined) {
+        // A restore that can never apply must be refused here, before the gate opens: a decided
+        // interface is immutable, so recording it would wedge the gate behind an unapplicable
+        // decision. Adoption-sourced drift has no retained manifest to restore from.
+        if (requested.decision.choice === "restore-recorded-versions" &&
+            !(await baselineRestoreOffered(services.dependencies, services.authority, services.state!, adoption.context.drifted_projections))) {
+          return transitionInvalid(state, "baseline-adoption-restore-unavailable");
+        }
+        const input: Record<string, PlainJsonValue> = {
+          ...mechanicalInput(services, state, intentId),
+          phase_instance: state.phase_instance,
+          summary,
+          subject_digest: adoption.subject_digest,
+          current_evidence: adoption.current_evidence as unknown as PlainJsonValue,
+          kind: "baseline-adoption",
+          context: adoption.context as unknown as PlainJsonValue,
+        };
+        const preview = buildGatePreview({
+          task_id: services.authority.task_id,
+          revision: state.revision,
+          phase_instance: state.phase_instance,
+          summary,
+          subject_digest: input.subject_digest as ProspectiveGate["subject_digest"],
+          current_evidence: adoption.current_evidence,
+          kind: "baseline-adoption",
+          context: input.context as ProspectiveGate["context"],
+        });
+        if (preview.preview_digest !== requested.preview_digest || !previewHasChoice(preview, requested.decision)) {
+          return transitionInvalid(state, preview.preview_digest !== requested.preview_digest
+            ? "gate-preview-stale"
+            : "gate-decision-choice-invalid");
+        }
+        input.preview_digest = requested.preview_digest;
+        input.decision = requested.decision as unknown as PlainJsonValue;
+        return computeCallEnvelope(services, { tool: "archflow_gate", input });
+      }
+    }
+  }
   const phaseKind = decodePhaseInstance(state.phase_instance).kind;
   const gateKind = phaseKind === "phase-impl"
     ? "commit-authorization"

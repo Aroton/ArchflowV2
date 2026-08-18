@@ -265,6 +265,9 @@ function evidenceBindingFailure(
   evidence: RetainedGateEvidence,
   subject: EvidenceSubject,
 ): GateApprovalBindingFailure | undefined {
+  // A baseline-adoption approval cites the drift observation, not a review set; it can never
+  // satisfy an adjudication gate's evidence binding.
+  if (request.kind === "baseline-adoption") return "request-gate-kind";
   const { counter_review_digest: counterDigest, triage, adjudication } = evidence;
   if (counterDigest === undefined) return "counter-review-evidence-missing";
   if (triage === undefined) return "triage-evidence-missing";

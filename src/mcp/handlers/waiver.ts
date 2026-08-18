@@ -64,6 +64,10 @@ export async function handleWaiver(
     if (!authenticWaiverOriginArchive(originRequest, originDecision, call.input.origin)) {
       return fail(createProjectError("CONTRACT_INVALID", { issue_code: "waiver-origin-decision-invalid" }));
     }
+    // A waiver origin is always a reviewed gate kind; narrowing also fixes the evidence shape.
+    if (originRequest.value.kind === "baseline-adoption") {
+      return fail(createProjectError("CONTRACT_INVALID", { issue_code: "waiver-origin-decision-invalid" }));
+    }
 
     const identified = identifyTransactionRequest(call, services.authority, call.input.input_fingerprint);
     const waiverContext: WaiverGateContext = Object.freeze({ origin: call.input.origin, rationale: call.input.rationale });

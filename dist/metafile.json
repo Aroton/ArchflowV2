@@ -3617,7 +3617,7 @@
       ]
     },
     "src/contracts/durable-gate.ts": {
-      "bytes": 23100,
+      "bytes": 24179,
       "format": "esm",
       "imports": [
         {
@@ -3893,7 +3893,7 @@
       ]
     },
     "src/contracts/durable-state.ts": {
-      "bytes": 23325,
+      "bytes": 25595,
       "format": "esm",
       "imports": [
         {
@@ -3915,6 +3915,11 @@
           "kind": "import-statement",
           "original": "./gates.js",
           "path": "src/contracts/gates.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./path-claims.js",
+          "path": "src/contracts/path-claims.ts"
         },
         {
           "kind": "import-statement",
@@ -3970,7 +3975,7 @@
       ]
     },
     "src/contracts/durable.ts": {
-      "bytes": 45810,
+      "bytes": 46492,
       "format": "esm",
       "imports": [
         {
@@ -4068,7 +4073,7 @@
       ]
     },
     "src/contracts/fingerprints.ts": {
-      "bytes": 17036,
+      "bytes": 17727,
       "format": "esm",
       "imports": [
         {
@@ -4089,7 +4094,7 @@
       ]
     },
     "src/contracts/gates.ts": {
-      "bytes": 28615,
+      "bytes": 32075,
       "format": "esm",
       "imports": [
         {
@@ -4176,7 +4181,7 @@
       ]
     },
     "src/contracts/mcp-tools.ts": {
-      "bytes": 27009,
+      "bytes": 27390,
       "format": "esm",
       "imports": [
         {
@@ -4389,7 +4394,7 @@
       }
     },
     "src/contracts/schemas/v1/gate-contract.schema.json": {
-      "bytes": 23053,
+      "bytes": 24898,
       "format": "esm",
       "imports": [],
       "with": {
@@ -4397,7 +4402,7 @@
       }
     },
     "src/contracts/schemas/v1/gate-decision.schema.json": {
-      "bytes": 15778,
+      "bytes": 17199,
       "format": "esm",
       "imports": [],
       "with": {
@@ -4421,7 +4426,7 @@
       }
     },
     "src/contracts/schemas/v1/mcp-tools.schema.json": {
-      "bytes": 29977,
+      "bytes": 30012,
       "format": "esm",
       "imports": [],
       "with": {
@@ -4445,7 +4450,7 @@
       }
     },
     "src/contracts/schemas/v1/project-error.schema.json": {
-      "bytes": 87923,
+      "bytes": 87952,
       "format": "esm",
       "imports": [],
       "with": {
@@ -4485,7 +4490,7 @@
       }
     },
     "src/contracts/schemas/v1/task-state.schema.json": {
-      "bytes": 21425,
+      "bytes": 22618,
       "format": "esm",
       "imports": [],
       "with": {
@@ -5189,7 +5194,7 @@
       ]
     },
     "src/local/build-request.ts": {
-      "bytes": 35122,
+      "bytes": 38236,
       "format": "esm",
       "imports": [
         {
@@ -5291,6 +5296,26 @@
           "kind": "import-statement",
           "original": "../state/status.js",
           "path": "src/state/status.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../state/gates.js",
+          "path": "src/state/gates.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/canonical.js",
+          "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../state/reconciliation.js",
+          "path": "src/state/reconciliation.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../state/reconciliation-discovery.js",
+          "path": "src/state/reconciliation-discovery.ts"
         },
         {
           "kind": "import-statement",
@@ -5563,7 +5588,7 @@
       ]
     },
     "src/local/gate-preview.ts": {
-      "bytes": 6209,
+      "bytes": 6550,
       "format": "esm",
       "imports": [
         {
@@ -5879,7 +5904,7 @@
       ]
     },
     "src/mcp/handlers/gate.ts": {
-      "bytes": 3318,
+      "bytes": 4237,
       "format": "esm",
       "imports": [
         {
@@ -5896,6 +5921,11 @@
           "kind": "import-statement",
           "original": "../../state/gate-direct.js",
           "path": "src/state/gate-direct.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../state/gates.js",
+          "path": "src/state/gates.ts"
         },
         {
           "kind": "import-statement",
@@ -6155,7 +6185,7 @@
       ]
     },
     "src/mcp/handlers/waiver.ts": {
-      "bytes": 6520,
+      "bytes": 6791,
       "format": "esm",
       "imports": [
         {
@@ -6730,7 +6760,7 @@
       ]
     },
     "src/review/fixed-point.ts": {
-      "bytes": 25470,
+      "bytes": 25690,
       "format": "esm",
       "imports": [
         {
@@ -7191,7 +7221,7 @@
       ]
     },
     "src/state/gate-core.ts": {
-      "bytes": 13644,
+      "bytes": 13737,
       "format": "esm",
       "imports": [
         {
@@ -7252,7 +7282,7 @@
       ]
     },
     "src/state/gate-decision-interface.ts": {
-      "bytes": 27499,
+      "bytes": 28896,
       "format": "esm",
       "imports": [
         {
@@ -7339,7 +7369,7 @@
       ]
     },
     "src/state/gate-preview.ts": {
-      "bytes": 5234,
+      "bytes": 5258,
       "format": "esm",
       "imports": [
         {
@@ -7396,7 +7426,7 @@
       ]
     },
     "src/state/gates.ts": {
-      "bytes": 68665,
+      "bytes": 82153,
       "format": "esm",
       "imports": [
         {
@@ -7503,6 +7533,16 @@
           "kind": "import-statement",
           "original": "./transitions.js",
           "path": "src/state/transitions.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./reconciliation.js",
+          "path": "src/state/reconciliation.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./reconciliation-discovery.js",
+          "path": "src/state/reconciliation-discovery.ts"
         },
         {
           "kind": "import-statement",
@@ -7853,7 +7893,7 @@
       ]
     },
     "src/state/next-action.ts": {
-      "bytes": 16705,
+      "bytes": 17870,
       "format": "esm",
       "imports": [
         {
@@ -8064,7 +8104,7 @@
       ]
     },
     "src/state/reconciliation-discovery.ts": {
-      "bytes": 11020,
+      "bytes": 12966,
       "format": "esm",
       "imports": [
         {
@@ -8125,7 +8165,7 @@
       ]
     },
     "src/state/reconciliation.ts": {
-      "bytes": 8922,
+      "bytes": 8912,
       "format": "esm",
       "imports": [
         {
@@ -8156,7 +8196,7 @@
       ]
     },
     "src/state/request-templates.ts": {
-      "bytes": 15801,
+      "bytes": 17489,
       "format": "esm",
       "imports": [
         {
@@ -8371,7 +8411,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 61542,
+      "bytes": 64373,
       "format": "esm",
       "imports": [
         {
@@ -8679,7 +8719,7 @@
       ]
     },
     "src/state/waiver-origin.ts": {
-      "bytes": 1766,
+      "bytes": 1934,
       "format": "esm",
       "imports": [
         {
@@ -8753,7 +8793,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1670734,
+      "bytes": 1683974,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -8975,6 +9015,21 @@
         {
           "external": true,
           "kind": "import-statement",
+          "path": "node:fs"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
           "path": "node:fs/promises"
         },
         {
@@ -9031,21 +9086,6 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:path"
         },
         {
           "external": true,
@@ -9734,7 +9774,7 @@
           "bytesInOutput": 1982
         },
         "src/contracts/durable-gate.ts": {
-          "bytesInOutput": 13057
+          "bytesInOutput": 13566
         },
         "src/contracts/durable-implementation-output.ts": {
           "bytesInOutput": 2484
@@ -9752,13 +9792,13 @@
           "bytesInOutput": 1945
         },
         "src/contracts/durable-state.ts": {
-          "bytesInOutput": 10690
+          "bytesInOutput": 11643
         },
         "src/contracts/durable-task-initialization.ts": {
           "bytesInOutput": 531
         },
         "src/contracts/durable.ts": {
-          "bytesInOutput": 32193
+          "bytesInOutput": 32568
         },
         "src/contracts/errors.ts": {
           "bytesInOutput": 16048
@@ -9767,10 +9807,10 @@
           "bytesInOutput": 2125
         },
         "src/contracts/fingerprints.ts": {
-          "bytesInOutput": 7497
+          "bytesInOutput": 7774
         },
         "src/contracts/gates.ts": {
-          "bytesInOutput": 17586
+          "bytesInOutput": 19362
         },
         "src/contracts/internal/trust-brands.ts": {
           "bytesInOutput": 1855
@@ -9779,7 +9819,7 @@
           "bytesInOutput": 711
         },
         "src/contracts/mcp-tools.ts": {
-          "bytesInOutput": 10747
+          "bytesInOutput": 10932
         },
         "src/contracts/path-claims.ts": {
           "bytesInOutput": 3184
@@ -9854,7 +9894,7 @@
           "bytesInOutput": 5034
         },
         "src/local/build-request.ts": {
-          "bytesInOutput": 25570
+          "bytesInOutput": 27591
         },
         "src/local/call-envelope.ts": {
           "bytesInOutput": 4571
@@ -9866,7 +9906,7 @@
           "bytesInOutput": 3640
         },
         "src/local/gate-preview.ts": {
-          "bytesInOutput": 4605
+          "bytesInOutput": 4822
         },
         "src/local/main.ts": {
           "bytesInOutput": 3612
@@ -9890,7 +9930,7 @@
           "bytesInOutput": 3838
         },
         "src/review/fixed-point.ts": {
-          "bytesInOutput": 13798
+          "bytesInOutput": 13871
         },
         "src/review/rubrics.ts": {
           "bytesInOutput": 10588
@@ -9911,7 +9951,7 @@
           "bytesInOutput": 6007
         },
         "src/state/fingerprint-readers.ts": {
-          "bytesInOutput": 3980
+          "bytesInOutput": 3987
         },
         "src/state/fingerprint.ts": {
           "bytesInOutput": 2794
@@ -9920,16 +9960,16 @@
           "bytesInOutput": 3508
         },
         "src/state/gate-core.ts": {
-          "bytesInOutput": 6765
+          "bytesInOutput": 6858
         },
         "src/state/gate-decision-interface.ts": {
-          "bytesInOutput": 20012
+          "bytesInOutput": 21356
         },
         "src/state/gate-preview.ts": {
           "bytesInOutput": 2964
         },
         "src/state/gates.ts": {
-          "bytesInOutput": 0
+          "bytesInOutput": 310
         },
         "src/state/implementation-manifest.ts": {
           "bytesInOutput": 36522
@@ -9950,7 +9990,7 @@
           "bytesInOutput": 2300
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 9890
+          "bytesInOutput": 10892
         },
         "src/state/phase-documents.ts": {
           "bytesInOutput": 4683
@@ -9965,13 +10005,13 @@
           "bytesInOutput": 2486
         },
         "src/state/reconciliation-discovery.ts": {
-          "bytesInOutput": 8008
+          "bytesInOutput": 8949
         },
         "src/state/reconciliation.ts": {
-          "bytesInOutput": 5858
+          "bytesInOutput": 5853
         },
         "src/state/request-templates.ts": {
-          "bytesInOutput": 11228
+          "bytesInOutput": 12771
         },
         "src/state/request.ts": {
           "bytesInOutput": 3462
@@ -9986,13 +10026,13 @@
           "bytesInOutput": 1353
         },
         "src/state/status.ts": {
-          "bytesInOutput": 40620
+          "bytesInOutput": 42200
         },
         "src/state/transitions.ts": {
           "bytesInOutput": 982
         },
         "src/state/waiver-origin.ts": {
-          "bytesInOutput": 1212
+          "bytesInOutput": 1228
         },
         "src/state/workspace-cleanup.ts": {
           "bytesInOutput": 15980
@@ -10000,7 +10040,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2535494,
+      "bytes": 2569776,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -10368,6 +10408,21 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
         },
         {
           "external": true,
@@ -10974,7 +11029,7 @@
           "bytesInOutput": 1845
         },
         "src/contracts/durable-gate.ts": {
-          "bytesInOutput": 13106
+          "bytesInOutput": 13615
         },
         "src/contracts/durable-implementation-output.ts": {
           "bytesInOutput": 2335
@@ -10992,13 +11047,13 @@
           "bytesInOutput": 1945
         },
         "src/contracts/durable-state.ts": {
-          "bytesInOutput": 10690
+          "bytesInOutput": 11643
         },
         "src/contracts/durable-task-initialization.ts": {
           "bytesInOutput": 531
         },
         "src/contracts/durable.ts": {
-          "bytesInOutput": 32208
+          "bytesInOutput": 32583
         },
         "src/contracts/errors.ts": {
           "bytesInOutput": 17569
@@ -11007,10 +11062,10 @@
           "bytesInOutput": 2125
         },
         "src/contracts/fingerprints.ts": {
-          "bytesInOutput": 6997
+          "bytesInOutput": 7271
         },
         "src/contracts/gates.ts": {
-          "bytesInOutput": 17586
+          "bytesInOutput": 19362
         },
         "src/contracts/hosts.ts": {
           "bytesInOutput": 602
@@ -11022,7 +11077,7 @@
           "bytesInOutput": 1231
         },
         "src/contracts/mcp-tools.ts": {
-          "bytesInOutput": 16435
+          "bytesInOutput": 16620
         },
         "src/contracts/path-claims.ts": {
           "bytesInOutput": 3097
@@ -11055,10 +11110,10 @@
           "bytesInOutput": 1308
         },
         "src/contracts/schemas/v1/gate-contract.schema.json": {
-          "bytesInOutput": 22057
+          "bytesInOutput": 23818
         },
         "src/contracts/schemas/v1/gate-decision.schema.json": {
-          "bytesInOutput": 15216
+          "bytesInOutput": 16583
         },
         "src/contracts/schemas/v1/implementation-output.schema.json": {
           "bytesInOutput": 4332
@@ -11067,7 +11122,7 @@
           "bytesInOutput": 3748
         },
         "src/contracts/schemas/v1/mcp-tools.schema.json": {
-          "bytesInOutput": 28939
+          "bytesInOutput": 28974
         },
         "src/contracts/schemas/v1/path-claim.schema.json": {
           "bytesInOutput": 493
@@ -11076,7 +11131,7 @@
           "bytesInOutput": 1499
         },
         "src/contracts/schemas/v1/project-error.schema.json": {
-          "bytesInOutput": 83761
+          "bytesInOutput": 83790
         },
         "src/contracts/schemas/v1/review.schema.json": {
           "bytesInOutput": 3210
@@ -11091,7 +11146,7 @@
           "bytesInOutput": 1432
         },
         "src/contracts/schemas/v1/task-state.schema.json": {
-          "bytesInOutput": 20656
+          "bytesInOutput": 21801
         },
         "src/contracts/schemas/v1/triage.schema.json": {
           "bytesInOutput": 4577
@@ -11154,7 +11209,7 @@
           "bytesInOutput": 908
         },
         "src/mcp/handlers/gate.ts": {
-          "bytesInOutput": 2516
+          "bytesInOutput": 3071
         },
         "src/mcp/handlers/index.ts": {
           "bytesInOutput": 213
@@ -11172,7 +11227,7 @@
           "bytesInOutput": 14385
         },
         "src/mcp/handlers/waiver.ts": {
-          "bytesInOutput": 5226
+          "bytesInOutput": 5403
         },
         "src/mcp/process-runner.ts": {
           "bytesInOutput": 3941
@@ -11241,10 +11296,10 @@
           "bytesInOutput": 3500
         },
         "src/state/gate-core.ts": {
-          "bytesInOutput": 7748
+          "bytesInOutput": 7841
         },
         "src/state/gate-decision-interface.ts": {
-          "bytesInOutput": 20217
+          "bytesInOutput": 21555
         },
         "src/state/gate-direct.ts": {
           "bytesInOutput": 806
@@ -11256,7 +11311,7 @@
           "bytesInOutput": 1657
         },
         "src/state/gates.ts": {
-          "bytesInOutput": 59727
+          "bytesInOutput": 69096
         },
         "src/state/implementation-manifest.ts": {
           "bytesInOutput": 22040
@@ -11271,7 +11326,7 @@
           "bytesInOutput": 1972
         },
         "src/state/legacy-stage.ts": {
-          "bytesInOutput": 1112
+          "bytesInOutput": 1116
         },
         "src/state/lock.ts": {
           "bytesInOutput": 2311
@@ -11290,6 +11345,12 @@
         },
         "src/state/read.ts": {
           "bytesInOutput": 2486
+        },
+        "src/state/reconciliation-discovery.ts": {
+          "bytesInOutput": 8964
+        },
+        "src/state/reconciliation.ts": {
+          "bytesInOutput": 5283
         },
         "src/state/request.ts": {
           "bytesInOutput": 3462
@@ -11310,7 +11371,7 @@
           "bytesInOutput": 17946
         },
         "src/state/waiver-origin.ts": {
-          "bytesInOutput": 1204
+          "bytesInOutput": 1220
         },
         "src/state/workspace-cleanup.ts": {
           "bytesInOutput": 15671

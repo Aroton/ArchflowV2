@@ -26,7 +26,7 @@ export type GatePreviewSubject = Readonly<{
   phase_instance: PhaseInstanceId;
   summary: string;
   subject_digest: Sha256Digest;
-  current_evidence: CurrentEvidenceSetRef;
+  current_evidence: GateRequestV1["current_evidence"];
   kind: GateKind;
   context: GateRequestV1["context"];
   options: HumanGatePresentation["options"];
@@ -45,7 +45,7 @@ export type ProspectiveGate = Readonly<{
   phase_instance: PhaseInstanceId;
   summary: string;
   subject_digest: Sha256Digest;
-  current_evidence: CurrentEvidenceSetRef;
+  current_evidence: GateRequestV1["current_evidence"];
   kind: GateKind;
   context: GateRequestV1["context"];
 }>;
