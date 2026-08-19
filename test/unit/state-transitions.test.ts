@@ -413,6 +413,38 @@ describe("planStateTransition", () => {
     }
   });
 
+  it("re-opens the produce window from a step that is still running or already failed", () => {
+    // The escape door out of a step whose terminal result cannot be recorded — a review that
+    // cannot be dispatched over documents that changed under it has no forward edge otherwise.
+    for (const status of ["running", "failed"] as const) {
+      const current = state({ step: "counter_review", status, attempt: parseSafeInteger(1) });
+      const reentry = planStateTransition({
+        current,
+        target: { phase_instance: current.phase_instance, step: "produce", status: "running", attempt: parseSafeInteger(2), input_fingerprint: D("8") },
+        recomputed_input_fingerprint: D("8"),
+      });
+      expect(reentry.ok, status).toBe(true);
+      expect(legalRunStepStatus(current, "produce"), status).toBe("running");
+
+      const sameAttempt = planStateTransition({
+        current,
+        target: { phase_instance: current.phase_instance, step: "produce", status: "running", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
+        recomputed_input_fingerprint: D("8"),
+      });
+      expect(sameAttempt.ok ? undefined : sameAttempt.error.code, status).toBe("TRANSITION_INVALID");
+    }
+
+    // Produce work already in flight still settles at its own terminal result first.
+    const midProduce = state({ step: "produce", status: "running", attempt: parseSafeInteger(1) });
+    const reenteredMidProduce = planStateTransition({
+      current: midProduce,
+      target: { phase_instance: midProduce.phase_instance, step: "produce", status: "running", attempt: parseSafeInteger(2), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"),
+    });
+    expect(reenteredMidProduce.ok ? undefined : reenteredMidProduce.error.code).toBe("TRANSITION_INVALID");
+    expect(legalRunStepStatus(midProduce, "produce")).toBe("succeeded");
+  });
+
   it("keeps the surrounding movement space closed", () => {
     // running -> running never moves sideways.
     const midProduce = state();
@@ -423,15 +455,15 @@ describe("planStateTransition", () => {
     });
     expect(sideways.ok ? undefined : sideways.error.code).toBe("TRANSITION_INVALID");
 
-    // triage-failed re-enters only itself, never produce.
+    // triage-failed may retry itself or re-enter produce, but never move sideways.
     const failedTriage = state({ step: "triage", status: "failed" });
-    const backward = planStateTransition({
+    const sidewaysFromFailed = planStateTransition({
       current: failedTriage,
-      target: { phase_instance: failedTriage.phase_instance, step: "produce", status: "running", attempt: parseSafeInteger(2), input_fingerprint: D("8") },
+      target: { phase_instance: failedTriage.phase_instance, step: "counter_review", status: "running", attempt: parseSafeInteger(2), input_fingerprint: D("8") },
       recomputed_input_fingerprint: D("8"),
     });
-    expect(backward.ok ? undefined : backward.error.code).toBe("TRANSITION_INVALID");
-    expect(legalRunStepStatus(failedTriage, "produce")).toBeUndefined();
+    expect(sidewaysFromFailed.ok ? undefined : sidewaysFromFailed.error.code).toBe("TRANSITION_INVALID");
+    expect(legalRunStepStatus(failedTriage, "counter_review")).toBeUndefined();
 
     // produce-succeeded still may not skip ahead to triage.
     const produced = state({ status: "succeeded" });

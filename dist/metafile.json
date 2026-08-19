@@ -5956,7 +5956,7 @@
       ]
     },
     "src/mcp/handlers/state.ts": {
-      "bytes": 26986,
+      "bytes": 27411,
       "format": "esm",
       "imports": [
         {
@@ -7665,7 +7665,7 @@
       ]
     },
     "src/state/next-action.ts": {
-      "bytes": 21815,
+      "bytes": 25606,
       "format": "esm",
       "imports": [
         {
@@ -7790,7 +7790,7 @@
       ]
     },
     "src/state/produce-subject.ts": {
-      "bytes": 18228,
+      "bytes": 19154,
       "format": "esm",
       "imports": [
         {
@@ -8513,7 +8513,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 65315,
+      "bytes": 67857,
       "format": "esm",
       "imports": [
         {
@@ -8785,7 +8785,7 @@
       ]
     },
     "src/state/transitions.ts": {
-      "bytes": 25321,
+      "bytes": 26109,
       "format": "esm",
       "imports": [
         {
@@ -8889,7 +8889,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1595861,
+      "bytes": 1602001,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10032,13 +10032,13 @@
           "bytesInOutput": 2311
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 13462
+          "bytesInOutput": 15259
         },
         "src/state/phase-documents.ts": {
           "bytesInOutput": 2363
         },
         "src/state/produce-subject.ts": {
-          "bytesInOutput": 7764
+          "bytesInOutput": 10610
         },
         "src/state/production.ts": {
           "bytesInOutput": 13202
@@ -10068,7 +10068,7 @@
           "bytesInOutput": 22398
         },
         "src/state/status.ts": {
-          "bytesInOutput": 38302
+          "bytesInOutput": 39799
         },
         "src/state/workspace-cleanup.ts": {
           "bytesInOutput": 15564
@@ -10076,7 +10076,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2852381,
+      "bytes": 2856393,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -11307,7 +11307,7 @@
           "bytesInOutput": 12296
         },
         "src/mcp/handlers/state.ts": {
-          "bytesInOutput": 21417
+          "bytesInOutput": 21802
         },
         "src/mcp/process-runner.ts": {
           "bytesInOutput": 3941
@@ -11409,7 +11409,7 @@
           "bytesInOutput": 2300
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 13466
+          "bytesInOutput": 15263
         },
         "src/state/pending-waiver.ts": {
           "bytesInOutput": 3112
@@ -11424,7 +11424,7 @@
           "bytesInOutput": 1605
         },
         "src/state/produce-subject.ts": {
-          "bytesInOutput": 11722
+          "bytesInOutput": 12023
         },
         "src/state/production.ts": {
           "bytesInOutput": 13222
@@ -11466,13 +11466,13 @@
           "bytesInOutput": 26324
         },
         "src/state/status.ts": {
-          "bytesInOutput": 36571
+          "bytesInOutput": 38068
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 43525
         },
         "src/state/transitions.ts": {
-          "bytesInOutput": 18823
+          "bytesInOutput": 18855
         },
         "src/state/workspace-cleanup.ts": {
           "bytesInOutput": 17067

@@ -764,4 +764,69 @@ describe("post-triage re-entry edits are expected", () => {
       stub.restore();
     }
   }, TIMEOUT);
+  it("re-records the work result when the reviewed document changed under a pending review", async () => {
+    // The wedge this covers: a document the recorded work result covers is edited after the
+    // result was recorded but before the review has run. The review re-reads that document and
+    // refuses to review bytes the result never recorded, so the position has no forward edge —
+    // and the human baseline decision cannot supply one, because adopting the bytes re-baselines
+    // the *path* while the recorded result stays pinned to what it recorded.
+    const fixture = await repository();
+    const h = harness(fixture.root);
+    const prdPath = join(fixture.root, ".archflow", "tasks", task, "prd.md");
+    const prdClaim = `.archflow/tasks/${task}/prd.md`;
+
+    const created = await h.status();
+    expect(created.next_action.code).toBe("create-task");
+    const createComposed = await h.compose({ intent_id: "initialize-1", kind: "initialize" });
+    await h.invoke("archflow_state", createComposed.request.input);
+    writeFileSync(join(fixture.root, ".archflow", "tasks", task, "ask.md"), "Build the drift proof.\n");
+    writeFileSync(prdPath, "# PRD\n\nRecorded requirements.\n");
+    const produceComposed = await h.compose({ intent_id: "produce-1" });
+    await h.invoke(produceComposed.request.tool, produceComposed.request.input);
+
+    // Enter the review, then let the document change under it.
+    const counterEntry = await h.compose({ intent_id: "counter-entry-1", kind: "running", step: "counter_review" });
+    await h.invoke(counterEntry.request.tool, counterEntry.request.input);
+    expect(await h.status()).toMatchObject({ step: "counter_review", status: "running", attempt: 1 });
+    writeFileSync(prdPath, "# PRD\n\nRecorded requirements, plus a late note.\n");
+
+    const stub = installReviewerStub(fixture.root);
+    try {
+      // The dispatch genuinely cannot run: this is the failure the position used to be stuck on.
+      const counterComposed = await h.compose({ intent_id: "counter-1", kind: "counter-review" });
+      const refused = await h.invokeRaw(counterComposed.request.tool, counterComposed.request.input);
+      expect(refused.ok).toBe(false);
+      expect(refused.error?.code).toBe("STATE_INVALID");
+
+      // Status names the file and offers the one move that clears it, instead of a human
+      // baseline decision that could only spend a choice and leave the review just as stuck.
+      const stuck = await h.status();
+      expect(stuck.next_action).toMatchObject({ code: "run-step", step: "produce", human_required: false });
+      expect(stuck.next_action.detail).toContain(prdClaim);
+      expect(stuck.next_action.gate_kind).toBeUndefined();
+
+      // And the move is actually available from a review that is still running: the produce
+      // window re-opens at attempt + 1, and the terminal produce records the current bytes.
+      const reentryComposed = await h.compose({ intent_id: "produce-reentry-1", kind: "running", step: "produce" });
+      await h.invoke(reentryComposed.request.tool, reentryComposed.request.input);
+      expect(await h.status()).toMatchObject({ step: "produce", status: "running", attempt: 2 });
+      const rerecorded = await h.compose({ intent_id: "produce-reentry-2" });
+      await h.invoke(rerecorded.request.tool, rerecorded.request.input);
+
+      const recovered = await h.status();
+      expect(recovered.subject_digest).toBe(rerecorded.artifact_digest);
+      expect(recovered.subject_digest).not.toBe(produceComposed.artifact_digest);
+      expect(recovered.reconciliation?.classification).toBe("consistent");
+      expect(recovered.next_action).toMatchObject({ code: "run-step", step: "counter_review" });
+
+      // The review now dispatches over the bytes that are really there.
+      const counterEntry2 = await h.compose({ intent_id: "counter-entry-2", kind: "running", step: "counter_review" });
+      await h.invoke(counterEntry2.request.tool, counterEntry2.request.input);
+      const counterComposed2 = await h.compose({ intent_id: "counter-2", kind: "counter-review" });
+      await h.invoke(counterComposed2.request.tool, counterComposed2.request.input);
+      expect(await h.status()).toMatchObject({ step: "counter_review", status: "succeeded" });
+    } finally {
+      stub.restore();
+    }
+  }, TIMEOUT);
 });
