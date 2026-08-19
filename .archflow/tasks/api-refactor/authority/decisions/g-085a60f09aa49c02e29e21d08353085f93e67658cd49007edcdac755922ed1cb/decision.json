@@ -1,0 +1,33 @@
+{
+  "context_digest": "4a2891b6a0dbd698903d033b11033f39d15a576ea79a0b7185892d63d4243a2d",
+  "envelope": {
+    "context_digest": "4a2891b6a0dbd698903d033b11033f39d15a576ea79a0b7185892d63d4243a2d",
+    "gate_id": "g-085a60f09aa49c02e29e21d08353085f93e67658cd49007edcdac755922ed1cb",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-b6f43984b9ea3681ee06fe12c3bab1c5997e9c6e4f29bf512a7a0e83a89dd8e9",
+      "recorded_at": "2026-08-19T00:32:20.990Z",
+      "request_id_digest": "7d6d0fdadb309413f7415028f8449651c7a87926db4410467a4c35941de26493",
+      "schema_version": "1"
+    },
+    "kind": "commit-authorization",
+    "payload": {
+      "decision": "authorize-commit",
+      "reason": "The full change set passed independent review with zero findings, the constitution review passed, and the complete verification suite including offline release reproduction is green."
+    },
+    "phase_instance": "phase-impl-4",
+    "schema_version": "1",
+    "subject_digest": "98bed9ef08559f4c27e6a891c17df30bae6beb278aa8014477993d90d8a63859",
+    "task_id": "api-refactor"
+  },
+  "gate_id": "g-085a60f09aa49c02e29e21d08353085f93e67658cd49007edcdac755922ed1cb",
+  "kind": "commit-authorization",
+  "outcome": "decided",
+  "phase_instance": "phase-impl-4",
+  "schema_version": "1",
+  "subject_digest": "98bed9ef08559f4c27e6a891c17df30bae6beb278aa8014477993d90d8a63859",
+  "task_id": "api-refactor"
+}

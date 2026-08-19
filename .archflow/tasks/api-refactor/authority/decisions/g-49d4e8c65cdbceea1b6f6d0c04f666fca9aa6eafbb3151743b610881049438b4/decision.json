@@ -1,0 +1,33 @@
+{
+  "context_digest": "85d847180e9730930f9c5779440d093ac585bdc4c360c9bea183b0e1cc2e5443",
+  "envelope": {
+    "context_digest": "85d847180e9730930f9c5779440d093ac585bdc4c360c9bea183b0e1cc2e5443",
+    "gate_id": "g-49d4e8c65cdbceea1b6f6d0c04f666fca9aa6eafbb3151743b610881049438b4",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-8f797732864b43e93cb7b61bbbdcd439838c059e28f8661ba0b0e335bd8dd8bb",
+      "recorded_at": "2026-08-19T01:19:02.927Z",
+      "request_id_digest": "b84440225fdd80d0230649d1b4a82aef4e648973cbaf483e4df861538f62cfb0",
+      "schema_version": "1"
+    },
+    "kind": "design-approval",
+    "payload": {
+      "decision": "approve",
+      "reason": "The amendment authorizes the requested planned-final-phase fix, the independent review returned zero findings and verified the fix is live (the bound re-derived to 4 on this design's own produce), and the remaining cycle re-declares the delta under review before completion."
+    },
+    "phase_instance": "phase-design-4",
+    "schema_version": "1",
+    "subject_digest": "b77564867263b832073d0bceb7a25d7912809f567496a4e3fdb74f77649d7900",
+    "task_id": "api-refactor"
+  },
+  "gate_id": "g-49d4e8c65cdbceea1b6f6d0c04f666fca9aa6eafbb3151743b610881049438b4",
+  "kind": "design-approval",
+  "outcome": "decided",
+  "phase_instance": "phase-design-4",
+  "schema_version": "1",
+  "subject_digest": "b77564867263b832073d0bceb7a25d7912809f567496a4e3fdb74f77649d7900",
+  "task_id": "api-refactor"
+}

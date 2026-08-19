@@ -1,0 +1,61 @@
+{
+  "allowed_decisions": [
+    "adopt-current-bytes",
+    "restore-recorded-bytes",
+    "abort",
+    "cancel"
+  ],
+  "context": {
+    "drifted_projections": [
+      {
+        "observed_digest": "b49c4541d8e922b24ba8de5f350daf055e2f5fb1076120a28b25d21612879381",
+        "path": "dist/archflow-mcp.mjs",
+        "recorded_digest": "aab3d3ec598d2e2a881b1a9cc42450b1b3daa462035fb5468e4137f1e5cf9d68"
+      },
+      {
+        "observed_digest": "072fa6fe4786c0f6caf6508a92f2a06105d66975858d79eca0a768c76fe1bf94",
+        "path": "dist/manifest.json",
+        "recorded_digest": "79998d8d50098d6ff5c86f8f865d24e851c722193e9eedde57aae57a4f6df976"
+      },
+      {
+        "observed_digest": "c0bc37b3972994790ffcda4cd995663035bd8bf71d35dd60df6b12c33a6d0422",
+        "path": "dist/metafile.json",
+        "recorded_digest": "0597cecb75a5ff28a8ec602721dfc7bf2dd05a67c3430513e9b3bedefa21fda2"
+      },
+      {
+        "observed_digest": "4d50a92b7f660ba16f1cb763c906cb98bcaf966747004e6ebc38bd349f6cacda",
+        "path": "docs/state/DURABLE-STATE.md",
+        "recorded_digest": "b5c5a2a8b8ac68ee91dd19449443720a3cfb450e14c17229a06cb09f2752a18c"
+      },
+      {
+        "observed_digest": "ea2ee30fedb9c0d480b3c07655d49e02b8f52e048d7db4bc01a3faa0ea2d1bf5",
+        "path": "src/mcp/handlers/state.ts",
+        "recorded_digest": "928e9c9330d847816ad3888f355116d1b8ba201012c0d99d0f4ab1e3cdf4968b"
+      },
+      {
+        "observed_digest": "f4d1b8eecdced8ff2d7fdfd3d1d3adebd5ed60af7437cd94beedef5514b5a10f",
+        "path": "src/state/transitions.ts",
+        "recorded_digest": "bf643808d6533e26a67e3ed8ea9a67ea71ebaed2704b9fd9354323c4cc8f8126"
+      }
+    ]
+  },
+  "context_digest": "8a816c28c5e1bb8a33ed15ab7a7fb38a24d67c5aeaf674588e6e30c3e618a22e",
+  "current_evidence": {
+    "drift_digest": "2c4b7406c8621c5704a8d9438e03d49903eefb31f2380f1eb3784bbdbe2d5419",
+    "observation_kind": "projection-drift",
+    "observed_at_revision": 274,
+    "phase_instance": "phase-design-4",
+    "schema_version": "1",
+    "task_id": "api-refactor"
+  },
+  "gate_id": "g-5f92d67ccf76fb33c99793fae4376ef0554d66d1259499996d9c1e050aa6ec82",
+  "intent_id": "afop-6126cbe7716d465434d0576ec50dfc330c172cabc9255e24dd288cedf31bbe57-open-gate",
+  "kind": "baseline-adoption",
+  "opened_at_revision": 275,
+  "phase_instance": "phase-design-4",
+  "request_digest": "7dd38c555b82035250b69fc12ee7fdf1ce3a643bdf4ef1c45102fe90e5aeda4d",
+  "schema_version": "1",
+  "subject_digest": "2c4b7406c8621c5704a8d9438e03d49903eefb31f2380f1eb3784bbdbe2d5419",
+  "summary": "Reopening phase 4 to add the planned-final-phase fix (your \"might as well dog food\" request) re-exposed this phase's bytes as drift: the fix's source, tests, docs, and rebuilt dist are the same reviewed shape as before, and build-request.ts was temporarily restored from git history to satisfy the adoption-recorded digest — the implementation re-declaration will delete it again. Decide: keep the current versions as the recorded baseline so the design revision can complete, or restore the older recorded bytes.",
+  "task_id": "api-refactor"
+}

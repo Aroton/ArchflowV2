@@ -1,0 +1,123 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 265,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 32257285
+  },
+  "artifact_digest": "63cd7a40a48313c4345df33d310509d15a448cb9a28ae5b9e2c519d4593e0791",
+  "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+  "outputs": [],
+  "phase_instance": "phase-impl-4",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-3c01dfb2077c52748031cf7630b35f35",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [
+        "9eff45f0641371a4d18ac0bd0d515fb280d4c68ca604bd2c935e5ee0b58925e2"
+      ],
+      "assurance": "server-attested",
+      "cli_version": "2.1.235",
+      "constitution": "pass",
+      "drift": "incidental",
+      "drift_findings": [
+        {
+          "affected_claim_ids": [
+            "session-handler-copy-deletion",
+            "semantic-view-migration-audit-mapping",
+            "release-payload-embeds-skill-bytes",
+            "crash-resume-interface-cleanup"
+          ],
+          "drift": "incidental",
+          "rationale": "The implementation satisfies the upstream's substantive claims — two-tool advertised catalogue, retirement of the low-level handlers/waiting machinery/staged requests/retired CLI commands, the migration-audit composer arm, local `upgrade adopt`, the read-only status skill, the inverted skill contracts, the doc set and audit annotation, and digest-bound real-host evidence — and the three largest mid-phase changes are already absorbed into this approved revision's Section 1.3, so they are not drift. What remains are narrow, recorded departures from pinned specifics: `src/mcp/handlers/session.ts` survives with its staged-legacy-config fallback rather than deleting with the retiring handler (deleting it stranded the live legacy-import journey), `src/state/semantic-view.ts` needed no source change because the generic open-gate and commit-milestone mappings already covered migration-audit, the design's assumption that the release payload embeds skill bytes was wrong (dist covers only the two src-derived bundles), and crash-cut resume semantics changed where the retired wait flow owned decision-interface cleanup. Each is documented in phases/4/impl-notes.md and none alters an approved outcome, exit criterion, or authority boundary.",
+          "upstream_digest": "9eff45f0641371a4d18ac0bd0d515fb280d4c68ca604bd2c935e5ee0b58925e2"
+        }
+      ],
+      "effort": "medium",
+      "envelope_input_digest": "b5710cca777f5b0c48f81ebfaa7c7ed56a38795901eb117ba3a797393a885b25",
+      "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+      "invocation_id": "adjudication-invocation-2a2d8d330486de4e34869582ca35a174",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "512ead0a77c0409192916dcdd21b9407caf6eedb6d43e320eff95a5545f1927a",
+      "phase_instance": "phase-impl-4",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-3c01dfb2077c52748031cf7630b35f35",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "The change set matches the approved phase design's pinned scope: the advertised catalogue shrinks to the semantic pair (src/contracts/tool-names.ts:18), the retirement deletions listed in design Section 5.2 are present in the snapshot, the migration-audit composer arm and `upgrade adopt` adapter exist, and the skill/doc/test inversions landed. The three material mid-phase departures (origin/main merge, dev-mode launcher replacing the self-cutover reinstalls, and the unrestorable-missing-projection recovery) are not undocumented drift: the approved upstream itself carries them in Section 1.3 'Mid-phase amendments recorded at implementation', so the governing document was updated and re-entered its review boundary. Remaining smaller departures (retained session.ts fallback, no semantic-view source change, dist not embedding skills, crash-cut resume semantics, corpus/pin corrections) are each recorded in phases/4/impl-notes.md under 'Deviations from Plan', which the design's risk section explicitly requires.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The subject is a phase-4 implementation output produced under the approved phase design (declared input `phase-design` digest 82f030d5…), changing src/, skills/, docs/, and dist/."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Every added authority path binds an explicit human record to the exact subject. `hasAuthenticatedMigrationAudit` (src/state/transitions.ts:247-260) accepts the design-phase exit only when an authenticated migration-audit approval carries decision `accept-import-audit`, its request phase is `design`, its request subject digest equals the approval subject digest, and the import commit is observed; `openDurableGate` retains the deep migration-audit context validation (src/state/gates.ts:335-406). The drift route keeps an already-open gate open until a human decides rather than re-offering or auto-resolving it (src/state/next-action.ts:282-287), and adoption-sourced drift is refused a restore it cannot apply. The new unrestorable-missing-projection route (src/state/next-action.ts:298-310) grants no approval: it only reopens the produce window, so the fresh terminal produce re-enters the ordinary review-and-approval boundary. Local `upgrade adopt` remains pre-task mechanical work gated upstream by the preview approval and downstream by the migration-audit gate.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The change adds a new gate arm (`migration-audit`), a new phase exit authority for imports, a baseline-adoption drift decision, and a new next-action route for unrestorable missing projections — all of which touch approval/advancement authority."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Unavailable capability is surfaced as a visible non-success with a safe next action rather than being bypassed: an unrestorable projection yields an explicit run-step/produce instruction whose text states that no retained bytes exist (src/state/next-action.ts:303-309), restorable cases keep the inspect-and-restore route, and unparsable pinned config yields an explicit `upgrade-tooling` blocker (src/state/next-action.ts:261-276). The recorded host evidence is bound to the shipped bundle (`bundle_manifest_sha256` 79998d8d… equals the artifact's dist/manifest.json payload digest), and the impl notes disclose the earlier run with `blocked_journey_hosts 1`, the skipped installs, the interrupted-transaction atomicity gap as a standing known limitation, and the re-entry guard's phase-kind limitation. One trivial prose slip (notes say claude 2.1.234 where the artifact records 2.1.235) does not misrepresent any failure as success.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The change alters failure routing (`restore_unavailable` findings, `inspect-state` vs produce re-entry), records real-host evidence under docs/validation/, and reports phase verification results."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "All task-scoped writes and the undeclared runtime paths stay inside this task's own directory (.archflow/tasks/api-refactor/...); no other task's files appear in outputs, restore targets, or the scanned set. Evidence remains subject-bound and fails closed: migration-audit exit compares request and approval subject digests for the exact phase (src/state/transitions.ts:251-257), the composer applies the post-restart approval-eligibility filter so a superseded approval cannot authorize new bytes, and the absence-aware projection union resolves conflicting observations by newest authoritative observation rather than merging stale presence records (src/state/reconciliation-discovery.ts). Adoption-sourced projections are explicitly marked unrestorable rather than treated as usable retained evidence (reconciliation.ts:118-127).",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The change set writes .archflow/tasks/api-refactor/phases/4/impl-notes.md and modifies reconciliation, approval-eligibility, and gate-authority code that consumes durable evidence."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "7232b6ea8ec25ea4be8a859ff729a83b17f60f01c654a18840c8793e0dbc9c90",
+      "step": "adjudicate",
+      "subject_digest": "98bed9ef08559f4c27e6a891c17df30bae6beb278aa8014477993d90d8a63859",
+      "task_id": "api-refactor",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "api-refactor"
+}

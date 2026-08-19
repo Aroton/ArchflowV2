@@ -76,7 +76,7 @@ journeys pass" rule applied to the last journey that matters — this one.
 
 ### 1.3 Mid-phase amendments recorded at implementation (human-directed)
 
-Implementation deviated from the pinned plan in four material ways, each recorded here so
+Implementation deviated from the pinned plan in five material ways, each recorded here so
 the design stays truthful; detail and verification live in `phases/4/impl-notes.md`.
 
 1. **Main merge absorbed mid-phase (user-directed).** The task's durable state had been
@@ -123,7 +123,25 @@ the design stays truthful; detail and verification live in `phases/4/impl-notes.
 4. **Host-proof binding.** Success criterion 8's evidence under `docs/validation/` is
    digest-bound to the shipped `dist/manifest.json` at recording time; after any dist
    regeneration (the merge, the fix) the suite is re-run so `bundle_manifest_sha256`
-   matches the final shipped bytes.
+   matches the final shipped bytes. The final review round also hardened the binding
+   itself: the always-on digest-contract test now compares the recorded
+   `bundle_manifest_sha256` against the tracked `dist/manifest.json`, so stale host
+   evidence fails `npm run check` instead of depending on operator memory.
+5. **Planned-final-phase staleness fix (user-directed, added by reopening this phase).**
+   Driving the task to its finish exposed a defect: `planned_final_phase` was derived only
+   when a design-position approval settled, from that approval's retained design bytes —
+   this task's bound said 10 phases (the originally approved plan) while the design bytes
+   revised through phase boundaries plan 4, so completion never triggered and the workflow
+   offered a nonexistent phase 5. Fix: any produce whose retained payloads record the task
+   design document re-derives the bound from those exact bytes in the same transaction
+   (`plannedFinalPhaseFromRecordedPayloads` in `src/state/planned-final-phase.ts`, threaded
+   through `planStateTransition` as `derived_planned_final_phase` and computed in the state
+   handler's produce settlement); an open-ended recorded design clears the bound, a produce
+   that records no design document leaves it untouched, and a recorded design whose phase
+   plan does not conform fails the produce closed. Pinned by
+   `test/unit/planned-final-phase.test.ts` and three transitions tests; the reopened
+   phase-design produce of this very document is the live proof — recording it re-derives
+   this task's bound from 10 to 4, and the task then completes under the fixed code.
 
 ## 2. Upstream requirements and observable outcome
 

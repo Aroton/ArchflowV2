@@ -1,0 +1,115 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "artifact_kind": "phase-design",
+    "baseline_commit": "df0bdc388de777151227b131ff7ea6d85aebae67",
+    "commit_message": "ArchFlow: Approve api-refactor phase 4 design",
+    "constitution": "pass",
+    "eligible_waivers": [
+      {
+        "rule": {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      }
+    ],
+    "policy_findings": [
+      {
+        "compliance": "pass",
+        "rationale": "The rule permits material deviation only when the governing documents are updated and the applicable review boundary is re-entered before dependent work advances. That is exactly the shape here: each deviation is named in the design itself with its code seam and pinning test, the parent task design is corrected in the same change (Section 1.1's no-constitution-adapter narrowing and Section 4.2 step 4's removal of the third commit-confirmation diamond), and the phase design was explicitly reopened so this artifact re-enters design review before phase completion and task completion (the only dependent work remaining). Section 1.3 amendment 1 is also candid that the surviving baseline-adoption drift seam exists only in this change set and not in the committed merge base, which is the disclosure this rule is designed to force rather than a violation of it. The verified repository bytes match the described seams, so the governing document is truthful about the implemented architecture.",
+        "rule_id": "approved-design-before-code",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "Section 1.3 records five material implementation deviations from the pinned plan (main merge absorbed, dev-mode self-cutover replacing reinstalls, unrestorable-missing-projection recovery, host-proof digest binding, planned-final-phase staleness fix), and Section 10 states the phase design must be approved before implementation. Amendment 5 states the phase was reopened so this document is re-reviewed; the repository confirms the code already exists (src/state/planned-final-phase.ts, the baseline-adoption arm at src/state/request-composition.ts:533, ADVERTISED_TOOL_NAMES already the semantic pair at src/contracts/tool-names.ts:18)."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "Every advancing authority in the phase is an explicit, subject-bound human record. The one place authority is exercised without a second prompt — the import milestone commit — is not inference: the migration-audit acceptance is itself the explicit decision bound to the exact audited subject, and the design justifies the single-confirmation rule against the established design-milestone precedent while correcting the parent design's contradicting sketch rather than quietly diverging from it (Section 4.2 step 4). Adoption is described as mechanical precisely because it is bracketed by two explicit human decisions (preview approval before staging, migration-audit after). The new baseline-adoption arm added mid-phase likewise routes through the ordinary `decide`/`gate-summary` shapes so drift is resolved by a human choice, with the restore-applicability refusal preventing an adoption-sourced drift from being offered an action it cannot apply. Retirement removes advertisement and handlers only; durable decision archives and gate vocabulary are explicitly preserved (Sections 3.1, 4.1).",
+        "rule_id": "explicit-human-authority",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "The design turns on human authority throughout: the migration-audit gate opened via skill-authored `gate-summary` and resolved through `decision-archive`/`decision-settle` (Sections 4.2 step 3, 5.1); import commit authority derived from migration-audit acceptance with `requires_human_confirmation: false` (Section 4.2 step 4); preview approval bound by `approved_preview_digest` before staging (Section 4.2 step 1); the baseline-adoption gate composed in `composeGate` (verified at src/state/request-composition.ts:533) with the `baseline-adoption-restore-source-unavailable` refusal (verified in src/state/gates.ts); Section 7's closing rule that no acceptance test may infer approval, adopt an import without the staged approved preview, or create a commit without exact durable authority."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "The design reports its own failures and retractions plainly instead of presenting the phase as clean, and each non-success state it introduces stays visible with a safe next action: unavailable server degrades to read-only classification and waits, unrestorable missing projections route to a produce re-entry whose fresh terminal produce re-declares the drift so the review boundary still covers the bytes, ambiguous or conflicting authority yields `blocked / inspect` with no mutation offer, and tampered or stale staged bytes fail closed. Human control is strengthened rather than automated away — the opt-in real-host suite is honestly scoped as reproducible evidence outside CI, while the one claim that could have depended on operator memory (host evidence matching shipped bytes) is mechanically enforced, which I confirmed actually runs in the default suite.",
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "Section 1.1 retracts a parent-design claim rather than fabricating a constitution adapter; Section 1.3 retracts this revision's own earlier reinstall steps after the user forbade installs; amendment 3 discloses a wedge found while dogfooding (an interrupted produce left a deletion neither adoptable nor restorable with no client-reachable action) and its recovery routing; Sections 4.3/4.2 step 5 keep the degraded `manual-status` ladder and stop-and-wait behavior when the server is unavailable; `blocked / inspect` is the pinned outcome for conflicting authority; Section 5.4 requires tampered staged bytes to fail closed. Amendment 4's claim that the digest binding is always-on is verified: the `host-selection digest contract` block at test/real-host/host-selection.test.ts:489-513 sits outside the ARCHFLOW_REAL_HOSTS gate and vitest.config.ts includes test/** so `npm test` (inside `npm run check`) runs it."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "Nothing in the phase loosens subject binding or crosses task boundaries. Adoption operates on one named task's staged artifact with digest-bound preview authority and fails closed on byte mismatch; the migration-audit gate's subject, evidence, and context are all server-derived from the authenticated import for that task's design phase, with only the summary authored. Retirement is an advertisement-and-handler deletion that explicitly preserves durable record vocabulary, so existing archives keep identifying the exact subjects they govern. The restore-applicability refusal on adoption-sourced projections prevents restoring bytes that were never retained — a fail-closed response to missing evidence rather than a substitution. The host evidence added under docs/validation/ is itself digest-bound to the exact shipped bundle, so stale evidence cannot be read as proof of different bytes.",
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "Section 4.6 binds host-proof artifacts by digest to the shipped `dist/manifest.json` (assertion verified at test/real-host/host-selection.test.ts:504-513); Section 5.4 requires tampered/replaced staged bytes to fail closed and `upgrade adopt` to fail closed on unexpected staged-bytes mismatch; Section 4.2 step 1 binds staging to `approved_preview_digest`; Section 3.1 keeps `TOOL_NAMES`, gate archives, and provenance channels as untouched durable vocabulary; Section 8 criterion 5 requires seeded checkpoints to keep projecting; the migration-audit composer arm derives context from the authenticated legacy import and refuses accepted audits per task/phase (src/state/request-composition.ts:619-649)."
+      }
+    ],
+    "target_ref": "refs/heads/feature/api-refactor"
+  },
+  "context_digest": "85d847180e9730930f9c5779440d093ac585bdc4c360c9bea183b0e1cc2e5443",
+  "current_evidence": {
+    "set_digest": "337ede344bdb79746d8b9eb1241a5e9eca33b136ff83e3e5bcc6a5b5d8358e44",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "c4925510ecbf7d94bee62aabff48f3a1ee6d291e4462a1bbc43f92052f05b5bb",
+        "producer_family": "claude",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-49d4e8c65cdbceea1b6f6d0c04f666fca9aa6eafbb3151743b610881049438b4",
+  "intent_id": "afop-8033b66100121ac30657fc2f41950dcc13f5acfa75a0c152eae590fbf529017d-open-gate",
+  "kind": "design-approval",
+  "opened_at_revision": 281,
+  "phase_instance": "phase-design-4",
+  "request_digest": "fe977c062cbacd4699f08a2cdacd8614f2f41142bf139d66030cede4036192c0",
+  "schema_version": "1",
+  "subject_digest": "b77564867263b832073d0bceb7a25d7912809f567496a4e3fdb74f77649d7900",
+  "summary": "The reopened phase-4 design adds one amendment (item 5) authorizing the planned-final-phase staleness fix you requested: the phase bound now re-derives whenever a produce records the task design document, an open-ended design clears it, and a nonconforming recorded phase plan fails the produce closed. The independent review returned zero findings. The fix is already implemented and verified in the worktree (26 focused tests, 62-test regression set, dist rebuilt, real-host evidence re-recorded and digest-bound), and the live proof is on the record — recording this very design produce re-derived the task's bound from 10 to 4. Approving this design authorizes its milestone commit and the implementation re-declaration of the fix delta, after which the task completes under the corrected bound.",
+  "task_id": "api-refactor"
+}
