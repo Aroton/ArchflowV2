@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { canonicalDocument, gitBlobOid, parseGitOid, sha256Bytes } from "../../src/contracts/canonical.js";
 import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
+import { parseImplementationOutput } from "../../src/contracts/durable-implementation-output.js";
 import type { OutputEntry } from "../../src/contracts/durable-primitives.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import type { GateContext } from "../../src/contracts/gates.js";
@@ -384,5 +385,105 @@ describe("implementation-output builder", () => {
     expect(second.value.accounting.task_bytes)
       .toBe(retained + second.value.accounting.result_bytes);
     await expect(verifyImplementationManifest(discovered.value, second.value, context)).resolves.toBeDefined();
+  });
+
+  it("resolves whatever commit reference the caller names, and rejects one Git cannot resolve", async () => {
+    const root = mkdtempSync(join(tmpdir(), "archflow-base-commit-"));
+    roots.push(root);
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root, env: gitEnv });
+    const taskId = parseTaskSlug("base-commit-task");
+    const taskRoot = join(root, ".archflow", "tasks", taskId);
+    mkdirSync(taskRoot, { recursive: true });
+    writeFileSync(join(taskRoot, "prd.md"), "requirements\n");
+    writeFileSync(join(root, "modify.txt"), "before\n");
+    execFileSync("git", ["add", "."], { cwd: root, env: gitEnv });
+    execFileSync("git", ["commit", "-qm", "base"], { cwd: root, env: gitEnv });
+    const baseCommit = parseGitOid(execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: root, env: gitEnv, encoding: "utf8",
+    }).trim());
+    writeFileSync(join(root, "modify.txt"), "after\n");
+
+    const phase = encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(3) });
+    const context: RepositoryOperationContext = {
+      task_id: taskId,
+      phase_instance: phase,
+      operation: "build-implementation-output" as never,
+      attempt: parseSafeInteger(1),
+    };
+    const discovered = await discoverWorktree(createGitRunner({ cwd: root }), context);
+    if (!discovered.ok) throw discovered.error;
+    const environment = await preflightGit(discovered.value, context);
+    if (!environment.ok) throw environment.error;
+    const authority = await createInternalTransactionAuthority({
+      runner: discovered.value, environment: environment.value, task_id: taskId, context,
+    });
+    if (!authority.ok) throw authority.error;
+    const transcriptPath = join(root, ".archflow", "runtime", "tasks", taskId, "cache", "phases", "3");
+    mkdirSync(transcriptPath, { recursive: true });
+    writeFileSync(join(transcriptPath, "verification.txt"), "npm test\nall passed\n");
+    const fingerprint = parseSha256Digest("1".repeat(64));
+    const state = canonicalDocument<TaskStateV1>({
+      schema_version: "1",
+      task_id: taskId,
+      repository_identity_digest: authority.value.repository_identity_digest,
+      revision: parseSafeInteger(1),
+      phase_instance: phase,
+      step: "produce",
+      status: "running",
+      attempt: parseSafeInteger(1),
+      input_fingerprint: fingerprint,
+      initialization_digest: parseSha256Digest("2".repeat(64)),
+      config_digest: parseSha256Digest("3".repeat(64)),
+      workflow_digest: parseSha256Digest("4".repeat(64)),
+      constitution_digest: parseSha256Digest("5".repeat(64)),
+      policy_base_commit: baseCommit,
+      authoritative_results: [], approvals: [], waivers: [],
+    });
+    const dependencies = {
+      runner: discovered.value,
+      environment: environment.value,
+      read_retained_task_bytes: async () => parseSafeInteger(0),
+    } as GateLifecycleDependencies;
+    const paths = [parseRepositoryPathClaim("modify.txt")];
+    const input = {
+      phase_instance: phase,
+      step: "produce" as const,
+      base_commit: baseCommit,
+      outputs: paths,
+      restore_targets: paths,
+      parent_documents: [{ document_path: parseTaskPathClaim("prd.md"), role: "prd" as const }],
+      declared_inputs: [],
+      input_fingerprint: fingerprint,
+    };
+
+    // Git accepts an abbreviation everywhere the builder observes, so the artifact must still name
+    // the one unambiguous commit rather than the prefix the caller happened to hold.
+    const abbreviated = await buildImplementationOutput(dependencies, authority.value, state, {
+      ...input, base_commit: baseCommit.slice(0, 7) as typeof baseCommit,
+    });
+    expect(abbreviated.ok).toBe(true);
+    if (!abbreviated.ok) return;
+    expect(abbreviated.value.base_commit).toBe(baseCommit);
+    // The original failure was here and nowhere earlier: every observation accepted the prefix,
+    // and only the durable parse rejected it — far too late to be reported as anything but an
+    // internal error. Parsing the built artifact is what proves the fix closed that gap.
+    expect(() => parseImplementationOutput(abbreviated.value)).not.toThrow();
+    expect(() => parseImplementationOutput({ ...abbreviated.value, base_commit: baseCommit.slice(0, 7) }))
+      .toThrow();
+
+    const full = await buildImplementationOutput(dependencies, authority.value, state, input);
+    expect(full.ok).toBe(true);
+    if (!full.ok) return;
+    expect(full.value.diff_digest).toBe(abbreviated.value.diff_digest);
+
+    // An unusable reference is the caller's to correct, so it must arrive as a contract failure
+    // rather than as an opaque internal error.
+    const unresolvable = await buildImplementationOutput(dependencies, authority.value, state, {
+      ...input, base_commit: "no-such-ref" as typeof baseCommit,
+    });
+    expect(unresolvable.ok).toBe(false);
+    if (unresolvable.ok) return;
+    expect(unresolvable.error.code).toBe("CONTRACT_INVALID");
+    expect(unresolvable.error.diagnostic.parameters).toMatchObject({ issue_code: "base-commit-unresolvable" });
   });
 });
