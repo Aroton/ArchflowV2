@@ -67586,6 +67586,7 @@ function authenticatedSemanticReviewContinuation(state, expectedSubstep) {
   } catch {
     throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "semantic-looking review transition has an invalid intent identity");
   }
+  if (identity.substep !== expectedSubstep) return void 0;
   const expected = expectedSubstep === "review-enter" ? { tool: "archflow_state", operation: "record-state-boundary" } : { tool: "archflow_counter_review", operation: "counter-review" };
   if (!authenticateSemanticLastTransition(state, identity.operation_digest, expectedSubstep, {
     ...expected,
@@ -67605,7 +67606,8 @@ function authenticatedSemanticTriageContinuation(state) {
   } catch {
     throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "semantic triage entry has an invalid intent identity");
   }
-  if (identity.substep !== "triage-enter" || !authenticateSemanticLastTransition(
+  if (identity.substep !== "triage-enter") return void 0;
+  if (!authenticateSemanticLastTransition(
     state,
     identity.operation_digest,
     identity.substep,
