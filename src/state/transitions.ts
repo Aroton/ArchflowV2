@@ -454,7 +454,10 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
   if (
     decodedCurrent.kind !== "phase-impl" &&
     crossesPhase &&
-    !hasAuthenticatedArtifactApproval(input)
+    !hasAuthenticatedArtifactApproval(input) &&
+    // An accepted migration audit is the design phase's exit authority for a legacy import: the
+    // same authenticated approval legalMovement's design-jump rule settles on.
+    !(decodedCurrent.kind === "design" && hasAuthenticatedMigrationAudit(input))
   ) return invalid(input, from, to);
   if (
     (decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") &&

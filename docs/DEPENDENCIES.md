@@ -47,7 +47,7 @@ There is no ESLint, Prettier, Biome, dotenv loader, web framework, database clie
 - The server identifies itself as `archflow-mcp@0.0.0` and supports MCP protocol `2025-11-25` (`PROTOCOL_VERSION` in `src/mcp/sdk-adapter.ts`).
 - The only SDK import in production is the public root in `src/mcp/sdk-adapter.ts`. `scripts/check-mcp-sdk-boundary.mjs` enforces that boundary; `scripts/test-mcp-sdk-boundary-policy.mjs` mutation-tests the checker.
 - `scripts/probe-mcp-sdk-compatibility.mjs` verifies the installed SDK/core public and behavioral surfaces the adapter relies on.
-- `src/mcp/tools.ts` advertises six purpose-described tools. `archflow_status` and `archflow_apply` use the generated semantic-workflow schema; `archflow_state`, `archflow_counter_review`, `archflow_gate`, and `archflow_waiver` retain the generated low-level MCP schema and remain the only durable tool-name identities.
+- `src/mcp/tools.ts` advertises exactly two purpose-described tools. `archflow_status` and `archflow_apply` use the generated semantic-workflow schema; the four low-level names remain durable-record vocabulary in `TOOL_NAMES` for existing state, but nothing advertises or dispatches them.
 
 Host identity is derived from MCP `clientInfo.name` in `src/contracts/hosts.ts`: `claude-code` maps to Claude, `codex-mcp-client` maps to Codex, and any unrecognized name maps to `unknown`. Recorded versions are evidence fixtures, not a prefix-based identity fallback.
 
@@ -160,6 +160,8 @@ No formatter or source linter is configured. Formatting/import style is conventi
 The release is not published by automation. `dist/` is tracked and validated against `dist/manifest.json`, `dist/metafile.json`, dependency provenance, the repository `THIRD_PARTY_NOTICES.md`, and retained upstream license texts. The release copies notices and licenses directly, hashes every payload artifact, and verifies source-to-payload byte equality. Reproduction materializes a clean source set, performs isolated `npm ci`, rebuilds, and byte-compares the candidate.
 
 `install.sh` verifies the tracked payload, installs it beneath `${ARCHFLOW_HOME:-$HOME/.archflow}/bundle`, writes `archflow-mcp` and `archflow-local` launchers beneath `${ARCHFLOW_BIN:-$HOME/.local/bin}`, and copies skills to `~/.claude/skills/` and/or `~/.agents/skills/`. It requires Node in `^24.15.0` and requires the launcher directory to be on `PATH`.
+
+**Developing ArchFlow inside this repository** never requires installing: the project-scoped `.mcp.json` routes through `scripts/dev-mcp-launcher.sh`, which serves this checkout's tracked `dist/` bundle when `ARCHFLOW_DEV=1` (optionally `ARCHFLOW_DEV_DIST` to point elsewhere) and otherwise falls through to the installed `archflow-mcp` launcher. A dev session started with `ARCHFLOW_DEV=1` therefore exercises the branch's own bytes — regenerate `dist/` with the release loop after source changes — while the machine-global install stays untouched for everyone else.
 
 ### Automation
 

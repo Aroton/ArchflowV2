@@ -2,22 +2,20 @@
 
 **Explored:** 2026-08-16 · **Commit:** `d60da73` · **Covers:** `src/local/`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
 
-`archflow-local` is the agent's local helper: it composes requests and reads status — including a read-only classification of where a task stands when the MCP server is unavailable. It is deliberately *not* the authority — with one narrow exception (task initialization staging inside `build-request`), it derives and verifies rather than writes.
+`archflow-local` is the agent's local adapter surface: repository bootstrap, the legacy-upgrade adapter, bounded diagnostics, and a read-only classification of where a task stands when the MCP server is unavailable. It is deliberately *not* the authority — with one narrow exception (the staged legacy import and its atomic adoption), it derives and verifies rather than writes.
 
-During the semantic API migration this CLI remains the adapter for the `archflow-status` skill — the last legacy producer path until the status skill migrates. PRD, design, phase design, and phase implementation instead use `archflow_status` and `archflow_apply`, which call the same request-composition and durable services behind a one-action façade. The CLI remains relevant for diagnostics and degraded read-only status; the semantic tools do not turn it into a second authority. Git stays client-owned on both paths.
+Every workflow action itself is composed server-side. PRD, design, phase design, phase implementation, status reporting, and the post-adoption half of a legacy upgrade run through `archflow_status` and `archflow_apply`; the semantic action planner calls the same transport-neutral request composer (`src/state/request-composition.ts`) that once backed a local request-building command, so the CLI and the live MCP surface never maintained parallel request builders. Hand-assembling request fields was measured as the dominant failure mode — in a full PRD loop, 8 of 10 requests were mechanical transcription — and the inversion removes that door entirely: the caller supplies only judgment, the server derives everything mechanical from durable authority. Git stays client-owned; the semantic view returns the exact authorized commit facts and the client stages and commits them itself.
 
 A packaging note that trips up maintainers: there is no `bin` entry in `package.json`. `install.sh` writes a shell shim into `~/.local/bin` that execs `node dist/archflow-local.mjs`; the source of truth is `src/local/main.ts`.
 
 ## Invocation shape
 
 ```
-archflow-local <command> [--task <task>] [--input <json-file>] [--brief]
+archflow-local <command> [--task <task>] [--input <json-file>]
 ```
 
 - Payload commands read JSON from `--input <file>`, or stdin when `--input` is omitted. If stdin is a TTY and no `--input` was given, the command fails immediately rather than hanging.
-- Input-free commands (`status`, `manual-status`, `init`, `clean`, `commit`) never read stdin at all.
-- Full `status` publishes the phase's canonical `resources` (`role`, repository-relative `path`, and `access`) plus its server-owned `review_policy`. Agents consume these entries instead of rediscovering `.archflow/` layout or copying review policy from a skill.
-- `--brief` (status only) projects the routine-loop view from the same computed status: position, blockers, a conversational open-gate summary, reconciliation, and one next action. It omits rule text, request bodies, decision payloads, IDs, digests, internal paths, and protocol codes unless diagnostic output is explicitly requested. Workspace state appears only when `cleanup_pending` is true (`projectBriefStatus` in `src/state/status.ts`).
+- Input-free commands (`manual-status`, `init`, `clean`, and `upgrade adopt`) never read stdin at all.
 - Output is always canonical JSON on stdout. **Failures exit nonzero**: any result carrying `{"ok": false, ...}` also exits 1, so shell-level checks and the JSON agree; the JSON body remains the authority for structured details.
 - `--help` is generated from the same command table that drives dispatch (`LOCAL_COMMAND_CONTRACTS` in `src/local/commands.ts`), so help can't drift from behavior.
 
@@ -28,7 +26,7 @@ archflow-local <command> [--task <task>] [--input <json-file>] [--brief]
 | Command | Purpose |
 |---|---|
 | `validate` | Run an artifact through its contract parser and echo the parsed value |
-| `hash` | SHA-256 of a value's canonical encoding (mostly superseded by `build-request`) |
+| `hash` | SHA-256 of a value's canonical encoding |
 | `render` | Preview the canonical Markdown projection of a review or constitution-review result, with digest |
 | `init` | Set up the repository: `.archflow/` assets + MCP registrations for both hosts |
 
@@ -38,68 +36,30 @@ Initialization diagnostics also list generated ArchFlow assets hidden by an ance
 
 | Command | Purpose |
 |---|---|
-| `status` | The reconciled durable truth plus exactly one `next_action`, often with a prefilled request — the normal driver loop; `--brief` projects the loop-sized view |
 | `manual-status` | Read-only mode classifier: `normal`, `degraded`, `repair-required`, `upgrade-staged` (a reusable current import waits for MCP), or `upgrade-restart-required` (old/ambiguous staging must be explicitly discarded) |
-| `gate-preview` | Re-derive the current human decision presentation and a canonical `preview_digest`; ordinary gates take a human summary, while waivers also identify their archived origin and rationale |
-| `envelope` | Authenticate an *already-authored* complete tool request (fingerprint + request digest) |
-
-**Task-scoped, composing:**
-
-| Command | Purpose |
-|---|---|
-| `build-request` | **The one documented door** — see below |
 
 **Task-scoped, mutating:**
 
 | Command | Purpose |
 |---|---|
 | `snapshot` / `restore` | Install / read back a content-addressed retained result |
-| `decide` | Recovery/debug interface for a previously opened gate. The normal skill path carries the decision in the bounded MCP call and does not use this side channel. |
-| `commit` | Commit the exact action currently authorized by status (`commit-artifacts` or `commit-phase`), rechecking its ref, baseline, message, paths, and—during implementation—the retained diff; unrelated staged and worktree changes are preserved |
 | `clean` | Remove only unreferenced authority plus stale or reconstructible work; reports removed/retained file and byte counts |
 | `reconcile` | Compare recorded projections against what's on disk |
-| `upgrade` | `preview` a legacy import without writes, `stage` an approved preview into ignored runtime only, or safely `discard-stage`; visible adoption is performed atomically by MCP initialization (see `../workflow/SKILLS.md`) |
+| `upgrade` | The legacy-adoption adapter, below |
 
-## build-request: the one documented door
+## upgrade: the legacy-adoption adapter
 
-Every ArchFlow MCP call is a large object whose fields the server checks byte-for-byte. Hand-assembling those fields was measured to be the dominant failure mode — in a full PRD loop, 8 of 10 requests were mechanical transcription, with only findings and dispositions being genuine judgment. Transcription can only *introduce* errors (`TRANSITION_INVALID`, `INPUT_FINGERPRINT_MISMATCH`); it can never add value.
+Adoption of a legacy in-flight task is the one workflow that must start before any task exists, so it stays a purpose-specific local adapter rather than a task `archflow_apply` action. Its operations:
 
-So `build-request` inverts the contract: **the caller supplies only judgment; the tool derives everything mechanical** from the same durable authorities the server will check against. The derivation now lives in transport-neutral `src/state/request-composition.ts`; `src/local/build-request.ts` is a thin adapter that opens production services, calls `composeRequest`, and renders the result. Semantic action planning calls the same service, so the CLI and live MCP façade do not maintain parallel request builders.
+- `preview` — validate the repository, baselines, source selection, exclusions, secret scan, mapping, phase continuity, visible document set, and derived resume phase, without writing. An unresolved task-local constitution edit or a secret finding blocks staging.
+- `stage` — write the approved import (bound by `approved_preview_digest`) into ignored runtime only; no visible destination file is created. An incompatible pre-fix stage is discarded with `discard-stage`.
+- `adopt` — the input-free `archflow-local upgrade adopt --task <task>` form (registered as `upgrade-adopt`; `upgrade adopt` is the one two-token CLI form). It runs the existing initialization transaction locally over the staged artifact, atomically publishing `config.yaml`, `state.json`, `prd.md`, `design.md`, and the mapped phase documents. Adoption is retry-safe through the transaction's replay machinery; replaced or tampered staged bytes fail closed.
 
-```mermaid
-flowchart LR
-    J["Judgment only:<br/>findings, dispositions,<br/>rationales, summaries, decisions"] --> BR["build-request<br/>kind: initialize | produce | failed | running | advance |<br/>triage | counter-review | gate | planning-restart | waiver"]
-    DS[("durable state,<br/>pinned config,<br/>retained evidence")] --> BR
-    BR --> ENV["call envelope:<br/>fingerprint + request digest"]
-    ENV --> STG["staged request in ignored runtime:<br/>transient/intents/&lt;intent-id&gt;.request.json"]
-    ENV --> OUT["staged.reference — four fields<br/>pasted into the MCP call<br/>(request.input is the fallback)"]
-```
+After adoption the task exists and the workflow returns to the semantic surface: the imported design travels the ordinary review/triage cycle and the one `migration-audit` gate through `archflow_status`/`archflow_apply`, and acceptance authorizes the task-local import commit the client creates itself. The human approvals are the preview approval before `stage` and the migration-audit decision; adoption itself is mechanical.
 
-Properties worth knowing:
+## One naming note
 
-- Each kind guards the transition with the server's own rule first, so an illegal move fails at compose time with the server's own error, not on the network call.
-- Every kind except `initialize` also **stages** the resolved request below `.archflow/runtime/tasks/<task>/transient/intents/` (atomically, overwrite-on-recompose) and adds `staged: {path, reference}` to the envelope. The reference — `{schema_version, task_id, intent_id, request_digest}` — is the whole MCP tool input; the server rehydrates the staged bytes and refuses on any digest disagreement, so the multi-kilobyte payload never crosses the model's context. Passing `request.input` verbatim remains the documented fallback.
-- `intent_id` is optional: when omitted, the composer generates `<kind>-<UTC stamp>-<4 hex>` and echoes it in the request and reference. An explicit id is only for replaying or resuming an interrupted call.
-- `running` enters a pipeline step; the steps are exactly `produce`, `counter_review`, and `triage`.
-- `planning-restart` records an explicitly requested backward move to `prd`, `design`, or an earlier phase design. It takes only the exact human reason and a semantic skill invocation, derives the strictly earlier planning target itself, and is legal only for an active nonterminal task with no open gate. Git and worktree bytes stay untouched; the server archives superseded result references into `restart_history`, clears target-and-downstream current authority plus active waivers and pending human revision, removes the superseded attempt's untracked phase documents, and enters the target at `produce: running`. A PRD target also derives and binds the expected ask-prefix digest for the appended correction entry; the state handler and semantic action use the same bounded restart service.
-- `advance` is judgment-free. It composes only when fresh status says `advance-phase` or `complete-task`, derives the exact successor operation, and stages an `archflow_state` request. PRD re-verifies artifact approval. Design and phase-design re-verify combined design approval plus its observed task-local milestone commit. Producer skills invoke it automatically after the gate and commit; the destination skill may invoke it as crash recovery only when status's target phase, skill, and arguments exactly match that invocation.
-- `counter-review` takes no rubric or artifact-path facts. The composer derives the artifact path from the durable phase, and the server selects the immutable rubric for that phase kind.
-- `triage` enforces exactly one disposition per current finding — unknown IDs, duplicates, and gaps are rejected before the server ever sees them.
-- `gate` composes a pending constitution gate mechanically for PRD and implementation. For task design and phase design it instead composes one `design-approval`, binding every constitution finding, eligible waiver, current subject, target ref, baseline commit, and commit message. Post-milestone projection drift composes a `baseline-adoption` decision ahead of any phase gate (a restore choice is refused here when no retained manifest holds the recorded bytes). Otherwise it picks the mandatory kind from the phase (`phase-impl` → `commit-authorization`, PRD → `artifact-approval`). The author always writes only the human summary. The bounded decision pair is optional and all-or-nothing: adding `preview_digest` and `decision: {choice, reason}` after `gate-preview` presented that exact snapshot composes the settled gate call in one shot — the composer recomputes the preview and refuses stale bytes or a choice it did not offer — while omitting both composes the gate unopened so the human decision can return through the interface.
-- `waiver` accepts no gate facts. It reconstructs the pending waiver request from the authenticated gate request and human decision archives, including rule, scope, subject, evidence, origin, and rationale. It takes the same optional decision pair: with `preview_digest` and `decision` it stages the settled waiver call after revalidating a fresh preview against the archived origin; without them it opens the waiver and the decision returns through the interface.
-- During implementation `produce`, the composer also intersects Git's changed paths with the canonical writable task documents. Any changed PRD, task design, current phase design, or implementation log is added mechanically to both `outputs` and `restore_targets` and retained as a parent document, so omitting a governing-document edit from the authored path list cannot bypass review or rollback.
-- `initialize` is the documented exception: the only composer that writes (it must stage the task before a fingerprint can resolve), legal only before durable state exists. Its envelope carries **no** `staged` block — there is no durable task directory yet to hold a staged file — so the create-task call is the one place `request.input` is passed verbatim by design, as typed JSON (`artifact` an object, `expected_revision` the number `0`).
-- A contract test pins that every prefill the server emits maps onto a composer kind — "the one door" is literally true, not aspirational.
-
-The semantic façade adds no CLI commands. `build-request` retains the legacy composition kinds and the bounded `failed`, `planning-restart`, and no-submission `waiver` kinds shared with semantic execution. The low-level `archflow_state` planning-restart arm remains an additive migration adapter, not a new durable tool identity. Direct human decisions now use nonblocking server-owned archive and settlement services on the semantic path.
-
-For a pending hand-off, `next_action` keeps `phase_instance` honest as the current durable predecessor while adding the derived `target_phase_instance` and exact `skill_args`. Human-facing status renders both `Claude: /<skill> <task> <args...>` and `Codex: $<skill> <task> <args...>` from those fields; it never routes the user back to the skill that already finished and emits no command at terminal completion. Both `commit-artifacts` and `commit-phase` are nonhuman actions because their resolved gates already supplied authority. `archflow-local commit --task <id>` re-derives the live action immediately before Git: design and migration commits are bound to the exact task root, baseline, target ref, and message; implementation commits additionally prove the exact retained diff digest and sorted changed-path set. It uses Git's path-limited commit so unrelated index and worktree state survive untouched.
-
-## Two things called "envelope"
-
-`src/local/call-envelope.ts` produces the **call envelope**: the authentication wrapper around one outgoing MCP call. It resolves the input fingerprint internally (running it over its own output is a fixed point — idempotent), substitutes it into exactly the two places the contracts bind it, and computes the request digest. In decision-carrying mode, gate and waiver calls include the already-presented preview digest and the human's nested decision in that authenticated request. There is no second-terminal, polling, or optional gate-review recipe.
-
-This is **unrelated** to `src/review/envelopes.ts` (the sealed evidence package sent to a child reviewer — see `../review/COUNTER-REVIEW.md`). The shared name is a known collision; a rename is on the simplification list.
+Internal request-digest derivation lives in `src/local/call-envelope.ts` — the authentication wrapper the composer binds around one durable request. It is unrelated to `src/review/envelopes.ts`, the sealed evidence package sent to a child reviewer (see `../review/COUNTER-REVIEW.md`). The shared name is a known collision; a rename is on the simplification list.
 
 ## Degraded mode
 
@@ -113,4 +73,4 @@ When the MCP server is unavailable, there is no offline recording path — the s
 
 Nothing in this mode advances the workflow, resolves gates, or records progress.
 
-`clean --task <id>` is safe to run after an automatic cleanup warning. It never reads stdin, never treats cache as authority, and never rolls a committed transition back. Full status reports `workspace.cleanup_pending`; brief status mentions workspace only while that condition is present.
+`clean --task <id>` is safe to run after an automatic cleanup warning. It never reads stdin, never treats cache as authority, and never rolls a committed transition back.

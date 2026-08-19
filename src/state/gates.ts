@@ -62,7 +62,6 @@ import {
   type GateOpenResult,
   type GateResolution,
 } from "./gate-core.js";
-import { waitForGateInterface } from "./gate-wait.js";
 import { buildHumanGatePresentation, selectGateDecisionTemplate } from "./gate-decision-interface.js";
 import { ensureDecisionDirectory, ensureIntentDirectory, ensureWorkspaceProjectionParent } from "./layout.js";
 import { loadLegacyImportInitialization, loadLegacyImportResumePhase } from "./legacy-import-resume.js";
@@ -82,8 +81,6 @@ export {
   buildHumanGatePresentation,
   gateDecisionTemplateName,
   selectGateDecisionTemplate,
-  writeGateDecisionChoice,
-  writeGateDecisionInterface,
 } from "./gate-decision-interface.js";
 export type { HumanGateDecisionOption, HumanGatePresentation } from "./gate-decision-interface.js";
 export type { GateLifecycleDependencies, GateOpenInput } from "./gate-core.js";
@@ -160,35 +157,6 @@ async function authenticateWaiverOrigin(
   const requestContext = request.value.context;
   if (!("eligible_waivers" in requestContext) || request.value.gate_id !== context.origin.origin_gate_id || request.value.context_digest !== context.origin.origin_context_digest || request.value.task_id !== context.origin.task_id || request.value.phase_instance !== context.origin.phase_instance || request.value.subject_digest !== context.origin.subject_digest || request.value.current_evidence.set_digest !== context.origin.current_evidence_set_digest || !isDeepStrictEqual(payload.rule, context.origin.rule) || payload.operation !== context.origin.scope.operation || !requestContext.eligible_waivers.some((eligible) => isDeepStrictEqual(eligible.rule, context.origin.rule) && isDeepStrictEqual(eligible.scope, context.origin.scope))) return issue("CONTRACT_INVALID", undefined, "waiver-origin-binding-invalid");
   return ok(undefined);
-}
-
-async function cleanupResolvedInterfaces(
-  dependencies: GateLifecycleDependencies,
-  authority: TransactionAuthority,
-  request: GateRequestV1,
-  record: GateDecisionRecordV1,
-): Promise<ProjectResult<void>> {
-  try {
-    await ensureIntentDirectory(authority);
-    return await dependencies.lock.runExclusive(authority.workspace_root, async () => {
-      const gateJson = await resolvePath(dependencies, authority, "gate.json", "workspace-gate-interface");
-      if (!gateJson.ok) return gateJson;
-      const active = await readCanonical(gateJson.value, "active gate", parseActiveGate);
-      if (active !== "missing" && active !== "invalid" && active.value.gate_id === request.gate_id && active.value.task_id === request.task_id && active.value.phase_instance === request.phase_instance && active.value.subject_digest === request.subject_digest && active.value.context_digest === request.context_digest) {
-        await dependencies.atomic.removeGateInterface(gateJson.value);
-      }
-      const decision = await resolvePath(dependencies, authority, "gate.decision", "workspace-gate-interface");
-      if (!decision.ok) return decision;
-      const projected = await readCanonical(decision.value, "gate decision interface", (value) => value as PlainJsonValue);
-      if (projected !== "missing" && projected !== "invalid") {
-        try {
-          const bound = parseInterface(projected.value, request);
-          if (canonicalJsonDigest(bound) === canonicalJsonDigest(record)) await dependencies.atomic.removeGateInterface(decision.value);
-        } catch { /* never remove an interface whose gate identity cannot be authenticated */ }
-      }
-      return ok(undefined);
-    });
-  } catch (error) { return error instanceof TaskLockError ? io(authority, `gate-cleanup-lock-${error.stage}`) : io(authority, "gate-cleanup"); }
 }
 
 export async function openDurableGate(
@@ -769,7 +737,7 @@ async function closedStateForRecord(
     if (!targets.ok) return targets;
     for (const drifted of request.context.drifted_projections) {
       const entry = targets.value.get(drifted.path);
-      if (entry === undefined || entry.projection.content_digest !== drifted.recorded_digest) {
+      if (entry === undefined || entry.retired || entry.projection.content_digest !== drifted.recorded_digest) {
         return issue("STATE_INVALID", current.value, "baseline-adoption-current-stale");
       }
       if (await currentProjectionDigest(entry.target) !== drifted.observed_digest) {
@@ -1129,6 +1097,15 @@ export async function archiveDirectSemanticGateDecision(
           gate_kind: open.gate_kind,
           issue_code: "decision-choice-invalid",
         }));
+      }
+      // A restore that can never apply must be refused before the decision is archived: the
+      // decided interface is immutable, so recording it would wedge the gate behind an
+      // unapplicable decision. Adoption-sourced drift has no retained manifest to restore from.
+      const selectedDecision = (selected as Readonly<{ payload?: Readonly<{ decision?: PlainJsonValue }> }>).payload?.decision;
+      if (request.value.kind === "baseline-adoption" &&
+          selectedDecision === "restore-recorded-bytes" &&
+          !(await baselineRestoreOffered(dependencies, input.authority, current, request.value.context.drifted_projections))) {
+        return issue("STATE_INVALID", current.value, "baseline-adoption-restore-source-unavailable");
       }
       const provenance: HumanDecisionProvenance = {
         schema_version: "1",
@@ -1496,7 +1473,8 @@ export async function resolveDurableGate(
         const prepared = closure.value;
         // A closure-before-receipt crash resumes through the same ordering. The archived request
         // carries no fingerprint field, so only non-success closures can be resumed here; success
-        // receipt recovery is driven by runDurableGate, which supplies the authenticated fingerprint.
+        // receipt recovery is driven by the direct semantic settlement, which supplies the
+        // authenticated fingerprint.
         if (earnsReceipt(archived.value)) return issue("STATE_INVALID", current.value, "gate-success-receipt-resume-required");
         const transitioned = withGateTransition(
           authority, request.value, archived.value, current, prepared,
@@ -1558,39 +1536,6 @@ export async function resolveDurableGate(
   }
 }
 
-export async function runDurableGate(
-  dependencies: GateLifecycleDependencies,
-  input: GateOpenInput & Readonly<{ signal: AbortSignal }>,
-): Promise<ProjectResult<GateResolution | GateOpenResult>> {
-  const opened = await openDurableGate(dependencies, input);
-  if (!opened.ok) return opened;
-  if (opened.value.replay !== undefined) {
-    if (opened.value.state.value.open_gate?.gate_id !== opened.value.gate_id) {
-      const effect = opened.value.replay.value.outcome === "decided" ? gateDecisionEffect(opened.value.replay.value.envelope.payload) : "non-advancing";
-      const cleaned = await cleanupResolvedInterfaces(dependencies, input.authority, opened.value.request.value, opened.value.replay.value);
-      if (!cleaned.ok) return cleaned;
-      if (opened.value.replay.value.outcome === "cancelled") return fail(createProjectError("GATE_CANCELLED", { gate_id: opened.value.gate_id, gate_kind: opened.value.replay.value.kind }));
-      return ok({ state: opened.value.state, record: opened.value.replay, effect, replayed: true });
-    }
-    return earnsReceipt(opened.value.replay.value)
-      ? resolveAdvancingGate(dependencies, input.authority, opened.value.gate_id, input.input_fingerprint)
-      : resolveDurableGate(dependencies, input.authority, opened.value.gate_id, input.input_fingerprint);
-  }
-  const decision = await resolvePath(dependencies, input.authority, "gate.decision", "workspace-gate-interface");
-  if (!decision.ok) return decision;
-  const wait = await waitForGateInterface({
-    decision_path: decision.value,
-    signal: input.signal,
-  });
-  if (wait.kind === "aborted") return fail(createProjectError("CANCELLED", { source: "client", attempt: input.authority.context.attempt }));
-  // Resolve inline so advancing decisions can write archive -> receipt -> state while the
-  // authenticated request fingerprint is still available. The lower-level resolver deliberately
-  // refuses to manufacture success receipts without it.
-  const resolved = await resolveDurableGate(dependencies, input.authority, opened.value.gate_id, input.input_fingerprint);
-  if (resolved.ok || resolved.error.code !== "STATE_INVALID") return resolved;
-  return resolveAdvancingGate(dependencies, input.authority, opened.value.gate_id, input.input_fingerprint);
-}
-
 export type BaselineDriftedProjection = Extract<GateRequestV1, { kind: "baseline-adoption" }>["context"]["drifted_projections"][number];
 
 /**
@@ -1635,7 +1580,7 @@ async function baselineRestoreOwners(
   const owners = new Map<string, { reference: AuthoritativeResultRef; drifted: BaselineDriftedProjection[] }>();
   for (const drifted of driftedProjections) {
     const entry = targets.value.get(drifted.path);
-    if (entry === undefined || entry.projection.content_digest !== drifted.recorded_digest) {
+    if (entry === undefined || entry.retired || entry.projection.content_digest !== drifted.recorded_digest) {
       return issue("STATE_INVALID", current.value, "baseline-adoption-current-stale");
     }
     if (entry.reference === undefined) {

@@ -491,3 +491,65 @@ only if the complete chain imports, status reports reconciled non-conflicting au
 conservative milestone, no resolved decision or retained result is duplicated, and no extra commit
 appears. Record all observations in `docs/validation/journey-val12-manual.md`; if the host or helper
 asks to repeat a resolved decision, stop and record the journey as blocked.
+
+## Automated host-selection journey
+
+`test/real-host/host-selection.test.ts` proves the two-tool semantic catalogue from the hosts'
+side. Run it with:
+
+```bash
+ARCHFLOW_REAL_HOSTS=1 npx vitest run test/real-host/host-selection.test.ts
+```
+
+Prerequisites: `claude` and `codex` on `PATH` and authenticated (the shared opt-in probe fails the
+run when either is missing). The suite installs the tracked `dist/` bundle into a scratch home
+through `install.sh` with `ARCHFLOW_HOME`/`ARCHFLOW_BIN` redirected there — the shared
+machine-global locations are never written, and the suite fails if the developer's
+`~/.claude/skills` or `~/.agents/skills` trees changed.
+
+For each authenticated host it records three observations into
+`docs/validation/host-selection.json`, digest-bound to
+`docs/validation/host-selection-thresholds.json` (the review-benchmark artifact pattern; the
+digest/threshold binding itself is checked in ordinary test runs):
+
+1. **Advertisement** — the host reports the exact MCP tool names it can see; the recorded set
+   must be exactly `archflow_apply` and `archflow_status`.
+2. **First-call selection** — for the plain-language question "What is the current status of the
+   ArchFlow task <task>? Answer in one sentence." (no tool names, invocation shapes, or other
+   skill-authored protocol hints in the prompt), the host's first ArchFlow tool call must be
+   `archflow_status` with the named `task_id`.
+3. **Journey slice** — through the host: an invocation-scoped `archflow_status`, then
+   `archflow_apply` performing `initialize-task` with a `task-ask`, landing at the `submit-work`
+   offer with durable `prd`/`produce`/`running` task state.
+
+Driving mechanics (both headless, one process per step, disposable Git repositories under the
+system temporary directory):
+
+- Claude Code: `claude -p --tools "" --strict-mcp-config --mcp-config <scratch-config>
+  --no-session-persistence --setting-sources "" --output-format stream-json --verbose --model
+  claude-opus-5 --effort high --permission-mode auto <prompt>`. The strict MCP config points at
+  the scratch-installed `archflow-mcp` launcher; `--setting-sources ""` and `--tools ""` keep
+  machine-global skills and built-in tools out of the observation.
+- Codex: `codex exec --ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check
+  --approve-for-me --json -m gpt-5.6-sol` with `-c mcp_servers.archflow.*` overrides, run with a
+  scratch `HOME` (so machine-global `~/.agents/skills` — possibly a stale install — cannot steer
+  the host) and an explicit `CODEX_HOME` pointing at the real home so authentication survives.
+
+Remediated host defect (2026-08-18), previously recorded here as a blocked journey: on this
+operator account Claude Code routes model requests through a proxy whose tool-call
+serialization emitted the advertised `invocation` argument — a nested `$ref` into
+`#/$defs/semantic-workflow/$defs/workflowInvocation` — as a JSON string, so every
+invocation-bearing call was rejected `CONTRACT_INVALID` before the semantic layer ran. A
+controlled echo-server experiment isolated the trigger on this account: flat `#/$defs/<name>`
+references passed as nested objects, while the two-level
+`#/$defs/semantic-workflow/$defs/<name>` pointers the semantic fragments used were the ones
+that arrived stringified; Codex completed the identical journey, proving the server side end to
+end. The advertised schema projection in `src/mcp/tools.ts` was therefore flattened: every
+reference the advertised surface exposes now resolves in a single hop through a flat top-level
+`$defs` (`#/$defs/workflowInvocation`, `#/$defs/taskSlug`, `#/$defs/applySubmission`, …), with
+the same reference-reachable pruning and unchanged server-side validation. The rerun recorded
+both hosts completing the full journey (advertisement, first-call selection, and the
+initialize-task → `submit-work` slice), and `test/contracts/mcp-advertised-schema.test.ts`
+carries a regression fence pinning the single-hop reference form. The capability probe and the
+`journey.status = "blocked"` recording path stay in the suite: an account whose serialization
+regresses will be recorded, not silently passed.

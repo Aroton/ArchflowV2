@@ -41,10 +41,16 @@ export type ReconciliationInput = Readonly<{
   intent?: ReconciliationIntent;
   /** Discovery-only blockers consumed by status; they do not alter reconciliation classification. */
   blocking_reasons?: readonly string[];
+  /**
+   * Paths whose newest recorded projection has no retained payload to restore from — a
+   * baseline adoption records digests only. Discovery-only, like blocking_reasons: it annotates
+   * findings so routing can distinguish an unrecoverable-by-restore mismatch from a restorable one.
+   */
+  unrestorable_paths?: readonly ProjectionDigestRef["path"][];
 }>;
 
 export type ReconciliationFinding =
-  | Readonly<{ kind: "projection-mismatch"; path: ProjectionDigestRef["path"]; recorded_digest: Sha256Digest; observed_digest?: Sha256Digest; next_action: "open-baseline-adoption-gate" }>
+  | Readonly<{ kind: "projection-mismatch"; path: ProjectionDigestRef["path"]; recorded_digest: Sha256Digest; observed_digest?: Sha256Digest; restore_unavailable?: true; next_action: "open-baseline-adoption-gate" }>
   | Readonly<{ kind: "receipt-only"; request_digest: Sha256Digest; receipt_digest: Sha256Digest; next_action: "resume-exact-intent" }>
   | Readonly<{ kind: "receipt-invalid"; receipt_digest: Sha256Digest; next_action: "inspect-retained-receipt" }>
   | Readonly<{ kind: "intent-mismatch"; requested_digest: Sha256Digest; receipt_request_digest: Sha256Digest; next_action: "create-fresh-intent" }>
@@ -64,6 +70,7 @@ function materialize(input: ReconciliationInput): ReconciliationInput {
     current_projections: input.current_projections,
     active_heads: input.active_heads,
     ...(input.blocking_reasons === undefined ? {} : { blocking_reasons: input.blocking_reasons }),
+    ...(input.unrestorable_paths === undefined ? {} : { unrestorable_paths: input.unrestorable_paths }),
   }, "reconciliation working set");
   let intent: ReconciliationIntent | undefined;
   if (input.intent !== undefined) {
@@ -89,6 +96,9 @@ function materialize(input: ReconciliationInput): ReconciliationInput {
     ...(input.blocking_reasons === undefined
       ? {}
       : { blocking_reasons: Object.freeze([...input.blocking_reasons]) }),
+    ...(input.unrestorable_paths === undefined
+      ? {}
+      : { unrestorable_paths: Object.freeze([...input.unrestorable_paths]) }),
   };
 }
 
@@ -105,6 +115,7 @@ export function reconcileCurrentAuthority(value: ReconciliationInput): Reconcili
   const input = materialize(value);
   const findings: ReconciliationFinding[] = [];
   const observed = new Map(input.current_projections.map((projection) => [projection.path, projection.content_digest]));
+  const unrestorable = new Set(input.unrestorable_paths ?? []);
   for (const recorded of input.recorded_projections) {
     const digest = observed.get(recorded.path);
     if (digest !== recorded.content_digest) {
@@ -113,6 +124,7 @@ export function reconcileCurrentAuthority(value: ReconciliationInput): Reconcili
         path: recorded.path,
         recorded_digest: recorded.content_digest,
         ...(digest === undefined ? {} : { observed_digest: digest }),
+        ...(digest === undefined && unrestorable.has(recorded.path) ? { restore_unavailable: true } : {}),
         next_action: "open-baseline-adoption-gate",
       }));
     }

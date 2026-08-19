@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { parseToolCall, validateProjectFailureStructure, validateProjectResultStructure } from "../../src/contracts/mcp-tools.js";
 import { ADVERTISED_TOOL_NAMES, SEMANTIC_TOOL_NAMES, TOOL_NAMES, type ToolName } from "../../src/contracts/tool-names.js";
 import { ADVERTISED_TOOL_CATALOGUE } from "../../src/mcp/tools.js";
+import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 
 interface CorpusCase {
   readonly label: string;
@@ -46,7 +47,10 @@ const schemaDocumentPaths = [
 ] as const;
 
 const validatingKeywordCoverage = {
-  "x-archflow-max-utf8-bytes": ["path-utf8-input", "path-utf8-output", "project-error-path-utf8"],
+  // The project-error document still carries its own byte and ordering keywords, so those arms
+  // are document-enforced against the durable contracts — only the path-claim arms (whose
+  // keywords retired into the Zod refines) stay runtime-only categories.
+  "x-archflow-max-utf8-bytes": ["path-utf8-input", "path-utf8-output"],
   "x-archflow-mcp-semantics": [
     "mcp-waiver-origin-task",
     "gate-constitution-rule-order",
@@ -72,7 +76,6 @@ const validatingKeywordCoverage = {
     "gate-restore-adoption-authority"
   ],
   "x-archflow-nfc": ["path-nfc-input"],
-  "x-archflow-sorted-unique": ["project-error-sorted-unique"],
   "x-archflow-sorted-unique-by": ["document-declared-input-order"]
 } as const;
 
@@ -240,8 +243,33 @@ describe("advertised MCP tool catalogue", () => {
     expect(validation).toHaveProperty("value");
     expect(listed).not.toHaveProperty("nextCursor");
     expect(ADVERTISED_TOOL_CATALOGUE.map(({ name }) => name)).toEqual(ADVERTISED_TOOL_NAMES);
-    expect(ADVERTISED_TOOL_CATALOGUE).toHaveLength(6);
+    expect(ADVERTISED_TOOL_CATALOGUE).toHaveLength(2);
     expect(ADVERTISED_TOOL_CATALOGUE.every(({ description }) => description.length > 40)).toBe(true);
+  });
+
+  it("pins the final two-tool catalogue: names, plain object roots, purpose descriptions, byte budget", () => {
+    // Final measured size of JSON.stringify({tools: ADVERTISED_TOOL_CATALOGUE}): 23,474 bytes
+    // for the semantic pair with flat single-hop $defs, against the historical 105,478-byte
+    // four-tool catalogue and the 1,316,997-byte unpruned catalogue (whose bytes were ~99%
+    // definitions no tool member referenced; ref-reachable pruning first brought it to
+    // 283,708). The ceiling leaves ~20% headroom for description edits while failing the
+    // accidental return of a retired tool or a definitions blob.
+    expect(ADVERTISED_TOOL_NAMES).toEqual(["archflow_status", "archflow_apply"]);
+    expect(ADVERTISED_TOOL_CATALOGUE.map(({ name }) => name)).toEqual(["archflow_status", "archflow_apply"]);
+    expect(ADVERTISED_TOOL_CATALOGUE.map(({ description }) => description)).toEqual([
+      "Read durable ArchFlow status for one task and optional producing-skill invocation without mutation; returns one reconciled workflow view and at most one bounded offer for the current document owner.",
+      "Apply exactly one supplied server offer using only its expected semantic submission; never chooses or loops to another action and returns the newly authenticated workflow view.",
+    ]);
+    for (const descriptor of ADVERTISED_TOOL_CATALOGUE) {
+      for (const [member, schema] of [["input", descriptor.inputSchema], ["output", descriptor.outputSchema]] as const) {
+        expect(schema.type, `${descriptor.name} ${member} root`).toBe("object");
+      }
+      // The merged-input-root fence: only the result union (output) may carry a root combinator.
+      for (const combinator of ["oneOf", "allOf", "anyOf", "$ref", "if"] as const) {
+        expect(descriptor.inputSchema, `${descriptor.name} input root ${combinator}`).not.toHaveProperty(combinator);
+      }
+    }
+    expect(JSON.stringify({ tools: ADVERTISED_TOOL_CATALOGUE }).length).toBeLessThan(28_200);
   });
 
   it("compiles every standalone input and output with strict Ajv 2020 and standard formats only", () => {
@@ -278,11 +306,11 @@ describe("advertised MCP tool catalogue", () => {
   });
 
   it("advertises every input as a flat object root that survives host oneOf-flattening", () => {
-    // Regression fence: the normative input contract is a two-branch union, and at least one MCP
+    // Regression fence: the normative input contract is a union of arms, and at least one MCP
     // host flattens a root-level combinator by dropping branches it cannot resolve through
-    // $ref/allOf — observed advertising all five tools as zero-field objects. The advertised root
+    // $ref/allOf — observed advertising the tools as zero-field objects. The advertised root
     // must carry the merged field surface directly and leave combinators below the root.
-    const stagedReference = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", request_digest: D("c") };
+    const retiredReference = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", request_digest: D("c") };
     for (const descriptor of ADVERTISED_TOOL_CATALOGUE) {
       const schema = descriptor.inputSchema;
       for (const combinator of ["oneOf", "allOf", "anyOf", "$ref", "if"]) {
@@ -294,22 +322,22 @@ describe("advertised MCP tool catalogue", () => {
         expect(properties, `${descriptor.name} requires undeclared ${field}`).toHaveProperty(field);
       }
       expect(schema.additionalProperties, `${descriptor.name} input strictness`).toBe(false);
-      if ((TOOL_NAMES as readonly string[]).includes(descriptor.name)) {
-        expect(schema.description, `${descriptor.name} input description`).toMatch(/Staged reference/u);
-        expect(freshAjv().compile(schema)(stagedReference), `${descriptor.name} staged reference portable`).toBe(true);
-      } else {
-        expect(schema).not.toHaveProperty("description", expect.stringMatching(/Staged reference/u));
-        expect(freshAjv().compile(schema)(stagedReference), `${descriptor.name} rejects staged reference`).toBe(false);
-      }
+      // No advertised input carries the retired staged-reference arm in any form.
+      expect(JSON.stringify(schema), `${descriptor.name} staged reference`).not.toContain("request_digest");
+      expect(freshAjv().compile(schema)(retiredReference), `${descriptor.name} rejects retired staged reference`).toBe(false);
     }
 
     // The merge must carry the branch field types through, not collapse them: these are the
-    // exact fields the zero-field regression left the model to guess as strings.
-    const stateProperties = (ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === "archflow_state")!.inputSchema as { properties: Record<string, unknown> }).properties;
-    expect(stateProperties.expected_revision).toEqual({ $ref: "#/$defs/mcp-tools/$defs/integer" });
-    expect(stateProperties.artifact).toEqual({ $ref: "#/$defs/mcp-tools/$defs/durableArtifact" });
-    const gateProperties = (ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === "archflow_gate")!.inputSchema as { properties: Record<string, unknown> }).properties;
-    expect((gateProperties.context as { oneOf: unknown[] }).oneOf).toHaveLength(9);
+    // exact fields the zero-field regression left the model to guess as strings. The apply
+    // input's submission union stays a below-root def reached from the merged action object,
+    // and both variant fields resolve through single-hop flat defs.
+    const applyProperties = (ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === "archflow_apply")!.inputSchema as { properties: Record<string, unknown> }).properties;
+    expect(applyProperties.invocation).toEqual({ $ref: "#/$defs/workflowInvocation" });
+    expect(applyProperties.task_id).toEqual({ $ref: "#/$defs/taskSlug" });
+    const action = applyProperties.action as { properties: Record<string, unknown>; required: readonly string[] };
+    expect(action.required).toContain("offer");
+    expect(action.properties.offer).toMatchObject({ type: "string" });
+    expect(action.properties.submission).toEqual({ $ref: "#/$defs/applySubmission" });
   });
 
   it("advertises exactly the reference-reachable definitions within the context-budget fence", () => {
@@ -333,7 +361,10 @@ describe("advertised MCP tool catalogue", () => {
         if (typeof value !== "object" || value === null) return;
         for (const [key, entry] of Object.entries(value)) {
           if (key === "$ref" && typeof entry === "string") {
-            expect(entry, `${label} reference form`).toMatch(/^#\/\$defs\/[^/]+/u);
+            // Every advertised reference resolves in a single hop: a $ref pointing INTO a
+            // nested $defs made at least one MCP host serialize the declared argument as a
+            // JSON string instead of an object.
+            expect(entry, `${label} reference form`).toMatch(/^#\/\$defs\/[^/]+$/u);
             reachable.add(unescape(entry.split("/")[2] as string));
             if (!visitedReferences.has(entry)) {
               visitedReferences.add(entry);
@@ -350,15 +381,17 @@ describe("advertised MCP tool catalogue", () => {
     };
 
     for (const descriptor of ADVERTISED_TOOL_CATALOGUE) {
+      expect((SEMANTIC_TOOL_NAMES as readonly string[]).includes(descriptor.name), descriptor.name).toBe(true);
       assertExactReachableClosure(descriptor.inputSchema, `${descriptor.name} input`);
       assertExactReachableClosure(descriptor.outputSchema, `${descriptor.name} output`);
-      // The error union is a result-envelope concern; no tool input reaches it.
+      // The error union is a result-envelope concern; no semantic tool schema reaches it, and
+      // the flat def names never leave a document-key grouping level behind.
       expect(Object.keys(descriptor.inputSchema.$defs as object)).not.toContain("project-error");
-      if ((SEMANTIC_TOOL_NAMES as readonly string[]).includes(descriptor.name)) {
-        expect(Object.keys(descriptor.outputSchema.$defs as object)).not.toContain("project-error");
-        expect(Object.keys(descriptor.outputSchema.$defs as object)).toContain("semantic-workflow");
-      } else {
-        expect(Object.keys(descriptor.outputSchema.$defs as object)).toContain("project-error");
+      expect(Object.keys(descriptor.outputSchema.$defs as object)).not.toContain("project-error");
+      expect(Object.keys(descriptor.outputSchema.$defs as object)).toContain("workflowView");
+      for (const documentKey of ["mcp-tools", "primitives", "semantic-workflow", "project-error"]) {
+        expect(Object.keys(descriptor.inputSchema.$defs as object), `${descriptor.name} input ${documentKey} group`).not.toContain(documentKey);
+        expect(Object.keys(descriptor.outputSchema.$defs as object), `${descriptor.name} output ${documentKey} group`).not.toContain(documentKey);
       }
     }
 
@@ -385,12 +418,22 @@ describe("advertised MCP tool catalogue", () => {
     const validSuccessTools = cases.filter(({ classification, member, portable, runtime, call_fixture }) => classification === "portable-structure" && member === "output" && portable && runtime && call_fixture !== undefined).map(({ tool }) => tool);
     expect(validSuccessTools).toEqual(TOOL_NAMES);
 
+    // The corpus covers the durable request contracts — the internal request vocabulary the
+    // semantic composers still emit — so its portable structure is pinned against the generated
+    // mcp-tools document, not the advertised (now semantic-only) catalogue.
+    const documents = await Promise.all(schemaDocumentPaths.map(async (path) => JSON.parse(await readFile(new URL(path, import.meta.url), "utf8")) as object));
+    const mcp = documents[0] as { $id?: string; $defs: Record<string, { input: object; result?: object }> };
+    const references = documents.slice(1);
+    const durableSchemaValidator = (entry: CorpusCase) => createJsonSchemaValidator<unknown>({
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      ...mcp.$defs[entry.tool]![entry.member === "input" ? "input" : "result"]!,
+      $defs: mcp.$defs,
+    }, references);
+
     for (const entry of cases) {
-      const descriptor = ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === entry.tool);
-      expect(descriptor, entry.label).toBeDefined();
       const { value, call } = materialize(entry);
-      const schema = entry.member === "input" ? descriptor!.inputSchema : descriptor!.outputSchema;
-      expect(freshAjv().compile(schema)(value), `${entry.label} portable`).toBe(entry.portable);
+      const validator = durableSchemaValidator(entry);
+      expect(validator.validate(value), `${entry.label} portable: ${JSON.stringify(validator.validate.errors)}`).toBe(entry.portable);
       const isSuccessOutput = entry.member === "output" && (value as { ok?: unknown }).ok === true;
       if (isSuccessOutput) {
         expect(entry.call_fixture, `${entry.label} companion call fixture`).toBe(entry.tool);
@@ -410,7 +453,10 @@ describe("advertised MCP tool catalogue", () => {
         expect(entry.runtime).toBe(false);
       }
     }
-  });
+    // Compiling a JSON-Schema validator per corpus row over both authorities is CPU-heavy;
+    // under a full parallel suite it exceeds the default test timeout without indicating any
+    // contract drift.
+  }, 30_000);
 
   it("keeps the catalogue on its direct SDK-free seam", async () => {
     const [source, contractBarrel, packageManifest] = await Promise.all([

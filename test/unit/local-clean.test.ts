@@ -40,9 +40,7 @@ describe("archflow-local clean", () => {
   it("is an input-free task command", () => {
     expect(LOCAL_COMMAND_CONTRACTS.clean).toEqual({ payload: null, task: "required" });
     expect(INPUT_FREE_COMMANDS.has("clean")).toBe(true);
-    expect(LOCAL_COMMAND_CONTRACTS.commit).toEqual({ payload: null, task: "required" });
-    expect(INPUT_FREE_COMMANDS.has("commit")).toBe(true);
-    expect(INPUT_FREE_COMMANDS.has("gate-preview")).toBe(false);
+    expect(INPUT_FREE_COMMANDS.has("validate")).toBe(false);
   });
 
   it("returns workspace cleanup accounting without a payload or maintenance record", async () => {

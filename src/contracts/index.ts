@@ -36,15 +36,12 @@ export * from "./semantic-workflow.js";
 export {
   TOOL_DEFINITIONS,
   bindParsedToolCallRequest,
-  classifyToolCallInput,
   correlateProjectResult,
-  parseStagedRequestReference,
   parseToolCall,
   validateProjectFailureStructure,
   validateProjectResultStructure,
 } from "./mcp-tools.js";
 export type {
-  ClassifiedToolCallInput,
   CommonToolInput,
   CounterReviewConstitutionOutcome,
   CounterReviewInput,
@@ -66,7 +63,6 @@ export type {
   ToolDefinition,
   ToolInput,
   ToolSuccess,
-  StagedRequestReference,
   WaiverDecisionBinding,
   WaiverInput,
   WaiverSuccess,

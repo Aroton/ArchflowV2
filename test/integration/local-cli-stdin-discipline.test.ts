@@ -34,8 +34,8 @@ afterAll(async () => {
 });
 
 describe("archflow-local process", () => {
-  it("does not wait for stdin when status has no input payload", async () => {
-    const child = spawn(process.execPath, [localBundle, "status"], {
+  it("does not wait for stdin when manual-status has no input payload", async () => {
+    const child = spawn(process.execPath, [localBundle, "manual-status"], {
       cwd: repositoryRoot,
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -46,7 +46,7 @@ describe("archflow-local process", () => {
     const result = await new Promise<Readonly<{ code: number | null; signal: NodeJS.Signals | null }>>((resolveResult, reject) => {
       const timer = setTimeout(() => {
         child.kill("SIGKILL");
-        reject(new Error("archflow-local status waited for stdin"));
+        reject(new Error("archflow-local manual-status waited for stdin"));
       }, PROCESS_TIMEOUT_MS);
       child.once("error", reject);
       child.once("exit", (code, signal) => {
@@ -56,7 +56,7 @@ describe("archflow-local process", () => {
     });
 
     expect(result).toEqual({ code: 1, signal: null });
-    expect(stderr).toContain("status requires --task <task>");
+    expect(stderr).toContain("manual-status requires --task <task>");
     child.stdin.destroy();
   }, TEST_TIMEOUT_MS);
 

@@ -98,17 +98,33 @@ function outputClassFor(
 }
 
 /**
- * The newest recorded projection per path, with the worktree target it resolves to and the
- * retained result that owns it. `reference` is `undefined` when the newest record is a human
- * baseline adoption — those bytes exist only in the worktree and git, never in a manifest —
- * which is exactly what a restore needs to know before promising to rewrite them.
+ * One retained manifest's newest word on a projected path. A presence projection says the path was
+ * materialized at a digest; a declared delete or rename source says the path is retired. Revisions
+ * order the observations, and only a path whose newest observation is a presence contributes a
+ * recorded projection — otherwise an earlier phase's stale present-projection would outlive a later
+ * phase's declared deletion and wedge reconciliation demanding "restored" bytes.
+ *
+ * The non-retired arm also carries the retained result that owns the projection. `reference` is
+ * `undefined` when the newest record is a human baseline adoption — those bytes exist only in the
+ * worktree and git, never in a manifest — which is exactly what a restore needs to know before
+ * promising to rewrite them.
  */
-export type NewestProjection = Readonly<{
-  projection: ProjectionDigestRef;
-  measured_at_revision: number;
-  target: ResolvedPath;
-  reference: import("../contracts/durable-state.js").AuthoritativeResultRef | undefined;
-}>;
+export type NewestProjection = Readonly<
+  | {
+    retired: false;
+    path: ProjectionDigestRef["path"];
+    projection: ProjectionDigestRef;
+    measured_at_revision: number;
+    target: ResolvedPath;
+    reference: import("../contracts/durable-state.js").AuthoritativeResultRef | undefined;
+  }
+  | {
+    retired: true;
+    path: ProjectionDigestRef["path"];
+    measured_at_revision: number;
+    reference: undefined;
+  }
+>;
 
 export async function discoverNewestProjections(
   dependencies: GateLifecycleDependencies,
@@ -125,6 +141,20 @@ export async function discoverNewestProjections(
       const loaded = await loadManifest(reference);
       if (!loaded.ok) return loaded;
       const manifest = loaded.value.manifest.value;
+      for (const output of manifest.outputs) {
+        if (output.operation !== "delete" && output.operation !== "rename") continue;
+        const retiredPath = output.operation === "delete" ? output.path : output.previous_path;
+        const prior = newest.get(retiredPath);
+        if (prior === undefined || manifest.accounting.measured_at_revision > prior.measured_at_revision) {
+          const retirement: NewestProjection = Object.freeze({
+            retired: true,
+            path: retiredPath,
+            measured_at_revision: manifest.accounting.measured_at_revision,
+            reference: undefined,
+          });
+          newest.set(retiredPath, retirement);
+        }
+      }
       for (const projection of manifest.projections) {
         const pathClass = outputClassFor(manifest, projection.path);
         if (pathClass === undefined) return stateInvalid(authority, "reconciliation-projection-unbound");
@@ -139,12 +169,15 @@ export async function discoverNewestProjections(
         const measuredAtRevision = manifest.accounting.measured_at_revision;
         const prior = newest.get(projection.path);
         if (prior === undefined || measuredAtRevision > prior.measured_at_revision) {
-          newest.set(projection.path, Object.freeze({
+          const candidate: NewestProjection = Object.freeze({
+            retired: false,
+            path: projection.path,
             projection,
             measured_at_revision: measuredAtRevision,
             target: target.value,
             reference,
-          }));
+          });
+          newest.set(projection.path, candidate);
         }
       }
     }
@@ -155,13 +188,19 @@ export async function discoverNewestProjections(
       for (const projection of adoption.adopted_projections) {
         const prior = newest.get(projection.path);
         if (prior === undefined) return stateInvalid(authority, "reconciliation-projection-unbound");
+        // An adopted path is never retirement-newest: adoption gates open only over recorded
+        // projections, and a retirement that measured later supersedes the adoption instead.
+        if (prior.retired) continue;
         if (adoption.adopted_at_revision > prior.measured_at_revision) {
-          newest.set(projection.path, Object.freeze({
+          const adopted: NewestProjection = Object.freeze({
+            retired: false,
+            path: projection.path,
             projection,
             measured_at_revision: adoption.adopted_at_revision,
             target: prior.target,
             reference: undefined,
-          }));
+          });
+          newest.set(projection.path, adopted);
         }
       }
     }
@@ -178,21 +217,31 @@ async function discoverProjections(
 ): Promise<ProjectResult<Readonly<{
   recorded: readonly ProjectionDigestRef[];
   current: readonly ProjectionDigestRef[];
+  unrestorable: readonly ProjectionDigestRef["path"][];
 }>>> {
   const newest = await discoverNewestProjections(dependencies, authority, state);
   if (!newest.ok) return newest;
   try {
     const recorded: ProjectionDigestRef[] = [];
     const current: ProjectionDigestRef[] = [];
-    for (const candidate of [...newest.value.values()]
-      .sort((left, right) => left.projection.path.localeCompare(right.projection.path))) {
-      recorded.push(candidate.projection);
-      const digest = await currentProjectionDigest(candidate.target);
+    const unrestorable: ProjectionDigestRef["path"][] = [];
+    for (const observation of [...newest.value.values()]
+      .sort((left, right) => left.path.localeCompare(right.path))) {
+      if (observation.retired) continue;
+      recorded.push(observation.projection);
+      // An adoption-sourced projection (no retained manifest reference) recorded only a digest;
+      // there are no retained bytes to restore if the worktree copy goes missing.
+      if (observation.reference === undefined) unrestorable.push(observation.projection.path);
+      const digest = await currentProjectionDigest(observation.target);
       if (digest !== "missing") {
-        current.push(Object.freeze({ path: candidate.projection.path, content_digest: digest }));
+        current.push(Object.freeze({ path: observation.projection.path, content_digest: digest }));
       }
     }
-    return ok(Object.freeze({ recorded: Object.freeze(recorded), current: Object.freeze(current) }));
+    return ok(Object.freeze({
+      recorded: Object.freeze(recorded),
+      current: Object.freeze(current),
+      unrestorable: Object.freeze(unrestorable),
+    }));
   } catch {
     return ioFailure(authority, "discover-reconciliation-projections");
   }
@@ -300,6 +349,7 @@ export async function discoverReconciliationInput(
     state,
     recorded_projections: projections.value.recorded,
     current_projections: projections.value.current,
+    ...(projections.value.unrestorable.length === 0 ? {} : { unrestorable_paths: projections.value.unrestorable }),
     active_heads: Object.freeze({
       ...(gate.value.head === undefined ? {} : { gate: gate.value.head }),
     }),

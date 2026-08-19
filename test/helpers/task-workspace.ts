@@ -17,7 +17,7 @@ import { parseSafeCode, parseTaskSlug, type TaskSlug } from "../../src/contracts
 import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
 import { stageTaskInitialization } from "../../src/init/task-initialization.js";
-import { runBuildRequest } from "../../src/local/build-request.js";
+import { composeRequest } from "../../src/state/request-composition.js";
 import { runStateInitialization } from "../../src/state/initialization.js";
 import { createProductionServices, type ProductionServices } from "../../src/state/production.js";
 
@@ -81,12 +81,12 @@ export async function createTaskWorkspace(options: TaskWorkspaceOptions): Promis
     if (!staged.ok) throw new Error(staged.error.code);
     const bootstrap = await createProductionServices({ working_directory: root, task_id: taskId, operation });
     if (!bootstrap.ok) throw new Error(bootstrap.error.code);
-    const composed = await runBuildRequest(bootstrap.value, {
+    const composed = await composeRequest(bootstrap.value, {
       intent_id: "initialize-task-workspace",
       kind: "initialize",
     });
     if (!composed.ok) throw new Error(composed.error.code);
-    const call = parseToolCall("archflow_state", composed.value.request.input);
+    const call = parseToolCall("archflow_state", composed.value.envelope.request.input);
     const initialized = await runStateInitialization(bootstrap.value.dependencies, {
       authority: bootstrap.value.authority,
       call,

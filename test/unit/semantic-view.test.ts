@@ -161,6 +161,35 @@ describe("semantic status projection", () => {
     });
   });
 
+  it("maps the migration-audit gate position and import milestone commit through the shared shapes", () => {
+    const designInvocation: WorkflowInvocationV1 = { skill: "archflow-design", intent: "resume" };
+    const designPhase = encodePhaseInstance({ kind: "design" });
+    const auditPosition = projectSemanticStatus(snapshot(fullStatus(
+      action("open-gate", { gate_kind: "migration-audit", phase_instance: designPhase }),
+      { phase_instance: designPhase, step: "triage", status: "succeeded" },
+    )), designInvocation).view.next_action;
+    expect(auditPosition.kind).toBe("decide");
+    expect(auditPosition.expected_submission).toBe("gate-summary");
+
+    const importCommit = projectSemanticStatus(snapshot(fullStatus(
+      action("commit-artifacts", {
+        commit_path: ".archflow/tasks/semantic-test",
+        commit_message: "Import legacy task semantic-test",
+        commit_target_ref: "refs/heads/main",
+        commit_baseline: "3".repeat(40),
+      }),
+      { phase_instance: designPhase, step: "triage", status: "succeeded" },
+    )), designInvocation).view.next_action;
+    expect(importCommit.kind).toBe("commit");
+    expect(importCommit.commit).toEqual({
+      paths: [".archflow/tasks/semantic-test"],
+      message: "Import legacy task semantic-test",
+      target_ref: "refs/heads/main",
+      baseline: "3".repeat(40),
+      requires_human_confirmation: false,
+    });
+  });
+
   it("binds offers to invocation and repository while generic status cannot mutate", () => {
     const documentPhase = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(1) });
     const status = fullStatus(action("run-step", { step: "produce", phase_instance: documentPhase }), {

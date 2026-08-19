@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
-import { sha256Bytes } from "../contracts/canonical.js";
+import { canonicalJsonDigest, sha256Bytes } from "../contracts/canonical.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
-import { parsePathSafeId, parseSha256Digest, type PathSafeId } from "../contracts/evidence.js";
+import { parsePathSafeId, type PathSafeId } from "../contracts/evidence.js";
 import { parseConfigYaml } from "../contracts/config.js";
-import type { GateKind } from "../contracts/gates.js";
+import type { GateContext } from "../contracts/gates.js";
 import {
   parseRepositoryPathClaim,
   parseTaskPathClaim,
@@ -34,18 +34,27 @@ import {
   planningRestartAskBaseDigest,
   type PhaseImplParentDocument,
 } from "./phase-documents.js";
-import { buildGatePreview, previewHasChoice, type GateDecisionChoice, type ProspectiveGate } from "./gate-preview.js";
 import { loadCurrentProduceSubject } from "./produce-subject.js";
+import { reconcileCurrentAuthority } from "./reconciliation.js";
+import { discoverReconciliationInput } from "./reconciliation-discovery.js";
+import { canonicalDocument } from "../contracts/canonical.js";
 import type { ProductionServices } from "./production.js";
 import { resolvePinnedConstitution } from "./constitution.js";
 import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "./gate-approvals.js";
-import { APPROVAL_ARTIFACT_KINDS } from "./request-templates.js";
-import { buildCommitAuthorizationInput, buildDesignApprovalInput, computeTaskStatus, currentApprovedUpstreams, currentReviewPredecessor, currentTargetRef, pendingAdjudicationGate } from "./status.js";
+import { loadLegacyImportInitialization } from "./legacy-import-resume.js";
+/** The artifact-kind each planning phase's artifact-approval gate approves. */
+export const APPROVAL_ARTIFACT_KINDS = {
+  "prd": "prd",
+  "design": "design",
+  "phase-design": "phase-design",
+  "phase-impl": "phase-implementation",
+} as const;
+import { baselineAdoptionInputFromFindings, buildCommitAuthorizationInput, buildDesignApprovalInput, computeTaskStatus, currentApprovedUpstreams, currentReviewPredecessor, currentTargetRef, pendingAdjudicationGate } from "./status.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { legalRunStepStatus } from "./transitions.js";
+import { authenticatedApprovalIsEligibleAfterLatestRestart } from "./restart-authority.js";
 import { assessCurrentEvidence, DEFAULT_MAX_ATTEMPTS } from "../review/fixed-point.js";
 import { computeCallEnvelope, type CallEnvelope } from "../local/call-envelope.js";
-import { computeLocalGatePreview } from "../local/gate-preview.js";
 import { planningRestartTarget, semanticPlanningRestartId } from "./planning-restart.js";
 import { resolveTaskPath } from "../repository/paths.js";
 import { derivePendingWaiverRequest } from "./pending-waiver.js";
@@ -66,7 +75,7 @@ const PAYLOAD_SHAPE =
   '"document"?:{...},"implementation"?:{...},' +
   '"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},' +
   '"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],' +
-  '"summary"?:<gate summary text>,"preview_digest"?:<gate-preview digest>,"decision"?:{"choice":<option token>,"reason":<human reason}>,' +
+  '"summary"?:<gate summary text>,' +
   '"origin"?:<waiver origin>,"rationale"?:<waiver rationale>}';
 
 function record(value: unknown, name: string): Record<string, unknown> {
@@ -74,31 +83,6 @@ function record(value: unknown, name: string): Record<string, unknown> {
     throw new TypeError(`${name} must be an object; expected ${PAYLOAD_SHAPE}`);
   }
   return value as Record<string, unknown>;
-}
-
-/**
- * The bounded-decision pair is optional and all-or-nothing: present together when the caller has
- * already collected the human choice (the single-call settle path), absent when the request should
- * merely open the gate and await the human decision through the disposable interface.
- */
-function optionalGateDecision(snapshot: Record<string, unknown>, label: string): Readonly<{
-  preview_digest: ReturnType<typeof parseSha256Digest>;
-  decision: GateDecisionChoice;
-}> | undefined {
-  if (snapshot.decision === undefined && snapshot.preview_digest === undefined) return undefined;
-  if (snapshot.decision === undefined || snapshot.preview_digest === undefined) {
-    throw new TypeError(`${label} decision and preview_digest must be supplied together or both omitted; expected ${PAYLOAD_SHAPE}`);
-  }
-  const raw = record(snapshot.decision, `${label} decision`);
-  const choice = String(raw.choice ?? "");
-  const reason = String(raw.reason ?? "");
-  if (choice.trim() === "" || reason.trim() === "") {
-    throw new TypeError(`${label} decision requires non-empty "choice" and "reason" fields`);
-  }
-  return Object.freeze({
-    preview_digest: parseSha256Digest(snapshot.preview_digest),
-    decision: Object.freeze({ choice, reason }),
-  });
 }
 
 const ordinal = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
@@ -525,7 +509,34 @@ async function composeGate(
   if (summary.trim() === "") {
     throw new TypeError('build-request gate facts require a non-empty "summary" written for the human reviewer');
   }
-  const requested = optionalGateDecision(snapshot, "build-request gate");
+  // Baseline adoption composes ahead of the phase's own approval gates: reconciliation blocking is
+  // ahead of them in status routing too, so an approval composed past unresolved drift could never
+  // resolve honestly. Mid-produce drift is expected producer work and never composes this gate.
+  if (state.step !== "produce" || state.status === "succeeded") {
+    const discovered = await discoverReconciliationInput(services.dependencies, services.authority, canonicalDocument(state));
+    if (!discovered.ok) return discovered;
+    const drift = reconcileCurrentAuthority(discovered.value);
+    if (drift.classification === "reconciliation-required") {
+      const adoption = baselineAdoptionInputFromFindings(services.authority.task_id, state, drift.findings);
+      if (adoption !== undefined) {
+        // A restore that can never apply is refused later, before the human decision is archived:
+        // the decided interface is immutable, so recording it would wedge the gate behind an
+        // unapplicable decision. Adoption-sourced drift has no retained manifest to restore from.
+        return computeCallEnvelope(services, {
+          tool: "archflow_gate",
+          input: {
+            ...mechanicalInput(services, state, intentId),
+            phase_instance: state.phase_instance,
+            summary,
+            subject_digest: adoption.subject_digest,
+            current_evidence: adoption.current_evidence as unknown as PlainJsonValue,
+            kind: "baseline-adoption",
+            context: adoption.context as unknown as PlainJsonValue,
+          },
+        });
+      }
+    }
+  }
   const phaseKind = decodePhaseInstance(state.phase_instance).kind;
   const gateKind = phaseKind === "phase-impl"
     ? "commit-authorization"
@@ -556,15 +567,18 @@ async function composeGate(
   );
   let pendingGate: ReturnType<typeof pendingAdjudicationGate>;
   let exhaustion: Readonly<{ attempts: number; maximum_attempts: number }> | undefined;
+  // The same eligibility filter status applies: an approval superseded by a later planning
+  // restart must not make the composer disagree with the advertised action.
+  const authenticated: AuthenticatedGateApproval[] = [];
+  for (const approval of state.approvals) {
+    const loadedApproval = await loadAuthenticatedGateApproval(
+      services.dependencies, services.authority, approval,
+    );
+    if (!loadedApproval.ok) return loadedApproval;
+    if (!authenticatedApprovalIsEligibleAfterLatestRestart(state, loadedApproval.value)) continue;
+    authenticated.push(loadedApproval.value);
+  }
   if (constitution.ok) {
-    const authenticated: AuthenticatedGateApproval[] = [];
-    for (const approval of state.approvals) {
-      const loadedApproval = await loadAuthenticatedGateApproval(
-        services.dependencies, services.authority, approval,
-      );
-      if (!loadedApproval.ok) return loadedApproval;
-      authenticated.push(loadedApproval.value);
-    }
     pendingGate = pendingAdjudicationGate(state, constitution.value, loaded.value, authenticated);
     // The attempts-exhausted gate composes exactly when the fixed point says the budget is spent;
     // deriving the kind from the phase alone would open the phase-default gate instead. The
@@ -597,6 +611,44 @@ async function composeGate(
     }
   }
 
+  // The migration-audit gate composes from the same legacy import authority status derives the
+  // advertised `migration_audit_required` fact from: the design phase of a legacy import with no
+  // accepted audit yet, ahead of the phase-default design-approval gate. Every context field is
+  // mechanical — only the summary is authored.
+  const legacyInitialization = await loadLegacyImportInitialization(services.dependencies, services.authority, state);
+  const migrationAuditRequired = legacyInitialization.ok &&
+    legacyInitialization.value !== undefined && state.phase_instance === "design" &&
+    !authenticated.some((approval) =>
+      approval.request.kind === "migration-audit" &&
+      approval.decision.envelope.payload.decision === "accept-import-audit");
+  let migrationAuditContext: GateContext<"migration-audit"> | undefined;
+  if (migrationAuditRequired) {
+    const initialization = legacyInitialization.value;
+    migrationAuditContext = initialization !== undefined &&
+      initialization.resume_phase !== undefined &&
+      initialization.planned_final_phase !== undefined &&
+      initialization.target_ref !== undefined &&
+      initialization.commit_message !== undefined
+      ? Object.freeze({
+          source_identity_digest: initialization.source_identity_digest,
+          destination_identity_digest: services.authority.task_identity_digest,
+          import_digest: initialization.import_digest,
+          code_baseline_digest: canonicalJsonDigest({ schema_version: "1", digest_kind: "code-baseline-commit", commit: initialization.code_baseline_commit }),
+          policy_baseline_digest: canonicalJsonDigest({ schema_version: "1", digest_kind: "policy-base-commit", commit: initialization.policy_base_commit }),
+          resume_phase: initialization.resume_phase,
+          planned_final_phase: initialization.planned_final_phase,
+          imported_documents: Object.freeze(initialization.mapping.map((entry) => Object.freeze({
+            path: entry.destination_path,
+            content_digest: initialization.staged_payload_refs.find((reference) => reference.legacy_path === entry.legacy_path)!.digest,
+          })).sort((left, right) => left.path.localeCompare(right.path))),
+          target_ref: initialization.target_ref,
+          baseline_commit: initialization.code_baseline_commit,
+          commit_message: initialization.commit_message,
+        })
+      : undefined;
+    if (migrationAuditContext === undefined) return transitionInvalid(state, "migration-audit-gate");
+  }
+
   let input: Record<string, PlainJsonValue>;
   if (exhaustion !== undefined) {
     input = {
@@ -607,6 +659,16 @@ async function composeGate(
       current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
       kind: "attempts-exhausted",
       context: { ...exhaustion, step: state.step },
+    };
+  } else if (migrationAuditRequired) {
+    input = {
+      ...mechanicalInput(services, state, intentId),
+      phase_instance: state.phase_instance,
+      summary,
+      subject_digest: subject.value.artifact_digest,
+      current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
+      kind: "migration-audit",
+      context: migrationAuditContext as unknown as PlainJsonValue,
     };
   } else if (gateKind === "design-approval") {
     const target = await currentTargetRef(services.dependencies);
@@ -657,25 +719,6 @@ async function composeGate(
       kind: "artifact-approval",
       context: { artifact_kind: APPROVAL_ARTIFACT_KINDS[phaseKind] },
     };
-  }
-  if (requested !== undefined) {
-    const preview = buildGatePreview({
-      task_id: services.authority.task_id,
-      revision: state.revision,
-      phase_instance: state.phase_instance,
-      summary,
-      subject_digest: input.subject_digest as ProspectiveGate["subject_digest"],
-      current_evidence: derived.current_evidence_set,
-      kind: input.kind as GateKind,
-      context: input.context as ProspectiveGate["context"],
-    });
-    if (preview.preview_digest !== requested.preview_digest || !previewHasChoice(preview, requested.decision)) {
-      return transitionInvalid(state, preview.preview_digest !== requested.preview_digest
-        ? "gate-preview-stale"
-        : "gate-decision-choice-invalid");
-    }
-    input.preview_digest = requested.preview_digest;
-    input.decision = requested.decision as unknown as PlainJsonValue;
   }
   return computeCallEnvelope(services, { tool: "archflow_gate", input });
 }
@@ -767,30 +810,10 @@ export async function composePendingWaiverRequest(
   }
   const pending = await derivePendingWaiverRequest(services);
   if (!pending.ok) return pending;
-  const requested = optionalGateDecision(snapshot, "build-request waiver");
-  const decisionFields = requested === undefined ? {} : {
-    preview_digest: requested.preview_digest as PlainJsonValue,
-    decision: requested.decision as unknown as PlainJsonValue,
-  };
-  if (requested !== undefined) {
-    const preview = await computeLocalGatePreview(services, {
-      kind: "waiver",
-      origin: pending.value.origin as unknown as PlainJsonValue,
-      rationale: pending.value.rationale,
-    });
-    if (!preview.ok) return preview;
-    if (preview.value.preview_digest !== requested.preview_digest ||
-        !previewHasChoice(preview.value, requested.decision)) {
-      return transitionInvalid(state, preview.value.preview_digest !== requested.preview_digest
-        ? "waiver-preview-stale"
-        : "waiver-decision-choice-invalid");
-    }
-  }
   return computeCallEnvelope(services, { tool: "archflow_waiver", input: {
     ...mechanicalInput(services, state, intentId),
     origin: pending.value.origin as unknown as PlainJsonValue,
     rationale: pending.value.rationale,
-    ...decisionFields,
   } });
 }
 

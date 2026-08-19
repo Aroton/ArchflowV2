@@ -1,6 +1,6 @@
 # Client workflow interface audit
 
-**Audited:** 2026-08-14 · **Commit:** `6637099` · **Status:** recommendation for follow-up; not implemented
+**Audited:** 2026-08-14 · **Commit:** `6637099` · **Status:** recommendation for follow-up; not implemented. Supersession note (2026-08-18): the choreography measurements below stand as point-in-time evidence against the surface as it existed at this commit; the autonomous-runner recommendation was superseded by the implemented client-orchestrated two-tool surface (`archflow_status` + `archflow_apply` with client-owned commits).
 
 This audit starts from the actions an AI client actually needs to perform, then compares those actions with the current CLI and MCP surface. It now also accounts for the intended next iteration: once the human approves the task design and phase plan, ArchFlow should execute the remaining phase-design and implementation loop autonomously, with human escalation as an exception.
 

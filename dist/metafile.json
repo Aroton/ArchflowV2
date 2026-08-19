@@ -3893,7 +3893,7 @@
       ]
     },
     "src/contracts/durable-state.ts": {
-      "bytes": 25595,
+      "bytes": 26939,
       "format": "esm",
       "imports": [
         {
@@ -4011,7 +4011,7 @@
       ]
     },
     "src/contracts/errors.ts": {
-      "bytes": 24428,
+      "bytes": 23850,
       "format": "esm",
       "imports": [
         {
@@ -4073,7 +4073,7 @@
       ]
     },
     "src/contracts/fingerprints.ts": {
-      "bytes": 17727,
+      "bytes": 19157,
       "format": "esm",
       "imports": [
         {
@@ -4181,7 +4181,7 @@
       ]
     },
     "src/contracts/mcp-tools.ts": {
-      "bytes": 27390,
+      "bytes": 29469,
       "format": "esm",
       "imports": [
         {
@@ -4293,7 +4293,7 @@
       ]
     },
     "src/contracts/phase-instance.ts": {
-      "bytes": 6276,
+      "bytes": 6185,
       "format": "esm",
       "imports": [
         {
@@ -4426,7 +4426,7 @@
       }
     },
     "src/contracts/schemas/v1/mcp-tools.schema.json": {
-      "bytes": 30012,
+      "bytes": 28017,
       "format": "esm",
       "imports": [],
       "with": {
@@ -4450,7 +4450,7 @@
       }
     },
     "src/contracts/schemas/v1/project-error.schema.json": {
-      "bytes": 87952,
+      "bytes": 84374,
       "format": "esm",
       "imports": [],
       "with": {
@@ -4481,6 +4481,14 @@
         "type": "json"
       }
     },
+    "src/contracts/schemas/v1/semantic-workflow.schema.json": {
+      "bytes": 35498,
+      "format": "esm",
+      "imports": [],
+      "with": {
+        "type": "json"
+      }
+    },
     "src/contracts/schemas/v1/task-initialization.schema.json": {
       "bytes": 1446,
       "format": "esm",
@@ -4490,7 +4498,7 @@
       }
     },
     "src/contracts/schemas/v1/task-state.schema.json": {
-      "bytes": 22618,
+      "bytes": 21619,
       "format": "esm",
       "imports": [],
       "with": {
@@ -4531,8 +4539,39 @@
         }
       ]
     },
+    "src/contracts/semantic-workflow.ts": {
+      "bytes": 18996,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "zod",
+          "path": "node_modules/zod/index.js"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./evidence.js",
+          "path": "src/contracts/evidence.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./plain-json.js",
+          "path": "src/contracts/plain-json.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./phase-instance.js",
+          "path": "src/contracts/phase-instance.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./review.js",
+          "path": "src/contracts/review.ts"
+        }
+      ]
+    },
     "src/contracts/tool-names.ts": {
-      "bytes": 352,
+      "bytes": 1257,
       "format": "esm",
       "imports": []
     },
@@ -4996,7 +5035,7 @@
       ]
     },
     "src/init/legacy-upgrade.ts": {
-      "bytes": 23717,
+      "bytes": 29986,
       "format": "esm",
       "imports": [
         {
@@ -5076,8 +5115,38 @@
         },
         {
           "kind": "import-statement",
+          "original": "../state/initialization.js",
+          "path": "src/state/initialization.ts"
+        },
+        {
+          "kind": "import-statement",
           "original": "../state/layout.js",
           "path": "src/state/layout.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/durable-legacy-import.js",
+          "path": "src/contracts/durable-legacy-import.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../local/call-envelope.js",
+          "path": "src/local/call-envelope.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/mcp-tools.js",
+          "path": "src/contracts/mcp-tools.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/evidence.js",
+          "path": "src/contracts/evidence.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../state/production.js",
+          "path": "src/state/production.ts"
         },
         {
           "kind": "import-statement",
@@ -5123,7 +5192,7 @@
       ]
     },
     "src/init/task-initialization.ts": {
-      "bytes": 7134,
+      "bytes": 9262,
       "format": "esm",
       "imports": [
         {
@@ -5173,6 +5242,11 @@
         },
         {
           "kind": "import-statement",
+          "original": "../contracts/plain-json.js",
+          "path": "src/contracts/plain-json.ts"
+        },
+        {
+          "kind": "import-statement",
           "original": "../repository/git.js",
           "path": "src/repository/git.ts"
         },
@@ -5193,159 +5267,8 @@
         }
       ]
     },
-    "src/local/build-request.ts": {
-      "bytes": 38236,
-      "format": "esm",
-      "imports": [
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:crypto"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/errors.js",
-          "path": "src/contracts/errors.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/evidence.js",
-          "path": "src/contracts/evidence.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/phase-instance.js",
-          "path": "src/contracts/phase-instance.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/plain-json.js",
-          "path": "src/contracts/plain-json.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/triage.js",
-          "path": "src/contracts/triage.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/vocabulary.js",
-          "path": "src/contracts/vocabulary.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/durable-document.js",
-          "path": "src/contracts/durable-document.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/path-claims.js",
-          "path": "src/contracts/path-claims.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../init/task-initialization.js",
-          "path": "src/init/task-initialization.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../repository/git.js",
-          "path": "src/repository/git.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/document-artifact.js",
-          "path": "src/state/document-artifact.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/evidence-results.js",
-          "path": "src/state/evidence-results.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/implementation-manifest.js",
-          "path": "src/state/implementation-manifest.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/phase-documents.js",
-          "path": "src/state/phase-documents.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/produce-subject.js",
-          "path": "src/state/produce-subject.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/constitution.js",
-          "path": "src/state/constitution.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/gate-approvals.js",
-          "path": "src/state/gate-approvals.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/request-templates.js",
-          "path": "src/state/request-templates.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/status.js",
-          "path": "src/state/status.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/gates.js",
-          "path": "src/state/gates.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/canonical.js",
-          "path": "src/contracts/canonical.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/reconciliation.js",
-          "path": "src/state/reconciliation.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/reconciliation-discovery.js",
-          "path": "src/state/reconciliation-discovery.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/transitions.js",
-          "path": "src/state/transitions.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/gate-preview.js",
-          "path": "src/state/gate-preview.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/staged-requests.js",
-          "path": "src/state/staged-requests.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./call-envelope.js",
-          "path": "src/local/call-envelope.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./gate-preview.js",
-          "path": "src/local/gate-preview.ts"
-        }
-      ]
-    },
     "src/local/call-envelope.ts": {
-      "bytes": 8215,
+      "bytes": 7699,
       "format": "esm",
       "imports": [
         {
@@ -5406,7 +5329,7 @@
       ]
     },
     "src/local/commands.ts": {
-      "bytes": 17643,
+      "bytes": 14336,
       "format": "esm",
       "imports": [
         {
@@ -5481,11 +5404,6 @@
         },
         {
           "kind": "import-statement",
-          "original": "../state/gates.js",
-          "path": "src/state/gates.ts"
-        },
-        {
-          "kind": "import-statement",
           "original": "../state/layout.js",
           "path": "src/state/layout.ts"
         },
@@ -5493,11 +5411,6 @@
           "kind": "import-statement",
           "original": "../state/production.js",
           "path": "src/state/production.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/status.js",
-          "path": "src/state/status.ts"
         },
         {
           "kind": "import-statement",
@@ -5521,16 +5434,6 @@
         },
         {
           "kind": "import-statement",
-          "original": "./build-request.js",
-          "path": "src/local/build-request.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./call-envelope.js",
-          "path": "src/local/call-envelope.ts"
-        },
-        {
-          "kind": "import-statement",
           "original": "./status-classification.js",
           "path": "src/local/status-classification.ts"
         },
@@ -5540,111 +5443,14 @@
           "path": "src/state/workspace-cleanup.ts"
         },
         {
-          "kind": "import-statement",
-          "original": "./commit.js",
-          "path": "src/local/commit.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./gate-preview.js",
-          "path": "src/local/gate-preview.ts"
-        },
-        {
           "kind": "dynamic-import",
           "original": "../contracts/renderers.js",
           "path": "src/contracts/renderers.ts"
         }
       ]
     },
-    "src/local/commit.ts": {
-      "bytes": 5539,
-      "format": "esm",
-      "imports": [
-        {
-          "kind": "import-statement",
-          "original": "../contracts/canonical.js",
-          "path": "src/contracts/canonical.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/errors.js",
-          "path": "src/contracts/errors.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/evidence.js",
-          "path": "src/contracts/evidence.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../repository/git.js",
-          "path": "src/repository/git.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/status.js",
-          "path": "src/state/status.ts"
-        }
-      ]
-    },
-    "src/local/gate-preview.ts": {
-      "bytes": 6550,
-      "format": "esm",
-      "imports": [
-        {
-          "kind": "import-statement",
-          "original": "../contracts/canonical.js",
-          "path": "src/contracts/canonical.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/durable-gate.js",
-          "path": "src/contracts/durable-gate.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/errors.js",
-          "path": "src/contracts/errors.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/gates.js",
-          "path": "src/contracts/gates.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/plain-json.js",
-          "path": "src/contracts/plain-json.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/trust.js",
-          "path": "src/contracts/trust.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../repository/paths.js",
-          "path": "src/repository/paths.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/gate-preview.js",
-          "path": "src/state/gate-preview.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/status.js",
-          "path": "src/state/status.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/waiver-origin.js",
-          "path": "src/state/waiver-origin.ts"
-        }
-      ]
-    },
     "src/local/main.ts": {
-      "bytes": 4067,
+      "bytes": 4076,
       "format": "esm",
       "imports": [
         {
@@ -5726,13 +5532,18 @@
       ]
     },
     "src/main.ts": {
-      "bytes": 974,
+      "bytes": 1017,
       "format": "esm",
       "imports": [
         {
           "external": true,
           "kind": "import-statement",
           "path": "node:process"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./mcp/sdk-zod-initialization.js",
+          "path": "src/mcp/sdk-zod-initialization.ts"
         },
         {
           "kind": "import-statement",
@@ -5762,7 +5573,7 @@
       "imports": []
     },
     "src/mcp/handlers/counter-review.ts": {
-      "bytes": 20449,
+      "bytes": 21356,
       "format": "esm",
       "imports": [
         {
@@ -5842,6 +5653,11 @@
         },
         {
           "kind": "import-statement",
+          "original": "../../state/restart-authority.js",
+          "path": "src/state/restart-authority.ts"
+        },
+        {
+          "kind": "import-statement",
           "original": "../../state/produce-subject.js",
           "path": "src/state/produce-subject.ts"
         },
@@ -5903,70 +5719,24 @@
         }
       ]
     },
-    "src/mcp/handlers/gate.ts": {
-      "bytes": 4237,
-      "format": "esm",
-      "imports": [
-        {
-          "kind": "import-statement",
-          "original": "../../contracts/errors.js",
-          "path": "src/contracts/errors.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../../state/gate-preview.js",
-          "path": "src/state/gate-preview.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../../state/gate-direct.js",
-          "path": "src/state/gate-direct.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../../state/gates.js",
-          "path": "src/state/gates.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../../state/request.js",
-          "path": "src/state/request.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./errors.js",
-          "path": "src/mcp/handlers/errors.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./session.js",
-          "path": "src/mcp/handlers/session.ts"
-        }
-      ]
-    },
     "src/mcp/handlers/index.ts": {
-      "bytes": 542,
+      "bytes": 657,
       "format": "esm",
       "imports": [
         {
+          "external": true,
           "kind": "import-statement",
-          "original": "./counter-review.js",
-          "path": "src/mcp/handlers/counter-review.ts"
+          "path": "./counter-review.js"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "./state.js"
         },
         {
           "kind": "import-statement",
-          "original": "./gate.js",
-          "path": "src/mcp/handlers/gate.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./state.js",
-          "path": "src/mcp/handlers/state.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./waiver.js",
-          "path": "src/mcp/handlers/waiver.ts"
+          "original": "./semantic.js",
+          "path": "src/mcp/handlers/semantic.ts"
         }
       ]
     },
@@ -5986,8 +5756,94 @@
         }
       ]
     },
+    "src/mcp/handlers/semantic.ts": {
+      "bytes": 10874,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../../contracts/canonical.js",
+          "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../contracts/errors.js",
+          "path": "src/contracts/errors.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../contracts/evidence.js",
+          "path": "src/contracts/evidence.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../contracts/durable-gate.js",
+          "path": "src/contracts/durable-gate.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../contracts/mcp-tools.js",
+          "path": "src/contracts/mcp-tools.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../contracts/semantic-workflow.js",
+          "path": "src/contracts/semantic-workflow.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../repository/paths.js",
+          "path": "src/repository/paths.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../state/gates.js",
+          "path": "src/state/gates.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../state/production.js",
+          "path": "src/state/production.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../state/request.js",
+          "path": "src/state/request.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../state/request-composition.js",
+          "path": "src/state/request-composition.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../state/semantic-actions.js",
+          "path": "src/state/semantic-actions.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../state/semantic-status.js",
+          "path": "src/state/semantic-status.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../state/semantic-view.js",
+          "path": "src/state/semantic-view.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./counter-review.js",
+          "path": "src/mcp/handlers/counter-review.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./state.js",
+          "path": "src/mcp/handlers/state.ts"
+        }
+      ]
+    },
     "src/mcp/handlers/session.ts": {
-      "bytes": 4116,
+      "bytes": 4163,
       "format": "esm",
       "imports": [
         {
@@ -6084,7 +5940,7 @@
       ]
     },
     "src/mcp/handlers/state.ts": {
-      "bytes": 18012,
+      "bytes": 24736,
       "format": "esm",
       "imports": [
         {
@@ -6096,6 +5952,11 @@
           "kind": "import-statement",
           "original": "../../contracts/canonical.js",
           "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../contracts/fingerprints.js",
+          "path": "src/contracts/fingerprints.ts"
         },
         {
           "kind": "import-statement",
@@ -6111,6 +5972,11 @@
           "kind": "import-statement",
           "original": "../../contracts/path-claims.js",
           "path": "src/contracts/path-claims.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../repository/paths.js",
+          "path": "src/repository/paths.ts"
         },
         {
           "kind": "import-statement",
@@ -6169,6 +6035,26 @@
         },
         {
           "kind": "import-statement",
+          "original": "../../state/transitions.js",
+          "path": "src/state/transitions.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../state/phase-documents.js",
+          "path": "src/state/phase-documents.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../state/restart-authority.js",
+          "path": "src/state/restart-authority.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../state/planning-restart.js",
+          "path": "src/state/planning-restart.ts"
+        },
+        {
+          "kind": "import-statement",
           "original": "./errors.js",
           "path": "src/mcp/handlers/errors.ts"
         },
@@ -6184,74 +6070,13 @@
         }
       ]
     },
-    "src/mcp/handlers/waiver.ts": {
-      "bytes": 6791,
-      "format": "esm",
-      "imports": [
-        {
-          "kind": "import-statement",
-          "original": "../../contracts/canonical.js",
-          "path": "src/contracts/canonical.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../../contracts/errors.js",
-          "path": "src/contracts/errors.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../../contracts/durable-gate.js",
-          "path": "src/contracts/durable-gate.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../../repository/paths.js",
-          "path": "src/repository/paths.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../../state/gate-direct.js",
-          "path": "src/state/gate-direct.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../../state/gate-preview.js",
-          "path": "src/state/gate-preview.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../../state/request.js",
-          "path": "src/state/request.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./errors.js",
-          "path": "src/mcp/handlers/errors.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./session.js",
-          "path": "src/mcp/handlers/session.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../../state/waiver-origin.js",
-          "path": "src/state/waiver-origin.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../../state/waiver-origin.js",
-          "path": "src/state/waiver-origin.ts"
-        }
-      ]
-    },
     "src/mcp/process-runner.ts": {
       "bytes": 5695,
       "format": "esm",
       "imports": []
     },
     "src/mcp/sdk-adapter.ts": {
-      "bytes": 14717,
+      "bytes": 14737,
       "format": "esm",
       "imports": [
         {
@@ -6301,13 +6126,24 @@
         }
       ]
     },
+    "src/mcp/sdk-zod-initialization.ts": {
+      "bytes": 540,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "zod",
+          "path": "node_modules/zod/index.js"
+        }
+      ]
+    },
     "src/mcp/send-queue.ts": {
       "bytes": 6425,
       "format": "esm",
       "imports": []
     },
     "src/mcp/server.ts": {
-      "bytes": 11178,
+      "bytes": 8000,
       "format": "esm",
       "imports": [
         {
@@ -6327,28 +6163,13 @@
         },
         {
           "kind": "import-statement",
-          "original": "../contracts/evidence.js",
-          "path": "src/contracts/evidence.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/mcp-tools.js",
-          "path": "src/contracts/mcp-tools.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/plain-json.js",
-          "path": "src/contracts/plain-json.ts"
+          "original": "../contracts/semantic-workflow.js",
+          "path": "src/contracts/semantic-workflow.ts"
         },
         {
           "kind": "import-statement",
           "original": "../contracts/tool-names.js",
           "path": "src/contracts/tool-names.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../state/staged-requests.js",
-          "path": "src/state/staged-requests.ts"
         },
         {
           "kind": "import-statement",
@@ -6358,7 +6179,7 @@
       ]
     },
     "src/mcp/tools.ts": {
-      "bytes": 17035,
+      "bytes": 10510,
       "format": "esm",
       "imports": [
         {
@@ -6485,6 +6306,14 @@
           "kind": "import-statement",
           "original": "../contracts/schemas/v1/triage.schema.json",
           "path": "src/contracts/schemas/v1/triage.schema.json",
+          "with": {
+            "type": "json"
+          }
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/schemas/v1/semantic-workflow.schema.json",
+          "path": "src/contracts/schemas/v1/semantic-workflow.schema.json",
           "with": {
             "type": "json"
           }
@@ -6622,7 +6451,7 @@
       ]
     },
     "src/review/counter-review.ts": {
-      "bytes": 17946,
+      "bytes": 18174,
       "format": "esm",
       "imports": [
         {
@@ -6873,7 +6702,7 @@
       ]
     },
     "src/state/atomic.ts": {
-      "bytes": 7647,
+      "bytes": 8435,
       "format": "esm",
       "imports": [
         {
@@ -7144,7 +6973,7 @@
       ]
     },
     "src/state/fingerprint.ts": {
-      "bytes": 5150,
+      "bytes": 5333,
       "format": "esm",
       "imports": [
         {
@@ -7282,14 +7111,40 @@
       ]
     },
     "src/state/gate-decision-interface.ts": {
-      "bytes": 28896,
+      "bytes": 19655,
       "format": "esm",
       "imports": [
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:crypto"
+          "path": "node:util"
         },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/durable-gate.js",
+          "path": "src/contracts/durable-gate.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/gates.js",
+          "path": "src/contracts/gates.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/plain-json.js",
+          "path": "src/contracts/plain-json.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./gate-core.js",
+          "path": "src/state/gate-core.ts"
+        }
+      ]
+    },
+    "src/state/gates.ts": {
+      "bytes": 107853,
+      "format": "esm",
+      "imports": [
         {
           "external": true,
           "kind": "import-statement",
@@ -7307,142 +7162,18 @@
         },
         {
           "kind": "import-statement",
-          "original": "../contracts/durable-gate.js",
-          "path": "src/contracts/durable-gate.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/errors.js",
-          "path": "src/contracts/errors.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/gates.js",
-          "path": "src/contracts/gates.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/plain-json.js",
-          "path": "src/contracts/plain-json.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../repository/paths.js",
-          "path": "src/repository/paths.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./authority.js",
-          "path": "src/state/authority.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./layout.js",
-          "path": "src/state/layout.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./gate-core.js",
-          "path": "src/state/gate-core.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./lock.js",
-          "path": "src/state/lock.ts"
-        }
-      ]
-    },
-    "src/state/gate-direct.ts": {
-      "bytes": 1668,
-      "format": "esm",
-      "imports": [
-        {
-          "kind": "import-statement",
-          "original": "./gate-decision-interface.js",
-          "path": "src/state/gate-decision-interface.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./gates.js",
-          "path": "src/state/gates.ts"
-        }
-      ]
-    },
-    "src/state/gate-preview.ts": {
-      "bytes": 5258,
-      "format": "esm",
-      "imports": [
-        {
-          "kind": "import-statement",
-          "original": "../contracts/canonical.js",
-          "path": "src/contracts/canonical.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/durable-gate.js",
-          "path": "src/contracts/durable-gate.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/evidence.js",
-          "path": "src/contracts/evidence.ts"
-        },
-        {
-          "kind": "import-statement",
           "original": "../contracts/fingerprints.js",
           "path": "src/contracts/fingerprints.ts"
         },
         {
           "kind": "import-statement",
-          "original": "./gate-core.js",
-          "path": "src/state/gate-core.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./gate-decision-interface.js",
-          "path": "src/state/gate-decision-interface.ts"
-        }
-      ]
-    },
-    "src/state/gate-wait.ts": {
-      "bytes": 2197,
-      "format": "esm",
-      "imports": [
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs/promises"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../repository/paths.js",
-          "path": "src/repository/paths.ts"
-        }
-      ]
-    },
-    "src/state/gates.ts": {
-      "bytes": 82153,
-      "format": "esm",
-      "imports": [
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:util"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/canonical.js",
-          "path": "src/contracts/canonical.ts"
-        },
-        {
-          "kind": "import-statement",
           "original": "../contracts/durable-gate.js",
           "path": "src/contracts/durable-gate.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/durable-state.js",
+          "path": "src/contracts/durable-state.ts"
         },
         {
           "kind": "import-statement",
@@ -7468,6 +7199,11 @@
           "kind": "import-statement",
           "original": "../contracts/phase-instance.js",
           "path": "src/contracts/phase-instance.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/mcp-tools.js",
+          "path": "src/contracts/mcp-tools.ts"
         },
         {
           "kind": "import-statement",
@@ -7506,8 +7242,8 @@
         },
         {
           "kind": "import-statement",
-          "original": "./gate-wait.js",
-          "path": "src/state/gate-wait.ts"
+          "original": "./gate-decision-interface.js",
+          "path": "src/state/gate-decision-interface.ts"
         },
         {
           "kind": "import-statement",
@@ -7533,6 +7269,16 @@
           "kind": "import-statement",
           "original": "./transitions.js",
           "path": "src/state/transitions.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./produce-subject.js",
+          "path": "src/state/produce-subject.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./restart-authority.js",
+          "path": "src/state/restart-authority.ts"
         },
         {
           "kind": "import-statement",
@@ -7893,7 +7639,7 @@
       ]
     },
     "src/state/next-action.ts": {
-      "bytes": 17870,
+      "bytes": 20007,
       "format": "esm",
       "imports": [
         {
@@ -7908,14 +7654,75 @@
         }
       ]
     },
-    "src/state/phase-documents.ts": {
-      "bytes": 6762,
+    "src/state/pending-waiver.ts": {
+      "bytes": 3910,
       "format": "esm",
       "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:util"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/canonical.js",
+          "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/durable-gate.js",
+          "path": "src/contracts/durable-gate.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/durable.js",
+          "path": "src/contracts/durable.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/errors.js",
+          "path": "src/contracts/errors.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/evidence.js",
+          "path": "src/contracts/evidence.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../repository/paths.js",
+          "path": "src/repository/paths.ts"
+        }
+      ]
+    },
+    "src/state/phase-documents.ts": {
+      "bytes": 11119,
+      "format": "esm",
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/canonical.js",
+          "path": "src/contracts/canonical.ts"
+        },
         {
           "kind": "import-statement",
           "original": "../contracts/phase-instance.js",
           "path": "src/contracts/phase-instance.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./atomic.js",
+          "path": "src/state/atomic.ts"
         }
       ]
     },
@@ -7935,8 +7742,24 @@
         }
       ]
     },
+    "src/state/planning-restart.ts": {
+      "bytes": 2376,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/evidence.js",
+          "path": "src/contracts/evidence.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/phase-instance.js",
+          "path": "src/contracts/phase-instance.ts"
+        }
+      ]
+    },
     "src/state/produce-subject.ts": {
-      "bytes": 18057,
+      "bytes": 18228,
       "format": "esm",
       "imports": [
         {
@@ -7973,11 +7796,16 @@
           "kind": "import-statement",
           "original": "./legacy-import-resume.js",
           "path": "src/state/legacy-import-resume.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./restart-authority.js",
+          "path": "src/state/restart-authority.ts"
         }
       ]
     },
     "src/state/production.ts": {
-      "bytes": 19235,
+      "bytes": 18827,
       "format": "esm",
       "imports": [
         {
@@ -8064,6 +7892,11 @@
           "kind": "import-statement",
           "original": "./snapshots.js",
           "path": "src/state/snapshots.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./retained-result-graph.js",
+          "path": "src/state/retained-result-graph.ts"
         }
       ]
     },
@@ -8104,7 +7937,7 @@
       ]
     },
     "src/state/reconciliation-discovery.ts": {
-      "bytes": 12966,
+      "bytes": 15368,
       "format": "esm",
       "imports": [
         {
@@ -8165,7 +7998,7 @@
       ]
     },
     "src/state/reconciliation.ts": {
-      "bytes": 8912,
+      "bytes": 9716,
       "format": "esm",
       "imports": [
         {
@@ -8195,14 +8028,99 @@
         }
       ]
     },
-    "src/state/request-templates.ts": {
-      "bytes": 17489,
+    "src/state/request-composition.ts": {
+      "bytes": 42654,
       "format": "esm",
       "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:crypto"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/canonical.js",
+          "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/errors.js",
+          "path": "src/contracts/errors.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/evidence.js",
+          "path": "src/contracts/evidence.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/config.js",
+          "path": "src/contracts/config.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/path-claims.js",
+          "path": "src/contracts/path-claims.ts"
+        },
         {
           "kind": "import-statement",
           "original": "../contracts/phase-instance.js",
           "path": "src/contracts/phase-instance.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/semantic-workflow.js",
+          "path": "src/contracts/semantic-workflow.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/plain-json.js",
+          "path": "src/contracts/plain-json.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/triage.js",
+          "path": "src/contracts/triage.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/vocabulary.js",
+          "path": "src/contracts/vocabulary.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/durable-document.js",
+          "path": "src/contracts/durable-document.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../init/task-initialization.js",
+          "path": "src/init/task-initialization.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../repository/git.js",
+          "path": "src/repository/git.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./document-artifact.js",
+          "path": "src/state/document-artifact.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./evidence-results.js",
+          "path": "src/state/evidence-results.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./implementation-manifest.js",
+          "path": "src/state/implementation-manifest.ts"
         },
         {
           "kind": "import-statement",
@@ -8211,13 +8129,83 @@
         },
         {
           "kind": "import-statement",
+          "original": "./produce-subject.js",
+          "path": "src/state/produce-subject.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./reconciliation.js",
+          "path": "src/state/reconciliation.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./reconciliation-discovery.js",
+          "path": "src/state/reconciliation-discovery.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/canonical.js",
+          "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./constitution.js",
+          "path": "src/state/constitution.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./gate-approvals.js",
+          "path": "src/state/gate-approvals.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./legacy-import-resume.js",
+          "path": "src/state/legacy-import-resume.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./status.js",
+          "path": "src/state/status.ts"
+        },
+        {
+          "kind": "import-statement",
           "original": "./transitions.js",
           "path": "src/state/transitions.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./restart-authority.js",
+          "path": "src/state/restart-authority.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../review/fixed-point.js",
+          "path": "src/review/fixed-point.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../local/call-envelope.js",
+          "path": "src/local/call-envelope.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./planning-restart.js",
+          "path": "src/state/planning-restart.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../repository/paths.js",
+          "path": "src/repository/paths.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./pending-waiver.js",
+          "path": "src/state/pending-waiver.ts"
         }
       ]
     },
     "src/state/request.ts": {
-      "bytes": 4579,
+      "bytes": 5043,
       "format": "esm",
       "imports": [
         {
@@ -8241,6 +8229,27 @@
           "path": "src/state/authority.ts"
         }
       ]
+    },
+    "src/state/restart-authority.ts": {
+      "bytes": 5554,
+      "format": "esm",
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:util"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/phase-instance.js",
+          "path": "src/contracts/phase-instance.ts"
+        }
+      ]
+    },
+    "src/state/retained-result-graph.ts": {
+      "bytes": 1399,
+      "format": "esm",
+      "imports": []
     },
     "src/state/secret-scan.ts": {
       "bytes": 7611,
@@ -8275,6 +8284,134 @@
           "kind": "import-statement",
           "original": "../contracts/evidence.js",
           "path": "src/contracts/evidence.ts"
+        }
+      ]
+    },
+    "src/state/semantic-actions.ts": {
+      "bytes": 42394,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/canonical.js",
+          "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/evidence.js",
+          "path": "src/contracts/evidence.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/phase-instance.js",
+          "path": "src/contracts/phase-instance.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/semantic-workflow.js",
+          "path": "src/contracts/semantic-workflow.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./request-composition.js",
+          "path": "src/state/request-composition.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./semantic-view.js",
+          "path": "src/state/semantic-view.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../init/task-initialization.js",
+          "path": "src/init/task-initialization.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../dispatch/cli.js",
+          "path": "src/dispatch/cli.ts"
+        }
+      ]
+    },
+    "src/state/semantic-status.ts": {
+      "bytes": 22260,
+      "format": "esm",
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:util"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/canonical.js",
+          "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/durable-gate.js",
+          "path": "src/contracts/durable-gate.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/durable.js",
+          "path": "src/contracts/durable.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/evidence.js",
+          "path": "src/contracts/evidence.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/phase-instance.js",
+          "path": "src/contracts/phase-instance.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/plain-json.js",
+          "path": "src/contracts/plain-json.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/semantic-workflow.js",
+          "path": "src/contracts/semantic-workflow.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../repository/paths.js",
+          "path": "src/repository/paths.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./evidence-results.js",
+          "path": "src/state/evidence-results.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./gate-core.js",
+          "path": "src/state/gate-core.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./status.js",
+          "path": "src/state/status.ts"
+        }
+      ]
+    },
+    "src/state/semantic-view.ts": {
+      "bytes": 21148,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/canonical.js",
+          "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/phase-instance.js",
+          "path": "src/contracts/phase-instance.ts"
         }
       ]
     },
@@ -8344,74 +8481,8 @@
         }
       ]
     },
-    "src/state/staged-requests.ts": {
-      "bytes": 7934,
-      "format": "esm",
-      "imports": [
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs"
-        },
-        {
-          "kind": "import-statement",
-          "original": "zod",
-          "path": "node_modules/zod/index.js"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/canonical.js",
-          "path": "src/contracts/canonical.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/errors.js",
-          "path": "src/contracts/errors.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/evidence.js",
-          "path": "src/contracts/evidence.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/mcp-tools.js",
-          "path": "src/contracts/mcp-tools.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/plain-json.js",
-          "path": "src/contracts/plain-json.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/tool-names.js",
-          "path": "src/contracts/tool-names.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../repository/paths.js",
-          "path": "src/repository/paths.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./layout.js",
-          "path": "src/state/layout.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./production.js",
-          "path": "src/state/production.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./request.js",
-          "path": "src/state/request.ts"
-        }
-      ]
-    },
     "src/state/status.ts": {
-      "bytes": 64373,
+      "bytes": 63791,
       "format": "esm",
       "imports": [
         {
@@ -8506,6 +8577,11 @@
         },
         {
           "kind": "import-statement",
+          "original": "./restart-authority.js",
+          "path": "src/state/restart-authority.ts"
+        },
+        {
+          "kind": "import-statement",
           "original": "./gate-decision-interface.js",
           "path": "src/state/gate-decision-interface.ts"
         },
@@ -8518,11 +8594,6 @@
           "kind": "import-statement",
           "original": "./next-action.js",
           "path": "src/state/next-action.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./request-templates.js",
-          "path": "src/state/request-templates.ts"
         },
         {
           "kind": "import-statement",
@@ -8567,7 +8638,7 @@
       ]
     },
     "src/state/transaction.ts": {
-      "bytes": 57867,
+      "bytes": 58342,
       "format": "esm",
       "imports": [
         {
@@ -8674,11 +8745,16 @@
           "kind": "import-statement",
           "original": "./workspace-cleanup.js",
           "path": "src/state/workspace-cleanup.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./restart-authority.js",
+          "path": "src/state/restart-authority.ts"
         }
       ]
     },
     "src/state/transitions.ts": {
-      "bytes": 24867,
+      "bytes": 24637,
       "format": "esm",
       "imports": [
         {
@@ -8718,24 +8794,8 @@
         }
       ]
     },
-    "src/state/waiver-origin.ts": {
-      "bytes": 1934,
-      "format": "esm",
-      "imports": [
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:util"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/durable.js",
-          "path": "src/contracts/durable.ts"
-        }
-      ]
-    },
     "src/state/workspace-cleanup.ts": {
-      "bytes": 21872,
+      "bytes": 21527,
       "format": "esm",
       "imports": [
         {
@@ -8787,31 +8847,21 @@
           "kind": "import-statement",
           "original": "./authority.js",
           "path": "src/state/authority.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./retained-result-graph.js",
+          "path": "src/state/retained-result-graph.ts"
         }
       ]
     }
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1684035,
+      "bytes": 1586635,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
-        {
-          "external": true,
-          "kind": "require-call",
-          "path": "tty"
-        },
-        {
-          "external": true,
-          "kind": "require-call",
-          "path": "util"
-        },
-        {
-          "external": true,
-          "kind": "require-call",
-          "path": "supports-color"
-        },
         {
           "external": true,
           "kind": "require-call",
@@ -8831,6 +8881,21 @@
           "external": true,
           "kind": "require-call",
           "path": "process"
+        },
+        {
+          "external": true,
+          "kind": "require-call",
+          "path": "tty"
+        },
+        {
+          "external": true,
+          "kind": "require-call",
+          "path": "util"
+        },
+        {
+          "external": true,
+          "kind": "require-call",
+          "path": "supports-color"
         },
         {
           "external": true,
@@ -8885,6 +8950,21 @@
         {
           "external": true,
           "kind": "import-statement",
+          "path": "node:fs"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
           "path": "node:fs/promises"
         },
         {
@@ -8905,12 +8985,17 @@
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:fs"
+          "path": "node:fs/promises"
         },
         {
           "external": true,
           "kind": "import-statement",
           "path": "node:util"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:crypto"
         },
         {
           "external": true,
@@ -8925,62 +9010,7 @@
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:util"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
           "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:path"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:util"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:path"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:perf_hooks"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:path"
-        },
-        {
-          "external": true,
-          "kind": "dynamic-import",
-          "path": "node:fs"
-        },
-        {
-          "external": true,
-          "kind": "dynamic-import",
-          "path": "node:path"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:path"
         },
         {
           "external": true,
@@ -9010,21 +9040,31 @@
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:util"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
           "path": "node:fs"
         },
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:fs/promises"
+          "path": "node:path"
         },
         {
           "external": true,
           "kind": "import-statement",
+          "path": "node:perf_hooks"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "external": true,
+          "kind": "dynamic-import",
+          "path": "node:fs"
+        },
+        {
+          "external": true,
+          "kind": "dynamic-import",
           "path": "node:path"
         },
         {
@@ -9036,11 +9076,6 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:path"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:crypto"
         },
         {
           "external": true,
@@ -9050,42 +9085,7 @@
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:crypto"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:path"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs/promises"
+          "path": "node:util"
         },
         {
           "external": true,
@@ -9195,7 +9195,12 @@
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:crypto"
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
         },
         {
           "external": true,
@@ -9210,7 +9215,37 @@
         {
           "external": true,
           "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
           "path": "node:util"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs"
         },
         {
           "external": true,
@@ -9279,7 +9314,7 @@
           "bytesInOutput": 329
         },
         "node_modules/@secretlint/secretlint-rule-preset-recommend/module/index.js": {
-          "bytesInOutput": 134354
+          "bytesInOutput": 134348
         },
         "node_modules/boundary/lib/index.js": {
           "bytesInOutput": 1384
@@ -9351,7 +9386,7 @@
           "bytesInOutput": 587
         },
         "node_modules/yaml/dist/doc/Document.js": {
-          "bytesInOutput": 12252
+          "bytesInOutput": 12240
         },
         "node_modules/yaml/dist/doc/anchors.js": {
           "bytesInOutput": 2302
@@ -9363,7 +9398,7 @@
           "bytesInOutput": 2783
         },
         "node_modules/yaml/dist/doc/directives.js": {
-          "bytesInOutput": 5900
+          "bytesInOutput": 5897
         },
         "node_modules/yaml/dist/errors.js": {
           "bytesInOutput": 2142
@@ -9378,10 +9413,10 @@
           "bytesInOutput": 3830
         },
         "node_modules/yaml/dist/nodes/Collection.js": {
-          "bytesInOutput": 5119
+          "bytesInOutput": 5113
         },
         "node_modules/yaml/dist/nodes/Node.js": {
-          "bytesInOutput": 1479
+          "bytesInOutput": 1476
         },
         "node_modules/yaml/dist/nodes/Pair.js": {
           "bytesInOutput": 1343
@@ -9429,7 +9464,7 @@
           "bytesInOutput": 3904
         },
         "node_modules/yaml/dist/schema/Schema.js": {
-          "bytesInOutput": 1488
+          "bytesInOutput": 1485
         },
         "node_modules/yaml/dist/schema/common/map.js": {
           "bytesInOutput": 585
@@ -9759,16 +9794,13 @@
           "bytesInOutput": 7642
         },
         "src/contracts/canonical.ts": {
-          "bytesInOutput": 2816
+          "bytesInOutput": 2401
         },
         "src/contracts/config.ts": {
           "bytesInOutput": 1682
         },
         "src/contracts/constitution.ts": {
           "bytesInOutput": 2258
-        },
-        "src/contracts/contexts.ts": {
-          "bytesInOutput": 2429
         },
         "src/contracts/durable-document.ts": {
           "bytesInOutput": 1982
@@ -9792,22 +9824,22 @@
           "bytesInOutput": 1945
         },
         "src/contracts/durable-state.ts": {
-          "bytesInOutput": 11643
+          "bytesInOutput": 12206
         },
         "src/contracts/durable-task-initialization.ts": {
           "bytesInOutput": 531
         },
         "src/contracts/durable.ts": {
-          "bytesInOutput": 32568
+          "bytesInOutput": 32570
         },
         "src/contracts/errors.ts": {
-          "bytesInOutput": 16048
+          "bytesInOutput": 16392
         },
         "src/contracts/evidence.ts": {
           "bytesInOutput": 2125
         },
         "src/contracts/fingerprints.ts": {
-          "bytesInOutput": 7774
+          "bytesInOutput": 8680
         },
         "src/contracts/gates.ts": {
           "bytesInOutput": 19423
@@ -9819,13 +9851,13 @@
           "bytesInOutput": 711
         },
         "src/contracts/mcp-tools.ts": {
-          "bytesInOutput": 10932
+          "bytesInOutput": 17166
         },
         "src/contracts/path-claims.ts": {
           "bytesInOutput": 3184
         },
         "src/contracts/phase-instance.ts": {
-          "bytesInOutput": 3676
+          "bytesInOutput": 3326
         },
         "src/contracts/plain-json.ts": {
           "bytesInOutput": 3790
@@ -9843,7 +9875,7 @@
           "bytesInOutput": 1115
         },
         "src/contracts/tool-names.ts": {
-          "bytesInOutput": 222
+          "bytesInOutput": 377
         },
         "src/contracts/triage.ts": {
           "bytesInOutput": 2790
@@ -9864,79 +9896,67 @@
           "bytesInOutput": 1585
         },
         "src/dispatch/cli.ts": {
-          "bytesInOutput": 21334
+          "bytesInOutput": 21322
         },
         "src/dispatch/process.ts": {
-          "bytesInOutput": 7404
+          "bytesInOutput": 7394
         },
         "src/dispatch/routing.ts": {
-          "bytesInOutput": 2112
+          "bytesInOutput": 2110
         },
         "src/dispatch/workspace.ts": {
-          "bytesInOutput": 1908
+          "bytesInOutput": 1898
         },
         "src/init/assets.ts": {
-          "bytesInOutput": 4542
+          "bytesInOutput": 4538
         },
         "src/init/diagnostics.ts": {
-          "bytesInOutput": 8331
+          "bytesInOutput": 8328
         },
         "src/init/index.ts": {
           "bytesInOutput": 1563
         },
         "src/init/legacy-upgrade.ts": {
-          "bytesInOutput": 19911
+          "bytesInOutput": 23973
         },
         "src/init/registration.ts": {
-          "bytesInOutput": 12598
+          "bytesInOutput": 12586
         },
         "src/init/task-initialization.ts": {
-          "bytesInOutput": 5034
-        },
-        "src/local/build-request.ts": {
-          "bytesInOutput": 27591
+          "bytesInOutput": 1838
         },
         "src/local/call-envelope.ts": {
-          "bytesInOutput": 4571
+          "bytesInOutput": 4568
         },
         "src/local/commands.ts": {
-          "bytesInOutput": 13233
-        },
-        "src/local/commit.ts": {
-          "bytesInOutput": 3640
-        },
-        "src/local/gate-preview.ts": {
-          "bytesInOutput": 4822
+          "bytesInOutput": 10759
         },
         "src/local/main.ts": {
-          "bytesInOutput": 3612
+          "bytesInOutput": 3467
         },
         "src/local/status-classification.ts": {
-          "bytesInOutput": 4461
+          "bytesInOutput": 4454
         },
         "src/repository/git.ts": {
-          "bytesInOutput": 15186
+          "bytesInOutput": 14720
         },
         "src/repository/identity.ts": {
-          "bytesInOutput": 5766
-        },
-        "src/repository/index-entries.ts": {
-          "bytesInOutput": 2782
+          "bytesInOutput": 5764
         },
         "src/repository/paths.ts": {
-          "bytesInOutput": 17935
+          "bytesInOutput": 16719
         },
         "src/review/adjudication.ts": {
-          "bytesInOutput": 3838
+          "bytesInOutput": 2812
         },
         "src/review/fixed-point.ts": {
-          "bytesInOutput": 13871
+          "bytesInOutput": 13843
         },
         "src/review/rubrics.ts": {
-          "bytesInOutput": 10588
+          "bytesInOutput": 10586
         },
         "src/state/atomic.ts": {
-          "bytesInOutput": 5901
+          "bytesInOutput": 6119
         },
         "src/state/authority.ts": {
           "bytesInOutput": 2725
@@ -9944,106 +9964,106 @@
         "src/state/constitution.ts": {
           "bytesInOutput": 5027
         },
-        "src/state/document-artifact.ts": {
-          "bytesInOutput": 5812
-        },
         "src/state/evidence-results.ts": {
-          "bytesInOutput": 6007
+          "bytesInOutput": 4164
         },
         "src/state/fingerprint-readers.ts": {
-          "bytesInOutput": 3987
+          "bytesInOutput": 3960
         },
         "src/state/fingerprint.ts": {
-          "bytesInOutput": 2794
+          "bytesInOutput": 2977
         },
         "src/state/gate-approvals.ts": {
-          "bytesInOutput": 3508
+          "bytesInOutput": 3500
         },
         "src/state/gate-core.ts": {
-          "bytesInOutput": 6858
+          "bytesInOutput": 3773
         },
         "src/state/gate-decision-interface.ts": {
-          "bytesInOutput": 21356
-        },
-        "src/state/gate-preview.ts": {
-          "bytesInOutput": 2964
-        },
-        "src/state/gates.ts": {
-          "bytesInOutput": 310
+          "bytesInOutput": 11357
         },
         "src/state/implementation-manifest.ts": {
-          "bytesInOutput": 36522
+          "bytesInOutput": 7144
         },
         "src/state/initialization.ts": {
-          "bytesInOutput": 9058
+          "bytesInOutput": 21858
         },
         "src/state/layout.ts": {
-          "bytesInOutput": 4538
+          "bytesInOutput": 4532
         },
         "src/state/legacy-import-resume.ts": {
-          "bytesInOutput": 672
+          "bytesInOutput": 674
         },
         "src/state/legacy-stage.ts": {
-          "bytesInOutput": 735
+          "bytesInOutput": 1113
         },
         "src/state/lock.ts": {
-          "bytesInOutput": 2300
+          "bytesInOutput": 2311
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 10892
+          "bytesInOutput": 12309
         },
         "src/state/phase-documents.ts": {
-          "bytesInOutput": 4683
+          "bytesInOutput": 2363
         },
         "src/state/produce-subject.ts": {
-          "bytesInOutput": 7681
+          "bytesInOutput": 7764
         },
         "src/state/production.ts": {
-          "bytesInOutput": 13691
+          "bytesInOutput": 13202
         },
         "src/state/read.ts": {
           "bytesInOutput": 2486
         },
         "src/state/reconciliation-discovery.ts": {
-          "bytesInOutput": 8949
+          "bytesInOutput": 10192
         },
         "src/state/reconciliation.ts": {
-          "bytesInOutput": 5853
-        },
-        "src/state/request-templates.ts": {
-          "bytesInOutput": 12771
+          "bytesInOutput": 6226
         },
         "src/state/request.ts": {
-          "bytesInOutput": 3462
+          "bytesInOutput": 3868
+        },
+        "src/state/restart-authority.ts": {
+          "bytesInOutput": 1053
+        },
+        "src/state/retained-result-graph.ts": {
+          "bytesInOutput": 913
         },
         "src/state/secret-scan.ts": {
           "bytesInOutput": 4909
         },
         "src/state/snapshots.ts": {
-          "bytesInOutput": 22435
-        },
-        "src/state/staged-requests.ts": {
-          "bytesInOutput": 1353
+          "bytesInOutput": 22398
         },
         "src/state/status.ts": {
-          "bytesInOutput": 42200
-        },
-        "src/state/transitions.ts": {
-          "bytesInOutput": 982
-        },
-        "src/state/waiver-origin.ts": {
-          "bytesInOutput": 1228
+          "bytesInOutput": 37408
         },
         "src/state/workspace-cleanup.ts": {
-          "bytesInOutput": 15980
+          "bytesInOutput": 15564
         }
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2569837,
+      "bytes": 2833445,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
+        {
+          "external": true,
+          "kind": "require-call",
+          "path": "tty"
+        },
+        {
+          "external": true,
+          "kind": "require-call",
+          "path": "util"
+        },
+        {
+          "external": true,
+          "kind": "require-call",
+          "path": "supports-color"
+        },
         {
           "external": true,
           "kind": "require-call",
@@ -10063,21 +10083,6 @@
           "external": true,
           "kind": "require-call",
           "path": "process"
-        },
-        {
-          "external": true,
-          "kind": "require-call",
-          "path": "tty"
-        },
-        {
-          "external": true,
-          "kind": "require-call",
-          "path": "util"
-        },
-        {
-          "external": true,
-          "kind": "require-call",
-          "path": "supports-color"
         },
         {
           "external": true,
@@ -10112,17 +10117,12 @@
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:util"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
           "path": "node:crypto"
         },
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:fs"
+          "path": "node:util"
         },
         {
           "external": true,
@@ -10142,17 +10142,12 @@
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:fs"
+          "path": "node:util"
         },
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:path"
+          "path": "node:util"
         },
         {
           "external": true,
@@ -10177,12 +10172,12 @@
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:fs/promises"
+          "path": "node:fs"
         },
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:crypto"
+          "path": "node:util"
         },
         {
           "external": true,
@@ -10197,7 +10192,67 @@
         {
           "external": true,
           "kind": "import-statement",
+          "path": "node:util"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
           "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:util"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:perf_hooks"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "external": true,
+          "kind": "dynamic-import",
+          "path": "node:fs"
+        },
+        {
+          "external": true,
+          "kind": "dynamic-import",
+          "path": "node:path"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:util"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
         },
         {
           "external": true,
@@ -10227,46 +10282,6 @@
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:fs"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:path"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:perf_hooks"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:path"
-        },
-        {
-          "external": true,
-          "kind": "dynamic-import",
-          "path": "node:fs"
-        },
-        {
-          "external": true,
-          "kind": "dynamic-import",
-          "path": "node:path"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:path"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
           "path": "node:util"
         },
         {
@@ -10282,17 +10297,122 @@
         {
           "external": true,
           "kind": "import-statement",
+          "path": "node:util"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
           "path": "node:path"
         },
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:util"
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
         },
         {
           "external": true,
           "kind": "import-statement",
           "path": "node:crypto"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:crypto"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:util"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
         },
         {
           "external": true,
@@ -10313,6 +10433,16 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:util"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:crypto"
         },
         {
           "external": true,
@@ -10337,47 +10467,12 @@
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:util"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
           "path": "node:util"
         },
         {
           "external": true,
           "kind": "import-statement",
           "path": "node:path"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:path"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:util"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:util"
         },
         {
           "external": true,
@@ -10393,71 +10488,6 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:buffer"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:util"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:path"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:crypto"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:util"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:path"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:path"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:util"
         }
       ],
       "inputs": {
@@ -10474,10 +10504,10 @@
           "bytesInOutput": 1284
         },
         "node_modules/@modelcontextprotocol/server/dist/mcp-DXXb3Vv3.mjs": {
-          "bytesInOutput": 40148
+          "bytesInOutput": 40152
         },
         "node_modules/@modelcontextprotocol/server/dist/src-CX2iR2pK.mjs": {
-          "bytesInOutput": 184741
+          "bytesInOutput": 184745
         },
         "node_modules/@secretlint/core/module/RuleContext.js": {
           "bytesInOutput": 2398
@@ -10534,7 +10564,7 @@
           "bytesInOutput": 329
         },
         "node_modules/@secretlint/secretlint-rule-preset-recommend/module/index.js": {
-          "bytesInOutput": 134371
+          "bytesInOutput": 134368
         },
         "node_modules/boundary/lib/index.js": {
           "bytesInOutput": 1384
@@ -11026,10 +11056,10 @@
           "bytesInOutput": 3275
         },
         "src/contracts/durable-document.ts": {
-          "bytesInOutput": 1845
+          "bytesInOutput": 1982
         },
         "src/contracts/durable-gate.ts": {
-          "bytesInOutput": 13615
+          "bytesInOutput": 13583
         },
         "src/contracts/durable-implementation-output.ts": {
           "bytesInOutput": 2335
@@ -11047,22 +11077,22 @@
           "bytesInOutput": 1945
         },
         "src/contracts/durable-state.ts": {
-          "bytesInOutput": 11643
+          "bytesInOutput": 12206
         },
         "src/contracts/durable-task-initialization.ts": {
           "bytesInOutput": 531
         },
         "src/contracts/durable.ts": {
-          "bytesInOutput": 32583
+          "bytesInOutput": 32581
         },
         "src/contracts/errors.ts": {
-          "bytesInOutput": 17569
+          "bytesInOutput": 17055
         },
         "src/contracts/evidence.ts": {
           "bytesInOutput": 2125
         },
         "src/contracts/fingerprints.ts": {
-          "bytesInOutput": 7271
+          "bytesInOutput": 8651
         },
         "src/contracts/gates.ts": {
           "bytesInOutput": 19423
@@ -11077,13 +11107,13 @@
           "bytesInOutput": 1231
         },
         "src/contracts/mcp-tools.ts": {
-          "bytesInOutput": 16620
+          "bytesInOutput": 18155
         },
         "src/contracts/path-claims.ts": {
           "bytesInOutput": 3097
         },
         "src/contracts/phase-instance.ts": {
-          "bytesInOutput": 3679
+          "bytesInOutput": 3329
         },
         "src/contracts/plain-json.ts": {
           "bytesInOutput": 3790
@@ -11122,7 +11152,7 @@
           "bytesInOutput": 3748
         },
         "src/contracts/schemas/v1/mcp-tools.schema.json": {
-          "bytesInOutput": 28974
+          "bytesInOutput": 27017
         },
         "src/contracts/schemas/v1/path-claim.schema.json": {
           "bytesInOutput": 493
@@ -11131,7 +11161,7 @@
           "bytesInOutput": 1499
         },
         "src/contracts/schemas/v1/project-error.schema.json": {
-          "bytesInOutput": 83790
+          "bytesInOutput": 80376
         },
         "src/contracts/schemas/v1/review.schema.json": {
           "bytesInOutput": 3210
@@ -11142,11 +11172,14 @@
         "src/contracts/schemas/v1/secret-scan-result.schema.json": {
           "bytesInOutput": 3020
         },
+        "src/contracts/schemas/v1/semantic-workflow.schema.json": {
+          "bytesInOutput": 33932
+        },
         "src/contracts/schemas/v1/task-initialization.schema.json": {
           "bytesInOutput": 1432
         },
         "src/contracts/schemas/v1/task-state.schema.json": {
-          "bytesInOutput": 21801
+          "bytesInOutput": 20800
         },
         "src/contracts/schemas/v1/triage.schema.json": {
           "bytesInOutput": 4577
@@ -11154,8 +11187,11 @@
         "src/contracts/secret-scan.ts": {
           "bytesInOutput": 1255
         },
+        "src/contracts/semantic-workflow.ts": {
+          "bytesInOutput": 10835
+        },
         "src/contracts/tool-names.ts": {
-          "bytesInOutput": 222
+          "bytesInOutput": 495
         },
         "src/contracts/triage.ts": {
           "bytesInOutput": 6072
@@ -11173,25 +11209,31 @@
           "bytesInOutput": 247
         },
         "src/contracts/workflow.ts": {
-          "bytesInOutput": 1652
+          "bytesInOutput": 1896
         },
         "src/contracts/yaml.ts": {
           "bytesInOutput": 1586
         },
         "src/dispatch/cli.ts": {
-          "bytesInOutput": 23582
+          "bytesInOutput": 23603
         },
         "src/dispatch/coordinator.ts": {
           "bytesInOutput": 5198
         },
         "src/dispatch/process.ts": {
-          "bytesInOutput": 7394
+          "bytesInOutput": 7404
         },
         "src/dispatch/routing.ts": {
           "bytesInOutput": 2112
         },
         "src/dispatch/workspace.ts": {
-          "bytesInOutput": 6077
+          "bytesInOutput": 6113
+        },
+        "src/init/task-initialization.ts": {
+          "bytesInOutput": 6622
+        },
+        "src/local/call-envelope.ts": {
+          "bytesInOutput": 4542
         },
         "src/main.ts": {
           "bytesInOutput": 805
@@ -11203,31 +11245,28 @@
           "bytesInOutput": 2638
         },
         "src/mcp/handlers/counter-review.ts": {
-          "bytesInOutput": 14609
+          "bytesInOutput": 15022
         },
         "src/mcp/handlers/errors.ts": {
           "bytesInOutput": 908
         },
-        "src/mcp/handlers/gate.ts": {
-          "bytesInOutput": 3071
-        },
         "src/mcp/handlers/index.ts": {
-          "bytesInOutput": 213
+          "bytesInOutput": 148
         },
         "src/mcp/handlers/replay.ts": {
           "bytesInOutput": 732
         },
+        "src/mcp/handlers/semantic.ts": {
+          "bytesInOutput": 7998
+        },
         "src/mcp/handlers/session.ts": {
-          "bytesInOutput": 2577
+          "bytesInOutput": 2624
         },
         "src/mcp/handlers/state-results.ts": {
           "bytesInOutput": 12296
         },
         "src/mcp/handlers/state.ts": {
-          "bytesInOutput": 14385
-        },
-        "src/mcp/handlers/waiver.ts": {
-          "bytesInOutput": 5403
+          "bytesInOutput": 20394
         },
         "src/mcp/process-runner.ts": {
           "bytesInOutput": 3941
@@ -11235,146 +11274,167 @@
         "src/mcp/sdk-adapter.ts": {
           "bytesInOutput": 10827
         },
+        "src/mcp/sdk-zod-initialization.ts": {
+          "bytesInOutput": 136
+        },
         "src/mcp/send-queue.ts": {
           "bytesInOutput": 4970
         },
         "src/mcp/server.ts": {
-          "bytesInOutput": 7344
+          "bytesInOutput": 5001
         },
         "src/mcp/tools.ts": {
-          "bytesInOutput": 11467
+          "bytesInOutput": 7121
         },
         "src/repository/git.ts": {
           "bytesInOutput": 15188
         },
         "src/repository/identity.ts": {
-          "bytesInOutput": 5766
+          "bytesInOutput": 5764
         },
         "src/repository/index-entries.ts": {
           "bytesInOutput": 2782
         },
         "src/repository/paths.ts": {
-          "bytesInOutput": 17809
+          "bytesInOutput": 17799
         },
         "src/review/adjudication.ts": {
-          "bytesInOutput": 1886
+          "bytesInOutput": 5541
         },
         "src/review/counter-review.ts": {
-          "bytesInOutput": 9564
+          "bytesInOutput": 9622
         },
         "src/review/envelopes.ts": {
-          "bytesInOutput": 15997
+          "bytesInOutput": 15989
         },
         "src/review/fixed-point.ts": {
-          "bytesInOutput": 658
+          "bytesInOutput": 14412
         },
         "src/review/pinned-context.ts": {
-          "bytesInOutput": 18859
+          "bytesInOutput": 18863
         },
         "src/review/rubrics.ts": {
           "bytesInOutput": 10588
         },
         "src/state/atomic.ts": {
-          "bytesInOutput": 5864
+          "bytesInOutput": 6371
         },
         "src/state/authority.ts": {
           "bytesInOutput": 2725
         },
         "src/state/constitution.ts": {
-          "bytesInOutput": 3365
+          "bytesInOutput": 3598
+        },
+        "src/state/document-artifact.ts": {
+          "bytesInOutput": 5818
         },
         "src/state/evidence-results.ts": {
-          "bytesInOutput": 15206
+          "bytesInOutput": 15955
         },
         "src/state/fingerprint-readers.ts": {
-          "bytesInOutput": 3960
+          "bytesInOutput": 3987
         },
         "src/state/fingerprint.ts": {
-          "bytesInOutput": 2794
+          "bytesInOutput": 2977
         },
         "src/state/gate-approvals.ts": {
-          "bytesInOutput": 3500
+          "bytesInOutput": 3499
         },
         "src/state/gate-core.ts": {
-          "bytesInOutput": 7841
+          "bytesInOutput": 7836
         },
         "src/state/gate-decision-interface.ts": {
-          "bytesInOutput": 21555
-        },
-        "src/state/gate-direct.ts": {
-          "bytesInOutput": 806
-        },
-        "src/state/gate-preview.ts": {
-          "bytesInOutput": 2951
-        },
-        "src/state/gate-wait.ts": {
-          "bytesInOutput": 1657
+          "bytesInOutput": 15548
         },
         "src/state/gates.ts": {
-          "bytesInOutput": 69096
+          "bytesInOutput": 91753
         },
         "src/state/implementation-manifest.ts": {
-          "bytesInOutput": 22040
+          "bytesInOutput": 36522
         },
         "src/state/initialization.ts": {
-          "bytesInOutput": 21866
+          "bytesInOutput": 21823
         },
         "src/state/layout.ts": {
-          "bytesInOutput": 6966
+          "bytesInOutput": 6960
         },
         "src/state/legacy-import-resume.ts": {
-          "bytesInOutput": 1972
+          "bytesInOutput": 1966
         },
         "src/state/legacy-stage.ts": {
-          "bytesInOutput": 1116
+          "bytesInOutput": 1109
         },
         "src/state/lock.ts": {
-          "bytesInOutput": 2311
+          "bytesInOutput": 2300
+        },
+        "src/state/next-action.ts": {
+          "bytesInOutput": 12313
+        },
+        "src/state/pending-waiver.ts": {
+          "bytesInOutput": 3112
         },
         "src/state/phase-documents.ts": {
-          "bytesInOutput": 3601
+          "bytesInOutput": 7589
         },
         "src/state/planned-final-phase.ts": {
-          "bytesInOutput": 3015
+          "bytesInOutput": 3013
+        },
+        "src/state/planning-restart.ts": {
+          "bytesInOutput": 1605
         },
         "src/state/produce-subject.ts": {
-          "bytesInOutput": 11654
+          "bytesInOutput": 11722
         },
         "src/state/production.ts": {
-          "bytesInOutput": 13682
+          "bytesInOutput": 13222
         },
         "src/state/read.ts": {
           "bytesInOutput": 2486
         },
         "src/state/reconciliation-discovery.ts": {
-          "bytesInOutput": 8964
+          "bytesInOutput": 10178
         },
         "src/state/reconciliation.ts": {
-          "bytesInOutput": 5283
+          "bytesInOutput": 6226
+        },
+        "src/state/request-composition.ts": {
+          "bytesInOutput": 30821
         },
         "src/state/request.ts": {
-          "bytesInOutput": 3462
+          "bytesInOutput": 3868
+        },
+        "src/state/restart-authority.ts": {
+          "bytesInOutput": 4192
+        },
+        "src/state/retained-result-graph.ts": {
+          "bytesInOutput": 913
         },
         "src/state/secret-scan.ts": {
           "bytesInOutput": 4909
         },
-        "src/state/snapshots.ts": {
-          "bytesInOutput": 26326
+        "src/state/semantic-actions.ts": {
+          "bytesInOutput": 33011
         },
-        "src/state/staged-requests.ts": {
-          "bytesInOutput": 3568
+        "src/state/semantic-status.ts": {
+          "bytesInOutput": 16652
+        },
+        "src/state/semantic-view.ts": {
+          "bytesInOutput": 18302
+        },
+        "src/state/snapshots.ts": {
+          "bytesInOutput": 26324
+        },
+        "src/state/status.ts": {
+          "bytesInOutput": 35677
         },
         "src/state/transaction.ts": {
-          "bytesInOutput": 43106
+          "bytesInOutput": 43525
         },
         "src/state/transitions.ts": {
-          "bytesInOutput": 17946
-        },
-        "src/state/waiver-origin.ts": {
-          "bytesInOutput": 1220
+          "bytesInOutput": 18496
         },
         "src/state/workspace-cleanup.ts": {
-          "bytesInOutput": 15671
+          "bytesInOutput": 17067
         }
       }
     }

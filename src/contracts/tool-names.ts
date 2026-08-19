@@ -14,7 +14,8 @@ export const SEMANTIC_TOOL_NAMES = Object.freeze([
 ] as const);
 
 export type SemanticToolName = (typeof SEMANTIC_TOOL_NAMES)[number];
-export const ADVERTISED_TOOL_NAMES = Object.freeze([...TOOL_NAMES, ...SEMANTIC_TOOL_NAMES] as const);
+/** Only the semantic pair is advertised; TOOL_NAMES stays durable-record vocabulary for existing state. */
+export const ADVERTISED_TOOL_NAMES = Object.freeze([...SEMANTIC_TOOL_NAMES] as const);
 export type AdvertisedToolName = (typeof ADVERTISED_TOOL_NAMES)[number];
 
 export function isToolName(value: unknown): value is ToolName {

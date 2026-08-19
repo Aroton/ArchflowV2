@@ -21,10 +21,6 @@
     "tool": {
       "type": "string",
       "enum": [
-        "archflow_state",
-        "archflow_counter_review",
-        "archflow_gate",
-        "archflow_waiver",
         "archflow_status",
         "archflow_apply"
       ]

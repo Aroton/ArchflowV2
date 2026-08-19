@@ -122,7 +122,7 @@ function assertCleanExit(result, label) {
   assert.deepEqual({ code: result.code, signal: result.signal }, { code: 0, signal: null }, `${label} did not exit cleanly`);
 }
 
-function assertCallTranscript(bytes, initialize, calls, workingDirectory) {
+function assertCallTranscript(bytes, initialize, calls) {
   const lines = bytes.toString("utf8").trimEnd().split("\n").map((line) => JSON.parse(line));
   assert.equal(lines.length, 7, "complete initialize/calls sequence must emit seven frames");
   assert.deepEqual(lines[0], initialize.malformed_response);
@@ -130,10 +130,6 @@ function assertCallTranscript(bytes, initialize, calls, workingDirectory) {
   assert.deepEqual(lines[2]?.jsonrpc, "2.0");
   assert.deepEqual(lines[2]?.id, calls.list.id);
   assert.deepEqual(lines[2]?.result?.tools?.map((tool) => tool.name), [
-    "archflow_state",
-    "archflow_counter_review",
-    "archflow_gate",
-    "archflow_waiver",
     "archflow_status",
     "archflow_apply",
   ]);
@@ -166,16 +162,19 @@ function assertCallTranscript(bytes, initialize, calls, workingDirectory) {
   assert.equal(missing.id, calls.missing_arguments.id);
   assert.equal(missing.result?.isError, true);
   assert.equal(missing.result?.structuredContent?.ok, false);
-  assert.equal(missing.result?.structuredContent?.error?.code, "CONTRACT_INVALID");
-  assert.equal(missing.result?.structuredContent?.error?.diagnostic?.parameters?.issue_code, "input-not-object");
+  // The semantic input classifier answers a missing-arguments call; the durable
+  // "input-not-object" issue code retired with the legacy request validation.
+  assert.deepEqual(missing.result?.structuredContent?.error, {
+    code: "CONTRACT_INVALID",
+    message: "unsupported undefined value at archflow status input",
+    retryable: false,
+  });
   assert.equal(missing.result?.content?.[0]?.text, JSON.stringify(missing.result.structuredContent));
+  // The semantic boundary projects repository discovery failures as its own error
+  // shape; the durable project-error envelope with the candidate digest retired
+  // with the legacy request validation.
   const projectError = {
-    schema_version: "1", code: "REPOSITORY_NOT_FOUND", owner: "repository", retryable: false,
-    diagnostic: {
-      template_id: "REPOSITORY_NOT_FOUND",
-      parameters: { repository_candidate_digest: createHash("sha256").update(`archflow:repository-candidate:v1:${workingDirectory}`).digest("hex") },
-    },
-    next_action: "open-repository",
+    code: "REPOSITORY_NOT_FOUND", message: "REPOSITORY_NOT_FOUND", retryable: false,
   };
   const structuredContent = { schema_version: "1", ok: false, error: projectError };
   assert.deepEqual(lines[6], {
@@ -193,7 +192,7 @@ async function exerciseProtocolFixtures({ copiedBundle, copiedPayload, env, guar
   ].join(""));
   const exact = await runChild({ argv: [copiedBundle], cwd: copiedPayload, env, input: callInput });
   assertCleanExit(exact, "exact copied payload call sequence");
-  assertCallTranscript(exact.stdout, initialize, calls, copiedPayload);
+  assertCallTranscript(exact.stdout, initialize, calls);
 
   const guarded = await runChild({
     argv: ["--require", guard, copiedBundle],
@@ -300,8 +299,8 @@ export async function smokeReleasePayload(payloadRoot) {
     const localHelpText = localHelp.stdout.toString("utf8");
     assert.match(localHelpText, /usage: archflow-local <command>/u);
     assert.match(localHelpText, /^ {2}render {2,}payload \{"kind":"review"\|"adjudication"/mu);
-    assert.match(localHelpText, /^ {2}status {2,}no payload; --task required/mu);
-    assert.match(localHelpText, /^ {2}envelope {2,}payload \{"tool":<tool name>/mu);
+    assert.match(localHelpText, /^ {2}manual-status {2,}no payload; --task required/mu);
+    assert.match(localHelpText, /^ {2}upgrade-adopt {2,}no payload; --task required/mu);
     await assertGuardNegative({ cwd: copiedPayload, env, guard });
     return {
       bundles: ["archflow-mcp.mjs", "archflow-local.mjs"],

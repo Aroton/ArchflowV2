@@ -2,7 +2,7 @@ import { canonicalJsonDigest } from "../contracts/canonical.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
 import { type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
 import { computeGateId, computeInputFingerprint } from "../contracts/fingerprints.js";
-import { parseToolCall, type ParsedToolCall, type StagedRequestReference } from "../contracts/mcp-tools.js";
+import { parseToolCall, type ParsedToolCall } from "../contracts/mcp-tools.js";
 import { parseRepositoryPathClaim, type RepositoryPathClaim, type TaskPathClaim } from "../contracts/path-claims.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { TOOL_NAMES, isToolName, type ToolName } from "../contracts/tool-names.js";
@@ -22,13 +22,6 @@ export type CallEnvelope = Readonly<{
    * envelope over its own `request` returns the same digests.
    */
   request: Readonly<{ tool: ToolName; input: PlainJsonValue }>;
-  /**
-   * Present when `build-request` staged the resolved request on disk: `path` is where the exact
-   * request bytes live, and `reference` is the four-field object to paste into the MCP tool call
-   * instead of the full `request.input`. The server loads the staged request and refuses on any
-   * request-digest disagreement, so the reference is safe against staleness and transcription.
-   */
-  staged?: Readonly<{ path: RepositoryPathClaim; reference: StagedRequestReference }>;
   artifact_digest?: Sha256Digest;
   gate?: Readonly<{
     gate_id: PathSafeId;

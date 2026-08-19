@@ -28,11 +28,11 @@ import {
   enterDirectSemanticRevisionCheckpoint,
   openDurableGate,
   resolveDurableGate,
-  runDurableGate,
   settleDirectSemanticGateDecision,
   type GateLifecycleDependencies,
   type GateOpenInput,
 } from "../../src/state/gates.js";
+import { resolveInterfaceGateDecision } from "../helpers/resolve-interface-gate.js";
 import { readIntentReceipt, readTaskState } from "../../src/state/read.js";
 import { computeAuthoritativeSemanticStatus } from "../../src/state/semantic-status.js";
 import { executeSemanticAction } from "../../src/state/semantic-actions.js";
@@ -289,7 +289,7 @@ function restoreEnvelope(request: GateRequestV1, decision: "discard-and-restore"
 }
 
 describe("durable gate lifecycle", () => {
-  it("opens exactly one durable gate, clears the prior transition, and abort leaves it pending", async () => {
+  it("opens exactly one durable gate, clears the prior transition, and leaves it pending", async () => {
     const h = await harness();
     const opened = await openDurableGate(h.dependencies, gateInput(h));
     expect(opened.ok, opened.ok ? undefined : JSON.stringify({ error: opened.error, root: h.root, files: readFileSync(h.authority.state.absolute, "utf8") })).toBe(true);
@@ -299,11 +299,7 @@ describe("durable gate lifecycle", () => {
     expect(existsSync(join(h.authority.task_root, "authority", "decisions", opened.value.gate_id, "request.json"))).toBe(true);
     expect(existsSync(gatePath(h))).toBe(true);
 
-    const controller = new AbortController();
-    controller.abort();
-    const aborted = await runDurableGate(h.dependencies, { ...gateInput(h), signal: controller.signal });
-    expect(aborted.ok).toBe(false);
-    if (!aborted.ok) expect(aborted.error.code).toBe("CANCELLED");
+    // No consumer path closes the gate implicitly: it stays pending until a decision resolves it.
     const state = await readTaskState(h.authority.state);
     expect(state.kind).toBe("canonical");
     if (state.kind === "canonical") expect(state.document.value.open_gate?.gate_id).toBe(opened.value.gate_id);
@@ -340,7 +336,7 @@ describe("durable gate lifecycle", () => {
     writeFileSync(decisionPath(h), canonicalDocument(envelope(retried.value.request.value)).bytes);
     const tampered = { ...retried.value.state.value, status: "running" as const };
     writeFileSync(h.authority.state.absolute, canonicalDocument(tampered).bytes);
-    const rejected = await runDurableGate(h.dependencies, { ...retriedInput, signal: new AbortController().signal });
+    const rejected = await resolveInterfaceGateDecision(h.dependencies, h.authority, retried.value.gate_id, FINGERPRINT);
     expect(rejected.ok).toBe(false);
     expect(existsSync(archivePath(h, retried.value.gate_id))).toBe(false);
   });
@@ -354,7 +350,10 @@ describe("durable gate lifecycle", () => {
       if (damage === "missing") rmSync(gatePath(h));
       else writeFileSync(gatePath(h), "{not canonical json");
       writeFileSync(decisionPath(h), canonicalDocument(envelope(opened.value.request.value)).bytes);
-      const resolved = await runDurableGate(h.dependencies, { ...input, signal: new AbortController().signal });
+      // Re-opening republishes the missing or damaged active-gate interface before resolution.
+      const republished = await openDurableGate(h.dependencies, input);
+      expect(republished.ok, republished.ok ? undefined : JSON.stringify(republished.error)).toBe(true);
+      const resolved = await resolveInterfaceGateDecision(h.dependencies, h.authority, opened.value.gate_id);
       expect(resolved.ok, resolved.ok ? undefined : JSON.stringify(resolved.error)).toBe(true);
       const state = await readTaskState(h.authority.state);
       expect(state.kind === "canonical" ? state.document.value.approvals : []).toHaveLength(1);
@@ -383,7 +382,7 @@ describe("durable gate lifecycle", () => {
     writeFileSync(decisionPath(h), canonicalDocument(envelope(opened.value.request.value)).bytes);
     const injected = { ...opened.value.state.value, last_transition: { ...initialState(h.authority).last_transition!, result_id: "injected-result" as never } };
     writeFileSync(h.authority.state.absolute, canonicalDocument(injected).bytes);
-    const rejected = await runDurableGate(h.dependencies, { ...input, signal: new AbortController().signal });
+    const rejected = await resolveInterfaceGateDecision(h.dependencies, h.authority, opened.value.gate_id, FINGERPRINT);
     expect(rejected.ok).toBe(false);
     expect(existsSync(archivePath(h, opened.value.gate_id))).toBe(false);
   });
@@ -393,7 +392,7 @@ describe("durable gate lifecycle", () => {
     const opened = await openDurableGate(h.dependencies, gateInput(h));
     if (!opened.ok) throw new Error("gate open failed");
     writeFileSync(decisionPath(h), canonicalDocument(envelope(opened.value.request.value)).bytes);
-    const resolved = await runDurableGate(h.dependencies, { ...gateInput(h), signal: new AbortController().signal });
+    const resolved = await resolveInterfaceGateDecision(h.dependencies, h.authority, opened.value.gate_id);
     expect(resolved.ok, resolved.ok ? undefined : JSON.stringify(resolved.error)).toBe(true);
     if (!resolved.ok || !("record" in resolved.value)) return;
     expect(resolved.value.effect).toBe("advance");
@@ -404,7 +403,7 @@ describe("durable gate lifecycle", () => {
     expect(existsSync(gatePath(h))).toBe(false);
     expect(existsSync(decisionPath(h))).toBe(false);
 
-    const replay = await runDurableGate(h.dependencies, { ...gateInput(h), signal: new AbortController().signal });
+    const replay = await resolveInterfaceGateDecision(h.dependencies, h.authority, opened.value.gate_id);
     expect(replay.ok).toBe(true);
     if (replay.ok && "record" in replay.value) {
       expect(replay.value.replayed).toBe(true);
@@ -816,54 +815,15 @@ describe("durable gate lifecycle", () => {
   });
 
   it("refuses every unreadable decision shape without advancing durable authority", async () => {
-    for (const issueCode of ["decision-missing", "decision-noncanonical", "decision-invalid"] as const) {
+    for (const issueCode of ["decision-missing", "decision-noncanonical"] as const) {
       const h = await harness();
-      const baseInput = gateInput(h, `refused-${issueCode}`);
-      const input: GateOpenInput = issueCode === "decision-invalid"
-        ? {
-            ...baseInput,
-            kind: "constitution-review",
-            context: {
-              constitution: "pass", failed_rules: [], uncertain_rules: [],
-              matched_trigger_rules: [{ rule_id: "review-required", rule_version: 1 }],
-              uncertain_trigger_rules: [], eligible_waivers: [],
-            },
-          }
-        : baseInput;
+      const input = gateInput(h, `refused-${issueCode}`);
       const opened = await openDurableGate(h.dependencies, input);
       if (!opened.ok) throw new Error("gate open failed");
       if (issueCode === "decision-noncanonical") writeFileSync(decisionPath(h), "{not canonical json");
-      if (issueCode === "decision-invalid") {
-        const request = opened.value.request.value;
-        writeFileSync(decisionPath(h), canonicalDocument({
-          schema_version: "1", gate_id: request.gate_id, task_id: request.task_id,
-          phase_instance: request.phase_instance, kind: request.kind,
-          subject_digest: request.subject_digest, context_digest: request.context_digest,
-          human_provenance: PROVENANCE,
-          payload: { decision: "revise", reason: "Revise current artifact" },
-        }).bytes);
-      }
       const before = await refusalPostcondition(h, input.intent_id);
-      let refused;
-      let observedLocks = 0;
-      if (issueCode === "decision-invalid") {
-        let locks = 0;
-        const dependencies: GateLifecycleDependencies = {
-          ...h.dependencies,
-          lock: {
-            runExclusive: async <T>(_root: ResolvedTaskWorkspacePath, work: () => Promise<T>) => {
-              locks += 1;
-              observedLocks = locks;
-              if (locks === 3) writeFileSync(decisionPath(h), "{not canonical json");
-              return work();
-            },
-          },
-        };
-        refused = await runDurableGate(dependencies, { ...input, signal: new AbortController().signal });
-      } else {
-        refused = await resolveDurableGate(h.dependencies, h.authority, opened.value.gate_id);
-      }
-      expect(refused.ok, `${issueCode} locks=${observedLocks}`).toBe(false);
+      const refused = await resolveDurableGate(h.dependencies, h.authority, opened.value.gate_id);
+      expect(refused.ok, issueCode).toBe(false);
       if (!refused.ok) {
         expect(refused.error.code, issueCode).toBe("GATE_DECISION_INVALID");
         expect(refused.error.diagnostic.parameters, issueCode).toMatchObject({ issue_code: issueCode });
@@ -919,7 +879,7 @@ describe("durable gate lifecycle", () => {
         continue;
       }
       writeFileSync(decisionPath(h), canonicalDocument(waiverInterface(opened.value.request.value, outcome === "grant")).bytes);
-      const resolved = await runDurableGate(h.dependencies, { ...input, signal: new AbortController().signal });
+      const resolved = await resolveInterfaceGateDecision(h.dependencies, h.authority, opened.value.gate_id);
       expect(resolved.ok).toBe(true);
       if (!resolved.ok || !("record" in resolved.value)) continue;
       expect(resolved.value.record.value.outcome).toBe("waiver-decided");
@@ -966,7 +926,9 @@ describe("durable gate lifecycle", () => {
           : { ...read.document.value, status: "failed" as const };
         writeFileSync(h.authority.state.absolute, canonicalDocument(mutated).bytes);
       }
-      const rejected = await runDurableGate(dependencies, { ...resumedInput, signal: new AbortController().signal });
+      const rejected = changed === "fingerprint"
+        ? await resolveInterfaceGateDecision(dependencies, h.authority, opened.value.gate_id, resumedInput.input_fingerprint)
+        : await resolveInterfaceGateDecision(dependencies, h.authority, opened.value.gate_id);
       expect(rejected.ok, `${changed} change unexpectedly resolved`).toBe(false);
       expect(existsSync(archivePath(h, opened.value.gate_id))).toBe(false);
     }
@@ -1012,7 +974,7 @@ describe("durable gate lifecycle", () => {
     expect(opened.ok).toBe(true);
     if (!opened.ok) return;
     writeFileSync(decisionPath(h), canonicalDocument(restoreEnvelope(opened.value.request.value, "discard-and-restore")).bytes);
-    const resolved = await runDurableGate(restore.dependencies, { ...restore.input, signal: new AbortController().signal });
+    const resolved = await resolveInterfaceGateDecision(restore.dependencies, h.authority, opened.value.gate_id);
     expect(resolved.ok).toBe(true);
     expect(readFileSync(restore.target.absolute)).toEqual(Buffer.from(restore.desired));
     expect(restore.writerEvents).toEqual(["replace-regular"]);
@@ -1048,7 +1010,7 @@ describe("durable gate lifecycle", () => {
     const beforeState = await refusalPostcondition(h, restore.input.intent_id);
     writeFileSync(decisionPath(h), canonicalDocument(restoreEnvelope(opened.value.request.value, "discard-and-restore")).bytes);
 
-    const rejected = await runDurableGate(restore.dependencies, { ...restore.input, signal: new AbortController().signal });
+    const rejected = await resolveInterfaceGateDecision(restore.dependencies, h.authority, opened.value.gate_id);
 
     expect(rejected.ok).toBe(false);
     if (!rejected.ok) expect(rejected.error.code, JSON.stringify(rejected.error)).toBe("SECRET_DETECTED");
@@ -1070,7 +1032,7 @@ describe("durable gate lifecycle", () => {
     if (!opened.ok) return;
     writeFileSync(restore.target.absolute, "newer human generation\n");
     writeFileSync(decisionPath(h), canonicalDocument(restoreEnvelope(opened.value.request.value, "discard-and-restore")).bytes);
-    const rejected = await runDurableGate(restore.dependencies, { ...restore.input, signal: new AbortController().signal });
+    const rejected = await resolveInterfaceGateDecision(restore.dependencies, h.authority, opened.value.gate_id);
     expect(rejected.ok).toBe(false);
     if (!rejected.ok) expect(rejected.error.code).toBe("STATE_INVALID");
     expect(restore.writerEvents).toEqual([]);
@@ -1085,7 +1047,7 @@ describe("durable gate lifecycle", () => {
     if (!opened.ok) return;
     const before = readFileSync(restore.target.absolute);
     writeFileSync(decisionPath(h), canonicalDocument(restoreEnvelope(opened.value.request.value, "adopt-as-new-generation")).bytes);
-    const resolved = await runDurableGate(restore.dependencies, { ...restore.input, signal: new AbortController().signal });
+    const resolved = await resolveInterfaceGateDecision(restore.dependencies, h.authority, opened.value.gate_id);
     expect(resolved.ok, resolved.ok ? undefined : JSON.stringify(resolved.error)).toBe(true);
     expect(restore.writerEvents).toEqual([]);
     expect(readFileSync(restore.target.absolute)).toEqual(before);
@@ -1108,10 +1070,10 @@ describe("durable gate lifecycle", () => {
         await realAtomic.replace(path, bytes);
       },
     } };
-    const first = await runDurableGate(crashing, { ...restore.input, signal: new AbortController().signal });
+    const first = await resolveInterfaceGateDecision(crashing, h.authority, opened.value.gate_id);
     expect(first.ok).toBe(false);
     expect(readFileSync(restore.target.absolute)).toEqual(Buffer.from(restore.desired));
-    const resumed = await runDurableGate(restore.dependencies, { ...restore.input, signal: new AbortController().signal });
+    const resumed = await resolveInterfaceGateDecision(restore.dependencies, h.authority, opened.value.gate_id);
     expect(resumed.ok).toBe(true);
     const state = await readTaskState(h.authority.state);
     expect(state.kind === "canonical" ? state.document.value.approvals : []).toHaveLength(1);
@@ -1148,7 +1110,7 @@ describe("durable gate lifecycle", () => {
     writeFileSync(peerTarget.absolute, "peer changed after gate\n");
     const primaryBefore = readFileSync(restore.target.absolute);
     writeFileSync(decisionPath(h), canonicalDocument(restoreEnvelope(opened.value.request.value, "discard-and-restore")).bytes);
-    const rejected = await runDurableGate(dependencies, { ...restore.input, signal: new AbortController().signal });
+    const rejected = await resolveInterfaceGateDecision(dependencies, h.authority, opened.value.gate_id);
     expect(rejected.ok).toBe(false);
     expect(restore.writerEvents).toEqual([]);
     expect(readFileSync(restore.target.absolute)).toEqual(primaryBefore);
@@ -1200,12 +1162,12 @@ describe("durable gate lifecycle", () => {
         replaceSymlink: async (...args) => { writes += 1; if (writes === 2) throw new Error("simulated process death"); await writer.replaceSymlink(...args); },
         remove: async (...args) => { writes += 1; if (writes === 2) throw new Error("simulated process death"); await writer.remove(...args); },
       } };
-      const crashed = await runDurableGate(crashing, { ...input, signal: new AbortController().signal });
+      const crashed = await resolveInterfaceGateDecision(crashing, h.authority, opened.value.gate_id);
       expect(crashed.ok).toBe(false);
       expect(existsSync(restore.target.absolute)).toBe(false);
       expect(existsSync(peerTarget.absolute)).toBe(false);
       if (thirdGeneration) writeFileSync(peerTarget.absolute, "third generation\n");
-      const resumed = await runDurableGate(dependencies, { ...input, signal: new AbortController().signal });
+      const resumed = await resolveInterfaceGateDecision(dependencies, h.authority, opened.value.gate_id);
       expect(resumed.ok, resumed.ok ? undefined : JSON.stringify(resumed.error)).toBe(!thirdGeneration);
       expect(existsSync(restore.target.absolute)).toBe(false);
       expect(thirdGeneration ? readFileSync(peerTarget.absolute, "utf8") : readFileSync(peerTarget.absolute)).toEqual(
@@ -1252,7 +1214,7 @@ describe("durable gate lifecycle", () => {
     if (!opened.ok) throw new Error("rename restore open failed");
     writeFileSync(decisionPath(h), canonicalDocument(restoreEnvelope(opened.value.request.value, "discard-and-restore")).bytes);
     writeFileSync(peerTarget.absolute, desiredPeer);
-    const resumed = await runDurableGate(dependencies, { ...input, signal: new AbortController().signal });
+    const resumed = await resolveInterfaceGateDecision(dependencies, h.authority, opened.value.gate_id);
     expect(resumed.ok, resumed.ok ? undefined : JSON.stringify(resumed.error)).toBe(true);
     expect(existsSync(restore.target.absolute)).toBe(false);
     expect(readFileSync(peerTarget.absolute)).toEqual(Buffer.from(desiredPeer));
@@ -1287,7 +1249,7 @@ describe("durable gate lifecycle", () => {
     const opened = await openDurableGate(dependencies, restore.input);
     if (!opened.ok) throw new Error("rename destination gate open failed");
     writeFileSync(decisionPath(h), canonicalDocument(restoreEnvelope(opened.value.request.value, "discard-and-restore")).bytes);
-    const resolved = await runDurableGate(dependencies, { ...restore.input, signal: new AbortController().signal });
+    const resolved = await resolveInterfaceGateDecision(dependencies, h.authority, opened.value.gate_id);
     expect(resolved.ok, resolved.ok ? undefined : JSON.stringify(resolved.error)).toBe(true);
     expect(readFileSync(restore.target.absolute)).toEqual(Buffer.from(restore.desired));
     expect(existsSync(sourceTarget.absolute)).toBe(false);
@@ -1299,7 +1261,7 @@ describe("durable gate lifecycle", () => {
     const opened = await openDurableGate(h.dependencies, input);
     if (!opened.ok) throw new Error("gate open failed");
     writeFileSync(decisionPath(h), canonicalDocument(envelope(opened.value.request.value)).bytes);
-    const closed = await runDurableGate(h.dependencies, { ...input, signal: new AbortController().signal });
+    const closed = await resolveInterfaceGateDecision(h.dependencies, h.authority, opened.value.gate_id);
     if (!closed.ok) throw new Error("gate resolution failed");
     const oldGateProjection = JSON.parse(readFileSync(join(h.authority.task_root, "authority", "decisions", opened.value.gate_id, "request.json"), "utf8")) as Record<string, unknown>;
     const foreignId = "g-ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" as GateOpenInput["intent_id"];
@@ -1324,7 +1286,7 @@ describe("durable gate lifecycle", () => {
       }
       return result;
     } } };
-    const replayed = await runDurableGate(raced, { ...input, signal: new AbortController().signal });
+    const replayed = await resolveInterfaceGateDecision(raced, h.authority, opened.value.gate_id);
     expect(replayed.ok, replayed.ok ? undefined : JSON.stringify(replayed.error)).toBe(true);
     expect(existsSync(gatePath(h))).toBe(true);
     expect(existsSync(decisionPath(h))).toBe(true);

@@ -14,8 +14,6 @@ import { parsePathSafeId, parseSha256Digest } from "../../src/contracts/evidence
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
 import { stageTaskAsk } from "../../src/init/task-initialization.js";
-import { runBuildRequest } from "../../src/local/build-request.js";
-import { computeLocalGatePreview } from "../../src/local/gate-preview.js";
 import { derivePendingWaiverRequest } from "../../src/state/pending-waiver.js";
 import { createProductionServices, type ProductionServices } from "../../src/state/production.js";
 import { composeRequest } from "../../src/state/request-composition.js";
@@ -60,75 +58,91 @@ async function uninitializedServices(): Promise<ProductionServices> {
   return created.value;
 }
 
-async function expectParity(services: ProductionServices, input: PlainJsonValue): Promise<void> {
-  const direct = await composeRequest(services, input);
-  const legacy = await runBuildRequest(services, input);
-  expect(legacy.ok).toBe(direct.ok);
-  if (!direct.ok || !legacy.ok) {
-    expect(direct.ok ? undefined : direct.error).toEqual(legacy.ok ? undefined : legacy.error);
-    return;
+/** Composition is transport-neutral and never stages: the returned envelope is the finished call. */
+async function expectComposed(services: ProductionServices, input: PlainJsonValue): Promise<void> {
+  const composed = await composeRequest(services, input);
+  expect(composed.ok, composed.ok ? undefined : composed.error.code).toBe(true);
+  if (composed.ok) {
+    expect(composed.value.envelope.request.tool).toBeDefined();
+    expect(typeof composed.value.envelope.request_digest).toBe("string");
   }
-  expect(legacy.value).toMatchObject(direct.value.envelope);
-  expect(legacy.value.request).toEqual(direct.value.envelope.request);
-  expect(legacy.value.request_digest).toBe(direct.value.envelope.request_digest);
-  expect(legacy.value.input_fingerprint).toBe(direct.value.envelope.input_fingerprint);
-  expect(legacy.value.staged === undefined).toBe(services.state === undefined);
 }
 
-describe("transport-neutral request composition parity", () => {
-  it("preserves revision-zero initialization bytes while only the legacy adapter stages later requests", async () => {
+describe("transport-neutral request composition", () => {
+  it("composes the revision-zero initialization request without staging anything", async () => {
     const services = await uninitializedServices();
-    await expectParity(services, { kind: "initialize", intent_id: "initialize-parity" });
+    const composed = await composeRequest(services, { kind: "initialize", intent_id: "initialize-composition" });
+    expect(composed.ok, composed.ok ? undefined : composed.error.code).toBe(true);
+    if (composed.ok) {
+      expect(composed.value.envelope.request.input).toMatchObject({
+        task_id: services.authority.task_id,
+        phase_instance: "prd",
+        expected_revision: 0,
+      });
+    }
   });
 
-  it("preserves document production and current-position errors across every legacy family", async () => {
+  it("composes document production and refuses current-position errors across every family", async () => {
     const fixture = await createTaskWorkspace({ taskId: "composition-families", label: "composition-families" });
     roots.push(fixture.root);
     writeFileSync(join(fixture.services.authority.task_root, "ask.md"), "Compose requests in process.\n");
     writeFileSync(join(fixture.services.authority.task_root, "prd.md"), "# Request composition\n");
 
-    await expectParity(fixture.services, { kind: "produce", intent_id: "produce-parity" });
-    for (const input of [
-      { kind: "failed", intent_id: "failed-parity" },
-      { kind: "running", step: "counter_review", intent_id: "running-parity" },
-      { kind: "triage", dispositions: [], intent_id: "triage-parity" },
-      { kind: "counter-review", intent_id: "review-parity" },
-      {
-        kind: "gate",
-        summary: "Review the composed request.",
-        preview_digest: "0".repeat(64),
-        decision: { choice: "approve", reason: "Parity probe decision." },
-        intent_id: "gate-parity",
-      },
-      { kind: "advance", intent_id: "advance-parity" },
-    ] satisfies PlainJsonValue[]) {
-      await expectParity(fixture.services, input);
+    await expectComposed(fixture.services, { kind: "produce", intent_id: "produce-composition" });
+    // From produce/running the only additional legal family is the failed record; every later
+    // step, gate, and advance composes only from its own legal position.
+    await expectComposed(fixture.services, { kind: "failed", intent_id: "failed-composition" });
+    for (const [input, expectedCode] of [
+      [{ kind: "running", step: "counter_review", intent_id: "running-refused" }, "TRANSITION_INVALID"],
+      [{ kind: "triage", dispositions: [], intent_id: "triage-refused" }, "TRANSITION_INVALID"],
+      [{ kind: "counter-review", intent_id: "review-refused" }, "TRANSITION_INVALID"],
+      // No produce result exists yet, so the gate composer fails on the missing subject.
+      [{ kind: "gate", summary: "Review the composed request.", intent_id: "gate-refused" }, "STATE_INVALID"],
+      [{ kind: "advance", intent_id: "advance-refused" }, "TRANSITION_INVALID"],
+    ] satisfies Readonly<[PlainJsonValue, string]>[]) {
+      const composed = await composeRequest(fixture.services, input);
+      expect(composed.ok, JSON.stringify(composed)).toBe(false);
+      if (!composed.ok) expect(composed.error.code).toBe(expectedCode);
     }
+    // The bounded gate-preview decision pair retired with its only producer: a supplied
+    // preview_digest plus decision never reaches the composed request.
+    const decided = await composeRequest(fixture.services, {
+      kind: "gate",
+      summary: "Review the composed request.",
+      preview_digest: "0".repeat(64),
+      decision: { choice: "approve", reason: "Retired bounded decision." },
+      intent_id: "gate-decision-retired",
+    });
+    expect(decided.ok, JSON.stringify(decided)).toBe(false);
 
     fixture.dispose();
     roots.pop();
   });
 
-  it("composes successful failed, running, and review families from their legal positions", async () => {
+  it("composes the failed record and the produce re-entry from their legal positions", async () => {
     const fixture = await createTaskWorkspace({ taskId: "composition-success-families", label: "composition-success" });
     roots.push(fixture.root);
-    await expectParity(fixture.services, { kind: "failed", intent_id: "failed-success-parity" });
+    await expectComposed(fixture.services, { kind: "failed", intent_id: "failed-success-composition" });
 
     const initial = fixture.services.state!.value;
     const { last_transition: _transition, ...withoutTransition } = initial;
     await fixture.services.dependencies.atomic.replace(fixture.services.authority.state, canonicalDocument({
       ...withoutTransition, revision: parseSafeInteger(initial.revision + 1), status: "failed",
     }).bytes);
-    let refreshed = await createProductionServices({ working_directory: fixture.root, task_id: fixture.taskId, operation: parseSafeCode("composition-running") });
-    if (!refreshed.ok || refreshed.value.state === undefined) throw new Error("running parity services unavailable");
-    await expectParity(refreshed.value, { kind: "running", step: "produce", intent_id: "running-success-parity" });
+    const refreshed = await createProductionServices({ working_directory: fixture.root, task_id: fixture.taskId, operation: parseSafeCode("composition-running") });
+    if (!refreshed.ok || refreshed.value.state === undefined) throw new Error("running composition services unavailable");
+    await expectComposed(refreshed.value, { kind: "running", step: "produce", intent_id: "running-success-composition" });
 
+    // The terminal counter-review record composes only once the step is running; a succeeded
+    // produce alone leaves it refused.
     await refreshed.value.dependencies.atomic.replace(refreshed.value.authority.state, canonicalDocument({
       ...refreshed.value.state.value, revision: parseSafeInteger(refreshed.value.state.value.revision + 1), status: "succeeded",
     }).bytes);
-    refreshed = await createProductionServices({ working_directory: fixture.root, task_id: fixture.taskId, operation: parseSafeCode("composition-review") });
-    if (!refreshed.ok || refreshed.value.state === undefined) throw new Error("review parity services unavailable");
-    await expectParity(refreshed.value, { kind: "counter-review", intent_id: "review-success-parity" });
+    const atSucceeded = await createProductionServices({ working_directory: fixture.root, task_id: fixture.taskId, operation: parseSafeCode("composition-review") });
+    if (!atSucceeded.ok || atSucceeded.value.state === undefined) throw new Error("review composition services unavailable");
+    const premature = await composeRequest(atSucceeded.value, { kind: "counter-review", intent_id: "review-premature" });
+    expect(premature.ok).toBe(false);
+    if (!premature.ok) expect(premature.error.code).toBe("TRANSITION_INVALID");
 
     fixture.dispose();
     roots.pop();
@@ -154,28 +168,33 @@ describe("transport-neutral request composition parity", () => {
     await fixture.services.dependencies.atomic.replace(fixture.services.authority.state, canonicalDocument({ ...state, last_transition: { ...prior, tool: "archflow_gate", operation: parseSafeCode("gate"), result_id: gateId } }).bytes);
     const refreshed = await createProductionServices({ working_directory: fixture.root, task_id: fixture.taskId, operation: parseSafeCode("composition-waiver") });
     if (!refreshed.ok || refreshed.value.state === undefined) throw new Error("waiver services unavailable");
-    // The bounded decision path: derive the pending origin, preview it, then decide through it.
+    // The waiver opens and awaits the human decision through the semantic surface; the
+    // bounded preview_digest+decision pair retired with the gate-preview machinery.
     const pending = await derivePendingWaiverRequest(refreshed.value);
     if (!pending.ok) throw new Error(pending.error.code);
-    const preview = await computeLocalGatePreview(refreshed.value, {
-      kind: "waiver",
-      origin: pending.value.origin as unknown as PlainJsonValue,
-      rationale: pending.value.rationale,
-    });
-    if (!preview.ok) throw new Error(preview.error.code);
     const composed = await composeRequest(refreshed.value, {
       kind: "waiver",
-      intent_id: "waiver-parity",
-      preview_digest: preview.value.preview_digest,
-      decision: { choice: "grant-exception", reason: "The exception is narrowly bounded." },
+      intent_id: "waiver-composition",
     });
     expect(composed.ok, composed.ok ? undefined : composed.error.code).toBe(true);
     if (composed.ok) expect(composed.value.envelope.request.input).toMatchObject({
       origin: { origin_gate_id: gateId, rule, scope, subject_digest: subject, current_evidence_set_digest: currentEvidence.set_digest },
       rationale: "The exception is bounded.",
-      preview_digest: preview.value.preview_digest,
-      decision: { choice: "grant-exception", reason: "The exception is narrowly bounded." },
     });
+    // The bounded waiver decision pair retired with the gate-preview machinery: the composed
+    // waiver request opens the gate and never carries preview_digest or decision.
+    const decided = await composeRequest(refreshed.value, {
+      kind: "waiver",
+      intent_id: "waiver-decision-retired",
+      preview_digest: "0".repeat(64),
+      decision: { choice: "grant-exception", reason: "Retired bounded decision." },
+    });
+    expect(decided.ok, decided.ok ? undefined : decided.error.code).toBe(true);
+    if (decided.ok) {
+      const decidedInput = decided.value.envelope.request.input as Record<string, unknown>;
+      expect(decidedInput).not.toHaveProperty("preview_digest");
+      expect(decidedInput).not.toHaveProperty("decision");
+    }
     fixture.dispose();
     roots.pop();
   });

@@ -17,16 +17,16 @@ import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import { currentEvidenceSetRef } from "../../src/contracts/trust.js";
 import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
 import { computeCallEnvelope } from "../../src/local/call-envelope.js";
-import { createToolHandlers } from "../../src/mcp/handlers/index.js";
+import { handleState } from "../../src/mcp/handlers/state.js";
 import { prepareDocumentResult } from "../../src/mcp/handlers/state-results.js";
-import { createToolBoundary } from "../../src/mcp/server.js";
 import type { ResolvedTaskWorkspacePath } from "../../src/repository/paths.js";
 import { buildDocumentArtifact } from "../../src/state/document-artifact.js";
-import { openDurableGate, runDurableGate } from "../../src/state/gates.js";
+import { openDurableGate } from "../../src/state/gates.js";
 import { ensurePayloadParent, ensureResultDirectory } from "../../src/state/layout.js";
 import { createProductionServices } from "../../src/state/production.js";
 import { installSnapshot } from "../../src/state/snapshots.js";
 import { runStateInitialization } from "../../src/state/initialization.js";
+import { resolveInterfaceGateDecision } from "../helpers/resolve-interface-gate.js";
 
 const TIMEOUT = 30_000;
 const repositoryRoot = resolve(import.meta.dirname, "../..");
@@ -95,7 +95,8 @@ async function invokeState(root: string, input: unknown, id: string) {
   const connection = connectionContextFactory.captureStartup({
     connection_id: `${id}-connection`, startup_repository_candidate: { working_directory: root },
   }).initialize({ client: { name: "codex-mcp-client", version: "0.146.0" }, host: "codex", protocol_version: "2025-11-25" });
-  return createToolBoundary(createToolHandlers()).invoke("archflow_state", input, createInvocationContext(connection, {
+  // The retained internal state service, invoked directly the way the semantic handler drives it.
+  return handleState(parseToolCall("archflow_state", input), createInvocationContext(connection, {
     invocation_id: id, transport_metadata: { request_id: `${id}-request`, operation: "tools/call" },
   }, new AbortController().signal));
 }
@@ -139,7 +140,7 @@ describe("bundled legacy upgrade workflow", () => {
     writeFileSync(join(root, `.archflow/runtime/tasks/${task}/cache/imports/${initialization.import_digest}/payload/${reference.legacy_path}`), "tampered\n");
     const call = await initializationCall(root, initialization, "legacy-invalid-payload");
     expect(await invokeState(root, call, "legacy-invalid-payload")).toMatchObject({
-      kind: "project-result", result: { ok: false },
+      ok: false,
     });
     expect(() => readFileSync(join(root, `.archflow/tasks/${task}/config.yaml`))).toThrow();
     expect(() => readFileSync(join(root, `.archflow/tasks/${task}/state.json`))).toThrow();
@@ -167,7 +168,7 @@ describe("bundled legacy upgrade workflow", () => {
     expect(JSON.parse(readFileSync(join(root, emitted.manifest_path), "utf8"))).toEqual(initialization);
     const call = await initializationCall(root, initialization, "legacy-initialization");
     const initialized = await invokeState(root, call, "legacy-initialization");
-    expect(initialized).toMatchObject({ kind: "project-result", result: { ok: true, value: { revision: 1 } } });
+    expect(initialized).toMatchObject({ ok: true, value: { revision: 1 } });
     expect(readFileSync(join(root, `.archflow/tasks/${task}/prd.md`))).toEqual(readFileSync(join(source, "prd.md")));
     expect(readFileSync(join(root, `.archflow/tasks/${task}/design.md`))).toEqual(readFileSync(join(source, "architecture.md")));
     expect(readFileSync(join(root, `.archflow/tasks/${task}/phases/3/design.md`))).toEqual(readFileSync(join(source, "phases/phase-3-unlogged-review.md")));
@@ -188,7 +189,7 @@ describe("bundled legacy upgrade workflow", () => {
     const initialization = parseLegacyImportInitialization(emitted.initialization);
     const initialCall = await initializationCall(root, initialization, "legacy-audit-initialization");
     const initialized = await invokeState(root, initialCall, "legacy-audit-initialization");
-    expect(initialized).toMatchObject({ kind: "project-result", result: { ok: true } });
+    expect(initialized).toMatchObject({ ok: true });
 
     let services = await createProductionServices({ working_directory: root, task_id: task, operation: parseSafeCode("legacy-retain-documents") });
     if (!services.ok || services.value.state === undefined) throw new Error("services unavailable");
@@ -270,7 +271,7 @@ describe("bundled legacy upgrade workflow", () => {
           decision_event_id: `legacy-approve-decision-${index}`, helper_invocation_id: `legacy-approve-helper-${index}`, recorded_at: "2026-08-03T12:00:00.000Z" },
         payload: { decision: "approve", reason: "Reviewed current canonical document" },
       }).bytes);
-      const resolved = await runDurableGate(services.value.dependencies, { ...gateInput, signal: new AbortController().signal });
+      const resolved = await resolveInterfaceGateDecision(services.value.dependencies, services.value.authority, opened.value.gate_id);
       if (!resolved.ok) throw new Error(JSON.stringify(resolved));
     }
 
@@ -299,7 +300,7 @@ describe("bundled legacy upgrade workflow", () => {
         decision_event_id: "legacy-audit-decision", helper_invocation_id: "legacy-audit-helper", recorded_at: "2026-08-03T12:00:00.000Z" },
       payload: { decision: "accept-import-audit", reason: "Reviewed retained history and canonical reruns" },
     }).bytes);
-    const resolved = await runDurableGate(services.value.dependencies, { ...auditInput, signal: new AbortController().signal });
+    const resolved = await resolveInterfaceGateDecision(services.value.dependencies, services.value.authority, opened.value.gate_id);
     expect(resolved).toMatchObject({ ok: true, value: { state: { value: { phase_instance: "design", approvals: expect.any(Array) } } } });
 
     git(root, "add", "--", `.archflow/tasks/${task}`);
@@ -315,7 +316,7 @@ describe("bundled legacy upgrade workflow", () => {
     const envelope = await computeCallEnvelope(services.value, { tool: "archflow_state", input: draftCall });
     if (!envelope.ok) throw new Error(JSON.stringify(envelope));
     const jumped = await invokeState(root, { ...draftCall, input_fingerprint: envelope.value.input_fingerprint }, "legacy-jump");
-    expect(jumped, JSON.stringify(jumped)).toMatchObject({ kind: "project-result", result: { ok: true, value: { status: "running" } } });
+    expect(jumped, JSON.stringify(jumped)).toMatchObject({ ok: true, value: { status: "running" } });
     const afterJump = await createProductionServices({ working_directory: root, task_id: task, operation: parseSafeCode("legacy-after-jump") });
     if (!afterJump.ok || afterJump.value.state === undefined) throw new Error("jumped state unavailable");
     expect(afterJump.value.state.value).toMatchObject({

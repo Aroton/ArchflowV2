@@ -32,7 +32,7 @@ This is a strict TypeScript/Node package whose conventions are enforced primaril
 | Internal locals/options | camelCase | `runnerMaxBuffer`, `materializedSpec` |
 | Error codes | upper snake case | `STATE_CONFLICT`, `PATH_ESCAPE` |
 | Error owners/actions | lowercase; actions are kebab-case | `"state"`, `"reread-and-retry-intent"` |
-| MCP tools | `archflow_` plus snake_case | `archflow_state`, `archflow_counter_review` |
+| MCP tools | `archflow_` plus snake_case | `archflow_status`, `archflow_apply` |
 | Tests/files | behavior or exported-symbol name, never workflow phase number | `state-transaction.test.ts`, `local-cli-stdin-discipline.test.ts` |
 
 Vocabulary is represented as a constant tuple plus a derived union, not a TypeScript `enum`. For example, `PIPELINE_STEPS` and `PipelineStep` in `src/contracts/vocabulary.ts` let Zod, JSON Schema generation/validation, and TypeScript share one vocabulary.

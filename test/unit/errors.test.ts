@@ -6,7 +6,10 @@ const D = "a".repeat(64);
 
 describe("error registries", () => {
   it("are exhaustive, separate, and recursively immutable at definition boundaries", () => {
-    expect(Object.keys(PROJECT_ERROR_DEFINITIONS)).toHaveLength(55);
+    expect(Object.keys(PROJECT_ERROR_DEFINITIONS)).toHaveLength(53);
+    // The staged-request kinds retired with the local staging path.
+    expect(Object.keys(PROJECT_ERROR_DEFINITIONS)).not.toContain("STAGED_REQUEST_NOT_FOUND");
+    expect(Object.keys(PROJECT_ERROR_DEFINITIONS)).not.toContain("STAGED_REQUEST_MISMATCH");
     expect(Object.keys(PROTOCOL_ERROR_DEFINITIONS)).toEqual(["TOOL_NOT_FOUND", "TOOL_DISABLED", "UNSUPPORTED_PROTOCOL", "INITIALIZATION_REPEATED"]);
     expect(Object.keys(PROJECT_ERROR_DEFINITIONS).some((code) => Object.hasOwn(PROTOCOL_ERROR_DEFINITIONS, code))).toBe(false);
     expect(Object.isFrozen(PROJECT_ERROR_DEFINITIONS)).toBe(true);

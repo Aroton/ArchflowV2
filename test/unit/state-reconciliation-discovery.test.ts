@@ -171,6 +171,52 @@ describe("discoverReconciliationInput", () => {
     if (discovered.ok) expect(reconcileCurrentAuthority(discovered.value)).toEqual({ classification: "consistent", findings: [] });
   });
 
+  it("names adoption-sourced projections unrestorable when the worktree copy is gone", async () => {
+    const h = await harness();
+    const path = parseRepositoryPathClaim("tracked.txt");
+    const reference = {
+      phase_instance: PHASE, step: "produce", result_digest: D("7"), result_id: parseSafeId("result-1"),
+      input_fingerprint: D("2"),
+    } as TaskStateV1["authoritative_results"][number];
+    const current = h.state({
+      revision: parseSafeInteger(6),
+      authoritative_results: [reference],
+      baseline_adoptions: [{
+        gate_id: parsePathSafeId("gate-baseline"),
+        adopted_at_revision: parseSafeInteger(5),
+        adopted_projections: [{ path, content_digest: D("c") }],
+      }],
+    });
+    rmSync(join(h.root, "tracked.txt"));
+    const dependencies = {
+      ...h.services.dependencies,
+      load_retained_manifest: async () => ({
+        schema_version: "1" as const, ok: true as const,
+        value: {
+          manifest: { value: {
+            outputs: [{ path, path_class: "repository-source", operation: "modify" }],
+            projections: [{ path, content_digest: D("a") }],
+            accounting: { measured_at_revision: 4 },
+          } },
+        } as never,
+      }),
+    };
+    const discovered = await discoverReconciliationInput(dependencies, h.services.authority, canonicalDocument(current));
+    expect(discovered).toMatchObject({
+      ok: true,
+      value: {
+        unrestorable_paths: [path],
+        recorded_projections: [{ path, content_digest: D("c") }],
+        current_projections: [],
+      },
+    });
+    if (discovered.ok) {
+      expect(reconcileCurrentAuthority(discovered.value).findings).toContainEqual(
+        expect.objectContaining({ kind: "projection-mismatch", path, restore_unavailable: true }),
+      );
+    }
+  });
+
   it("uses the newest manifest generation when phases record the same projection path", async () => {
     const h = await harness();
     const path = parseRepositoryPathClaim("tracked.txt");
@@ -204,6 +250,177 @@ describe("discoverReconciliationInput", () => {
         recorded_projections: [{ path, content_digest: currentDigest }],
         current_projections: [{ path, content_digest: currentDigest }],
       },
+    });
+  });
+
+  it("retires an older presence projection when a newer manifest declares the path deleted", async () => {
+    const h = await harness();
+    const path = parseRepositoryPathClaim("retired.txt");
+    const older = {
+      phase_instance: "design", step: "produce", result_digest: D("7"), result_id: parseSafeId("older"),
+      input_fingerprint: D("2"),
+    } as TaskStateV1["authoritative_results"][number];
+    const newer = {
+      phase_instance: PHASE, step: "produce", result_digest: D("8"), result_id: parseSafeId("newer"),
+      input_fingerprint: D("2"),
+    } as TaskStateV1["authoritative_results"][number];
+    const dependencies = {
+      ...h.services.dependencies,
+      load_retained_manifest: async (reference: typeof older) => ({
+        schema_version: "1" as const, ok: true as const,
+        value: { manifest: { value: reference.result_id === older.result_id ? {
+          outputs: [{ path, path_class: "repository-source", operation: "modify" }],
+          projections: [{ path, content_digest: D("a") }],
+          accounting: { measured_at_revision: 3 },
+        } : {
+          outputs: [{ path, path_class: "repository-source", operation: "delete" }],
+          projections: [],
+          accounting: { measured_at_revision: 5 },
+        } } } as never,
+      }),
+    };
+
+    // `retired.txt` exists in no manifest's projections as present anymore and in no worktree:
+    // under a presence-only union this wedge reported projection-mismatch demanding restored bytes.
+    const discovered = await discoverReconciliationInput(
+      dependencies, h.services.authority,
+      canonicalDocument(h.state({ authoritative_results: [older, newer] })),
+    );
+    expect(discovered).toMatchObject({
+      ok: true,
+      value: { recorded_projections: [], current_projections: [] },
+    });
+    if (!discovered.ok) return;
+    expect(reconcileCurrentAuthority(discovered.value)).toEqual({ classification: "consistent", findings: [] });
+  });
+
+  it("keeps a newer presence projection over an older declared absence", async () => {
+    const h = await harness();
+    const path = parseRepositoryPathClaim("tracked.txt");
+    const presentDigest = sha256Bytes(Buffer.from("root\n"));
+    const older = {
+      phase_instance: "design", step: "produce", result_digest: D("7"), result_id: parseSafeId("older"),
+      input_fingerprint: D("2"),
+    } as TaskStateV1["authoritative_results"][number];
+    const newer = {
+      phase_instance: PHASE, step: "produce", result_digest: D("8"), result_id: parseSafeId("newer"),
+      input_fingerprint: D("2"),
+    } as TaskStateV1["authoritative_results"][number];
+    const dependencies = {
+      ...h.services.dependencies,
+      load_retained_manifest: async (reference: typeof older) => ({
+        schema_version: "1" as const, ok: true as const,
+        value: { manifest: { value: reference.result_id === older.result_id ? {
+          outputs: [{ path, path_class: "repository-source", operation: "delete" }],
+          projections: [],
+          accounting: { measured_at_revision: 3 },
+        } : {
+          outputs: [{ path, path_class: "repository-source", operation: "modify" }],
+          projections: [{ path, content_digest: presentDigest }],
+          accounting: { measured_at_revision: 5 },
+        } } } as never,
+      }),
+    };
+
+    const discovered = await discoverReconciliationInput(
+      dependencies, h.services.authority,
+      canonicalDocument(h.state({ authoritative_results: [older, newer] })),
+    );
+    expect(discovered).toMatchObject({
+      ok: true,
+      value: {
+        recorded_projections: [{ path, content_digest: presentDigest }],
+        current_projections: [{ path, content_digest: presentDigest }],
+      },
+    });
+    if (!discovered.ok) return;
+    expect(reconcileCurrentAuthority(discovered.value)).toEqual({ classification: "consistent", findings: [] });
+  });
+
+  it("retires rename sources like declared deletes", async () => {
+    const h = await harness();
+    const previousPath = parseRepositoryPathClaim("legacy-name.txt");
+    const renamedPath = parseRepositoryPathClaim("renamed.txt");
+    const renamedDigest = sha256Bytes(Buffer.from("moved\n"));
+    writeFileSync(join(h.root, "renamed.txt"), "moved\n");
+    const older = {
+      phase_instance: "design", step: "produce", result_digest: D("7"), result_id: parseSafeId("older"),
+      input_fingerprint: D("2"),
+    } as TaskStateV1["authoritative_results"][number];
+    const newer = {
+      phase_instance: PHASE, step: "produce", result_digest: D("8"), result_id: parseSafeId("newer"),
+      input_fingerprint: D("2"),
+    } as TaskStateV1["authoritative_results"][number];
+    const dependencies = {
+      ...h.services.dependencies,
+      load_retained_manifest: async (reference: typeof older) => ({
+        schema_version: "1" as const, ok: true as const,
+        value: { manifest: { value: reference.result_id === older.result_id ? {
+          outputs: [{ path: previousPath, path_class: "repository-source", operation: "modify" }],
+          projections: [{ path: previousPath, content_digest: D("a") }],
+          accounting: { measured_at_revision: 3 },
+        } : {
+          outputs: [{ path: renamedPath, path_class: "repository-source", operation: "rename", previous_path: previousPath }],
+          projections: [{ path: renamedPath, content_digest: renamedDigest }],
+          accounting: { measured_at_revision: 5 },
+        } } } as never,
+      }),
+    };
+
+    const discovered = await discoverReconciliationInput(
+      dependencies, h.services.authority,
+      canonicalDocument(h.state({ authoritative_results: [older, newer] })),
+    );
+    expect(discovered).toMatchObject({
+      ok: true,
+      value: {
+        recorded_projections: [{ path: renamedPath, content_digest: renamedDigest }],
+        current_projections: [{ path: renamedPath, content_digest: renamedDigest }],
+      },
+    });
+    if (!discovered.ok) return;
+    expect(reconcileCurrentAuthority(discovered.value)).toEqual({ classification: "consistent", findings: [] });
+  });
+
+  it("keeps strict projection drift for paths no manifest ever declared absent", async () => {
+    const h = await harness();
+    const path = parseRepositoryPathClaim("tracked.txt");
+    const reference = {
+      phase_instance: PHASE, step: "produce", result_digest: D("7"), result_id: parseSafeId("result-1"),
+      input_fingerprint: D("2"),
+    } as TaskStateV1["authoritative_results"][number];
+    const dependencies = {
+      ...h.services.dependencies,
+      load_retained_manifest: async () => ({
+        schema_version: "1" as const, ok: true as const,
+        value: { manifest: { value: {
+          outputs: [{ path, path_class: "repository-source", operation: "modify" }],
+          projections: [{ path, content_digest: D("a") }],
+          accounting: { measured_at_revision: 4 },
+        } } } as never,
+      }),
+    };
+
+    const discovered = await discoverReconciliationInput(
+      dependencies, h.services.authority,
+      canonicalDocument(h.state({ authoritative_results: [reference] })),
+    );
+    expect(discovered).toMatchObject({
+      ok: true,
+      value: {
+        recorded_projections: [{ path, content_digest: D("a") }],
+        current_projections: [{ path, content_digest: sha256Bytes(Buffer.from("root\n")) }],
+      },
+    });
+    if (!discovered.ok) return;
+    expect(reconcileCurrentAuthority(discovered.value)).toEqual({
+      classification: "reconciliation-required",
+      findings: [expect.objectContaining({
+        kind: "projection-mismatch",
+        path,
+        recorded_digest: D("a"),
+        observed_digest: sha256Bytes(Buffer.from("root\n")),
+      })],
     });
   });
 });

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -360,5 +360,57 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     const triageBoundaryB = await h.status(invocation);
     expect(triageBoundaryB).toEqual(triageBoundaryA);
     expect(triageBoundaryB).toEqual(reviewed.value);
+  });
+
+  it("recovers an unrestorable missing projection by re-declaring the deletion in a fresh produce", async () => {
+    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-unrestorable", label: "semantic-impl-unrestorable" });
+    workspaces.push(workspace);
+    restorers.push(installSemanticReviewStub(workspace.root, [[]]));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, view } = await consumeImplementationHandoff(workspace, h);
+    const work = writeClientImplementationWork(workspace, view, {
+      source: SOURCE_BYTES, notes: IMPLEMENTATION_NOTES, transcript: TRANSCRIPT_BYTES,
+    });
+    // A declared deletion needs the file present in the produce base commit, so the client
+    // commits the source before the first terminal produce — as an earlier phase would have.
+    execFileSync("git", ["add", "--", SOURCE_PATH], { cwd: workspace.root });
+    execFileSync("git", ["-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid",
+      "commit", "-q", "-m", "Commit the reviewed source for the journey", `--`, SOURCE_PATH], { cwd: workspace.root });
+
+    const submitted = await h.apply(invocation, view, implementationSubmission(workspace, work.outputs));
+    expect(submitted.ok, JSON.stringify(submitted)).toBe(true);
+    if (!submitted.ok) return;
+
+    // Post-produce drift opens the baseline adoption decision; the human keeps current bytes,
+    // which records digests only — the exact shape that later leaves a deletion unrestorable.
+    writeFileSync(work.sourceAbsolute, SOURCE_BYTES_REVISED);
+    const drifted = await h.status(invocation);
+    expect(drifted.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    const opened = await h.apply(invocation, drifted, { kind: "gate-summary", summary: "The drifted source should stay as the new baseline." });
+    expect(opened.ok, JSON.stringify(opened)).toBe(true);
+    if (!opened.ok) return;
+    const adopted = await h.apply(invocation, opened.value, {
+      kind: "decision", choice: "keep-current-versions", reason: "The current bytes are the reviewed ones.",
+    });
+    expect(adopted.ok, JSON.stringify(adopted)).toBe(true);
+
+    // The adopted file is then deleted: restore is impossible and adoption needs current bytes.
+    // The workflow must offer the produce re-entry that re-declares the deletion, not block.
+    rmSync(work.sourceAbsolute);
+    const wedged = await h.status(invocation);
+    expect(wedged.condition).not.toBe("blocked");
+    expect(wedged.next_action).toMatchObject({ kind: "begin-work" });
+
+    const reopened = await h.apply(invocation, wedged);
+    expect(reopened.ok, JSON.stringify(reopened)).toBe(true);
+    if (!reopened.ok) return;
+    expect(reopened.value.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
+
+    const redeclared = await h.apply(invocation, reopened.value, implementationSubmission(workspace, work.outputs));
+    expect(redeclared.ok, JSON.stringify(redeclared)).toBe(true);
+    if (!redeclared.ok) return;
+    expect(redeclared.value.condition).not.toBe("blocked");
+    expect(redeclared.value.next_action.kind).toBe("review");
+    expect(existsSync(work.sourceAbsolute)).toBe(false);
   });
 });

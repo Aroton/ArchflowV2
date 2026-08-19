@@ -165,18 +165,10 @@ export const stateInputSchema = z.object({
   if (input.human_revision !== undefined && (input.step !== "produce" || input.status !== "succeeded")) context.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
 }) as unknown as z.ZodType<StateInput>;
 /**
- * The staged-request reference arm shared by every tool input union. It is structurally disjoint
- * from every full-payload arm: strictness rejects any full payload (extra fields), and every full
- * payload requires `expected_revision`/`input_fingerprint`, which the reference lacks — so
- * classification between the arms is never ambiguous. The server resolves the reference to the
- * staged file `build-request` wrote and refuses on any digest disagreement.
+ * The staged-request reference arm shared by every tool input union retired with the local
+ * `build-request` staging path: only the full-payload arms remain, and the server dispatches
+ * none of them — the names stay durable-record vocabulary for existing state.
  */
-const stagedReferenceInput = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, request_digest: digest }).strict();
-export type StagedRequestReference = Readonly<{ schema_version: "1"; task_id: TaskSlug; intent_id: PathSafeId; request_digest: Sha256Digest }>;
-export function parseStagedRequestReference(value: unknown): StagedRequestReference {
-  assertPlainJson(value, "staged request reference");
-  return deepFreeze(stagedReferenceInput.parse(structuredClone(value))) as StagedRequestReference;
-}
 export const counterReviewInputSchema = z.object({ ...common, artifact_path: taskPathClaimV1Schema }).strict();
 const humanGateChoiceSchema = z.object({ choice: text, reason: text }).strict();
 export const gateInputSchema = z.object({ ...common, phase_instance: phase, summary: text, subject_digest: digest, current_evidence: z.unknown(), kind: z.enum(GATE_KINDS), context: z.unknown(), preview_digest: digest.optional(), decision: humanGateChoiceSchema.optional() }).strict().superRefine((input, context) => {
@@ -231,22 +223,6 @@ export function parseToolCall<K extends ToolName>(name: K, value: unknown): Extr
   parsedCalls.add(call);
   return call;
 }
-export type ClassifiedToolCallInput<K extends ToolName> =
-  | Readonly<{ kind: "call"; call: Extract<ParsedToolCall, { name: K }> }>
-  | Readonly<{ kind: "staged-reference"; tool: K; reference: StagedRequestReference }>;
-/**
- * The union entry for every tool input: a full payload parses to an authentic call, and the
- * staged-request reference arm is returned for the server to rehydrate from durable staging.
- */
-export function classifyToolCallInput<K extends ToolName>(name: K, value: unknown): ClassifiedToolCallInput<K> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) throw new TypeError("unknown tool");
-  assertPlainJson(value, `${name} input`);
-  const reference = stagedReferenceInput.safeParse(structuredClone(value));
-  if (reference.success) {
-    return Object.freeze({ kind: "staged-reference", tool: name, reference: deepFreeze(reference.data) as StagedRequestReference });
-  }
-  return Object.freeze({ kind: "call", call: parseToolCall(name, value) });
-}
 export type RequestIdentifiedToolCall<K extends ToolName = ToolName> = ParsedToolCall<K> & { readonly request_digest: Sha256Digest };
 export function bindParsedToolCallRequest<K extends ToolName>(call: Extract<ParsedToolCall, { name: K }>, requestDigest: Sha256Digest): Extract<RequestIdentifiedToolCall, { name: K }> { if (!parsedCalls.has(call)) throw new TypeError("an authentic parsed tool call is required"); digest.parse(requestDigest); requestDigests.set(call, requestDigest); return call as Extract<RequestIdentifiedToolCall, { name: K }>; }
 
@@ -268,8 +244,7 @@ export const toolSuccessSchemas = {
 } as const;
 /**
  * The shared `mcp-tools.schema.json` leaf `$defs` the generator emits, keyed by committed def
- * name. The advertised catalogue in `src/mcp/tools.ts` reaches `integer` and `durableArtifact`
- * by pointer and the gate-input emission references the rest, so every name here is pinned.
+ * name. The gate-input emission references these by pointer, so every name here is pinned.
  * Registering these local instances keeps each use site a `#/$defs/<name>` reference instead of
  * an inline copy, mirroring the def layout the hand-written document established.
  */
@@ -282,7 +257,6 @@ export const mcpToolsSchemaDefs: Readonly<Record<string, z.ZodType>> = Object.fr
   durableArtifact,
   rule,
   scope,
-  stagedReference: stagedReferenceInput,
 });
 function successFor<K extends ToolName>(call: Extract<ParsedToolCall, { name: K }>, value: unknown): ToolSuccess<K> {
   const parsed = toolSuccessSchemas[call.name].parse(value) as ToolSuccess<K>;

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parsePathSafeId, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import type { EvidenceAssessment } from "../../src/review/fixed-point.js";
 import { deriveNextAction, type NextActionInput } from "../../src/state/next-action.js";
@@ -93,6 +94,39 @@ const reconciliationCases: readonly [ReconciliationFinding, string][] = [
 ];
 
 describe("deriveNextAction", () => {
+  it("reopens the produce window when a missing projection has no retained bytes to restore", () => {
+    const unrestorable: ReconciliationFinding = {
+      kind: "projection-mismatch", path: parseRepositoryPathClaim("src/gone.ts"),
+      recorded_digest: D("a"), restore_unavailable: true, next_action: "open-baseline-adoption-gate",
+    };
+    const result = deriveNextAction(input({
+      state: state({ step: "produce", status: "succeeded" }),
+      reconciliation_findings: [unrestorable],
+    }));
+    expect(result.code).toBe("run-step");
+    expect(result.step).toBe("produce");
+  });
+
+  it("keeps the restore route for a missing projection with retained bytes", () => {
+    const restorable: ReconciliationFinding = {
+      kind: "projection-mismatch", path: parseRepositoryPathClaim("src/gone.ts"), recorded_digest: D("a"), next_action: "open-baseline-adoption-gate",
+    };
+    expect(deriveNextAction(input({
+      state: state({ step: "produce", status: "succeeded" }),
+      reconciliation_findings: [restorable],
+    })).code).toBe("inspect-state");
+  });
+
+  it("does not reopen produce for unrestorable drift outside a closed produce window", () => {
+    const unrestorable: ReconciliationFinding = {
+      kind: "projection-mismatch", path: parseRepositoryPathClaim("src/gone.ts"), recorded_digest: D("a"), restore_unavailable: true, next_action: "open-baseline-adoption-gate",
+    };
+    expect(deriveNextAction(input({
+      state: state({ step: "adjudicate", status: "succeeded" }),
+      reconciliation_findings: [unrestorable],
+    })).code).toBe("inspect-state");
+  });
+
   it("covers every closed next-action code", () => {
     const gate = {
       gate_id: parsePathSafeId("gate-1"), gate_kind: "artifact-approval" as const,

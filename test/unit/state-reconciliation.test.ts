@@ -39,6 +39,34 @@ describe("reconcileCurrentAuthority", () => {
     expect(result.findings).toEqual([expect.objectContaining({ kind: "projection-mismatch", recorded_digest: D("a"), observed_digest: D("b") })]);
   });
 
+  it("marks a missing projection unrestorable only when discovery named it and no bytes remain", () => {
+    const retained = parseRepositoryPathClaim("src/retained.ts");
+    const adopted = parseRepositoryPathClaim("src/adopted.ts");
+    const result = reconcileCurrentAuthority({
+      state: canonicalDocument(STATE),
+      recorded_projections: [
+        { path: retained, content_digest: D("a") },
+        { path: adopted, content_digest: D("b") },
+      ],
+      current_projections: [],
+      active_heads: {},
+      unrestorable_paths: [adopted],
+    });
+    expect(result.findings).toEqual([
+      expect.objectContaining({ kind: "projection-mismatch", path: retained }),
+      expect.objectContaining({ kind: "projection-mismatch", path: adopted, restore_unavailable: true }),
+    ]);
+    const digestDrift = reconcileCurrentAuthority({
+      state: canonicalDocument(STATE),
+      recorded_projections: [{ path: adopted, content_digest: D("b") }],
+      current_projections: [{ path: adopted, content_digest: D("c") }],
+      active_heads: {},
+      unrestorable_paths: [adopted],
+    });
+    expect(digestDrift.findings).toEqual([expect.objectContaining({ kind: "projection-mismatch" })]);
+    expect(digestDrift.findings[0]).not.toHaveProperty("restore_unavailable");
+  });
+
   it("compares an active gate head", () => {
     const gate = { gate_id: parsePathSafeId("gate-1"), gate_kind: "commit-authorization" as const, subject_digest: D("a"), context_digest: D("b"), frozen_state_digest: D("f"), opened_at_revision: parseSafeInteger(4) };
     const state = { ...STATE, open_gate: gate };

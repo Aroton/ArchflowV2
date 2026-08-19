@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { canonicalDocument } from "../../src/contracts/canonical.js";
-import { authenticWaiverOriginArchive } from "../../src/mcp/handlers/waiver.js";
+import { authenticWaiverOriginArchive } from "../../src/state/waiver-origin.js";
 
 const D = (character: string) => character.repeat(64);
 

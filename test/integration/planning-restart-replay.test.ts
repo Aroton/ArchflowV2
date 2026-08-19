@@ -9,7 +9,6 @@ import { parseSafeCode, parseSafeInteger } from "../../src/contracts/evidence.js
 import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import { computeCallEnvelope } from "../../src/local/call-envelope.js";
 import { handleState } from "../../src/mcp/handlers/state.js";
-import { ADVERTISED_TOOL_CATALOGUE } from "../../src/mcp/tools.js";
 import { createProductionServices, type ProductionServices } from "../../src/state/production.js";
 import { composeRequest } from "../../src/state/request-composition.js";
 import { installPlanningRestartAskAppend } from "../../src/state/phase-documents.js";
@@ -221,18 +220,4 @@ describe("planning restart replay boundaries", () => {
     expect(after.value.state.value.planned_final_phase).toBeUndefined();
   });
 
-  it("keeps the advertised state input at a plain object root with restart fields visible", () => {
-    const schema = ADVERTISED_TOOL_CATALOGUE.find((tool) => tool.name === "archflow_state")!.inputSchema;
-    expect(schema.type).toBe("object");
-    expect(schema).not.toHaveProperty("$ref");
-    expect(schema).not.toHaveProperty("oneOf");
-    expect(schema).not.toHaveProperty("anyOf");
-    expect(schema).not.toHaveProperty("allOf");
-    expect(schema.properties).toMatchObject({
-      operation: {},
-      target_phase_instance: {},
-      reason: {},
-      ask_base_digest: {},
-    });
-  });
 });
