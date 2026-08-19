@@ -1,6 +1,0 @@
-{
-  "human_revision": {
-    "classification": "significant",
-    "rationale": "The revision changes the workflow ownership model: it removes the proposed all-phases autonomous run, retains separate human kickoffs and public skills for PRD, design, each phase design, and each phase implementation, and confines near-total automation to the currently invoked phase-design or phase-implementation step. This changes public interfaces, authority boundaries, success criteria, and verification, so prior review evidence cannot be reused."
-  }
-}
