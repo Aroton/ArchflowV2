@@ -1,4 +1,4 @@
-import { spawnSync, execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -7,19 +7,13 @@ import { fileURLToPath } from "node:url";
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import { parseSafeCode, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
-import { parseToolCall } from "../../src/contracts/mcp-tools.js";
+import { parseTaskSlug } from "../../src/contracts/evidence.js";
 import { LOCAL_COMMANDS, LOCAL_COMMAND_CONTRACTS } from "../../src/local/commands.js";
-import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
-import { stageTaskInitialization } from "../../src/init/task-initialization.js";
-import { runStateInitialization } from "../../src/state/initialization.js";
-import { createProductionServices } from "../../src/state/production.js";
 
 const TIMEOUT = 30_000;
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const roots: string[] = [];
 const task = parseTaskSlug("payload-input");
-const digest = (character: string) => parseSha256Digest(character.repeat(64));
 let bundleRoot = "";
 let localBundle = "";
 
@@ -50,10 +44,6 @@ beforeAll(async () => {
 afterAll(async () => { if (bundleRoot !== "") await rm(bundleRoot, { recursive: true, force: true }); });
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
-function git(root: string, ...argv: string[]): string {
-  return execFileSync("git", argv, { cwd: root, env: gitEnvironment, encoding: "utf8" }).trim();
-}
-
 function cliStdin(root: string, command: string, raw?: string): Readonly<{ status: number | null; stdout: string; stderr: string; value?: any }> {
   const result = spawnSync(process.execPath, [localBundle, command, "--task", task], {
     cwd: root, env: gitEnvironment, input: raw, encoding: "utf8", timeout: TIMEOUT,
@@ -74,61 +64,21 @@ function cliFile(root: string, command: string, raw: string): Readonly<{ status:
     ...(result.stdout === "" ? {} : { value: JSON.parse(result.stdout) }) };
 }
 
-async function repository() {
-  const root = mkdtempSync(join(tmpdir(), "archflow-payload-repo-"));
-  roots.push(root);
-  git(root, "-c", "init.defaultBranch=main", "init", "-q");
-  writeFileSync(join(root, "README.md"), "repository\n");
-  git(root, "add", "--", "README.md");
-  git(root, "commit", "-q", "-m", "root");
-  const scaffolded = await scaffoldRepositoryAssets({ working_directory: root });
-  if (!scaffolded.ok) throw new Error(scaffolded.error.code);
-  git(root, "add", "--", ".gitattributes", ".archflow/workflow.yaml", ".archflow/constitution", ".archflow/config.yaml");
-  git(root, "commit", "-q", "-m", "policy");
-  const staged = await stageTaskInitialization({ working_directory: root, task_id: task });
-  if (!staged.ok) throw new Error(staged.error.code);
-  return { root, initialization: staged.value };
-}
-
 // The interactive-TTY guard (isTTY → fail fast) is not reachable from spawned children, which
 // always receive pipes; the empty-stdin cases below assert the same "no payload provided" message.
 describe("payload input modes and error taxonomy", () => {
-  it("accepts --input <file> for envelope and build-request", async () => {
-    const fixture = await repository();
-    const placeholder = digest("0");
-    const initialInput = {
-      schema_version: "1", task_id: task, intent_id: "initialize-file-mode", expected_revision: 0,
-      input_fingerprint: placeholder, phase_instance: "prd", step: "produce", status: "running",
-      artifact: fixture.initialization,
-    };
-    const first = cliFile(fixture.root, "envelope", JSON.stringify({ tool: "archflow_state", input: initialInput }));
-    expect(first).toMatchObject({ status: 0, value: { ok: true, value: { tool: "archflow_state" } } });
-
-    const bootstrap = await createProductionServices({
-      working_directory: fixture.root, task_id: task, operation: parseSafeCode("cli-file-bootstrap"),
-    });
-    if (!bootstrap.ok || bootstrap.value.state !== undefined) throw new Error("bootstrap services unavailable");
-    const initialized = await runStateInitialization(bootstrap.value.dependencies, {
-      authority: bootstrap.value.authority,
-      call: parseToolCall("archflow_state", { ...initialInput, input_fingerprint: first.value.value.input_fingerprint }),
-    });
-    expect(initialized.ok).toBe(true);
-    if (!initialized.ok) return;
-
-    writeFileSync(join(bootstrap.value.authority.task_root, "prd.md"), "# PRD\n");
-    const built = cliFile(fixture.root, "build-request", JSON.stringify({
-      intent_id: "produce-file-mode", kind: "produce",
-      document: { document_path: "prd.md", declared_inputs: [] },
-    }));
-    expect(built).toMatchObject({ status: 0, value: { ok: true, value: { tool: "archflow_state" } } });
-    expect(built.value.value.request.input.artifact).toMatchObject({ artifact_kind: "document", document_path: "prd.md" });
+  it("accepts --input <file> for a payload command", () => {
+    const value = { z: [2, 1], a: "value" };
+    const hashed = cliFile(repositoryRoot, "hash", JSON.stringify(value));
+    expect(hashed).toMatchObject({ status: 0 });
+    expect(typeof hashed.value.digest).toBe("string");
   }, TIMEOUT);
 
   it("names the command's input contract when stdin is empty and --input is absent", () => {
-    const result = cliStdin(repositoryRoot, "envelope", "");
+    const result = cliStdin(repositoryRoot, "validate", "");
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("envelope requires an input payload (--input <json-file> or stdin)");
-    expect(result.stderr).toContain('expected: {"tool":<tool name>,"input":<tool input>}');
+    expect(result.stderr).toContain("validate requires an input payload (--input <json-file> or stdin)");
+    expect(result.stderr).toContain(`expected: ${LOCAL_COMMAND_CONTRACTS.validate.payload}`);
   });
 
   it("names render's expected payload shape when called without input", () => {
@@ -155,27 +105,14 @@ describe("payload input modes and error taxonomy", () => {
   });
 
   it("reports invalid JSON with its source for stdin payloads", () => {
-    const result = cliStdin(repositoryRoot, "envelope", "{");
+    const result = cliStdin(repositoryRoot, "hash", "{");
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("invalid JSON payload from stdin");
   });
 
   it("reports invalid JSON with its source for --input payloads", () => {
-    const result = cliFile(repositoryRoot, "envelope", "{");
+    const result = cliFile(repositoryRoot, "hash", "{");
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(`invalid JSON payload from ${result.path}`);
   });
-
-  it("states the expected envelope wrapper for missing and unrecognized tools", async () => {
-    const fixture = await repository();
-    const missing = cliStdin(fixture.root, "envelope", JSON.stringify({ input: {} }));
-    expect(missing.status).toBe(1);
-    expect(missing.stderr).toContain('call envelope input is missing "tool"');
-    expect(missing.stderr).toContain('{"tool": <one of archflow_state');
-
-    const unrecognized = cliStdin(fixture.root, "envelope", JSON.stringify({ tool: "archflow_bogus", input: {} }));
-    expect(unrecognized.status).toBe(1);
-    expect(unrecognized.stderr).toContain('call envelope tool "archflow_bogus" is not recognized');
-    expect(unrecognized.stderr).toContain("archflow_state");
-  }, TIMEOUT);
 });

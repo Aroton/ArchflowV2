@@ -32,18 +32,16 @@ export * from "./durable-implementation-output.js";
 export * from "./durable-result-manifest.js";
 export * from "./durable-gate.js";
 export * from "./durable.js";
+export * from "./semantic-workflow.js";
 export {
   TOOL_DEFINITIONS,
   bindParsedToolCallRequest,
-  classifyToolCallInput,
   correlateProjectResult,
-  parseStagedRequestReference,
   parseToolCall,
   validateProjectFailureStructure,
   validateProjectResultStructure,
 } from "./mcp-tools.js";
 export type {
-  ClassifiedToolCallInput,
   CommonToolInput,
   CounterReviewConstitutionOutcome,
   CounterReviewInput,
@@ -51,7 +49,6 @@ export type {
   GateInput,
   GateSuccess,
   HumanRevisionDeclaration,
-  PlanningRestartDeclaration,
   ParsedToolCall,
   ParsedToolInput,
   ResultExpectation,
@@ -66,7 +63,6 @@ export type {
   ToolDefinition,
   ToolInput,
   ToolSuccess,
-  StagedRequestReference,
   WaiverDecisionBinding,
   WaiverInput,
   WaiverSuccess,

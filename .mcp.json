@@ -2,8 +2,8 @@
   "mcpServers": {
     "archflow": {
       "type": "stdio",
-      "command": "archflow-mcp",
-      "args": [],
+      "command": "bash",
+      "args": ["scripts/dev-mcp-launcher.sh"],
       "env": {},
       "timeout": 3600000
     }

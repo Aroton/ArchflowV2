@@ -11,14 +11,14 @@ import { parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contra
 import { computeInputFingerprint } from "../../src/contracts/fingerprints.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { parseRepositoryPathClaim, parseTaskPathClaim } from "../../src/contracts/path-claims.js";
-import { createToolHandlers } from "../../src/mcp/handlers/index.js";
-import { createToolBoundary } from "../../src/mcp/server.js";
-import { runBuildRequest } from "../../src/local/build-request.js";
+import { handleState } from "../../src/mcp/handlers/state.js";
+import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import { createGitRunner, preflightGit } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
 import { resolvePinnedConstitution } from "../../src/state/constitution.js";
 import { createProductionServices } from "../../src/state/production.js";
+import { composeRequest } from "../../src/state/request-composition.js";
 import { deriveDeclaredSnapshotDigest } from "../../src/state/snapshots.js";
 import { cleanupTemporaryRepositories, createTempRepository } from "../helpers/temp-repository.js";
 
@@ -163,11 +163,9 @@ Preserve explicit human review gates.
 describe("state handler durable integration", () => {
   it("installs a real document result and returns the byte-identical outcome on exact replay", async () => {
     const h = await fixture();
-    const boundary = createToolBoundary(createToolHandlers());
-    const first = await boundary.invoke("archflow_state", h.args, h.invocation("state-first"));
+    const first = await handleState(parseToolCall("archflow_state", h.args), h.invocation("state-first"));
     expect(first).toMatchObject({
-      kind: "project-result",
-      result: { schema_version: "1", ok: true, value: { path: "state.json", revision: 5, status: "succeeded" } },
+      schema_version: "1", ok: true, value: { path: "state.json", revision: 5, status: "succeeded" },
     });
     const stateAfterFirst = readFileSync(h.authority.state.absolute);
     const committed = parseCanonicalDocument<TaskStateV1>(stateAfterFirst, "committed state").value;
@@ -175,31 +173,12 @@ describe("state handler durable integration", () => {
     const reference = committed.authoritative_results[0]!;
     expect(existsSync(join(h.authority.task_root, "authority", "results", `${reference.result_digest}.json`))).toBe(true);
 
-    const replay = await boundary.invoke(
-      "archflow_state",
-      { ...h.args, expected_revision: 5 },
+    const replay = await handleState(
+      parseToolCall("archflow_state", { ...h.args, expected_revision: 5 }),
       h.invocation("state-replay"),
     );
     expect(replay).toEqual(first);
     expect(readFileSync(h.authority.state.absolute)).toEqual(stateAfterFirst);
-  });
-
-  it("maps a non-plain handler result to INTERNAL_ERROR at the authenticated boundary", async () => {
-    const h = await fixture();
-    const boundary = createToolBoundary({
-      archflow_state: () => ({
-        schema_version: "1",
-        ok: true,
-        get value() {
-          return { path: "state.json", revision: 5, status: "succeeded" };
-        },
-      }),
-    });
-    const outcome = await boundary.invoke("archflow_state", h.args, h.invocation("state-non-plain"));
-    expect(outcome).toMatchObject({
-      kind: "project-result",
-      result: { schema_version: "1", ok: false, error: { code: "INTERNAL_ERROR" } },
-    });
   });
 
   it("restarts directly to PRD without requiring a current implementation result", async () => {
@@ -211,6 +190,9 @@ describe("state handler durable integration", () => {
     });
     if (!services.ok || services.value.state === undefined) throw new Error("restart services unavailable");
 
+    // The PRD restart appends the human request to the pinned ask record before landing.
+    writeFileSync(join(h.authority.task_root, "ask.md"), "# Original ask\n");
+
     // Documents the abandoned forward work left behind. The milestone commit that follows the
     // redone planning covers the whole task directory, so leaving these here would sweep unreviewed
     // documents into it and make that commit unprovable — with no way to retry it.
@@ -219,21 +201,20 @@ describe("state handler durable integration", () => {
     writeFileSync(join(phaseRoot, "design.md"), "# Superseded phase design\n");
     writeFileSync(join(phaseRoot, "impl-notes.md"), "# Superseded attempt\n");
 
-    const composed = await runBuildRequest(services.value, {
-      kind: "restart",
+    const composed = await composeRequest(services.value, {
+      kind: "planning-restart",
       intent_id: "restart-to-prd",
-      target_phase_instance: "prd",
+      invocation: { skill: "archflow-prd", intent: "reopen" },
       reason: "Implementation exposed incorrect product requirements.",
     });
     expect(composed.ok).toBe(true);
     if (!composed.ok) return;
-    const boundary = createToolBoundary(createToolHandlers());
-    const first = await boundary.invoke(
-      "archflow_state", composed.value.staged!.reference, h.invocation("restart-to-prd-call"),
+    const first = await handleState(
+      parseToolCall("archflow_state", composed.value.envelope.request.input),
+      h.invocation("restart-to-prd-call"),
     );
     expect(first).toMatchObject({
-      kind: "project-result",
-      result: { ok: true, value: { revision: 5, status: "running" } },
+      ok: true, value: { revision: 5, status: "running" },
     });
     const restarted = parseCanonicalDocument<TaskStateV1>(
       readFileSync(h.authority.state.absolute), "restarted state",
@@ -244,10 +225,10 @@ describe("state handler durable integration", () => {
       status: "running",
       attempt: 1,
       restart_history: [{
-        from_phase_instance: PHASE,
-        to_phase_instance: "prd",
+        source_phase_instance: PHASE,
+        target_phase_instance: "prd",
         reason: "Implementation exposed incorrect product requirements.",
-        provenance: {
+        human_provenance: {
           assurance: "connected-request-trace",
           channel: "connected-host",
           connection_id: "handler-state-replay-connection",
@@ -257,9 +238,11 @@ describe("state handler durable integration", () => {
     });
     expect(existsSync(join(phaseRoot, "design.md"))).toBe(false);
     expect(existsSync(join(phaseRoot, "impl-notes.md"))).toBe(false);
-    const replay = await boundary.invoke(
-      "archflow_state",
-      { ...(composed.value.request.input as Record<string, unknown>), expected_revision: 5 },
+    const replay = await handleState(
+      parseToolCall("archflow_state", {
+        ...(composed.value.envelope.request.input as Record<string, unknown>),
+        expected_revision: 5,
+      }),
       h.invocation("restart-to-prd-replay"),
     );
     expect(replay).toEqual(first);

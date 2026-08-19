@@ -55,6 +55,12 @@ All working files live in `.archflow/`. Tracked in git during development to pre
 
 Installs the shared skills to `~/.claude/skills/` and `~/.agents/skills/` for global availability.
 
+### Installation safety — hard rule
+
+**Never run `install.sh`, and never otherwise install or update the skills, launchers, or bundle in the shared machine-global locations (`~/.claude/skills/`, `~/.agents/skills/`, `~/.archflow/bundle/`, `~/.local/bin/`), unless the user explicitly asks for an install in the current conversation.** These locations are machine-global: an install from a feature branch immediately changes behavior for other people and for other sessions working from different branches or checkouts. The user saying "install" once does not authorize later installs.
+
+Work on a branch stays inside the repo: the working tree, the tracked `dist/` payload, and scratch/temp directories used by tests. Anything that would place this checkout's bytes into a shared location — `install.sh`, copying bundles into `~/.archflow/`, overwriting launchers — requires an explicit per-action request. If a workflow document (for example a phase design's self-cutover step) instructs an install, treat this rule as overriding it and surface the conflict to the user instead of installing.
+
 ## Documentation
 
 Human-readable system documentation lives in `docs/` using a caps-naming convention: **caps-named files (`OVERVIEW.md`, `COMPLEXITY.md`, `section/FILE.md`) are the maintained documentation set**. The set is produced and refreshed by `/archflow-explore`; each page carries an `**Explored:** <date> · **Commit:** <short-hash> · **Covers:** <paths>` stamp so a refresh can diff since the stamped commit and re-explore only pages whose covered code changed. `docs/validation/` is separate: point-in-time validation evidence and benchmark data (read by `test/real-host/review-benchmark.test.ts`), not kept current by explore. The maintained set:
@@ -69,9 +75,9 @@ docs/
   LIMITATIONS.md           # honest reliability/security boundaries
   workflow/LIFECYCLE.md    # phase graph, pipeline, gates, trust boundaries
   workflow/SKILLS.md       # the nine skills
-  mcp/SERVER.md            # MCP server, four tools, protocol plumbing
+  mcp/SERVER.md            # MCP server, two semantic tools, protocol plumbing
   mcp/DISPATCH.md          # child reviewer dispatch, sandbox, repo views
-  cli/COMMANDS.md          # archflow-local surface, build-request, degraded mode
+  cli/COMMANDS.md          # archflow-local adapters, upgrade adoption, degraded mode
   review/COUNTER-REVIEW.md # dispatch envelopes, pinned context, review flow, constitution review, waivers
   contracts/CONTRACTS.md   # canonical JSON, digests, trust brands
   state/DURABLE-STATE.md   # .archflow layout, transactions, state machine, git boundary

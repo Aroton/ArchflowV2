@@ -10,11 +10,10 @@ import { parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contra
 import { computeInputFingerprint } from "../../src/contracts/fingerprints.js";
 import { encodePhaseInstance, type PhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
-import { resolveRepositoryViewCommit } from "../../src/mcp/handlers/counter-review.js";
-import { createToolHandlers } from "../../src/mcp/handlers/index.js";
+import { handleCounterReview, resolveRepositoryViewCommit } from "../../src/mcp/handlers/counter-review.js";
+import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import { REPOSITORY_VIEW_NOTE } from "../../src/review/envelopes.js";
 import { canonicalRubricForPhaseKind } from "../../src/review/rubrics.js";
-import { createToolBoundary } from "../../src/mcp/server.js";
 import { createGitRunner, preflightGit } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
@@ -282,16 +281,14 @@ describe("counter-review pinned context integration", () => {
     const h = await fixture({ phase: "prd", declareAsk: true });
     activateFixtureCli(h);
 
-    const boundary = createToolBoundary(createToolHandlers());
-    const result = await boundary.invoke("archflow_counter_review", h.args, h.invocation("ask-pinned"));
+    const result = await handleCounterReview(parseToolCall("archflow_counter_review", h.args), h.invocation("ask-pinned"));
     expect(result).toMatchObject({
-      kind: "project-result",
-      result: { schema_version: "1", ok: true, value: {
+      schema_version: "1", ok: true, value: {
         verdict: "pass",
         // With zero active rules the server itself decides the constitution review is not run,
         // and the merged success says so explicitly instead of omitting the field.
         constitution: { status: "not-run", reason: "no-active-constitution-rules" },
-      } },
+      },
     });
     const envelope = capturedEnvelope(h.envelopePath);
     expect(envelope.context).toEqual([{
@@ -325,18 +322,15 @@ Future tasks should use this revised policy.
     h.repository.git("add", "--", ".archflow/constitution/00-process.md");
     h.repository.git("commit", "-m", "revise future policy");
 
-    const boundary = createToolBoundary(createToolHandlers());
-    const result = await boundary.invoke(
-      "archflow_counter_review",
-      h.args,
+    const result = await handleCounterReview(
+      parseToolCall("archflow_counter_review", h.args),
       h.invocation("task-branch-policy-edit"),
     );
     expect(result).toMatchObject({
-      kind: "project-result",
-      result: { schema_version: "1", ok: true, value: {
+      schema_version: "1", ok: true, value: {
         verdict: "pass",
         constitution: { status: "not-run", reason: "no-active-constitution-rules" },
-      } },
+      },
     });
     expect(capturedEnvelope(h.envelopePath).workspace).toMatchObject({
       kind: "read-only-repository-checkout",
@@ -357,14 +351,10 @@ Future tasks should use this revised policy.
     activateFixtureCli(h);
     h.repository.write(`.archflow/tasks/${TASK}/ask.md`, "Rewritten after produce.\n");
 
-    const boundary = createToolBoundary(createToolHandlers());
-    const result = await boundary.invoke("archflow_counter_review", h.args, h.invocation("ask-drifted"));
+    const result = await handleCounterReview(parseToolCall("archflow_counter_review", h.args), h.invocation("ask-drifted"));
     expect(result).toMatchObject({
-      kind: "project-result",
-      result: {
-        ok: false,
-        error: { code: "STATE_INVALID", diagnostic: { parameters: { issue_code: "user-ask-not-current" } } },
-      },
+      ok: false,
+      error: { code: "STATE_INVALID", diagnostic: { parameters: { issue_code: "user-ask-not-current" } } },
     });
     expect(() => readFileSync(h.envelopePath)).toThrow();
   });
@@ -373,12 +363,8 @@ Future tasks should use this revised policy.
     const h = await fixture({ phase: "prd", declareAsk: false });
     activateFixtureCli(h);
 
-    const boundary = createToolBoundary(createToolHandlers());
-    const result = await boundary.invoke("archflow_counter_review", h.args, h.invocation("ask-undeclared"));
-    expect(result).toMatchObject({
-      kind: "project-result",
-      result: { schema_version: "1", ok: true, value: { verdict: "pass" } },
-    });
+    const result = await handleCounterReview(parseToolCall("archflow_counter_review", h.args), h.invocation("ask-undeclared"));
+    expect(result).toMatchObject({ schema_version: "1", ok: true, value: { verdict: "pass" } });
     const context = capturedEnvelope(h.envelopePath).context;
     expect(context).toHaveLength(1);
     expect(context[0]).toMatchObject({ kind: "user-ask", label: "ask.md", status: "unavailable" });
@@ -388,12 +374,8 @@ Future tasks should use this revised policy.
     const h = await fixture({ phase: "design", approveUpstream: true });
     activateFixtureCli(h);
 
-    const boundary = createToolBoundary(createToolHandlers());
-    const result = await boundary.invoke("archflow_counter_review", h.args, h.invocation("upstream-pinned"));
-    expect(result).toMatchObject({
-      kind: "project-result",
-      result: { schema_version: "1", ok: true, value: { verdict: "pass" } },
-    });
+    const result = await handleCounterReview(parseToolCall("archflow_counter_review", h.args), h.invocation("upstream-pinned"));
+    expect(result).toMatchObject({ schema_version: "1", ok: true, value: { verdict: "pass" } });
     const envelope = capturedEnvelope(h.envelopePath);
     expect(envelope.workspace).toMatchObject({
       kind: "read-only-repository-checkout",
@@ -420,14 +402,10 @@ Future tasks should use this revised policy.
     const h = await fixture({ phase: "design", approveUpstream: false });
     activateFixtureCli(h);
 
-    const boundary = createToolBoundary(createToolHandlers());
-    const result = await boundary.invoke("archflow_counter_review", h.args, h.invocation("upstream-unapproved"));
+    const result = await handleCounterReview(parseToolCall("archflow_counter_review", h.args), h.invocation("upstream-unapproved"));
     expect(result).toMatchObject({
-      kind: "project-result",
-      result: {
-        ok: false,
-        error: { code: "STATE_INVALID", diagnostic: { parameters: { issue_code: "upstream-approval-missing" } } },
-      },
+      ok: false,
+      error: { code: "STATE_INVALID", diagnostic: { parameters: { issue_code: "upstream-approval-missing" } } },
     });
     expect(() => readFileSync(h.envelopePath)).toThrow();
   });

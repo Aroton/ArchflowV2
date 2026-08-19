@@ -191,6 +191,7 @@ async function harness(): Promise<Harness> {
         throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: true, collision: false });
       }
     },
+    replaceTaskAsk: async () => { throw new TypeError("unexpected task ask replacement"); },
     removeGateInterface: async () => undefined,
   };
   value.dependencies = {

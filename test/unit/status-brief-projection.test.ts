@@ -51,8 +51,6 @@ function fullStatus(overrides: Record<string, unknown> = {}): TaskStatusV1 {
       human_required: true,
       gate_id: "gate-1",
       gate_kind: "artifact-approval",
-      request: { tool: "archflow_gate", input: { summary: "placeholder request body" } },
-      guidance: "Verbose generated guidance that routine status must omit.",
     },
     ...overrides,
   } as unknown as TaskStatusV1;
@@ -81,10 +79,6 @@ describe("projectBriefStatus", () => {
       human_required: true,
     });
     expect(brief.next_action).not.toHaveProperty("gate_id");
-    expect(brief.next_action).not.toHaveProperty("request");
-    expect(brief.next_action).not.toHaveProperty("guidance");
-    expect(JSON.stringify(brief)).not.toContain("placeholder request body");
-    expect(JSON.stringify(brief)).not.toContain("Verbose generated guidance");
   });
 
   it("projects only an open gate's conversational presentation", () => {

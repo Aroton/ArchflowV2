@@ -19,10 +19,11 @@ import { createAtomicWriter } from "../../src/state/atomic.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
 import { assessCurrentEvidence } from "../../src/review/fixed-point.js";
 import { deriveCurrentEvidenceSet, type RetainedEvidenceSet } from "../../src/state/evidence-results.js";
-import { loadAuthenticatedGateApproval, runDurableGate } from "../../src/state/gates.js";
+import { loadAuthenticatedGateApproval, openDurableGate, resolveDurableGate, uniqueMaterialDriftUpstream } from "../../src/state/gates.js";
 import { createTaskLock } from "../../src/state/lock.js";
 import { readIntentReceipt, readTaskConfig, readTaskState } from "../../src/state/read.js";
 import { planStateTransition } from "../../src/state/transitions.js";
+import { resolveInterfaceGateDecision } from "../helpers/resolve-interface-gate.js";
 import { resolvedConstitutionFixture } from "../helpers/resolved-constitution.js";
 
 const D = (value: string) => parseSha256Digest(value.repeat(64));
@@ -66,6 +67,16 @@ const EFFECT_CASES = [
 ] as const satisfies readonly Readonly<{ kind: GateKind; context: object; allowed: readonly string[]; payload: Readonly<{ decision: string } & Record<string, unknown>>; effect: GateEffect }>[];
 
 describe("durable gate decisions", () => {
+  it("rejects one affected digest claimed by conflicting producer phases", () => {
+    const digest = D("a");
+    const subject = (phase: string) => ({
+      artifact_digest: digest,
+      artifact: { phase_instance: phase },
+    }) as never;
+    expect(uniqueMaterialDriftUpstream([subject("design"), subject("phase-design-1")], digest)).toBeUndefined();
+    expect(uniqueMaterialDriftUpstream([subject("design"), subject("design")], digest)).toBeDefined();
+  });
+
   it("maps every decision-effect arm to its movement outcome", () => {
     expect(new Set(EFFECT_CASES.map(({ payload }) => payload.decision)).size).toBe(14);
     for (const entry of EFFECT_CASES) {
@@ -73,7 +84,7 @@ describe("durable gate decisions", () => {
     }
   });
 
-  it("leaves an aborted wait pending and resumes through archive, receipt, state, and cleanup", async () => {
+  it("resolves an opened gate through archive, receipt, state, and cleanup", async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "archflow-gate-service-"))); roots.push(root);
     const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null", GIT_AUTHOR_NAME: "ArchFlow Test", GIT_AUTHOR_EMAIL: "test@example.invalid", GIT_COMMITTER_NAME: "ArchFlow Test", GIT_COMMITTER_EMAIL: "test@example.invalid" };
     execFileSync("git", ["-c", "init.defaultBranch=main", "init", "-q"], { cwd: root, env });
@@ -130,9 +141,8 @@ describe("durable gate decisions", () => {
     ])).current_evidence_set;
     const lifecycle = { authority, expected_revision: initial.revision, intent_id: "intent-1" as never, request_digest: D("b"), input_fingerprint: inputFingerprint, phase_instance: initial.phase_instance, summary: "Approve", subject_digest: D("c"), current_evidence: currentEvidence, kind: "constitution-review" as const, context: reviewContext };
     const lifecycleGate = computeGateId({ task_identity_digest: authority.task_identity_digest, intent_id: lifecycle.intent_id, request_digest: lifecycle.request_digest });
-    const aborted = new AbortController(); aborted.abort();
-    const first = await runDurableGate(dependencies, { ...lifecycle, signal: aborted.signal });
-    expect(first).toMatchObject({ ok: false, error: { code: "CANCELLED" } });
+    const opened = await openDurableGate(dependencies, lifecycle);
+    expect(opened.ok, opened.ok ? undefined : JSON.stringify(opened.error)).toBe(true);
     const pending = await readTaskState(authority.state); expect(pending).toMatchObject({ kind: "canonical", document: { value: { revision: 5, open_gate: { gate_id: lifecycleGate } } } });
     const lifecycleContextDigest = computeGateContextDigest("constitution-review", reviewContext);
     const gateWorkspace = join(authority.workspace_root, "cache", "gates");
@@ -143,7 +153,7 @@ describe("durable gate decisions", () => {
       human_provenance: provenance,
       payload: { decision: "approve", reason: "Reviewed" },
     }).bytes);
-    const resumed = await runDurableGate(dependencies, { ...lifecycle, signal: new AbortController().signal });
+    const resumed = await resolveInterfaceGateDecision(dependencies, authority, lifecycleGate, inputFingerprint);
     expect(resumed).toMatchObject({ ok: true, value: { replayed: false, effect: "advance", state: { value: { revision: 6, approvals: [{ gate_id: lifecycleGate }] } } } });
     expect(existsSync(join(taskRoot, "authority", "decisions", lifecycleGate, "decision.json"))).toBe(true);
     expect(existsSync(join(authority.workspace_root, "transient", "intents", "intent-1.json"))).toBe(false);
@@ -427,8 +437,8 @@ describe("durable gate decisions", () => {
         subject_digest: subjectDigest, current_evidence: evidence, kind, context: gateContext,
       } as const;
       const gate = computeGateId({ task_identity_digest: authority.task_identity_digest, intent_id: intentId, request_digest: requestDigest });
-      const aborted = new AbortController(); aborted.abort();
-      expect(await runDurableGate(dependencies, { ...base, signal: aborted.signal })).toMatchObject({ ok: false, error: { code: "CANCELLED" } });
+      const opened = await openDurableGate(dependencies, base);
+      expect(opened.ok, opened.ok ? undefined : JSON.stringify(opened.error)).toBe(true);
       const contextDigest = computeGateContextDigest(kind, gateContext as never);
       const gateWorkspace = join(authority.workspace_root, "cache", "gates");
       writeFileSync(join(gateWorkspace, "gate.decision"), canonicalDocument({
@@ -439,9 +449,9 @@ describe("durable gate decisions", () => {
           ? { decision: "approve", reason: "Reviewed" }
           : { decision: "authorize-commit", reason: "Reviewed" },
       }).bytes);
-      const result = await runDurableGate(dependencies, { ...base, signal: new AbortController().signal });
       if (expectedIssue !== undefined) {
-        expect(result).toMatchObject({
+        const refused = await resolveDurableGate(dependencies, authority, gate, inputFingerprint);
+        expect(refused).toMatchObject({
           ok: false,
           error: { code: "STATE_INVALID", diagnostic: { parameters: { issue_code: expectedIssue } } },
         });
@@ -459,14 +469,15 @@ describe("durable gate decisions", () => {
             ...provenance, decision_event_id: `decision-${sequence}-revised`, helper_invocation_id: `helper-${sequence}-revised`,
           }, payload: { decision: "reject", reason: "Reject the malformed phase plan" },
         }).bytes);
-        const recovered = await runDurableGate(dependencies, { ...base, signal: new AbortController().signal });
+        const recovered = await resolveInterfaceGateDecision(dependencies, authority, gate, inputFingerprint);
         expect(recovered, JSON.stringify(recovered)).toMatchObject({ ok: true, value: { effect: "non-advancing", replayed: false } });
         if (!recovered.ok || !("state" in recovered.value)) throw new Error("corrected gate did not resolve");
         current = recovered.value.state.value;
         expect(existsSync(archive)).toBe(true);
         return;
       }
-      expect(result.ok).toBe(true);
+      const result = await resolveInterfaceGateDecision(dependencies, authority, gate, inputFingerprint);
+      expect(result.ok, JSON.stringify(result)).toBe(true);
       if (!result.ok || !("state" in result.value)) throw new Error("gate did not resolve");
       current = result.value.state.value;
     };

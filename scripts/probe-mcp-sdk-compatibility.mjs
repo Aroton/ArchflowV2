@@ -108,7 +108,7 @@ assert.equal(specTypeSchemas.CallToolRequest.safeParse({
   jsonrpc: "2.0",
   id: 3,
   method: "tools/call",
-  params: { name: "archflow_state", arguments: {} }
+  params: { name: "archflow_status", arguments: {} }
 }).success, true);
 assert.equal(specTypeSchemas.CancelledNotification.safeParse({
   jsonrpc: "2.0",
@@ -141,7 +141,7 @@ server.setRequestHandler("tools/call", async () => {
     owner: "protocol",
     retryable: false,
     next_action: "enable-tool",
-    diagnostic: { tool: "archflow_state" }
+    diagnostic: { tool: "archflow_status" }
   });
 });
 await server.connect(transport);
@@ -201,7 +201,7 @@ transport.receive({
   jsonrpc: "2.0",
   id: 3,
   method: "tools/call",
-  params: { name: "archflow_state", arguments: {} }
+  params: { name: "archflow_status", arguments: {} }
 });
 await waitFor(() => transport.sent.length === 3, "tools/call ProtocolError response");
 assert.equal(
@@ -275,7 +275,7 @@ async function initialized(probe, id = "init") {
     jsonrpc: "2.0",
     id: 2,
     method: "tools/call",
-    params: { name: "archflow_state", arguments: "bad" }
+    params: { name: "archflow_status", arguments: "bad" }
   });
   await waitFor(() => probe.transport.sent.length === 2, "non-object arguments rejection");
   assert.equal(probe.transport.sent[1].id, 2);
@@ -295,7 +295,7 @@ async function initialized(probe, id = "init") {
     jsonrpc: "2.0",
     id: 4,
     method: "tools/call",
-    params: { name: "archflow_state", arguments: {}, extraKey: true }
+    params: { name: "archflow_status", arguments: {}, extraKey: true }
   });
   await waitFor(() => probe.transport.sent.length === 4, "loose params acceptance");
   assert.ok(Object.hasOwn(probe.transport.sent[3], "result"), "extra params keys must stay handler-reachable");
@@ -356,7 +356,7 @@ async function initialized(probe, id = "init") {
     jsonrpc: "2.0",
     id: 5,
     method: "tools/call",
-    params: { name: "archflow_state", arguments: {} }
+    params: { name: "archflow_status", arguments: {} }
   });
   await waitFor(() => started, "tools/call handler start");
   probe.transport.receive({

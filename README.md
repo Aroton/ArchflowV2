@@ -182,7 +182,7 @@ ArchFlow keeps tracked workflow authority and ignored local runtime data togethe
         decisions/<gate-id>/        # State-referenced requests and decisions
   runtime/                          # Entire ignored, reconstructible workspace
     tasks/my-feature/
-      transient/                    # Staged requests, receipts, transaction lock
+      transient/                    # Intent receipts, transaction lock
       cache/                        # Payloads, rendered reviews/gates, verification, imports
       diagnostics/attempts/         # Current-phase failed dispatch evidence
 ```

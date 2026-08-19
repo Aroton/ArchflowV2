@@ -10,8 +10,8 @@ import { parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contra
 import { computeInputFingerprint } from "../../src/contracts/fingerprints.js";
 import { encodePhaseInstance } from "../../src/contracts/phase-instance.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
-import { createToolHandlers } from "../../src/mcp/handlers/index.js";
-import { createToolBoundary } from "../../src/mcp/server.js";
+import { handleCounterReview } from "../../src/mcp/handlers/counter-review.js";
+import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import { canonicalRubricForPhaseKind } from "../../src/review/rubrics.js";
 import { createGitRunner, preflightGit } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
@@ -237,12 +237,17 @@ describe("counter-review handler replay integration", () => {
     process.env.PATH = `${h.bin}${delimiter}${saved.PATH ?? dirname(process.execPath)}`;
     process.env.HOME = h.sourceHome;
     try {
-      const boundary = createToolBoundary(createToolHandlers());
-      const first = await boundary.invoke("archflow_counter_review", h.args, h.invocation("counter-first"));
+      // The counter-review handler is an internal service invoked by the semantic apply
+      // handler; it is driven here directly, as its only retained caller drives it.
+      const first = await handleCounterReview(
+        parseToolCall("archflow_counter_review", h.args),
+        h.invocation("counter-first"),
+      );
       // The one call ran both children and reports the evaluated constitution outcome inline.
       expect(first, JSON.stringify(first)).toMatchObject({
-        kind: "project-result",
-        result: { schema_version: "1", ok: true, value: {
+        schema_version: "1",
+        ok: true,
+        value: {
           verdict: "pass",
           blocking_count: 0,
           constitution: {
@@ -252,7 +257,7 @@ describe("counter-review handler replay integration", () => {
             triggers: [],
           },
           revision: 8,
-        } },
+        },
       });
       expect(callCount(h.countPath)).toBe(2);
       // Both evidence results were installed by the one transaction: durable state moved a
@@ -268,9 +273,8 @@ describe("counter-review handler replay integration", () => {
         .map((reference) => reference.step)
         .sort()).toEqual(["adjudicate", "counter_review"]);
 
-      const replay = await boundary.invoke(
-        "archflow_counter_review",
-        { ...h.args, expected_revision: 8 },
+      const replay = await handleCounterReview(
+        parseToolCall("archflow_counter_review", { ...h.args, expected_revision: 8 }),
         h.invocation("counter-replay"),
       );
       expect(replay).toEqual(first);

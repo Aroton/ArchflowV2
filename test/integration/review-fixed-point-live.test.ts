@@ -16,9 +16,9 @@ import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { parseRepositoryPathClaim, parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { currentEvidenceSetRef } from "../../src/contracts/trust.js";
-import { createToolHandlers } from "../../src/mcp/handlers/index.js";
+import { handleCounterReview } from "../../src/mcp/handlers/counter-review.js";
+import { handleState } from "../../src/mcp/handlers/state.js";
 import { prepareDocumentResult } from "../../src/mcp/handlers/state-results.js";
-import { createToolBoundary } from "../../src/mcp/server.js";
 import { runCounterReview } from "../../src/review/counter-review.js";
 import { assessCurrentEvidence } from "../../src/review/fixed-point.js";
 import { canonicalRubricForPhaseKind } from "../../src/review/rubrics.js";
@@ -26,7 +26,8 @@ import { resolvePinnedConstitution } from "../../src/state/constitution.js";
 import { buildDocumentArtifact } from "../../src/state/document-artifact.js";
 import { buildImplementationOutput } from "../../src/state/implementation-manifest.js";
 import { createProductionServices, type ProductionServices } from "../../src/state/production.js";
-import { openDurableGate, runDurableGate } from "../../src/state/gates.js";
+import { openDurableGate } from "../../src/state/gates.js";
+import { resolveInterfaceGateDecision } from "../helpers/resolve-interface-gate.js";
 import { ensurePayloadParent, ensureResultDirectory } from "../../src/state/layout.js";
 import { installSnapshot } from "../../src/state/snapshots.js";
 import { readTaskConfig } from "../../src/state/read.js";
@@ -147,17 +148,18 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
     }).initialize({
       client: { name: "claude-code", version: "2.1.220" }, host: "claude", protocol_version: "2025-11-25",
     });
+    // The retained internal state service — the same handle the semantic handler drives — invoked
+    // directly, since the tool boundary no longer dispatches the durable vocabulary by name.
     const invokeState = async (input: unknown, id: string) => {
-      const outcome = await createToolBoundary(createToolHandlers()).invoke(
-        "archflow_state",
-        input,
+      const result = await handleState(
+        parseToolCall("archflow_state", input),
         createInvocationContext(connection, {
           invocation_id: id,
           transport_metadata: { request_id: `${id}-request`, operation: "tools/call" },
         }, new AbortController().signal),
       );
-      if (outcome.kind !== "project-result" || !outcome.result.ok) throw new Error(JSON.stringify(outcome));
-      return outcome.result.value;
+      if (!result.ok) throw new Error(JSON.stringify(result));
+      return result.value;
     };
     const build = async (
       services: ProductionServices,
@@ -288,9 +290,9 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
         },
         payload: { decision: "authorize-commit", reason: "Reviewed for handler completion proof" },
       }).bytes);
-      const resolved = await runDurableGate(currentServices.dependencies, {
-        ...input, signal: new AbortController().signal,
-      });
+      const resolved = await resolveInterfaceGateDecision(
+        currentServices.dependencies, currentServices.authority, opened.value.gate_id,
+      );
       if (!resolved.ok) throw new Error(JSON.stringify(resolved));
     };
 
@@ -493,7 +495,9 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
         human_provenance: { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: `upstream-decision-${index}`, helper_invocation_id: `upstream-helper-${index}`, recorded_at: "2026-08-03T12:00:00.000Z" },
         payload: { decision: "approve", reason: "Approved canonical retained upstream" },
       }).bytes);
-      const resolved = await runDurableGate(services.value.dependencies, { ...gateInput, signal: new AbortController().signal });
+      const resolved = await resolveInterfaceGateDecision(
+        services.value.dependencies, services.value.authority, opened.value.gate_id,
+      );
       if (!resolved.ok || !("state" in resolved.value)) throw new Error(JSON.stringify(resolved));
       approvalState = resolved.value.state.value;
     }
@@ -602,12 +606,15 @@ else {
     const connection = connectionContextFactory.captureStartup({
       connection_id: "live-pipeline", startup_repository_candidate: { working_directory: h.root },
     }).initialize({ client: { name: "claude-code", version: "2.1.220" }, host: "claude", protocol_version: "2025-11-25" });
-    const invoke = async (name: Parameters<ReturnType<typeof createToolBoundary>["invoke"]>[0], input: unknown, id: string) => {
-      const result = await createToolBoundary(createToolHandlers()).invoke(name, input, createInvocationContext(connection, {
+    const invoke = async (name: "archflow_state" | "archflow_counter_review", input: unknown, id: string) => {
+      const context = createInvocationContext(connection, {
         invocation_id: id, transport_metadata: { request_id: `${id}-request`, operation: "tools/call" },
-      }, new AbortController().signal));
-      if (result.kind !== "project-result" || !result.result.ok) throw new Error(JSON.stringify(result));
-      return result.result.value;
+      }, new AbortController().signal);
+      const result = name === "archflow_counter_review"
+        ? await handleCounterReview(parseToolCall("archflow_counter_review", input), context)
+        : await handleState(parseToolCall("archflow_state", input), context);
+      if (!result.ok) throw new Error(JSON.stringify(result));
+      return result.value;
     };
     try {
       await invoke("archflow_state", { ...produceTemplate.input, input_fingerprint: produceFingerprint, artifact: produceArtifact }, "produce");

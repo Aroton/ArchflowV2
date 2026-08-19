@@ -1,5 +1,7 @@
 import process from "node:process";
 
+import "./mcp/sdk-zod-initialization.js";
+
 import { runMcpProcess } from "./mcp/process-runner.js";
 import { startMcpRuntime } from "./mcp/sdk-adapter.js";
 import { createToolHandlers } from "./mcp/handlers/index.js";

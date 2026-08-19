@@ -8,7 +8,8 @@ import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { createProjectError, createProtocolError } from "../../src/contracts/errors.js";
+import { createProtocolError, describeValidationIssues } from "../../src/contracts/errors.js";
+import { parseArchFlowStatusInputV1 } from "../../src/contracts/semantic-workflow.js";
 import { runDispatchChild } from "../../src/dispatch/process.js";
 import { startMcpRuntime, type McpRuntimeHandle } from "../../src/mcp/sdk-adapter.js";
 import type { ToolHandlerRegistry } from "../../src/mcp/server.js";
@@ -131,25 +132,25 @@ async function complete(
   }
 }
 
-function projectFailure(issueCode: string): Record<string, unknown> {
-  return projectErrorResult({
-    schema_version: "1",
-    ok: false,
-    error: createProjectError("CONTRACT_INVALID", {
-      tool: "archflow_state",
-      issue_code: issueCode,
-    }),
-  } as const);
-}
-
 // Key order matches the pinned SDK's CallToolResult schema shape, which the
 // codec revalidation applies to every tools/call result on egress.
-function projectErrorResult(result: Readonly<Record<string, unknown>>): Record<string, unknown> {
+function toolResultFrame(result: Readonly<Record<string, unknown>>): Record<string, unknown> {
   return {
     content: [{ type: "text", text: JSON.stringify(result) }],
     structuredContent: result,
     isError: true,
   };
+}
+
+/** The exact CONTRACT_INVALID frame the boundary emits for an unparseable semantic input. */
+function semanticContractInvalidFrame(): Record<string, unknown> {
+  let issues: string[] | undefined;
+  try { parseArchFlowStatusInputV1(undefined); } catch (error) { issues = describeValidationIssues(error); }
+  return toolResultFrame({
+    schema_version: "1",
+    ok: false,
+    error: { code: "CONTRACT_INVALID", message: issues?.join("; ") ?? "The semantic tool input is invalid.", retryable: false },
+  });
 }
 
 beforeAll(async () => {
@@ -243,7 +244,7 @@ async function lifecycleRuntime(root: string): Promise<LifecycleRuntime> {
   });
   const fixture = new URL("../fixtures/dispatch/grandchild.mjs", import.meta.url);
   const handlers: ToolHandlerRegistry = {
-    archflow_state: async (_call, context) => runDispatchChild({
+    archflow_status: async (_input, context) => runDispatchChild({
       adapter: "codex-cli",
       command: process.execPath,
       argv: [fixture.pathname],
@@ -336,11 +337,19 @@ describe("bundled MCP stdio runtime", () => {
       const unknownError = createProtocolError("TOOL_NOT_FOUND", {
         tool_name_digest: createHash("sha256").update("unknown_tool").digest("hex"),
       });
-      const liveHandlerFailure = projectErrorResult({
-        schema_version: "1",
-        ok: false,
-        error: createProjectError("CONFIG_INVALID", { issue_code: "config-missing" }),
-      });
+      // The real registered handler answers a read-only status call for an uncreated task with
+      // the initialization-ready view — the semantic pair is live in the bundle, never disabled.
+      const missingTaskView = {
+        schema_version: "1", task_id: "task-1", condition: "ready",
+        headline: "Task initialization is ready", detail: "Create durable state for this task.",
+        resources: [],
+        next_action: { kind: "initialize-task", instruction: "Create the task from the exact user ask." },
+      };
+      const liveSemanticSuccess = {
+        content: [{ type: "text", text: JSON.stringify({ schema_version: "1", ok: true, value: missingTaskView }) }],
+        structuredContent: { schema_version: "1", ok: true, value: missingTaskView },
+        isError: false,
+      };
       // Non-object arguments are rejected by the pinned SDK's tools/call wire
       // schema; the validator prose below is that SDK's exact rejection shape.
       const sdkArgumentsRejection = [
@@ -360,9 +369,9 @@ describe("bundled MCP stdio runtime", () => {
         initialize.response,
         { jsonrpc: "2.0", id: "list-1", result: { tools: ADVERTISED_TOOL_CATALOGUE } },
         { jsonrpc: "2.0", id: "call-unknown", error: { code: -32001, message: "TOOL_NOT_FOUND", data: unknownError } },
-        { jsonrpc: "2.0", id: "call-missing", result: projectFailure("input-not-object") },
+        { jsonrpc: "2.0", id: "call-missing", result: semanticContractInvalidFrame() },
         { jsonrpc: "2.0", id: "call-non-object", error: { code: -32602, message: sdkArgumentsRejection } },
-        { jsonrpc: "2.0", id: "call-disabled", result: liveHandlerFailure },
+        { jsonrpc: "2.0", id: "call-disabled", result: liveSemanticSuccess },
       ].map(jsonLine).join("");
 
       expectExactBytes(Buffer.concat(runtime.stdout), Buffer.from(expected));
@@ -432,7 +441,7 @@ describe("MCP stdio dispatch lifecycle", () => {
         jsonrpc: "2.0",
         id: "dispatch-call",
         method: "tools/call",
-        params: { name: "archflow_state", arguments: calls.valid_disabled.params.arguments },
+        params: { name: "archflow_status", arguments: calls.valid_disabled.params.arguments },
       });
       const pids = await lifecyclePids(root);
       runtime.send({
@@ -456,7 +465,7 @@ describe("MCP stdio dispatch lifecycle", () => {
       jsonrpc: "2.0",
       id: "dispatch-call",
       method: "tools/call",
-      params: { name: "archflow_state", arguments: calls.valid_disabled.params.arguments },
+      params: { name: "archflow_status", arguments: calls.valid_disabled.params.arguments },
     });
     const pids = await lifecyclePids(root);
 

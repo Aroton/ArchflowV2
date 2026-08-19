@@ -14,7 +14,6 @@ import { serializedProjectErrorV1Schema } from "./schema-generation-errors.js";
 import type { GeneratedDefOverride, SchemaGenerationGroup } from "./schema-generation.js";
 
 const digest = mcpToolsSchemaDefs.digest as ZodType;
-const stagedReference = mcpToolsSchemaDefs.stagedReference as ZodType;
 
 /**
  * Structural mirror of `currentEvidenceSetRefSchema` in `trust.js`, built from this document's
@@ -29,10 +28,10 @@ const currentEvidence = z.object({ set_digest: digest, slots: requiredReviewSlot
 const failure = z.object({ schema_version: z.literal("1"), ok: z.literal(false), error: serializedProjectErrorV1Schema }).strict();
 
 /**
- * Per-tool input contract: the full payload first, then the staged-request reference arm —
- * `src/mcp/tools.ts` pins that order when it merges the branches into the advertised flat root.
+ * Per-tool input contract: the full payload. The staged-request reference arm retired with the
+ * local staging path; these contracts remain the internal durable request vocabulary.
  */
-const inputContract = (fullPayload: ZodType): ZodType => z.union([fullPayload, stagedReference]);
+const inputContract = (fullPayload: ZodType): ZodType => fullPayload;
 const resultContract = (success: ZodType): ZodType =>
   z.union([failure, z.object({ schema_version: z.literal("1"), ok: z.literal(true), value: success }).strict()]);
 
@@ -72,8 +71,8 @@ const gateContractContext = (arm: string): GeneratedDefOverride =>
  * the per-kind context schema — a composition `gateInputSchema` (one strict object whose
  * kind/context agreement lives in a `superRefine` on `parseGateContext`) has no emission for.
  * The nine `gate-contract#/$defs/<arm>/properties/context` pointer paths are the published
- * spellings the advertised catalogue resolves, so they are preserved byte-for-byte from the
- * hand-written document.
+ * spellings the durable gate contract pins, preserved byte-for-byte from the hand-written
+ * document.
  */
 const gateInputEmission: GeneratedDefOverride = {
   oneOf: [
@@ -146,7 +145,6 @@ const gateInputEmission: GeneratedDefOverride = {
         },
       ],
     },
-    { $ref: "#/$defs/stagedReference" },
   ],
 };
 

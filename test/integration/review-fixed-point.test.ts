@@ -58,6 +58,7 @@ import {
   discoverWorktree,
   type RootBoundGitRunner,
 } from "../../src/repository/identity.js";
+import { serializeDispatch } from "../../src/dispatch/cli.js";
 import {
   parseWorkspacePathClaim,
   type ResolvedPath,
@@ -770,6 +771,7 @@ async function commitCounter(
   subject: Sha256Digest,
   fingerprint: Sha256Digest,
   finding: "accepted" | "blocker" | "clean",
+  dispatchAlreadySerialized = false,
 ) {
   await enterStep(
     h,
@@ -819,6 +821,9 @@ async function commitCounter(
       }
       return prepared;
     },
+    ...(dispatchAlreadySerialized
+      ? { serialize_dispatch: async <T>(operation: () => Promise<T>) => operation() }
+      : {}),
   }, {
     authority: h.authority,
     call,
@@ -1083,6 +1088,32 @@ async function assessment(
 }
 
 describe("durable review fixed point", () => {
+  it("completes review dispatches when the semantic action already owns the outer FIFO", async () => {
+    const h = await fixture();
+    const subject = canonicalJsonDigest({ artifact: "semantic-outer-fifo" });
+    const fingerprint = computeInputFingerprint(fingerprintSubject(0));
+
+    const result = await serializeDispatch(() => commitCounter(
+      h,
+      h.dependencies,
+      0,
+      subject,
+      fingerprint,
+      "clean",
+      true,
+    ));
+
+    expect(result.transaction.outcome).toMatchObject({
+      verdict: "pass",
+      constitution: { status: "evaluated", constitution: "pass" },
+    });
+    expect((await durableState(h.authority)).authoritative_results
+      .map((reference) => reference.step).sort()).toEqual([
+        "adjudicate",
+        "counter_review",
+      ]);
+  });
+
   it("restarts twice and advances only after the final clean merged review", async () => {
     const h = await fixture();
     let dependencies = h.dependencies;

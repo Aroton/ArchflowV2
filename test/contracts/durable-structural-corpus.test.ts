@@ -283,22 +283,32 @@ const restartWaiver = (gateId: string, fill: string): JsonObject => ({
 });
 const restartRecord = (restartId: string, fromPhase: string, targetPhase: string): JsonObject => ({
   restart_id: restartId,
-  from_phase_instance: fromPhase,
-  to_phase_instance: targetPhase,
+  source_phase_instance: fromPhase,
+  target_phase_instance: targetPhase,
   reason: "Planning authority required correction.",
   restarted_at_revision: 4,
   superseded_results: [restartResult("design", "a"), restartResult("phase-design-1", "b")],
   cleared_waivers: [restartWaiver("gate-a", "c"), restartWaiver("gate-b", "d")],
-  provenance: {
-    schema_version: "1",
-    actor_class: "human",
-    assurance: "connected-request-trace",
-    channel: "connected-host",
-    connection_id: "connection-1",
-    invocation_id: "invocation-1",
-    request_id_digest: "f".repeat(64),
-    request_digest: "e".repeat(64),
-  },
+  human_provenance: restartId === "restart-a"
+    ? {
+        schema_version: "1",
+        actor_class: "human",
+        assurance: "declared-local-trace",
+        channel: "archflow-local",
+        decision_event_id: `${restartId}-decision`,
+        helper_invocation_id: `${restartId}-helper`,
+        recorded_at: "2026-08-16T12:00:00.000Z",
+      }
+    : {
+        schema_version: "1",
+        actor_class: "human",
+        assurance: "connected-request-trace",
+        channel: "connected-host",
+        connection_id: "connection-1",
+        invocation_id: "invocation-1",
+        request_id_digest: "f".repeat(64),
+        request_digest: "e".repeat(64),
+      },
 });
 const taskStateRestartCollections: JsonObject = {
   ...taskStateWithoutOpenGate,
@@ -318,6 +328,7 @@ const taskStateBaselineAdoptionCollections: JsonObject = {
         { path: "src/alpha.ts", content_digest: "a".repeat(64) },
         { path: "src/beta.ts", content_digest: "b".repeat(64) },
       ],
+      adopted_absences: ["docs/retired-a.md", "docs/retired-b.md"],
     },
     {
       gate_id: "gate-adoption-b",
@@ -366,6 +377,7 @@ const DECLARED_SETS: readonly { readonly shape: string; readonly path: string; r
   { shape: "task-state", path: "restart_history.0.cleared_waivers", base: taskStateRestartCollections },
   { shape: "task-state", path: "baseline_adoptions", base: taskStateBaselineAdoptionCollections },
   { shape: "task-state", path: "baseline_adoptions.0.adopted_projections", base: taskStateBaselineAdoptionCollections },
+  { shape: "task-state", path: "baseline_adoptions.0.adopted_absences", base: taskStateBaselineAdoptionCollections },
   { shape: "legacy-import-initialization", path: "mapping" },
   { shape: "legacy-import-initialization", path: "staged_payload_refs" },
   { shape: "document-artifact", path: "declared_inputs" },
@@ -466,6 +478,7 @@ describe("no array in this phase is exempt from set ordering", () => {
         "task-state/properties/approvals",
         "task-state/properties/authoritative_results",
         "task-state/properties/baseline_adoptions",
+        "task-state/properties/baseline_adoptions/items/properties/adopted_absences",
         "task-state/properties/baseline_adoptions/items/properties/adopted_projections",
         "task-state/properties/human_revision_history",
         "task-state/properties/restart_history",

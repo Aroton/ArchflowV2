@@ -349,16 +349,152 @@
       ],
       "additionalProperties": false
     },
+    "planningRestartHumanProvenance": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "type": "string",
+              "const": "1"
+            },
+            "actor_class": {
+              "type": "string",
+              "const": "human"
+            },
+            "assurance": {
+              "type": "string",
+              "const": "declared-local-trace"
+            },
+            "channel": {
+              "type": "string",
+              "const": "connected-host"
+            },
+            "decision_event_id": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+            },
+            "connection_id": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+            },
+            "request_id_digest": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+            },
+            "recorded_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}(?:Z))$"
+            }
+          },
+          "required": [
+            "schema_version",
+            "actor_class",
+            "assurance",
+            "channel",
+            "decision_event_id",
+            "connection_id",
+            "request_id_digest",
+            "recorded_at"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "type": "string",
+              "const": "1"
+            },
+            "actor_class": {
+              "type": "string",
+              "const": "human"
+            },
+            "assurance": {
+              "type": "string",
+              "const": "declared-local-trace"
+            },
+            "channel": {
+              "type": "string",
+              "const": "archflow-local"
+            },
+            "decision_event_id": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+            },
+            "helper_invocation_id": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+            },
+            "recorded_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}(?:Z))$"
+            }
+          },
+          "required": [
+            "schema_version",
+            "actor_class",
+            "assurance",
+            "channel",
+            "decision_event_id",
+            "helper_invocation_id",
+            "recorded_at"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "type": "string",
+              "const": "1"
+            },
+            "actor_class": {
+              "type": "string",
+              "const": "human"
+            },
+            "assurance": {
+              "type": "string",
+              "const": "connected-request-trace"
+            },
+            "channel": {
+              "type": "string",
+              "const": "connected-host"
+            },
+            "connection_id": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+            },
+            "invocation_id": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+            },
+            "request_id_digest": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+            },
+            "request_digest": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+            }
+          },
+          "required": [
+            "schema_version",
+            "actor_class",
+            "assurance",
+            "channel",
+            "connection_id",
+            "invocation_id",
+            "request_id_digest",
+            "request_digest"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
     "planningRestartRecord": {
       "type": "object",
       "properties": {
         "restart_id": {
           "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
         },
-        "from_phase_instance": {
+        "source_phase_instance": {
           "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
         },
-        "to_phase_instance": {
+        "target_phase_instance": {
           "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
         },
         "reason": {
@@ -387,162 +523,19 @@
         "cleared_pending_human_revision": {
           "$ref": "#/$defs/pendingHumanRevision"
         },
-        "provenance": {
-          "anyOf": [
-            {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "schema_version": {
-                      "type": "string",
-                      "const": "1"
-                    },
-                    "actor_class": {
-                      "type": "string",
-                      "enum": [
-                        "human",
-                        "archforge"
-                      ]
-                    },
-                    "assurance": {
-                      "type": "string",
-                      "const": "declared-local-trace"
-                    },
-                    "decision_event_id": {
-                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
-                    },
-                    "recorded_at": {
-                      "type": "string",
-                      "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}(?:Z))$"
-                    },
-                    "channel": {
-                      "type": "string",
-                      "const": "connected-host"
-                    },
-                    "connection_id": {
-                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
-                    },
-                    "request_id_digest": {
-                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
-                    }
-                  },
-                  "required": [
-                    "schema_version",
-                    "actor_class",
-                    "assurance",
-                    "decision_event_id",
-                    "recorded_at",
-                    "channel",
-                    "connection_id",
-                    "request_id_digest"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "schema_version": {
-                      "type": "string",
-                      "const": "1"
-                    },
-                    "actor_class": {
-                      "type": "string",
-                      "enum": [
-                        "human",
-                        "archforge"
-                      ]
-                    },
-                    "assurance": {
-                      "type": "string",
-                      "const": "declared-local-trace"
-                    },
-                    "decision_event_id": {
-                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
-                    },
-                    "recorded_at": {
-                      "type": "string",
-                      "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}(?:Z))$"
-                    },
-                    "channel": {
-                      "type": "string",
-                      "const": "archflow-local"
-                    },
-                    "helper_invocation_id": {
-                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
-                    }
-                  },
-                  "required": [
-                    "schema_version",
-                    "actor_class",
-                    "assurance",
-                    "decision_event_id",
-                    "recorded_at",
-                    "channel",
-                    "helper_invocation_id"
-                  ],
-                  "additionalProperties": false
-                }
-              ]
-            },
-            {
-              "type": "object",
-              "properties": {
-                "schema_version": {
-                  "type": "string",
-                  "const": "1"
-                },
-                "actor_class": {
-                  "type": "string",
-                  "const": "human"
-                },
-                "assurance": {
-                  "type": "string",
-                  "const": "connected-request-trace"
-                },
-                "channel": {
-                  "type": "string",
-                  "const": "connected-host"
-                },
-                "connection_id": {
-                  "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
-                },
-                "invocation_id": {
-                  "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
-                },
-                "request_id_digest": {
-                  "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
-                },
-                "request_digest": {
-                  "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
-                }
-              },
-              "required": [
-                "schema_version",
-                "actor_class",
-                "assurance",
-                "channel",
-                "connection_id",
-                "invocation_id",
-                "request_id_digest",
-                "request_digest"
-              ],
-              "additionalProperties": false
-            }
-          ]
+        "human_provenance": {
+          "$ref": "#/$defs/planningRestartHumanProvenance"
         }
       },
       "required": [
         "restart_id",
-        "from_phase_instance",
-        "to_phase_instance",
+        "source_phase_instance",
+        "target_phase_instance",
         "reason",
         "restarted_at_revision",
         "superseded_results",
         "cleared_waivers",
-        "provenance"
+        "human_provenance"
       ],
       "additionalProperties": false
     },
@@ -762,6 +755,12 @@
                 "content_digest"
               ],
               "additionalProperties": false
+            }
+          },
+          "adopted_absences": {
+            "type": "array",
+            "items": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
             }
           }
         },

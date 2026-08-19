@@ -1,4 +1,5 @@
 import { createServer } from "vite";
+import { existsSync } from "node:fs";
 import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -144,9 +145,34 @@ try {
     }),
     read_state: read.readTaskState, read_config: read.readTaskConfig, read_receipt: read.readIntentReceipt,
   };
+  // The retired runDurableGate combined open, wait, resolve, and the advancing fallback in one
+  // call. The retained surface composes the same journey from exported services: open (which
+  // publishes the interface and releases the task lock), an orchestration-level wait for the
+  // human decision, the durable resolver (which archives the interface bytes and refuses to
+  // manufacture success receipts), and the direct settlement step that finishes an advancing
+  // decision. Nothing holds the task lock while the decision lands.
   const result = action.includes("open")
     ? await gates.openDurableGate(dependencies, input)
-    : await gates.runDurableGate(dependencies, { ...input, signal: new AbortController().signal });
+    : await (async () => {
+        const opened = await gates.openDurableGate(dependencies, input);
+        if (!opened.ok) return opened;
+        if (opened.value.replay === undefined) {
+          const decisionFile = `${authority.value.workspace_root}/cache/gates/gate.decision`;
+          const deadline = Date.now() + 10_000;
+          while (!existsSync(decisionFile)) {
+            if (Date.now() > deadline) throw new Error("timed out waiting for the gate decision interface");
+            await new Promise((resolve) => setTimeout(resolve, 25));
+          }
+        }
+        const resolved = await gates.resolveDurableGate(dependencies, authority.value, opened.value.gate_id, inputFingerprint);
+        if (resolved.ok || resolved.error.code !== "STATE_INVALID") return resolved;
+        const operation = evidence.parseSha256Digest("f".repeat(64));
+        return gates.settleDirectSemanticGateDecision(dependencies, {
+          authority: authority.value,
+          operation_digest: operation,
+          intent_id: evidence.parsePathSafeId(`afop-${operation}-decision-settle`),
+        });
+      })();
   process.send({ type: "result", result });
 } catch (error) {
   process.send({ type: "failed", message: error instanceof Error ? error.message : String(error), stack: error?.stack });

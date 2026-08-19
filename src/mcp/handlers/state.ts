@@ -1,6 +1,7 @@
 import type { InvocationContext } from "../../contracts/contexts.js";
 import { createProjectError, type ProjectResult } from "../../contracts/errors.js";
 import { canonicalJsonDigest, sha256Bytes } from "../../contracts/canonical.js";
+import { computeInputFingerprint } from "../../contracts/fingerprints.js";
 import { parseSafeId, parseSafeInteger } from "../../contracts/evidence.js";
 import {
   createInternalResultExpectation,
@@ -9,6 +10,7 @@ import {
   type ToolSuccess,
 } from "../../contracts/mcp-tools.js";
 import { parseTaskPathClaim } from "../../contracts/path-claims.js";
+import { resolveTaskPath } from "../../repository/paths.js";
 import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "../../state/gate-approvals.js";
 import { findLegacyImportResumePhase } from "../../state/legacy-import-resume.js";
 import {
@@ -31,6 +33,11 @@ import {
   type PreparedTransaction,
 } from "../../state/transaction.js";
 import { planStateTransition } from "../../state/transitions.js";
+import { planPlanningRestart } from "../../state/transitions.js";
+import { installPlanningRestartAskAppend, validatePlanningRestartAskAppend } from "../../state/phase-documents.js";
+import { authenticatedApprovalIsEligibleAfterLatestRestart } from "../../state/restart-authority.js";
+import { completedPlanningRestartMatches, planningRestartId } from "../../state/planning-restart.js";
+import { derivedFinalPhaseBelowCurrentPhase, plannedFinalPhaseFromRecordedPayloads } from "../../state/planned-final-phase.js";
 import { mapHandlerErrors } from "./errors.js";
 import { openHandlerSession } from "./session.js";
 import {
@@ -74,8 +81,12 @@ export async function handleState(
     const session = await openHandlerSession(call, context);
     if (!session.ok) return session;
     const { services } = session.value;
-    const artifact = call.input.artifact;
+    const restartInput = call.input.operation === "planning_restart" ? call.input : undefined;
+    const artifact = restartInput === undefined ? call.input.artifact : undefined;
     if (services.state === undefined) {
+      if (restartInput !== undefined) {
+        return fail(createProjectError("STATE_MISSING", { phase_instance: restartInput.phase_instance }));
+      }
       const initialized = await runStateInitialization(services.dependencies, {
         authority: services.authority,
         call,
@@ -83,6 +94,61 @@ export async function handleState(
       return initialized.ok
         ? Object.freeze({ schema_version: "1", ok: true, value: initialized.value.outcome })
         : initialized;
+    }
+
+    if (restartInput !== undefined) {
+      const identified = identifyTransactionRequest(
+        call,
+        services.authority,
+        restartInput.input_fingerprint,
+      );
+      const restartId = planningRestartId(identified.request_digest, restartInput.intent_id);
+      const existing = services.state.value.restart_history?.find((record) => record.restart_id === restartId);
+      if (existing !== undefined) {
+        if (!completedPlanningRestartMatches(services.state.value, {
+          restart_id: restartId,
+          source_phase_instance: restartInput.phase_instance,
+          target_phase_instance: restartInput.target_phase_instance,
+          reason: restartInput.reason,
+          input_fingerprint: restartInput.input_fingerprint,
+        })) {
+          return fail(createProjectError("STATE_INVALID", {
+            phase_instance: services.state.value.phase_instance,
+            issue_code: "planning-restart-replay-mismatch",
+          }));
+        }
+        if (existing.target_phase_instance === "prd") {
+          const ask = await resolveTaskPath({
+            runner: services.runner,
+            taskId: services.authority.task_id,
+            claim: parseTaskPathClaim("ask.md"),
+            expectedClass: "task-ask",
+            context: services.authority.context,
+          });
+          if (!ask.ok) return ask;
+          if (restartInput.ask_base_digest === undefined || !await validatePlanningRestartAskAppend({
+            target: ask.value,
+            expected_base_digest: restartInput.ask_base_digest,
+            restart_id: restartId,
+            request: restartInput.reason,
+          })) {
+            return fail(createProjectError("STATE_INVALID", {
+              phase_instance: services.state.value.phase_instance,
+              issue_code: "planning-restart-ask-replay-mismatch",
+            }));
+          }
+        }
+        return Object.freeze({
+          schema_version: "1",
+          ok: true,
+          value: Object.freeze({
+            path: parseTaskPathClaim("state.json"),
+            revision: existing.restarted_at_revision,
+            status: "running" as const,
+            request_digest: identified.request_digest,
+          }),
+        });
+      }
     }
 
     const identified = identifyTransactionRequest(
@@ -96,7 +162,86 @@ export async function handleState(
       services.dependencies,
       { authority: services.authority, call },
       async (current, identifiedCall): Promise<ProjectResult<PreparedTransaction<"archflow_state">>> => {
+        if (restartInput !== undefined) {
+          const revision = parseSafeInteger(current.value.revision + 1);
+          const restartId = planningRestartId(identified.request_digest, restartInput.intent_id);
+          let landingFingerprint = identified.input_fingerprint;
+          const planInput = {
+            current: current.value,
+            restart_id: restartId,
+            target_phase_instance: restartInput.target_phase_instance,
+            reason: restartInput.reason,
+            recomputed_input_fingerprint: landingFingerprint,
+            human_provenance: restartProvenance(context, identified.request_digest),
+          } as const;
+          // Validate every state precondition before the sole permitted worktree side effect.
+          let planned = planPlanningRestart(planInput);
+          if (!planned.ok) return planned;
+          if (restartInput.target_phase_instance === "prd") {
+            const writer = services.dependencies.atomic;
+            const ask = await resolveTaskPath({
+              runner: services.runner,
+              taskId: services.authority.task_id,
+              claim: parseTaskPathClaim("ask.md"),
+              expectedClass: "task-ask",
+              context: services.authority.context,
+            });
+            if (!ask.ok) return ask;
+            await installPlanningRestartAskAppend(writer, {
+              target: ask.value,
+              expected_base_digest: restartInput.ask_base_digest!,
+              restart_id: restartId,
+              request: restartInput.reason,
+            });
+            const liveConfig = await services.dependencies.read_config(services.authority.config);
+            if (liveConfig.kind !== "valid") {
+              return fail(createProjectError("CONFIG_INVALID", { issue_code: `config-${liveConfig.kind}` }));
+            }
+            const landingSubject = await services.dependencies.resolve_input_fingerprint({
+              runner: services.runner,
+              authority: services.authority,
+              state: current,
+              call,
+              live_config: liveConfig.snapshot,
+              context: services.authority.context,
+            });
+            if (!landingSubject.ok) return landingSubject;
+            landingFingerprint = computeInputFingerprint(landingSubject.value);
+            // The append is now installed; bind the landing state to the post-append observation.
+            planned = planPlanningRestart({ ...planInput, recomputed_input_fingerprint: landingFingerprint });
+            if (!planned.ok) return planned;
+          }
+          const success = Object.freeze({
+            path: parseTaskPathClaim("state.json"),
+            revision,
+            status: "running" as const,
+            request_digest: identified.request_digest,
+          });
+          const resultId = parseSafeId(restartId);
+          const expectation = createInternalResultExpectation({
+            schema_version: "1",
+            tool: "archflow_state",
+            task_id: services.authority.task_id,
+            intent_id: restartInput.intent_id,
+            input_fingerprint: restartInput.input_fingerprint,
+            request_digest: identified.request_digest,
+            result_id: resultId,
+            resulting_revision: revision,
+            success,
+          });
+          const result = validateProjectResultStructure(identifiedCall, {
+            schema_version: "1",
+            ok: true,
+            value: success,
+          });
+          return Object.freeze({
+            schema_version: "1",
+            ok: true,
+            value: Object.freeze({ expectation, result, next_state: planned.value }),
+          });
+        }
         let preparedResult: PreparedStateResult | PreparedEvidenceResult | undefined;
+        let derivedPlannedFinalPhase: number | null | undefined;
         if (artifact?.artifact_kind === "document" || artifact?.artifact_kind === "implementation-output") {
           if (retainedBytes === undefined || scanner === undefined) {
             throw new TypeError("snapshot preparation dependencies are unavailable");
@@ -125,6 +270,37 @@ export async function handleState(
             : await prepareImplementationResult({ ...common, artifact });
           if (!prepared.ok) return prepared;
           preparedResult = prepared.value;
+          // A produce that records the task design document re-derives the planned final phase
+          // from those exact bytes in this same transaction: the bound otherwise survives from
+          // the design position's own approval and goes stale when later phase boundaries
+          // revise the phase plan. A recorded design whose phase plan cannot be parsed fails
+          // the produce closed instead of silently keeping the stale bound — but only while a
+          // stored bound exists; a boundless task (fresh, legacy-imported, or restarted to the
+          // design position) preserves the absent bound and the design-approval gate keeps
+          // enforcing conformance at approval.
+          try {
+            derivedPlannedFinalPhase = plannedFinalPhaseFromRecordedPayloads(
+              services.authority.task_id,
+              prepared.value.prepared.payloads,
+              current.value.planned_final_phase,
+            );
+          } catch {
+            return fail(createProjectError("CONTRACT_INVALID", {
+              tool: "archflow_state",
+              issue_code: "produce-design-phase-plan-invalid",
+            }));
+          }
+          // A derived bound below the producing phase can never satisfy completion's equality
+          // test and would wedge the task offering a nonexistent successor — the same class of
+          // wedge the re-derivation exists to remove. The honest route for a genuinely shrunken
+          // plan is a backward planning restart.
+          if (derivedPlannedFinalPhase !== undefined && derivedPlannedFinalPhase !== null &&
+              derivedFinalPhaseBelowCurrentPhase(derivedPlannedFinalPhase, call.input.phase_instance)) {
+            return fail(createProjectError("CONTRACT_INVALID", {
+              tool: "archflow_state",
+              issue_code: "produce-derived-final-phase-below-current",
+            }));
+          }
         }
         if (artifact?.artifact_kind === "triage") {
           const loadManifest = services.dependencies.load_retained_manifest;
@@ -197,7 +373,7 @@ export async function handleState(
         const authenticatedGateApprovals: AuthenticatedGateApproval[] = [];
         const decodedCurrent = decodePhaseInstance(current.value.phase_instance);
         const crossesPhase = call.input.phase_instance !== current.value.phase_instance;
-        const planningRestartSignal = call.input.planning_restart !== undefined;
+        const planningRestartSignal = restartInput !== undefined;
         const completionSignal =
           !planningRestartSignal &&
           artifact === undefined &&
@@ -226,6 +402,7 @@ export async function handleState(
               services.dependencies, services.authority, approval,
             );
             if (!loaded.ok) return loaded;
+            if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
             authenticatedGateApprovals.push(loaded.value);
           }
           if (
@@ -257,6 +434,7 @@ export async function handleState(
               services.dependencies, services.authority, approval,
             );
             if (!loaded.ok) return loaded;
+            if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
             authenticatedGateApprovals.push(loaded.value);
           }
           const source = currentProduce.artifact;
@@ -306,6 +484,7 @@ export async function handleState(
                 approval,
               );
               if (!loaded.ok) return loaded;
+              if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
               authenticatedGateApprovals.push(loaded.value);
               if (
                 loaded.value.request.kind === "migration-audit" &&
@@ -356,12 +535,8 @@ export async function handleState(
           commit_observed: commitObserved,
           ...(legacyResumePhase === undefined ? {} : { legacy_resume_phase: legacyResumePhase }),
           ...(call.input.human_revision === undefined ? {} : { human_revision: call.input.human_revision }),
-          ...(call.input.planning_restart === undefined ? {} : {
-            planning_restart: {
-              restart_id: call.input.intent_id,
-              reason: call.input.planning_restart.reason,
-              provenance: restartProvenance(context, identified.request_digest),
-            },
+          ...(derivedPlannedFinalPhase === undefined ? {} : {
+            derived_planned_final_phase: derivedPlannedFinalPhase,
           }),
           ...(authenticatedGateApprovals.length === 0 ? {} : {
             authenticated_gate_approvals: authenticatedGateApprovals,

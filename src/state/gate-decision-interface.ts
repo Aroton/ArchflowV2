@@ -1,36 +1,13 @@
-import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 
-import { canonicalDocument, canonicalJsonDigest } from "../contracts/canonical.js";
-import { assertAuthenticInvocationContext, type InvocationContext } from "../contracts/contexts.js";
-import { parseActiveGate, parseGateRequest, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
-import { createProjectError, type ProjectResult } from "../contracts/errors.js";
+import { parseActiveGate, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
 import type { PathSafeId, Sha256Digest } from "../contracts/evidence.js";
-import {
-  validateGateDecision,
-  type GateContext,
-  type HumanDecisionProvenance,
-} from "../contracts/gates.js";
+import { validateGateDecision, type GateContext } from "../contracts/gates.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
-import type { RepositoryPathClaim } from "../contracts/path-claims.js";
-import { gateRequestClaim, type ResolvedTaskWorkspacePath } from "../repository/paths.js";
-import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
-import { ensureIntentDirectory, ensureWorkspaceProjectionParent } from "./layout.js";
 import {
   deepFreezeGateJson,
-  activeProjection,
-  fail,
-  io,
-  issue,
-  ok,
-  parseInterface,
-  readCanonical,
-  resolvePath,
-  stateOrFailure,
   waiverContext,
-  type GateLifecycleDependencies,
 } from "./gate-core.js";
-import { TaskLockError } from "./lock.js";
 
 const TEMPLATE_REASON = "Record the human decision reason.";
 const TEMPLATE_RATIONALE = "Record the human decision rationale.";
@@ -86,6 +63,14 @@ export function buildGateDecisionTemplates(active: ActiveGateV1): readonly Plain
   for (const decision of request.allowed_decisions) {
     if (decision === "cancel") {
       templates.push(cancellation);
+      continue;
+    }
+    // A baseline adoption offers only the decisions its context can satisfy: bytes choices need
+    // live drifted files, the deletion choice needs committed deletions. Offering an inapplicable
+    // choice would archive a decision that can never settle.
+    if (request.kind === "baseline-adoption" &&
+        ((decision === "adopt-current-bytes" || decision === "restore-recorded-bytes") && request.context.drifted_projections.length === 0 ||
+         decision === "adopt-committed-deletions" && (request.context.deleted_projections?.length ?? 0) === 0)) {
       continue;
     }
 
@@ -158,6 +143,7 @@ type PresentedDecision =
   | "adopt-as-new-generation"
   | "adopt-current-bytes"
   | "restore-recorded-bytes"
+  | "adopt-committed-deletions"
   | "accept-import-audit"
   | "cancel"
   | "waiver-grant"
@@ -205,7 +191,7 @@ const PRESENTATION_COPY = Object.freeze({
   }),
   "baseline-adoption": Object.freeze({
     title: "Decide what to do with changed files",
-    question: "These files changed after ArchFlow recorded their reviewed bytes (for example by later commits or a merge). Keep the current versions as the new baseline, restore the recorded versions, or stop?",
+    question: "These files changed after ArchFlow recorded their reviewed bytes (for example by later commits or a merge), or were deleted by an already-committed change. Keep the current state as the new baseline, restore the recorded versions, or stop?",
   }),
   "migration-audit": Object.freeze({
     title: "Review the imported task",
@@ -227,6 +213,7 @@ const OPTION_COPY = Object.freeze({
   "discard-and-restore": Object.freeze({ token: "restore-saved-version", label: "Restore the saved version", consequence: "Discard the conflicting workspace copy and reconstruct it from durable authority." }),
   "adopt-as-new-generation": Object.freeze({ token: "keep-current-version", label: "Keep the current version", consequence: "Treat the current workspace copy as a new generation of the artifact." }),
   "adopt-current-bytes": Object.freeze({ token: "keep-current-versions", label: "Keep the current versions", consequence: "Record the current file versions as the reviewed baseline without re-reviewing them. Nothing is lost, and the next implementation phase still reviews everything it touches." }),
+  "adopt-committed-deletions": Object.freeze({ token: "keep-the-deletions", label: "Keep the deletions", consequence: "Accept the committed deletions as the reviewed baseline. These files were already removed by an authorized commit; ArchFlow's records stop claiming them, and nothing is restored." }),
   "restore-recorded-bytes": Object.freeze({ token: "restore-recorded-versions", label: "Restore the recorded versions", consequence: "Discard the current versions of these files and rewrite the recorded ones. The discarded changes stay in git history." }),
   "accept-import-audit": Object.freeze({ token: "accept-import", label: "Accept the import", consequence: "Confirm that the imported task faithfully represents the legacy source and continue." }),
   cancel: Object.freeze({ token: "cancel", label: "Cancel this decision", consequence: "Close this decision without approving anything; the workflow will remain stopped here." }),
@@ -303,9 +290,16 @@ export function buildHumanGatePresentation(active: ActiveGateV1): HumanGatePrese
     } : {}),
     ...(request.kind === "baseline-adoption" ? {
       details: Object.freeze([
-        `${request.context.drifted_projections.length} file${request.context.drifted_projections.length === 1 ? "" : "s"} changed, including:`,
-        ...request.context.drifted_projections.slice(0, 10).map((drifted) => drifted.path),
-        ...(request.context.drifted_projections.length > 10 ? [`… and ${request.context.drifted_projections.length - 10} more`] : []),
+        ...(request.context.drifted_projections.length === 0 ? [] : [
+          `${request.context.drifted_projections.length} file${request.context.drifted_projections.length === 1 ? "" : "s"} changed, including:`,
+          ...request.context.drifted_projections.slice(0, 10).map((drifted) => drifted.path),
+          ...(request.context.drifted_projections.length > 10 ? [`… and ${request.context.drifted_projections.length - 10} more`] : []),
+        ]),
+        ...((request.context.deleted_projections ?? []).length === 0 ? [] : [
+          `${request.context.deleted_projections!.length} file${request.context.deleted_projections!.length === 1 ? "" : "s"} deleted by an already-committed change:`,
+          ...request.context.deleted_projections!.slice(0, 10).map((deleted) => deleted.path),
+          ...(request.context.deleted_projections!.length > 10 ? [`… and ${request.context.deleted_projections!.length - 10} more`] : []),
+        ]),
       ]),
     } : {}),
     question: `${copy.question} Choose an option and briefly explain why.`,
@@ -419,198 +413,4 @@ export function selectGateDecisionTemplate(active: ActiveGateV1, value: PlainJso
         : {}),
     },
   };
-}
-
-export type GateDecisionInterfaceWriteResult = Readonly<{
-  gate_id: PathSafeId;
-  decision_path: RepositoryPathClaim;
-  decision_digest: Sha256Digest;
-}>;
-
-type DecisionSelector = (active: ActiveGateV1) => PlainJsonValue;
-
-/** Installs a selected template without overwriting a decision that already binds the live gate. */
-export async function writeGateDecisionInterface(
-  dependencies: GateLifecycleDependencies,
-  authority: TransactionAuthority,
-  value: PlainJsonValue,
-): Promise<ProjectResult<GateDecisionInterfaceWriteResult>> {
-  assertInternalTransactionAuthority(authority, {
-    runner: dependencies.runner,
-    environment: dependencies.environment,
-  });
-  assertPlainJson(value, "gate decision template");
-  const selected = structuredClone(value);
-  return writeSelectedGateDecision(dependencies, authority, () => selected);
-}
-
-/** Installs a human choice after resolving all live gate bindings from durable authority. */
-export async function writeGateDecisionChoice(
-  dependencies: GateLifecycleDependencies,
-  authority: TransactionAuthority,
-  value: PlainJsonValue,
-): Promise<ProjectResult<GateDecisionInterfaceWriteResult>> {
-  assertInternalTransactionAuthority(authority, {
-    runner: dependencies.runner,
-    environment: dependencies.environment,
-  });
-  const selected = structuredClone(choiceRecord(value));
-  return writeSelectedGateDecision(dependencies, authority, (active) => selectGateDecisionTemplate(active, selected));
-}
-
-/** Installs a connected-host choice and mints provenance only from a branded MCP invocation. */
-export async function writeConnectedGateDecisionChoice(
-  dependencies: GateLifecycleDependencies,
-  authority: TransactionAuthority,
-  value: PlainJsonValue,
-  context: InvocationContext,
-): Promise<ProjectResult<GateDecisionInterfaceWriteResult>> {
-  assertInternalTransactionAuthority(authority, {
-    runner: dependencies.runner,
-    environment: dependencies.environment,
-  });
-  assertAuthenticInvocationContext(context);
-  const selected = structuredClone(choiceRecord(value));
-  const provenance: HumanDecisionProvenance = {
-    schema_version: "1",
-    actor_class: "human",
-    assurance: "declared-local-trace",
-    channel: "connected-host",
-    decision_event_id: randomUUID(),
-    connection_id: context.connection.connection_id,
-    request_id_digest: canonicalJsonDigest({
-      schema_version: "1",
-      digest_kind: "transport-request-id",
-      request_id: context.transport_metadata.request_id,
-    }),
-    recorded_at: new Date().toISOString(),
-  };
-  return writeSelectedGateDecision(
-    dependencies,
-    authority,
-    (active) => selectGateDecisionTemplate(active, selected),
-    provenance,
-  );
-}
-
-/** Installs a selected template without overwriting a decision that already binds the live gate. */
-async function writeSelectedGateDecision(
-  dependencies: GateLifecycleDependencies,
-  authority: TransactionAuthority,
-  select: DecisionSelector,
-  suppliedProvenance?: HumanDecisionProvenance,
-): Promise<ProjectResult<GateDecisionInterfaceWriteResult>> {
-
-  try {
-    await ensureIntentDirectory(authority);
-    return await dependencies.lock.runExclusive(authority.workspace_root, async () => {
-      const stateResult = await stateOrFailure(dependencies, authority);
-      if (!stateResult.ok) return stateResult;
-      const current = stateResult.value;
-      const gate = current.value.open_gate;
-      if (gate === undefined) return issue("STATE_INVALID", current.value, "gate-interface-open-gate-missing");
-
-      const requestPath = await resolvePath(
-        dependencies,
-        authority,
-        gateRequestClaim(gate.gate_id),
-        "authority-decision",
-      );
-      const activePath = await resolvePath(dependencies, authority, "gate.json", "workspace-gate-interface");
-      const interfacePath = await resolvePath(dependencies, authority, "gate.decision", "workspace-gate-interface");
-      if (!requestPath.ok) return requestPath;
-      if (!activePath.ok) return activePath;
-      if (!interfacePath.ok) return interfacePath;
-      const durableRequest = await readCanonical(requestPath.value, "gate request", parseGateRequest);
-      if (durableRequest === "missing" || durableRequest === "invalid") {
-        return issue("STATE_INVALID", current.value, "active-gate-request-invalid");
-      }
-      const projected = await readCanonical(activePath.value, "active gate", parseActiveGate);
-      const active = projected === "missing" || projected === "invalid"
-        ? parseActiveGate(activeProjection(durableRequest.value))
-        : projected.value;
-      if (
-        active.task_id !== authority.task_id ||
-        active.gate_id !== gate.gate_id ||
-        active.kind !== gate.gate_kind ||
-        active.subject_digest !== gate.subject_digest ||
-        active.context_digest !== gate.context_digest
-      ) return issue("STATE_INVALID", current.value, "active-gate-interface-mismatch");
-
-      if (projected === "missing" || projected === "invalid") {
-        await ensureWorkspaceProjectionParent(authority, activePath.value.absolute as ResolvedTaskWorkspacePath);
-        await dependencies.atomic.replace(activePath.value, canonicalDocument(active).bytes);
-      }
-
-      let selected: PlainJsonValue;
-      try {
-        selected = select(active);
-      } catch {
-        return fail(createProjectError("GATE_DECISION_INVALID", {
-          gate_id: active.gate_id,
-          gate_kind: active.kind,
-          issue_code: "decision-choice-invalid",
-        }));
-      }
-      const provenance: HumanDecisionProvenance = suppliedProvenance ?? {
-        schema_version: "1",
-        actor_class: "human",
-        assurance: "declared-local-trace",
-        channel: "archflow-local",
-        decision_event_id: randomUUID(),
-        helper_invocation_id: randomUUID(),
-        recorded_at: new Date().toISOString(),
-      };
-      const candidate = selected !== null && typeof selected === "object" && !Array.isArray(selected)
-        ? { ...selected, human_provenance: provenance } as PlainJsonValue
-        : selected;
-
-      try {
-        parseInterface(candidate, active);
-      } catch {
-        return fail(createProjectError("GATE_DECISION_INVALID", {
-          gate_id: active.gate_id,
-          gate_kind: active.kind,
-          issue_code: "decision-binding-invalid",
-        }));
-      }
-
-      const existing = await readCanonical(interfacePath.value, "gate decision interface", (raw) => raw as PlainJsonValue);
-      if (existing !== "missing" && existing !== "invalid") {
-        try {
-          const boundExisting = parseInterface(existing.value, active);
-          const boundCandidate = parseInterface(candidate, active);
-          const semantics = (record: typeof boundExisting): PlainJsonValue => record.outcome === "decided"
-            ? { outcome: record.outcome, kind: record.kind, payload: record.envelope.payload as unknown as PlainJsonValue }
-            : record.outcome === "waiver-decided"
-              ? { outcome: record.outcome, granted: record.granted, scope: record.scope as unknown as PlainJsonValue, origin: record.origin as unknown as PlainJsonValue, notes: record.notes }
-              : { outcome: record.outcome, reason: record.reason };
-          if (canonicalJsonDigest(semantics(boundExisting)) === canonicalJsonDigest(semantics(boundCandidate))) {
-            return ok({
-              gate_id: active.gate_id,
-              decision_path: interfacePath.value.repositoryRelative,
-              decision_digest: existing.digest,
-            });
-          }
-          return fail(createProjectError("GATE_ACTIVE", {
-            gate_id: active.gate_id,
-            gate_kind: active.kind,
-          }));
-        } catch { /* invalid or stale interface is replaceable */ }
-      }
-
-      const document = canonicalDocument(candidate);
-      await ensureWorkspaceProjectionParent(authority, interfacePath.value.absolute as ResolvedTaskWorkspacePath);
-      await dependencies.atomic.replace(interfacePath.value, document.bytes);
-      return ok({
-        gate_id: active.gate_id,
-        decision_path: interfacePath.value.repositoryRelative,
-        decision_digest: document.digest,
-      });
-    });
-  } catch (error) {
-    return error instanceof TaskLockError
-      ? io(authority, `gate-lock-${error.stage}`)
-      : io(authority, "gate-interface-write");
-  }
 }

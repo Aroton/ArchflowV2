@@ -15,6 +15,7 @@ import { parseSafeCode, parseSafeInteger, parseTaskSlug } from "../contracts/evi
 import { computePinnedConfigDigest } from "../contracts/fingerprints.js";
 import { parseRepositoryPathClaim } from "../contracts/path-claims.js";
 import { parsePhaseInstanceId } from "../contracts/phase-instance.js";
+import { assertPlainJson } from "../contracts/plain-json.js";
 import {
   createGitRunner,
   GitInvocationError,
@@ -33,6 +34,10 @@ import type { RootBoundGitRunner } from "../repository/identity.js";
 export type StageTaskInitializationInput = {
   readonly working_directory: string;
   readonly task_id: string;
+};
+
+export type StageTaskAskInput = StageTaskInitializationInput & {
+  readonly text: string;
 };
 
 const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -79,6 +84,61 @@ export async function createTaskConfig(root: string, taskId: string): Promise<Ui
     if (!errno(error, "EEXIST")) throw error;
     return new Uint8Array(await readFile(taskConfig));
   }
+}
+
+/**
+ * Installs the human's exact ask before revision-zero initialization. The byte-identical existing
+ * file is an idempotent retry; any different existing content is a collision and remains intact.
+ */
+export async function stageTaskAsk(input: StageTaskAskInput): Promise<ProjectResult<Readonly<{
+  path: ReturnType<typeof parseRepositoryPathClaim>;
+  byte_count: number;
+  digest: Sha256Digest;
+}>>> {
+  assertPlainJson(input, "task ask staging input");
+  const snapshot = structuredClone(input);
+  const taskId = parseTaskSlug(snapshot.task_id);
+  if (typeof snapshot.text !== "string") throw new TypeError("task ask text must be a string");
+  const bytes = new TextEncoder().encode(snapshot.text);
+  const askPath = join(snapshot.working_directory, ".archflow", "tasks", taskId, "ask.md");
+  try {
+    await mkdir(dirname(askPath), { recursive: true });
+    const handle = await open(askPath, "wx");
+    try {
+      await handle.writeFile(bytes);
+    } finally {
+      await handle.close();
+    }
+  } catch (error) {
+    if (!errno(error, "EEXIST")) {
+      return fail(createProjectError("IO_ERROR", {
+        operation: parseSafeCode("stage-task-ask"),
+        attempt: parseSafeInteger(1),
+      }));
+    }
+    try {
+      const existing = new Uint8Array(await readFile(askPath));
+      if (!Buffer.from(existing).equals(Buffer.from(bytes))) {
+        return fail(createProjectError("TASK_INVALID", {
+          task_id: taskId,
+          issue_code: parseSafeCode("task-ask-collision"),
+        }));
+      }
+    } catch (readError) {
+      if (!errno(readError, "ENOENT")) {
+        return fail(createProjectError("IO_ERROR", {
+          operation: parseSafeCode("stage-task-ask"),
+          attempt: parseSafeInteger(1),
+        }));
+      }
+      return stageTaskAsk(input);
+    }
+  }
+  return ok(Object.freeze({
+    path: parseRepositoryPathClaim(`.archflow/tasks/${taskId}/ask.md`),
+    byte_count: bytes.byteLength,
+    digest: sha256Bytes(bytes),
+  }));
 }
 
 export function canonicalTaskPaths(taskId: TaskSlug) {

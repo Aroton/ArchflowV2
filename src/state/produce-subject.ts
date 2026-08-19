@@ -13,6 +13,7 @@ import { resolveTaskPath } from "../repository/paths.js";
 import type { TransactionAuthority } from "./authority.js";
 import type { TransactionDependencies, RetainedManifest } from "./transaction.js";
 import { loadLegacyImportInitialization } from "./legacy-import-resume.js";
+import { approvalIsEligibleAfterLatestRestart } from "./restart-authority.js";
 
 /** Throwing decoder for document projections, which must be UTF-8 text — no base64 fallback. */
 const fatalUtf8 = new TextDecoder("utf-8", { fatal: true });
@@ -112,7 +113,8 @@ export async function loadProduceUpstreamSubject(
         !ownsPath ||
         !state.approvals.some((approval) =>
           (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") &&
-          approval.subject_digest === manifest.artifact_digest)
+          approval.subject_digest === manifest.artifact_digest &&
+          approvalIsEligibleAfterLatestRestart(state, approval, artifact.phase_instance))
       ) continue;
       approvedOwners.push(Object.freeze({
         reference,

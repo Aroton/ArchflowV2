@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parseTaskSlug } from "../../src/contracts/evidence.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
-import { includeChangedImplementationDocuments } from "../../src/local/build-request.js";
+import { includeChangedImplementationDocuments } from "../../src/state/request-composition.js";
 
 describe("implementation request document capture", () => {
   it("adds a changed phase design to outputs, rollback, and retained parent documents", () => {

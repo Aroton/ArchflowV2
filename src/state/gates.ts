@@ -1,24 +1,37 @@
 import { isDeepStrictEqual } from "node:util";
 
 import { canonicalDocument, canonicalJsonDigest, sha256Bytes, type CanonicalDocument } from "../contracts/canonical.js";
+import { assertAuthenticInvocationContext, type InvocationContext } from "../contracts/contexts.js";
+import { computeInputFingerprint } from "../contracts/fingerprints.js";
 import {
   parseActiveGate,
   parseArchivedGateDecisionRecord,
   parseArchivedGateRequest,
   parseGateDecisionRecord,
   parseGateRequest,
+  parsePersistedGateRequest,
   type GateDecisionRecordV1,
   type GateRequestV1,
   type WaiverGateContext,
 } from "../contracts/durable-gate.js";
-import type { ApprovalRef, AuthoritativeResultRef, BaselineAdoptionRecord, LastTransition, TaskStateV1, WaiverRef } from "../contracts/durable-state.js";
+import {
+  planningRestartHumanProvenanceV1Schema,
+  type ApprovalRef,
+  type AuthoritativeResultRef,
+  type BaselineAdoptionRecord,
+  type LastTransition,
+  type TaskStateV1,
+  type WaiverRef,
+} from "../contracts/durable-state.js";
 import { intentOutcomeDigest, parseIntentReceipt, type IntentReceiptV1 } from "../contracts/durable-intent.js";
 import { createCommittedIntentSubject, createPreparedIntentSubject, openGateFrozenStateDigest, validateDurableSemantics } from "../contracts/durable.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
-import { parseSafeCode, parseSafeId, parseSafeInteger, type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
+import { parsePathSafeId, parseSafeCode, parseSafeId, parseSafeInteger, type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
 import { decodePhaseInstance } from "../contracts/phase-instance.js";
+import { parseToolCall } from "../contracts/mcp-tools.js";
 import { baselineAdoptionDriftDigest, computeGateContextDigest, computeGateId } from "../contracts/fingerprints.js";
 import { gateDecisionEffect, type BaselineObservationRef } from "../contracts/gates.js";
+import type { HumanDecisionProvenance } from "../contracts/gates.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
 import {
   gateDecisionClaim,
@@ -50,12 +63,14 @@ import {
   type GateOpenResult,
   type GateResolution,
 } from "./gate-core.js";
-import { waitForGateInterface } from "./gate-wait.js";
+import { buildHumanGatePresentation, selectGateDecisionTemplate } from "./gate-decision-interface.js";
 import { ensureDecisionDirectory, ensureIntentDirectory, ensureWorkspaceProjectionParent } from "./layout.js";
 import { loadLegacyImportInitialization, loadLegacyImportResumePhase } from "./legacy-import-resume.js";
 import { TaskLockError } from "./lock.js";
 import { loadApprovedDesignFinalPhase } from "./planned-final-phase.js";
 import { planPlanningRestart, planStateTransition } from "./transitions.js";
+import { expectedProduceUpstreamBindings, loadProduceUpstreamSubject, type ProduceUpstreamSubject } from "./produce-subject.js";
+import { approvalIsEligibleAfterLatestRestart } from "./restart-authority.js";
 import { reconcileCurrentAuthority, type ReconciliationFinding } from "./reconciliation.js";
 import { currentProjectionDigest, discoverNewestProjections, discoverReconciliationInput } from "./reconciliation-discovery.js";
 import { applyProjectionPlan, captureProjectionTarget, prepareProjectionPlan, projectionGenerationDigest, type ProjectionSource } from "./snapshots.js";
@@ -67,12 +82,33 @@ export {
   buildHumanGatePresentation,
   gateDecisionTemplateName,
   selectGateDecisionTemplate,
-  writeGateDecisionChoice,
-  writeGateDecisionInterface,
 } from "./gate-decision-interface.js";
 export type { HumanGateDecisionOption, HumanGatePresentation } from "./gate-decision-interface.js";
 export type { GateLifecycleDependencies, GateOpenInput } from "./gate-core.js";
 export { findLegacyImportResumePhase } from "./legacy-import-resume.js";
+
+export type DirectSemanticDecisionInput = Readonly<{
+  authority: TransactionAuthority;
+  operation_digest: Sha256Digest;
+  intent_id: PathSafeId;
+  choice: string;
+  reason: string;
+  option_rationale?: string;
+  invocation_context: InvocationContext;
+}>;
+
+export type DirectSemanticDecisionSettlementInput = Readonly<{
+  authority: TransactionAuthority;
+  operation_digest: Sha256Digest;
+  intent_id: PathSafeId;
+}>;
+
+export type DirectSemanticDecisionArchiveResult = Readonly<{
+  state: CanonicalDocument<TaskStateV1>;
+  request: CanonicalDocument<GateRequestV1>;
+  record: CanonicalDocument<GateDecisionRecordV1>;
+  replayed: boolean;
+}>;
 
 /** Cleanup is derived work: a committed state must never be rolled back because it failed. */
 async function cleanupCommittedGateWorkspace(
@@ -124,35 +160,6 @@ async function authenticateWaiverOrigin(
   return ok(undefined);
 }
 
-async function cleanupResolvedInterfaces(
-  dependencies: GateLifecycleDependencies,
-  authority: TransactionAuthority,
-  request: GateRequestV1,
-  record: GateDecisionRecordV1,
-): Promise<ProjectResult<void>> {
-  try {
-    await ensureIntentDirectory(authority);
-    return await dependencies.lock.runExclusive(authority.workspace_root, async () => {
-      const gateJson = await resolvePath(dependencies, authority, "gate.json", "workspace-gate-interface");
-      if (!gateJson.ok) return gateJson;
-      const active = await readCanonical(gateJson.value, "active gate", parseActiveGate);
-      if (active !== "missing" && active !== "invalid" && active.value.gate_id === request.gate_id && active.value.task_id === request.task_id && active.value.phase_instance === request.phase_instance && active.value.subject_digest === request.subject_digest && active.value.context_digest === request.context_digest) {
-        await dependencies.atomic.removeGateInterface(gateJson.value);
-      }
-      const decision = await resolvePath(dependencies, authority, "gate.decision", "workspace-gate-interface");
-      if (!decision.ok) return decision;
-      const projected = await readCanonical(decision.value, "gate decision interface", (value) => value as PlainJsonValue);
-      if (projected !== "missing" && projected !== "invalid") {
-        try {
-          const bound = parseInterface(projected.value, request);
-          if (canonicalJsonDigest(bound) === canonicalJsonDigest(record)) await dependencies.atomic.removeGateInterface(decision.value);
-        } catch { /* never remove an interface whose gate identity cannot be authenticated */ }
-      }
-      return ok(undefined);
-    });
-  } catch (error) { return error instanceof TaskLockError ? io(authority, `gate-cleanup-lock-${error.stage}`) : io(authority, "gate-cleanup"); }
-}
-
 export async function openDurableGate(
   dependencies: GateLifecycleDependencies,
   input: GateOpenInput,
@@ -178,7 +185,7 @@ export async function openDurableGate(
       if (!requestPath.ok) return requestPath;
       if (!decisionPath.ok) return decisionPath;
       const archived = await readCanonical(decisionPath.value, "gate decision record", parseGateDecisionRecord);
-      const requestRead = await readCanonical(requestPath.value, "gate request", parseGateRequest);
+      const requestRead = await readCanonical(requestPath.value, "gate request", parsePersistedGateRequest);
       if (archived !== "missing") {
         if (archived === "invalid" || requestRead === "missing" || requestRead === "invalid") return issue("STATE_INVALID", current.value, "gate-archive-invalid");
         if (!validateDurableSemantics({ gate_request: requestRead, gate_decision: archived }).ok) return issue("STATE_INVALID", current.value, "gate-archive-binding-invalid");
@@ -244,7 +251,7 @@ export async function openDurableGate(
       if (current.value.open_gate !== undefined) {
         const activeRequestPath = await resolvePath(dependencies, input.authority, gateRequestClaim(current.value.open_gate.gate_id), "authority-decision");
         if (!activeRequestPath.ok) return activeRequestPath;
-        const activeRequest = await readCanonical(activeRequestPath.value, "active gate request", parseGateRequest);
+        const activeRequest = await readCanonical(activeRequestPath.value, "active gate request", parsePersistedGateRequest);
         if (activeRequest === "missing" || activeRequest === "invalid") return issue("STATE_INVALID", current.value, "active-gate-request-invalid");
         if (activeRequest.value.intent_id === input.intent_id && activeRequest.value.request_digest !== input.request_digest) {
           return fail(createProjectError("INTENT_MISMATCH", { expected_digest: activeRequest.value.request_digest, observed_digest: input.request_digest }));
@@ -299,21 +306,31 @@ export async function openDurableGate(
           return issue("STATE_INVALID", current.value, "baseline-adoption-loader-unavailable");
         }
         // Truth is re-derived under the lock: the gate may only open on exactly the live drift set,
-        // so a partial adoption or a context naming currently-clean paths fails closed here.
+        // so a partial adoption or a context naming currently-clean paths fails closed here. The
+        // live set splits into drifted (live bytes observed) and committed-deleted findings; a
+        // missing projection that is restorable, or deleted only in the worktree, is not
+        // representable and refuses the open.
         const discovered = await discoverReconciliationInput(dependencies, input.authority, current);
         if (!discovered.ok) return discovered;
         const drift = reconcileCurrentAuthority(discovered.value).findings
           .filter((finding): finding is Extract<ReconciliationFinding, { kind: "projection-mismatch" }> => finding.kind === "projection-mismatch")
           .sort((left, right) => left.path.localeCompare(right.path));
-        if (drift.some((finding) => finding.observed_digest === undefined)) {
-          return issue("STATE_INVALID", current.value, "baseline-adoption-missing-projection");
-        }
         const context = input.context as Extract<GateRequestV1, { kind: "baseline-adoption" }>["context"];
-        const exact = drift.length === context.drifted_projections.length && drift.every((finding, index) => {
-          const declared = context.drifted_projections[index];
-          return declared !== undefined && declared.path === finding.path &&
-            declared.recorded_digest === finding.recorded_digest && declared.observed_digest === finding.observed_digest;
-        });
+        const liveDrifted = drift.filter((finding) => finding.observed_digest !== undefined);
+        const liveDeleted = drift.filter((finding) =>
+          finding.observed_digest === undefined && finding.restore_unavailable === true && finding.committed_absent === true);
+        const exact = liveDrifted.length === context.drifted_projections.length &&
+          liveDeleted.length === (context.deleted_projections ?? []).length &&
+          liveDrifted.every((finding, index) => {
+            const declared = context.drifted_projections[index];
+            return declared !== undefined && declared.path === finding.path &&
+              declared.recorded_digest === finding.recorded_digest && declared.observed_digest === finding.observed_digest;
+          }) &&
+          liveDeleted.every((finding, index) => {
+            const declared = (context.deleted_projections ?? [])[index];
+            return declared !== undefined && declared.path === finding.path &&
+              declared.recorded_digest === finding.recorded_digest;
+          });
         if (!exact) return issue("STATE_INVALID", current.value, drift.length === 0 ? "baseline-adoption-no-drift" : "baseline-adoption-context-mismatch");
         if (input.subject_digest !== baselineAdoptionDriftDigest(context)) {
           return issue("STATE_INVALID", current.value, "baseline-adoption-subject-mismatch");
@@ -364,7 +381,8 @@ export async function openDurableGate(
         }
         const traditionallyApproved = current.value.approvals.some((approval) =>
           (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") &&
-          approval.subject_digest === subject);
+          approval.subject_digest === subject &&
+          approvalIsEligibleAfterLatestRestart(current.value, approval, current.value.phase_instance));
         if (
           input.subject_digest !== subject ||
           (!traditionallyApproved && !reviewedMigration)
@@ -417,7 +435,7 @@ export async function openDurableGate(
       let requestDocument = canonicalDocument(request);
       const created = await dependencies.atomic.createExclusive(requestPath.value, requestDocument.bytes);
       if (created === "exists") {
-        const existing = await readCanonical(requestPath.value, "gate request", parseGateRequest);
+        const existing = await readCanonical(requestPath.value, "gate request", parsePersistedGateRequest);
         if (existing === "missing" || existing === "invalid" || existing.value.gate_id !== gateId || existing.value.intent_id !== input.intent_id || existing.value.request_digest !== input.request_digest) return issue("STATE_INVALID", current.value, "gate-request-collision");
         request = existing.value;
         requestDocument = existing;
@@ -500,64 +518,6 @@ function enactsPlanningRestart(record: GateDecisionRecordV1): boolean {
     record.envelope.payload.decision === "amend-upstream";
 }
 
-async function materialDriftRestartTarget(
-  dependencies: GateLifecycleDependencies,
-  current: TaskStateV1,
-  request: GateRequestV1,
-): Promise<ProjectResult<TaskStateV1["phase_instance"]>> {
-  if (request.kind !== "material-drift" || dependencies.load_retained_result === undefined) {
-    return issue("STATE_INVALID", current, "material-drift-restart-target-unavailable");
-  }
-  for (const reference of [...current.authoritative_results].reverse()) {
-    const retained = await dependencies.load_retained_result(reference);
-    if (!retained.ok) return retained;
-    const manifest = retained.value.prepared.manifest.value;
-    if (manifest.artifact_digest !== request.context.affected_upstream.digest) continue;
-    const artifact = manifest.source_artifact;
-    if (artifact.artifact_kind !== "document") break;
-    return ok(artifact.phase_instance);
-  }
-  return issue("STATE_INVALID", current, "material-drift-restart-target-unavailable");
-}
-
-async function planGateAuthorizedPlanningRestart(
-  dependencies: GateLifecycleDependencies,
-  authority: TransactionAuthority,
-  current: CanonicalDocument<TaskStateV1>,
-  request: GateRequestV1,
-  record: GateDecisionRecordV1,
-): Promise<ProjectResult<CanonicalDocument<TaskStateV1>>> {
-  if (record.outcome !== "decided" || record.kind !== "material-drift" ||
-      record.envelope.payload.decision !== "amend-upstream" ||
-      !exactOpenGateMatches(current.value, request)) {
-    return issue("STATE_INVALID", current.value, "gate-restart-predecessor-mismatch");
-  }
-  const target = await materialDriftRestartTarget(dependencies, current.value, request);
-  if (!target.ok) return target;
-  if (dependencies.resolve_gate_reentry_fingerprint === undefined) {
-    return issue("STATE_INVALID", current.value, "gate-reentry-fingerprint-unavailable");
-  }
-  const fingerprint = await dependencies.resolve_gate_reentry_fingerprint({
-    authority,
-    request,
-    current,
-    target_phase_instance: target.value,
-  });
-  if (!fingerprint.ok) return fingerprint;
-  const { open_gate: _open, last_transition: _transition, ...predecessor } = current.value;
-  const restart = planPlanningRestart({
-    current: predecessor as TaskStateV1,
-    target_phase_instance: target.value,
-    input_fingerprint: fingerprint.value,
-    restart_id: record.gate_id,
-    reason: record.envelope.payload.reason,
-    provenance: record.envelope.human_provenance,
-  });
-  return restart.ok
-    ? ok(canonicalDocument({ ...restart.value, revision: parseSafeInteger(current.value.revision + 1) }))
-    : restart;
-}
-
 function exactOpenGateMatches(state: TaskStateV1, request: GateRequestV1): boolean {
   const open = state.open_gate;
   if (
@@ -572,6 +532,35 @@ function exactOpenGateMatches(state: TaskStateV1, request: GateRequestV1): boole
   ) return false;
   const { open_gate: _open, last_transition: _transition, ...base } = state;
   return open.frozen_state_digest === openGateFrozenStateDigest(base as TaskStateV1);
+}
+
+function completedMaterialDriftRestartMatches(
+  state: TaskStateV1,
+  request: GateRequestV1,
+  record: GateDecisionRecordV1,
+): boolean {
+  if (
+    request.kind !== "material-drift" || record.outcome !== "decided" ||
+    record.kind !== "material-drift" || record.envelope.payload.decision !== "amend-upstream"
+  ) return false;
+  const restart = state.restart_history?.find((entry) => entry.restart_id === record.gate_id);
+  return restart !== undefined &&
+    restart.source_phase_instance === request.phase_instance &&
+    restart.target_phase_instance === state.phase_instance &&
+    restart.reason === record.envelope.payload.reason &&
+    restart.restarted_at_revision === request.opened_at_revision + 1 &&
+    state.revision >= restart.restarted_at_revision &&
+    isDeepStrictEqual(restart.human_provenance, record.envelope.human_provenance);
+}
+
+/** One affected digest may authorize exactly one producer phase; conflicting ownership fails closed. */
+export function uniqueMaterialDriftUpstream(
+  subjects: readonly ProduceUpstreamSubject[],
+  affectedDigest: Sha256Digest,
+): ProduceUpstreamSubject | undefined {
+  const matching = subjects.filter((subject) => subject.artifact_digest === affectedDigest);
+  const phases = new Set(matching.map((subject) => subject.artifact.phase_instance));
+  return phases.size === 1 ? matching[0] : undefined;
 }
 
 async function planGateAuthorizedReentry(
@@ -650,8 +639,68 @@ async function closedStateForRecord(
   record: GateDecisionRecordV1,
   digest: Sha256Digest,
 ): Promise<ProjectResult<CanonicalDocument<TaskStateV1>>> {
-  if (enactsPlanningRestart(record)) {
-    return planGateAuthorizedPlanningRestart(dependencies, authority, current, request, record);
+  if (
+    record.outcome === "decided" && record.kind === "material-drift" &&
+    record.envelope.payload.decision === "amend-upstream" && request.kind === "material-drift"
+  ) {
+    if (!exactOpenGateMatches(current.value, request)) {
+      return issue("STATE_INVALID", current.value, "material-drift-restart-predecessor-mismatch");
+    }
+    const subjects: ProduceUpstreamSubject[] = [];
+    for (const binding of expectedProduceUpstreamBindings(current.value)) {
+      const loaded = await loadProduceUpstreamSubject(dependencies, authority, current.value, binding);
+      if (!loaded.ok) return loaded;
+      subjects.push(loaded.value);
+    }
+    const upstream = uniqueMaterialDriftUpstream(subjects, request.context.affected_upstream.digest);
+    if (upstream === undefined) {
+      return issue("STATE_INVALID", current.value, "material-drift-upstream-subject-unavailable");
+    }
+    if (record.envelope.human_provenance.actor_class !== "human") {
+      return issue("STATE_INVALID", current.value, "material-drift-restart-human-provenance-required");
+    }
+    const humanProvenance = planningRestartHumanProvenanceV1Schema.safeParse(
+      record.envelope.human_provenance,
+    );
+    if (!humanProvenance.success) {
+      return issue("STATE_INVALID", current.value, "material-drift-restart-human-provenance-required");
+    }
+    const targetPhase = upstream.artifact.phase_instance;
+    const { open_gate: _open, last_transition: _transition, ...predecessor } = current.value;
+    const restartPredecessor = predecessor as TaskStateV1;
+    const liveConfig = await dependencies.read_config(authority.config);
+    if (liveConfig.kind !== "valid") return issue("STATE_INVALID", current.value, "material-drift-restart-config-unavailable");
+    const targetCall = parseToolCall("archflow_state", {
+      schema_version: "1",
+      task_id: authority.task_id,
+      intent_id: record.gate_id,
+      expected_revision: current.value.revision,
+      input_fingerprint: current.value.input_fingerprint,
+      phase_instance: targetPhase,
+      step: "produce",
+      status: "running",
+    });
+    const fingerprintSubject = await dependencies.resolve_input_fingerprint({
+      runner: dependencies.runner,
+      authority,
+      state: canonicalDocument(restartPredecessor),
+      call: targetCall,
+      live_config: liveConfig.snapshot,
+      context: authority.context,
+    });
+    if (!fingerprintSubject.ok) return fingerprintSubject;
+    const fingerprint = computeInputFingerprint(fingerprintSubject.value);
+    const planned = planPlanningRestart({
+      current: restartPredecessor,
+      restart_id: record.gate_id,
+      target_phase_instance: targetPhase,
+      reason: record.envelope.payload.reason,
+      recomputed_input_fingerprint: fingerprint,
+      human_provenance: humanProvenance.data,
+    });
+    return planned.ok
+      ? ok(canonicalDocument({ ...planned.value, revision: parseSafeInteger(current.value.revision + 1) } as TaskStateV1))
+      : planned;
   }
   if (enactsReentry(record)) {
     return planGateAuthorizedReentry(dependencies, authority, current, request, record);
@@ -699,7 +748,7 @@ async function closedStateForRecord(
     if (!targets.ok) return targets;
     for (const drifted of request.context.drifted_projections) {
       const entry = targets.value.get(drifted.path);
-      if (entry === undefined || entry.projection.content_digest !== drifted.recorded_digest) {
+      if (entry === undefined || entry.retired || entry.projection.content_digest !== drifted.recorded_digest) {
         return issue("STATE_INVALID", current.value, "baseline-adoption-current-stale");
       }
       if (await currentProjectionDigest(entry.target) !== drifted.observed_digest) {
@@ -710,6 +759,32 @@ async function closedStateForRecord(
     if (!plannedFinalPhase.ok) return plannedFinalPhase;
     const next = nextStateForRecord(current.value, record, digest, plannedFinalPhase.value);
     const baseline_adoptions = [...(next.value.baseline_adoptions ?? []), baselineAdoptionRecord(record.gate_id, next.value.revision, request.context.drifted_projections)]
+      .sort((left, right) => left.gate_id.localeCompare(right.gate_id));
+    return ok(canonicalDocument({ ...next.value, baseline_adoptions: Object.freeze(baseline_adoptions) } as TaskStateV1));
+  }
+  if (
+    record.outcome === "decided" && record.kind === "baseline-adoption" &&
+    record.envelope.payload.decision === "adopt-committed-deletions" && request.kind === "baseline-adoption"
+  ) {
+    // The decision is bound to the exact recorded presences the human saw retired; each must
+    // still be the newest recorded projection for its path and still be absent from the worktree
+    // at commit time, or the decision is stale. Replay is naturally idempotent: the retirement
+    // of an already-retired path changes nothing.
+    const targets = await discoverNewestProjections(dependencies, authority, current);
+    if (!targets.ok) return targets;
+    for (const deleted of request.context.deleted_projections ?? []) {
+      const entry = targets.value.get(deleted.path);
+      if (entry === undefined || entry.retired || entry.projection.content_digest !== deleted.recorded_digest) {
+        return issue("STATE_INVALID", current.value, "baseline-adoption-deletion-stale");
+      }
+      if (await currentProjectionDigest(entry.target) !== "missing") {
+        return issue("STATE_INVALID", current.value, "baseline-adoption-deletion-stale");
+      }
+    }
+    const plannedFinalPhase = await loadApprovedDesignFinalPhase(dependencies, current.value, record);
+    if (!plannedFinalPhase.ok) return plannedFinalPhase;
+    const next = nextStateForRecord(current.value, record, digest, plannedFinalPhase.value);
+    const baseline_adoptions = [...(next.value.baseline_adoptions ?? []), baselineAdoptionRecord(record.gate_id, next.value.revision, request.context.drifted_projections, request.context.deleted_projections ?? [])]
       .sort((left, right) => left.gate_id.localeCompare(right.gate_id));
     return ok(canonicalDocument({ ...next.value, baseline_adoptions: Object.freeze(baseline_adoptions) } as TaskStateV1));
   }
@@ -804,12 +879,12 @@ async function validateCompletedPlanningRestart(
     return issue("STATE_INVALID", current.value, "gate-restart-replay-state-mismatch");
   }
   const restart = current.value.restart_history?.find((entry) => entry.restart_id === record.gate_id);
-  if (restart === undefined || restart.from_phase_instance !== request.phase_instance) {
+  if (restart === undefined || restart.source_phase_instance !== request.phase_instance) {
     return issue("STATE_INVALID", current.value, "gate-restart-replay-state-mismatch");
   }
   if (current.value.revision > request.opened_at_revision + 1) return ok(undefined);
   if (
-    current.value.phase_instance !== restart.to_phase_instance ||
+    current.value.phase_instance !== restart.target_phase_instance ||
     current.value.step !== "produce" ||
     current.value.status !== "running" ||
     current.value.attempt !== 1
@@ -821,7 +896,7 @@ async function validateCompletedPlanningRestart(
     authority,
     request,
     current,
-    target_phase_instance: restart.to_phase_instance,
+    target_phase_instance: restart.target_phase_instance,
   });
   if (!fingerprint.ok) return fingerprint;
   return current.value.input_fingerprint === fingerprint.value
@@ -937,6 +1012,457 @@ async function installReceipt(
   return ok({ receipt, final });
 }
 
+function directSemanticDecisionIntent(
+  operationDigest: Sha256Digest,
+  substep: "decision-archive" | "decision-settle" | "revise-enter",
+): PathSafeId {
+  return parsePathSafeId(`afop-${operationDigest}-${substep}`);
+}
+
+function directSemanticDecisionRequestDigest(
+  operationDigest: Sha256Digest,
+  request: CanonicalDocument<GateRequestV1>,
+  decision: CanonicalDocument<GateDecisionRecordV1>,
+): Sha256Digest {
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "direct-semantic-decision-settlement",
+    operation_digest: operationDigest,
+    gate_request_digest: request.digest,
+    gate_decision_digest: decision.digest,
+  });
+}
+
+function legacyLocalDecisionSettlementOperationDigest(
+  request: CanonicalDocument<GateRequestV1>,
+  decision: CanonicalDocument<GateDecisionRecordV1>,
+): Sha256Digest {
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "legacy-local-decision-settlement",
+    gate_request_digest: request.digest,
+    gate_decision_digest: decision.digest,
+  });
+}
+
+function directSemanticRevisionEntryRequestDigest(
+  operationDigest: Sha256Digest,
+  checkpointRequestDigest: Sha256Digest,
+  request: CanonicalDocument<GateRequestV1>,
+  record: CanonicalDocument<GateDecisionRecordV1>,
+  inputFingerprint: Sha256Digest,
+): Sha256Digest {
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "direct-semantic-revision-entry",
+    operation_digest: operationDigest,
+    checkpoint_request_digest: checkpointRequestDigest,
+    gate_request_digest: request.digest,
+    gate_decision_digest: record.digest,
+    input_fingerprint: inputFingerprint,
+  });
+}
+
+function equivalentDirectDecision(
+  existing: GateDecisionRecordV1,
+  candidate: GateDecisionRecordV1,
+  operationDigest: Sha256Digest,
+): boolean {
+  const existingProvenance = existing.outcome === "decided"
+    ? existing.envelope.human_provenance
+    : existing.human_provenance;
+  const candidateProvenance = candidate.outcome === "decided"
+    ? candidate.envelope.human_provenance
+    : candidate.human_provenance;
+  const { human_provenance: _existing, ...existingBody } = existing.outcome === "decided"
+    ? existing.envelope
+    : existing;
+  const { human_provenance: _candidate, ...candidateBody } = candidate.outcome === "decided"
+    ? candidate.envelope
+    : candidate;
+  return existingProvenance.channel === "connected-host" &&
+    existingProvenance.decision_event_id === `afdecision-${operationDigest}` &&
+    candidateProvenance.channel === "connected-host" &&
+    candidateProvenance.decision_event_id === existingProvenance.decision_event_id &&
+    isDeepStrictEqual(existingBody, candidateBody);
+}
+
+/**
+ * Creates the immutable server-owned decision archive for one authenticated semantic operation.
+ * The disposable gate.decision projection is deliberately not consulted or written.
+ */
+export async function archiveDirectSemanticGateDecision(
+  dependencies: GateLifecycleDependencies,
+  input: DirectSemanticDecisionInput,
+): Promise<ProjectResult<DirectSemanticDecisionArchiveResult>> {
+  assertInternalTransactionAuthority(input.authority, { runner: dependencies.runner, environment: dependencies.environment });
+  assertAuthenticInvocationContext(input.invocation_context);
+  if (input.intent_id !== directSemanticDecisionIntent(input.operation_digest, "decision-archive")) {
+    throw new TypeError("direct decision archive intent does not bind the semantic operation");
+  }
+  try {
+    return await dependencies.lock.runExclusive(input.authority.workspace_root, async () => {
+      const stateResult = await stateOrFailure(dependencies, input.authority);
+      if (!stateResult.ok) return stateResult;
+      const current = stateResult.value;
+      const live = await validateLiveGateState(dependencies, input.authority, current, current.value.input_fingerprint);
+      if (!live.ok) return live;
+      const open = current.value.open_gate;
+      if (open === undefined) return issue("STATE_INVALID", current.value, "direct-decision-open-gate-missing");
+      const requestPath = await resolvePath(dependencies, input.authority, gateRequestClaim(open.gate_id), "authority-decision");
+      const archivePath = await resolvePath(dependencies, input.authority, gateDecisionClaim(open.gate_id), "authority-decision");
+      if (!requestPath.ok) return requestPath;
+      if (!archivePath.ok) return archivePath;
+      const request = await readCanonical(requestPath.value, "gate request", parsePersistedGateRequest);
+      if (request === "missing" || request === "invalid" || !exactOpenGateMatches(current.value, request.value)) {
+        return issue("STATE_INVALID", current.value, "direct-decision-request-invalid");
+      }
+      let selected: PlainJsonValue;
+      try {
+        const active = activeProjection(request.value);
+        if (!buildHumanGatePresentation(active).options.some((option) => option.token === input.choice)) {
+          throw new TypeError("semantic decisions require a server-issued choice token");
+        }
+        selected = selectGateDecisionTemplate(active, {
+          choice: input.choice,
+          reason: input.reason,
+          ...(input.option_rationale === undefined ? {} : { rationale: input.option_rationale }),
+        });
+      } catch {
+        return fail(createProjectError("GATE_DECISION_INVALID", {
+          gate_id: open.gate_id,
+          gate_kind: open.gate_kind,
+          issue_code: "decision-choice-invalid",
+        }));
+      }
+      // A restore that can never apply must be refused before the decision is archived: the
+      // decided interface is immutable, so recording it would wedge the gate behind an
+      // unapplicable decision. Adoption-sourced drift has no retained manifest to restore from.
+      const selectedDecision = (selected as Readonly<{ payload?: Readonly<{ decision?: PlainJsonValue }> }>).payload?.decision;
+      if (request.value.kind === "baseline-adoption" &&
+          selectedDecision === "restore-recorded-bytes" &&
+          !(await baselineRestoreOffered(dependencies, input.authority, current, request.value.context.drifted_projections))) {
+        return issue("STATE_INVALID", current.value, "baseline-adoption-restore-source-unavailable");
+      }
+      const provenance: HumanDecisionProvenance = {
+        schema_version: "1",
+        actor_class: "human",
+        assurance: "declared-local-trace",
+        channel: "connected-host",
+        decision_event_id: parseSafeId(`afdecision-${input.operation_digest}`),
+        connection_id: input.invocation_context.connection.connection_id,
+        request_id_digest: canonicalJsonDigest({
+          schema_version: "1",
+          request_id: input.invocation_context.transport_metadata.request_id,
+        }),
+        recorded_at: new Date().toISOString(),
+      };
+      const selectedRecord = selected as Record<string, PlainJsonValue>;
+      let candidate: CanonicalDocument<GateDecisionRecordV1>;
+      try {
+        candidate = canonicalDocument(parseInterface({ ...selectedRecord, human_provenance: provenance }, request.value));
+      } catch {
+        return fail(createProjectError("GATE_DECISION_INVALID", {
+          gate_id: open.gate_id,
+          gate_kind: open.gate_kind,
+          issue_code: "decision-binding-invalid",
+        }));
+      }
+      if (!validateDurableSemantics({ gate_request: request, gate_decision: candidate }).ok) {
+        return issue("STATE_INVALID", current.value, "direct-decision-archive-binding-invalid");
+      }
+      const existing = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
+      if (existing === "invalid") return issue("STATE_INVALID", current.value, "direct-decision-archive-invalid");
+      if (existing !== "missing") {
+        if (!validateDurableSemantics({ gate_request: request, gate_decision: existing }).ok ||
+            !equivalentDirectDecision(existing.value, candidate.value, input.operation_digest)) {
+          return issue("STATE_INVALID", current.value, "direct-decision-archive-conflict");
+        }
+        return ok({ state: current, request, record: existing, replayed: true });
+      }
+      if (await dependencies.atomic.createExclusive(archivePath.value, candidate.bytes) !== "created") {
+        const raced = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
+        if (raced === "missing" || raced === "invalid" ||
+            !equivalentDirectDecision(raced.value, candidate.value, input.operation_digest)) {
+          return issue("STATE_INVALID", current.value, "direct-decision-archive-conflict");
+        }
+        return ok({ state: current, request, record: raced, replayed: true });
+      }
+      return ok({ state: current, request, record: candidate, replayed: false });
+    });
+  } catch (error) {
+    return error instanceof TaskLockError ? io(input.authority, `direct-decision-lock-${error.stage}`) : io(input.authority, "direct-decision-archive");
+  }
+}
+
+async function settleDirectReentryCheckpoint(
+  dependencies: GateLifecycleDependencies,
+  input: DirectSemanticDecisionSettlementInput,
+): Promise<ProjectResult<GateResolution>> {
+  try {
+    return await dependencies.lock.runExclusive(input.authority.workspace_root, async () => {
+      const stateResult = await stateOrFailure(dependencies, input.authority);
+      if (!stateResult.ok) return stateResult;
+      const current = stateResult.value;
+      const open = current.value.open_gate;
+      if (open === undefined) return issue("STATE_INVALID", current.value, "direct-decision-open-gate-missing");
+      const requestPath = await resolvePath(dependencies, input.authority, gateRequestClaim(open.gate_id), "authority-decision");
+      const archivePath = await resolvePath(dependencies, input.authority, gateDecisionClaim(open.gate_id), "authority-decision");
+      if (!requestPath.ok) return requestPath;
+      if (!archivePath.ok) return archivePath;
+      const request = await readCanonical(requestPath.value, "gate request", parsePersistedGateRequest);
+      const record = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
+      if (request === "missing" || request === "invalid" || record === "missing" || record === "invalid" ||
+          !validateDurableSemantics({ gate_request: request, gate_decision: record }).ok ||
+          !exactOpenGateMatches(current.value, request.value) || !enactsReentry(record.value)) {
+        return issue("STATE_INVALID", current.value, "direct-decision-reentry-authority-invalid");
+      }
+      const provenance = record.value.outcome === "decided" ? record.value.envelope.human_provenance : record.value.human_provenance;
+      const operationMatches = provenance.channel === "connected-host"
+        ? provenance.decision_event_id === `afdecision-${input.operation_digest}`
+        : input.operation_digest === legacyLocalDecisionSettlementOperationDigest(request, record);
+      if (!operationMatches) {
+        return issue("STATE_INVALID", current.value, "direct-decision-operation-mismatch");
+      }
+      const revision = parseSafeInteger(current.value.revision + 1);
+      const outcome = receiptOutcome(record.value, revision);
+      const requestDigest = directSemanticDecisionRequestDigest(input.operation_digest, request, record);
+      const { open_gate: _open, last_transition: _transition, ...base } = current.value;
+      const checkpoint = canonicalDocument({
+        ...base,
+        revision,
+        last_transition: {
+          schema_version: "1",
+          tool: "archflow_gate",
+          operation: parseSafeCode("semantic-revision-requested"),
+          intent_id: input.intent_id,
+          request_digest: requestDigest,
+          input_fingerprint: current.value.input_fingerprint,
+          result_id: parseSafeId(record.value.gate_id),
+          outcome,
+          outcome_digest: intentOutcomeDigest(outcome),
+          prior_revision: current.value.revision,
+          resulting_revision: revision,
+        },
+      } as TaskStateV1);
+      if (!validateDurableSemantics({ state: checkpoint }).ok) {
+        return issue("STATE_INVALID", current.value, "direct-decision-checkpoint-invalid");
+      }
+      await dependencies.atomic.replace(input.authority.state, checkpoint.bytes);
+      await cleanupCommittedGateWorkspace(dependencies, input.authority, checkpoint.value);
+      return ok({ state: checkpoint, record, effect: "retry", replayed: false });
+    });
+  } catch (error) {
+    return error instanceof TaskLockError ? io(input.authority, `direct-decision-settle-lock-${error.stage}`) : io(input.authority, "direct-decision-settle");
+  }
+}
+
+/** Settles an already archived semantic decision; no human submission is accepted here. */
+export async function settleDirectSemanticGateDecision(
+  dependencies: GateLifecycleDependencies,
+  input: DirectSemanticDecisionSettlementInput,
+): Promise<ProjectResult<GateResolution>> {
+  assertInternalTransactionAuthority(input.authority, { runner: dependencies.runner, environment: dependencies.environment });
+  if (input.intent_id !== directSemanticDecisionIntent(input.operation_digest, "decision-settle")) {
+    throw new TypeError("direct decision settlement intent does not bind the semantic operation");
+  }
+  const currentResult = await stateOrFailure(dependencies, input.authority);
+  if (!currentResult.ok) return currentResult;
+  const open = currentResult.value.value.open_gate;
+  if (open === undefined) {
+    const transition = currentResult.value.value.last_transition;
+    if (transition === undefined || transition.tool !== "archflow_gate" ||
+        transition.operation !== "semantic-revision-requested" || transition.intent_id !== input.intent_id ||
+        transition.resulting_revision !== currentResult.value.value.revision) {
+      return issue("STATE_INVALID", currentResult.value.value, "direct-decision-open-gate-missing");
+    }
+    let gateId: PathSafeId;
+    try { gateId = parsePathSafeId(transition.result_id); }
+    catch { return issue("STATE_INVALID", currentResult.value.value, "direct-decision-checkpoint-invalid"); }
+    const requestPath = await resolvePath(dependencies, input.authority, gateRequestClaim(gateId), "authority-decision");
+    const archivePath = await resolvePath(dependencies, input.authority, gateDecisionClaim(gateId), "authority-decision");
+    if (!requestPath.ok) return requestPath;
+    if (!archivePath.ok) return archivePath;
+    const request = await readCanonical(requestPath.value, "gate request", parsePersistedGateRequest);
+    const record = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
+    if (request === "missing" || request === "invalid" || record === "missing" || record === "invalid" ||
+        !enactsReentry(record.value) || !validateDurableSemantics({ gate_request: request, gate_decision: record }).ok ||
+        transition.request_digest !== directSemanticDecisionRequestDigest(input.operation_digest, request, record) ||
+        transition.outcome_digest !== intentOutcomeDigest(transition.outcome)) {
+      return issue("STATE_INVALID", currentResult.value.value, "direct-decision-checkpoint-invalid");
+    }
+    return ok({ state: currentResult.value, record, effect: "retry", replayed: true });
+  }
+  const archivePath = await resolvePath(dependencies, input.authority, gateDecisionClaim(open.gate_id), "authority-decision");
+  if (!archivePath.ok) return archivePath;
+  const record = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
+  if (record === "missing" || record === "invalid") return issue("STATE_INVALID", currentResult.value.value, "direct-decision-archive-invalid");
+  const provenance = record.value.outcome === "decided" ? record.value.envelope.human_provenance
+    : record.value.human_provenance;
+  if (provenance?.channel === "connected-host" && provenance.decision_event_id !== `afdecision-${input.operation_digest}`) {
+    return issue("STATE_INVALID", currentResult.value.value, "direct-decision-operation-mismatch");
+  }
+  if (enactsReentry(record.value)) return settleDirectReentryCheckpoint(dependencies, input);
+  return earnsReceipt(record.value)
+    ? resolveAdvancingGate(dependencies, input.authority, open.gate_id, currentResult.value.value.input_fingerprint)
+    : resolveDurableGate(dependencies, input.authority, open.gate_id, currentResult.value.value.input_fingerprint);
+}
+
+/** Enters production from an authenticated close-only semantic revision checkpoint. */
+export async function enterDirectSemanticRevisionCheckpoint(
+  dependencies: GateLifecycleDependencies,
+  input: DirectSemanticDecisionSettlementInput,
+): Promise<ProjectResult<CanonicalDocument<TaskStateV1>>> {
+  assertInternalTransactionAuthority(input.authority, { runner: dependencies.runner, environment: dependencies.environment });
+  if (input.intent_id !== directSemanticDecisionIntent(input.operation_digest, "revise-enter")) {
+    throw new TypeError("direct revision entry intent does not bind the semantic operation");
+  }
+  try {
+    return await dependencies.lock.runExclusive(input.authority.workspace_root, async () => {
+      const stateResult = await stateOrFailure(dependencies, input.authority);
+      if (!stateResult.ok) return stateResult;
+      const current = stateResult.value;
+      const transition = current.value.last_transition;
+      if (current.value.open_gate === undefined && current.value.step === "produce" && current.value.status === "running" &&
+          transition !== undefined &&
+          transition.tool === "archflow_gate" && transition.operation === "semantic-revision-enter" &&
+          transition.intent_id === input.intent_id && transition.resulting_revision === current.value.revision &&
+          transition.input_fingerprint === current.value.input_fingerprint &&
+          transition.outcome_digest === intentOutcomeDigest(transition.outcome)) {
+        let replayGateId: PathSafeId;
+        try { replayGateId = parsePathSafeId(transition.result_id); }
+        catch { return issue("STATE_INVALID", current.value, "direct-revision-entry-replay-invalid"); }
+        const replayRequestPath = await resolvePath(dependencies, input.authority, gateRequestClaim(replayGateId), "authority-decision");
+        const replayArchivePath = await resolvePath(dependencies, input.authority, gateDecisionClaim(replayGateId), "authority-decision");
+        if (!replayRequestPath.ok) return replayRequestPath;
+        if (!replayArchivePath.ok) return replayArchivePath;
+        const replayRequest = await readCanonical(replayRequestPath.value, "gate request", parsePersistedGateRequest);
+        const replayRecord = await readCanonical(replayArchivePath.value, "gate decision record", parseGateDecisionRecord);
+        const checkpointRequestDigest = transition.outcome !== null && !Array.isArray(transition.outcome) &&
+          typeof transition.outcome === "object"
+          ? Object.getOwnPropertyDescriptor(transition.outcome, "checkpoint_request_digest")
+          : undefined;
+        const predecessorAttempt = transition.outcome !== null && !Array.isArray(transition.outcome) &&
+          typeof transition.outcome === "object"
+          ? Object.getOwnPropertyDescriptor(transition.outcome, "predecessor_attempt")
+          : undefined;
+        const checkpointDigestValue = checkpointRequestDigest?.enumerable === true && "value" in checkpointRequestDigest
+          ? checkpointRequestDigest.value
+          : undefined;
+        const predecessorAttemptValue = predecessorAttempt?.enumerable === true && "value" in predecessorAttempt
+          ? predecessorAttempt.value
+          : undefined;
+        if (replayRequest === "missing" || replayRequest === "invalid" || replayRecord === "missing" || replayRecord === "invalid" ||
+            typeof checkpointDigestValue !== "string" || !/^[0-9a-f]{64}$/u.test(checkpointDigestValue) || !enactsReentry(replayRecord.value) ||
+            !Number.isSafeInteger(predecessorAttemptValue) || Number(predecessorAttemptValue) < 1 ||
+            predecessorAttemptValue !== (beginsHumanRevision(replayRecord.value)
+              ? current.value.attempt
+              : current.value.attempt - 1) ||
+            !validateDurableSemantics({ state: current, gate_request: replayRequest, gate_decision: replayRecord }).ok ||
+            transition.request_digest !== directSemanticRevisionEntryRequestDigest(
+              input.operation_digest, checkpointDigestValue as Sha256Digest, replayRequest, replayRecord,
+              current.value.input_fingerprint,
+            )) {
+          return issue("STATE_INVALID", current.value, "direct-revision-entry-replay-invalid");
+        }
+        return ok(current);
+      }
+      if (current.value.open_gate !== undefined || transition === undefined ||
+          transition.tool !== "archflow_gate" || transition.operation !== "semantic-revision-requested" ||
+          transition.resulting_revision !== current.value.revision || transition.input_fingerprint !== current.value.input_fingerprint ||
+          transition.outcome_digest !== intentOutcomeDigest(transition.outcome)) {
+        return issue("STATE_INVALID", current.value, "direct-revision-checkpoint-invalid");
+      }
+      let gateId: PathSafeId;
+      try { gateId = parsePathSafeId(transition.result_id); }
+      catch { return issue("STATE_INVALID", current.value, "direct-revision-checkpoint-invalid"); }
+      const requestPath = await resolvePath(dependencies, input.authority, gateRequestClaim(gateId), "authority-decision");
+      const archivePath = await resolvePath(dependencies, input.authority, gateDecisionClaim(gateId), "authority-decision");
+      if (!requestPath.ok) return requestPath;
+      if (!archivePath.ok) return archivePath;
+      const request = await readCanonical(requestPath.value, "gate request", parsePersistedGateRequest);
+      const record = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
+      if (request === "missing" || request === "invalid" || record === "missing" || record === "invalid" ||
+          !enactsReentry(record.value) || !validateDurableSemantics({ gate_request: request, gate_decision: record }).ok ||
+          request.value.task_id !== current.value.task_id || request.value.phase_instance !== current.value.phase_instance ||
+          request.value.opened_at_revision + 1 !== current.value.revision) {
+        return issue("STATE_INVALID", current.value, "direct-revision-archive-invalid");
+      }
+      const checkpointIdentity = /^afop-([0-9a-f]{64})-decision-settle$/u.exec(transition.intent_id);
+      if (checkpointIdentity === null || transition.request_digest !== directSemanticDecisionRequestDigest(
+        checkpointIdentity[1] as Sha256Digest, request, record,
+      )) return issue("STATE_INVALID", current.value, "direct-revision-operation-invalid");
+      const provenance = record.value.outcome === "decided" ? record.value.envelope.human_provenance : record.value.human_provenance;
+      if (provenance.channel === "connected-host" && provenance.decision_event_id !== `afdecision-${checkpointIdentity[1]}`) {
+        return issue("STATE_INVALID", current.value, "direct-revision-operation-invalid");
+      }
+      if (dependencies.resolve_gate_reentry_fingerprint === undefined) {
+        return issue("STATE_INVALID", current.value, "gate-reentry-fingerprint-unavailable");
+      }
+      const fingerprint = await dependencies.resolve_gate_reentry_fingerprint({ authority: input.authority, request: request.value, current });
+      if (!fingerprint.ok) return fingerprint;
+      const { last_transition: _last, ...predecessor } = current.value;
+      const planned = planStateTransition({
+        current: predecessor as TaskStateV1,
+        target: {
+          phase_instance: current.value.phase_instance,
+          step: "produce",
+          status: "running",
+          attempt: beginsHumanRevision(record.value) ? current.value.attempt : parseSafeInteger(current.value.attempt + 1),
+          input_fingerprint: fingerprint.value,
+        },
+        recomputed_input_fingerprint: fingerprint.value,
+        human_revision_reentry: beginsHumanRevision(record.value),
+      });
+      if (!planned.ok) return planned;
+      const revision = parseSafeInteger(current.value.revision + 1);
+      const evidence = current.value.authoritative_results.filter((entry) =>
+        entry.phase_instance === current.value.phase_instance &&
+        (entry.step === "counter_review" || entry.step === "adjudicate" || entry.step === "triage"));
+      const entryOutcome = {
+        ok: true,
+        checkpoint_request_digest: transition.request_digest,
+        predecessor_attempt: current.value.attempt,
+      } as const;
+      const entered = canonicalDocument({
+        ...planned.value,
+        revision,
+        ...(beginsHumanRevision(record.value) ? {
+          pending_human_revision: {
+            gate_id: record.value.gate_id,
+            gate_kind: record.value.kind,
+            predecessor_subject_digest: record.value.subject_digest,
+            predecessor_input_fingerprint: current.value.input_fingerprint,
+            requested_at_revision: revision,
+            attempt: current.value.attempt,
+            evidence,
+          },
+        } : {}),
+        last_transition: {
+          schema_version: "1",
+          tool: "archflow_gate",
+          operation: parseSafeCode("semantic-revision-enter"),
+          intent_id: input.intent_id,
+          request_digest: directSemanticRevisionEntryRequestDigest(
+            input.operation_digest, transition.request_digest, request, record, fingerprint.value,
+          ),
+          input_fingerprint: fingerprint.value,
+          result_id: parseSafeId(gateId),
+          outcome: entryOutcome,
+          outcome_digest: intentOutcomeDigest(entryOutcome),
+          prior_revision: current.value.revision,
+          resulting_revision: revision,
+        },
+      } as TaskStateV1);
+      if (!validateDurableSemantics({ state: entered }).ok) return issue("STATE_INVALID", current.value, "direct-revision-entry-invalid");
+      await dependencies.atomic.replace(input.authority.state, entered.bytes);
+      return ok(entered);
+    });
+  } catch (error) {
+    return error instanceof TaskLockError ? io(input.authority, `direct-revision-lock-${error.stage}`) : io(input.authority, "direct-revision-entry");
+  }
+}
+
 export async function resolveDurableGate(
   dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
@@ -956,7 +1482,7 @@ export async function resolveDurableGate(
       const archivePath = await resolvePath(dependencies, authority, gateDecisionClaim(gateId), "authority-decision");
       if (!requestPath.ok) return requestPath;
       if (!archivePath.ok) return archivePath;
-      const request = await readCanonical(requestPath.value, "gate request", parseGateRequest);
+      const request = await readCanonical(requestPath.value, "gate request", parsePersistedGateRequest);
       if (request === "missing" || request === "invalid") return issue("STATE_INVALID", current.value, "gate-request-invalid");
       const archived = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
       if (archived !== "missing") {
@@ -970,6 +1496,11 @@ export async function resolveDurableGate(
             );
             if (!replay.ok) return replay;
           }
+          if (
+            archived.value.outcome === "decided" && archived.value.kind === "material-drift" &&
+            archived.value.envelope.payload.decision === "amend-upstream" &&
+            !completedMaterialDriftRestartMatches(current.value, request.value, archived.value)
+          ) return issue("STATE_INVALID", current.value, "material-drift-restart-replay-mismatch");
           return ok({ state: current, record: archived, effect, replayed: true });
         }
         const closure = await closedStateForRecord(
@@ -979,7 +1510,8 @@ export async function resolveDurableGate(
         const prepared = closure.value;
         // A closure-before-receipt crash resumes through the same ordering. The archived request
         // carries no fingerprint field, so only non-success closures can be resumed here; success
-        // receipt recovery is driven by runDurableGate, which supplies the authenticated fingerprint.
+        // receipt recovery is driven by the direct semantic settlement, which supplies the
+        // authenticated fingerprint.
         if (earnsReceipt(archived.value)) return issue("STATE_INVALID", current.value, "gate-success-receipt-resume-required");
         const transitioned = withGateTransition(
           authority, request.value, archived.value, current, prepared,
@@ -1041,40 +1573,8 @@ export async function resolveDurableGate(
   }
 }
 
-export async function runDurableGate(
-  dependencies: GateLifecycleDependencies,
-  input: GateOpenInput & Readonly<{ signal: AbortSignal }>,
-): Promise<ProjectResult<GateResolution | GateOpenResult>> {
-  const opened = await openDurableGate(dependencies, input);
-  if (!opened.ok) return opened;
-  if (opened.value.replay !== undefined) {
-    if (opened.value.state.value.open_gate?.gate_id !== opened.value.gate_id) {
-      const effect = opened.value.replay.value.outcome === "decided" ? gateDecisionEffect(opened.value.replay.value.envelope.payload) : "non-advancing";
-      const cleaned = await cleanupResolvedInterfaces(dependencies, input.authority, opened.value.request.value, opened.value.replay.value);
-      if (!cleaned.ok) return cleaned;
-      if (opened.value.replay.value.outcome === "cancelled") return fail(createProjectError("GATE_CANCELLED", { gate_id: opened.value.gate_id, gate_kind: opened.value.replay.value.kind }));
-      return ok({ state: opened.value.state, record: opened.value.replay, effect, replayed: true });
-    }
-    return earnsReceipt(opened.value.replay.value)
-      ? resolveAdvancingGate(dependencies, input.authority, opened.value.gate_id, input.input_fingerprint)
-      : resolveDurableGate(dependencies, input.authority, opened.value.gate_id, input.input_fingerprint);
-  }
-  const decision = await resolvePath(dependencies, input.authority, "gate.decision", "workspace-gate-interface");
-  if (!decision.ok) return decision;
-  const wait = await waitForGateInterface({
-    decision_path: decision.value,
-    signal: input.signal,
-  });
-  if (wait.kind === "aborted") return fail(createProjectError("CANCELLED", { source: "client", attempt: input.authority.context.attempt }));
-  // Resolve inline so advancing decisions can write archive -> receipt -> state while the
-  // authenticated request fingerprint is still available. The lower-level resolver deliberately
-  // refuses to manufacture success receipts without it.
-  const resolved = await resolveDurableGate(dependencies, input.authority, opened.value.gate_id, input.input_fingerprint);
-  if (resolved.ok || resolved.error.code !== "STATE_INVALID") return resolved;
-  return resolveAdvancingGate(dependencies, input.authority, opened.value.gate_id, input.input_fingerprint);
-}
-
 export type BaselineDriftedProjection = Extract<GateRequestV1, { kind: "baseline-adoption" }>["context"]["drifted_projections"][number];
+export type BaselineDeletedProjection = NonNullable<Extract<GateRequestV1, { kind: "baseline-adoption" }>["context"]["deleted_projections"]>[number];
 
 /**
  * Builds one durable adoption record from the gate's drifted set. The projection sort is plain
@@ -1086,6 +1586,7 @@ export function baselineAdoptionRecord(
   gateId: GateDecisionRecordV1["gate_id"],
   adoptedAtRevision: TaskStateV1["revision"],
   driftedProjections: readonly BaselineDriftedProjection[],
+  deletedProjections: readonly BaselineDeletedProjection[] = [],
 ): BaselineAdoptionRecord {
   const ordinal = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
   return Object.freeze({
@@ -1094,6 +1595,13 @@ export function baselineAdoptionRecord(
     adopted_projections: Object.freeze(driftedProjections
       .map((drifted) => Object.freeze({ path: drifted.path, content_digest: drifted.observed_digest }))
       .sort((left, right) => ordinal(left.path, right.path))),
+    // Absence is recorded only when the decision adopted deletions; a bytes-only archive from
+    // before that decision exists must keep its exact historical shape.
+    ...(deletedProjections.length === 0 ? {} : {
+      adopted_absences: Object.freeze(deletedProjections
+        .map((deleted) => deleted.path)
+        .sort(ordinal)),
+    }),
   });
 }
 
@@ -1118,7 +1626,7 @@ async function baselineRestoreOwners(
   const owners = new Map<string, { reference: AuthoritativeResultRef; drifted: BaselineDriftedProjection[] }>();
   for (const drifted of driftedProjections) {
     const entry = targets.value.get(drifted.path);
-    if (entry === undefined || entry.projection.content_digest !== drifted.recorded_digest) {
+    if (entry === undefined || entry.retired || entry.projection.content_digest !== drifted.recorded_digest) {
       return issue("STATE_INVALID", current.value, "baseline-adoption-current-stale");
     }
     if (entry.reference === undefined) {
@@ -1167,7 +1675,7 @@ async function resolveAdvancingGate(
       const archivePath = await resolvePath(dependencies, authority, gateDecisionClaim(gateId), "authority-decision");
       const interfacePath = await resolvePath(dependencies, authority, "gate.decision", "workspace-gate-interface");
       if (!requestPath.ok) return requestPath; if (!archivePath.ok) return archivePath; if (!interfacePath.ok) return interfacePath;
-      const request = await readCanonical(requestPath.value, "gate request", parseGateRequest);
+      const request = await readCanonical(requestPath.value, "gate request", parsePersistedGateRequest);
       if (request === "missing" || request === "invalid") return issue("STATE_INVALID", current.value, "gate-request-invalid");
       let archived = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
       let preparedClosure: CanonicalDocument<TaskStateV1> | undefined;

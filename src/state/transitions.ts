@@ -1,16 +1,25 @@
 import { isDeepStrictEqual } from "node:util";
 
 import type { DurableArtifact } from "../contracts/durable.js";
-import type { AuthoritativeResultRef, HumanRevisionRecord, PlanningRestartConnectedProvenance, PlanningRestartRecord, TaskStateV1 } from "../contracts/durable-state.js";
+import type {
+  AuthoritativeResultRef,
+  HumanRevisionRecord,
+  PlanningRestartRecord,
+  TaskStateV1,
+} from "../contracts/durable-state.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
-import { parseSafeInteger, type PathSafeId, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
-import { comparePhaseInstances, decodePhaseInstance, isEarlierPlanningPhase, nextPhaseInstance } from "../contracts/phase-instance.js";
+import { parseSafeInteger, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
+import {
+  comparePhaseInstances,
+  decodePhaseInstance,
+  isStrictlyEarlierPlanningPhase,
+  nextPhaseInstance,
+} from "../contracts/phase-instance.js";
 import type { PhaseInstanceId } from "../contracts/phase-instance.js";
 import { assertPlainJson } from "../contracts/plain-json.js";
 import { WORKFLOW_V1 } from "../contracts/workflow.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
 import type { HumanRevisionDeclaration } from "../contracts/mcp-tools.js";
-import type { HumanDecisionProvenance } from "../contracts/gates.js";
 import {
   assertAuthenticatedGateApproval,
   type AuthenticatedGateApproval,
@@ -46,14 +55,99 @@ export type TransitionPlanInput = Readonly<{
   resulting_subject_digest?: Sha256Digest;
   /** Internal gate boundary: human-requested bytes begin without consuming a review attempt. */
   human_revision_reentry?: boolean;
-  planning_restart?: Readonly<{
-    restart_id: PathSafeId;
-    reason: string;
-    provenance: HumanDecisionProvenance | PlanningRestartConnectedProvenance;
-  }>;
+  /**
+   * Re-derived phase bound from the design-document bytes this produce records. Undefined
+   * leaves the stored bound untouched; null (open-ended design) clears it. Keeps the bound
+   * truthful when phase-boundary revisions change the plan after the design approval.
+   */
+  derived_planned_final_phase?: number | null;
+}>;
+
+export type PlanningRestartPlanInput = Readonly<{
+  current: TaskStateV1;
+  restart_id: PlanningRestartRecord["restart_id"];
+  target_phase_instance: PhaseInstanceId;
+  reason: string;
+  recomputed_input_fingerprint: Sha256Digest;
+  human_provenance: PlanningRestartRecord["human_provenance"];
 }>;
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
+
+function restartInvalid(input: PlanningRestartPlanInput, issue: string): ProjectResult<never> {
+  void issue;
+  return Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("TRANSITION_INVALID", {
+      phase_instance: input.target_phase_instance,
+      from: `${input.current.step}-${input.current.status}`,
+      to: "planning-restart",
+    }),
+  });
+}
+
+/**
+ * Plans the one exceptional backward edge. It archives, rather than deletes, every invalidated
+ * authority root and lands directly in the existing target produce window.
+ */
+export function planPlanningRestart(value: PlanningRestartPlanInput): ProjectResult<NextStateDraft> {
+  assertPlainJson(value, "planning restart input");
+  const input = structuredClone(value);
+  const current = input.current;
+  if (
+    current.terminal !== undefined || current.open_gate !== undefined || input.reason.trim() === "" ||
+    !isStrictlyEarlierPlanningPhase(input.target_phase_instance, current.phase_instance)
+  ) return restartInvalid(input, "target-not-strictly-earlier-planning-phase");
+  if ((current.restart_history ?? []).some((record) => record.restart_id === input.restart_id)) {
+    return restartInvalid(input, "restart-id-already-recorded");
+  }
+
+  const retained = current.authoritative_results.filter((reference) =>
+    comparePhaseInstances(reference.phase_instance, input.target_phase_instance) < 0);
+  const superseded = current.authoritative_results.filter((reference) =>
+    comparePhaseInstances(reference.phase_instance, input.target_phase_instance) >= 0);
+  const restartedAtRevision = parseSafeInteger(current.revision + 1);
+  const record: PlanningRestartRecord = Object.freeze({
+    restart_id: input.restart_id,
+    source_phase_instance: current.phase_instance,
+    target_phase_instance: input.target_phase_instance,
+    reason: input.reason,
+    restarted_at_revision: restartedAtRevision,
+    superseded_results: Object.freeze(superseded),
+    cleared_waivers: Object.freeze([...current.waivers]),
+    ...(current.pending_human_revision === undefined
+      ? {}
+      : { cleared_pending_human_revision: current.pending_human_revision }),
+    human_provenance: input.human_provenance,
+  });
+  const history = Object.freeze(
+    [...(current.restart_history ?? []), record]
+      .sort((left, right) => left.restart_id.localeCompare(right.restart_id)),
+  );
+  const targetKind = decodePhaseInstance(input.target_phase_instance).kind;
+  const {
+    revision: _revision,
+    last_transition: _lastTransition,
+    pending_human_revision: _pendingHumanRevision,
+    planned_final_phase: plannedFinalPhase,
+    ...preserved
+  } = current;
+  return ok(Object.freeze({
+    ...preserved,
+    phase_instance: input.target_phase_instance,
+    step: "produce",
+    status: "running",
+    attempt: parseSafeInteger(1),
+    input_fingerprint: input.recomputed_input_fingerprint,
+    authoritative_results: Object.freeze(retained),
+    waivers: Object.freeze([]),
+    restart_history: history,
+    ...(targetKind === "prd" || targetKind === "design" || plannedFinalPhase === undefined
+      ? {}
+      : { planned_final_phase: plannedFinalPhase }),
+  }));
+}
 
 function invalid(input: TransitionPlanInput, from: string, to: string): ProjectResult<never> {
   return Object.freeze({
@@ -215,78 +309,6 @@ function legalMovement(input: TransitionPlanInput): boolean {
     target.attempt === 1;
 }
 
-export type PlanningRestartPlanInput = Readonly<{
-  current: TaskStateV1;
-  target_phase_instance: PhaseInstanceId;
-  input_fingerprint: Sha256Digest;
-  restart_id: PathSafeId;
-  reason: string;
-  provenance: HumanDecisionProvenance | PlanningRestartConnectedProvenance;
-}>;
-
-/** Plans one explicit, audit-preserving restart to a strictly earlier planning stage. */
-export function planPlanningRestart(value: PlanningRestartPlanInput): ProjectResult<NextStateDraft> {
-  assertPlainJson(value, "planning restart input");
-  const input = structuredClone(value) as PlanningRestartPlanInput;
-  if (input.current.terminal !== undefined || input.current.open_gate !== undefined ||
-      !isEarlierPlanningPhase(input.target_phase_instance, input.current.phase_instance) ||
-      input.reason.trim() === "") {
-    return Object.freeze({
-      schema_version: "1",
-      ok: false,
-      error: createProjectError("TRANSITION_INVALID", {
-        phase_instance: input.target_phase_instance,
-        from: `${input.current.step}-${input.current.status}`,
-        to: "produce-running",
-      }),
-    });
-  }
-  const supersededResults = input.current.authoritative_results.filter((reference) =>
-    comparePhaseInstances(reference.phase_instance, input.target_phase_instance) >= 0);
-  const retainedResults = input.current.authoritative_results.filter((reference) =>
-    comparePhaseInstances(reference.phase_instance, input.target_phase_instance) < 0);
-  const restartedAtRevision = parseSafeInteger(input.current.revision + 1);
-  const record: PlanningRestartRecord = Object.freeze({
-    restart_id: input.restart_id,
-    from_phase_instance: input.current.phase_instance,
-    to_phase_instance: input.target_phase_instance,
-    reason: input.reason,
-    restarted_at_revision: restartedAtRevision,
-    superseded_results: Object.freeze(supersededResults),
-    cleared_waivers: Object.freeze([...input.current.waivers]),
-    ...(input.current.pending_human_revision === undefined ? {} : {
-      cleared_pending_human_revision: input.current.pending_human_revision,
-    }),
-    provenance: input.provenance,
-  });
-  const history = [...(input.current.restart_history ?? []), record]
-    .sort((left, right) => left.restart_id.localeCompare(right.restart_id));
-  const {
-    revision: _revision,
-    last_transition: _transition,
-    open_gate: _openGate,
-    pending_human_revision: _pending,
-    terminal: _terminal,
-    planned_final_phase: plannedFinalPhase,
-    ...preserved
-  } = input.current;
-  const targetKind = decodePhaseInstance(input.target_phase_instance).kind;
-  return ok(Object.freeze({
-    ...preserved,
-    phase_instance: input.target_phase_instance,
-    step: "produce",
-    status: "running",
-    attempt: parseSafeInteger(1),
-    input_fingerprint: input.input_fingerprint,
-    authoritative_results: Object.freeze(retainedResults),
-    waivers: Object.freeze([]),
-    restart_history: Object.freeze(history),
-    ...(targetKind === "phase-design" && plannedFinalPhase !== undefined
-      ? { planned_final_phase: plannedFinalPhase }
-      : {}),
-  } as NextStateDraft));
-}
-
 function artifactMatches(input: TransitionPlanInput): boolean {
   const artifact = input.artifact;
   if (artifact === undefined) {
@@ -412,19 +434,6 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
   if (input.target.input_fingerprint !== input.recomputed_input_fingerprint) {
     return fingerprintFailure(input.recomputed_input_fingerprint, input.target.input_fingerprint);
   }
-  if (input.planning_restart !== undefined) {
-    if (
-      input.target.step !== "produce" || input.target.status !== "running" || input.target.attempt !== 1 ||
-      input.artifact !== undefined || input.result_reference !== undefined ||
-      input.constitution_result_reference !== undefined || input.human_revision !== undefined
-    ) return invalid(input, from, to);
-    return planPlanningRestart({
-      current: input.current,
-      target_phase_instance: input.target.phase_instance,
-      input_fingerprint: input.target.input_fingerprint,
-      ...input.planning_restart,
-    });
-  }
   const committedOutput = hasAuthenticatedCommittedOutput(input);
   const decodedCurrent = decodePhaseInstance(input.current.phase_instance);
   const crossesPhase = input.target.phase_instance !== input.current.phase_instance;
@@ -451,7 +460,10 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
   if (
     decodedCurrent.kind !== "phase-impl" &&
     crossesPhase &&
-    !hasAuthenticatedArtifactApproval(input)
+    !hasAuthenticatedArtifactApproval(input) &&
+    // An accepted migration audit is the design phase's exit authority for a legacy import: the
+    // same authenticated approval legalMovement's design-jump rule settles on.
+    !(decodedCurrent.kind === "design" && hasAuthenticatedMigrationAudit(input))
   ) return invalid(input, from, to);
   if (
     (decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") &&
@@ -473,8 +485,12 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     revision: _revision,
     last_transition: _transition,
     pending_human_revision: pendingHumanRevision,
+    planned_final_phase: preservedPlannedFinalPhase,
     ...preserved
   } = input.current;
+  const plannedFinalPhase = input.derived_planned_final_phase !== undefined
+    ? input.derived_planned_final_phase
+    : preservedPlannedFinalPhase;
   const completingHumanRevision = pendingHumanRevision !== undefined &&
     input.target.step === "produce" && input.target.status === "succeeded";
   const significantHumanRevision = completingHumanRevision && input.human_revision?.classification === "significant";
@@ -523,6 +539,9 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     ...(!completingHumanRevision && pendingHumanRevision !== undefined
       ? { pending_human_revision: pendingHumanRevision }
       : {}),
+    ...(plannedFinalPhase === undefined || plannedFinalPhase === null
+      ? {}
+      : { planned_final_phase: parseSafeInteger(plannedFinalPhase) }),
   });
   if (
     input.result_reference === undefined &&

@@ -102,7 +102,7 @@ function protocolResponse(id: JsonRpcId, error: ProtocolError): Readonly<Record<
   return { jsonrpc: JSON_RPC, id, error: { code: protocolCode(error), message: error.code, data: error } };
 }
 
-function wireResult(outcome: Extract<ToolBoundaryOutcome, { kind: "project-result" }>): unknown {
+function wireResult(outcome: Extract<ToolBoundaryOutcome, { kind: "project-result" | "semantic-result" }>): unknown {
   return JSON.parse(JSON.stringify(outcome.result)) as unknown;
 }
 

@@ -1,59 +1,71 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 
+import { canonicalJsonDigest, sha256Bytes } from "../contracts/canonical.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
-import { parsePathSafeId, parseSha256Digest, type PathSafeId } from "../contracts/evidence.js";
-import type { GateKind } from "../contracts/gates.js";
-import { decodePhaseInstance, isEarlierPlanningPhase, parsePhaseInstanceId } from "../contracts/phase-instance.js";
-import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
-import { parseTriageCandidate, type TriageDisposition } from "../contracts/triage.js";
-import { PIPELINE_STEPS, type PipelineStep } from "../contracts/vocabulary.js";
-import { parseDocumentArtifact } from "../contracts/durable-document.js";
+import { parsePathSafeId, type PathSafeId } from "../contracts/evidence.js";
+import { parseConfigYaml } from "../contracts/config.js";
+import type { GateContext } from "../contracts/gates.js";
 import {
   parseRepositoryPathClaim,
   parseTaskPathClaim,
   toRepositoryPathClaim,
   type RepositoryPathClaim,
 } from "../contracts/path-claims.js";
+import { decodePhaseInstance, isStrictlyEarlierPlanningPhase } from "../contracts/phase-instance.js";
+import { parseWorkflowInvocationV1 } from "../contracts/semantic-workflow.js";
+import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
+import { parseTriageCandidate, type TriageDisposition } from "../contracts/triage.js";
+import { PIPELINE_STEPS, type PipelineStep } from "../contracts/vocabulary.js";
+import { parseDocumentArtifact } from "../contracts/durable-document.js";
 import { stageTaskInitialization } from "../init/task-initialization.js";
 import { readChangedGitPaths, resolveCommit } from "../repository/git.js";
-import { buildDocumentArtifact, type DocumentArtifactInput } from "../state/document-artifact.js";
+import { buildDocumentArtifact, type DocumentArtifactInput } from "./document-artifact.js";
 import {
   deriveCurrentEvidenceSet,
   derivePendingEditorialPredecessor,
   loadRetainedEvidence,
-} from "../state/evidence-results.js";
-import { buildImplementationOutput, type ImplementationOutputInput } from "../state/implementation-manifest.js";
+} from "./evidence-results.js";
+import { buildImplementationOutput, type ImplementationOutputInput } from "./implementation-manifest.js";
 import {
   phaseDocumentDefaults,
   phaseImplParentDocumentDefaults,
   phaseReviewPaths,
+  planningRestartAskBaseDigest,
   type PhaseImplParentDocument,
-} from "../state/phase-documents.js";
-import { loadCurrentProduceSubject } from "../state/produce-subject.js";
-import type { ProductionServices } from "../state/production.js";
-import { resolvePinnedConstitution } from "../state/constitution.js";
-import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "../state/gate-approvals.js";
-import { APPROVAL_ARTIFACT_KINDS } from "../state/request-templates.js";
-import { baselineAdoptionInputFromFindings, buildCommitAuthorizationInput, buildDesignApprovalInput, computeTaskStatus, currentTargetRef, pendingAdjudicationGate } from "../state/status.js";
-import { baselineRestoreOffered } from "../state/gates.js";
+} from "./phase-documents.js";
+import { loadCurrentProduceSubject } from "./produce-subject.js";
+import { reconcileCurrentAuthority } from "./reconciliation.js";
+import { discoverReconciliationInput } from "./reconciliation-discovery.js";
 import { canonicalDocument } from "../contracts/canonical.js";
-import { reconcileCurrentAuthority } from "../state/reconciliation.js";
-import { discoverReconciliationInput } from "../state/reconciliation-discovery.js";
+import type { ProductionServices } from "./production.js";
+import { resolvePinnedConstitution } from "./constitution.js";
+import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "./gate-approvals.js";
+import { loadLegacyImportInitialization } from "./legacy-import-resume.js";
+/** The artifact-kind each planning phase's artifact-approval gate approves. */
+export const APPROVAL_ARTIFACT_KINDS = {
+  "prd": "prd",
+  "design": "design",
+  "phase-design": "phase-design",
+  "phase-impl": "phase-implementation",
+} as const;
+import { baselineAdoptionInputFromFindings, buildCommitAuthorizationInput, buildDesignApprovalInput, computeTaskStatus, currentApprovedUpstreams, currentReviewPredecessor, currentTargetRef, pendingAdjudicationGate } from "./status.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
-import { legalRunStepStatus } from "../state/transitions.js";
-import { buildGatePreview, previewHasChoice, type GateDecisionChoice, type ProspectiveGate } from "../state/gate-preview.js";
-import { writeStagedRequest } from "../state/staged-requests.js";
-import { computeCallEnvelope, type CallEnvelope } from "./call-envelope.js";
-import { computeLocalGatePreview } from "./gate-preview.js";
+import { legalRunStepStatus } from "./transitions.js";
+import { authenticatedApprovalIsEligibleAfterLatestRestart } from "./restart-authority.js";
+import { assessCurrentEvidence, DEFAULT_MAX_ATTEMPTS } from "../review/fixed-point.js";
+import { computeCallEnvelope, type CallEnvelope } from "../local/call-envelope.js";
+import { planningRestartTarget, semanticPlanningRestartId } from "./planning-restart.js";
+import { resolveTaskPath } from "../repository/paths.js";
+import { derivePendingWaiverRequest } from "./pending-waiver.js";
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 const fail = <T = never>(error: ProjectError): ProjectResult<T> =>
   Object.freeze({ schema_version: "1", ok: false, error });
 
 export const BUILD_REQUEST_KINDS = Object.freeze([
-  "initialize", "produce", "running", "triage",
-  "counter-review", "gate", "waiver", "advance",
-  "restart",
+  "initialize", "produce", "failed", "running", "triage",
+  "counter-review", "gate", "advance", "planning-restart", "waiver",
 ] as const);
 export type BuildRequestKind = typeof BUILD_REQUEST_KINDS[number];
 
@@ -63,56 +75,14 @@ const PAYLOAD_SHAPE =
   '"document"?:{...},"implementation"?:{...},' +
   '"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},' +
   '"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],' +
-  '"summary"?:<gate summary text>,"preview_digest"?:<gate-preview digest>,"decision"?:{"choice":<option token>,"reason":<human reason>},' +
-  '"origin"?:<waiver origin>,"rationale"?:<waiver rationale>,"target_phase_instance"?:<earlier planning phase>,"reason"?:<restart reason>}';
+  '"summary"?:<gate summary text>,' +
+  '"origin"?:<waiver origin>,"rationale"?:<waiver rationale>}';
 
 function record(value: unknown, name: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${name} must be an object; expected ${PAYLOAD_SHAPE}`);
   }
   return value as Record<string, unknown>;
-}
-
-function transitionInvalid(state: TaskStateV1, to: string): ProjectResult<never> {
-  return fail(createProjectError("TRANSITION_INVALID", {
-    phase_instance: state.phase_instance,
-    from: `${state.step}-${state.status}`,
-    to,
-  }));
-}
-
-function requestedGateDecision(snapshot: Record<string, unknown>, label: string): Readonly<{
-  preview_digest: ReturnType<typeof parseSha256Digest>;
-  decision: GateDecisionChoice;
-}> {
-  const raw = record(snapshot.decision, `${label} decision`);
-  const choice = String(raw.choice ?? "");
-  const reason = String(raw.reason ?? "");
-  if (choice.trim() === "" || reason.trim() === "") {
-    throw new TypeError(`${label} decision requires non-empty "choice" and "reason" fields`);
-  }
-  return Object.freeze({
-    preview_digest: parseSha256Digest(snapshot.preview_digest),
-    decision: Object.freeze({ choice, reason }),
-  });
-}
-
-function isPipelineStep(value: string): value is PipelineStep {
-  return (PIPELINE_STEPS as readonly string[]).includes(value);
-}
-
-function mechanicalInput(
-  services: ProductionServices,
-  state: TaskStateV1,
-  intentId: string,
-): Record<string, PlainJsonValue> {
-  return {
-    schema_version: "1",
-    task_id: services.authority.task_id,
-    intent_id: intentId,
-    expected_revision: state.revision,
-    input_fingerprint: state.input_fingerprint,
-  };
 }
 
 const ordinal = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
@@ -177,6 +147,32 @@ function implementationParentDocuments(
     }
     return Object.freeze({ document_path: parseTaskPathClaim(parent.document_path), role });
   });
+}
+
+function transitionInvalid(state: TaskStateV1, to: string): ProjectResult<never> {
+  return fail(createProjectError("TRANSITION_INVALID", {
+    phase_instance: state.phase_instance,
+    from: `${state.step}-${state.status}`,
+    to,
+  }));
+}
+
+function isPipelineStep(value: string): value is PipelineStep {
+  return (PIPELINE_STEPS as readonly string[]).includes(value);
+}
+
+function mechanicalInput(
+  services: ProductionServices,
+  state: TaskStateV1,
+  intentId: string,
+): Record<string, PlainJsonValue> {
+  return {
+    schema_version: "1",
+    task_id: services.authority.task_id,
+    intent_id: intentId,
+    expected_revision: state.revision,
+    input_fingerprint: state.input_fingerprint,
+  };
 }
 
 // Parseable on purpose so the draft passes tool-call parsing; computeCallEnvelope substitutes
@@ -315,6 +311,26 @@ async function composeProduce(
       status: "succeeded",
       artifact,
       ...(humanRevision === undefined ? {} : { human_revision: humanRevision }),
+    },
+  });
+}
+
+function composeFailedProduce(
+  services: ProductionServices,
+  state: TaskStateV1,
+  intentId: string,
+): Promise<ProjectResult<CallEnvelope>> | ProjectResult<never> {
+  if (state.terminal !== undefined || state.open_gate !== undefined ||
+      state.step !== "produce" || state.status !== "running") {
+    return transitionInvalid(state, "produce-failed");
+  }
+  return computeCallEnvelope(services, {
+    tool: "archflow_state",
+    input: {
+      ...mechanicalInput(services, state, intentId),
+      phase_instance: state.phase_instance,
+      step: "produce",
+      status: "failed",
     },
   });
 }
@@ -493,7 +509,6 @@ async function composeGate(
   if (summary.trim() === "") {
     throw new TypeError('build-request gate facts require a non-empty "summary" written for the human reviewer');
   }
-  const requested = requestedGateDecision(snapshot, "build-request gate");
   // Baseline adoption composes ahead of the phase's own approval gates: reconciliation blocking is
   // ahead of them in status routing too, so an approval composed past unresolved drift could never
   // resolve honestly. Mid-produce drift is expected producer work and never composes this gate.
@@ -504,40 +519,21 @@ async function composeGate(
     if (drift.classification === "reconciliation-required") {
       const adoption = baselineAdoptionInputFromFindings(services.authority.task_id, state, drift.findings);
       if (adoption !== undefined) {
-        // A restore that can never apply must be refused here, before the gate opens: a decided
-        // interface is immutable, so recording it would wedge the gate behind an unapplicable
-        // decision. Adoption-sourced drift has no retained manifest to restore from.
-        if (requested.decision.choice === "restore-recorded-versions" &&
-            !(await baselineRestoreOffered(services.dependencies, services.authority, services.state!, adoption.context.drifted_projections))) {
-          return transitionInvalid(state, "baseline-adoption-restore-unavailable");
-        }
-        const input: Record<string, PlainJsonValue> = {
-          ...mechanicalInput(services, state, intentId),
-          phase_instance: state.phase_instance,
-          summary,
-          subject_digest: adoption.subject_digest,
-          current_evidence: adoption.current_evidence as unknown as PlainJsonValue,
-          kind: "baseline-adoption",
-          context: adoption.context as unknown as PlainJsonValue,
-        };
-        const preview = buildGatePreview({
-          task_id: services.authority.task_id,
-          revision: state.revision,
-          phase_instance: state.phase_instance,
-          summary,
-          subject_digest: input.subject_digest as ProspectiveGate["subject_digest"],
-          current_evidence: adoption.current_evidence,
-          kind: "baseline-adoption",
-          context: input.context as ProspectiveGate["context"],
+        // A restore that can never apply is refused later, before the human decision is archived:
+        // the decided interface is immutable, so recording it would wedge the gate behind an
+        // unapplicable decision. Adoption-sourced drift has no retained manifest to restore from.
+        return computeCallEnvelope(services, {
+          tool: "archflow_gate",
+          input: {
+            ...mechanicalInput(services, state, intentId),
+            phase_instance: state.phase_instance,
+            summary,
+            subject_digest: adoption.subject_digest,
+            current_evidence: adoption.current_evidence as unknown as PlainJsonValue,
+            kind: "baseline-adoption",
+            context: adoption.context as unknown as PlainJsonValue,
+          },
         });
-        if (preview.preview_digest !== requested.preview_digest || !previewHasChoice(preview, requested.decision)) {
-          return transitionInvalid(state, preview.preview_digest !== requested.preview_digest
-            ? "gate-preview-stale"
-            : "gate-decision-choice-invalid");
-        }
-        input.preview_digest = requested.preview_digest;
-        input.decision = requested.decision as unknown as PlainJsonValue;
-        return computeCallEnvelope(services, { tool: "archflow_gate", input });
       }
     }
   }
@@ -570,20 +566,111 @@ async function composeGate(
     services.runner, state.policy_base_commit, services.authority.context,
   );
   let pendingGate: ReturnType<typeof pendingAdjudicationGate>;
+  let exhaustion: Readonly<{ attempts: number; maximum_attempts: number }> | undefined;
+  // The same eligibility filter status applies: an approval superseded by a later planning
+  // restart must not make the composer disagree with the advertised action.
+  const authenticated: AuthenticatedGateApproval[] = [];
+  for (const approval of state.approvals) {
+    const loadedApproval = await loadAuthenticatedGateApproval(
+      services.dependencies, services.authority, approval,
+    );
+    if (!loadedApproval.ok) return loadedApproval;
+    if (!authenticatedApprovalIsEligibleAfterLatestRestart(state, loadedApproval.value)) continue;
+    authenticated.push(loadedApproval.value);
+  }
   if (constitution.ok) {
-    const authenticated: AuthenticatedGateApproval[] = [];
-    for (const approval of state.approvals) {
-      const loadedApproval = await loadAuthenticatedGateApproval(
-        services.dependencies, services.authority, approval,
-      );
-      if (!loadedApproval.ok) return loadedApproval;
-      authenticated.push(loadedApproval.value);
-    }
     pendingGate = pendingAdjudicationGate(state, constitution.value, loaded.value, authenticated);
+    // The attempts-exhausted gate composes exactly when the fixed point says the budget is spent;
+    // deriving the kind from the phase alone would open the phase-default gate instead. The
+    // assessor sees the same subject facts status derives — including the shared review
+    // predecessor, without which one-hop simple-revision states would assess differently here —
+    // so the composed request and the advertised action cannot disagree about exhaustion.
+    try {
+      const configRead = await services.dependencies.read_config(services.authority.config);
+      const configured = configRead.kind === "valid"
+        ? parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(configRead.snapshot.bytes), "task config").max_attempts
+        : undefined;
+      const approvedUpstreams = await currentApprovedUpstreams(
+        services.dependencies, services.authority, state, authenticated, subject.value,
+      );
+      const predecessor = currentReviewPredecessor(state, subject.value);
+      const assessment = assessCurrentEvidence(state, loaded.value, {
+        subject_digest: subject.value.artifact_digest,
+        input_fingerprint: state.input_fingerprint,
+        constitution: constitution.value,
+        approved_upstream_digests: approvedUpstreams,
+        authenticated_gate_approvals: authenticated,
+        ...(predecessor === undefined ? {} : { review_predecessor: predecessor }),
+        ...(configured === undefined ? {} : { max_attempts: configured }),
+      });
+      if (assessment.next === "attempts-exhausted") {
+        exhaustion = Object.freeze({ attempts: state.attempt, maximum_attempts: configured ?? DEFAULT_MAX_ATTEMPTS });
+      }
+    } catch {
+      return transitionInvalid(state, "gate-fixed-point-disagreement");
+    }
+  }
+
+  // The migration-audit gate composes from the same legacy import authority status derives the
+  // advertised `migration_audit_required` fact from: the design phase of a legacy import with no
+  // accepted audit yet, ahead of the phase-default design-approval gate. Every context field is
+  // mechanical — only the summary is authored.
+  const legacyInitialization = await loadLegacyImportInitialization(services.dependencies, services.authority, state);
+  const migrationAuditRequired = legacyInitialization.ok &&
+    legacyInitialization.value !== undefined && state.phase_instance === "design" &&
+    !authenticated.some((approval) =>
+      approval.request.kind === "migration-audit" &&
+      approval.decision.envelope.payload.decision === "accept-import-audit");
+  let migrationAuditContext: GateContext<"migration-audit"> | undefined;
+  if (migrationAuditRequired) {
+    const initialization = legacyInitialization.value;
+    migrationAuditContext = initialization !== undefined &&
+      initialization.resume_phase !== undefined &&
+      initialization.planned_final_phase !== undefined &&
+      initialization.target_ref !== undefined &&
+      initialization.commit_message !== undefined
+      ? Object.freeze({
+          source_identity_digest: initialization.source_identity_digest,
+          destination_identity_digest: services.authority.task_identity_digest,
+          import_digest: initialization.import_digest,
+          code_baseline_digest: canonicalJsonDigest({ schema_version: "1", digest_kind: "code-baseline-commit", commit: initialization.code_baseline_commit }),
+          policy_baseline_digest: canonicalJsonDigest({ schema_version: "1", digest_kind: "policy-base-commit", commit: initialization.policy_base_commit }),
+          resume_phase: initialization.resume_phase,
+          planned_final_phase: initialization.planned_final_phase,
+          imported_documents: Object.freeze(initialization.mapping.map((entry) => Object.freeze({
+            path: entry.destination_path,
+            content_digest: initialization.staged_payload_refs.find((reference) => reference.legacy_path === entry.legacy_path)!.digest,
+          })).sort((left, right) => left.path.localeCompare(right.path))),
+          target_ref: initialization.target_ref,
+          baseline_commit: initialization.code_baseline_commit,
+          commit_message: initialization.commit_message,
+        })
+      : undefined;
+    if (migrationAuditContext === undefined) return transitionInvalid(state, "migration-audit-gate");
   }
 
   let input: Record<string, PlainJsonValue>;
-  if (gateKind === "design-approval") {
+  if (exhaustion !== undefined) {
+    input = {
+      ...mechanicalInput(services, state, intentId),
+      phase_instance: state.phase_instance,
+      summary,
+      subject_digest: subject.value.artifact_digest,
+      current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
+      kind: "attempts-exhausted",
+      context: { ...exhaustion, step: state.step },
+    };
+  } else if (migrationAuditRequired) {
+    input = {
+      ...mechanicalInput(services, state, intentId),
+      phase_instance: state.phase_instance,
+      summary,
+      subject_digest: subject.value.artifact_digest,
+      current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
+      kind: "migration-audit",
+      context: migrationAuditContext as unknown as PlainJsonValue,
+    };
+  } else if (gateKind === "design-approval") {
     const target = await currentTargetRef(services.dependencies);
     const approval = await buildDesignApprovalInput(services.dependencies, state, loaded.value, target);
     input = {
@@ -633,61 +720,7 @@ async function composeGate(
       context: { artifact_kind: APPROVAL_ARTIFACT_KINDS[phaseKind] },
     };
   }
-  const preview = buildGatePreview({
-    task_id: services.authority.task_id,
-    revision: state.revision,
-    phase_instance: state.phase_instance,
-    summary,
-    subject_digest: input.subject_digest as ProspectiveGate["subject_digest"],
-    current_evidence: derived.current_evidence_set,
-    kind: input.kind as GateKind,
-    context: input.context as ProspectiveGate["context"],
-  });
-  if (preview.preview_digest !== requested.preview_digest || !previewHasChoice(preview, requested.decision)) {
-    return transitionInvalid(state, preview.preview_digest !== requested.preview_digest
-      ? "gate-preview-stale"
-      : "gate-decision-choice-invalid");
-  }
-  input.preview_digest = requested.preview_digest;
-  input.decision = requested.decision as unknown as PlainJsonValue;
   return computeCallEnvelope(services, { tool: "archflow_gate", input });
-}
-
-async function composeWaiver(
-  services: ProductionServices,
-  state: TaskStateV1,
-  intentId: string,
-  snapshot: Record<string, unknown>,
-): Promise<ProjectResult<CallEnvelope>> {
-  if (state.terminal !== undefined || state.open_gate !== undefined) {
-    return transitionInvalid(state, "waiver-gate");
-  }
-  const requested = requestedGateDecision(snapshot, "build-request waiver");
-  const origin = record(snapshot.origin, "build-request waiver origin");
-  const rationale = String(snapshot.rationale ?? "");
-  if (rationale.trim() === "") throw new TypeError('build-request waiver requires a non-empty "rationale"');
-  const preview = await computeLocalGatePreview(services, {
-    kind: "waiver",
-    origin: origin as unknown as PlainJsonValue,
-    rationale,
-  });
-  if (!preview.ok) return preview;
-  if (preview.value.preview_digest !== requested.preview_digest ||
-      !previewHasChoice(preview.value, requested.decision)) {
-    return transitionInvalid(state, preview.value.preview_digest !== requested.preview_digest
-      ? "waiver-preview-stale"
-      : "waiver-decision-choice-invalid");
-  }
-  return computeCallEnvelope(services, {
-    tool: "archflow_waiver",
-    input: {
-      ...mechanicalInput(services, state, intentId),
-      origin: origin as unknown as PlainJsonValue,
-      rationale,
-      preview_digest: requested.preview_digest,
-      decision: requested.decision as unknown as PlainJsonValue,
-    },
-  });
 }
 
 /**
@@ -721,28 +754,67 @@ async function composeAdvance(
   });
 }
 
-function composePlanningRestart(
+export async function composePlanningRestartRequest(
   services: ProductionServices,
   state: TaskStateV1,
   intentId: string,
   snapshot: Record<string, unknown>,
-): Promise<ProjectResult<CallEnvelope>> | ProjectResult<never> {
-  const target = parsePhaseInstanceId(snapshot.target_phase_instance);
+): Promise<ProjectResult<CallEnvelope>> {
+  const invocation = parseWorkflowInvocationV1(snapshot.invocation);
+  const target = planningRestartTarget(invocation);
   const reason = String(snapshot.reason ?? "");
-  if (reason.trim() === "" || state.terminal !== undefined || state.open_gate !== undefined ||
-      !isEarlierPlanningPhase(target, state.phase_instance)) {
-    return transitionInvalid(state, `${target}-restart`);
+  if (reason.trim() === "") throw new TypeError("planning-restart requires the exact non-empty human reason");
+  if (state.terminal !== undefined || state.open_gate !== undefined ||
+      !isStrictlyEarlierPlanningPhase(target, state.phase_instance)) {
+    return transitionInvalid(state, "planning-restart");
+  }
+  let askBaseDigest: ReturnType<typeof sha256Bytes> | undefined;
+  if (target === "prd") {
+    const ask = await resolveTaskPath({
+      runner: services.runner, taskId: services.authority.task_id,
+      claim: parseTaskPathClaim("ask.md"), expectedClass: "task-ask", context: services.authority.context,
+    });
+    if (!ask.ok) return ask;
+    try {
+      const askBytes = new Uint8Array(await readFile(ask.value.absolute));
+      const semanticRestartId = semanticPlanningRestartId(intentId);
+      askBaseDigest = semanticRestartId === undefined
+        ? sha256Bytes(askBytes)
+        : planningRestartAskBaseDigest(askBytes, semanticRestartId, reason);
+    }
+    catch { return fail(createProjectError("IO_ERROR", { operation: "planning-restart-ask-read", attempt: state.attempt })); }
   }
   return computeCallEnvelope(services, {
     tool: "archflow_state",
     input: {
       ...mechanicalInput(services, state, intentId),
-      phase_instance: target,
+      phase_instance: state.phase_instance,
       step: "produce",
       status: "running",
-      planning_restart: { reason },
+      operation: "planning_restart",
+      target_phase_instance: target,
+      reason,
+      ...(askBaseDigest === undefined ? {} : { ask_base_digest: askBaseDigest }),
     },
   });
+}
+
+export async function composePendingWaiverRequest(
+  services: ProductionServices,
+  state: TaskStateV1,
+  intentId: string,
+  snapshot: Record<string, unknown>,
+): Promise<ProjectResult<CallEnvelope>> {
+  if (state.terminal !== undefined || state.open_gate !== undefined) {
+    return transitionInvalid(state, "waiver-gate");
+  }
+  const pending = await derivePendingWaiverRequest(services);
+  if (!pending.ok) return pending;
+  return computeCallEnvelope(services, { tool: "archflow_waiver", input: {
+    ...mechanicalInput(services, state, intentId),
+    origin: pending.value.origin as unknown as PlainJsonValue,
+    rationale: pending.value.rationale,
+  } });
 }
 
 /**
@@ -768,33 +840,15 @@ function generateIntentId(kind: string): PathSafeId {
   return parsePathSafeId(`${kind}-${stamp}-${random}`);
 }
 
-/**
- * Stages the resolved request beside the intent receipt slot and returns the envelope augmented
- * with the staged path plus the four-field reference the MCP call pastes instead of the payload.
- * Overwrite semantics are deliberate — recomposing the same intent replaces the staged file, and
- * the request digest is what protects against stale or mismatched use.
- */
-async function withStagedRequest(
-  services: ProductionServices,
-  intentId: PathSafeId,
-  result: ProjectResult<CallEnvelope>,
-): Promise<ProjectResult<CallEnvelope>> {
-  if (!result.ok) return result;
-  const staged = await writeStagedRequest({
-    services,
-    intent_id: intentId,
-    tool: result.value.tool,
-    request_input: result.value.request.input,
-    request_digest: result.value.request_digest,
-  });
-  if (!staged.ok) return staged;
-  return ok(Object.freeze({ ...result.value, staged: staged.value }));
-}
+export type ComposedRequest = Readonly<{
+  envelope: CallEnvelope;
+  intent_id: PathSafeId;
+}>;
 
-export async function runBuildRequest(
+export async function composeRequest(
   services: ProductionServices,
   value: PlainJsonValue,
-): Promise<ProjectResult<CallEnvelope>> {
+): Promise<ProjectResult<ComposedRequest>> {
   assertPlainJson(value, "build-request input");
   const snapshot = record(structuredClone(value), "build-request input");
   const kind = snapshot.kind === undefined ? "produce" : String(snapshot.kind);
@@ -806,9 +860,12 @@ export async function runBuildRequest(
     // durable state exists, and the initialization transaction owns the first authoritative
     // writes into the task directory — staging a request file next to a not-yet-adopted
     // scaffold would put bytes there that no durable authority accounts for yet.
-    return services.state === undefined
-      ? composeInitialize(services, intentId)
+    const composed = services.state === undefined
+      ? await composeInitialize(services, intentId)
       : transitionInvalid(services.state.value, "initialize");
+    return composed.ok
+      ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId }))
+      : composed;
   }
   if (services.state === undefined) {
     return fail(createProjectError("STATE_MISSING", {
@@ -818,14 +875,42 @@ export async function runBuildRequest(
   const state = services.state.value;
 
   switch (kind) {
-    case "produce": return withStagedRequest(services, intentId, await composeProduce(services, state, intentId, snapshot));
-    case "running": return withStagedRequest(services, intentId, await composeRunning(services, state, intentId, snapshot));
-    case "triage": return withStagedRequest(services, intentId, await composeTriage(services, state, intentId, snapshot));
-    case "counter-review": return withStagedRequest(services, intentId, await composeCounterReview(services, state, intentId, snapshot));
-    case "gate": return withStagedRequest(services, intentId, await composeGate(services, state, intentId, snapshot));
-    case "waiver": return withStagedRequest(services, intentId, await composeWaiver(services, state, intentId, snapshot));
-    case "advance": return withStagedRequest(services, intentId, await composeAdvance(services, state, intentId));
-    case "restart": return withStagedRequest(services, intentId, await composePlanningRestart(services, state, intentId, snapshot));
+    case "produce": {
+      const composed = await composeProduce(services, state, intentId, snapshot);
+      return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+    }
+    case "failed": {
+      const composed = await composeFailedProduce(services, state, intentId);
+      return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+    }
+    case "running": {
+      const composed = await composeRunning(services, state, intentId, snapshot);
+      return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+    }
+    case "triage": {
+      const composed = await composeTriage(services, state, intentId, snapshot);
+      return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+    }
+    case "counter-review": {
+      const composed = await composeCounterReview(services, state, intentId, snapshot);
+      return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+    }
+    case "gate": {
+      const composed = await composeGate(services, state, intentId, snapshot);
+      return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+    }
+    case "advance": {
+      const composed = await composeAdvance(services, state, intentId);
+      return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+    }
+    case "planning-restart": {
+      const composed = await composePlanningRestartRequest(services, state, intentId, snapshot);
+      return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+    }
+    case "waiver": {
+      const composed = await composePendingWaiverRequest(services, state, intentId, snapshot);
+      return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+    }
     default:
       throw new TypeError(`build-request kind ${JSON.stringify(kind)} is not recognized; expected ${PAYLOAD_SHAPE}`);
   }

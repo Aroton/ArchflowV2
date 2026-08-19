@@ -42,6 +42,8 @@ const failure = (state: TaskStateV1, issueCode: string): ProjectResult<never> =>
 function phaseInstance(call: ParsedToolCall, context: RepositoryOperationContext): TaskStateV1["phase_instance"] {
   switch (call.name) {
     case "archflow_state":
+      if (call.input.operation === "planning_restart") return call.input.target_phase_instance;
+      return call.input.phase_instance;
     case "archflow_gate":
       return call.input.phase_instance;
     case "archflow_waiver":
@@ -57,7 +59,7 @@ function phaseInstance(call: ParsedToolCall, context: RepositoryOperationContext
 
 function rubricDigest(call: ParsedToolCall, phase: TaskStateV1["phase_instance"]): Sha256Digest {
   const reviewCycle = call.name === "archflow_counter_review" ||
-    (call.name === "archflow_state" &&
+    (call.name === "archflow_state" && call.input.operation !== "planning_restart" &&
       (call.input.step === "counter_review" || call.input.step === "triage"));
   return reviewCycle
     ? canonicalRubricForPhaseKind(decodePhaseInstance(phase).kind).rubric_digest

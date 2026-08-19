@@ -5,11 +5,12 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
 import { parseSafeCode, parseSafeId } from "../../src/contracts/evidence.js";
+import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { buildDocumentArtifact } from "../../src/state/document-artifact.js";
 import { computeCallEnvelope } from "../../src/local/call-envelope.js";
-import { createToolHandlers } from "../../src/mcp/handlers/index.js";
-import { createToolBoundary } from "../../src/mcp/server.js";
+import { handleCounterReview } from "../../src/mcp/handlers/counter-review.js";
+import { handleState } from "../../src/mcp/handlers/state.js";
 import { createProductionServices } from "../../src/state/production.js";
 import { createTaskWorkspace, type TaskWorkspace } from "../helpers/task-workspace.js";
 
@@ -53,8 +54,7 @@ async function fixture(): Promise<Readonly<{
     input_fingerprint: state.value.input_fingerprint,
   });
   if (!artifact.ok) throw new Error(artifact.error.code);
-  const boundary = createToolBoundary(createToolHandlers());
-  const produced = await boundary.invoke("archflow_state", {
+  const produced = await handleState(parseToolCall("archflow_state", {
     schema_version: "1",
     task_id: workspace.taskId,
     intent_id: "handler-isolation-produce",
@@ -64,8 +64,8 @@ async function fixture(): Promise<Readonly<{
     step: "produce",
     status: "succeeded",
     artifact: artifact.value,
-  }, invocation(workspace.root, "produce"));
-  expect(produced).toMatchObject({ kind: "project-result", result: { ok: true } });
+  }), invocation(workspace.root, "produce"));
+  expect(produced).toMatchObject({ ok: true });
   const current = await createProductionServices({
     working_directory: workspace.root,
     task_id: workspace.taskId,
@@ -90,7 +90,7 @@ async function fixture(): Promise<Readonly<{
   };
 }
 
-describe("isolation through the real MCP handler entry", () => {
+describe("isolation at the internal handler entry", () => {
   it.each([
     ["traversal", "../outside.md"],
     ["absolute", "/tmp/outside.md"],
@@ -98,15 +98,10 @@ describe("isolation through the real MCP handler entry", () => {
     const { workspace, args } = await fixture();
     const config = join(workspace.services.authority.task_root, "config.yaml");
     renameSync(config, `${config}.hidden`);
-    const outcome = await createToolBoundary(createToolHandlers()).invoke(
-      "archflow_counter_review",
-      { ...args, artifact_path: artifactPath },
-      invocation(workspace.root, artifactPath.startsWith("/") ? "absolute" : "traversal"),
-    );
-    expect(outcome).toMatchObject({
-      kind: "project-result",
-      result: { ok: false, error: { code: "CONTRACT_INVALID", diagnostic: { parameters: { issue_code: "input-invalid" } } } },
-    });
+    // The contract boundary is the tool-call parse itself: a traversal or absolute claim is
+    // rejected there, before any handler — and therefore any task read — runs.
+    expect(() => parseToolCall("archflow_counter_review", { ...args, artifact_path: artifactPath }))
+      .toThrow();
     expect(existsSync(join(workspace.services.authority.task_root, "attempts"))).toBe(false);
   });
 
@@ -128,12 +123,15 @@ describe("isolation through the real MCP handler entry", () => {
       mkdirSync(join(workspace.services.authority.task_root, "phases", "2"), { recursive: true });
       symlinkSync(join(workspace.root, target), join(workspace.services.authority.task_root, artifactPath));
     }
-    const outcome = await createToolBoundary(createToolHandlers()).invoke(
-      "archflow_counter_review",
-      { ...args, intent_id: parseSafeId(`handler-${code.toLowerCase().replaceAll("_", "-")}`), artifact_path: artifactPath },
+    const outcome = await handleCounterReview(
+      parseToolCall("archflow_counter_review", {
+        ...args,
+        intent_id: parseSafeId(`handler-${code.toLowerCase().replaceAll("_", "-")}`),
+        artifact_path: artifactPath,
+      }),
       invocation(workspace.root, code.toLowerCase().replaceAll("_", "-")),
     );
-    expect(outcome).toMatchObject({ kind: "project-result", result: { ok: false, error: { code } } });
+    expect(outcome).toMatchObject({ ok: false, error: { code } });
     expect(existsSync(join(workspace.services.authority.task_root, "attempts"))).toBe(false);
   });
 });

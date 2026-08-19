@@ -26,6 +26,13 @@ import { createInternalTransactionAuthority } from "../../src/state/authority.js
 import type { TransactionDependencies } from "../../src/state/transaction.js";
 
 const roots: string[] = [];
+
+function semanticView() {
+  return {
+    schema_version: "1", task_id: TASK, condition: "ready", headline: "Ready", detail: "Continue.",
+    resources: [], next_action: { kind: "inspect", instruction: "Inspect status." },
+  };
+}
 const TASK = parseTaskSlug("dispatch-coordinator");
 const PHASE = encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(15) });
 const ROUTE: DispatchRoute = Object.freeze({
@@ -421,10 +428,18 @@ describe("createDispatchCoordinator", () => {
       cancellation_source: "client",
     });
     const boundary = createToolBoundary({
-      archflow_state: (_call, context) => mapHandlerErrors<"archflow_state">(
-        context.invocation_id,
-        async () => coordinator(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue) as never,
-      ),
+      // The semantic envelope is the only surface a coordinator classification crosses now:
+      // the handler maps the project failure into the semantic failure summary, as the
+      // retained dispatch seam inside the semantic apply handler does.
+      archflow_status: async (_input, context) => {
+        const classified = await mapHandlerErrors<"archflow_state">(
+          context.invocation_id,
+          async () => coordinator(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue) as never,
+        );
+        return classified.ok
+          ? { schema_version: "1", ok: true, value: semanticView() }
+          : { schema_version: "1", ok: false, error: { code: classified.error.code, message: classified.error.code, retryable: false } };
+      },
     });
     const connection = connectionContextFactory.captureStartup({
       connection_id: "coordinator-boundary",
@@ -439,13 +454,12 @@ describe("createDispatchCoordinator", () => {
       transport_metadata: { request_id: "request-1", operation: "tools/call" },
     }, new AbortController().signal);
 
-    const outcome = await boundary.invoke("archflow_state", {
-      schema_version: "1", task_id: TASK, intent_id: "boundary-intent", expected_revision: 0,
-      input_fingerprint: "a".repeat(64), phase_instance: PHASE, step: "produce", status: "running",
+    const outcome = await boundary.invoke("archflow_status", {
+      schema_version: "1", task_id: TASK,
     }, context);
 
-    expect(outcome.kind).toBe("project-result");
-    if (outcome.kind === "project-result") {
+    expect(outcome.kind).toBe("semantic-result");
+    if (outcome.kind === "semantic-result") {
       expect(outcome.result).toMatchObject({ ok: false, error: { code: "UNSUPPORTED_HOST" } });
     }
   });

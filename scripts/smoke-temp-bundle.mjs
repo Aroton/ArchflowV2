@@ -64,7 +64,7 @@ assert.throws(() => contracts.renderReviewEvidence(forgedReview), /authenticated
 assert.throws(() => contracts.renderAdjudicationEvidence({ evidence_digest: digest, evidence: {}, authority: {} }), /authenticated adjudication evidence/u);
 assert.throws(() => contracts.renderTriage({ schema_version: "1" }), /validated triage/u);
 
-assert.equal(Object.keys(contracts.PROJECT_ERROR_DEFINITIONS).length, 55);
+assert.equal(Object.keys(contracts.PROJECT_ERROR_DEFINITIONS).length, 53);
 assert.equal(Object.keys(contracts.PROTOCOL_ERROR_DEFINITIONS).length, 4);
 assert.equal(
   contracts.createProjectError("STATE_CONFLICT", { expected_revision: 1, observed_revision: 2 }).next_action,

@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { PROJECT_ERROR_DEFINITIONS } from "../../src/contracts/errors.js";
 import { parseTaskSlug } from "../../src/contracts/evidence.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
-import { TOOL_NAMES } from "../../src/contracts/tool-names.js";
+import { ADVERTISED_TOOL_NAMES } from "../../src/contracts/tool-names.js";
 import { LOCAL_COMMANDS } from "../../src/local/commands.js";
 import { classifyTaskPath } from "../../src/repository/paths.js";
 
@@ -30,7 +30,18 @@ const normalPhaseSkills = [
   "archflow-phase-impl",
   "archflow-status",
 ] as const;
-const productionRubricSkills = [
+const producerSkills = [
+  "archflow-prd",
+  "archflow-design",
+  "archflow-phase-design",
+  "archflow-phase-impl",
+] as const;
+const semanticDocumentSkills = [
+  "archflow-prd",
+  "archflow-design",
+  "archflow-phase-design",
+] as const;
+const semanticProducerSkills = [
   "archflow-prd",
   "archflow-design",
   "archflow-phase-design",
@@ -39,6 +50,23 @@ const productionRubricSkills = [
 function skill(name: typeof skillNames[number]): string {
   return readFileSync(resolve(root, "skills", name, "SKILL.md"), "utf8");
 }
+
+/**
+ * With the catalogue at exactly the two semantic names, the allow-lists are the global
+ * enforcement: any skill naming a retired tool or a retired helper command fails the
+ * contract, no cohort carve-outs. Every workflow — normal lifecycle, status reporting,
+ * and legacy adoption — runs through `archflow_status`/`archflow_apply` plus the retained
+ * local adapters, so the pinned vocabulary below is exhaustive, not per-cohort.
+ */
+const retiredHelperChoreography = [
+  "archflow-local build-request",
+  "archflow-local envelope",
+  "archflow-local decide",
+  "archflow-local gate-preview",
+  "archflow-local commit",
+  "archflow-local status",
+  "staged.reference",
+] as const;
 
 function frontmatter(source: string): Readonly<Record<string, string>> {
   const match = /^---\n([\s\S]*?)\n---\n/u.exec(source);
@@ -51,18 +79,33 @@ function frontmatter(source: string): Readonly<Record<string, string>> {
 }
 
 describe("canonical skill contracts", () => {
-  it("names only shipped local commands, MCP tools, and project errors", () => {
-    const source = skillNames.map(skill).join("\n");
-    const commands = [...source.matchAll(/\barchflow-local\s+([a-z][a-z-]*)/gu)].map((match) => match[1]!);
-    const tools = [...source.matchAll(/\barchflow_[a-z_]+\b/gu)].map((match) => match[0]);
-    const namedErrors = [...source.matchAll(/\b[A-Z][A-Z_]+\b/gu)]
-      .map((match) => match[0])
-      .filter((name) => name.includes("_") && name !== "SKILL");
+  it("advertises exactly the two semantic workflow tools", () => {
+    expect([...ADVERTISED_TOOL_NAMES]).toEqual(["archflow_status", "archflow_apply"]);
+  });
 
-    expect([...new Set(commands)].sort()).toEqual(expect.arrayContaining([...new Set(commands)]));
-    for (const command of commands) expect(LOCAL_COMMANDS).toContain(command);
-    for (const tool of tools) expect(TOOL_NAMES).toContain(tool);
-    for (const error of namedErrors) expect(PROJECT_ERROR_DEFINITIONS).toHaveProperty(error);
+  it("names only shipped local commands, MCP tools, and project errors", () => {
+    for (const name of skillNames) {
+      const source = skill(name);
+      const commands = [...source.matchAll(/\barchflow-local\s+([a-z][a-z-]*)/gu)].map((match) => match[1]!);
+      const tools = [...source.matchAll(/\barchflow_[a-z_]+\b/gu)].map((match) => match[0]);
+      const namedErrors = [...source.matchAll(/\b[A-Z][A-Z_]+\b/gu)]
+        .map((match) => match[0])
+        .filter((error) => error.includes("_") && error !== "SKILL");
+      for (const command of commands) expect(LOCAL_COMMANDS, `${name} names ${command}`).toContain(command);
+      for (const tool of tools) expect(ADVERTISED_TOOL_NAMES, `${name} names ${tool}`).toContain(tool);
+      for (const error of namedErrors) expect(PROJECT_ERROR_DEFINITIONS, `${name} names ${error}`).toHaveProperty(error);
+    }
+  });
+
+  it("names no retired tool or helper choreography in any skill", () => {
+    for (const name of skillNames) {
+      const source = skill(name);
+      for (const banned of retiredHelperChoreography) {
+        expect(source, `${name} names ${banned}`).not.toContain(banned);
+      }
+      const tools = [...source.matchAll(/\barchflow_[a-z_]+\b/gu)].map((match) => match[0]);
+      for (const tool of tools) expect(ADVERTISED_TOOL_NAMES, `${name} names retired tool ${tool}`).toContain(tool);
+    }
   });
 
   it("keeps exact frontmatter, server-owned review policy, and dual-client hand-offs", () => {
@@ -77,22 +120,15 @@ describe("canonical skill contracts", () => {
       expect(source).toContain("Claude:");
       expect(source).toContain("Codex:");
     }
-    for (const name of productionRubricSkills) {
+    for (const name of semanticProducerSkills) {
       const source = skill(name);
-      expect(source).toContain("full status");
-      expect(source).toContain("`review_policy`");
-      expect(source).toContain("`review_policy.rubric`");
+      expect(source).toContain("`review_context.rubric`");
       expect(source).toContain("`resources`");
       expect(source).toContain("{role,path,access}");
-      expect(source).toContain('`{"kind":"counter-review"}`');
-      expect(source).toContain("`gate-preview`");
-      expect(source).toContain("preview_digest");
-      expect(source).toContain("decision");
-      expect(source).not.toContain("`archflow-local decide --task <task>`");
+      expect(source).toContain("`archflow_status`");
+      expect(source).toContain("`archflow_apply`");
       expect(source).not.toContain("## Stable rubric");
       expect(source).not.toContain('"criteria":[');
-      expect(source).not.toContain('"kind":"counter-review","rubric"');
-      expect(source).not.toContain('kind: "interface"');
     }
   });
 
@@ -107,7 +143,7 @@ describe("canonical skill contracts", () => {
   });
 
   it("keeps workflow paths status-owned while preserving ordinary repository exploration", () => {
-    for (const name of productionRubricSkills) {
+    for (const name of producerSkills) {
       const source = skill(name);
       expect(source).toContain("select");
       expect(source).toContain("by role");
@@ -117,7 +153,7 @@ describe("canonical skill contracts", () => {
   });
 
   it("rejects envelope gaps and keeps non-material findings out of human approval", () => {
-    for (const name of productionRubricSkills) {
+    for (const name of producerSkills) {
       const source = skill(name);
       expect(source).toContain("`unverifiable-`");
       expect(source).toContain("`envelope-gap: `");
@@ -128,13 +164,13 @@ describe("canonical skill contracts", () => {
 
   it("keeps human gates conversational and machine bindings diagnostic-only", () => {
     const all = skillNames.map(skill).join("\n");
-    for (const name of productionRubricSkills) {
+    for (const name of producerSkills) {
       const source = skill(name);
       expect(source).toContain("conversational");
-      expect(source).toContain("ask one direct question");
+      expect(source.toLowerCase()).toContain("ask one direct question");
       expect(source).toContain("diagnostic");
       expect(source).toContain("audit detail");
-      expect(source).toContain("there is no optional");
+      expect(source.toLowerCase()).toContain("there is no optional");
     }
     expect(skill("archflow-status")).toContain("Do not expose the gate ID");
     expect(skill("archflow-init")).toContain("Do not relay raw output");
@@ -144,22 +180,22 @@ describe("canonical skill contracts", () => {
   });
 
   it("classifies human revisions and restarts significant review cycles", () => {
-    for (const name of productionRubricSkills) {
+    for (const name of producerSkills) {
       const source = skill(name);
-      expect(source).toContain("A **simple** revision");
+      expect(source).toMatch(/[Aa] \*\*simple\*\* revision/u);
       expect(source).toContain("approval of the final bytes");
-      expect(source).toContain("A **significant** revision");
+      expect(source).toMatch(/[Aa] \*\*significant\*\* revision/u);
       expect(source).toContain("resets the attempt count to 1");
-      expect(source).toContain("automatically runs a fresh counter-review plus constitution review");
-      expect(source).toContain("override it in either direction");
+      expect(source).toMatch(/automatically runs a fresh (?:opposite-client )?counter-review plus constitution review/u);
+      expect(source).toMatch(/override(?: it)? in either direction/u);
     }
   });
 
   it("uses one bounded PRD author check before the independent review", () => {
     const source = skill("archflow-prd");
-    expect(source).toContain("perform one bounded author check");
+    expect(source.toLowerCase()).toContain("perform one bounded author check");
     expect(source).not.toContain("spawn a fresh review sub-agent");
-    expect(source).toContain("Do not spawn an additional generative reviewer");
+    expect(source).toMatch(/Do not spawn an (?:additional|extra) generative reviewer/u);
   });
 
   it("persists PRD clarification dialogue in the pinned ask record", () => {
@@ -167,42 +203,99 @@ describe("canonical skill contracts", () => {
     expect(source).toContain("## Clarifications");
     expect(source).toContain("### Question 1");
     expect(source).toContain("### Answer 1");
-    expect(source).toContain("before presenting it to the user");
-    expect(source).toContain("An unanswered question remains in the resource");
-    expect(source).toContain("re-enter `produce` before appending");
-
-    expect(source).toContain("`user-ask` resource");
-    expect(source).toContain("judges ask fidelity against this entire pinned record");
+    expect(source).toContain("before presenting it");
+    expect(source).toMatch(/An unanswered question remains(?: in the resource)?/u);
+    expect(source).toContain("returned `user-ask`");
+    expect(source).toContain("ask fidelity");
   });
 
-  it("takes each phase rubric from full status and never authors durable review policy", () => {
-    for (const name of productionRubricSkills) {
+  it("takes review context from semantic status for every producer skill", () => {
+    for (const name of semanticProducerSkills) {
       const source = skill(name);
-      expect(source).toContain("server selects that same policy for the durable counter-review");
-      expect(source).toContain("never copy a rubric from skill text or author one");
+      expect(source).toContain("`review_context.rubric`");
+      expect(source).toContain("active rules");
+      expect(source).toMatch(/never (?:author durable review policy|an authored rubric)/u);
     }
   });
 
-  it("makes every producer execute and verify the server-derived phase hand-off", () => {
-    for (const name of productionRubricSkills) {
+  it("keeps the implementation producer on semantic commit observation and successor boundaries", () => {
+    const source = skill("archflow-phase-impl");
+    expect(source).toContain('`{"kind":"work-result","outcome":"succeeded","implementation":{...}}`');
+    expect(source).toContain("`base_commit`");
+    expect(source).toContain("`outputs`");
+    expect(source).toContain("`restore_targets`");
+    expect(source).toContain("`declared_inputs`");
+    expect(source).toContain("never author those values");
+    expect(source).toContain("`verification-transcript`");
+    expect(source).toContain("digest-checked transcript");
+    expect(source).toContain('`{"kind":"gate-summary","summary":<summary>}`');
+    expect(source).toContain("selected presentation option token");
+    expect(source).toContain("separate no-submission `open-waiver`");
+    expect(source).toContain("`requires_human_confirmation: true`");
+    expect(source).toContain("`commit.paths`");
+    expect(source).toContain(":(top,literal)<path>");
+    expect(source).toContain("create the commit yourself");
+    expect(source).toContain("read-only `archflow_status`");
+    expect(source).toContain("observes the commit proof");
+    expect(source).toContain("`finish-task`");
+    expect(source).toContain("never apply a `start-next-skill` offer");
+    expect(source).toContain("never start successor work");
+  });
+
+  it("makes document skills observe and report semantic successors without starting them", () => {
+    for (const name of semanticDocumentSkills) {
       const source = skill(name);
-      expect(source).toContain('next_action.code: "advance-phase"');
-      expect(source).toContain('`"complete-task"`');
-      expect(source).toContain('`{"kind":"advance"}`');
-      expect(source).toContain("call `archflow_state` with the returned `staged.reference`");
-      expect(source).toContain("Re-run status");
-      expect(source).toContain("do not return until durable status");
+      expect(source).toContain("`start-next-skill`");
+      expect(source).toContain("fresh status");
+      expect(source).toMatch(/never start|do not start|without starting/u);
+      expect(source).toContain("Claude:");
+      expect(source).toContain("Codex:");
     }
   });
 
-  it("limits destination-skill hand-off recovery to the exact server-derived target", () => {
-    for (const name of ["archflow-design", "archflow-phase-design", "archflow-phase-impl"] as const) {
+  it("pins document entry, reopen, semantic submission, revision, gate, waiver, and Git ownership", () => {
+    expect(skill("archflow-prd")).toContain('{"skill":"archflow-prd","intent":"resume"}');
+    expect(skill("archflow-design")).toContain('{"skill":"archflow-design","intent":"resume"}');
+    expect(skill("archflow-phase-design")).toContain('{"skill":"archflow-phase-design","phase":<phase-number>,"intent":"resume"}');
+    expect(skill("archflow-phase-impl")).toContain('{"skill":"archflow-phase-impl","phase":<phase-number>,"intent":"resume"}');
+    for (const name of semanticDocumentSkills) {
       const source = skill(name);
-      expect(source).toContain("immediate predecessor hand-off");
-      expect(source).toContain("`target_phase_instance`");
-      expect(source).toContain("`skill_args`");
-      expect(source).toContain("otherwise refuse the wrong phase");
+      expect(source).toContain('`intent:"reopen"`');
+      expect(source).toContain('exact `intent:"resume"` invocation above');
+      expect(source).toContain("one-shot reopen invocation does not own production");
+      expect(source).toContain('`"action":{"offer":<next_action.offer>}`');
+      expect(source).toContain("omit `submission` for `none`");
+      expect(source).toMatch(/`\{"kind":"reopening-request","request":<(?:exact request|the human's exact request)>\}`/u);
+      expect(source).toContain('`{"kind":"work-result","outcome":"succeeded"}`');
+      expect(source).toContain("separate no-submission `revise`");
+      expect(source).toContain('`{"kind":"gate-summary","summary":<summary>}`');
+      expect(source).toContain("nonblocking presentation");
+      expect(source).toContain("selected presentation option token");
+      expect(source).toContain("separate no-submission `open-waiver`");
     }
+    expect(skill("archflow-prd")).toContain('`{"kind":"task-ask","text":<the user\'s exact original ask>}`');
+    for (const name of ["archflow-design", "archflow-phase-design"] as const) {
+      const source = skill(name);
+      expect(source).toContain("`start-next-skill` with `next_action.offer`");
+      expect(source).toContain("names a successor without an offer");
+      expect(source).toContain("completed invocation does not own the hand-off");
+      expect(source).toContain("returned `commit` facts");
+      expect(source).toContain(":(top,literal)<path>");
+      expect(source).toContain("`commit.paths`");
+      expect(source).toContain("read-only `archflow_status`");
+    }
+    expect(skill("archflow-phase-design")).toContain("compound parent update");
+  });
+
+  it("limits destination-skill hand-off recovery to the exact semantic offer", () => {
+    const source = skill("archflow-phase-impl");
+    expect(source).toContain("`start-next-skill` with `next_action.offer`");
+    expect(source).toContain("this exact invocation");
+    expect(source).toContain("names a successor without an offer");
+    expect(source).toContain("completed invocation does not own the hand-off");
+    expect(source).toContain("require the position to be `phase-impl` with the requested phase");
+    expect(source).toContain("report a different phase or an inspection result rather than bypassing it");
+    expect(source).toContain("no reopen");
   });
 
   it("renders pending hand-offs from the exact server-derived destination command", () => {
@@ -211,6 +304,35 @@ describe("canonical skill contracts", () => {
     expect(source).toContain("`next_action.skill`");
     expect(source).toContain("`next_action.skill_args`");
     expect(source.toLowerCase()).toContain("never substitute the current phase's skill");
+  });
+
+  it("keeps the status skill a read-only semantic consumer", () => {
+    const source = skill("archflow-status");
+    expect(source).toContain("read-only `archflow_status`");
+    expect(source).toContain("no invocation");
+    expect(source).toContain("no mutation offer");
+    expect(source).toContain("never calls `archflow_apply`");
+    expect(source).toContain("`archflow-local manual-status --task <task>`");
+  });
+
+  it("pins the upgrade skill's local adapter plus semantic choreography", () => {
+    const source = skill("archflow-upgrade");
+    expect(source).toContain("input-free `archflow-local upgrade adopt --task <task>`");
+    expect(source).toContain("`approved_preview_digest`");
+    expect(source).toContain("operation `discard-stage`");
+    expect(source).toContain("No MCP call exists before this point");
+    expect(source).toContain('{"skill":"archflow-design","intent":"resume"}');
+    expect(source).toContain("`archflow_apply`");
+    expect(source).toContain('{"kind":"work-result","outcome":"succeeded"}');
+    expect(source).toContain('{"kind":"gate-summary","summary":<summary>}');
+    expect(source).toContain('{"kind":"decision","choice":<selected presentation option token>,"reason":<human reason>}');
+    expect(source).toContain("one `migration-audit` gate instead of separate PRD and design approval gates");
+    expect(source).toContain("no-submission `revise`");
+    expect(source).toContain("`commit.paths`");
+    expect(source).toContain("create the commit yourself");
+    expect(source).toContain("read-only `archflow_status`");
+    expect(source).toContain("observes the commit proof");
+    expect(source).toContain("phase N has a mapped design and no implementation log");
   });
 
   it("admits every canonical task document path used by the skills", () => {
