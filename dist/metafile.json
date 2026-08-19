@@ -5568,9 +5568,20 @@
       ]
     },
     "src/mcp/diagnostics.ts": {
-      "bytes": 486,
+      "bytes": 1872,
       "format": "esm",
-      "imports": []
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        }
+      ]
     },
     "src/mcp/framing.ts": {
       "bytes": 3378,
@@ -7328,7 +7339,7 @@
       ]
     },
     "src/state/implementation-manifest.ts": {
-      "bytes": 46918,
+      "bytes": 48211,
       "format": "esm",
       "imports": [
         {
@@ -7350,6 +7361,11 @@
           "kind": "import-statement",
           "original": "../contracts/canonical.js",
           "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/errors.js",
+          "path": "src/contracts/errors.ts"
         },
         {
           "kind": "import-statement",
@@ -10060,7 +10076,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2851246,
+      "bytes": 2852303,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -10128,6 +10144,16 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:crypto"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
         },
         {
           "external": true,
@@ -11254,7 +11280,7 @@
           "bytesInOutput": 805
         },
         "src/mcp/diagnostics.ts": {
-          "bytesInOutput": 247
+          "bytesInOutput": 714
         },
         "src/mcp/framing.ts": {
           "bytesInOutput": 2638
@@ -11311,7 +11337,7 @@
           "bytesInOutput": 2782
         },
         "src/repository/paths.ts": {
-          "bytesInOutput": 17799
+          "bytesInOutput": 17824
         },
         "src/review/adjudication.ts": {
           "bytesInOutput": 5541
@@ -11365,10 +11391,10 @@
           "bytesInOutput": 94082
         },
         "src/state/implementation-manifest.ts": {
-          "bytesInOutput": 36522
+          "bytesInOutput": 37080
         },
         "src/state/initialization.ts": {
-          "bytesInOutput": 21823
+          "bytesInOutput": 21830
         },
         "src/state/layout.ts": {
           "bytesInOutput": 6960
