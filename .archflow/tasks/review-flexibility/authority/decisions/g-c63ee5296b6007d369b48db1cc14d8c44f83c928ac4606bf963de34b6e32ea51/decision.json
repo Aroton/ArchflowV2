@@ -1,0 +1,33 @@
+{
+  "context_digest": "59ab62a748f4a1abb22ad1ec868f82c590178fcd818bec75e7b7ff1bb3790a55",
+  "envelope": {
+    "context_digest": "59ab62a748f4a1abb22ad1ec868f82c590178fcd818bec75e7b7ff1bb3790a55",
+    "gate_id": "g-c63ee5296b6007d369b48db1cc14d8c44f83c928ac4606bf963de34b6e32ea51",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-a52a71bf1b66c80c99f7a9d2cc538157f50925af04f062a902b912e885645c9a",
+      "recorded_at": "2026-08-19T22:07:31.492Z",
+      "request_id_digest": "cb6e1dfe582727d204ad51a977fe5a0211a5214d27687704ab67f3a39eb2712e",
+      "schema_version": "1"
+    },
+    "kind": "baseline-adoption",
+    "payload": {
+      "decision": "adopt-current-bytes",
+      "reason": "Keep the current notes bytes as the recorded baseline: the added paragraph accurately documents the deterministic human_revision INTERNAL_ERROR encountered during resubmission and is worth keeping in the durable notes."
+    },
+    "phase_instance": "phase-impl-1",
+    "schema_version": "1",
+    "subject_digest": "ae6ad67cc32cc329530812e325fc8de9870bea6d5e4c862a59c68488e38472af",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-c63ee5296b6007d369b48db1cc14d8c44f83c928ac4606bf963de34b6e32ea51",
+  "kind": "baseline-adoption",
+  "outcome": "decided",
+  "phase_instance": "phase-impl-1",
+  "schema_version": "1",
+  "subject_digest": "ae6ad67cc32cc329530812e325fc8de9870bea6d5e4c862a59c68488e38472af",
+  "task_id": "review-flexibility"
+}

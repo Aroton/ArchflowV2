@@ -1,0 +1,84 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "constitution": "pass",
+    "eligible_waivers": [
+      {
+        "rule": {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      }
+    ],
+    "failed_rules": [],
+    "matched_trigger_rules": [
+      {
+        "rule_id": "approved-design-before-code",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 1
+      }
+    ],
+    "uncertain_rules": [],
+    "uncertain_trigger_rules": []
+  },
+  "context_digest": "812f5399fe64666c922182a28d2aea3d5107b92a6f8ab308c2ae6a8d4187aebe",
+  "current_evidence": {
+    "set_digest": "056b50bef4bfc4224c1afc65a48491cc943375cb9e4ce5ee5e496573e8fe10c1",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "235ca8d2e61e72c18bcfe29ae871c2873ba2900763a309ef47d705ac034d3fac",
+        "producer_family": "claude",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-b5ff9250be64f1babbe70f2098518c05e4a67edc8f580c2508a6620a973493de",
+  "intent_id": "afop-041d85538486c51fa84d5a1be43edc40b81cb90dd82693ee21e9bac764962ed8-open-gate",
+  "kind": "constitution-review",
+  "opened_at_revision": 61,
+  "phase_instance": "phase-impl-1",
+  "request_digest": "25bc4d22fbeaf6eda236e7e9a33a16f175cd1e3d2aa8c40c23f05bdedc8cbc96",
+  "schema_version": "1",
+  "subject_digest": "60e329bfd8890aebb9db796d9a53aab54daeb81fc67201ca91e29f47b3d1a084",
+  "summary": "Phase 1 (config as an editable input) implemented from the approved phase design; the dispatched counter-review returned no findings. Constitution-relevant events for your judgment: (1) One material deviation from the approved design — the PRD planning-restart landing is a comparing site that preserves the recorded fingerprint composition rather than a composition flip site, because the kernel's equality pin makes the flip impossible; it was corrected in code, recorded as Deviations item 9 in the phase design, and the task design's D2 wording was updated in the same change, before submission. (2) Two server defects were hit during the workflow, both worked around without bypassing any gate: the human_revision declaration field crashed the server deterministically (so the revision-classification metadata could not be durably recorded — the fresh counter-review that classification triggers did run), and a drift-gate/review-continuation interaction required the two baseline decisions you already made to unblock. Both are proposed as follow-up fixes; nothing was represented as verified or approved that was not. (3) All human authority in this phase has been explicit: your baseline decisions, this gate, and the commit authorization still to come. (4) The real-host test suite was updated but could not run (pre-existing breakage from retired local-CLI commands) and is reported as unrun, not as passing.",
+  "task_id": "review-flexibility"
+}

@@ -1,0 +1,33 @@
+{
+  "context_digest": "55cc3daf38cde2dc8c64dbacc241cb842a06354da468890776f8ee17afd09301",
+  "envelope": {
+    "context_digest": "55cc3daf38cde2dc8c64dbacc241cb842a06354da468890776f8ee17afd09301",
+    "gate_id": "g-6a7fbf65755c769b0e523bbc5fdf773ac611959170d6ab52073fc81146b98b96",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-b2dc48bbae23e3b344fe19b19a6964e78e8febf621234851e72b0b3191b33e6d",
+      "recorded_at": "2026-08-19T22:17:25.750Z",
+      "request_id_digest": "ed89a1ae9482bf3db82503f8191d0b887e14749a8b49d79f12b8762c2c9fcbc9",
+      "schema_version": "1"
+    },
+    "kind": "baseline-adoption",
+    "payload": {
+      "decision": "adopt-current-bytes",
+      "reason": "The restored notes match the produced artifact bytes exactly; recording them as the baseline unblocks the counter-review, and the crash documentation is preserved in the session report and as a proposed follow-up."
+    },
+    "phase_instance": "phase-impl-1",
+    "schema_version": "1",
+    "subject_digest": "14150941946efa99b0061db640bf141f808f9ffcf7bee93416dbe32052b6cec5",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-6a7fbf65755c769b0e523bbc5fdf773ac611959170d6ab52073fc81146b98b96",
+  "kind": "baseline-adoption",
+  "outcome": "decided",
+  "phase_instance": "phase-impl-1",
+  "schema_version": "1",
+  "subject_digest": "14150941946efa99b0061db640bf141f808f9ffcf7bee93416dbe32052b6cec5",
+  "task_id": "review-flexibility"
+}

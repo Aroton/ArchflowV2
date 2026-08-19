@@ -1,0 +1,33 @@
+{
+  "context_digest": "466cea5d07c49b5c3977380fe128e16ced992ed02997211a6b440aabc4cd0699",
+  "envelope": {
+    "context_digest": "466cea5d07c49b5c3977380fe128e16ced992ed02997211a6b440aabc4cd0699",
+    "gate_id": "g-9d52098d0738f2795581a61d258e8744ff4bb2c74da85d643445c5fc4380b7c8",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-6da8d25155558dacee623011f22b32d340cf9874137da6fd2a3ec5e8d13cb460",
+      "recorded_at": "2026-08-19T23:11:14.008Z",
+      "request_id_digest": "b84440225fdd80d0230649d1b4a82aef4e648973cbaf483e4df861538f62cfb0",
+      "schema_version": "1"
+    },
+    "kind": "design-approval",
+    "payload": {
+      "decision": "approve",
+      "reason": "Human approved the reviewed phase-2 design bytes after the presented outcome, review history, material tradeoffs, and constitution details."
+    },
+    "phase_instance": "phase-design-2",
+    "schema_version": "1",
+    "subject_digest": "6973b6ff7fc1842cf2463c0b55744c6511565f37d88561e9187124f1634e1fab",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-9d52098d0738f2795581a61d258e8744ff4bb2c74da85d643445c5fc4380b7c8",
+  "kind": "design-approval",
+  "outcome": "decided",
+  "phase_instance": "phase-design-2",
+  "schema_version": "1",
+  "subject_digest": "6973b6ff7fc1842cf2463c0b55744c6511565f37d88561e9187124f1634e1fab",
+  "task_id": "review-flexibility"
+}

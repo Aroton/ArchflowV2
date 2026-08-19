@@ -1,0 +1,38 @@
+{
+  "allowed_decisions": [
+    "adopt-current-bytes",
+    "restore-recorded-bytes",
+    "adopt-committed-deletions",
+    "abort",
+    "cancel"
+  ],
+  "context": {
+    "deleted_projections": [],
+    "drifted_projections": [
+      {
+        "observed_digest": "8be5dce9b24dcc336c03580f6bdc04b6fb1d08b0a4e23485358230bd9beee2d6",
+        "path": ".archflow/tasks/review-flexibility/phases/1/impl-notes.md",
+        "recorded_digest": "2c30258ee74bcf17b700eb8ed951d0fffe7fac688ce779b281d8a2339ae0af62"
+      }
+    ]
+  },
+  "context_digest": "59ab62a748f4a1abb22ad1ec868f82c590178fcd818bec75e7b7ff1bb3790a55",
+  "current_evidence": {
+    "drift_digest": "ae6ad67cc32cc329530812e325fc8de9870bea6d5e4c862a59c68488e38472af",
+    "observation_kind": "projection-drift",
+    "observed_at_revision": 52,
+    "phase_instance": "phase-impl-1",
+    "schema_version": "1",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-c63ee5296b6007d369b48db1cc14d8c44f83c928ac4606bf963de34b6e32ea51",
+  "intent_id": "afop-4c8c61363c985b8138f8a3935ba1d3659a0cd19b4c888c42c6262b1ad832a7f7-open-gate",
+  "kind": "baseline-adoption",
+  "opened_at_revision": 53,
+  "phase_instance": "phase-impl-1",
+  "request_digest": "579f7743dd34f50c8f1c38de96b47d9b2abbda12cc40ddaa5d7e8b8461c047ea",
+  "schema_version": "1",
+  "subject_digest": "ae6ad67cc32cc329530812e325fc8de9870bea6d5e4c862a59c68488e38472af",
+  "summary": "After the revised work-result was recorded, one further edit was made to the phase implementation notes: a paragraph documenting that the revision-classification field (human_revision) crashed the running server with a deterministic INTERNAL_ERROR when included in the resubmission, so the classification metadata could not be recorded (the corrected declaration without it was accepted, and the fresh counter-review it triggers is still queued). Nothing else changed — code, tests, and the verification transcript are byte-identical to the recorded declaration; the notes differ only by that added documentation paragraph. The decision: keep the current notes bytes as the recorded baseline (the paragraph is accurate and worth keeping), or restore the recorded bytes (the same information can be relayed in conversation at the commit gate instead).",
+  "task_id": "review-flexibility"
+}

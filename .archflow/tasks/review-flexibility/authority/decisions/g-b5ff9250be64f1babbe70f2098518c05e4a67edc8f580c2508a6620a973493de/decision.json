@@ -1,0 +1,33 @@
+{
+  "context_digest": "812f5399fe64666c922182a28d2aea3d5107b92a6f8ab308c2ae6a8d4187aebe",
+  "envelope": {
+    "context_digest": "812f5399fe64666c922182a28d2aea3d5107b92a6f8ab308c2ae6a8d4187aebe",
+    "gate_id": "g-b5ff9250be64f1babbe70f2098518c05e4a67edc8f580c2508a6620a973493de",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-0cbe8f6b9284d8717ba293baf51e391f6618a39363107d97f8d45dc29640796a",
+      "recorded_at": "2026-08-19T22:22:28.852Z",
+      "request_id_digest": "51b6fe54425e5d6cb11d2693cd747b7d99edf2c1f120e7140829b7f4b42293f1",
+      "schema_version": "1"
+    },
+    "kind": "constitution-review",
+    "payload": {
+      "decision": "approve",
+      "reason": "The deviation from the approved design was corrected and recorded in the governing documents before submission, the counter-review returned no findings, the server defects were worked around without bypassing any gate, and the unrun real-host suite is reported honestly. Approve and continue."
+    },
+    "phase_instance": "phase-impl-1",
+    "schema_version": "1",
+    "subject_digest": "60e329bfd8890aebb9db796d9a53aab54daeb81fc67201ca91e29f47b3d1a084",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-b5ff9250be64f1babbe70f2098518c05e4a67edc8f580c2508a6620a973493de",
+  "kind": "constitution-review",
+  "outcome": "decided",
+  "phase_instance": "phase-impl-1",
+  "schema_version": "1",
+  "subject_digest": "60e329bfd8890aebb9db796d9a53aab54daeb81fc67201ca91e29f47b3d1a084",
+  "task_id": "review-flexibility"
+}

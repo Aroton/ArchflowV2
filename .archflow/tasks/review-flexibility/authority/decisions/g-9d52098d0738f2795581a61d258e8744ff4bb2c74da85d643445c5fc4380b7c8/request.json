@@ -1,0 +1,115 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "artifact_kind": "phase-design",
+    "baseline_commit": "31fe7a369879d8a1e83a485fdb1bb9c27b1cbe9e",
+    "commit_message": "ArchFlow: Approve review-flexibility phase 2 design",
+    "constitution": "pass",
+    "eligible_waivers": [
+      {
+        "rule": {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      }
+    ],
+    "policy_findings": [
+      {
+        "compliance": "pass",
+        "rationale": "The rule's second clause governs here: material deviations must update the governing documents and re-enter the applicable review boundary before dependent work advances. Both conditions are met in this production result. The supplied design.md D4 bullet already carries the revised mechanism (\"The dispatching review offer advertises `expected_submission: \\\"review-dispatch\\\"` ... non-dispatching review shapes keep `\\\"none\\\"` ... a required field because an override-less apply uses no submission\"), the plan-carrier seam (\"Because `substepPlan` continuations call `requestFacts` without the submission ... the declaration rides the plan\"), the corrected `src/contracts/schemas/v1/` path, and the Phase-2 file list including archflow-upgrade — so the parent is updated in lockstep rather than left contradicted. This artifact is itself the re-entry into the phase-design review boundary, and no implementation has begun: the document is a plan, with all edits assigned to chunks A-E and an executable verification list. Its stated fact basis is verified: `assertSubmissionMatches` is exactly-required today (src/state/semantic-actions.ts:82-87), the `review`/`review-run` facts case emits only `{kind, intent_id}` and ignores its submission parameter (:347-350), `substepPlan` calls `requestFacts(..., undefined)` (:601), the dispatching review offer advertises `\"none\"` (src/state/semantic-view.ts:182-187), `APPLY_SUBMISSION_KINDS` lacks the new kind (src/contracts/semantic-workflow.ts:99), and the downstream consumers already exist (`composeCounterReview` passing `facts.route_override` at src/state/request-composition.ts:495-504; `routeFor`/`overrideRecordFor` at src/review/counter-review.ts:280-298). The plan therefore describes machinery that exists as claimed, and the deviations are disclosed rather than silently absorbed.",
+        "rule_id": "approved-design-before-code",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "The artifact is a phase design that departs from its governing task design in seven enumerated ways (\"Deviations\" items 1-7), including a mechanism change (P2-1: the dispatching review offer advertises `expected_submission: \"review-dispatch\"` instead of the parent's sketched `\"none\"`), a required rather than optional `route_override` field (item 6), a plan-field carrier seam (item 3), and an added skill file archflow-upgrade (item 7)."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "Nothing here supplies advancement, approval, waiver, gate, or commit authority by inference. The override parameterizes which reviewer route a dispatch uses; the design states explicitly that \"the substitution parameterizes the automatic counter-review and never skips it\", and the phase touches no gate-opening or approval-acceptance code path (files touched are the submission contract, the schema, `semantic-actions.ts` threading, `semantic-view.ts` offer text, skills, and tests). The matcher widening is narrowly scoped and does not weaken authentication: `\"none\"` still forbids a submission, every other kind stays exact-required, and only absence is tolerated for `review-dispatch` at the single enforcement point, with no planner-level bypass. The human's decision remains explicit and bound to the exact dispatch: `routeOverrideSchema` requires a non-empty reason and at least one role, `operationKey` digests `submission ?? {kind: \"none\"}` into `submission_digest` (src/state/semantic-actions.ts:117-141) so a fresh apply binds the declaration into the authenticated operation identity, and `overrideRecordFor` stamps the reason onto review and adjudication evidence only when the substitute actually displaced a route (src/review/counter-review.ts:286-298). The absence of a pre-approval gate is a PRD-level assumption carried forward, not an inference invented here, and the reason is recorded and surfaced at the next gate via `counter_review_provenance.route_override`. The fabricated-authorization risk this rule guards against is identified and closed rather than ignored: deviation item 7 adds a carve-out to archflow-upgrade precisely because its generic \"follow `expected_submission`\" rule would otherwise direct a session to manufacture an override with a required human reason absent any human authorization, and the skill prose (P2-5) makes the substitution a human-authorized exception requiring an asked-for route and reason. The crash-path concession is a narrowing of binding strength (operation-level to request-level) for a request that is still digest-authenticated and still produces truthful evidence; it confers no authority on anyone.",
+        "rule_id": "explicit-human-authority",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "The design creates a new client-submitted payload on the public apply path (`review-dispatch` carrying a `RouteOverrideDeclaration` with a human reason), relaxes the submission matcher for that one kind (P2-1/P2-3), states \"No dedicated pre-approval gate for an override\", and on the crash-recovery path binds the override at request level while the operation identity stays the recovered one (P2-3)."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "The accepted limitation is represented as a limitation, not as success. The design names the exact loss window, explains why the alternative was rejected (persisting the override or changing the shared continuation-recovery digest selection at src/state/semantic-actions.ts:441-444 would add durable machinery and review surface for a crash window no requirement names), and keeps the resulting state visible: evidence records the route that actually ran and carries no `RouteOverrideRecord` when none applied, which matches the verified `overrideRecordFor` behavior. There is no silent bypass — the client sees the re-offered review action and can re-request the substitution, and that re-request is pinned by a test in Chunk D.3 alongside the crash-window pin. Dispatch failure remains a visible non-success state: existing remediation (`retry-unchanged-attempt` / `repair-before-fresh-attempt`) is preserved and sustained failure surfaces through the fixed point's attempts-exhausted gate, so an unavailable reviewer still stops for a human rather than resolving as success. The skill guidance reinforces the same honesty by refusing to let the outage procedure be used when the server itself is unreachable (stop, `manual-status`, wait) rather than papering over a degraded server with a route substitution. Deviation item 5 discloses that the crash-window semantics were unstated in the parent, and the LIMITATIONS text is scheduled to Phase 6 consistent with the phase plan's file allocation, so the limitation is documented, not dropped. One residual is noted honestly by the design itself and does not rise to a violation: a lost override produces no dedicated notice to the client beyond the evidence's truthful record of the route that ran.",
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "P2-3 accepts a failure mode deliberately: \"If an apply is interrupted between review-enter and review-run, the recovered continuation binds the submission's digest but not its value: the resumed dispatch runs under the configured route, with no override.\" The skills prose (P2-5) also scopes the outage procedure against the degraded-operation stop path."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "Evidence stays bound to the exact subject bytes it governs. The override is deliberately kept out of the input-fingerprint subject, so it cannot make evidence for one subject appear valid for another, and it is not a means of admitting stale or mismatched evidence: it only selects the adapter that produces new evidence, which is then stamped with the substitution and its reason. Fail-closed validation is preserved at every layer the design enumerates and the repository confirms — the plan-time submission arm schema, `routeOverrideSchema` inside `parseToolCall`, and dispatch-time `routeFromConfiguredRoute`, which holds the substitute to exactly the configured-route rules (the verified `routeFor` at src/review/counter-review.ts:280-285 routes a named substitute through that same validator rather than around it). Cross-task leakage is not reachable: the declaration is per-apply, carried on the plan for the in-process continuation only (pinned interface 2), and `operationKey` already scopes identity by `task_id`, `invocation`, `phase_instance`, and `subject_digest` (src/state/semantic-actions.ts:129-140). The crash-path concession does not let mismatched evidence authorize advancement — the re-submitted request is a distinct new intent that runs its own dispatch and produces its own evidence, and no prior review result is reused under the new route. Chunk D.2 pins the isolation property directly: the request digest changes with the override while the subject's input fingerprint does not.",
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "Pinned interface 5 (\"Fingerprint neutrality\") and P2-3 govern how the declaration binds to identity: \"the override affects `submission_digest`/operation digest/request digest only; the input-fingerprint composition is untouched\", and on recovery the request \"proceeds as a fresh request — a new request digest that passes the pre-dispatch replay probe as a genuinely new intent — while the operation identity stays the recovered one\"."
+      }
+    ],
+    "target_ref": "refs/heads/feature/review-override-flexibility"
+  },
+  "context_digest": "466cea5d07c49b5c3977380fe128e16ced992ed02997211a6b440aabc4cd0699",
+  "current_evidence": {
+    "set_digest": "bfcadee5265b56fbd1291e3840a50c48e14238037ea0c6504b20c9ddc6b91bb4",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "044ce39455d098eb42e8bc50829ffa03c47824981c2e10420cef744c1e98cfbc",
+        "producer_family": "claude",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-9d52098d0738f2795581a61d258e8744ff4bb2c74da85d643445c5fc4380b7c8",
+  "intent_id": "afop-6ab0ecff000b500dca50f1242f65719a07c9a79c6de52590039a650fda4d0671-open-gate",
+  "kind": "design-approval",
+  "opened_at_revision": 77,
+  "phase_instance": "phase-design-2",
+  "request_digest": "11a23b30d26a600e0dfafa755a3bfad45ecf0cb87faf695ec8bb03541ab3a094",
+  "schema_version": "1",
+  "subject_digest": "6973b6ff7fc1842cf2463c0b55744c6511565f37d88561e9187124f1634e1fab",
+  "summary": "Phase 2 of review-flexibility is designed and reviewed: the per-dispatch reviewer route override becomes reachable through the semantic workflow tools. The design adds a review-dispatch submission carrying a human-authorized route_override on the review action; the dispatching review offer honestly advertises the new expected submission kind while still tolerating an absent submission, so every existing review flow is unchanged; the override rides the action plan into the dispatch facts; validation, evidence recording with the human reason, and provenance surfacing already exist downstream and are only being connected. Six skills gain prose (the four reviewing skills get the outage procedure, archflow-init documents config overrides, archflow-upgrade gets a one-clause carve-out added on review's finding), with contract-pin updates in the same change. Verification: unit, composition, integration journey (substitute route actually runs, evidence records the override with its reason), digest-binding and crash-window pins, full contract suites, schema regeneration, and the dist bundle rebuild. Two review rounds ran: round one produced one accepted finding (the archflow-upgrade carve-out), which was incorporated; round two returned no findings. Material accepted tradeoffs: an override lost to a crash between the two review substeps does not survive — the resumed dispatch runs under the configured route and the override is re-requested; on that recovery path the override authenticates at request level rather than operation level. The reviewed subject input fingerprint is never affected. About fifteen hand-written files including tests, within the approved phase scope; the task design was updated in the same production result to record the refinements (honest advertisement, required arm field, plan-field carrier, crash-window semantics, upgrade-skill addition, schema path).",
+  "task_id": "review-flexibility"
+}

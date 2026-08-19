@@ -1,0 +1,109 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 73,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 6634738
+  },
+  "artifact_digest": "4bcdbe25921acbc3b9e45eb9b55d31bcde9ec57c70c16e46abd4e949b0e1f201",
+  "input_fingerprint": "603f0175f930a2b6f3eeed939550d10b450eb68c6608d94ab87fd2fe761a58b1",
+  "outputs": [],
+  "phase_instance": "phase-design-2",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-b240d1dc365040840b6595dc17b5432a",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [],
+      "assurance": "server-attested",
+      "cli_version": "2.1.236",
+      "constitution": "pass",
+      "drift": "aligned",
+      "drift_findings": [],
+      "effort": "medium",
+      "envelope_input_digest": "ac6217ffd6705edb2f2cf40d37b83ca67aaecd5359e328ec6e1e72f21ac7a82b",
+      "input_fingerprint": "603f0175f930a2b6f3eeed939550d10b450eb68c6608d94ab87fd2fe761a58b1",
+      "invocation_id": "adjudication-invocation-37949bdacd369d3a34527c541e3c90eb",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "0aaaa3d5ef48f7343a7e6707bd9ec1198ea42dd207ea3af6f51c786cd2759e68",
+      "phase_instance": "phase-design-2",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-b240d1dc365040840b6595dc17b5432a",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "The rule's second clause governs here: material deviations must update the governing documents and re-enter the applicable review boundary before dependent work advances. Both conditions are met in this production result. The supplied design.md D4 bullet already carries the revised mechanism (\"The dispatching review offer advertises `expected_submission: \\\"review-dispatch\\\"` ... non-dispatching review shapes keep `\\\"none\\\"` ... a required field because an override-less apply uses no submission\"), the plan-carrier seam (\"Because `substepPlan` continuations call `requestFacts` without the submission ... the declaration rides the plan\"), the corrected `src/contracts/schemas/v1/` path, and the Phase-2 file list including archflow-upgrade — so the parent is updated in lockstep rather than left contradicted. This artifact is itself the re-entry into the phase-design review boundary, and no implementation has begun: the document is a plan, with all edits assigned to chunks A-E and an executable verification list. Its stated fact basis is verified: `assertSubmissionMatches` is exactly-required today (src/state/semantic-actions.ts:82-87), the `review`/`review-run` facts case emits only `{kind, intent_id}` and ignores its submission parameter (:347-350), `substepPlan` calls `requestFacts(..., undefined)` (:601), the dispatching review offer advertises `\"none\"` (src/state/semantic-view.ts:182-187), `APPLY_SUBMISSION_KINDS` lacks the new kind (src/contracts/semantic-workflow.ts:99), and the downstream consumers already exist (`composeCounterReview` passing `facts.route_override` at src/state/request-composition.ts:495-504; `routeFor`/`overrideRecordFor` at src/review/counter-review.ts:280-298). The plan therefore describes machinery that exists as claimed, and the deviations are disclosed rather than silently absorbed.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The artifact is a phase design that departs from its governing task design in seven enumerated ways (\"Deviations\" items 1-7), including a mechanism change (P2-1: the dispatching review offer advertises `expected_submission: \"review-dispatch\"` instead of the parent's sketched `\"none\"`), a required rather than optional `route_override` field (item 6), a plan-field carrier seam (item 3), and an added skill file archflow-upgrade (item 7)."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Nothing here supplies advancement, approval, waiver, gate, or commit authority by inference. The override parameterizes which reviewer route a dispatch uses; the design states explicitly that \"the substitution parameterizes the automatic counter-review and never skips it\", and the phase touches no gate-opening or approval-acceptance code path (files touched are the submission contract, the schema, `semantic-actions.ts` threading, `semantic-view.ts` offer text, skills, and tests). The matcher widening is narrowly scoped and does not weaken authentication: `\"none\"` still forbids a submission, every other kind stays exact-required, and only absence is tolerated for `review-dispatch` at the single enforcement point, with no planner-level bypass. The human's decision remains explicit and bound to the exact dispatch: `routeOverrideSchema` requires a non-empty reason and at least one role, `operationKey` digests `submission ?? {kind: \"none\"}` into `submission_digest` (src/state/semantic-actions.ts:117-141) so a fresh apply binds the declaration into the authenticated operation identity, and `overrideRecordFor` stamps the reason onto review and adjudication evidence only when the substitute actually displaced a route (src/review/counter-review.ts:286-298). The absence of a pre-approval gate is a PRD-level assumption carried forward, not an inference invented here, and the reason is recorded and surfaced at the next gate via `counter_review_provenance.route_override`. The fabricated-authorization risk this rule guards against is identified and closed rather than ignored: deviation item 7 adds a carve-out to archflow-upgrade precisely because its generic \"follow `expected_submission`\" rule would otherwise direct a session to manufacture an override with a required human reason absent any human authorization, and the skill prose (P2-5) makes the substitution a human-authorized exception requiring an asked-for route and reason. The crash-path concession is a narrowing of binding strength (operation-level to request-level) for a request that is still digest-authenticated and still produces truthful evidence; it confers no authority on anyone.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The design creates a new client-submitted payload on the public apply path (`review-dispatch` carrying a `RouteOverrideDeclaration` with a human reason), relaxes the submission matcher for that one kind (P2-1/P2-3), states \"No dedicated pre-approval gate for an override\", and on the crash-recovery path binds the override at request level while the operation identity stays the recovered one (P2-3)."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The accepted limitation is represented as a limitation, not as success. The design names the exact loss window, explains why the alternative was rejected (persisting the override or changing the shared continuation-recovery digest selection at src/state/semantic-actions.ts:441-444 would add durable machinery and review surface for a crash window no requirement names), and keeps the resulting state visible: evidence records the route that actually ran and carries no `RouteOverrideRecord` when none applied, which matches the verified `overrideRecordFor` behavior. There is no silent bypass — the client sees the re-offered review action and can re-request the substitution, and that re-request is pinned by a test in Chunk D.3 alongside the crash-window pin. Dispatch failure remains a visible non-success state: existing remediation (`retry-unchanged-attempt` / `repair-before-fresh-attempt`) is preserved and sustained failure surfaces through the fixed point's attempts-exhausted gate, so an unavailable reviewer still stops for a human rather than resolving as success. The skill guidance reinforces the same honesty by refusing to let the outage procedure be used when the server itself is unreachable (stop, `manual-status`, wait) rather than papering over a degraded server with a route substitution. Deviation item 5 discloses that the crash-window semantics were unstated in the parent, and the LIMITATIONS text is scheduled to Phase 6 consistent with the phase plan's file allocation, so the limitation is documented, not dropped. One residual is noted honestly by the design itself and does not rise to a violation: a lost override produces no dedicated notice to the client beyond the evidence's truthful record of the route that ran.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "P2-3 accepts a failure mode deliberately: \"If an apply is interrupted between review-enter and review-run, the recovered continuation binds the submission's digest but not its value: the resumed dispatch runs under the configured route, with no override.\" The skills prose (P2-5) also scopes the outage procedure against the degraded-operation stop path."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Evidence stays bound to the exact subject bytes it governs. The override is deliberately kept out of the input-fingerprint subject, so it cannot make evidence for one subject appear valid for another, and it is not a means of admitting stale or mismatched evidence: it only selects the adapter that produces new evidence, which is then stamped with the substitution and its reason. Fail-closed validation is preserved at every layer the design enumerates and the repository confirms — the plan-time submission arm schema, `routeOverrideSchema` inside `parseToolCall`, and dispatch-time `routeFromConfiguredRoute`, which holds the substitute to exactly the configured-route rules (the verified `routeFor` at src/review/counter-review.ts:280-285 routes a named substitute through that same validator rather than around it). Cross-task leakage is not reachable: the declaration is per-apply, carried on the plan for the in-process continuation only (pinned interface 2), and `operationKey` already scopes identity by `task_id`, `invocation`, `phase_instance`, and `subject_digest` (src/state/semantic-actions.ts:129-140). The crash-path concession does not let mismatched evidence authorize advancement — the re-submitted request is a distinct new intent that runs its own dispatch and produces its own evidence, and no prior review result is reused under the new route. Chunk D.2 pins the isolation property directly: the request digest changes with the override while the subject's input fingerprint does not.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "Pinned interface 5 (\"Fingerprint neutrality\") and P2-3 govern how the declaration binds to identity: \"the override affects `submission_digest`/operation digest/request digest only; the input-fingerprint composition is untouched\", and on recovery the request \"proceeds as a fresh request — a new request digest that passes the pre-dispatch replay probe as a genuinely new intent — while the operation identity stays the recovered one\"."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "bfcadee5265b56fbd1291e3840a50c48e14238037ea0c6504b20c9ddc6b91bb4",
+      "step": "adjudicate",
+      "subject_digest": "6973b6ff7fc1842cf2463c0b55744c6511565f37d88561e9187124f1634e1fab",
+      "task_id": "review-flexibility",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "review-flexibility"
+}

@@ -1,0 +1,105 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 57,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 6560549
+  },
+  "artifact_digest": "9859b92835649b0b5f6d4fe579e31d67f919648a8f8920d502a1bdb4329772cc",
+  "input_fingerprint": "469bdda474c3e3bb3096096592481d3cc8e5dc12dcfb7c052202ce1fbd8db465",
+  "outputs": [],
+  "phase_instance": "phase-impl-1",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-49d9579446aba5828485e78e89aa2a67",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [],
+      "assurance": "server-attested",
+      "cli_version": "2.1.236",
+      "constitution": "pass",
+      "drift": "aligned",
+      "drift_findings": [],
+      "effort": "medium",
+      "envelope_input_digest": "fcd9a16ca3ad6accd2ec0c7b6cebcc0e7601ec517701e844d10a84a809c90c35",
+      "input_fingerprint": "469bdda474c3e3bb3096096592481d3cc8e5dc12dcfb7c052202ce1fbd8db465",
+      "invocation_id": "adjudication-invocation-f96ec883ffcf068f1c066934f6ed9b6a",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "0d241cac06aa399b3fefd6b80e112a58b7decf8acf859aaae08ac76f3d2d56e2",
+      "phase_instance": "phase-impl-1",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-49d9579446aba5828485e78e89aa2a67",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "Each material deviation updated its governing document in the same production result: phases/1/design.md carries Deviations item 9 and corrected Chunk B / pinned-interface text, and design.md's D2 convergence wording was amended (both appear as modified outputs with matching parent_documents digests). The corrected documents and the code are entering the review boundary together as this adjudication subject, so no dependent work has advanced on stale plans. The implementation otherwise follows the phase design's pinned interfaces verbatim — resolver return shape (src/state/fingerprint.ts:25-37), expected-digest seam, legacy composition keyed on state.config_digest (fingerprint.ts:153), the four recording points (transaction.ts:800, initialization.ts:212, gates.ts:430,704), and the informational-only status field (status.ts:226-231). Verification evidence is reported with counts and with the one suite left unrun and why.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "impl-notes.md \"Deviations from Plan\" records departures from the phase design: the PRD planning-restart landing reclassified from a no-expected flip site to a comparing site (src/mcp/handlers/state.ts:200 now passes expected_input_fingerprint), the withLastSeenConfig injection moved after assertPreserved (src/state/transaction.ts:794-800), and file-list additions beyond the design summary."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Phase 1 removes only live-bytes config comparisons and the config term of the fingerprint composition; it introduces no path by which advancement, approval, waiver, or commit authority is inferred. The new config_change surface is informational and cannot change action kind or open/close a gate (status.ts:226-231; semantic-view.ts:407-437). Where config can no longer be verified, next-action derives inspect-state with human_required: true (next-action.ts:259-271) rather than advancing. The legacy fingerprint fallback only accepts a value a human-authenticated record already claimed for the same task and subject; it never rewrites a record and never substitutes for a decision.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "not-matched",
+          "trigger_evidence": "No approval, gate-opening, waiver, or commit-authority code path is altered: src/state/gates.ts retains validateLiveGateState's INPUT_FINGERPRINT_MISMATCH check (:138), waiver-origin binding (:144-163), and openDurableGate (:165+); gates.ts changes are limited to returning the parsed config and applying withLastSeenConfig at :430 and :704. src/review/fixed-point.ts is not among the changed paths."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Unreadable or unparseable config remains a visible non-success with a safe next action everywhere: CONFIG_INVALID in the kernel (transaction.ts:403-407), CONTRACT_INVALID at gate open (gates.ts:137), CONFIG_INVALID at handler-session open (session.ts:53-55, plus the retained parse guard at :62-69), and in status a config-<kind> blocker (status.ts:751-761) driving inspect-state with human_required: true. Fingerprint mismatch still fails closed when neither composition matches (fingerprint.ts:149-158; transaction.ts:419-421). The impl-notes report the unrunnable real-host suite and the first failing integration run honestly rather than presenting them as success.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The phase deletes six fail-closed PINNED_CONFIG_MISMATCH comparisons and the status-side verifyPinnedConfig factory, changing what counts as a reportable non-success state."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The fallback is bounded and same-task: it reuses the identical subject (workflow, constitution, artifact and upstream identities, rubric digest, phase_instance, declared inputs) and folds in only this task's recorded creation-time state.config_digest, never live bytes or another task's value, and accepts only on an exact match with the caller-supplied expected digest — otherwise the new-composition value stands and the caller's mismatch error fires. No recorded value is rewritten (comparing sites record the accepted value; flips occur only at no-expected write sites). Subject-bytes binding is unweakened: artifact identities, phase instance, and declared inputs remain in the composition, gate fingerprint validation is intact (gates.ts:138), waiver-origin subject/context/evidence-set binding is unchanged (gates.ts:161), and the state↔initialization config_digest provenance agreement is retained.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "src/state/fingerprint.ts:97-158 adds a legacy-composition retry that can accept a fingerprint other than the newly computed one, and config_digest is removed from InputFingerprintSubject — both touch how durable records identify the bytes they govern."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "056b50bef4bfc4224c1afc65a48491cc943375cb9e4ce5ee5e496573e8fe10c1",
+      "step": "adjudicate",
+      "subject_digest": "60e329bfd8890aebb9db796d9a53aab54daeb81fc67201ca91e29f47b3d1a084",
+      "task_id": "review-flexibility",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "review-flexibility"
+}

@@ -1,0 +1,33 @@
+{
+  "context_digest": "1781884933353e2d885aa9df4aa2d567dd8663a1f230cf2cdabdcc3c0f1c2228",
+  "envelope": {
+    "context_digest": "1781884933353e2d885aa9df4aa2d567dd8663a1f230cf2cdabdcc3c0f1c2228",
+    "gate_id": "g-9d51b991c4b380b1df7a99b70fcbaf782f045a085866faca6d008274952fa1e0",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-9d06b9d0c60bc8a05230fb0cddb8e89db45145854c2defc3a08b43636ca307ed",
+      "recorded_at": "2026-08-19T22:22:58.669Z",
+      "request_id_digest": "175921c84f42b85937dd1aa9c38a2a63a952989e088457dbf7f03a92be3d9f80",
+      "schema_version": "1"
+    },
+    "kind": "commit-authorization",
+    "payload": {
+      "decision": "authorize-commit",
+      "reason": "Phase 1 is verified, both reviews are clean, and the constitution gate was approved; authorizing the commit of the exact reviewed change set to the feature branch."
+    },
+    "phase_instance": "phase-impl-1",
+    "schema_version": "1",
+    "subject_digest": "60e329bfd8890aebb9db796d9a53aab54daeb81fc67201ca91e29f47b3d1a084",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-9d51b991c4b380b1df7a99b70fcbaf782f045a085866faca6d008274952fa1e0",
+  "kind": "commit-authorization",
+  "outcome": "decided",
+  "phase_instance": "phase-impl-1",
+  "schema_version": "1",
+  "subject_digest": "60e329bfd8890aebb9db796d9a53aab54daeb81fc67201ca91e29f47b3d1a084",
+  "task_id": "review-flexibility"
+}

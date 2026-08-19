@@ -1,0 +1,3567 @@
+{
+  "accounting": {
+    "counted_entries": [
+      {
+        "path": ".archflow/tasks/review-flexibility/design.md",
+        "storage": "raw-payload",
+        "stored_bytes": 35831
+      },
+      {
+        "path": ".archflow/tasks/review-flexibility/phases/1/design.md",
+        "storage": "raw-payload",
+        "stored_bytes": 31661
+      },
+      {
+        "path": ".archflow/tasks/review-flexibility/phases/1/impl-notes.md",
+        "storage": "raw-payload",
+        "stored_bytes": 12368
+      },
+      {
+        "path": "assets/config.template.yaml",
+        "storage": "raw-payload",
+        "stored_bytes": 2029
+      },
+      {
+        "path": "dist/archflow-local.mjs",
+        "storage": "raw-payload",
+        "stored_bytes": 1597893
+      },
+      {
+        "path": "dist/archflow-mcp.mjs",
+        "storage": "raw-payload",
+        "stored_bytes": 2855873
+      },
+      {
+        "path": "dist/manifest.json",
+        "storage": "raw-payload",
+        "stored_bytes": 191867
+      },
+      {
+        "path": "dist/metafile.json",
+        "storage": "raw-payload",
+        "stored_bytes": 327249
+      },
+      {
+        "path": "src/contracts/config.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 3124
+      },
+      {
+        "path": "src/contracts/durable-state.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 30296
+      },
+      {
+        "path": "src/contracts/errors.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 23644
+      },
+      {
+        "path": "src/contracts/fingerprints.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 18965
+      },
+      {
+        "path": "src/contracts/internal/schema-generation-durable.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 6529
+      },
+      {
+        "path": "src/contracts/internal/schema-generation-semantic-workflow.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 1970
+      },
+      {
+        "path": "src/contracts/schemas/v1/project-error.schema.json",
+        "storage": "raw-payload",
+        "stored_bytes": 83119
+      },
+      {
+        "path": "src/contracts/schemas/v1/semantic-workflow.schema.json",
+        "storage": "raw-payload",
+        "stored_bytes": 36626
+      },
+      {
+        "path": "src/contracts/schemas/v1/task-state.schema.json",
+        "storage": "raw-payload",
+        "stored_bytes": 23905
+      },
+      {
+        "path": "src/contracts/semantic-workflow.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 20005
+      },
+      {
+        "path": "src/local/call-envelope.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 7396
+      },
+      {
+        "path": "src/mcp/handlers/session.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 3909
+      },
+      {
+        "path": "src/mcp/handlers/state.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 27346
+      },
+      {
+        "path": "src/state/config-change.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 4469
+      },
+      {
+        "path": "src/state/fingerprint.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 7558
+      },
+      {
+        "path": "src/state/gate-core.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 13917
+      },
+      {
+        "path": "src/state/gates.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 111379
+      },
+      {
+        "path": "src/state/initialization.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 27257
+      },
+      {
+        "path": "src/state/legacy-stage.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 1788
+      },
+      {
+        "path": "src/state/next-action.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 21467
+      },
+      {
+        "path": "src/state/production.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 18867
+      },
+      {
+        "path": "src/state/read.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 5434
+      },
+      {
+        "path": "src/state/semantic-view.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 21718
+      },
+      {
+        "path": "src/state/status.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 65081
+      },
+      {
+        "path": "src/state/transaction.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 58681
+      },
+      {
+        "path": "test/contracts/durable-contract-surface.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 22102
+      },
+      {
+        "path": "test/contracts/durable-structural-corpus.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 39742
+      },
+      {
+        "path": "test/crash/state-gate-lifecycle.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 16150
+      },
+      {
+        "path": "test/crash/state-initialization.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 11503
+      },
+      {
+        "path": "test/crash/state-transaction.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 21308
+      },
+      {
+        "path": "test/fixtures/state-gate-child.mjs",
+        "storage": "raw-payload",
+        "stored_bytes": 8979
+      },
+      {
+        "path": "test/fixtures/state-initialization-child.mjs",
+        "storage": "raw-payload",
+        "stored_bytes": 4985
+      },
+      {
+        "path": "test/fixtures/state-transaction-child.mjs",
+        "storage": "raw-payload",
+        "stored_bytes": 14878
+      },
+      {
+        "path": "test/helpers/task-workspace.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 5017
+      },
+      {
+        "path": "test/integration/config-editing.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 17071
+      },
+      {
+        "path": "test/integration/counter-review-pinned-context.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 18749
+      },
+      {
+        "path": "test/integration/mcp-handler-counter-replay.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 13610
+      },
+      {
+        "path": "test/integration/mcp-handler-state-replay.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 15325
+      },
+      {
+        "path": "test/integration/review-fixed-point-live.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 44913
+      },
+      {
+        "path": "test/integration/review-fixed-point.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 51694
+      },
+      {
+        "path": "test/integration/semantic-document-journeys.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 20776
+      },
+      {
+        "path": "test/integration/state-gate-lifecycle.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 88664
+      },
+      {
+        "path": "test/integration/state-projection-fresh-task.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 18168
+      },
+      {
+        "path": "test/integration/state-transaction.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 11495
+      },
+      {
+        "path": "test/real-host/terminal-journey.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 34941
+      },
+      {
+        "path": "test/unit/config-change.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 6018
+      },
+      {
+        "path": "test/unit/config-editing.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 16032
+      },
+      {
+        "path": "test/unit/config-pinning.test.ts",
+        "storage": "git-object",
+        "stored_bytes": 0
+      },
+      {
+        "path": "test/unit/errors.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 6326
+      },
+      {
+        "path": "test/unit/fingerprints.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 27638
+      },
+      {
+        "path": "test/unit/semantic-view.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 16794
+      },
+      {
+        "path": "test/unit/state-gates.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 47398
+      },
+      {
+        "path": "test/unit/state-initialization.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 9023
+      },
+      {
+        "path": "test/unit/state-next-action.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 23906
+      },
+      {
+        "path": "test/unit/state-status.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 24800
+      },
+      {
+        "path": "test/unit/state-transaction.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 66518
+      }
+    ],
+    "measured_at_revision": 51,
+    "result_byte_cap": 26214400,
+    "result_bytes": 6423744,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 12984288
+  },
+  "artifact_digest": "60e329bfd8890aebb9db796d9a53aab54daeb81fc67201ca91e29f47b3d1a084",
+  "input_fingerprint": "772da018abc3f40103b7f468004179672e3e88ab88e7b9076e11f6230e566379",
+  "outputs": [
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "d69087ce89e86fbd9d580d31f696f1cfe336d529",
+        "size_bytes": 35831
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "39047dbdeab4ca1e96fc0230952b698d491c3aec",
+        "size_bytes": 35727
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": ".archflow/tasks/review-flexibility/design.md",
+      "path_class": "document",
+      "payload_bytes": 35831,
+      "payload_digest": "2c7446d1c83d053caab90e3a18cb117863d7517c400717ab802e4d429603387d",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "e2cb06106508df7ff705ba3b426d8042a2d25d3c",
+        "size_bytes": 31661
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "8cd45b00ca51d9850b938fce87cffe6a4926ace5",
+        "size_bytes": 30007
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": ".archflow/tasks/review-flexibility/phases/1/design.md",
+      "path_class": "document",
+      "payload_bytes": 31661,
+      "payload_digest": "444c4e9de040e24ea0bdf1ac649af8ecbcbbfb38d1bfd675363d1b4b9f292f85",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "406cc1290c7b625d679a48b31c80f27170c92e93",
+        "size_bytes": 12368
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": ".archflow/tasks/review-flexibility/phases/1/impl-notes.md",
+      "path_class": "document",
+      "payload_bytes": 12368,
+      "payload_digest": "2c30258ee74bcf17b700eb8ed951d0fffe7fac688ce779b281d8a2339ae0af62",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "ad87a33a2b5d6eeef91ff03cf24e2add91baef10",
+        "size_bytes": 2029
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "7b3eea6e9cdb33f018af399317a38bd78caddce7",
+        "size_bytes": 1401
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "assets/config.template.yaml",
+      "path_class": "repository-source",
+      "payload_bytes": 2029,
+      "payload_digest": "ef5b19cfc26d542b78fe7281035ca5532e39059df602cdc4e2f28352210cdf4a",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "c785f199cb9700d68c246a276e0168922ec819f7",
+        "size_bytes": 1597893
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "58d4d9110bcc39d37b27ca8f3b3fedd95c6a85fc",
+        "size_bytes": 1595861
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "dist/archflow-local.mjs",
+      "path_class": "repository-source",
+      "payload_bytes": 1597893,
+      "payload_digest": "ea2ffd065a667d91ef137c3539488d1df4b1a6952e6f18e6213fb8fc00036bb0",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "6eb02c8ede4226c9edcfbf3119d8050e02948a4d",
+        "size_bytes": 2855873
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "bc0bbfe765f6b91e32b5a06f692faa4a54cb7888",
+        "size_bytes": 2851246
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "dist/archflow-mcp.mjs",
+      "path_class": "repository-source",
+      "payload_bytes": 2855873,
+      "payload_digest": "90ab6fd052744c3d7cca68362b87d66d9b0f8d4a5f68687a0fd618c4951233a2",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "b3b02739d5e4ef937f40be14d17c999ed5540b3a",
+        "size_bytes": 191867
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "c204a3196bbe9a2cb5b51853225650141392043b",
+        "size_bytes": 191465
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "dist/manifest.json",
+      "path_class": "repository-source",
+      "payload_bytes": 191867,
+      "payload_digest": "94c24b28c53ec0fac044fa3f4a33a4cb88d9d004f767a58f105afc5f9857a7a2",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "2bec562175a4f77442d28edf287ae9de7834af3d",
+        "size_bytes": 327249
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "7225bf787d73b9ac1ccb273ea5d9ba8557f89a2c",
+        "size_bytes": 327031
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "dist/metafile.json",
+      "path_class": "repository-source",
+      "payload_bytes": 327249,
+      "payload_digest": "62e38c9348ff5b3f6d9ec490ca8de5f59699cce57d89cbb6fe2bea8e335a1a28",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "76f8ed9f160a06650d928d33cd67b01d57ad4f4e",
+        "size_bytes": 3124
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "c70ba97552c3818ad9bc0dabd5c9a6b92d1d2b1d",
+        "size_bytes": 2116
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/contracts/config.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 3124,
+      "payload_digest": "a3032338fafacd606bc560daa4a0a20c51d43729511867ccc991bff416c0bf30",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "dedbe85fb1e2d2fff8b265986825662c37113c2d",
+        "size_bytes": 30296
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "d88e41b4b2e419383a1398d5b4a0aee77b59537f",
+        "size_bytes": 27579
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/contracts/durable-state.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 30296,
+      "payload_digest": "be6a2c3e11a08616dd4c6ca5e9c43a1a46db91092f9c9f19f416334e9a370dd2",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "cfbac4d011e0a428ea2b933894c589be8da01d2a",
+        "size_bytes": 23644
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "44afdfd47a0ee48ceb961ed7f5b2377223cf87dd",
+        "size_bytes": 23850
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/contracts/errors.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 23644,
+      "payload_digest": "44f6b549724053e1f72f482fb365d1bd17e2feecdc63e237ff23098c5e8b4839",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "68a496da6cef06d64ac025aac70318098fcdca76",
+        "size_bytes": 18965
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "647802dd92aa85da2ef09a6306b0ef23ab6888e8",
+        "size_bytes": 19780
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/contracts/fingerprints.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 18965,
+      "payload_digest": "7405632f7aa3667bda7dc18c6d918f7c3d48dcfe3e5fd865de8a4242f450b211",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "4a22adb1f25c0775ab2f4ed9d104d1a3f89b2018",
+        "size_bytes": 6529
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "d2a5cbb0717df7512a76cfd0e1299964f6281b0a",
+        "size_bytes": 5957
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/contracts/internal/schema-generation-durable.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 6529,
+      "payload_digest": "aff1763882faf875f74931b8935955bd0b4a5fd1ac4ccea0cd8d5e7736b10051",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "330792a17e01fd11e593d4a581186b624b8c407f",
+        "size_bytes": 1970
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "2cc9dd11357320272f14f028d2ece6eb9332421b",
+        "size_bytes": 1513
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/contracts/internal/schema-generation-semantic-workflow.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 1970,
+      "payload_digest": "b912427ab01738268089d85c04b557698b9163420310db0741e9e78ebcc86448",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "adf0610c019c9f4329f43b65efe7e2f951939771",
+        "size_bytes": 83119
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "e0735852e99d465f97e239d7b160e0a3cf0c0db0",
+        "size_bytes": 84374
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/contracts/schemas/v1/project-error.schema.json",
+      "path_class": "repository-source",
+      "payload_bytes": 83119,
+      "payload_digest": "b6d36acfa1ae5a91f6d762d930b88857772e74ba10f9f0794088ee9523c05689",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "06557031c8e06fd5c125cf44f9b8a2bcd4697aaa",
+        "size_bytes": 36626
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "0cdcc9aacd373e25b6665484be806380ef8ef015",
+        "size_bytes": 35498
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/contracts/schemas/v1/semantic-workflow.schema.json",
+      "path_class": "repository-source",
+      "payload_bytes": 36626,
+      "payload_digest": "87615f8ccc07fcd7269aaeff890a5d1aa2aa024eba87adadf294961dfe36abc0",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "54f3c6a89e5cde7bc49b79b5d477e8c27bc33bba",
+        "size_bytes": 23905
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "1c849e7637f2b92f1b289f3ff5a676b1754119b3",
+        "size_bytes": 21815
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/contracts/schemas/v1/task-state.schema.json",
+      "path_class": "repository-source",
+      "payload_bytes": 23905,
+      "payload_digest": "1a8fe69259edbd709a8f533008fd37374c71df774e9f6cfd74455960e1ce40d4",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "80d36886cd852ad76b1f2412822b2c7bb6cbe273",
+        "size_bytes": 20005
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "624ef7c05c1685fa2c2baad809238e79600c8ec5",
+        "size_bytes": 18996
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/contracts/semantic-workflow.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 20005,
+      "payload_digest": "0e3775fec15cdb885aa61dbe672b6bc2331949be1683d5ec087becbdfef55532",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "7351831b084ab90fcab3d2caa425c1597c16ce68",
+        "size_bytes": 7396
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "08549a12f4c33649ff225e8af5c3793c62d1a3b1",
+        "size_bytes": 7699
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/local/call-envelope.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 7396,
+      "payload_digest": "4d0d17fb18e24bf13d181fbcdfc43267bfee56a182d5820acea8eb0e7f9bffda",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "1cb3e48d10634c999ab633b68f236fdf00a09629",
+        "size_bytes": 3909
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "7800a3801bb16fe811dccb2d605e1cf152ecf8ba",
+        "size_bytes": 4163
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/mcp/handlers/session.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 3909,
+      "payload_digest": "edc076a2832b04bdb432cb4222454e7c26ed899b2d355ad492ab197d7447f438",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "81dab455a79b346b416e910fcfeb788041f56f97",
+        "size_bytes": 27346
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "7f8475b8ec7c7922b408dee9a544527e1ef960f3",
+        "size_bytes": 26986
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/mcp/handlers/state.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 27346,
+      "payload_digest": "3d6b6a79818bf0f34935efad9d467b64a20a78852dad746784524bea515bb659",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "d1e206a35443aa38cba0f1f1e7b411857c43aecf",
+        "size_bytes": 4469
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": "src/state/config-change.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 4469,
+      "payload_digest": "b4fe563d9d4510b368e29ac9ae0913a0c06af90dc01b468a5df1f76defcff66e",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "f6626b8cc325c26e7ffb465e9a13b7d94daa749e",
+        "size_bytes": 7558
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "433baa1d5d189af80e5bb009d7c056d5bbaa3fe6",
+        "size_bytes": 5333
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/fingerprint.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 7558,
+      "payload_digest": "fcbaf53a5242fc1de87500bdbb8837298f38358e0579bd7aecc108035e1e8122",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "44ace5d7fd9cc2d840d162ec65d5b9c9feeb9682",
+        "size_bytes": 13917
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "5966a5a4e7a1b742fea18c9f965834a9c332e881",
+        "size_bytes": 13766
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/gate-core.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 13917,
+      "payload_digest": "de426b6aac9817a3f9e19c0d4da44ee8c456b2e52de6990ab299e6e0ff51f07b",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "7beefe7a422b32028cd146bf710c9bc51ea092b4",
+        "size_bytes": 111379
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "d6cfcaeab038e7cec9d3d3021483000efbb016c7",
+        "size_bytes": 111095
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/gates.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 111379,
+      "payload_digest": "daf177e655bc5faf3ac7dfcd4989aed515d716045e683946ec291f92fe8167c1",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "06926689fb4aaa1e52d0c2e25d611005709f1443",
+        "size_bytes": 27257
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "74a1c4f502e0c9728265a2202167ac8c5430d165",
+        "size_bytes": 27269
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/initialization.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 27257,
+      "payload_digest": "ea0d7e94b9bca39fb8a7a99d3198dd37af451c84f1b7e002691eb2d522bb67db",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "3825f32f24e0bb1fcf01a64b63e92f58b37517d3",
+        "size_bytes": 1788
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "8eccded8966444a23d9f0c48d395f0834d38ae8d",
+        "size_bytes": 1710
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/legacy-stage.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 1788,
+      "payload_digest": "bb27c76e1031468da4714258d0a15b6797b3b314a4b3fcb421ef0d140b6a42fe",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "26a15cb36aa4ab01173b0bbc78e7cca24cb3fc77",
+        "size_bytes": 21467
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "79965cc1d6eb26c1c103b351bc0b29f67813a845",
+        "size_bytes": 21815
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/next-action.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 21467,
+      "payload_digest": "32916c985874668a7af29dccc17d3428ca677a28064f273378318e0199102736",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "e491ccd602fce63ac0b4cc7b40e5a1ba0eaee41c",
+        "size_bytes": 18867
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "72597f69557c81c47abbfe6f3926d3bd99da108d",
+        "size_bytes": 18827
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/production.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 18867,
+      "payload_digest": "bcd6eca7679b39722e5643c64d371c99886ee6a35a9ebb6230515ba1fa8e880f",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "57d9ab0e354cc5e8573c626d634e5a15feac927a",
+        "size_bytes": 5434
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "97cd0627c51afed007dd73bfa99e29141dad7969",
+        "size_bytes": 5036
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/read.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 5434,
+      "payload_digest": "7a6b8e9d04e70490dce65af2cda4a7da88ac2ae540fd9169e3e4fa3ec463b5b5",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "fc75930c736d8d8a437006b15bfb106abbaacb6e",
+        "size_bytes": 21718
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "ef7bb240ae1b07d6a39c157afb7f48d90d10cfc9",
+        "size_bytes": 21148
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/semantic-view.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 21718,
+      "payload_digest": "f8d7c9ead9ec980d275062d4a496de0242fdb3ee8a25beea3429f3273cd99640",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "d530190ed2f9fd8cfe64faeff2062fd75c32a289",
+        "size_bytes": 65081
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "c456eb564192fb895d9e09ef8264f1ef7c136511",
+        "size_bytes": 65315
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/status.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 65081,
+      "payload_digest": "59bf2b9babbdb150c9ad561b983eebb8f4a6cc363eca060d72aa2ef46e014b71",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "297985ee8464215ed19682e39907136cab8c7205",
+        "size_bytes": 58681
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "73a00a42e8c1ac8cf0690047a29707869bcac46a",
+        "size_bytes": 58342
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/transaction.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 58681,
+      "payload_digest": "d6641d41768ef1452ba0df89c9056bee55bd2f9081dbf7c5e712870f75a430b2",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "23c3c2fb1185c027cd22da5ecb7e7130daf8921b",
+        "size_bytes": 22102
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "d743dd4a72893083fe68da82b3c265df10d8acef",
+        "size_bytes": 22046
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/contracts/durable-contract-surface.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 22102,
+      "payload_digest": "b73ee86813cd38b69f7ac000304d81ddef60d49b528abdc8e8404d9f17056fb9",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "4d07da57f019b68ad6d79149950a9389042a6cb4",
+        "size_bytes": 39742
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "9544b18091acfa704e7022672dbd78c167365749",
+        "size_bytes": 39635
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/contracts/durable-structural-corpus.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 39742,
+      "payload_digest": "75698b780e3574ce8a74115c7bce724c04b23194254c97dda1e4a50b35c7a730",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "f48fbfe7e75e9f09c136db49ff6c5995f5be3aa7",
+        "size_bytes": 16150
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "7d4e95924a266d5f450ec9945b6f7159a8ecf7cd",
+        "size_bytes": 16188
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/crash/state-gate-lifecycle.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 16150,
+      "payload_digest": "ef5dbec7cd945825809565adf283852efd01c2e9800eaeec86763898d604f033",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "d4e1b45e192e9348c1a2d59650946923c1dd95e4",
+        "size_bytes": 11503
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "f2c9240cca729bda155f6fba89d4f6dd767038f9",
+        "size_bytes": 11504
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/crash/state-initialization.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 11503,
+      "payload_digest": "2d6dc34a14cdbc8d15fab6bb7e38942dffa031f347ac0a9dc79bb42cd996951b",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "c9b6d780d925ba2a86383b1c2aaafa8447f282f7",
+        "size_bytes": 21308
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "ee6daf02b1622a483446f7188467065320732a98",
+        "size_bytes": 21315
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/crash/state-transaction.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 21308,
+      "payload_digest": "6f753ca0e9cac08ce3bc3e3dfeb007403792bcf59f2fe8781a7b6da21e8e353a",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "249b2f2aa891df1435b9bc298f07a4cfa4b6d630",
+        "size_bytes": 8979
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "c433ade6f59f674137401a181f237ca0adc00ea4",
+        "size_bytes": 8995
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/fixtures/state-gate-child.mjs",
+      "path_class": "repository-source",
+      "payload_bytes": 8979,
+      "payload_digest": "f9cfb64677829c9794967a2eec77b2f404374a7b6baaae69853a9ae05112806b",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "f89376d7c6e168ea7f15a61f25d9777812598d1f",
+        "size_bytes": 4985
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "2761c8b70d10c1a45d13e40cbfa4b7871c77d68a",
+        "size_bytes": 4811
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/fixtures/state-initialization-child.mjs",
+      "path_class": "repository-source",
+      "payload_bytes": 4985,
+      "payload_digest": "a3e8802a55bd7827ce2d5f0eb9b9b662e796a9949d5f22989848dbcf3d08cc2a",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "5494ae12476c3d1b52988b77def97fd4a235b792",
+        "size_bytes": 14878
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "be25bc16b83648150cf10da5037722edaa121a24",
+        "size_bytes": 14892
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/fixtures/state-transaction-child.mjs",
+      "path_class": "repository-source",
+      "payload_bytes": 14878,
+      "payload_digest": "fde3209b73c2a129b57f2976164ff048c18b2d85859de9f223daa6cfe539519c",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "25bccc29b4d8e29e2e37500763e9d1ed1e158b9b",
+        "size_bytes": 5017
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "bd7fb7863d0d11a1a1f2874832c4585059042a8d",
+        "size_bytes": 4664
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/helpers/task-workspace.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 5017,
+      "payload_digest": "991ca11b78699ffdf075e46b066584d1476b8f8174056731bab491e1e76ebcf0",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "f297fa52497f99b1204bdf2672651803e51058c5",
+        "size_bytes": 17071
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": "test/integration/config-editing.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 17071,
+      "payload_digest": "2c2200a52be21f0378868cfc43e74807a07bdc1636a907efb50ed4b77ec0da66",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "1688c3f40f227b996012abecece57fc2c2bb3c9a",
+        "size_bytes": 18749
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "a16a91888ffc3655ed00f5225d7fc81e80a3b506",
+        "size_bytes": 18815
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/integration/counter-review-pinned-context.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 18749,
+      "payload_digest": "d22bb2b6c2076e79f72eb19e9c53a1af77b656dececd0f525f03318318ac8323",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "a92eee649646c90d73fae30b6e4b2596d911bef0",
+        "size_bytes": 13610
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "23a4c9c4f9a130b1dfa19693431cfa739c9a84b6",
+        "size_bytes": 13676
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/integration/mcp-handler-counter-replay.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 13610,
+      "payload_digest": "f13428acb8e406cad1d2f47f081adab535ac2b92d0ed822170a90b775cf69550",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "f6e53f01b8b7895b4226475e72b96973b20ea3bb",
+        "size_bytes": 15325
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "9c4acada7e4f7089856b13a8b701300c6d91241a",
+        "size_bytes": 11129
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/integration/mcp-handler-state-replay.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 15325,
+      "payload_digest": "ec2e57375804ada984ce906774627ea08613cbca2599ac8ff2525482aa96b807",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "1e247f7b86411d54980b031176e34b899e9bc34b",
+        "size_bytes": 44913
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "e610bdd441a77a73ed738e49ccaa8a06f848bdd1",
+        "size_bytes": 45129
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/integration/review-fixed-point-live.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 44913,
+      "payload_digest": "21896cdde21273b1362974c4ba900a709bc43a187a4f5b5c7b1b403be6c82156",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "8059a7b09fe43e2bb9c38cec8a97cbedee8f1fed",
+        "size_bytes": 51694
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "393756a35f0c327780d2a17db815a40545611942",
+        "size_bytes": 51608
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/integration/review-fixed-point.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 51694,
+      "payload_digest": "3f5907bfbbc1d7220573418bce72042d687d02ba75251b23111b44ef7bff55f9",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "2f2360516ba5e8db648bd04c8de50151e6af2550",
+        "size_bytes": 20776
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "b9841b0fba74125985cb98451f21c8e1df761b57",
+        "size_bytes": 20524
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/integration/semantic-document-journeys.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 20776,
+      "payload_digest": "768cc26e88730ac06978f4047bf6f2a3c988b32bcd743512b6a7b0fd79ffa144",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "5746c1224037168aadff213d09382130c0197d02",
+        "size_bytes": 88664
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "854562f499b21eaa83c8a82fbc5d15280d4f59ed",
+        "size_bytes": 88536
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/integration/state-gate-lifecycle.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 88664,
+      "payload_digest": "fc5532261b0aed3267bcd480689ae001316e8dc92a0f53ad4731227d352ab6a2",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "aba365d696e044097606a09b812ad06a2e5624ab",
+        "size_bytes": 18168
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "e2596f38be17b9de7013a29cac38f426e846210d",
+        "size_bytes": 18101
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/integration/state-projection-fresh-task.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 18168,
+      "payload_digest": "b940fb5b74bf374ab47cd2a072526583e9dd74aa956d06348fcd60cac5d43c93",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "e44146f6085085871a8a30aca686d01f5ddf02fa",
+        "size_bytes": 11495
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "51dd2a24c587d88db59b31ef8db0d7ed90e8f1e0",
+        "size_bytes": 11539
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/integration/state-transaction.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 11495,
+      "payload_digest": "5ebfd795466c365ed16670685ce91b2e3e903bacd38eb9cc109f84eb38cd16b7",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "f48d128b8013bc9717afb4a4d30d645add567ccd",
+        "size_bytes": 34941
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "8fe0df83bfe7de1be8c2342b2e137d0209421f06",
+        "size_bytes": 33018
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/real-host/terminal-journey.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 34941,
+      "payload_digest": "9f2789061931d6eb0f331254291808f19cd672b54bb039a89763f2867120a503",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "f1482d16bbe937502f1fab284cde2333ecf1f055",
+        "size_bytes": 6018
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": "test/unit/config-change.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 6018,
+      "payload_digest": "b92c62293e9c48410e1eab82a6c15612afb1b8edc0e5c7fbe559f480d1eb83cc",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "8cb389b2a5cb081a191959572b02f988a27a8004",
+        "size_bytes": 16032
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": "test/unit/config-editing.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 16032,
+      "payload_digest": "64f9f9721a7a6714575ff85dff5dc25905ac714d625b592423d69e67c41aab1d",
+      "storage": "raw-payload"
+    },
+    {
+      "before": {
+        "mode": "100644",
+        "oid": "3ae339e6a2b6a15cbfc772307fe743f19e632df7",
+        "size_bytes": 11721
+      },
+      "file_type": "regular",
+      "operation": "delete",
+      "path": "test/unit/config-pinning.test.ts",
+      "path_class": "repository-source",
+      "storage": "git-object"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "8585aa2a44fd9ea5adb98d8fb0296cf3974182f8",
+        "size_bytes": 6326
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "d2f31d99682bbda4ce63873756405ec61b2483f1",
+        "size_bytes": 6143
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/errors.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 6326,
+      "payload_digest": "1ff6293a166778417d4f861de37e22e7b5334f291bba449534aab825d3add50e",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "b98d806959276611f35b2025d256848fa4d2b071",
+        "size_bytes": 27638
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "5df666819d499dc99481420af89cf46e76249319",
+        "size_bytes": 21630
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/fingerprints.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 27638,
+      "payload_digest": "d85bfe31b919c3bb3e42e367a4eea1f2fa6ac8f427e1f5ceeac96a3529dec12d",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "75504e7a501636b65b18fb466ae3453a27957ef7",
+        "size_bytes": 16794
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "4d7ad7cc02d8b64b28315c16b6f8d9392a544322",
+        "size_bytes": 16071
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/semantic-view.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 16794,
+      "payload_digest": "b5bcc860ea3633a86489ebbe02affc4da1f5645c5a86e5ae190494dd6e33a15f",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "704405c9f0feeb92c14c8579ab483571ec3ac755",
+        "size_bytes": 47398
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "6dc7dab183f066f643b235b2c8c07f9b603070a3",
+        "size_bytes": 47296
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/state-gates.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 47398,
+      "payload_digest": "8df6d7ed7801d5ac720509fe348df8df0383a9ec94e49743015624e500c06a08",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "0227770d9a68d0b55232f8d1d56e53b0f9788d00",
+        "size_bytes": 9023
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "309f70fe23e8038eb90595e2d1df964a47767e80",
+        "size_bytes": 8806
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/state-initialization.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 9023,
+      "payload_digest": "6883902ea7fc6190f9723abe4847bab030dd9506ccdd42dad6b566ec15ee9838",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "687bd35af63584473b63823054c323dbf115e47d",
+        "size_bytes": 23906
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "18c17ebcdc89dc992a927d1b6e54240e0c1aa03b",
+        "size_bytes": 23416
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/state-next-action.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 23906,
+      "payload_digest": "f42cc56e68fc55fc4fc554b988004e9d0d3d2c813d6fa1b2c3ec02e789f99225",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "6c4885ab4420caf3c8f66eff67ce4804c201dd80",
+        "size_bytes": 24800
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "dcac1cce02b18ef6b03d922e2e99caa432dd3ca3",
+        "size_bytes": 23982
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/state-status.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 24800,
+      "payload_digest": "16ce27a761557879adae4ef682c709539ca2d4454aecdc04c8b771ceb98d0197",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "9750b6a6436ed0c9b421933b300d9778d5799ca3",
+        "size_bytes": 66518
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "c82da8d2b9c2ae467bb117b1eb8796c9626ce858",
+        "size_bytes": 65530
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/state-transaction.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 66518,
+      "payload_digest": "19b75e90c7b21c2dbddcf94a06127b6a4f0dc8489cc868587a8b2d8dfcbc49be",
+      "storage": "raw-payload"
+    }
+  ],
+  "phase_instance": "phase-impl-1",
+  "projections": [
+    {
+      "content_digest": "2c7446d1c83d053caab90e3a18cb117863d7517c400717ab802e4d429603387d",
+      "path": ".archflow/tasks/review-flexibility/design.md"
+    },
+    {
+      "content_digest": "444c4e9de040e24ea0bdf1ac649af8ecbcbbfb38d1bfd675363d1b4b9f292f85",
+      "path": ".archflow/tasks/review-flexibility/phases/1/design.md"
+    },
+    {
+      "content_digest": "2c30258ee74bcf17b700eb8ed951d0fffe7fac688ce779b281d8a2339ae0af62",
+      "path": ".archflow/tasks/review-flexibility/phases/1/impl-notes.md"
+    },
+    {
+      "content_digest": "ef5b19cfc26d542b78fe7281035ca5532e39059df602cdc4e2f28352210cdf4a",
+      "path": "assets/config.template.yaml"
+    },
+    {
+      "content_digest": "ea2ffd065a667d91ef137c3539488d1df4b1a6952e6f18e6213fb8fc00036bb0",
+      "path": "dist/archflow-local.mjs"
+    },
+    {
+      "content_digest": "90ab6fd052744c3d7cca68362b87d66d9b0f8d4a5f68687a0fd618c4951233a2",
+      "path": "dist/archflow-mcp.mjs"
+    },
+    {
+      "content_digest": "94c24b28c53ec0fac044fa3f4a33a4cb88d9d004f767a58f105afc5f9857a7a2",
+      "path": "dist/manifest.json"
+    },
+    {
+      "content_digest": "62e38c9348ff5b3f6d9ec490ca8de5f59699cce57d89cbb6fe2bea8e335a1a28",
+      "path": "dist/metafile.json"
+    },
+    {
+      "content_digest": "a3032338fafacd606bc560daa4a0a20c51d43729511867ccc991bff416c0bf30",
+      "path": "src/contracts/config.ts"
+    },
+    {
+      "content_digest": "be6a2c3e11a08616dd4c6ca5e9c43a1a46db91092f9c9f19f416334e9a370dd2",
+      "path": "src/contracts/durable-state.ts"
+    },
+    {
+      "content_digest": "44f6b549724053e1f72f482fb365d1bd17e2feecdc63e237ff23098c5e8b4839",
+      "path": "src/contracts/errors.ts"
+    },
+    {
+      "content_digest": "7405632f7aa3667bda7dc18c6d918f7c3d48dcfe3e5fd865de8a4242f450b211",
+      "path": "src/contracts/fingerprints.ts"
+    },
+    {
+      "content_digest": "aff1763882faf875f74931b8935955bd0b4a5fd1ac4ccea0cd8d5e7736b10051",
+      "path": "src/contracts/internal/schema-generation-durable.ts"
+    },
+    {
+      "content_digest": "b912427ab01738268089d85c04b557698b9163420310db0741e9e78ebcc86448",
+      "path": "src/contracts/internal/schema-generation-semantic-workflow.ts"
+    },
+    {
+      "content_digest": "b6d36acfa1ae5a91f6d762d930b88857772e74ba10f9f0794088ee9523c05689",
+      "path": "src/contracts/schemas/v1/project-error.schema.json"
+    },
+    {
+      "content_digest": "87615f8ccc07fcd7269aaeff890a5d1aa2aa024eba87adadf294961dfe36abc0",
+      "path": "src/contracts/schemas/v1/semantic-workflow.schema.json"
+    },
+    {
+      "content_digest": "1a8fe69259edbd709a8f533008fd37374c71df774e9f6cfd74455960e1ce40d4",
+      "path": "src/contracts/schemas/v1/task-state.schema.json"
+    },
+    {
+      "content_digest": "0e3775fec15cdb885aa61dbe672b6bc2331949be1683d5ec087becbdfef55532",
+      "path": "src/contracts/semantic-workflow.ts"
+    },
+    {
+      "content_digest": "4d0d17fb18e24bf13d181fbcdfc43267bfee56a182d5820acea8eb0e7f9bffda",
+      "path": "src/local/call-envelope.ts"
+    },
+    {
+      "content_digest": "edc076a2832b04bdb432cb4222454e7c26ed899b2d355ad492ab197d7447f438",
+      "path": "src/mcp/handlers/session.ts"
+    },
+    {
+      "content_digest": "3d6b6a79818bf0f34935efad9d467b64a20a78852dad746784524bea515bb659",
+      "path": "src/mcp/handlers/state.ts"
+    },
+    {
+      "content_digest": "b4fe563d9d4510b368e29ac9ae0913a0c06af90dc01b468a5df1f76defcff66e",
+      "path": "src/state/config-change.ts"
+    },
+    {
+      "content_digest": "fcbaf53a5242fc1de87500bdbb8837298f38358e0579bd7aecc108035e1e8122",
+      "path": "src/state/fingerprint.ts"
+    },
+    {
+      "content_digest": "de426b6aac9817a3f9e19c0d4da44ee8c456b2e52de6990ab299e6e0ff51f07b",
+      "path": "src/state/gate-core.ts"
+    },
+    {
+      "content_digest": "daf177e655bc5faf3ac7dfcd4989aed515d716045e683946ec291f92fe8167c1",
+      "path": "src/state/gates.ts"
+    },
+    {
+      "content_digest": "ea0d7e94b9bca39fb8a7a99d3198dd37af451c84f1b7e002691eb2d522bb67db",
+      "path": "src/state/initialization.ts"
+    },
+    {
+      "content_digest": "bb27c76e1031468da4714258d0a15b6797b3b314a4b3fcb421ef0d140b6a42fe",
+      "path": "src/state/legacy-stage.ts"
+    },
+    {
+      "content_digest": "32916c985874668a7af29dccc17d3428ca677a28064f273378318e0199102736",
+      "path": "src/state/next-action.ts"
+    },
+    {
+      "content_digest": "bcd6eca7679b39722e5643c64d371c99886ee6a35a9ebb6230515ba1fa8e880f",
+      "path": "src/state/production.ts"
+    },
+    {
+      "content_digest": "7a6b8e9d04e70490dce65af2cda4a7da88ac2ae540fd9169e3e4fa3ec463b5b5",
+      "path": "src/state/read.ts"
+    },
+    {
+      "content_digest": "f8d7c9ead9ec980d275062d4a496de0242fdb3ee8a25beea3429f3273cd99640",
+      "path": "src/state/semantic-view.ts"
+    },
+    {
+      "content_digest": "59bf2b9babbdb150c9ad561b983eebb8f4a6cc363eca060d72aa2ef46e014b71",
+      "path": "src/state/status.ts"
+    },
+    {
+      "content_digest": "d6641d41768ef1452ba0df89c9056bee55bd2f9081dbf7c5e712870f75a430b2",
+      "path": "src/state/transaction.ts"
+    },
+    {
+      "content_digest": "b73ee86813cd38b69f7ac000304d81ddef60d49b528abdc8e8404d9f17056fb9",
+      "path": "test/contracts/durable-contract-surface.test.ts"
+    },
+    {
+      "content_digest": "75698b780e3574ce8a74115c7bce724c04b23194254c97dda1e4a50b35c7a730",
+      "path": "test/contracts/durable-structural-corpus.test.ts"
+    },
+    {
+      "content_digest": "ef5dbec7cd945825809565adf283852efd01c2e9800eaeec86763898d604f033",
+      "path": "test/crash/state-gate-lifecycle.test.ts"
+    },
+    {
+      "content_digest": "2d6dc34a14cdbc8d15fab6bb7e38942dffa031f347ac0a9dc79bb42cd996951b",
+      "path": "test/crash/state-initialization.test.ts"
+    },
+    {
+      "content_digest": "6f753ca0e9cac08ce3bc3e3dfeb007403792bcf59f2fe8781a7b6da21e8e353a",
+      "path": "test/crash/state-transaction.test.ts"
+    },
+    {
+      "content_digest": "f9cfb64677829c9794967a2eec77b2f404374a7b6baaae69853a9ae05112806b",
+      "path": "test/fixtures/state-gate-child.mjs"
+    },
+    {
+      "content_digest": "a3e8802a55bd7827ce2d5f0eb9b9b662e796a9949d5f22989848dbcf3d08cc2a",
+      "path": "test/fixtures/state-initialization-child.mjs"
+    },
+    {
+      "content_digest": "fde3209b73c2a129b57f2976164ff048c18b2d85859de9f223daa6cfe539519c",
+      "path": "test/fixtures/state-transaction-child.mjs"
+    },
+    {
+      "content_digest": "991ca11b78699ffdf075e46b066584d1476b8f8174056731bab491e1e76ebcf0",
+      "path": "test/helpers/task-workspace.ts"
+    },
+    {
+      "content_digest": "2c2200a52be21f0378868cfc43e74807a07bdc1636a907efb50ed4b77ec0da66",
+      "path": "test/integration/config-editing.test.ts"
+    },
+    {
+      "content_digest": "d22bb2b6c2076e79f72eb19e9c53a1af77b656dececd0f525f03318318ac8323",
+      "path": "test/integration/counter-review-pinned-context.test.ts"
+    },
+    {
+      "content_digest": "f13428acb8e406cad1d2f47f081adab535ac2b92d0ed822170a90b775cf69550",
+      "path": "test/integration/mcp-handler-counter-replay.test.ts"
+    },
+    {
+      "content_digest": "ec2e57375804ada984ce906774627ea08613cbca2599ac8ff2525482aa96b807",
+      "path": "test/integration/mcp-handler-state-replay.test.ts"
+    },
+    {
+      "content_digest": "21896cdde21273b1362974c4ba900a709bc43a187a4f5b5c7b1b403be6c82156",
+      "path": "test/integration/review-fixed-point-live.test.ts"
+    },
+    {
+      "content_digest": "3f5907bfbbc1d7220573418bce72042d687d02ba75251b23111b44ef7bff55f9",
+      "path": "test/integration/review-fixed-point.test.ts"
+    },
+    {
+      "content_digest": "768cc26e88730ac06978f4047bf6f2a3c988b32bcd743512b6a7b0fd79ffa144",
+      "path": "test/integration/semantic-document-journeys.test.ts"
+    },
+    {
+      "content_digest": "fc5532261b0aed3267bcd480689ae001316e8dc92a0f53ad4731227d352ab6a2",
+      "path": "test/integration/state-gate-lifecycle.test.ts"
+    },
+    {
+      "content_digest": "b940fb5b74bf374ab47cd2a072526583e9dd74aa956d06348fcd60cac5d43c93",
+      "path": "test/integration/state-projection-fresh-task.test.ts"
+    },
+    {
+      "content_digest": "5ebfd795466c365ed16670685ce91b2e3e903bacd38eb9cc109f84eb38cd16b7",
+      "path": "test/integration/state-transaction.test.ts"
+    },
+    {
+      "content_digest": "9f2789061931d6eb0f331254291808f19cd672b54bb039a89763f2867120a503",
+      "path": "test/real-host/terminal-journey.test.ts"
+    },
+    {
+      "content_digest": "b92c62293e9c48410e1eab82a6c15612afb1b8edc0e5c7fbe559f480d1eb83cc",
+      "path": "test/unit/config-change.test.ts"
+    },
+    {
+      "content_digest": "64f9f9721a7a6714575ff85dff5dc25905ac714d625b592423d69e67c41aab1d",
+      "path": "test/unit/config-editing.test.ts"
+    },
+    {
+      "content_digest": "1ff6293a166778417d4f861de37e22e7b5334f291bba449534aab825d3add50e",
+      "path": "test/unit/errors.test.ts"
+    },
+    {
+      "content_digest": "d85bfe31b919c3bb3e42e367a4eea1f2fa6ac8f427e1f5ceeac96a3529dec12d",
+      "path": "test/unit/fingerprints.test.ts"
+    },
+    {
+      "content_digest": "b5bcc860ea3633a86489ebbe02affc4da1f5645c5a86e5ae190494dd6e33a15f",
+      "path": "test/unit/semantic-view.test.ts"
+    },
+    {
+      "content_digest": "8df6d7ed7801d5ac720509fe348df8df0383a9ec94e49743015624e500c06a08",
+      "path": "test/unit/state-gates.test.ts"
+    },
+    {
+      "content_digest": "6883902ea7fc6190f9723abe4847bab030dd9506ccdd42dad6b566ec15ee9838",
+      "path": "test/unit/state-initialization.test.ts"
+    },
+    {
+      "content_digest": "f42cc56e68fc55fc4fc554b988004e9d0d3d2c813d6fa1b2c3ec02e789f99225",
+      "path": "test/unit/state-next-action.test.ts"
+    },
+    {
+      "content_digest": "16ce27a761557879adae4ef682c709539ca2d4454aecdc04c8b771ceb98d0197",
+      "path": "test/unit/state-status.test.ts"
+    },
+    {
+      "content_digest": "19b75e90c7b21c2dbddcf94a06127b6a4f0dc8489cc868587a8b2d8dfcbc49be",
+      "path": "test/unit/state-transaction.test.ts"
+    }
+  ],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "state-result-468fa8b094d6d0345c0a10f13fc51e31",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [
+      ".archflow/tasks/review-flexibility/design.md",
+      ".archflow/tasks/review-flexibility/phases/1/design.md",
+      ".archflow/tasks/review-flexibility/phases/1/impl-notes.md",
+      "assets/config.template.yaml",
+      "dist/archflow-local.mjs",
+      "dist/archflow-mcp.mjs",
+      "dist/manifest.json",
+      "dist/metafile.json",
+      "src/contracts/config.ts",
+      "src/contracts/durable-state.ts",
+      "src/contracts/errors.ts",
+      "src/contracts/fingerprints.ts",
+      "src/contracts/internal/schema-generation-durable.ts",
+      "src/contracts/internal/schema-generation-semantic-workflow.ts",
+      "src/contracts/schemas/v1/project-error.schema.json",
+      "src/contracts/schemas/v1/semantic-workflow.schema.json",
+      "src/contracts/schemas/v1/task-state.schema.json",
+      "src/contracts/semantic-workflow.ts",
+      "src/local/call-envelope.ts",
+      "src/mcp/handlers/session.ts",
+      "src/mcp/handlers/state.ts",
+      "src/state/config-change.ts",
+      "src/state/fingerprint.ts",
+      "src/state/gate-core.ts",
+      "src/state/gates.ts",
+      "src/state/initialization.ts",
+      "src/state/legacy-stage.ts",
+      "src/state/next-action.ts",
+      "src/state/production.ts",
+      "src/state/read.ts",
+      "src/state/semantic-view.ts",
+      "src/state/status.ts",
+      "src/state/transaction.ts",
+      "test/contracts/durable-contract-surface.test.ts",
+      "test/contracts/durable-structural-corpus.test.ts",
+      "test/crash/state-gate-lifecycle.test.ts",
+      "test/crash/state-initialization.test.ts",
+      "test/crash/state-transaction.test.ts",
+      "test/fixtures/state-gate-child.mjs",
+      "test/fixtures/state-initialization-child.mjs",
+      "test/fixtures/state-transaction-child.mjs",
+      "test/helpers/task-workspace.ts",
+      "test/integration/config-editing.test.ts",
+      "test/integration/counter-review-pinned-context.test.ts",
+      "test/integration/mcp-handler-counter-replay.test.ts",
+      "test/integration/mcp-handler-state-replay.test.ts",
+      "test/integration/review-fixed-point-live.test.ts",
+      "test/integration/review-fixed-point.test.ts",
+      "test/integration/semantic-document-journeys.test.ts",
+      "test/integration/state-gate-lifecycle.test.ts",
+      "test/integration/state-projection-fresh-task.test.ts",
+      "test/integration/state-transaction.test.ts",
+      "test/real-host/terminal-journey.test.ts",
+      "test/unit/config-change.test.ts",
+      "test/unit/config-editing.test.ts",
+      "test/unit/errors.test.ts",
+      "test/unit/fingerprints.test.ts",
+      "test/unit/semantic-view.test.ts",
+      "test/unit/state-gates.test.ts",
+      "test/unit/state-initialization.test.ts",
+      "test/unit/state-next-action.test.ts",
+      "test/unit/state-status.test.ts",
+      "test/unit/state-transaction.test.ts"
+    ],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04913d7ccb02f12f3d59a02a394ccc24e218abfb7538169a27867d7e46839cde",
+  "source_artifact": {
+    "accounting": {
+      "counted_entries": [
+        {
+          "path": ".archflow/tasks/review-flexibility/design.md",
+          "storage": "raw-payload",
+          "stored_bytes": 35831
+        },
+        {
+          "path": ".archflow/tasks/review-flexibility/phases/1/design.md",
+          "storage": "raw-payload",
+          "stored_bytes": 31661
+        },
+        {
+          "path": ".archflow/tasks/review-flexibility/phases/1/impl-notes.md",
+          "storage": "raw-payload",
+          "stored_bytes": 12368
+        },
+        {
+          "path": "assets/config.template.yaml",
+          "storage": "raw-payload",
+          "stored_bytes": 2029
+        },
+        {
+          "path": "dist/archflow-local.mjs",
+          "storage": "raw-payload",
+          "stored_bytes": 1597893
+        },
+        {
+          "path": "dist/archflow-mcp.mjs",
+          "storage": "raw-payload",
+          "stored_bytes": 2855873
+        },
+        {
+          "path": "dist/manifest.json",
+          "storage": "raw-payload",
+          "stored_bytes": 191867
+        },
+        {
+          "path": "dist/metafile.json",
+          "storage": "raw-payload",
+          "stored_bytes": 327249
+        },
+        {
+          "path": "src/contracts/config.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 3124
+        },
+        {
+          "path": "src/contracts/durable-state.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 30296
+        },
+        {
+          "path": "src/contracts/errors.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 23644
+        },
+        {
+          "path": "src/contracts/fingerprints.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 18965
+        },
+        {
+          "path": "src/contracts/internal/schema-generation-durable.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 6529
+        },
+        {
+          "path": "src/contracts/internal/schema-generation-semantic-workflow.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 1970
+        },
+        {
+          "path": "src/contracts/schemas/v1/project-error.schema.json",
+          "storage": "raw-payload",
+          "stored_bytes": 83119
+        },
+        {
+          "path": "src/contracts/schemas/v1/semantic-workflow.schema.json",
+          "storage": "raw-payload",
+          "stored_bytes": 36626
+        },
+        {
+          "path": "src/contracts/schemas/v1/task-state.schema.json",
+          "storage": "raw-payload",
+          "stored_bytes": 23905
+        },
+        {
+          "path": "src/contracts/semantic-workflow.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 20005
+        },
+        {
+          "path": "src/local/call-envelope.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 7396
+        },
+        {
+          "path": "src/mcp/handlers/session.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 3909
+        },
+        {
+          "path": "src/mcp/handlers/state.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 27346
+        },
+        {
+          "path": "src/state/config-change.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 4469
+        },
+        {
+          "path": "src/state/fingerprint.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 7558
+        },
+        {
+          "path": "src/state/gate-core.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 13917
+        },
+        {
+          "path": "src/state/gates.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 111379
+        },
+        {
+          "path": "src/state/initialization.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 27257
+        },
+        {
+          "path": "src/state/legacy-stage.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 1788
+        },
+        {
+          "path": "src/state/next-action.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 21467
+        },
+        {
+          "path": "src/state/production.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 18867
+        },
+        {
+          "path": "src/state/read.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 5434
+        },
+        {
+          "path": "src/state/semantic-view.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 21718
+        },
+        {
+          "path": "src/state/status.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 65081
+        },
+        {
+          "path": "src/state/transaction.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 58681
+        },
+        {
+          "path": "test/contracts/durable-contract-surface.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 22102
+        },
+        {
+          "path": "test/contracts/durable-structural-corpus.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 39742
+        },
+        {
+          "path": "test/crash/state-gate-lifecycle.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 16150
+        },
+        {
+          "path": "test/crash/state-initialization.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 11503
+        },
+        {
+          "path": "test/crash/state-transaction.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 21308
+        },
+        {
+          "path": "test/fixtures/state-gate-child.mjs",
+          "storage": "raw-payload",
+          "stored_bytes": 8979
+        },
+        {
+          "path": "test/fixtures/state-initialization-child.mjs",
+          "storage": "raw-payload",
+          "stored_bytes": 4985
+        },
+        {
+          "path": "test/fixtures/state-transaction-child.mjs",
+          "storage": "raw-payload",
+          "stored_bytes": 14878
+        },
+        {
+          "path": "test/helpers/task-workspace.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 5017
+        },
+        {
+          "path": "test/integration/config-editing.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 17071
+        },
+        {
+          "path": "test/integration/counter-review-pinned-context.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 18749
+        },
+        {
+          "path": "test/integration/mcp-handler-counter-replay.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 13610
+        },
+        {
+          "path": "test/integration/mcp-handler-state-replay.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 15325
+        },
+        {
+          "path": "test/integration/review-fixed-point-live.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 44913
+        },
+        {
+          "path": "test/integration/review-fixed-point.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 51694
+        },
+        {
+          "path": "test/integration/semantic-document-journeys.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 20776
+        },
+        {
+          "path": "test/integration/state-gate-lifecycle.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 88664
+        },
+        {
+          "path": "test/integration/state-projection-fresh-task.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 18168
+        },
+        {
+          "path": "test/integration/state-transaction.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 11495
+        },
+        {
+          "path": "test/real-host/terminal-journey.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 34941
+        },
+        {
+          "path": "test/unit/config-change.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 6018
+        },
+        {
+          "path": "test/unit/config-editing.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 16032
+        },
+        {
+          "path": "test/unit/config-pinning.test.ts",
+          "storage": "git-object",
+          "stored_bytes": 0
+        },
+        {
+          "path": "test/unit/errors.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 6326
+        },
+        {
+          "path": "test/unit/fingerprints.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 27638
+        },
+        {
+          "path": "test/unit/semantic-view.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 16794
+        },
+        {
+          "path": "test/unit/state-gates.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 47398
+        },
+        {
+          "path": "test/unit/state-initialization.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 9023
+        },
+        {
+          "path": "test/unit/state-next-action.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 23906
+        },
+        {
+          "path": "test/unit/state-status.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 24800
+        },
+        {
+          "path": "test/unit/state-transaction.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 66518
+        }
+      ],
+      "measured_at_revision": 51,
+      "result_byte_cap": 26214400,
+      "result_bytes": 6423744,
+      "schema_version": "1",
+      "task_byte_cap": 262144000,
+      "task_bytes": 12984288
+    },
+    "artifact_kind": "implementation-output",
+    "base_commit": "d4035e9cc811ba57565563cbd147c30454e7142c",
+    "declared_inputs": [
+      {
+        "digest": "444c4e9de040e24ea0bdf1ac649af8ecbcbbfb38d1bfd675363d1b4b9f292f85",
+        "input_id": "phase-design"
+      },
+      {
+        "digest": "4a3136fe9ed0390477b7926f15444873d2cb78a0346173556d5b3f63c1767e79",
+        "input_id": "prd"
+      },
+      {
+        "digest": "2c7446d1c83d053caab90e3a18cb117863d7517c400717ab802e4d429603387d",
+        "input_id": "task-design"
+      }
+    ],
+    "diff_digest": "08d88b2e4f77e4bdf61e5c52399d425c781cdb1ffeefadfaf2208af0534da7e4",
+    "index_identity_digest": "80d28e3ed78ab9e560c8e4aa3f9aa9cb040ddd3c25154186df06a524f333d248",
+    "input_fingerprint": "772da018abc3f40103b7f468004179672e3e88ab88e7b9076e11f6230e566379",
+    "outputs": [
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "d69087ce89e86fbd9d580d31f696f1cfe336d529",
+          "size_bytes": 35831
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "39047dbdeab4ca1e96fc0230952b698d491c3aec",
+          "size_bytes": 35727
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": ".archflow/tasks/review-flexibility/design.md",
+        "path_class": "document",
+        "payload_bytes": 35831,
+        "payload_digest": "2c7446d1c83d053caab90e3a18cb117863d7517c400717ab802e4d429603387d",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "e2cb06106508df7ff705ba3b426d8042a2d25d3c",
+          "size_bytes": 31661
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "8cd45b00ca51d9850b938fce87cffe6a4926ace5",
+          "size_bytes": 30007
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": ".archflow/tasks/review-flexibility/phases/1/design.md",
+        "path_class": "document",
+        "payload_bytes": 31661,
+        "payload_digest": "444c4e9de040e24ea0bdf1ac649af8ecbcbbfb38d1bfd675363d1b4b9f292f85",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "406cc1290c7b625d679a48b31c80f27170c92e93",
+          "size_bytes": 12368
+        },
+        "file_type": "regular",
+        "operation": "add",
+        "path": ".archflow/tasks/review-flexibility/phases/1/impl-notes.md",
+        "path_class": "document",
+        "payload_bytes": 12368,
+        "payload_digest": "2c30258ee74bcf17b700eb8ed951d0fffe7fac688ce779b281d8a2339ae0af62",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "ad87a33a2b5d6eeef91ff03cf24e2add91baef10",
+          "size_bytes": 2029
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "7b3eea6e9cdb33f018af399317a38bd78caddce7",
+          "size_bytes": 1401
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "assets/config.template.yaml",
+        "path_class": "repository-source",
+        "payload_bytes": 2029,
+        "payload_digest": "ef5b19cfc26d542b78fe7281035ca5532e39059df602cdc4e2f28352210cdf4a",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "c785f199cb9700d68c246a276e0168922ec819f7",
+          "size_bytes": 1597893
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "58d4d9110bcc39d37b27ca8f3b3fedd95c6a85fc",
+          "size_bytes": 1595861
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "dist/archflow-local.mjs",
+        "path_class": "repository-source",
+        "payload_bytes": 1597893,
+        "payload_digest": "ea2ffd065a667d91ef137c3539488d1df4b1a6952e6f18e6213fb8fc00036bb0",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "6eb02c8ede4226c9edcfbf3119d8050e02948a4d",
+          "size_bytes": 2855873
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "bc0bbfe765f6b91e32b5a06f692faa4a54cb7888",
+          "size_bytes": 2851246
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "dist/archflow-mcp.mjs",
+        "path_class": "repository-source",
+        "payload_bytes": 2855873,
+        "payload_digest": "90ab6fd052744c3d7cca68362b87d66d9b0f8d4a5f68687a0fd618c4951233a2",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "b3b02739d5e4ef937f40be14d17c999ed5540b3a",
+          "size_bytes": 191867
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "c204a3196bbe9a2cb5b51853225650141392043b",
+          "size_bytes": 191465
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "dist/manifest.json",
+        "path_class": "repository-source",
+        "payload_bytes": 191867,
+        "payload_digest": "94c24b28c53ec0fac044fa3f4a33a4cb88d9d004f767a58f105afc5f9857a7a2",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "2bec562175a4f77442d28edf287ae9de7834af3d",
+          "size_bytes": 327249
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "7225bf787d73b9ac1ccb273ea5d9ba8557f89a2c",
+          "size_bytes": 327031
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "dist/metafile.json",
+        "path_class": "repository-source",
+        "payload_bytes": 327249,
+        "payload_digest": "62e38c9348ff5b3f6d9ec490ca8de5f59699cce57d89cbb6fe2bea8e335a1a28",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "76f8ed9f160a06650d928d33cd67b01d57ad4f4e",
+          "size_bytes": 3124
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "c70ba97552c3818ad9bc0dabd5c9a6b92d1d2b1d",
+          "size_bytes": 2116
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/contracts/config.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 3124,
+        "payload_digest": "a3032338fafacd606bc560daa4a0a20c51d43729511867ccc991bff416c0bf30",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "dedbe85fb1e2d2fff8b265986825662c37113c2d",
+          "size_bytes": 30296
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "d88e41b4b2e419383a1398d5b4a0aee77b59537f",
+          "size_bytes": 27579
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/contracts/durable-state.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 30296,
+        "payload_digest": "be6a2c3e11a08616dd4c6ca5e9c43a1a46db91092f9c9f19f416334e9a370dd2",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "cfbac4d011e0a428ea2b933894c589be8da01d2a",
+          "size_bytes": 23644
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "44afdfd47a0ee48ceb961ed7f5b2377223cf87dd",
+          "size_bytes": 23850
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/contracts/errors.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 23644,
+        "payload_digest": "44f6b549724053e1f72f482fb365d1bd17e2feecdc63e237ff23098c5e8b4839",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "68a496da6cef06d64ac025aac70318098fcdca76",
+          "size_bytes": 18965
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "647802dd92aa85da2ef09a6306b0ef23ab6888e8",
+          "size_bytes": 19780
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/contracts/fingerprints.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 18965,
+        "payload_digest": "7405632f7aa3667bda7dc18c6d918f7c3d48dcfe3e5fd865de8a4242f450b211",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "4a22adb1f25c0775ab2f4ed9d104d1a3f89b2018",
+          "size_bytes": 6529
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "d2a5cbb0717df7512a76cfd0e1299964f6281b0a",
+          "size_bytes": 5957
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/contracts/internal/schema-generation-durable.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 6529,
+        "payload_digest": "aff1763882faf875f74931b8935955bd0b4a5fd1ac4ccea0cd8d5e7736b10051",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "330792a17e01fd11e593d4a581186b624b8c407f",
+          "size_bytes": 1970
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "2cc9dd11357320272f14f028d2ece6eb9332421b",
+          "size_bytes": 1513
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/contracts/internal/schema-generation-semantic-workflow.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 1970,
+        "payload_digest": "b912427ab01738268089d85c04b557698b9163420310db0741e9e78ebcc86448",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "adf0610c019c9f4329f43b65efe7e2f951939771",
+          "size_bytes": 83119
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "e0735852e99d465f97e239d7b160e0a3cf0c0db0",
+          "size_bytes": 84374
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/contracts/schemas/v1/project-error.schema.json",
+        "path_class": "repository-source",
+        "payload_bytes": 83119,
+        "payload_digest": "b6d36acfa1ae5a91f6d762d930b88857772e74ba10f9f0794088ee9523c05689",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "06557031c8e06fd5c125cf44f9b8a2bcd4697aaa",
+          "size_bytes": 36626
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "0cdcc9aacd373e25b6665484be806380ef8ef015",
+          "size_bytes": 35498
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/contracts/schemas/v1/semantic-workflow.schema.json",
+        "path_class": "repository-source",
+        "payload_bytes": 36626,
+        "payload_digest": "87615f8ccc07fcd7269aaeff890a5d1aa2aa024eba87adadf294961dfe36abc0",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "54f3c6a89e5cde7bc49b79b5d477e8c27bc33bba",
+          "size_bytes": 23905
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "1c849e7637f2b92f1b289f3ff5a676b1754119b3",
+          "size_bytes": 21815
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/contracts/schemas/v1/task-state.schema.json",
+        "path_class": "repository-source",
+        "payload_bytes": 23905,
+        "payload_digest": "1a8fe69259edbd709a8f533008fd37374c71df774e9f6cfd74455960e1ce40d4",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "80d36886cd852ad76b1f2412822b2c7bb6cbe273",
+          "size_bytes": 20005
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "624ef7c05c1685fa2c2baad809238e79600c8ec5",
+          "size_bytes": 18996
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/contracts/semantic-workflow.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 20005,
+        "payload_digest": "0e3775fec15cdb885aa61dbe672b6bc2331949be1683d5ec087becbdfef55532",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "7351831b084ab90fcab3d2caa425c1597c16ce68",
+          "size_bytes": 7396
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "08549a12f4c33649ff225e8af5c3793c62d1a3b1",
+          "size_bytes": 7699
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/local/call-envelope.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 7396,
+        "payload_digest": "4d0d17fb18e24bf13d181fbcdfc43267bfee56a182d5820acea8eb0e7f9bffda",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "1cb3e48d10634c999ab633b68f236fdf00a09629",
+          "size_bytes": 3909
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "7800a3801bb16fe811dccb2d605e1cf152ecf8ba",
+          "size_bytes": 4163
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/mcp/handlers/session.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 3909,
+        "payload_digest": "edc076a2832b04bdb432cb4222454e7c26ed899b2d355ad492ab197d7447f438",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "81dab455a79b346b416e910fcfeb788041f56f97",
+          "size_bytes": 27346
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "7f8475b8ec7c7922b408dee9a544527e1ef960f3",
+          "size_bytes": 26986
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/mcp/handlers/state.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 27346,
+        "payload_digest": "3d6b6a79818bf0f34935efad9d467b64a20a78852dad746784524bea515bb659",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "d1e206a35443aa38cba0f1f1e7b411857c43aecf",
+          "size_bytes": 4469
+        },
+        "file_type": "regular",
+        "operation": "add",
+        "path": "src/state/config-change.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 4469,
+        "payload_digest": "b4fe563d9d4510b368e29ac9ae0913a0c06af90dc01b468a5df1f76defcff66e",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "f6626b8cc325c26e7ffb465e9a13b7d94daa749e",
+          "size_bytes": 7558
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "433baa1d5d189af80e5bb009d7c056d5bbaa3fe6",
+          "size_bytes": 5333
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/fingerprint.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 7558,
+        "payload_digest": "fcbaf53a5242fc1de87500bdbb8837298f38358e0579bd7aecc108035e1e8122",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "44ace5d7fd9cc2d840d162ec65d5b9c9feeb9682",
+          "size_bytes": 13917
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "5966a5a4e7a1b742fea18c9f965834a9c332e881",
+          "size_bytes": 13766
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/gate-core.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 13917,
+        "payload_digest": "de426b6aac9817a3f9e19c0d4da44ee8c456b2e52de6990ab299e6e0ff51f07b",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "7beefe7a422b32028cd146bf710c9bc51ea092b4",
+          "size_bytes": 111379
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "d6cfcaeab038e7cec9d3d3021483000efbb016c7",
+          "size_bytes": 111095
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/gates.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 111379,
+        "payload_digest": "daf177e655bc5faf3ac7dfcd4989aed515d716045e683946ec291f92fe8167c1",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "06926689fb4aaa1e52d0c2e25d611005709f1443",
+          "size_bytes": 27257
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "74a1c4f502e0c9728265a2202167ac8c5430d165",
+          "size_bytes": 27269
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/initialization.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 27257,
+        "payload_digest": "ea0d7e94b9bca39fb8a7a99d3198dd37af451c84f1b7e002691eb2d522bb67db",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "3825f32f24e0bb1fcf01a64b63e92f58b37517d3",
+          "size_bytes": 1788
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "8eccded8966444a23d9f0c48d395f0834d38ae8d",
+          "size_bytes": 1710
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/legacy-stage.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 1788,
+        "payload_digest": "bb27c76e1031468da4714258d0a15b6797b3b314a4b3fcb421ef0d140b6a42fe",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "26a15cb36aa4ab01173b0bbc78e7cca24cb3fc77",
+          "size_bytes": 21467
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "79965cc1d6eb26c1c103b351bc0b29f67813a845",
+          "size_bytes": 21815
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/next-action.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 21467,
+        "payload_digest": "32916c985874668a7af29dccc17d3428ca677a28064f273378318e0199102736",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "e491ccd602fce63ac0b4cc7b40e5a1ba0eaee41c",
+          "size_bytes": 18867
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "72597f69557c81c47abbfe6f3926d3bd99da108d",
+          "size_bytes": 18827
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/production.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 18867,
+        "payload_digest": "bcd6eca7679b39722e5643c64d371c99886ee6a35a9ebb6230515ba1fa8e880f",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "57d9ab0e354cc5e8573c626d634e5a15feac927a",
+          "size_bytes": 5434
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "97cd0627c51afed007dd73bfa99e29141dad7969",
+          "size_bytes": 5036
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/read.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 5434,
+        "payload_digest": "7a6b8e9d04e70490dce65af2cda4a7da88ac2ae540fd9169e3e4fa3ec463b5b5",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "fc75930c736d8d8a437006b15bfb106abbaacb6e",
+          "size_bytes": 21718
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "ef7bb240ae1b07d6a39c157afb7f48d90d10cfc9",
+          "size_bytes": 21148
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/semantic-view.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 21718,
+        "payload_digest": "f8d7c9ead9ec980d275062d4a496de0242fdb3ee8a25beea3429f3273cd99640",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "d530190ed2f9fd8cfe64faeff2062fd75c32a289",
+          "size_bytes": 65081
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "c456eb564192fb895d9e09ef8264f1ef7c136511",
+          "size_bytes": 65315
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/status.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 65081,
+        "payload_digest": "59bf2b9babbdb150c9ad561b983eebb8f4a6cc363eca060d72aa2ef46e014b71",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "297985ee8464215ed19682e39907136cab8c7205",
+          "size_bytes": 58681
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "73a00a42e8c1ac8cf0690047a29707869bcac46a",
+          "size_bytes": 58342
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/transaction.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 58681,
+        "payload_digest": "d6641d41768ef1452ba0df89c9056bee55bd2f9081dbf7c5e712870f75a430b2",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "23c3c2fb1185c027cd22da5ecb7e7130daf8921b",
+          "size_bytes": 22102
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "d743dd4a72893083fe68da82b3c265df10d8acef",
+          "size_bytes": 22046
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/contracts/durable-contract-surface.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 22102,
+        "payload_digest": "b73ee86813cd38b69f7ac000304d81ddef60d49b528abdc8e8404d9f17056fb9",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "4d07da57f019b68ad6d79149950a9389042a6cb4",
+          "size_bytes": 39742
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "9544b18091acfa704e7022672dbd78c167365749",
+          "size_bytes": 39635
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/contracts/durable-structural-corpus.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 39742,
+        "payload_digest": "75698b780e3574ce8a74115c7bce724c04b23194254c97dda1e4a50b35c7a730",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "f48fbfe7e75e9f09c136db49ff6c5995f5be3aa7",
+          "size_bytes": 16150
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "7d4e95924a266d5f450ec9945b6f7159a8ecf7cd",
+          "size_bytes": 16188
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/crash/state-gate-lifecycle.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 16150,
+        "payload_digest": "ef5dbec7cd945825809565adf283852efd01c2e9800eaeec86763898d604f033",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "d4e1b45e192e9348c1a2d59650946923c1dd95e4",
+          "size_bytes": 11503
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "f2c9240cca729bda155f6fba89d4f6dd767038f9",
+          "size_bytes": 11504
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/crash/state-initialization.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 11503,
+        "payload_digest": "2d6dc34a14cdbc8d15fab6bb7e38942dffa031f347ac0a9dc79bb42cd996951b",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "c9b6d780d925ba2a86383b1c2aaafa8447f282f7",
+          "size_bytes": 21308
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "ee6daf02b1622a483446f7188467065320732a98",
+          "size_bytes": 21315
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/crash/state-transaction.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 21308,
+        "payload_digest": "6f753ca0e9cac08ce3bc3e3dfeb007403792bcf59f2fe8781a7b6da21e8e353a",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "249b2f2aa891df1435b9bc298f07a4cfa4b6d630",
+          "size_bytes": 8979
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "c433ade6f59f674137401a181f237ca0adc00ea4",
+          "size_bytes": 8995
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/fixtures/state-gate-child.mjs",
+        "path_class": "repository-source",
+        "payload_bytes": 8979,
+        "payload_digest": "f9cfb64677829c9794967a2eec77b2f404374a7b6baaae69853a9ae05112806b",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "f89376d7c6e168ea7f15a61f25d9777812598d1f",
+          "size_bytes": 4985
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "2761c8b70d10c1a45d13e40cbfa4b7871c77d68a",
+          "size_bytes": 4811
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/fixtures/state-initialization-child.mjs",
+        "path_class": "repository-source",
+        "payload_bytes": 4985,
+        "payload_digest": "a3e8802a55bd7827ce2d5f0eb9b9b662e796a9949d5f22989848dbcf3d08cc2a",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "5494ae12476c3d1b52988b77def97fd4a235b792",
+          "size_bytes": 14878
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "be25bc16b83648150cf10da5037722edaa121a24",
+          "size_bytes": 14892
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/fixtures/state-transaction-child.mjs",
+        "path_class": "repository-source",
+        "payload_bytes": 14878,
+        "payload_digest": "fde3209b73c2a129b57f2976164ff048c18b2d85859de9f223daa6cfe539519c",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "25bccc29b4d8e29e2e37500763e9d1ed1e158b9b",
+          "size_bytes": 5017
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "bd7fb7863d0d11a1a1f2874832c4585059042a8d",
+          "size_bytes": 4664
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/helpers/task-workspace.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 5017,
+        "payload_digest": "991ca11b78699ffdf075e46b066584d1476b8f8174056731bab491e1e76ebcf0",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "f297fa52497f99b1204bdf2672651803e51058c5",
+          "size_bytes": 17071
+        },
+        "file_type": "regular",
+        "operation": "add",
+        "path": "test/integration/config-editing.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 17071,
+        "payload_digest": "2c2200a52be21f0378868cfc43e74807a07bdc1636a907efb50ed4b77ec0da66",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "1688c3f40f227b996012abecece57fc2c2bb3c9a",
+          "size_bytes": 18749
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "a16a91888ffc3655ed00f5225d7fc81e80a3b506",
+          "size_bytes": 18815
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/integration/counter-review-pinned-context.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 18749,
+        "payload_digest": "d22bb2b6c2076e79f72eb19e9c53a1af77b656dececd0f525f03318318ac8323",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "a92eee649646c90d73fae30b6e4b2596d911bef0",
+          "size_bytes": 13610
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "23a4c9c4f9a130b1dfa19693431cfa739c9a84b6",
+          "size_bytes": 13676
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/integration/mcp-handler-counter-replay.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 13610,
+        "payload_digest": "f13428acb8e406cad1d2f47f081adab535ac2b92d0ed822170a90b775cf69550",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "f6e53f01b8b7895b4226475e72b96973b20ea3bb",
+          "size_bytes": 15325
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "9c4acada7e4f7089856b13a8b701300c6d91241a",
+          "size_bytes": 11129
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/integration/mcp-handler-state-replay.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 15325,
+        "payload_digest": "ec2e57375804ada984ce906774627ea08613cbca2599ac8ff2525482aa96b807",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "1e247f7b86411d54980b031176e34b899e9bc34b",
+          "size_bytes": 44913
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "e610bdd441a77a73ed738e49ccaa8a06f848bdd1",
+          "size_bytes": 45129
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/integration/review-fixed-point-live.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 44913,
+        "payload_digest": "21896cdde21273b1362974c4ba900a709bc43a187a4f5b5c7b1b403be6c82156",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "8059a7b09fe43e2bb9c38cec8a97cbedee8f1fed",
+          "size_bytes": 51694
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "393756a35f0c327780d2a17db815a40545611942",
+          "size_bytes": 51608
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/integration/review-fixed-point.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 51694,
+        "payload_digest": "3f5907bfbbc1d7220573418bce72042d687d02ba75251b23111b44ef7bff55f9",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "2f2360516ba5e8db648bd04c8de50151e6af2550",
+          "size_bytes": 20776
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "b9841b0fba74125985cb98451f21c8e1df761b57",
+          "size_bytes": 20524
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/integration/semantic-document-journeys.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 20776,
+        "payload_digest": "768cc26e88730ac06978f4047bf6f2a3c988b32bcd743512b6a7b0fd79ffa144",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "5746c1224037168aadff213d09382130c0197d02",
+          "size_bytes": 88664
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "854562f499b21eaa83c8a82fbc5d15280d4f59ed",
+          "size_bytes": 88536
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/integration/state-gate-lifecycle.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 88664,
+        "payload_digest": "fc5532261b0aed3267bcd480689ae001316e8dc92a0f53ad4731227d352ab6a2",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "aba365d696e044097606a09b812ad06a2e5624ab",
+          "size_bytes": 18168
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "e2596f38be17b9de7013a29cac38f426e846210d",
+          "size_bytes": 18101
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/integration/state-projection-fresh-task.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 18168,
+        "payload_digest": "b940fb5b74bf374ab47cd2a072526583e9dd74aa956d06348fcd60cac5d43c93",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "e44146f6085085871a8a30aca686d01f5ddf02fa",
+          "size_bytes": 11495
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "51dd2a24c587d88db59b31ef8db0d7ed90e8f1e0",
+          "size_bytes": 11539
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/integration/state-transaction.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 11495,
+        "payload_digest": "5ebfd795466c365ed16670685ce91b2e3e903bacd38eb9cc109f84eb38cd16b7",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "f48d128b8013bc9717afb4a4d30d645add567ccd",
+          "size_bytes": 34941
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "8fe0df83bfe7de1be8c2342b2e137d0209421f06",
+          "size_bytes": 33018
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/real-host/terminal-journey.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 34941,
+        "payload_digest": "9f2789061931d6eb0f331254291808f19cd672b54bb039a89763f2867120a503",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "f1482d16bbe937502f1fab284cde2333ecf1f055",
+          "size_bytes": 6018
+        },
+        "file_type": "regular",
+        "operation": "add",
+        "path": "test/unit/config-change.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 6018,
+        "payload_digest": "b92c62293e9c48410e1eab82a6c15612afb1b8edc0e5c7fbe559f480d1eb83cc",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "8cb389b2a5cb081a191959572b02f988a27a8004",
+          "size_bytes": 16032
+        },
+        "file_type": "regular",
+        "operation": "add",
+        "path": "test/unit/config-editing.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 16032,
+        "payload_digest": "64f9f9721a7a6714575ff85dff5dc25905ac714d625b592423d69e67c41aab1d",
+        "storage": "raw-payload"
+      },
+      {
+        "before": {
+          "mode": "100644",
+          "oid": "3ae339e6a2b6a15cbfc772307fe743f19e632df7",
+          "size_bytes": 11721
+        },
+        "file_type": "regular",
+        "operation": "delete",
+        "path": "test/unit/config-pinning.test.ts",
+        "path_class": "repository-source",
+        "storage": "git-object"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "8585aa2a44fd9ea5adb98d8fb0296cf3974182f8",
+          "size_bytes": 6326
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "d2f31d99682bbda4ce63873756405ec61b2483f1",
+          "size_bytes": 6143
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/errors.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 6326,
+        "payload_digest": "1ff6293a166778417d4f861de37e22e7b5334f291bba449534aab825d3add50e",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "b98d806959276611f35b2025d256848fa4d2b071",
+          "size_bytes": 27638
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "5df666819d499dc99481420af89cf46e76249319",
+          "size_bytes": 21630
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/fingerprints.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 27638,
+        "payload_digest": "d85bfe31b919c3bb3e42e367a4eea1f2fa6ac8f427e1f5ceeac96a3529dec12d",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "75504e7a501636b65b18fb466ae3453a27957ef7",
+          "size_bytes": 16794
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "4d7ad7cc02d8b64b28315c16b6f8d9392a544322",
+          "size_bytes": 16071
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/semantic-view.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 16794,
+        "payload_digest": "b5bcc860ea3633a86489ebbe02affc4da1f5645c5a86e5ae190494dd6e33a15f",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "704405c9f0feeb92c14c8579ab483571ec3ac755",
+          "size_bytes": 47398
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "6dc7dab183f066f643b235b2c8c07f9b603070a3",
+          "size_bytes": 47296
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/state-gates.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 47398,
+        "payload_digest": "8df6d7ed7801d5ac720509fe348df8df0383a9ec94e49743015624e500c06a08",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "0227770d9a68d0b55232f8d1d56e53b0f9788d00",
+          "size_bytes": 9023
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "309f70fe23e8038eb90595e2d1df964a47767e80",
+          "size_bytes": 8806
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/state-initialization.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 9023,
+        "payload_digest": "6883902ea7fc6190f9723abe4847bab030dd9506ccdd42dad6b566ec15ee9838",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "687bd35af63584473b63823054c323dbf115e47d",
+          "size_bytes": 23906
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "18c17ebcdc89dc992a927d1b6e54240e0c1aa03b",
+          "size_bytes": 23416
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/state-next-action.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 23906,
+        "payload_digest": "f42cc56e68fc55fc4fc554b988004e9d0d3d2c813d6fa1b2c3ec02e789f99225",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "6c4885ab4420caf3c8f66eff67ce4804c201dd80",
+          "size_bytes": 24800
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "dcac1cce02b18ef6b03d922e2e99caa432dd3ca3",
+          "size_bytes": 23982
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/state-status.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 24800,
+        "payload_digest": "16ce27a761557879adae4ef682c709539ca2d4454aecdc04c8b771ceb98d0197",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "9750b6a6436ed0c9b421933b300d9778d5799ca3",
+          "size_bytes": 66518
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "c82da8d2b9c2ae467bb117b1eb8796c9626ce858",
+          "size_bytes": 65530
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/state-transaction.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 66518,
+        "payload_digest": "19b75e90c7b21c2dbddcf94a06127b6a4f0dc8489cc868587a8b2d8dfcbc49be",
+        "storage": "raw-payload"
+      }
+    ],
+    "parent_documents": [
+      {
+        "content_digest": "2c7446d1c83d053caab90e3a18cb117863d7517c400717ab802e4d429603387d",
+        "document_path": "design.md",
+        "role": "design"
+      },
+      {
+        "content_digest": "444c4e9de040e24ea0bdf1ac649af8ecbcbbfb38d1bfd675363d1b4b9f292f85",
+        "document_path": "phases/1/design.md",
+        "role": "phase-design"
+      },
+      {
+        "content_digest": "2c30258ee74bcf17b700eb8ed951d0fffe7fac688ce779b281d8a2339ae0af62",
+        "document_path": "phases/1/impl-notes.md",
+        "role": "impl-notes"
+      },
+      {
+        "content_digest": "4a3136fe9ed0390477b7926f15444873d2cb78a0346173556d5b3f63c1767e79",
+        "document_path": "prd.md",
+        "role": "prd"
+      }
+    ],
+    "phase_instance": "phase-impl-1",
+    "restore_targets": [
+      ".archflow/tasks/review-flexibility/design.md",
+      ".archflow/tasks/review-flexibility/phases/1/design.md",
+      ".archflow/tasks/review-flexibility/phases/1/impl-notes.md",
+      "assets/config.template.yaml",
+      "dist/archflow-local.mjs",
+      "dist/archflow-mcp.mjs",
+      "dist/manifest.json",
+      "dist/metafile.json",
+      "src/contracts/config.ts",
+      "src/contracts/durable-state.ts",
+      "src/contracts/errors.ts",
+      "src/contracts/fingerprints.ts",
+      "src/contracts/internal/schema-generation-durable.ts",
+      "src/contracts/internal/schema-generation-semantic-workflow.ts",
+      "src/contracts/schemas/v1/project-error.schema.json",
+      "src/contracts/schemas/v1/semantic-workflow.schema.json",
+      "src/contracts/schemas/v1/task-state.schema.json",
+      "src/contracts/semantic-workflow.ts",
+      "src/local/call-envelope.ts",
+      "src/mcp/handlers/session.ts",
+      "src/mcp/handlers/state.ts",
+      "src/state/config-change.ts",
+      "src/state/fingerprint.ts",
+      "src/state/gate-core.ts",
+      "src/state/gates.ts",
+      "src/state/initialization.ts",
+      "src/state/legacy-stage.ts",
+      "src/state/next-action.ts",
+      "src/state/production.ts",
+      "src/state/read.ts",
+      "src/state/semantic-view.ts",
+      "src/state/status.ts",
+      "src/state/transaction.ts",
+      "test/contracts/durable-contract-surface.test.ts",
+      "test/contracts/durable-structural-corpus.test.ts",
+      "test/crash/state-gate-lifecycle.test.ts",
+      "test/crash/state-initialization.test.ts",
+      "test/crash/state-transaction.test.ts",
+      "test/fixtures/state-gate-child.mjs",
+      "test/fixtures/state-initialization-child.mjs",
+      "test/fixtures/state-transaction-child.mjs",
+      "test/helpers/task-workspace.ts",
+      "test/integration/config-editing.test.ts",
+      "test/integration/counter-review-pinned-context.test.ts",
+      "test/integration/mcp-handler-counter-replay.test.ts",
+      "test/integration/mcp-handler-state-replay.test.ts",
+      "test/integration/review-fixed-point-live.test.ts",
+      "test/integration/review-fixed-point.test.ts",
+      "test/integration/semantic-document-journeys.test.ts",
+      "test/integration/state-gate-lifecycle.test.ts",
+      "test/integration/state-projection-fresh-task.test.ts",
+      "test/integration/state-transaction.test.ts",
+      "test/real-host/terminal-journey.test.ts",
+      "test/unit/config-change.test.ts",
+      "test/unit/config-editing.test.ts",
+      "test/unit/config-pinning.test.ts",
+      "test/unit/errors.test.ts",
+      "test/unit/fingerprints.test.ts",
+      "test/unit/semantic-view.test.ts",
+      "test/unit/state-gates.test.ts",
+      "test/unit/state-initialization.test.ts",
+      "test/unit/state-next-action.test.ts",
+      "test/unit/state-status.test.ts",
+      "test/unit/state-transaction.test.ts"
+    ],
+    "schema_version": "1",
+    "secret_scan": {
+      "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+      "outcome": "clean",
+      "scanned_paths": [
+        ".archflow/tasks/review-flexibility/design.md",
+        ".archflow/tasks/review-flexibility/phases/1/design.md",
+        ".archflow/tasks/review-flexibility/phases/1/impl-notes.md",
+        "assets/config.template.yaml",
+        "dist/archflow-local.mjs",
+        "dist/archflow-mcp.mjs",
+        "dist/manifest.json",
+        "dist/metafile.json",
+        "src/contracts/config.ts",
+        "src/contracts/durable-state.ts",
+        "src/contracts/errors.ts",
+        "src/contracts/fingerprints.ts",
+        "src/contracts/internal/schema-generation-durable.ts",
+        "src/contracts/internal/schema-generation-semantic-workflow.ts",
+        "src/contracts/schemas/v1/project-error.schema.json",
+        "src/contracts/schemas/v1/semantic-workflow.schema.json",
+        "src/contracts/schemas/v1/task-state.schema.json",
+        "src/contracts/semantic-workflow.ts",
+        "src/local/call-envelope.ts",
+        "src/mcp/handlers/session.ts",
+        "src/mcp/handlers/state.ts",
+        "src/state/config-change.ts",
+        "src/state/fingerprint.ts",
+        "src/state/gate-core.ts",
+        "src/state/gates.ts",
+        "src/state/initialization.ts",
+        "src/state/legacy-stage.ts",
+        "src/state/next-action.ts",
+        "src/state/production.ts",
+        "src/state/read.ts",
+        "src/state/semantic-view.ts",
+        "src/state/status.ts",
+        "src/state/transaction.ts",
+        "test/contracts/durable-contract-surface.test.ts",
+        "test/contracts/durable-structural-corpus.test.ts",
+        "test/crash/state-gate-lifecycle.test.ts",
+        "test/crash/state-initialization.test.ts",
+        "test/crash/state-transaction.test.ts",
+        "test/fixtures/state-gate-child.mjs",
+        "test/fixtures/state-initialization-child.mjs",
+        "test/fixtures/state-transaction-child.mjs",
+        "test/helpers/task-workspace.ts",
+        "test/integration/config-editing.test.ts",
+        "test/integration/counter-review-pinned-context.test.ts",
+        "test/integration/mcp-handler-counter-replay.test.ts",
+        "test/integration/mcp-handler-state-replay.test.ts",
+        "test/integration/review-fixed-point-live.test.ts",
+        "test/integration/review-fixed-point.test.ts",
+        "test/integration/semantic-document-journeys.test.ts",
+        "test/integration/state-gate-lifecycle.test.ts",
+        "test/integration/state-projection-fresh-task.test.ts",
+        "test/integration/state-transaction.test.ts",
+        "test/real-host/terminal-journey.test.ts",
+        "test/unit/config-change.test.ts",
+        "test/unit/config-editing.test.ts",
+        "test/unit/errors.test.ts",
+        "test/unit/fingerprints.test.ts",
+        "test/unit/semantic-view.test.ts",
+        "test/unit/state-gates.test.ts",
+        "test/unit/state-initialization.test.ts",
+        "test/unit/state-next-action.test.ts",
+        "test/unit/state-status.test.ts",
+        "test/unit/state-transaction.test.ts"
+      ],
+      "schema_version": "1"
+    },
+    "snapshot_digest": "04913d7ccb02f12f3d59a02a394ccc24e218abfb7538169a27867d7e46839cde",
+    "step": "produce",
+    "task_id": "review-flexibility",
+    "undeclared_changes": {
+      "scanned": true,
+      "undeclared_paths": [
+        ".archflow/tasks/review-flexibility/authority/results/7bc614366a233b2c0d094172ac422369e9e2e2fa74af30455012d44c1d20fd0c.json",
+        ".archflow/tasks/review-flexibility/authority/results/a2de0f443afa7d57983c24417343598a2dec4c9729348dfce55025185bfa7c76.json",
+        ".archflow/tasks/review-flexibility/authority/results/d4bdced5f9d27b4a12018d8b41b0f4fc70ceca1949a81c5875d132226d9c3ae1.json",
+        ".archflow/tasks/review-flexibility/authority/results/fad7f0f8e3dc89b04ef8e5d6d34ad1d4e5b73967c64f6499420cf0f0d60ffae0.json",
+        ".archflow/tasks/review-flexibility/state.json"
+      ],
+      "unrepresentable_count": 0
+    },
+    "verification_evidence": {
+      "byte_count": 1570,
+      "transcript_digest": "cc791729ba5f52865e585025414db8e5e58ec6e66b81b3d1b64d745249b4607b"
+    },
+    "worktree_identity_digest": "4f27a7641514105bbf571cfcbac4a4f99fcaafb9f6a49115268ab433f598f92b"
+  },
+  "step": "produce",
+  "task_id": "review-flexibility"
+}

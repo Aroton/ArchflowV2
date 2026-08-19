@@ -1,0 +1,142 @@
+{
+  "accounting": {
+    "counted_entries": [
+      {
+        "path": ".archflow/tasks/review-flexibility/design.md",
+        "storage": "raw-payload",
+        "stored_bytes": 37212
+      },
+      {
+        "path": ".archflow/tasks/review-flexibility/phases/2/design.md",
+        "storage": "raw-payload",
+        "stored_bytes": 24942
+      },
+      {
+        "path": ".archflow/tasks/review-flexibility/prd.md",
+        "storage": "raw-payload",
+        "stored_bytes": 12035
+      }
+    ],
+    "measured_at_revision": 71,
+    "result_byte_cap": 26214400,
+    "result_bytes": 74189,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 6707465
+  },
+  "artifact_digest": "6973b6ff7fc1842cf2463c0b55744c6511565f37d88561e9187124f1634e1fab",
+  "input_fingerprint": "8449120858050db439de4de0fc16c73ac6fe3de63152972b64ad256780c214da",
+  "outputs": [
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "aa756ec781960ef1d76dadc94423c63e383ef21f",
+        "size_bytes": 37212
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": ".archflow/tasks/review-flexibility/design.md",
+      "path_class": "document",
+      "payload_bytes": 37212,
+      "payload_digest": "f29a3dec3530214074e4211dcd33a011c84f598f31b4c1ccda54d2b93b0b7c4b",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "5b536875dd3a221365aaadea0020de00fca7b545",
+        "size_bytes": 24942
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": ".archflow/tasks/review-flexibility/phases/2/design.md",
+      "path_class": "document",
+      "payload_bytes": 24942,
+      "payload_digest": "53db4cf6023aa4f7295fb1921c519b8a9ab51ba775106ef42d2457d77dd4ec37",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "6a47ef40777dd1d016dfb5355e434cbb06bd75dc",
+        "size_bytes": 12035
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": ".archflow/tasks/review-flexibility/prd.md",
+      "path_class": "document",
+      "payload_bytes": 12035,
+      "payload_digest": "4a3136fe9ed0390477b7926f15444873d2cb78a0346173556d5b3f63c1767e79",
+      "storage": "raw-payload"
+    }
+  ],
+  "phase_instance": "phase-design-2",
+  "projections": [
+    {
+      "content_digest": "f29a3dec3530214074e4211dcd33a011c84f598f31b4c1ccda54d2b93b0b7c4b",
+      "path": ".archflow/tasks/review-flexibility/design.md"
+    },
+    {
+      "content_digest": "53db4cf6023aa4f7295fb1921c519b8a9ab51ba775106ef42d2457d77dd4ec37",
+      "path": ".archflow/tasks/review-flexibility/phases/2/design.md"
+    },
+    {
+      "content_digest": "4a3136fe9ed0390477b7926f15444873d2cb78a0346173556d5b3f63c1767e79",
+      "path": ".archflow/tasks/review-flexibility/prd.md"
+    }
+  ],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "state-result-ba0612a7a24f3b528304b3b0da9057a1",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [
+      ".archflow/tasks/review-flexibility/design.md",
+      ".archflow/tasks/review-flexibility/phases/2/design.md",
+      ".archflow/tasks/review-flexibility/prd.md"
+    ],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "e1e5586b6ae86954d51a97a6de79d729d605c74221ea1867e17602a3dd4226ab",
+  "source_artifact": {
+    "additional_documents": [
+      {
+        "byte_count": 37212,
+        "content_digest": "f29a3dec3530214074e4211dcd33a011c84f598f31b4c1ccda54d2b93b0b7c4b",
+        "document_path": "design.md",
+        "projection_target": ".archflow/tasks/review-flexibility/design.md"
+      },
+      {
+        "byte_count": 12035,
+        "content_digest": "4a3136fe9ed0390477b7926f15444873d2cb78a0346173556d5b3f63c1767e79",
+        "document_path": "prd.md",
+        "projection_target": ".archflow/tasks/review-flexibility/prd.md"
+      }
+    ],
+    "artifact_kind": "document",
+    "byte_count": 24942,
+    "content_digest": "53db4cf6023aa4f7295fb1921c519b8a9ab51ba775106ef42d2457d77dd4ec37",
+    "declared_inputs": [
+      {
+        "digest": "f29a3dec3530214074e4211dcd33a011c84f598f31b4c1ccda54d2b93b0b7c4b",
+        "input_id": "design"
+      },
+      {
+        "digest": "4a3136fe9ed0390477b7926f15444873d2cb78a0346173556d5b3f63c1767e79",
+        "input_id": "prd"
+      }
+    ],
+    "document_path": "phases/2/design.md",
+    "input_fingerprint": "8449120858050db439de4de0fc16c73ac6fe3de63152972b64ad256780c214da",
+    "path_class": "document",
+    "phase_instance": "phase-design-2",
+    "projection_target": ".archflow/tasks/review-flexibility/phases/2/design.md",
+    "schema_version": "1",
+    "snapshot_digest": "e1e5586b6ae86954d51a97a6de79d729d605c74221ea1867e17602a3dd4226ab",
+    "step": "produce",
+    "task_id": "review-flexibility"
+  },
+  "step": "produce",
+  "task_id": "review-flexibility"
+}

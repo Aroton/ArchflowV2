@@ -1,0 +1,38 @@
+{
+  "allowed_decisions": [
+    "adopt-current-bytes",
+    "restore-recorded-bytes",
+    "adopt-committed-deletions",
+    "abort",
+    "cancel"
+  ],
+  "context": {
+    "deleted_projections": [],
+    "drifted_projections": [
+      {
+        "observed_digest": "2c30258ee74bcf17b700eb8ed951d0fffe7fac688ce779b281d8a2339ae0af62",
+        "path": ".archflow/tasks/review-flexibility/phases/1/impl-notes.md",
+        "recorded_digest": "8be5dce9b24dcc336c03580f6bdc04b6fb1d08b0a4e23485358230bd9beee2d6"
+      }
+    ]
+  },
+  "context_digest": "55cc3daf38cde2dc8c64dbacc241cb842a06354da468890776f8ee17afd09301",
+  "current_evidence": {
+    "drift_digest": "14150941946efa99b0061db640bf141f808f9ffcf7bee93416dbe32052b6cec5",
+    "observation_kind": "projection-drift",
+    "observed_at_revision": 55,
+    "phase_instance": "phase-impl-1",
+    "schema_version": "1",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-6a7fbf65755c769b0e523bbc5fdf773ac611959170d6ab52073fc81146b98b96",
+  "intent_id": "afop-fe41322f99671ee3926498416138ffb7e8a768ac53272317f7a09a17ac3c1e6e-open-gate",
+  "kind": "baseline-adoption",
+  "opened_at_revision": 56,
+  "phase_instance": "phase-impl-1",
+  "request_digest": "ec670677a07dba1c11f5565116c146c4de6383c0f4a7bf2848e9543f8c065fd3",
+  "schema_version": "1",
+  "subject_digest": "14150941946efa99b0061db640bf141f808f9ffcf7bee93416dbe32052b6cec5",
+  "summary": "The implementation notes were restored to the bytes recorded at work-result submission, as agreed, so the counter-review can run: the only difference from the currently-recorded baseline (which had adopted the post-submission edit) is the removal of that one documentation paragraph about the human_revision server crash. Nothing else changed. Keeping the current (restored) version aligns the baseline with the produced artifact and unblocks the review; the crash documentation remains in the session report and as a proposed follow-up.",
+  "task_id": "review-flexibility"
+}
