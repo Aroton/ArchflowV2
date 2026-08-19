@@ -1,0 +1,105 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "artifact_kind": "design",
+    "baseline_commit": "6549da8a2b872a2c72aabe7cc4632e1d3eb09b89",
+    "commit_message": "ArchFlow: Approve review-flexibility design",
+    "constitution": "pass",
+    "eligible_waivers": [
+      {
+        "rule": {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      }
+    ],
+    "policy_findings": [
+      {
+        "compliance": "pass",
+        "rationale": "The trigger condition is engaged deliberately and handled through the sanctioned route rather than by departure. (a) The change to what 'approved' means is executed as a constitution amendment following the documented procedure (D9: keep IDs, bump versions, per validateConstitutionEvolution in src/contracts/constitution.ts), authorized by the approved PRD's R8, with the seed under assets/constitution/ and the registry test updated in lockstep. (b) The amendment is sequenced after the machinery works (Phase 5) so the narrowed text never describes absent machinery, and the D9 self-application switchover adds subjects: [prd, design, phase-design, phase-impl] to this task's own config at Phase 3 cutover, so this task's own phases 4-6 continue to require explicit approved phase designs under v1 until completion. (c) Truthfulness is preserved: each phase still ends with its own reviewed phase design before implementation, counter-review before step completion stays machine-enforced and unskippable by any rule (fixed-point explicitly listed as unchanged), and the PRD is amended in the same production result for the config-surface clarification rather than left stale. The residual tension - that between Phase 4 and Phase 5 the shipped default behavior for other projects precedes the amendment text - is disclosed in the artifact's self-application risk entry and bounded to a within-task intermediate state.",
+        "rule_id": "approved-design-before-code",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "D6/D7 let a phase design advance without an approval gate via a rule-advance receipt, and D6 extends design-milestone commit authority to that receipt path ('under the shipped default ruleset phase-design never opens design-approval'); D9 amends the rule to v2 to permit it."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "Nothing in the design infers human authority from a prohibited source. The v1 text forbids silence, elapsed time, agent prose, or a model verdict supplying approval; rule-advance is none of these - it is a human-authored declarative rule in the project's own config, evaluated by one pure helper, and the artifact is explicit that 'the receipt is honest bookkeeping, not approval' rather than dressing an absent decision as one. Where a gate does open, the decision remains explicit and bound to the exact subject: the receipt records task, subject digest, rule outcome and evaluating config digest, and gate presentations enumerate matched paths, operations and size deltas (D7). Safety authority is not weakened - D7's split keeps the design-approval policy arm exempt from triggers so unsatisfied policy findings, a failing or uncertain constitution rule, or eligible waivers open the gate regardless of rules, and the exception/safety gate kinds are listed as never rule-conditional; the artifact also reasons through the deadlock case (fixed point demanding a gate nothing opens) rather than leaving it open. The change to gate defaults is made by amending this rule to v2 through the documented procedure, authorized by PRD R8, and D9's self-application switchover keeps this task's own gates explicitly human-decided under v1 through completion. The disagreement guard (src/state/request-composition.ts:595-618) is extended so the three sites deciding whether a human is required cannot silently diverge.",
+        "rule_id": "explicit-human-authority",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "D5-D8 make artifact-approval, design-approval, and commit-authorization rule-conditional, D8 leaves the commit boundary ungated by default, and D6 introduces RuleAdvanceV1 receipts that satisfy all six hard approval preconditions (src/state/status.ts:481, src/review/fixed-point.ts:586, src/state/planned-final-phase.ts:50, src/mcp/handlers/counter-review.ts:124-203, src/review/pinned-context.ts:263-267, src/state/produce-subject.ts:110-142)."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "The design increases automation while keeping non-success states visible with a safe next action. Uncertain or failing constitution rules still open design-approval via the exempt policy arm (D7); attempt exhaustion still stops (verification strategy keeps the existing attempts-exhausted fixtures green); the D4 outage path requires a human reason, validates the substitute like a configured route, and records it on evidence with existing renderers. Honesty about limits is explicit rather than papered over: in-flight tasks in other checkouts are named as acceptable breakage and routed to LIMITATIONS and archflow-upgrade, content-rule scope (phase-impl changed paths only; SQL-in-non-SQL-files unsolved) is documented as a limitation, and the removal of fail-closed pinning is stated as a deliberate trade of audit enforcement for reporting with per-dispatch route provenance retained as the durable record. The naming discipline around the receipt ('not approval') is itself the rule's honesty requirement applied to the new mechanism.",
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 1,
+        "trigger": "not-matched",
+        "trigger_evidence": "No failure, cancellation, unavailable reviewer, uncertain policy result, or missing evidence is represented as success: D1 keeps unparseable config fail-closed as CONFIG_INVALID, D2 fails closed when neither fingerprint composition matches, D7 preserves the waiver and cancel arms in every enumerated decision shape, and exception gates (attempts-exhausted, constitution-review, material-drift, restore-collision, baseline-adoption, migration-audit) survive untouched."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "Isolation and subject binding are preserved. Subject digests, task identification, canonical JSON/digest machinery, task path isolation and request-digest authentication of submissions are listed as explicitly unchanged, and the D4 override binds into the authenticated operation identity through operationKey's submission_digest rather than adding unbound API surface. The D2 fallback is bounded in the ways that matter for this rule: it lives in the single internal resolver, only retries and accepts on an exact match, never rewrites recorded values, and recomputes using the retained creation-time state.config_digest rather than live config bytes - so a post-cutover config edit cannot be used to manufacture a match, and mismatch outside those two compositions still fails closed. Removing config bytes from the fingerprint loosens evidence-to-config binding, but the rule governs binding to the task and subject bytes, which is untouched; config provenance is retained at creation time and supplemented by D3 change notices and per-dispatch route provenance. The PRD's clarification that each task evaluates its own copied config.yaml keeps rule evaluation inside the task boundary rather than reading repo-level state mid-task. D6 receipts identify the task and subject digest they govern, so receipt-authorized advancement carries the same identification discipline as an approval.",
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "D2 removes config_digest from InputFingerprintSubject (src/contracts/fingerprints.ts:24-37) and adds a fallback that recomputes and accepts a legacy-composition fingerprint, touching the binding between durable evidence and the bytes it governs."
+      }
+    ],
+    "target_ref": "refs/heads/feature/review-override-flexibility"
+  },
+  "context_digest": "ddea3e9c616017e264f10f6c6836fca4fc6e74ab4fe0b37fb05ee7c0d012232b",
+  "current_evidence": {
+    "set_digest": "8c94200c7bbc9b679ed71d98ca1f514b1b435acb0f02fb25e6d5683271baeccd",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "e683620aaeffa67f1244d40b35dfd06e9022721b57218da75735d9e241c44612",
+        "producer_family": "claude",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-b57de0b9cb1b77a6667c689fab0679866bc497b68c29f21b528c2acc98d864d5",
+  "intent_id": "afop-fdaad0242bdbe20aca1063f1f5b71a4fadbfb74a95e5f8329cdc5ab8e606b88b-open-gate",
+  "kind": "design-approval",
+  "opened_at_revision": 29,
+  "phase_instance": "design",
+  "request_digest": "a491af3fb72b4aecd16260199f94c592a9ddb1d253787cf45271bd079c80482a",
+  "schema_version": "1",
+  "subject_digest": "e46826fb324c29dbf63b9314c7613ab59bd39e52f1a7e7ea895da2c3c30662d3",
+  "summary": "Design for review-flexibility: config becomes an ordinary editable input (byte-pinning removed; the config digest leaves the review fingerprint with a recorded-digest legacy fallback so in-flight evidence stays valid; field-level change notices appear in status and gates). The per-dispatch reviewer route override becomes reachable through a new review-dispatch submission on the semantic review action, and the config template ships the per-phase-kind overrides section. Built-in approval gates are replaced by per-project trigger rules in config: subject triggers (default: PRD and architecture) and content triggers on changed file paths (default: SQL); counter-review before step completion and all safety/exception gates stay machine-enforced; commits are ungated when no rule matches. Gateless steps leave durable rule-advance receipts satisfying the six upstream-approval preconditions and deriving design-milestone commit facts; the design-approval policy arm (constitution findings) stays unconditional so the constitution safety path can never be skipped or deadlocked. This repository's constitution amendment (explicit-human-authority and approved-design-before-code narrow to v2) lands in Phase 5, and this task's own config gains the full subject list at the Phase 3 cutover so its remaining phases keep human gates. Six phases: config lifecycle, route override wiring, subject triggers/advancement, content triggers/commit boundary, constitution+skills, docs. Two review rounds: four findings triaged accepted and resolved; final counter-review clean.",
+  "task_id": "review-flexibility"
+}

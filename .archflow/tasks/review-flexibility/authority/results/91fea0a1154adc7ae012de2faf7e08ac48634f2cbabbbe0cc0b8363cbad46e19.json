@@ -1,0 +1,105 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 25,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 59036
+  },
+  "artifact_digest": "e3a59084e305decc9bdf573e6415ed77b7c35ed09c3540c0c6be0e4ff3ed7bb4",
+  "input_fingerprint": "21230fe376905f962767c385973884ddef7d9aeed77ec2a98b23c52f8fd9ac29",
+  "outputs": [],
+  "phase_instance": "design",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-cf152581581ca2d53e760f142fec4407",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [],
+      "assurance": "server-attested",
+      "cli_version": "2.1.235",
+      "constitution": "pass",
+      "drift": "aligned",
+      "drift_findings": [],
+      "effort": "medium",
+      "envelope_input_digest": "fef0db86d0abf8a66d9f9998f18526829a468001987b6f8d1b96fe42adb7b7f3",
+      "input_fingerprint": "21230fe376905f962767c385973884ddef7d9aeed77ec2a98b23c52f8fd9ac29",
+      "invocation_id": "adjudication-invocation-28e762a3e38d5bdff056ce41967d3f1f",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "85e3bcbf0d52a45febfef749365b2546f033991bd3a06a30e2749f7a3eb8257d",
+      "phase_instance": "design",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-cf152581581ca2d53e760f142fec4407",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "The trigger condition is engaged deliberately and handled through the sanctioned route rather than by departure. (a) The change to what 'approved' means is executed as a constitution amendment following the documented procedure (D9: keep IDs, bump versions, per validateConstitutionEvolution in src/contracts/constitution.ts), authorized by the approved PRD's R8, with the seed under assets/constitution/ and the registry test updated in lockstep. (b) The amendment is sequenced after the machinery works (Phase 5) so the narrowed text never describes absent machinery, and the D9 self-application switchover adds subjects: [prd, design, phase-design, phase-impl] to this task's own config at Phase 3 cutover, so this task's own phases 4-6 continue to require explicit approved phase designs under v1 until completion. (c) Truthfulness is preserved: each phase still ends with its own reviewed phase design before implementation, counter-review before step completion stays machine-enforced and unskippable by any rule (fixed-point explicitly listed as unchanged), and the PRD is amended in the same production result for the config-surface clarification rather than left stale. The residual tension - that between Phase 4 and Phase 5 the shipped default behavior for other projects precedes the amendment text - is disclosed in the artifact's self-application risk entry and bounded to a within-task intermediate state.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "D6/D7 let a phase design advance without an approval gate via a rule-advance receipt, and D6 extends design-milestone commit authority to that receipt path ('under the shipped default ruleset phase-design never opens design-approval'); D9 amends the rule to v2 to permit it."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Nothing in the design infers human authority from a prohibited source. The v1 text forbids silence, elapsed time, agent prose, or a model verdict supplying approval; rule-advance is none of these - it is a human-authored declarative rule in the project's own config, evaluated by one pure helper, and the artifact is explicit that 'the receipt is honest bookkeeping, not approval' rather than dressing an absent decision as one. Where a gate does open, the decision remains explicit and bound to the exact subject: the receipt records task, subject digest, rule outcome and evaluating config digest, and gate presentations enumerate matched paths, operations and size deltas (D7). Safety authority is not weakened - D7's split keeps the design-approval policy arm exempt from triggers so unsatisfied policy findings, a failing or uncertain constitution rule, or eligible waivers open the gate regardless of rules, and the exception/safety gate kinds are listed as never rule-conditional; the artifact also reasons through the deadlock case (fixed point demanding a gate nothing opens) rather than leaving it open. The change to gate defaults is made by amending this rule to v2 through the documented procedure, authorized by PRD R8, and D9's self-application switchover keeps this task's own gates explicitly human-decided under v1 through completion. The disagreement guard (src/state/request-composition.ts:595-618) is extended so the three sites deciding whether a human is required cannot silently diverge.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "D5-D8 make artifact-approval, design-approval, and commit-authorization rule-conditional, D8 leaves the commit boundary ungated by default, and D6 introduces RuleAdvanceV1 receipts that satisfy all six hard approval preconditions (src/state/status.ts:481, src/review/fixed-point.ts:586, src/state/planned-final-phase.ts:50, src/mcp/handlers/counter-review.ts:124-203, src/review/pinned-context.ts:263-267, src/state/produce-subject.ts:110-142)."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The design increases automation while keeping non-success states visible with a safe next action. Uncertain or failing constitution rules still open design-approval via the exempt policy arm (D7); attempt exhaustion still stops (verification strategy keeps the existing attempts-exhausted fixtures green); the D4 outage path requires a human reason, validates the substitute like a configured route, and records it on evidence with existing renderers. Honesty about limits is explicit rather than papered over: in-flight tasks in other checkouts are named as acceptable breakage and routed to LIMITATIONS and archflow-upgrade, content-rule scope (phase-impl changed paths only; SQL-in-non-SQL-files unsolved) is documented as a limitation, and the removal of fail-closed pinning is stated as a deliberate trade of audit enforcement for reporting with per-dispatch route provenance retained as the durable record. The naming discipline around the receipt ('not approval') is itself the rule's honesty requirement applied to the new mechanism.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "not-matched",
+          "trigger_evidence": "No failure, cancellation, unavailable reviewer, uncertain policy result, or missing evidence is represented as success: D1 keeps unparseable config fail-closed as CONFIG_INVALID, D2 fails closed when neither fingerprint composition matches, D7 preserves the waiver and cancel arms in every enumerated decision shape, and exception gates (attempts-exhausted, constitution-review, material-drift, restore-collision, baseline-adoption, migration-audit) survive untouched."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Isolation and subject binding are preserved. Subject digests, task identification, canonical JSON/digest machinery, task path isolation and request-digest authentication of submissions are listed as explicitly unchanged, and the D4 override binds into the authenticated operation identity through operationKey's submission_digest rather than adding unbound API surface. The D2 fallback is bounded in the ways that matter for this rule: it lives in the single internal resolver, only retries and accepts on an exact match, never rewrites recorded values, and recomputes using the retained creation-time state.config_digest rather than live config bytes - so a post-cutover config edit cannot be used to manufacture a match, and mismatch outside those two compositions still fails closed. Removing config bytes from the fingerprint loosens evidence-to-config binding, but the rule governs binding to the task and subject bytes, which is untouched; config provenance is retained at creation time and supplemented by D3 change notices and per-dispatch route provenance. The PRD's clarification that each task evaluates its own copied config.yaml keeps rule evaluation inside the task boundary rather than reading repo-level state mid-task. D6 receipts identify the task and subject digest they govern, so receipt-authorized advancement carries the same identification discipline as an approval.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "D2 removes config_digest from InputFingerprintSubject (src/contracts/fingerprints.ts:24-37) and adds a fallback that recomputes and accepts a legacy-composition fingerprint, touching the binding between durable evidence and the bytes it governs."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "8c94200c7bbc9b679ed71d98ca1f514b1b435acb0f02fb25e6d5683271baeccd",
+      "step": "adjudicate",
+      "subject_digest": "e46826fb324c29dbf63b9314c7613ab59bd39e52f1a7e7ea895da2c3c30662d3",
+      "task_id": "review-flexibility",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "review-flexibility"
+}

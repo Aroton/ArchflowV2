@@ -1,0 +1,33 @@
+{
+  "context_digest": "03096477ebcc02b146d4258ef3a5cda48613ec1aaba04af403e0a909f975888c",
+  "envelope": {
+    "context_digest": "03096477ebcc02b146d4258ef3a5cda48613ec1aaba04af403e0a909f975888c",
+    "gate_id": "g-76ddebb5eddc244ddb63553479ee2798a8da428ae87fc79d385cebd83fd26f59",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-7e8dee4540cb4fc269ce84a218703d85a5e7bd5746c202ae3f660bfb8552792c",
+      "recorded_at": "2026-08-19T18:23:22.978Z",
+      "request_id_digest": "f5b73ec4ca177aa83410950145a7e4ec2e79d185fc8add31453fa82b2a2d214a",
+      "schema_version": "1"
+    },
+    "kind": "artifact-approval",
+    "payload": {
+      "decision": "approve",
+      "reason": "approve"
+    },
+    "phase_instance": "prd",
+    "schema_version": "1",
+    "subject_digest": "058ec7fbf3d9a8ae54f48821ad23163c87209ca6389bbe010057637bde8aba99",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-76ddebb5eddc244ddb63553479ee2798a8da428ae87fc79d385cebd83fd26f59",
+  "kind": "artifact-approval",
+  "outcome": "decided",
+  "phase_instance": "prd",
+  "schema_version": "1",
+  "subject_digest": "058ec7fbf3d9a8ae54f48821ad23163c87209ca6389bbe010057637bde8aba99",
+  "task_id": "review-flexibility"
+}

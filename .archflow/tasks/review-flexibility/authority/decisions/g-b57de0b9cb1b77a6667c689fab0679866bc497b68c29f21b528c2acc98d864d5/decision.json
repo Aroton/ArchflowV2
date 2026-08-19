@@ -1,0 +1,33 @@
+{
+  "context_digest": "ddea3e9c616017e264f10f6c6836fca4fc6e74ab4fe0b37fb05ee7c0d012232b",
+  "envelope": {
+    "context_digest": "ddea3e9c616017e264f10f6c6836fca4fc6e74ab4fe0b37fb05ee7c0d012232b",
+    "gate_id": "g-b57de0b9cb1b77a6667c689fab0679866bc497b68c29f21b528c2acc98d864d5",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-e9f29957efcf8a5c61c78f54681fa6e057a3d8de5369f82cabb2f76ed5d67dfb",
+      "recorded_at": "2026-08-19T19:03:29.285Z",
+      "request_id_digest": "6098a2d81c4f3d18dfab4bb2472b46437314b185b23c0920355af2e2ee1be2a4",
+      "schema_version": "1"
+    },
+    "kind": "design-approval",
+    "payload": {
+      "decision": "approve",
+      "reason": "Approved. Config-based trigger rules are fine for unambiguous file classes; constitution-elevated human review stays unconditional and is the intended home for semantic conditions like public-API changes, with model judgment quality accepted as a known limit."
+    },
+    "phase_instance": "design",
+    "schema_version": "1",
+    "subject_digest": "e46826fb324c29dbf63b9314c7613ab59bd39e52f1a7e7ea895da2c3c30662d3",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-b57de0b9cb1b77a6667c689fab0679866bc497b68c29f21b528c2acc98d864d5",
+  "kind": "design-approval",
+  "outcome": "decided",
+  "phase_instance": "design",
+  "schema_version": "1",
+  "subject_digest": "e46826fb324c29dbf63b9314c7613ab59bd39e52f1a7e7ea895da2c3c30662d3",
+  "task_id": "review-flexibility"
+}

@@ -1,0 +1,139 @@
+{
+  "approvals": [
+    {
+      "decision_digest": "3c40d90d4466733a42b731f2263d659278582209e7c85e112e06889e0aa99159",
+      "gate_id": "g-76ddebb5eddc244ddb63553479ee2798a8da428ae87fc79d385cebd83fd26f59",
+      "gate_kind": "artifact-approval",
+      "resolved_at_revision": 16,
+      "subject_digest": "058ec7fbf3d9a8ae54f48821ad23163c87209ca6389bbe010057637bde8aba99"
+    },
+    {
+      "decision_digest": "03bd7d0a8c7ee69b71c24278bee8f48326c157b501ce428a4204a20767ed619b",
+      "gate_id": "g-b57de0b9cb1b77a6667c689fab0679866bc497b68c29f21b528c2acc98d864d5",
+      "gate_kind": "design-approval",
+      "resolved_at_revision": 30,
+      "subject_digest": "e46826fb324c29dbf63b9314c7613ab59bd39e52f1a7e7ea895da2c3c30662d3"
+    },
+    {
+      "decision_digest": "64205c76bf3d849ee7ac6b2fd5aeb94e2440f88cdd1c51c70e0635a5ba3ff8ec",
+      "gate_id": "g-c41d4ad997b8f08fffc5adeb6aff70ec70422b341cd896f86e700cbcc061bbc9",
+      "gate_kind": "constitution-review",
+      "resolved_at_revision": 14,
+      "subject_digest": "058ec7fbf3d9a8ae54f48821ad23163c87209ca6389bbe010057637bde8aba99"
+    }
+  ],
+  "attempt": 2,
+  "authoritative_results": [
+    {
+      "input_fingerprint": "21230fe376905f962767c385973884ddef7d9aeed77ec2a98b23c52f8fd9ac29",
+      "phase_instance": "design",
+      "result_digest": "91fea0a1154adc7ae012de2faf7e08ac48634f2cbabbbe0cc0b8363cbad46e19",
+      "result_id": "adjudication-result-cf152581581ca2d53e760f142fec4407",
+      "step": "adjudicate"
+    },
+    {
+      "input_fingerprint": "21230fe376905f962767c385973884ddef7d9aeed77ec2a98b23c52f8fd9ac29",
+      "phase_instance": "design",
+      "result_digest": "93f2b16f7a2c59dc4aea1e98286cf3ab34156c7fd7326e5dc2c1100b580e4287",
+      "result_id": "result-a13dc458ffbd06fb3e38e8b19be948c5",
+      "step": "counter_review"
+    },
+    {
+      "input_fingerprint": "c23db73827f11a9ddf7bcf95ece70c74908cf80258317b1543354d01009ce591",
+      "phase_instance": "design",
+      "result_digest": "41e95126bd29da6514914b24afbc03a7a6d5bac4367987a32fd5a85fb0dda821",
+      "result_id": "state-result-cdfba394f862620d49887dfbf9dd81ea",
+      "step": "produce"
+    },
+    {
+      "input_fingerprint": "21230fe376905f962767c385973884ddef7d9aeed77ec2a98b23c52f8fd9ac29",
+      "phase_instance": "design",
+      "result_digest": "349a5616690fb6943d2a323a5632151a0ef44a30cfdba65d353fb1d1fee14b5b",
+      "result_id": "state-result-8962ac8823617d4ad9cd3c5ab8fe4bb4",
+      "step": "triage"
+    },
+    {
+      "input_fingerprint": "643a097810100c16012bc85027c2e61c80463452d323850fab7b65cb0b08dca3",
+      "phase_instance": "prd",
+      "result_digest": "9c32eea4342e83d9fe1c1890a2209f6e41bcb23f3b13e96d5c834e6ca1d57860",
+      "result_id": "adjudication-result-edc0a29588540aa2e00f568e268cc2cb",
+      "step": "adjudicate"
+    },
+    {
+      "input_fingerprint": "643a097810100c16012bc85027c2e61c80463452d323850fab7b65cb0b08dca3",
+      "phase_instance": "prd",
+      "result_digest": "1763aa964d8e27fe58885648d27b262f278afc92dc7c87a24e8c14b032f293a5",
+      "result_id": "result-190f72ec953b4b832b772d73e67995cb",
+      "step": "counter_review"
+    },
+    {
+      "input_fingerprint": "47c962de45edf06054194ad0f6ceba6091651b22c2e3b6b08fcf12d8b561da60",
+      "phase_instance": "prd",
+      "result_digest": "f6c921823ab8da5f913b61f3aa1763bc4f337f36fb2871f83cc37297e8b6ee20",
+      "result_id": "state-result-1bd009d2e09c72a5ec35a02589c46318",
+      "step": "produce"
+    },
+    {
+      "input_fingerprint": "643a097810100c16012bc85027c2e61c80463452d323850fab7b65cb0b08dca3",
+      "phase_instance": "prd",
+      "result_digest": "2522334bd672eb4aef48fedb0336c256ff583f38a2b9abaf7e8e7ad10c0ab530",
+      "result_id": "state-result-c85c42606a68587015fdd0ddb14426d9",
+      "step": "triage"
+    }
+  ],
+  "config_digest": "493173957ba07913669e2970f822f501cace89fcbd42b68d0cf7b54185880c08",
+  "constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+  "initialization_digest": "8198c85109ea65a5c74550ee943d6a7373b771605e45cda4b8daa623c3432755",
+  "input_fingerprint": "21230fe376905f962767c385973884ddef7d9aeed77ec2a98b23c52f8fd9ac29",
+  "last_transition": {
+    "input_fingerprint": "21230fe376905f962767c385973884ddef7d9aeed77ec2a98b23c52f8fd9ac29",
+    "intent_id": "afop-fdaad0242bdbe20aca1063f1f5b71a4fadbfb74a95e5f8329cdc5ab8e606b88b-open-gate",
+    "operation": "gate",
+    "outcome": {
+      "decision": {
+        "context_digest": "ddea3e9c616017e264f10f6c6836fca4fc6e74ab4fe0b37fb05ee7c0d012232b",
+        "gate_id": "g-b57de0b9cb1b77a6667c689fab0679866bc497b68c29f21b528c2acc98d864d5",
+        "human_provenance": {
+          "actor_class": "human",
+          "assurance": "declared-local-trace",
+          "channel": "connected-host",
+          "connection_id": "connection-1",
+          "decision_event_id": "afdecision-e9f29957efcf8a5c61c78f54681fa6e057a3d8de5369f82cabb2f76ed5d67dfb",
+          "recorded_at": "2026-08-19T19:03:29.285Z",
+          "request_id_digest": "6098a2d81c4f3d18dfab4bb2472b46437314b185b23c0920355af2e2ee1be2a4",
+          "schema_version": "1"
+        },
+        "kind": "design-approval",
+        "payload": {
+          "decision": "approve",
+          "reason": "Approved. Config-based trigger rules are fine for unambiguous file classes; constitution-elevated human review stays unconditional and is the intended home for semantic conditions like public-API changes, with model judgment quality accepted as a known limit."
+        },
+        "phase_instance": "design",
+        "schema_version": "1",
+        "subject_digest": "e46826fb324c29dbf63b9314c7613ab59bd39e52f1a7e7ea895da2c3c30662d3",
+        "task_id": "review-flexibility"
+      },
+      "kind": "design-approval",
+      "notes": "Approved. Config-based trigger rules are fine for unambiguous file classes; constitution-elevated human review stays unconditional and is the intended home for semantic conditions like public-API changes, with model judgment quality accepted as a known limit.",
+      "revision": 30
+    },
+    "outcome_digest": "5c97aaf95ee27ba8739f9cc32ee838cffc17ad8fb84b077257741fd6912a3bf7",
+    "prior_revision": 29,
+    "request_digest": "a491af3fb72b4aecd16260199f94c592a9ddb1d253787cf45271bd079c80482a",
+    "result_id": "g-b57de0b9cb1b77a6667c689fab0679866bc497b68c29f21b528c2acc98d864d5",
+    "resulting_revision": 30,
+    "schema_version": "1",
+    "tool": "archflow_gate"
+  },
+  "phase_instance": "design",
+  "planned_final_phase": 6,
+  "policy_base_commit": "6549da8a2b872a2c72aabe7cc4632e1d3eb09b89",
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "revision": 30,
+  "schema_version": "1",
+  "status": "succeeded",
+  "step": "triage",
+  "task_id": "review-flexibility",
+  "waivers": [],
+  "workflow_digest": "3f5f7536f19219fbf4ade78aea07c93d22d03057ce2ed83d532e25a54a8aab9a"
+}

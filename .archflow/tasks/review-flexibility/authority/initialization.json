@@ -1,0 +1,18 @@
+{
+  "artifact_kind": "task-initialization",
+  "canonical_paths": {
+    "config": ".archflow/tasks/review-flexibility/config.yaml",
+    "constitution_root": ".archflow/constitution",
+    "state": ".archflow/tasks/review-flexibility/state.json",
+    "task_root": ".archflow/tasks/review-flexibility",
+    "workflow": ".archflow/workflow.yaml"
+  },
+  "code_baseline_commit": "6549da8a2b872a2c72aabe7cc4632e1d3eb09b89",
+  "config_digest": "493173957ba07913669e2970f822f501cace89fcbd42b68d0cf7b54185880c08",
+  "constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+  "policy_base_commit": "6549da8a2b872a2c72aabe7cc4632e1d3eb09b89",
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "schema_version": "1",
+  "task_id": "review-flexibility",
+  "workflow_digest": "3f5f7536f19219fbf4ade78aea07c93d22d03057ce2ed83d532e25a54a8aab9a"
+}

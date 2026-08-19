@@ -1,0 +1,33 @@
+{
+  "context_digest": "b62d1ea2dd63531d90b5fea7d5cfef970ecb6268d6e131ce085ab3bb5b36c623",
+  "envelope": {
+    "context_digest": "b62d1ea2dd63531d90b5fea7d5cfef970ecb6268d6e131ce085ab3bb5b36c623",
+    "gate_id": "g-c41d4ad997b8f08fffc5adeb6aff70ec70422b341cd896f86e700cbcc061bbc9",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-93502956c3d828d6607e135a79805e3db9607c03061b1a21c790a21b545e7108",
+      "recorded_at": "2026-08-19T18:22:48.868Z",
+      "request_id_digest": "9d8a3e6170ebbb81de81f392361553f8e24a82446af3663833f120d0b3e9a6a7",
+      "schema_version": "1"
+    },
+    "kind": "constitution-review",
+    "payload": {
+      "decision": "approve",
+      "reason": "PRD looks good, approved"
+    },
+    "phase_instance": "prd",
+    "schema_version": "1",
+    "subject_digest": "058ec7fbf3d9a8ae54f48821ad23163c87209ca6389bbe010057637bde8aba99",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-c41d4ad997b8f08fffc5adeb6aff70ec70422b341cd896f86e700cbcc061bbc9",
+  "kind": "constitution-review",
+  "outcome": "decided",
+  "phase_instance": "prd",
+  "schema_version": "1",
+  "subject_digest": "058ec7fbf3d9a8ae54f48821ad23163c87209ca6389bbe010057637bde8aba99",
+  "task_id": "review-flexibility"
+}

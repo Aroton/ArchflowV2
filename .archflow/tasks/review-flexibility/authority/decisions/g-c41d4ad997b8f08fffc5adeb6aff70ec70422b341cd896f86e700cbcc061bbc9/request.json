@@ -1,0 +1,113 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "constitution": "fail",
+    "eligible_waivers": [
+      {
+        "rule": {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "adjudication-failure"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      }
+    ],
+    "failed_rules": [
+      {
+        "rule_id": "approved-design-before-code",
+        "rule_version": 1
+      }
+    ],
+    "matched_trigger_rules": [
+      {
+        "rule_id": "approved-design-before-code",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "explicit-human-authority",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 1
+      }
+    ],
+    "uncertain_rules": [],
+    "uncertain_trigger_rules": []
+  },
+  "context_digest": "b62d1ea2dd63531d90b5fea7d5cfef970ecb6268d6e131ce085ab3bb5b36c623",
+  "current_evidence": {
+    "set_digest": "25d7097fabdf5e6655207d654c99467a3c37475c2fba0ddd023f1089e5a123cf",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "92b3c40fb5286af2d172cfbb12158e9e8f8b068ccadabfe9bd71ed1974fcc9bf",
+        "producer_family": "claude",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-c41d4ad997b8f08fffc5adeb6aff70ec70422b341cd896f86e700cbcc061bbc9",
+  "intent_id": "afop-342cbfa25285d553ea039274feb087e87d46d6028d307fb4efe3f116ff64a293-open-gate",
+  "kind": "constitution-review",
+  "opened_at_revision": 13,
+  "phase_instance": "prd",
+  "request_digest": "4c765210ddeba4820611d570987f26e1ffb62595e92199c04413c76801e3979a",
+  "schema_version": "1",
+  "subject_digest": "058ec7fbf3d9a8ae54f48821ad23163c87209ca6389bbe010057637bde8aba99",
+  "summary": "The review-flexibility PRD is ready for approval. It defines three coordinated changes: (1) task config becomes an ordinary editable input — the byte-pinning and config-digest-in-fingerprint enforcement is removed so mid-project edits never fail the workflow; changes are reported field-level in status and gate views instead, with existing per-dispatch route provenance as the durable record of what actually ran. (2) The existing per-dispatch reviewer route override becomes reachable through the semantic workflow tools, with outage guidance added to the skills, and the config template documents the per-phase-kind overrides section. (3) Human approval becomes a targeted trigger rather than a built-in default: counter-review stays machine-enforced before every step completes, while approval gates (PRD, design, commit) fire only when per-project rules match — subject triggers (prd/design) or content triggers (e.g. SQL file paths, presented with locations and change summaries). Default shipped ruleset: review PRD, review design, human approval for SQL file changes; commits are not gated (feature-branch + squash-merge workflow). Exception/safety gates (attempt exhaustion, constitution rule failure, drift, restore collisions, baseline adoption, migration audit) survive unchanged. Trigger rules live in per-project repository configuration, not constitution files, so rule changes inherit free editing with change reporting; the repo's own constitution is amended once to narrow the explicit-human-authority rule to triggered gates. A first counter-review raised three findings (config digest's role in the input fingerprint, gate-kind scope ambiguity, rule location vs constitution pinning); all three were accepted and folded into the revised PRD, and the fresh counter-review of the revised bytes returned no findings. One open decision to confirm at approval: trigger rules in repo config rather than constitution rule files — chosen for consistency with free editing; say so if you prefer constitution residency instead.",
+  "task_id": "review-flexibility"
+}

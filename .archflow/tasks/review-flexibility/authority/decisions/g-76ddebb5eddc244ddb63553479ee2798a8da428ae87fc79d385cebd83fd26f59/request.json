@@ -1,0 +1,34 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "cancel"
+  ],
+  "context": {
+    "artifact_kind": "prd"
+  },
+  "context_digest": "03096477ebcc02b146d4258ef3a5cda48613ec1aaba04af403e0a909f975888c",
+  "current_evidence": {
+    "set_digest": "25d7097fabdf5e6655207d654c99467a3c37475c2fba0ddd023f1089e5a123cf",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "92b3c40fb5286af2d172cfbb12158e9e8f8b068ccadabfe9bd71ed1974fcc9bf",
+        "producer_family": "claude",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-76ddebb5eddc244ddb63553479ee2798a8da428ae87fc79d385cebd83fd26f59",
+  "intent_id": "afop-96c1fcfeff3cb7be7c9a51d04613b792bcff62e290469a16acc10ab98090ffa0-open-gate",
+  "kind": "artifact-approval",
+  "opened_at_revision": 15,
+  "phase_instance": "prd",
+  "request_digest": "185b758b7a1d1d2c45807d835424165584e1070bde63f69b0bef34676d5fb571",
+  "schema_version": "1",
+  "subject_digest": "058ec7fbf3d9a8ae54f48821ad23163c87209ca6389bbe010057637bde8aba99",
+  "summary": "Final approval of the review-flexibility PRD bytes. The PRD was revised once to fold in three accepted counter-review findings (config content leaves the input fingerprint; R4 scoped to approval gates with exception gates surviving; trigger rules fixed to per-project repo config) and passed a fresh independent review with no findings. You already approved the policy review and confirmed the config-residency decision implicitly stands unless changed. The PRD covers: free mid-project config editing with field-level change reporting instead of byte-pinning; wiring the per-dispatch route override through the semantic tools with skill outage guidance; targeted human approval via subject and content triggers with a default ruleset of PRD review, design review, and SQL file approval; ungated commits; a one-time amendment of this repo's constitution to narrow explicit-human-authority to triggered gates; and documentation updates. Approving here approves the exact final PRD bytes and hands off to architecture design.",
+  "task_id": "review-flexibility"
+}
