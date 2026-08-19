@@ -1,0 +1,33 @@
+{
+  "context_digest": "21f5aee4c58c35bc1953e573f16d924aec98e1072c9e593912e1917288b64b33",
+  "envelope": {
+    "context_digest": "21f5aee4c58c35bc1953e573f16d924aec98e1072c9e593912e1917288b64b33",
+    "gate_id": "g-d4561564bea0f665078e96d7819b361c0635bedb1de2538e8fe7c667ebd46883",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-3ffdd651d93385f4cc06f1026faffde6184267ddea289a255bbee14b55110163",
+      "recorded_at": "2026-08-18T22:16:04.913Z",
+      "request_id_digest": "13481777671e165a2aa3dff3ca1805dc40054c58499642fdace6adcde3565b2a",
+      "schema_version": "1"
+    },
+    "kind": "baseline-adoption",
+    "payload": {
+      "decision": "adopt-current-bytes",
+      "reason": "We've already reviewed them all — keep the current versions as the baseline and continue."
+    },
+    "phase_instance": "phase-impl-4",
+    "schema_version": "1",
+    "subject_digest": "3a3923243f8f3679f086b6cdb39cc6af9f0caf486556a7e950aa5f214f04b0d3",
+    "task_id": "api-refactor"
+  },
+  "gate_id": "g-d4561564bea0f665078e96d7819b361c0635bedb1de2538e8fe7c667ebd46883",
+  "kind": "baseline-adoption",
+  "outcome": "decided",
+  "phase_instance": "phase-impl-4",
+  "schema_version": "1",
+  "subject_digest": "3a3923243f8f3679f086b6cdb39cc6af9f0caf486556a7e950aa5f214f04b0d3",
+  "task_id": "api-refactor"
+}

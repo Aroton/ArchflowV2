@@ -1,0 +1,33 @@
+{
+  "context_digest": "4e27572aabb3a7625b98df383252374366006cd4fbbe67066f051dd6e9bd5894",
+  "envelope": {
+    "context_digest": "4e27572aabb3a7625b98df383252374366006cd4fbbe67066f051dd6e9bd5894",
+    "gate_id": "g-b5e8a63815751e24d13576de166d2b53ddfe8f58ad744513cae680366d658b9f",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-9bfa14641766134aaedc5d38a685096636d14d2ce3f2cd18669fde659856c73c",
+      "recorded_at": "2026-08-18T22:28:05.551Z",
+      "request_id_digest": "5655bbb92e5adfbd70abd00dee80912c8d24d3f13008e9238a0a7e5c276ece63",
+      "schema_version": "1"
+    },
+    "kind": "attempts-exhausted",
+    "payload": {
+      "decision": "revise",
+      "reason": "need more reviews, go"
+    },
+    "phase_instance": "phase-impl-4",
+    "schema_version": "1",
+    "subject_digest": "c1347f4cdf1b38f7228b75c6cfac92a877c5dd8df654372f370171bbb75c40c2",
+    "task_id": "api-refactor"
+  },
+  "gate_id": "g-b5e8a63815751e24d13576de166d2b53ddfe8f58ad744513cae680366d658b9f",
+  "kind": "attempts-exhausted",
+  "outcome": "decided",
+  "phase_instance": "phase-impl-4",
+  "schema_version": "1",
+  "subject_digest": "c1347f4cdf1b38f7228b75c6cfac92a877c5dd8df654372f370171bbb75c40c2",
+  "task_id": "api-refactor"
+}

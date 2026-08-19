@@ -1,0 +1,44 @@
+{
+  "allowed_decisions": [
+    "amend-upstream",
+    "revise-current",
+    "reject",
+    "cancel"
+  ],
+  "context": {
+    "affected_claim_ids": [
+      "no-new-capability-or-durable-shape",
+      "release-payload-reinstall",
+      "retirement-file-scope",
+      "self-cutover-reinstall-procedure"
+    ],
+    "affected_upstream": {
+      "digest": "7c3d6fb873e43b365f59663c74ffa07a0b7c867202ad481d749e2a63a0bad14f",
+      "kind": "implementation-result"
+    },
+    "drift": "material"
+  },
+  "context_digest": "2149e47411b36663e49b57ed89b7ce3487495bb0f1a8ef1be636f50304acd61d",
+  "current_evidence": {
+    "set_digest": "0a2863b844dac4a90d46158bbbe79e20598586bca3befd3a0867f2971f921102",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "1e698007653f70ffed41dee2511e6133ac0f50d2ade46c6a14e91262b380f5a4",
+        "producer_family": "claude",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-1f5c84107b2ce5726ab362c3baecb745e441d17f089a57c0d466d257495a3e8a",
+  "intent_id": "afop-2c3c060fa8190dda707066cb9801d64b56480350632cf1fff057c0b33b58364f-open-gate",
+  "kind": "material-drift",
+  "opened_at_revision": 230,
+  "phase_instance": "phase-impl-4",
+  "request_digest": "896ab5a4925e92ba20a820765a112bfa6d0fbd8d29802fbce4fea43f269c9347",
+  "schema_version": "1",
+  "subject_digest": "98d752860f2bd5f1701ea51350f7d0a5ccb2dd0ddad5e8665a9c2dd28f7d4557",
+  "summary": "Final policy decision for this phase: the drift review compared the implemented phase against the approved parent documents (PRD, task design, phase design) and found changes that need a home — most notably the merge from origin/main absorbed mid-phase, the dev-mode MCP launcher added on your request, and the unrestorable-missing-projection recovery fix built today after the workflow wedged. Each is already recorded truthfully in the implementation notes, and the maintained documentation and the phase design's relevant sections were updated to match reality. Decide whether those corrections belong in the upstream documents as recorded (keeping the plan truthful), or whether the work should instead be revised to match the older plan.",
+  "task_id": "api-refactor"
+}

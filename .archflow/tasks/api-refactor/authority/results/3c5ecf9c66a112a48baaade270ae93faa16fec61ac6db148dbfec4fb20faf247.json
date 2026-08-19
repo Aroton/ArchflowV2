@@ -1,0 +1,122 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 214,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 25284055
+  },
+  "artifact_digest": "05a78c1dfe7caea6c87b4640f1acf604f3e9d849626cca527a4e013e98874b19",
+  "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+  "outputs": [],
+  "phase_instance": "phase-impl-4",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-9730e4b84cdf31cb14130dd3a3b8d44f",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [
+        "7c3d6fb873e43b365f59663c74ffa07a0b7c867202ad481d749e2a63a0bad14f"
+      ],
+      "assurance": "server-attested",
+      "cli_version": "2.1.235",
+      "constitution": "pass",
+      "drift": "incidental",
+      "drift_findings": [
+        {
+          "affected_claim_ids": [
+            "self-cutover-reinstall",
+            "session-handler-deletion",
+            "phase-file-scope"
+          ],
+          "drift": "incidental",
+          "rationale": "The implemented surface matches the approved upstream's substantive claims: exactly archflow_status + archflow_apply advertised with plain object roots, retired names failing TOOL_NOT_FOUND, the migration-audit arm composed through the generic gate-summary/decide machinery with acceptance as the import-commit authority, local atomic adoption over the existing initialization transaction, the read-only status skill with its manual-status and staged-import ladders, globally inverted skill contracts, and the constitution skill left adapter-free. Three recorded departures do not change those claims. (1) self-cutover-reinstall: the design's Section 1.2/5.5 reinstall procedure was not performed, on the user's explicit mid-phase instruction; verification stayed repo-local against the tracked dist bundle, so the pinned interfaces are unaffected while the procedural claim is not literally satisfied. (2) session-handler-deletion: src/mcp/handlers/session.ts's staged-config fallback was retained because deletion stranded the live legacy-import journey — exactly the sole-caller exception the design's Section 7 anticipates and requires be recorded. (3) phase-file-scope: the user-directed origin/main merge moved the base commit to 54d60e9 and brought main's baseline-adoption gate kind and overlay into the change set, which the phase design's file scope does not enumerate; that is integration of already-approved upstream work needed for this branch's schema to parse its own task state, not a new architectural direction. None of these contradicts an approved claim's substance, so the drift is incidental rather than material.",
+          "upstream_digest": "7c3d6fb873e43b365f59663c74ffa07a0b7c867202ad481d749e2a63a0bad14f"
+        }
+      ],
+      "effort": "medium",
+      "envelope_input_digest": "8c4de71d577ad0c9ed074ae47de5df5172d7fcf81bdc5088bab4e99591eeeb03",
+      "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+      "invocation_id": "adjudication-invocation-e5bcfcf4e1c0cca86fa7351ec175dc78",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "fd8c3b6080bfc78a7bc1e44daa565933ef484c85bc7dd525bea08e18d87e4354",
+      "phase_instance": "phase-impl-4",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-9730e4b84cdf31cb14130dd3a3b8d44f",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "The delivered scope tracks the approved phase design chunk for chunk: the two-name catalogue, migration-audit gate arm, local atomic adoption, status/upgrade skill rewrites, inverted skill contracts, retirement deletions, and the maintained docs set. Every departure is recorded in the co-produced impl-notes as the design's Section 7/10 handoff requires: the skipped self-cutover reinstalls (user instruction forbidding installs), retention of src/mcp/handlers/session.ts's staged-config fallback under the stranded-consumer rule, the user-directed origin/main merge, the advertised $ref flattening after a real-host defect, and three fence corrections (fixed-point 'advance' on clean legacy review, planStateTransition import exit authority, restart-eligibility filter in the composer) that the design's risk section anticipates. The parent-design Section 3.5 correction was already present in committed bytes. No implementation appears to precede its approved design, and no approved architectural claim was silently replaced.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The subject is a phase-4 implementation output (base 54d60e9) whose parent_documents include the approved phases/4/design.md (digest 14b6be44…), and the change set implements that design's Sections 4-5: ADVERTISED_TOOL_NAMES shrunk to the semantic pair (src/contracts/tool-names.ts:18), the migration-audit composer arm (src/state/request-composition.ts:614), the upgrade adopt adapter (src/init/legacy-upgrade.ts:536), and the retirement deletions."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Authority remains explicit and subject-bound. hasAuthenticatedMigrationAudit requires an authenticated approval whose gate_kind and request.kind are both 'migration-audit', whose request.subject_digest equals the approval subject_digest, and whose decision payload is exactly 'accept-import-audit' — no advance is inferred from prose, elapsed time, or a review verdict. The composer only accepts a client-authored summary; every context field is derived from loadLegacyImportInitialization. authenticatedApprovalIsEligibleAfterLatestRestart is applied in the composer, status, counter-review, and the state handler, so a restart-superseded approval cannot authorize new bytes. skills/archflow-status/SKILL.md is read-only and explicitly never resolves a gate or calls archflow_apply; skills/archflow-upgrade/SKILL.md states adoption approves nothing and that the preview approval plus the migration-audit decision are the human decisions, and requires stopping for the explicit human choice before submitting a decision.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The change adds a new gate arm and retires the low-level gate/waiver handlers: composeGate's migration-audit branch (src/state/request-composition.ts:614-634), the design-phase exit authority in src/state/transitions.ts:247-260, and deletion of src/mcp/handlers/gate.ts, waiver.ts, gate-wait.ts, gate-direct.ts."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Non-success states stay visible with a safe next action: retired and unknown tool names fail closed with a non-retryable digest-only protocol error rather than a fabricated success; the status skill preserves blocked/inspect reporting ('do not invent a repair'), the five manual classifications, and the both-unavailable static reinstall direction; the upgrade skill directs discard-and-restart on tampered staged bytes rather than hand repair. The implementation notes report failures honestly rather than as success: the skipped installs are named as a deviation, the stale-projection wedge is described as a pre-existing defect that blocked recording, the earlier Claude real-host journey blockage is recorded with its remediation, and the verification section names failing-then-fixed runs (interrupted-state typecheck, the stale 55-count smoke pin, the codex probe flake) alongside the passing final check.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The change alters failure and unavailability surfaces: TOOL_NOT_FOUND for every retired name (src/mcp/server.ts:150), the manual-status degraded ladder and staged-import fallback in skills/archflow-status/SKILL.md:26-32, and the impl-notes verification evidence section."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Adoption is bound to one task: stagedImportDescriptor accepts a staged descriptor only when stage.task_id equals the parsed slug and stage.import_digest equals its own directory digest, discard validates a 64-hex digest and refuses an already-adopted destination, and all paths resolve through resolveTaskWorkspacePath under .archflow/{tasks,runtime/tasks}/<task>. Evidence identifies the exact bytes it governs: the migration-audit exit requires request.subject_digest === approval.subject_digest, and restart-generation eligibility rejects stale approvals even for byte-identical subjects. The absence-aware projection union fixes the opposite failure mode (a stale present-projection outliving a declared deletion) by letting the newest observation per path win, which tightens rather than loosens fail-closed reconciliation. I found no cross-task read or write introduced by the change.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The change adds a task-scoped local adoption path (src/init/legacy-upgrade.ts stagedImportDescriptor / adoptLegacyUpgrade) and rewrites the retained-manifest projection union in src/state/reconciliation-discovery.ts, both of which read task-scoped durable evidence."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "970ce19c79864557c55a9785a66e8ab3d8762448380fa8686733d54f12e474c5",
+      "step": "adjudicate",
+      "subject_digest": "c1347f4cdf1b38f7228b75c6cfac92a877c5dd8df654372f370171bbb75c40c2",
+      "task_id": "api-refactor",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "api-refactor"
+}

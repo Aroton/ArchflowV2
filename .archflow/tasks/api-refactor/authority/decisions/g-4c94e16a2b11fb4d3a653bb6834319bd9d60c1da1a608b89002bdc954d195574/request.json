@@ -1,0 +1,98 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "constitution": "pass",
+    "eligible_waivers": [
+      {
+        "rule": {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      }
+    ],
+    "failed_rules": [],
+    "matched_trigger_rules": [
+      {
+        "rule_id": "approved-design-before-code",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "explicit-human-authority",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 1
+      }
+    ],
+    "uncertain_rules": [],
+    "uncertain_trigger_rules": []
+  },
+  "context_digest": "31615f4ed9572d097024da223f01b1b9d1b554b8399c5d0d136cc98fa25d39d6",
+  "current_evidence": {
+    "set_digest": "0a2863b844dac4a90d46158bbbe79e20598586bca3befd3a0867f2971f921102",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "1e698007653f70ffed41dee2511e6133ac0f50d2ade46c6a14e91262b380f5a4",
+        "producer_family": "claude",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-4c94e16a2b11fb4d3a653bb6834319bd9d60c1da1a608b89002bdc954d195574",
+  "intent_id": "afop-30ba42e4b2288459d5b036e2b1f335faa9b138d3c73c10d6a587c692a4d99f54-open-gate",
+  "kind": "constitution-review",
+  "opened_at_revision": 228,
+  "phase_instance": "phase-impl-4",
+  "request_digest": "f66304a57dae37714c54ba33bd07a6f92325298f8e4fd04276d12602a37b66a4",
+  "schema_version": "1",
+  "subject_digest": "98d752860f2bd5f1701ea51350f7d0a5ccb2dd0ddad5e8665a9c2dd28f7d4557",
+  "summary": "The independent counter-review of the full phase-4 change set — the two-tool API refactor, retirement of the old surfaces, dev-mode MCP launcher, and the unrestorable-missing-projection recovery fix — found no material defects. Its one minor finding was an evidence gap caused by the review envelope truncating the verification transcript at its read cap; the full transcript is digest-bound and complete on disk, and the reviewer's own corroboration (the fix present in the shipped dist bundles, the host-selection evidence bound to the shipped manifest digest) matched the claims, so it was rejected as an envelope gap. The constitution and drift review that ran with it triggered this decision: confirm the work respects the repository's constitution rules and that parent documents remain truthful. A second, smaller decision (material drift) opens after this one.",
+  "task_id": "api-refactor"
+}

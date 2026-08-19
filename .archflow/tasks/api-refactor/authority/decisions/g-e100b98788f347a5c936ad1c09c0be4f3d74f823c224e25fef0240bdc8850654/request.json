@@ -1,0 +1,115 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "artifact_kind": "phase-design",
+    "baseline_commit": "54d60e96d4f46c609dfd5ed285f420be5d785d6c",
+    "commit_message": "ArchFlow: Approve api-refactor phase 4 design",
+    "constitution": "pass",
+    "eligible_waivers": [
+      {
+        "rule": {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      }
+    ],
+    "policy_findings": [
+      {
+        "compliance": "pass",
+        "rationale": "The rule's second clause is the governing one here: material deviations must update the governing documents and re-enter the applicable review boundary before dependent work advances. That is exactly the artifact's posture. The four mid-phase deviations (the origin/main merge and surviving baseline-adoption composer seam, the dev-mode replacement for self-cutover reinstalls, the unrestorable-missing-projection recovery, and the host-proof digest rebinding) are each named, attributed to explicit user direction, and folded back into the pinned design text rather than left implicit, with detail deferred to phases/4/impl-notes.md. Retracted instructions are explicitly retracted (Section 1.3 item 2 names Sections 1.2, 5.5, Chunk E and Section 9 as superseded), so the document does not carry contradictory pins. Parent-document truthfulness is maintained in the same production change: Section 1.1 records the verified scope narrowing that no constitution adapter is needed (confirmed against the repository - skills/archflow-constitution/SKILL.md contains no archflow-local or archflow_ reference), and Section 4.2 step 4 corrects the parent design's Section 3.5 upgrade diagram, listing .archflow/tasks/api-refactor/design.md in the Section 5.2 file scope so the correction actually lands. Ordering discipline for dependent work is preserved by Section 6: the migration-audit composer arm and adoption adapter (Chunk A) and the status-skill migration (Chunk B) land and are proven before Chunk C retires the low-level tools, which the design states as \"the 'replacement journeys pass before old tools retire' rule applied literally\". Section 10 re-pins approval as the precondition for continuing. No claim in the artifact asserts that unreviewed implementation may advance dependent work.",
+        "rule_id": "approved-design-before-code",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "Section 1.3 \"Mid-phase amendments recorded at implementation (human-directed)\" states \"Implementation deviated from the pinned plan in four material ways, each recorded here so the design stays truthful\", and Sections 1.1 and 4.2 step 4 record corrections to the parent task design; Section 10 states \"Implementation may begin only after this exact phase design is independently reviewed, explicitly approved by the user, committed through the authorized task-local milestone\"."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "Every authority the phase creates or moves remains an explicit human record bound to the exact subject. The commit without a second confirmation is not inferred authority: the migration-audit gate is an explicit human choice-plus-reason resolved through the existing decision-archive/decision-settle machinery over a durable gate archive, and it is that recorded acceptance - not silence, elapsed time, or model prose - that authorizes the single task-local import commit. The design justifies the confirmation setting against the established milestone rule rather than asserting it, noting the shipped input-free archflow-local commit performed the same authority and that PRD R8's explicit pre-commit confirmation governs implementation commits, not import milestones; it then corrects the parent design's contrary diagram in the same change instead of quietly diverging. Mechanical adoption is bracketed by two distinct explicit human decisions - the exact-preview approval bound by approved_preview_digest before stage, and the later migration-audit gate - and the design states plainly that \"the human approvals that gate it are the preview approval (before stage) and the later migration-audit gate\". The status skill is constrained to never supply authority: Section 4.3 pins that it renders an open-gate presentation with one direct question and \"never resolves, records, or calls archflow_apply\", and Section 8 criterion 3 restates this. Section 7 closes with an explicit prohibition that \"No acceptance test may infer approval, adopt an import without the staged approved preview, or create a commit without the exact durable authority the workflow already requires.\" The baseline-adoption seam retained from the merge is likewise a human decision reached through the ordinary decide/gate-summary shapes. Retirement removes advertisement and handlers only; it adds no path by which authority could be synthesized.",
+        "rule_id": "explicit-human-authority",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "Section 4.2 step 4 pins the import commit facts as \"requires_human_confirmation: false\" and states \"migration-audit acceptance is the import-commit authority\"; Section 4.2 step 2 states \"Adoption stays mechanical\"; Section 8 criterion 4 requires \"the one migration-audit gate through gate-summary and archive/settle decisions, both decision outcomes\"."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "Unavailable capabilities and failures stay visible non-success states with a safe next action. Server unavailability degrades to a read-only manual-status classification that still detects upgrade-staged and upgrade-restart-required, then stops and waits for the human rather than fabricating progress or self-installing - the design explicitly subordinates any install to the user's choice under the installation-safety hard rule. Missing or unreadable task authority is not hidden either: Section 4.3 routes semantic status reporting a task missing to the manual fallback precisely so a staged, not-yet-adopted import remains visible. Failure modes fail closed and say so: tampered or replaced staged bytes fail closed (Sections 5.4, 9), an unexpected staged-bytes mismatch during adopt fails closed (Section 4.2 step 2), and invalid or conflicting authority yields blocked/inspect rather than a fabricated prompt. The artifact's own reporting is honest about its limits and history: Section 1.1 records a scope narrowing against the parent design instead of silently skipping the constitution adapter; Section 1.3 discloses four material implementation deviations including a genuine wedge discovered while dogfooding, describing the recovery route rather than declaring the path already sound; Section 4.7 annotates the historical client-interface audit as superseded while leaving its measured body bytes intact, so point-in-time evidence is not rewritten as current proof. Host-proof evidence is scoped honestly as opt-in and outside npm run check, with digest binding re-established after dist regeneration so recorded numbers match shipped bytes rather than a stale build.",
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "Section 4.2 step 5 pins the degraded ladder \"Server unavailable -> read-only manual-status classification ..., then stop and wait for the user to restore the server\"; Section 1.3 item 3 discloses a wedge where \"the missing file could neither be adopted nor restored, and the routing offered no client-reachable action\"; the Section 4.5 mapping retains \"blocked / inspect\" for authority conflicts."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "The phase is a surface retirement, and it is scoped so that no durable record loses the identity binding it to its exact task and subject bytes. TOOL_NAMES, gate archives, receipts, last_transition.tool, and the channel: \"archflow-local\" provenance values are all explicitly retained as readable history - retirement removes advertisement and handlers, not the evidence that identifies which task and subject a record governs. Adoption is atomic through the existing initialization transaction with existing replay machinery, and an unexpected staged-bytes mismatch fails closed rather than adopting bytes that do not match the approved preview, which is the exact-subject binding the rule protects. The migration-audit arm derives its gate request from the same facts.migration_audit authority the retiring template used and leaves openDurableGate's existing deep context validation unchanged, so no approval widens its subject scope. The retained baseline-adoption seam carries an explicit restore-applicability refusal (baseline-adoption-restore-source-unavailable) so an adoption-sourced projection, which holds digests without retained bytes, is never offered a restore it cannot apply - a fail-closed response to partial evidence rather than a silent best-effort. Section 8 criterion 5 and Section 7 keep the legacy-seeded projection matrix green through the retirement chunk, and Section 5.3 requires legacy-seeded checkpoint projections to stay green, so existing tasks are not stranded. Host-proof journeys run against a scratch task in a scratch home, keeping the measurement isolated from real task state. I found no place where the design lets an approval, waiver, review, or result be reused for bytes other than the subject it identifies.",
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "Section 4.1 states \"TOOL_NAMES remains exported as durable vocabulary for reading and writing existing state records\" and Section 7 states \"Durable vocabulary (TOOL_NAMES, gate archives, provenance channels) is untouched\"; Section 1.3 item 1 pins \"the restore-applicability refusal in archiveDirectSemanticGateDecision so an adoption-sourced drift can never be offered a restore it cannot apply\"; Section 8 criterion 5 requires existing durable tasks and seeded checkpoints to keep projecting."
+      }
+    ],
+    "target_ref": "refs/heads/feature/api-refactor"
+  },
+  "context_digest": "7d6016da71f596525a90bd007fc475d85f88ea2fd41d6a8e56241927585143b0",
+  "current_evidence": {
+    "set_digest": "85f699030189d79cb00b3cca9285c245201e7bfd975643141bc97747da35ee93",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "b273e2e9638fdc3e38abdd48de24b25228c75bec61e965badd081cf61f2feeff",
+        "producer_family": "claude",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-e100b98788f347a5c936ad1c09c0be4f3d74f823c224e25fef0240bdc8850654",
+  "intent_id": "afop-4022dc00d875f37ad1915f1f7a1dd4bafb5c7bd8e171d8760a643c2d5bcec98d-open-gate",
+  "kind": "design-approval",
+  "opened_at_revision": 255,
+  "phase_instance": "phase-design-4",
+  "request_digest": "b58b2a8e364fa8fffcb3886a2d32d97a3e1e2ec23b8b9b536ea5b2c5b0d28378",
+  "schema_version": "1",
+  "subject_digest": "9eff45f0641371a4d18ac0bd0d515fb280d4c68ca604bd2c935e5ee0b58925e2",
+  "summary": "The revised phase 4 design is ready for approval. Since your last look, it gained a mid-phase amendments section recording what actually happened (the main merge, the dev-mode replacement for reinstall steps — every install instruction is now retracted in favor of the dev-mode launcher, the unrestorable-missing-projection recovery fix, and the host-proof digest binding), and an explicit citation of the surviving file-drift recovery seam with its pinning test, added after the reviewer correctly challenged its absence from the committed tree. The fresh independent review found no blocking issues: the one disputed finding was resolved by that citation, and the single remaining minor note — a stale count pin in a smoke script that the implementation already corrected and recorded in the implementation log — was rejected as non-material. Approving this design also authorizes its task-local milestone commit; implementation of phase 4 is already complete in the working tree, so approval lets the revision's commit land and the phase's implementation evidence finish.",
+  "task_id": "api-refactor"
+}

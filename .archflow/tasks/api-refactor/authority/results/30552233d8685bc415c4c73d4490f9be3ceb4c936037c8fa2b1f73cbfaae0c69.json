@@ -1,0 +1,63 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 216,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 25284055
+  },
+  "artifact_digest": "337ce98ac48f427f495568b2007e4a33f983f49f92dc0805d3bca0588445c8b5",
+  "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+  "outputs": [],
+  "phase_instance": "phase-impl-4",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "state-result-30e77ba4db213a0ef7ad9e673a60153b",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "triage",
+    "evidence": {
+      "accepted_count": 1,
+      "accepted_editorial_count": 0,
+      "current_evidence_set_digest": "970ce19c79864557c55a9785a66e8ab3d8762448380fa8686733d54f12e474c5",
+      "dispositions": [
+        {
+          "disposition": "accepted",
+          "finding_id": "host-proof-bound-to-superseded-bundle",
+          "rationale": "Material verification gap: the real-host evidence required by success criterion 8 is digest-bound to the pre-merge bundle (f900ccdb...) while the shipped dist/manifest.json is f58de93a..., and no always-on check pins the two together, so the final catalogue ships without host evidence bound to its bytes.",
+          "review_evidence_digest": "9261411d9dbd260ebd435e0bb17e0886e3aace5104645e2d34205c582c42a600",
+          "revision_intent": "Re-run ARCHFLOW_REAL_HOSTS=1 npx vitest run test/real-host/host-selection.test.ts against the final tracked dist so the recorded artifact's bundle_manifest_sha256 binds the shipped bytes; append the command and raw output to the phase verification transcript and record the refreshed manifest digest in impl-notes."
+        },
+        {
+          "disposition": "rejected",
+          "evidence": "docs/validation/ is point-in-time validation evidence by repo convention (CLAUDE.md: not kept current by explore), and the retirement of archflow_gate/archflow_waiver/archflow_state/archflow-local commit is already mechanically pinned by test/contracts/retired-surface.test.ts, so an operator cannot silently use the retired surface against this checkout.",
+          "finding_id": "runbook-retired-tool-instructions",
+          "rationale": "Documentation annotation only: no change to behavior, verification, an approved boundary, or risk.",
+          "review_evidence_digest": "9261411d9dbd260ebd435e0bb17e0886e3aace5104645e2d34205c582c42a600"
+        }
+      ],
+      "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+      "phase_instance": "phase-impl-4",
+      "rejected_count": 1,
+      "schema_version": "1",
+      "source_evidence_digests": [
+        "9261411d9dbd260ebd435e0bb17e0886e3aace5104645e2d34205c582c42a600"
+      ],
+      "step": "triage",
+      "subject_digest": "c1347f4cdf1b38f7228b75c6cfac92a877c5dd8df654372f370171bbb75c40c2",
+      "task_id": "api-refactor"
+    },
+    "schema_version": "1"
+  },
+  "step": "triage",
+  "task_id": "api-refactor"
+}

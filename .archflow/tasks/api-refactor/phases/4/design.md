@@ -53,10 +53,14 @@ This task (`api-refactor`) has been driven end to end by the legacy installed sk
 very choreography Phase 4 deletes. The phase-implementation session therefore cannot run on
 the installed legacy skill and then delete it underneath itself. The pinned procedure:
 
-1. The `/archflow-phase-impl api-refactor 4` session starts by reinstalling the repository
-   skills (`bash install.sh`) so it runs the already-migrated semantic
-   `skills/archflow-phase-impl/SKILL.md` against the currently installed server build (which
-   already advertises the semantic pair).
+1. The `/archflow-phase-impl api-refactor 4` session runs the already-migrated semantic
+   `skills/archflow-phase-impl/SKILL.md` from this checkout against this checkout's server
+   build through the dev-mode launcher (`.mcp.json` → `scripts/dev-mcp-launcher.sh` with
+   `ARCHFLOW_DEV=1`, serving the tracked `dist/`), leaving the machine-global install
+   untouched. The repository's pinned installation-safety hard rule (`CLAUDE.md`/`AGENTS.md`)
+   overrides any self-cutover reinstall this section might imply: never run `install.sh` or
+   write the shared machine-global locations unless the user explicitly asks for an install
+   in the current conversation.
 2. It consumes the `phase-impl-4` hand-off through the semantic invocation and performs all
    workflow steps — including this phase's own design-milestone commit — through the
    semantic surface: the client stages the authorized task-local path and creates the commit
@@ -69,6 +73,57 @@ the installed legacy skill and then delete it underneath itself. The pinned proc
 This dogfooding is also evidence: the live task must operate fully semantically before the
 legacy paths are deleted, which is exactly the "old tools retire only after the replacement
 journeys pass" rule applied to the last journey that matters — this one.
+
+### 1.3 Mid-phase amendments recorded at implementation (human-directed)
+
+Implementation deviated from the pinned plan in four material ways, each recorded here so
+the design stays truthful; detail and verification live in `phases/4/impl-notes.md`.
+
+1. **Main merge absorbed mid-phase (user-directed).** The task's durable state had been
+   written by a main-family server (main's baseline-adoption records), which this branch's
+   schema could not parse — falsifying success criterion 5 for this very task. On the
+   user's explicit choice, `origin/main` was merged (`54d60e9`): main's baseline-adoption
+   machinery survives alongside the retirement, the migration-audit work was deduplicated
+   by layer, and main's either-ascending path-order relaxation replaced the branch's
+   stricter phase-3 pin. The surviving drift seam, made explicit because the committed
+   merge base does not contain it — it exists only in this phase's change set: the
+   semantic gate composer composes `kind: "baseline-adoption"` in `composeGate`
+   (`src/state/request-composition.ts`, ahead of the phase's own approval gates whenever
+   reconciliation blocks, with the restore-applicability refusal in
+   `archiveDirectSemanticGateDecision` so an adoption-sourced drift can never be offered a
+   restore it cannot apply), `baselineAdoptionInputFromFindings` in `src/state/status.ts`
+   derives its subject/context/evidence, and the semantic drift journey — open through
+   `gate-summary`, adopt-current-bytes or restore-recorded-bytes, resume — is pinned by
+   `test/integration/status-reentry-edit.test.ts` ("resolves post-milestone projection
+   drift through the human baseline decision"), including the
+   `baseline-adoption-restore-source-unavailable` refusal. This very task exercised that
+   seam twice during phase 4. After the retirement deletes
+   `src/state/request-templates.ts`, this composer arm is the only producer of the
+   baseline-adoption gate request, and it is client-reachable through the ordinary
+   `decide`/`gate-summary` shapes.
+2. **Self-cutover reinstalls replaced by dev mode (user-directed).** The user forbade
+   installs mid-phase and added the installation-safety hard rule to `CLAUDE.md`/
+   `AGENTS.md`; the reinstall steps this revision originally pinned in Sections 1.2, 5.5,
+   Chunk E, and Section 9 are retracted in this revision and replaced by the dev-mode
+   route. The repository `.mcp.json` routes through `scripts/dev-mcp-launcher.sh`: with
+   `ARCHFLOW_DEV=1` the server serves this checkout's tracked `dist/`, leaving the
+   machine-global install untouched. The phase's own workflow steps still ran fully
+   semantically — the dogfooding evidence Section 1.2 asks for, achieved without
+   installing.
+3. **Unrestorable-missing-projection recovery (user-directed fix).** Driving this task
+   through dev mode exposed a wedge: an interrupted produce transaction left a file
+   deletion unretained, and the recorded digest that remained newest was adoption-sourced
+   (digests only, no retained bytes) — the missing file could neither be adopted nor
+   restored, and the routing offered no client-reachable action. Discovery now names
+   adoption-sourced projections unrestorable, reconciliation marks the matching missing
+   findings, and the next-action routing offers the produce re-entry (the same window
+   accepted findings use) whenever restore is impossible and the phase already has a
+   recorded produce; the fresh terminal produce re-declares the drift and the deletion so
+   the review boundary covers the bytes. Restorable deletions keep the restore route.
+4. **Host-proof binding.** Success criterion 8's evidence under `docs/validation/` is
+   digest-bound to the shipped `dist/manifest.json` at recording time; after any dist
+   regeneration (the merge, the fix) the suite is re-run so `bundle_manifest_sha256`
+   matches the final shipped bytes.
 
 ## 2. Upstream requirements and observable outcome
 
@@ -261,8 +316,9 @@ Pinned sequence for `skills/archflow-upgrade/SKILL.md`:
    decisions, with acceptance as the commit authority), and the deviation is recorded
    here.
 5. **Degraded ladder.** Server unavailable → read-only `manual-status` classification
-   (which still detects `upgrade-staged`/`upgrade-restart-required`), stop, reinstall.
-   Staging and adoption never require the server.
+   (which still detects `upgrade-staged`/`upgrade-restart-required`), then stop and wait
+   for the user to restore the server — any install is the user's explicit choice under
+   the installation-safety hard rule. Staging and adoption never require the server.
 
 The upgrade skill text names only: `archflow-local upgrade` (preview/stage/discard-stage/
 adopt), `archflow_status`, `archflow_apply`, and `archflow-local manual-status` degraded.
@@ -440,8 +496,9 @@ current stances and the cutover edit:
 ### 5.5 Docs and release payload
 
 - Section 4.7 page set; audit annotation; runbook entry.
-- Regenerate the tracked `dist/` payload once after all bytes stabilize; reinstall with
-  `bash install.sh` (self-cutover, Section 1.2) before the phase's own milestone commit.
+- Regenerate the tracked `dist/` payload once after all bytes stabilize; the session serves
+  it through the dev-mode launcher (Section 1.2) — no reinstall. The installation-safety
+  hard rule overrides any self-cutover reinstall.
 
 ## 6. Work chunks and ordering
 
@@ -471,7 +528,8 @@ Also independently verifiable; the full `status` command still exists at this po
 3. Retirement-negative tests (Section 5.4).
 
 Requires A (migration-audit arm) and B (no remaining `status`-command consumer). This is
-the chunk that performs the self-cutover reinstall first (Section 1.2).
+the chunk the self-cutover procedure of Section 1.2 accompanies: the session serves this
+checkout's rebuilt `dist/` through the dev-mode launcher, with no reinstall.
 
 ### Chunk D: Skills, contract inversion, docs, audit annotation
 
@@ -485,7 +543,9 @@ Requires C (the vocabulary being asserted against is gone).
 1. Catalogue byte measurement and budget pin.
 2. Real-host selection/journey suite + `docs/validation/` artifacts + runbook.
 3. Full `npm run check`; `npm run release:write`; release smoke/mutation/reproducibility;
-   reinstall; the phase's own client-side milestone commit and status observation.
+   the phase's own client-side milestone commit and status observation. No reinstall: the
+   dev-mode launcher serves the tracked `dist/` and the installation-safety hard rule
+   overrides any install instruction.
 
 ## 7. Review and risk controls
 
@@ -501,9 +561,9 @@ Requires C (the vocabulary being asserted against is gone).
   archives, provenance channels) is untouched; the semantic snapshot already projects every
   seeded checkpoint (Phase 1); the legacy-seeded projection matrix stays green through
   Chunk C.
-- **Retirement strands the implementing session.** Section 1.2's reinstall-first procedure
-  is pinned; the session's own milestone commit uses the semantic client-git path, and
-  `manual-status` survives as the degraded ladder.
+- **Retirement strands the implementing session.** Section 1.2's dev-mode procedure keeps
+  the session on this checkout without any install; the session's own milestone commit
+  uses the semantic client-git path, and `manual-status` survives as the degraded ladder.
 - **Deleted commands orphan shared code.** Each deletion is justified by the verified
   sole-caller inventory (Section 3.1); anything that gains a consumer during implementation
   stays and the deviation is recorded in impl notes.
@@ -614,10 +674,11 @@ ARCHFLOW_REAL_HOSTS=1 npx vitest run test/real-host/host-selection.test.ts
 
 plus the existing real-host suites, with results recorded under `docs/validation/`.
 
-After source, schemas, skills, tests, and documentation are final:
+After source, schemas, skills, tests, and documentation are final (no install: the
+installation-safety hard rule in `CLAUDE.md` overrides any self-cutover reinstall; serve
+the tracked `dist/` through the dev-mode launcher per Section 1.2):
 
 ```bash
-bash install.sh        # self-cutover reinstall before the phase's own commit
 npm run release:write
 npm run check
 ```
@@ -627,8 +688,9 @@ npm run check
 Implementation may begin only after this exact phase design is independently reviewed,
 explicitly approved by the user, committed through the authorized task-local milestone, and
 durable status advances to `phase-impl-4`. The implementation session follows Section 1.2
-(reinstall first; dogfood the semantic surface; create the phase's own milestone commit
-client-side). It must write implementation notes recording any deviation from these pinned
+(run on this checkout through the dev-mode launcher, never a reinstall; dogfood the
+semantic surface; create the phase's own milestone commit client-side). It must write
+implementation notes recording any deviation from these pinned
 interfaces — especially any deleted module that turned out to have a live consumer — and
 the final verification evidence. This is the planned final phase: after its completion
 authority and terminal hand-off, the task is complete and no successor skill is reported.

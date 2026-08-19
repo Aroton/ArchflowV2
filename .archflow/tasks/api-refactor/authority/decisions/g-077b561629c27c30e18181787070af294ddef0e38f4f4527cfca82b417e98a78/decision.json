@@ -1,0 +1,33 @@
+{
+  "context_digest": "4e27572aabb3a7625b98df383252374366006cd4fbbe67066f051dd6e9bd5894",
+  "envelope": {
+    "context_digest": "4e27572aabb3a7625b98df383252374366006cd4fbbe67066f051dd6e9bd5894",
+    "gate_id": "g-077b561629c27c30e18181787070af294ddef0e38f4f4527cfca82b417e98a78",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-8d1e07a2666cc45fe48cad573c63af12c0bcfc230b02f5e69a7b68d9c0966272",
+      "recorded_at": "2026-08-18T23:51:17.640Z",
+      "request_id_digest": "3f74e20ebd6415ccff4fc39c52ea37cba6fda78828605f31cf495ea3a3cb92ca",
+      "schema_version": "1"
+    },
+    "kind": "attempts-exhausted",
+    "payload": {
+      "decision": "revise",
+      "reason": "The finding's documentation gap is real; the accepted revision cites the surviving baseline-adoption seam by file and line in the design, and the amendment gets a fresh independent review."
+    },
+    "phase_instance": "phase-design-4",
+    "schema_version": "1",
+    "subject_digest": "bee28331068c52a0d798a941699c14ac7387208b36bf7465e90d90e8e4352747",
+    "task_id": "api-refactor"
+  },
+  "gate_id": "g-077b561629c27c30e18181787070af294ddef0e38f4f4527cfca82b417e98a78",
+  "kind": "attempts-exhausted",
+  "outcome": "decided",
+  "phase_instance": "phase-design-4",
+  "schema_version": "1",
+  "subject_digest": "bee28331068c52a0d798a941699c14ac7387208b36bf7465e90d90e8e4352747",
+  "task_id": "api-refactor"
+}

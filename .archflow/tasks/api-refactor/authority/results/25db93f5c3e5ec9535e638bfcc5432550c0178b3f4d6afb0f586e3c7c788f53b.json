@@ -1,0 +1,74 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 214,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 25284055
+  },
+  "artifact_digest": "9261411d9dbd260ebd435e0bb17e0886e3aace5104645e2d34205c582c42a600",
+  "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+  "outputs": [],
+  "phase_instance": "phase-impl-4",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "result-9d9e28e82a557f7565e1133075cd4acd",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "review-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "assurance": "server-attested",
+      "blocking_count": 0,
+      "cli_version": "2.1.235",
+      "effort": "medium",
+      "envelope_input_digest": "523bb2ddae7765419190c5f9ee84386d86bfd4b26d9bb738c7e6b6118a6e511e",
+      "findings": [
+        {
+          "blocking": false,
+          "evidence": "docs/validation/host-selection.json records observation_payload.bundle_manifest_sha256 = f900ccdbf1cf40df66d6c6851015631af5b5da152da15eec60db7653df07ed6d, which test/real-host/host-selection.test.ts:570-572 computes as sha256 of dist/manifest.json at run time. The implementation output's own entry for dist/manifest.json carries payload_digest f58de93a06d94dcd33238c753425cd1c4eca9fdd224f633e90ce25d3ce8ad07a, and impl-notes records the post-merge regeneration as \"release-offline green after the dist regen (manifest f58de93a…)\" while the earlier flattening measurement is recorded against \"manifest digest f900ccdb…\". The post-merge verification list in impl-notes contains typecheck, schema generation/check, contracts, mcp-runtime, full vitest (with the opt-in real-host groups skipped) and release-offline — the ARCHFLOW_REAL_HOSTS run is not among them, and the always-on digest-contract test at test/real-host/host-selection.test.ts:490-512 checks the artifact's internal self-consistency only, never bundle_manifest_sha256 against the current dist, so nothing fails on the drift.",
+          "finding_id": "host-proof-bound-to-superseded-bundle",
+          "severity": "major",
+          "suggested_resolution": "Either re-run `ARCHFLOW_REAL_HOSTS=1 npx vitest run test/real-host/host-selection.test.ts` against the final tracked dist so the recorded bundle_manifest_sha256 matches the shipped bytes, or state explicitly in the impl notes and in the artifact that the evidence was taken against the pre-merge bundle and name the automated post-merge pins (mcp-advertised-schema, contract agreement) relied on for the final catalogue; optionally add an assertion that bundle_manifest_sha256 equals the current dist/manifest.json digest so future drift is caught.",
+          "summary": "The recorded real-host evidence required by success criterion 8 is digest-bound to a bundle that is no longer the shipped tracked dist, and it was not re-recorded after the main merge and dist regeneration."
+        },
+        {
+          "blocking": false,
+          "evidence": "docs/validation/real-host-journeys.md:260-263 tells the operator to \"Record that the decision-bearing `archflow_gate` or `archflow_waiver` call returns in the same invocation\" and that \"after approval the nonhuman `archflow-local commit` action must run without a second confirmation\"; line 473 instructs a recovery invocation to \"call archflow_state once ... then run archflow-local status --task val12-manual\". All four names are retired by this change (src/contracts/tool-names.ts:18, src/mcp/server.ts:150, and the LOCAL_COMMANDS list pinned at test/contracts/retired-surface.test.ts:103-111). The file was edited in this phase to append the host-selection journey (section at line 497), but a grep for \"superseded|retired|historical\" returns no annotation on the older VAL-08/VAL-09/VAL-12 steps, and the document's opening still reads as an active procedure (\"Run all three ...\", lines 3-6).",
+          "finding_id": "runbook-retired-tool-instructions",
+          "severity": "minor",
+          "suggested_resolution": "Add a short supersession note to the affected VAL sections (as was done for docs/validation/client-interface-audit.md's status line) marking those steps as point-in-time evidence against the retired four-tool surface, or restate the decision/commit observation steps on the semantic `archflow_status`/`archflow_apply` surface.",
+          "summary": "The operator runbook this phase edited still instructs observing the now-retired `archflow_gate`, `archflow_waiver`, `archflow_state`, and `archflow-local commit` surfaces, with no supersession annotation."
+        }
+      ],
+      "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+      "invocation_id": "invocation-a8fbf5f18c10907f573c8af1171cbf96",
+      "matched_rule_versions": [],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "e252c80622f970d5edf63cb06158681c9f77888b17a3e11f39dddb2415acda0a",
+      "phase_instance": "phase-impl-4",
+      "producer_family": "claude",
+      "result_id": "result-9d9e28e82a557f7565e1133075cd4acd",
+      "role": "counter-review",
+      "rubric_digest": "68405124576f2bdca2a95003bd13548aa352ea018926faa733fad95a99f39775",
+      "schema_version": "1",
+      "step": "counter_review",
+      "subject_digest": "c1347f4cdf1b38f7228b75c6cfac92a877c5dd8df654372f370171bbb75c40c2",
+      "task_id": "api-refactor",
+      "verdict": "advisory"
+    },
+    "schema_version": "1"
+  },
+  "step": "counter_review",
+  "task_id": "api-refactor"
+}

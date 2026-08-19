@@ -1,0 +1,66 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 224,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 25354255
+  },
+  "artifact_digest": "1e698007653f70ffed41dee2511e6133ac0f50d2ade46c6a14e91262b380f5a4",
+  "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+  "outputs": [],
+  "phase_instance": "phase-impl-4",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "result-2280ebe43e8251379f43c46027d3c5c9",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "review-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "assurance": "server-attested",
+      "blocking_count": 0,
+      "cli_version": "2.1.235",
+      "effort": "medium",
+      "envelope_input_digest": "1f1c3efb7dd794755dbd0d63f023220d01c1bf5537d9565499e4724d957fa2e3",
+      "findings": [
+        {
+          "blocking": false,
+          "evidence": "The verification-transcript context entry is marked `status: truncated` with `total_byte_count: 55028`; its readable content ends inside \"SECTION 10 — Development probes\" (\"...emitting \\\"$ref\\\": \\\"positiveSafePhaseNumber\\\" wit\"). Impl notes cite later sections — the stale-projection fix, the main-merge integration run (174 files / 1853 tests), and the unrestorable-fix verification with `npm run check` at 1857 passed plus a re-run release loop and host suite — none of which appear in the visible bytes. Success criterion 9 of `phases/4/design.md` requires that final full check against the regenerated tracked payload.",
+          "finding_id": "unverifiable-final-check-transcript-tail",
+          "severity": "minor",
+          "suggested_resolution": "No code change is required. If the full transcript is available to the human at the gate, confirm the final `npm run check` exit status and the post-fix release/host sections there; the corroborating in-tree evidence (dist bundles containing the final `restore_unavailable` change, and `docs/validation/host-selection.json` recording `bundle_manifest_sha256 = 79998d8d…` equal to the shipped `dist/manifest.json` payload digest) is consistent with the claim.",
+          "summary": "The verification transcript supplied to this review is truncated mid-Section 10, so the final full `npm run check`, release reproduction, and re-recorded host-selection runs performed after the last source change (the unrestorable-missing-projection fix) are claimed in impl notes but not present in the readable evidence."
+        }
+      ],
+      "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+      "invocation_id": "invocation-c4079b6b4ea5e5c653c6615aaa48945a",
+      "matched_rule_versions": [],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "e9e3b1dbdaad47d92762fab38238a432eaba8f9824f10ce853cdf20f77c5a14f",
+      "phase_instance": "phase-impl-4",
+      "producer_family": "claude",
+      "result_id": "result-2280ebe43e8251379f43c46027d3c5c9",
+      "role": "counter-review",
+      "rubric_digest": "68405124576f2bdca2a95003bd13548aa352ea018926faa733fad95a99f39775",
+      "schema_version": "1",
+      "step": "counter_review",
+      "subject_digest": "98d752860f2bd5f1701ea51350f7d0a5ccb2dd0ddad5e8665a9c2dd28f7d4557",
+      "task_id": "api-refactor",
+      "verdict": "advisory"
+    },
+    "schema_version": "1"
+  },
+  "step": "counter_review",
+  "task_id": "api-refactor"
+}

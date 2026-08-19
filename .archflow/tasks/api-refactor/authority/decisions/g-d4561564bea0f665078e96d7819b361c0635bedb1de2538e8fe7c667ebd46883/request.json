@@ -1,0 +1,101 @@
+{
+  "allowed_decisions": [
+    "adopt-current-bytes",
+    "restore-recorded-bytes",
+    "abort",
+    "cancel"
+  ],
+  "context": {
+    "drifted_projections": [
+      {
+        "observed_digest": "90ef37025bbcd2bfb0198cbe0c5ffb93014c974e720a021b7a7be663bb9c4817",
+        "path": "docs/LIMITATIONS.md",
+        "recorded_digest": "68caaab364684efd5c5ba3ac12e387416468b91902cac5e6d4b78169e7e6baa9"
+      },
+      {
+        "observed_digest": "286e2d46541d5a36b12d51c83d72b164c59423b121287703d0d7562db411c35f",
+        "path": "skills/archflow-design/SKILL.md",
+        "recorded_digest": "66a331767e50e9304c9c92a089ec14468ae4e977a73c56fb295654396b60d8a1"
+      },
+      {
+        "observed_digest": "80d8897b94d39c7136950383e18da129e3f23b434fe1c531c5fb899c6d4b4add",
+        "path": "skills/archflow-phase-design/SKILL.md",
+        "recorded_digest": "acade1b52f53238a6b1aa169035a7c6e1c5f8360cff47816363e713ac928c62f"
+      },
+      {
+        "observed_digest": "bae579e2be32c076fca1e95692026de0e481eb91e1c8c84ce2432059e2c70122",
+        "path": "skills/archflow-phase-impl/SKILL.md",
+        "recorded_digest": "4a413272629a534e814ac555f9db1f2be07667394cbb5da63eafa0785ed7a077"
+      },
+      {
+        "observed_digest": "b4db97bead8b95695c32245bc6705802735f858dd8a6167c5a9ed3281f031310",
+        "path": "skills/archflow-prd/SKILL.md",
+        "recorded_digest": "e1178f28174274cd07191c7a595e18e3595c8ce6f6112eff69c0f58962836f2e"
+      },
+      {
+        "observed_digest": "713e0f4c6799d440f09aaff3c9cfd84bd4fb03ea6f78dbc46016d49cd3bf504b",
+        "path": "src/contracts/durable-state.ts",
+        "recorded_digest": "d2c8fceb2b70bf031251a91fd81a3305d0c2dd8077e32b59315c8b56042bb583"
+      },
+      {
+        "observed_digest": "d13ee7d2b65c955eded2b483dc2ec7b8420a0dec303da51a0a643b40002e3648",
+        "path": "src/contracts/fingerprints.ts",
+        "recorded_digest": "dc1e4f97d984c57d2914df83a0bc92e7b41102448448b9cbadb16584b9145b21"
+      },
+      {
+        "observed_digest": "62bb9720253cca0a8ef4235eccb3aa7b7b881491bd7625718f30463816dcad43",
+        "path": "src/contracts/gates.ts",
+        "recorded_digest": "b9daa7de51608aa6de278ea6a790c57dcab41887a4485bed8e279270fd09f07f"
+      },
+      {
+        "observed_digest": "a19a3153f955650dd87baade31df546795ede470e5f705484c3cc944df407fcd",
+        "path": "src/contracts/schemas/v1/task-state.schema.json",
+        "recorded_digest": "274f445faf1fab3516fcbad1e2101fe8bbbe22158648e1028baa8cd903752af0"
+      },
+      {
+        "observed_digest": "d15c325375b1208a53cc01b9d5a733e64c18ac15bd7501cedd0987d37fd12557",
+        "path": "src/mcp/handlers/session.ts",
+        "recorded_digest": "aa1de34b63c0e29f81785273b744c3f4e08c07c0295408bc70660de0621647ca"
+      },
+      {
+        "observed_digest": "a50cc4a42c2133768625afcd5006953bd98dfbe476a62fc79d5628b4a83011f7",
+        "path": "src/state/semantic-view.ts",
+        "recorded_digest": "43d395e4c75c1568b5a9bcb260d5785bdcfb291a3ea8a5af40e59763fb1a6905"
+      },
+      {
+        "observed_digest": "b1046f433cda796375a43d0812d3565eec1646df2be47aaaae4787316bd3443a",
+        "path": "test/contracts/durable-structural-corpus.test.ts",
+        "recorded_digest": "c1b239b9ebf28da3cb84ee90a8bde26aa5a937e9ed52a1c2220adf858e1d8328"
+      },
+      {
+        "observed_digest": "d89ea64a740c6bb5d3f797e1681420164af6a2694ec032e26e77169ff7e82033",
+        "path": "test/unit/gates.test.ts",
+        "recorded_digest": "060272288c8241855661108c1b960c9845fffb5734af25e01aa80d214e561414"
+      },
+      {
+        "observed_digest": "10c3ac4c99891426e84019e5ed0ee76b3c34c9002418c83fc3ddbcc2b36f542f",
+        "path": "test/unit/mcp-tools.test.ts",
+        "recorded_digest": "0ef3c087887b6aaf4f864b1bee2d79cc7eb88e1ff0476e8405f073f2ff32f574"
+      }
+    ]
+  },
+  "context_digest": "21f5aee4c58c35bc1953e573f16d924aec98e1072c9e593912e1917288b64b33",
+  "current_evidence": {
+    "drift_digest": "3a3923243f8f3679f086b6cdb39cc6af9f0caf486556a7e950aa5f214f04b0d3",
+    "observation_kind": "projection-drift",
+    "observed_at_revision": 211,
+    "phase_instance": "phase-impl-4",
+    "schema_version": "1",
+    "task_id": "api-refactor"
+  },
+  "gate_id": "g-d4561564bea0f665078e96d7819b361c0635bedb1de2538e8fe7c667ebd46883",
+  "intent_id": "afop-f0fde37a1be452b8a25362469f55c9f253d0ea9371db5f84f1c5f510ea2f13ee-open-gate",
+  "kind": "baseline-adoption",
+  "opened_at_revision": 212,
+  "phase_instance": "phase-impl-4",
+  "request_digest": "8eb56ade7c43b559004c102ecd36ad338b716f949c5c41bfaebf2b873d079f7d",
+  "schema_version": "1",
+  "subject_digest": "3a3923243f8f3679f086b6cdb39cc6af9f0caf486556a7e950aa5f214f04b0d3",
+  "summary": "Phase 4 paused at review with drifted bytes. Merging origin/main changed 13 files ArchFlow had recorded from reviewed work — gate-contract additions across src/contracts (durable-state, fingerprints, gates, task-state schema), src/mcp/handlers/session.ts, src/state/semantic-view.ts, small edits to five skills and docs/LIMITATIONS.md, and matching updates to three test files. Separately, this branch's API refactor deleted src/local/build-request.ts. Before phase work can continue, decide which bytes are the reviewed baseline: keep the current worktree bytes as the new recorded baseline, or restore the previously recorded bytes.",
+  "task_id": "api-refactor"
+}

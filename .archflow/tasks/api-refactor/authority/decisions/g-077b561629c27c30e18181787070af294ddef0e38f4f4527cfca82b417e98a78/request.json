@@ -1,0 +1,36 @@
+{
+  "allowed_decisions": [
+    "retry-once",
+    "revise",
+    "abort",
+    "cancel"
+  ],
+  "context": {
+    "attempts": 3,
+    "maximum_attempts": 3,
+    "step": "triage"
+  },
+  "context_digest": "4e27572aabb3a7625b98df383252374366006cd4fbbe67066f051dd6e9bd5894",
+  "current_evidence": {
+    "set_digest": "39b1252ec2ea73ddf23257456fa4d0db4cfcf84ed8ca2425d5f8f24d98c0a40b",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "6e0fb093984dcb1b4e76dd131a4cb4a1132ce266e0579c29955337b0ab219a4e",
+        "producer_family": "claude",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-077b561629c27c30e18181787070af294ddef0e38f4f4527cfca82b417e98a78",
+  "intent_id": "afop-20c533b6773c103517167971c9a90423220180c7368f561674f403ebffc334a4-open-gate",
+  "kind": "attempts-exhausted",
+  "opened_at_revision": 247,
+  "phase_instance": "phase-design-4",
+  "request_digest": "bd0fa16101909df5dc03940d226ec2c449db935c579f004153bd34f4e1b3d981",
+  "schema_version": "1",
+  "subject_digest": "bee28331068c52a0d798a941699c14ac7387208b36bf7465e90d90e8e4352747",
+  "summary": "The design revision has exhausted its review attempts on one disputed finding. The reviewer twice reported that the design lacks a baseline-adoption drift seam, and the second report correctly challenged my first rejection: at the committed merge base the seam genuinely does not exist. I verified the disagreement is a working-tree-versus-committed-tree artifact: the seam (a baseline-adoption arm in the gate composer) exists only in this phase's uncommitted change set — the exact bytes this phase ships — where I confirmed it by grep and by exercising it twice live in this session, and an integration journey test pins it. The reviewer's own suggested resolution (b) for this case is to cite that seam by file and line in the design and pin it with a test, which the accepted revision intent does with no code change. Decide: run another full review round after I make that documentation amendment, accept the finding's resolution and continue, or stop.",
+  "task_id": "api-refactor"
+}

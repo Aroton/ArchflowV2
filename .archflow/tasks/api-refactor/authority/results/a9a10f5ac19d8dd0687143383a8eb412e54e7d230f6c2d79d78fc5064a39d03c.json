@@ -1,0 +1,123 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 224,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 25354255
+  },
+  "artifact_digest": "c530942d732408ecde57ee15afbd66c68f7b7b8f90e366b90e0f0b6d76ee6bba",
+  "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+  "outputs": [],
+  "phase_instance": "phase-impl-4",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-142f03ecdc776bdbe6f75afaffb19f93",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [
+        "7c3d6fb873e43b365f59663c74ffa07a0b7c867202ad481d749e2a63a0bad14f"
+      ],
+      "assurance": "server-attested",
+      "cli_version": "2.1.235",
+      "constitution": "pass",
+      "drift": "material",
+      "drift_findings": [
+        {
+          "affected_claim_ids": [
+            "self-cutover-reinstall-procedure",
+            "retirement-file-scope",
+            "no-new-capability-or-durable-shape",
+            "release-payload-reinstall"
+          ],
+          "drift": "material",
+          "rationale": "The phase design's pinned Section 1.2/5.5 procedure — reinstall the repository skills first, dogfood the semantic surface on the installed build, and reinstall again before the milestone commit — was not performed; the user forbade installs mid-phase and the implementation substituted a new dev-mode mechanism (scripts/dev-mcp-launcher.sh plus a rewritten .mcp.json routing through it) that the approved design does not describe. Section 5.2 scoped src/mcp/handlers/session.ts's staged-config copy for deletion; it was retained under the design's own stranded-consumer allowance. Most significantly, the change set is based on a merge of origin/main (base_commit 54d60e9) that brings in baseline-adoption gate/overlay machinery, and it adds two kernel behavior changes the design's 'no new action kind, substep code, capability, or durable state shape' boundary did not contemplate: the absence-aware projection union in reconciliation discovery and the unrestorable-missing produce re-entry route in deriveNextAction. Each departure is recorded in phases/4/impl-notes.md and, for the routing change, in docs/state/DURABLE-STATE.md, and none contradicts the design's success criteria — the merge was in fact needed for criterion 5 (existing durable tasks must project and operate) to hold for this very task, and the advertised two-tool boundary, gate authority model, and retirement set match the approved design. The drift is material because the approved phase-design text still describes an install-based self-cutover, a session.ts deletion, and a scope that excludes the merged and kernel-level behavior now shipping, so a reader of the design alone would not anticipate the delivered surface.",
+          "upstream_digest": "7c3d6fb873e43b365f59663c74ffa07a0b7c867202ad481d749e2a63a0bad14f"
+        }
+      ],
+      "effort": "medium",
+      "envelope_input_digest": "3d6ccdf20b1194a487787aa7198e79c00b9bd040a36c7102a6862d104ea6196f",
+      "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+      "invocation_id": "adjudication-invocation-14c748f21f7d9afeccf6932b14807811",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "d0ec261b2c2b4f6f19b4e98c9eae328a8b5d769214fda87352841e33666ff443",
+      "phase_instance": "phase-impl-4",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-142f03ecdc776bdbe6f75afaffb19f93",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "Implementation followed an approved phase design, and every departure is explicitly recorded rather than silent: the impl-notes enumerate each deviation with its cause, docs/state/DURABLE-STATE.md was updated in the same change for the routing fix, and the design's own risk section pre-authorizes keeping a module that turns out to have a live consumer provided the deviation is recorded in impl notes (the session.ts case). The parent-design Section 3.5 correction was verified already present in the committed bytes. The architectural invariants the design pins are intact in the snapshot: the advertised surface is exactly the semantic pair (src/contracts/tool-names.ts:18), no new durable state shape was added (the new reconciliation fields are discovery-only annotations, src/state/reconciliation.ts:44-53), and recovery routing reuses the existing run-step action kind. The whole change set is re-entering the applicable review boundary here before any dependent work advances, and this is the terminal planned phase, so no successor has proceeded on undisclosed deviations. The unamended phase-design text for the merge- and kernel-derived scope is reported as drift below rather than as a rule breach.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The subject is phase-4 implementation output produced under the approved phases/4/design.md, and its impl-notes declare several departures from that design: the pinned §1.2/§5.5 self-cutover reinstall was skipped, src/mcp/handlers/session.ts kept a fallback the design scheduled for deletion, an origin/main merge (base_commit 54d60e9) absorbed baseline-adoption machinery, and two kernel recovery fixes (absence-aware projection union in src/state/reconciliation-discovery.ts:213-248, unrestorable-missing routing in src/state/next-action.ts:288-317) landed beyond the design's stated scope."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Every advancement remains bound to an explicit human record for the exact subject. The imported design's phase exit requires an authenticated migration-audit approval whose gate_kind, request kind, request phase_instance, subject_digest equality with the approval, and explicit accept-import-audit decision all check out, plus an observed commit (src/state/transitions.ts:247-260); status derives migration_audit_required/accepted only from authenticated approvals carrying that same explicit decision. The composer additionally applies restart-eligibility filtering so it cannot disagree with advertised status after a planning restart. The new unrestorable-missing route does not bypass any gate: it reopens the produce window so a fresh terminal produce re-declares the drifted paths and the normal review/approval boundary covers the new bytes, and an already-open gate still takes precedence (src/state/next-action.ts:282-287). Local adoption creates no approval — it runs the existing initialization transaction over an artifact whose human authority is the earlier preview approval and the later migration-audit gate. Skill texts repeatedly forbid inferring authorization and require stopping when the server is unavailable (skills/archflow-prd/SKILL.md:16, skills/archflow-phase-impl/SKILL.md:16), and the status skill is pinned read-only with no archflow_apply call (skills/archflow-status/SKILL.md:8).",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The change adds a migration-audit gate arm and a new import exit-authority path (src/state/request-composition.ts:614-623, src/state/status.ts:1160-1194, src/state/transitions.ts:247-260), adds a local adoption command, and changes recovery routing for missing projections (src/state/next-action.ts:288-317)."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Failure and uncertainty stay visible with a safe next action. A missing recorded projection with no retained bytes is reported as exactly that, with an instruction naming the honest recovery rather than being silently adopted or ignored (src/state/next-action.ts:302-316); restorable cases keep the restore route, and unrelated mismatches still route to the human baseline-adoption gate. Server unavailability degrades to read-only manual-status and an explicit stop with no offline recording (skills across the set, e.g. skills/archflow-design/SKILL.md:16). The recorded host evidence is measured, not asserted: docs/validation/host-selection.json carries per-host advertisement, first-call selection, journey outcomes, and an observed_metrics block with an explicit blocked_journey_hosts counter, digest-bound to the shipped bundle manifest 79998d8d… which matches dist/manifest.json in this change set. The impl-notes report the earlier codex probe flake, the initially blocked Claude journey, and the skipped installs plainly instead of presenting a clean run. Minor: the notes cite claude 2.1.234 while the final artifact records 2.1.235, consistent with the re-recorded final run and not a misrepresentation of outcome.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The change adds a degraded-path ladder to the status skill, a new non-success recovery route for unrestorable missing projections, and records real-host evidence under docs/validation/ including a run in which a host probe flaked."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Evidence stays bound to its own task and subject bytes, and mismatches fail closed. Adoption parses the task slug, resolves staging only under that task's workspace root, re-authenticates the staged manifest canonically, and refuses with CONTRACT_INVALID when the manifest task_id or import_digest disagrees with the staged descriptor, or with TASK_INVALID when state shows a different prior adoption (src/init/legacy-upgrade.ts:555-576); the deterministic adopt-legacy-import-<digest> intent makes retry a replay rather than a second effect. Migration-audit authority requires request.subject_digest === approval.subject_digest and a design-phase request before it can authorize the import exit. The absence-aware projection union resolves newest-per-path observations from this task's own retained manifests and retires declared deletions instead of carrying a stale cross-revision projection forward; adoption-sourced projections are marked unrestorable rather than treated as restorable evidence. Skill text explicitly forbids reading another task's files (skills/archflow-prd/SKILL.md:10).",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The change adds a task-scoped local adoption command over staged import bytes (src/init/legacy-upgrade.ts:536-609), new subject-bound gate/exit authority, and reconciliation discovery over per-task retained manifests."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "0a2863b844dac4a90d46158bbbe79e20598586bca3befd3a0867f2971f921102",
+      "step": "adjudicate",
+      "subject_digest": "98d752860f2bd5f1701ea51350f7d0a5ccb2dd0ddad5e8665a9c2dd28f7d4557",
+      "task_id": "api-refactor",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "api-refactor"
+}

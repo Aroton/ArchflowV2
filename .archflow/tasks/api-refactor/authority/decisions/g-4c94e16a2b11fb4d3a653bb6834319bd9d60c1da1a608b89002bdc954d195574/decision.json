@@ -1,0 +1,33 @@
+{
+  "context_digest": "31615f4ed9572d097024da223f01b1b9d1b554b8399c5d0d136cc98fa25d39d6",
+  "envelope": {
+    "context_digest": "31615f4ed9572d097024da223f01b1b9d1b554b8399c5d0d136cc98fa25d39d6",
+    "gate_id": "g-4c94e16a2b11fb4d3a653bb6834319bd9d60c1da1a608b89002bdc954d195574",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-c0724f2eac52610ddfb57dfdba3115a8100b4e454d7ba0eaec49b4c571e9ff0b",
+      "recorded_at": "2026-08-18T23:20:12.508Z",
+      "request_id_digest": "e8ddd7cd1b864868de2127fe79684ec4988bff221c8869ec3870401b46f17d12",
+      "schema_version": "1"
+    },
+    "kind": "constitution-review",
+    "payload": {
+      "decision": "approve",
+      "reason": "The counter-review found no material defects and the constitution rules are respected; accept the review and continue."
+    },
+    "phase_instance": "phase-impl-4",
+    "schema_version": "1",
+    "subject_digest": "98d752860f2bd5f1701ea51350f7d0a5ccb2dd0ddad5e8665a9c2dd28f7d4557",
+    "task_id": "api-refactor"
+  },
+  "gate_id": "g-4c94e16a2b11fb4d3a653bb6834319bd9d60c1da1a608b89002bdc954d195574",
+  "kind": "constitution-review",
+  "outcome": "decided",
+  "phase_instance": "phase-impl-4",
+  "schema_version": "1",
+  "subject_digest": "98d752860f2bd5f1701ea51350f7d0a5ccb2dd0ddad5e8665a9c2dd28f7d4557",
+  "task_id": "api-refactor"
+}

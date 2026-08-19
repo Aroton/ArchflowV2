@@ -1,0 +1,66 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 251,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 25543478
+  },
+  "artifact_digest": "b273e2e9638fdc3e38abdd48de24b25228c75bec61e965badd081cf61f2feeff",
+  "input_fingerprint": "c3995439b1e516197c6c50a101dcfa2712e855a67971726bb14c5ab54bcf1ef4",
+  "outputs": [],
+  "phase_instance": "phase-design-4",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "result-79f6a1fb74b4e215d7144ccb2f991c0a",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "review-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "assurance": "server-attested",
+      "blocking_count": 0,
+      "cli_version": "2.1.235",
+      "effort": "medium",
+      "envelope_input_digest": "a838c2e339e53c0e320e153ca66e2095b471a87fc4aca3d1491981500f4e5c0c",
+      "findings": [
+        {
+          "blocking": false,
+          "evidence": "Design Section 3.2 correction 5: \"scripts/smoke-temp-bundle.mjs pins no tools/list result — its tool assertion is the four-name TOOL_DEFINITIONS durable-contract pin (~lines 77-82), which survives retirement unchanged\". Section 4.1 states \"project-error schema loses the staged-request kinds\" and Section 3.2 correction 6 retires the STAGED_REQUEST_NOT_FOUND/STAGED_REQUEST_MISMATCH next-actions. In the checkout, scripts/smoke-temp-bundle.mjs:67 asserts `Object.keys(contracts.PROJECT_ERROR_DEFINITIONS).length === 55` and test/unit/errors.test.ts:9 asserts the same count; both codes are defined at src/contracts/errors.ts:95-96. Deleting them drops the count to 53, so `npm run build:temp` (Section 9) and `npm test` fail until both counts are updated, even though the design names smoke-temp-bundle as untouched and does not list test/unit/errors.test.ts in Section 5.3.",
+          "finding_id": "temp-bundle-error-count-pin",
+          "severity": "minor",
+          "suggested_resolution": "Amend Section 3.2 correction 5 to note that only smoke-temp-bundle.mjs's TOOL_DEFINITIONS pin survives unchanged, and add its error-count pin (line 67) plus test/unit/errors.test.ts's count assertion to the Section 5.2/5.3 edit list — or state explicitly that the two staged-request error definitions are retained as durable history (like TOOL_NAMES) and only their next-actions and advertisement change.",
+          "summary": "Section 3.2 correction 5 claims scripts/smoke-temp-bundle.mjs needs no change, but that script also pins the project-error definition count, which the planned removal of the two staged-request error kinds invalidates."
+        }
+      ],
+      "input_fingerprint": "c3995439b1e516197c6c50a101dcfa2712e855a67971726bb14c5ab54bcf1ef4",
+      "invocation_id": "invocation-9d2dd65dfd5678d5425a1b22491eb073",
+      "matched_rule_versions": [],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "8ed9c6cd64ff425e54568257da70c9ccd060195c78b2b27f8dec5b683f3016f9",
+      "phase_instance": "phase-design-4",
+      "producer_family": "claude",
+      "result_id": "result-79f6a1fb74b4e215d7144ccb2f991c0a",
+      "role": "counter-review",
+      "rubric_digest": "8023a567948bc5beb9caa889ddb1525c3309de7e2556a88d8182098e4afbbd25",
+      "schema_version": "1",
+      "step": "counter_review",
+      "subject_digest": "9eff45f0641371a4d18ac0bd0d515fb280d4c68ca604bd2c935e5ee0b58925e2",
+      "task_id": "api-refactor",
+      "verdict": "advisory"
+    },
+    "schema_version": "1"
+  },
+  "step": "counter_review",
+  "task_id": "api-refactor"
+}
