@@ -8319,7 +8319,7 @@
       ]
     },
     "src/state/semantic-actions.ts": {
-      "bytes": 42394,
+      "bytes": 42808,
       "format": "esm",
       "imports": [
         {
@@ -10076,7 +10076,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2852303,
+      "bytes": 2852381,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -11454,7 +11454,7 @@
           "bytesInOutput": 4909
         },
         "src/state/semantic-actions.ts": {
-          "bytesInOutput": 33011
+          "bytesInOutput": 33089
         },
         "src/state/semantic-status.ts": {
           "bytesInOutput": 16652

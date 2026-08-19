@@ -90,7 +90,7 @@ sequenceDiagram
     T-->>C: committed result
 ```
 
-`last_transition` makes the newest committed call self-contained in `state.json`: it records tool, operation, intent/request identity, input fingerprint, result identity, validated outcome, and outcome digest. A retry can therefore replay the last call exactly after its crash receipt has been deleted. Recovery buffers are preserved when a transaction has not durably committed; crash arbitration never guesses.
+`last_transition` makes the newest committed call self-contained in `state.json`: it records tool, operation, intent/request identity, input fingerprint, result identity, validated outcome, and outcome digest. A retry can therefore replay the last call exactly after its crash receipt has been deleted. It is a single slot, though, and any committed call overwrites it — including a human gate decision, which may legally land at almost any position. So a semantic continuation treats it as replay authority only when it names the very substep being continued; a slot naming a different substep is no evidence rather than evidence of tampering, and the action simply runs its remaining substeps under a fresh operation. That distinction is what keeps a decision taken mid-review from stranding the review forever. Recovery buffers are preserved when a transaction has not durably committed; crash arbitration never guesses.
 
 Other load-bearing guarantees remain: immutable authority never clobbers, incomplete results do not become visible, the kernel owns revision and `last_transition`, and write capability is minted only after repository and task resolution.
 
