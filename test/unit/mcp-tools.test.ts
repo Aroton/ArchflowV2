@@ -26,6 +26,24 @@ describe("correlated MCP tool contracts", () => {
       expect(definition.result_schema_id).toBe(`https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/result`);
     }
   });
+  it("accepts a well-formed counter-review route override and refuses malformed ones", () => {
+    const base = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, artifact_path: "phases/2/result.md" };
+    const withOverride = (route_override: unknown) => parseToolCall("archflow_counter_review", { ...base, route_override });
+
+    const parsed = withOverride({ reason: "codex auth outage", "counter-reviewer": { model: "claude-opus-4-6", effort: "max" } });
+    expect(parsed.input.route_override).toEqual({ reason: "codex auth outage", "counter-reviewer": { model: "claude-opus-4-6", effort: "max" } });
+    expect(Object.isFrozen(parsed.input.route_override)).toBe(true);
+    expect(withOverride({ reason: "outage", adjudicator: { model: "gpt-5.3-codex", effort: "high" } }).input.route_override?.adjudicator?.model).toBe("gpt-5.3-codex");
+
+    // A reason is the point of the field, a role-less override says nothing, and the strict route
+    // shape keeps a typo from being read as an unset option.
+    expect(() => withOverride({ "counter-reviewer": { model: "claude-opus-4-6", effort: "max" } })).toThrow();
+    expect(() => withOverride({ reason: "outage" })).toThrow();
+    expect(() => withOverride({ reason: "outage", "counter-reviewer": { model: "claude-opus-4-6" } })).toThrow();
+    expect(() => withOverride({ reason: "outage", "counter-reviewer": { model: "claude-opus-4-6", effort: "max", typo: 1 } })).toThrow();
+    expect(() => withOverride({ reason: "outage", reviewer: { model: "claude-opus-4-6", effort: "max" } })).toThrow();
+  });
+
   it("detaches and recursively freezes every nested parsed-call semantic", () => {
     const counterSource = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, artifact_path: "phases/2/result.md" };
     const counter = parseToolCall("archflow_counter_review", counterSource);

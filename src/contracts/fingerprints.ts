@@ -76,7 +76,7 @@ export type RequestDigestSubject = RequestDigestCommon & ({
 } | {
   readonly tool: "archflow_counter_review";
   readonly operation: "counter-review";
-  readonly operation_fields: Pick<CounterReviewInput, "artifact_path">;
+  readonly operation_fields: Pick<CounterReviewInput, "artifact_path" | "route_override">;
 } | {
   readonly tool: "archflow_gate";
   readonly operation: "gate";
@@ -89,7 +89,7 @@ export type RequestDigestSubject = RequestDigestCommon & ({
 
 type SelectorKeys = {
   readonly archflow_state: "phase_instance" | "step" | "status" | "artifact" | "human_revision" | "operation" | "target_phase_instance" | "reason" | "ask_base_digest";
-  readonly archflow_counter_review: "artifact_path";
+  readonly archflow_counter_review: "artifact_path" | "route_override";
   readonly archflow_gate: "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "kind" | "context" | "preview_digest" | "decision";
   readonly archflow_waiver: "origin" | "rationale" | "preview_digest" | "decision";
 };
@@ -255,8 +255,13 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
     case "archflow_counter_review": {
       const fields = (subject as Extract<RequestDigestSubject, { tool: "archflow_counter_review" }>).operation_fields;
       if (subject.operation !== "counter-review") throw new TypeError("invalid archflow_counter_review operation");
-      exactFields(fields, ["artifact_path"]);
-      return { artifact_path: fields.artifact_path };
+      const expected = ["artifact_path"];
+      if (fields.route_override !== undefined) expected.push("route_override");
+      exactFields(fields, expected);
+      return {
+        artifact_path: fields.artifact_path,
+        ...(fields.route_override === undefined ? {} : { route_override: fields.route_override as unknown as PlainJsonValue }),
+      };
     }
     case "archflow_gate": {
       const fields = (subject as Extract<RequestDigestSubject, { tool: "archflow_gate" }>).operation_fields;

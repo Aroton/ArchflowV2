@@ -136,6 +136,19 @@ export function parseAndDeriveReview(value: unknown): DerivedReview {
   return parsed;
 }
 
+/**
+ * Records that this dispatch ran on a human-authorized substitute route instead of the pinned
+ * one. The pinned config is never amended, so without this the deviation would be invisible at
+ * the approval gate: `reason` is the human's words, and the pinned fields say what was displaced.
+ */
+export type RouteOverrideRecord = {
+  readonly reason: string;
+  // Absent when the config pinned no route for this role at all — the override supplied one that
+  // never existed, so there is nothing it displaced.
+  readonly pinned_model?: string;
+  readonly pinned_effort?: (typeof EFFORT_VALUES)[number];
+};
+
 type ReviewProvenanceBase = DerivedReview & {
   readonly model_family: ModelFamily | "unknown";
   readonly model: string;
@@ -152,6 +165,7 @@ export type ServerAttestedReview = Omit<ReviewProvenanceBase, "model_family" | "
   readonly envelope_input_digest: Sha256Digest;
   readonly observed_output_digest: Sha256Digest;
   readonly result_id: string;
+  readonly route_override?: RouteOverrideRecord;
 };
 export type DegradedReview = ReviewProvenanceBase & {
   readonly assurance: "degraded";
@@ -164,6 +178,11 @@ const provenanceBase = rawReviewSchema.safeExtend({
   model: nonBlank,
   effort: z.union([z.enum(EFFORT_VALUES), z.literal("unknown")]),
 });
+export const routeOverrideRecordSchema = z.object({
+  reason: nonBlank,
+  pinned_model: nonBlank.optional(),
+  pinned_effort: z.enum(EFFORT_VALUES).optional(),
+}).strict();
 const serverAttestedReviewSchema = provenanceBase.safeExtend({
   assurance: z.literal("server-attested"),
   adapter: z.enum(ADAPTER_IDS),
@@ -174,6 +193,7 @@ const serverAttestedReviewSchema = provenanceBase.safeExtend({
   envelope_input_digest: digest,
   observed_output_digest: digest,
   result_id: id,
+  route_override: routeOverrideRecordSchema.optional(),
 }).strict();
 const degradedReviewSchema = provenanceBase.safeExtend({ assurance: z.literal("degraded"), reason: nonBlank }).strict();
 export const reviewEvidenceSchema = z.discriminatedUnion("assurance", [serverAttestedReviewSchema, degradedReviewSchema]);
@@ -182,7 +202,10 @@ export function parseReviewEvidence(value: unknown): ReviewEvidence {
   assertPlainJson(value, "review evidence");
   const parsed = reviewEvidenceSchema.parse(value);
   validateReviewClaims(parsed);
-  return parsed;
+  // `assertPlainJson` rejects an explicit `undefined` member, and zod omits an absent optional key
+  // rather than materializing it, so the parsed value never carries `route_override: undefined`.
+  // The assertion only narrows zod's `| undefined` inference back to the exact persisted shape.
+  return parsed as ReviewEvidence;
 }
 
 export function parseReferencedReviewEvidence(value: unknown): ReferencedEvidence<ReviewEvidence> {

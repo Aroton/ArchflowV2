@@ -67,6 +67,7 @@ import {
   type ResolvedWorkspacePath,
 } from "../../src/repository/paths.js";
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
+import type { DispatchRoute } from "../../src/dispatch/routing.js";
 import { rulesForEnvelope } from "../../src/review/adjudication.js";
 import {
   runCounterReview,
@@ -771,6 +772,7 @@ async function commitCounter(
   subject: Sha256Digest,
   fingerprint: Sha256Digest,
   finding: "accepted" | "blocker" | "clean",
+  override?: Readonly<{ declaration: unknown; routes: DispatchRoute[]; config?: ConfigV1 }>,
   dispatchAlreadySerialized = false,
 ) {
   await enterStep(
@@ -789,6 +791,7 @@ async function commitCounter(
     expected_revision: runningState.revision,
     input_fingerprint: fingerprint,
     artifact_path: parseTaskPathClaim("phases/phase-14-output.md"),
+    ...(override === undefined ? {} : { route_override: override.declaration }),
   });
   const result = await runCounterReview({
     transaction: dependencies,
@@ -797,12 +800,15 @@ async function commitCounter(
       ok: true,
       value: subject,
     }),
-    dispatch: async () => ({
-      cli_version: "fixture-1",
-      extracted_output_bytes: canonicalJsonBytes(
-        reviewOutput("counter-review", subject, fingerprint, finding),
-      ),
-    }),
+    dispatch: async (route) => {
+      override?.routes.push(route);
+      return {
+        cli_version: "fixture-1",
+        extracted_output_bytes: canonicalJsonBytes(
+          reviewOutput("counter-review", subject, fingerprint, finding),
+        ),
+      };
+    },
     prepare_evidence: async (evidence, measuredAtRevision) => {
       const prepared = await prepareEvidenceResult({
         authority: h.authority,
@@ -827,7 +833,7 @@ async function commitCounter(
   }, {
     authority: h.authority,
     call,
-    config,
+    config: override?.config ?? config,
     phase_kind: "phase-impl",
     producer_family: "claude",
     measured_at_revision: runningState.revision,
@@ -851,7 +857,13 @@ async function commitCounter(
     projection_digest: subject,
     // The pinned constitution has an active rule, so every counter-review call carries the
     // second, adjudicating dispatch and installs both evidence results in the one transaction.
-    constitution: constitutionPlan(h, dependencies, version),
+    constitution: ((plan) => override === undefined ? plan : {
+      ...plan,
+      dispatch: (route: DispatchRoute, envelope: Parameters<typeof plan.dispatch>[1], schema: Parameters<typeof plan.dispatch>[2]) => {
+        override.routes.push(route);
+        return plan.dispatch(route, envelope, schema);
+      },
+    })(constitutionPlan(h, dependencies, version)),
   });
   if (!result.ok) throw new Error(result.error.code);
   return result.value;
@@ -1087,6 +1099,88 @@ async function assessment(
   });
 }
 
+describe("counter-review route override", () => {
+  it("dispatches the substitute route per role and records the displaced pin on the evidence", async () => {
+    const h = await fixture();
+    const subject = canonicalJsonDigest({ artifact: 0 });
+    const fingerprint = computeInputFingerprint(fingerprintSubject(0));
+    const routes: DispatchRoute[] = [];
+
+    // Only the reviewer is substituted; the adjudicator keeps the pinned codex route, so a
+    // partial override must not quietly reroute the role the human did not name.
+    const merged = await commitCounter(h, h.dependencies, 0, subject, fingerprint, "clean", {
+      declaration: {
+        reason: "codex CLI auth outage; reviewing on claude for this dispatch",
+        "counter-reviewer": { model: "claude-opus-4-6", effort: "max" },
+      },
+      routes,
+    });
+
+    expect(routes).toEqual([
+      { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "max" },
+      { adapter: "codex-cli", family: "codex", model: "gpt-fixture", effort: "high" },
+    ]);
+
+    const evidence = merged.evidence;
+    if (evidence.assurance !== "server-attested") throw new Error("expected server-attested review");
+    expect(evidence.model).toBe("claude-opus-4-6");
+    expect(evidence.model_family).toBe("claude");
+    expect(evidence.route_override).toEqual({
+      reason: "codex CLI auth outage; reviewing on claude for this dispatch",
+      pinned_model: "gpt-fixture",
+      pinned_effort: "high",
+    });
+    // The adjudicator ran on its pin, so its evidence carries no deviation to report.
+    const constitutionEvidence = merged.constitution_evidence;
+    if (constitutionEvidence?.assurance !== "server-attested") throw new Error("expected server-attested adjudication");
+    expect(constitutionEvidence.model).toBe("gpt-fixture");
+    expect(constitutionEvidence.route_override).toBeUndefined();
+
+    // The override substitutes a route for one dispatch and leaves the pin itself alone; the byte
+    // pin's own enforcement is covered in test/unit/config-pinning.test.ts.
+    expect(config.roles).toEqual({
+      "counter-reviewer": { model: "gpt-fixture", effort: "high" },
+      adjudicator: { model: "gpt-fixture", effort: "high" },
+    });
+  });
+
+
+  it("substitutes the adjudicator alone and supplies a role the config never pinned", async () => {
+    const h = await fixture();
+    const subject = canonicalJsonDigest({ artifact: 0 });
+    const fingerprint = computeInputFingerprint(fingerprintSubject(0));
+    const routes: DispatchRoute[] = [];
+
+    // The config pins a reviewer but no adjudicator — schema-legal, since both roles are optional.
+    // Resolving the pin before reading the override used to throw `route-missing` here, stranding
+    // the task on a "repair-config" action against a file that cannot be repaired in-task.
+    const merged = await commitCounter(h, h.dependencies, 0, subject, fingerprint, "clean", {
+      declaration: {
+        reason: "no adjudicator was ever configured for this task",
+        adjudicator: { model: "claude-opus-4-6", effort: "high" },
+      },
+      routes,
+      config: { schema_version: "1", roles: { "counter-reviewer": { model: "gpt-fixture", effort: "high" } } },
+    });
+
+    expect(routes).toEqual([
+      { adapter: "codex-cli", family: "codex", model: "gpt-fixture", effort: "high" },
+      { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "high" },
+    ]);
+
+    const review = merged.evidence;
+    if (review.assurance !== "server-attested") throw new Error("expected server-attested review");
+    expect(review.model).toBe("gpt-fixture");
+    expect(review.route_override).toBeUndefined();
+
+    // Nothing was displaced, so the record carries the reason alone rather than inventing a pin.
+    const adjudication = merged.constitution_evidence;
+    if (adjudication?.assurance !== "server-attested") throw new Error("expected server-attested adjudication");
+    expect(adjudication.model).toBe("claude-opus-4-6");
+    expect(adjudication.route_override).toEqual({ reason: "no adjudicator was ever configured for this task" });
+  });
+});
+
 describe("durable review fixed point", () => {
   it("completes review dispatches when the semantic action already owns the outer FIFO", async () => {
     const h = await fixture();
@@ -1100,6 +1194,7 @@ describe("durable review fixed point", () => {
       subject,
       fingerprint,
       "clean",
+      undefined,
       true,
     ));
 

@@ -1,5 +1,5 @@
 import type { AdjudicationEvidence } from "./adjudication.js";
-import type { ReviewEvidence, ReviewFinding, RuleVersionRef } from "./review.js";
+import type { ReviewEvidence, ReviewFinding, RouteOverrideRecord, RuleVersionRef } from "./review.js";
 import type { QualifiedAdjudicationEvidence, QualifiedReviewEvidence, VerifiedReferencedEvidence } from "./trust.js";
 import type { TriageDisposition, ValidatedTriage } from "./triage.js";
 import { authenticQualifiedEvidence, authenticValidatedTriage, authenticVerifiedEvidence } from "./internal/trust-brands.js";
@@ -31,6 +31,18 @@ function renderReviewFinding(finding: ReviewFinding): string[] {
   return [`### Finding ${visibleJsonString(finding.finding_id)}`, `severity: ${canonical(finding.severity)}`, `blocking: ${canonical(finding.blocking)}`, prose("summary", finding.summary), prose("evidence", finding.evidence), prose("suggested_resolution", finding.suggested_resolution)];
 }
 
+/**
+ * States that this dispatch ran on a human-authorized substitute for the pinned route. The metadata
+ * block above already prints the model that actually reviewed; this says what it displaced and why,
+ * so the human at the gate can see the deviation without reading the pinned config.
+ */
+function renderRouteOverride(override: RouteOverrideRecord): string[] {
+  const displaced = override.pinned_model === undefined
+    ? ["pinned_route: none configured for this role"]
+    : [`pinned_model: ${canonical(override.pinned_model)}`, `pinned_effort: ${canonical(override.pinned_effort)}`];
+  return ["", "## Route Override", ...displaced, prose("reason", override.reason)];
+}
+
 export function renderReviewEvidence(
   value: QualifiedReviewEvidence | VerifiedReferencedEvidence<"review">,
 ): Uint8Array {
@@ -44,6 +56,7 @@ export function renderReviewEvidence(
   ]), "", "## Findings"];
   for (const finding of evidence.findings) lines.push("", ...renderReviewFinding(finding));
   if (evidence.assurance === "degraded") lines.push("", "## Degraded Assurance", prose("reason", evidence.reason));
+  if (evidence.assurance === "server-attested" && evidence.route_override !== undefined) lines.push(...renderRouteOverride(evidence.route_override));
   return linesToBytes(lines);
 }
 
@@ -79,5 +92,6 @@ export function renderAdjudicationEvidence(
   lines.push("", "## Drift Findings");
   for (const finding of evidence.drift_findings) lines.push("", `### Upstream ${visibleJsonString(finding.upstream_digest)}`, `drift: ${canonical(finding.drift)}`, `affected_claim_ids: ${canonical(finding.affected_claim_ids)}`, prose("rationale", finding.rationale));
   if (evidence.assurance === "degraded") lines.push("", "## Degraded Assurance", prose("reason", evidence.reason));
+  if (evidence.assurance === "server-attested" && evidence.route_override !== undefined) lines.push(...renderRouteOverride(evidence.route_override));
   return linesToBytes(lines);
 }

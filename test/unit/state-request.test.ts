@@ -131,6 +131,30 @@ describe("internal transaction request identity", () => {
     }
   });
 
+  // The selector's key list is checked against the tool input at compile time, but nothing checks
+  // that `subjectFor` actually projects each field. An omitted optional field is silently absent
+  // from the digest, which would let a staged request be edited after it was composed and still
+  // authenticate. This drives the real builder, not a hand-written subject.
+  it("carries a counter-review route override into the request digest", () => {
+    const raw = rawInputs();
+    const digestFor = (route_override?: unknown) => identifyTransactionRequest(
+      parseToolCall("archflow_counter_review", route_override === undefined
+        ? raw.archflow_counter_review
+        : { ...raw.archflow_counter_review, route_override }),
+      authority,
+      fingerprint,
+    ).request_digest;
+
+    const digests = [
+      digestFor(),
+      digestFor({ reason: "pinned reviewer is rate-limited", "counter-reviewer": { model: "claude-opus-4-6", effort: "max" } }),
+      digestFor({ reason: "pinned reviewer is rate-limited", "counter-reviewer": { model: "claude-opus-4-6", effort: "low" } }),
+      digestFor({ reason: "pinned reviewer is rate-limited", adjudicator: { model: "claude-opus-4-6", effort: "max" } }),
+      digestFor({ reason: "a reason the human did not write", "counter-reviewer": { model: "claude-opus-4-6", effort: "max" } }),
+    ];
+    expect(new Set(digests).size, "each distinct override must identify a distinct request").toBe(digests.length);
+  });
+
   it("selects every artifact operation and binds the exact canonical artifact digest", () => {
     const triageArtifact = {
       schema_version: "1",

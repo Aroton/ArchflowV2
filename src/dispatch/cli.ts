@@ -6,7 +6,7 @@ import { createProjectError, type ProjectError } from "../contracts/errors.js";
 import type { HostIdentity } from "../contracts/hosts.js";
 import { safeIdV1Schema } from "../contracts/evidence.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
-import type { AdapterId, ModelFamily } from "../contracts/review.js";
+import type { AdapterId, ModelFamily, RouteOverrideRecord } from "../contracts/review.js";
 import {
   createAdjudicationObservationCapability,
   createReviewObservationCapability,
@@ -300,6 +300,7 @@ export type ReviewObservationMint = Readonly<{
   route: DispatchRoute;
   envelope_input_digest: ObservationBindingByKind["review"]["envelope_input_digest"];
   extracted_output_bytes: Uint8Array;
+  route_override?: RouteOverrideRecord;
 }>;
 
 export type AdjudicationObservationMint = Readonly<{
@@ -309,6 +310,7 @@ export type AdjudicationObservationMint = Readonly<{
   route: DispatchRoute;
   envelope_input_digest: ObservationBindingByKind["adjudication"]["envelope_input_digest"];
   extracted_output_bytes: Uint8Array;
+  route_override?: RouteOverrideRecord;
 }>;
 
 export class CliAdapterError extends Error {
@@ -750,6 +752,7 @@ export function mintReviewObservation(input: ReviewObservationMint): ReturnType<
     effort: input.route.effort,
     rubric_digest: input.subject.rubric_digest,
     producer_family: input.subject.producer_family,
+    ...(input.route_override === undefined ? {} : { route_override: input.route_override }),
   };
   const capability = createReviewObservationCapability(binding);
   return observationSource.observeReview(capability, input.extracted_output_bytes);
@@ -778,6 +781,7 @@ export function mintAdjudicationObservation(
     pinned_constitution_digest: input.subject.pinned_constitution_digest,
     approved_upstream_digests: input.subject.approved_upstream_digests,
     source_evidence_set_digest: input.subject.source_evidence_set_digest,
+    ...(input.route_override === undefined ? {} : { route_override: input.route_override }),
   };
   const capability = createAdjudicationObservationCapability(binding);
   return observationSource.observeAdjudication(capability, input.extracted_output_bytes);

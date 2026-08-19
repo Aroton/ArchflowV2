@@ -54,7 +54,14 @@ function subjectFor(call: ParsedToolCall, authority: TransactionAuthority, input
         },
       };
     case "archflow_counter_review":
-      return { ...common, tool: call.name, operation: "counter-review", operation_fields: { artifact_path: call.input.artifact_path } };
+      // Every operation-specific field must be projected here or it never reaches the digest: the
+      // selector's key list is checked against the tool input at compile time, but nothing checks
+      // this builder, and an omitted optional field fails silently. The key stays absent rather
+      // than present-and-undefined because `materialize` rejects an undefined member outright.
+      return { ...common, tool: call.name, operation: "counter-review", operation_fields: {
+        artifact_path: call.input.artifact_path,
+        ...(call.input.route_override === undefined ? {} : { route_override: call.input.route_override }),
+      } };
     case "archflow_gate": {
       const operation_fields: Extract<RequestDigestSubject, { readonly tool: "archflow_gate" }>["operation_fields"] = {
         phase_instance: call.input.phase_instance,

@@ -1,4 +1,4 @@
-import type { ConfigV1 } from "../contracts/config.js";
+import type { ConfigV1, ModelRouteV1 } from "../contracts/config.js";
 import { ROUTING_ROLES } from "../contracts/config.js";
 import { createProjectError, type ProjectError } from "../contracts/errors.js";
 import { safeIdV1Schema } from "../contracts/evidence.js";
@@ -50,16 +50,11 @@ function assertSupportedEffort(adapter: AdapterId, effort: string): void {
   }
 }
 
-export function resolveDispatchRoute(
-  config: ConfigV1,
-  phaseKind: RoutingPhaseKind,
-  role: RoutingRole,
-): DispatchRoute {
-  const configured = config.overrides?.[phaseKind]?.[role] ?? config.roles[role];
-  if (configured === undefined) {
-    return fail(createProjectError("CONFIG_INVALID", { issue_code: "route-missing" }));
-  }
-
+/**
+ * Validates one configured route into a dispatchable route. Shared by the pinned-config path and
+ * the per-dispatch override, so an override is held to exactly the same rules as a pinned route.
+ */
+export function routeFromConfiguredRoute(configured: ModelRouteV1): DispatchRoute {
   if (!safeIdV1Schema.safeParse(configured.model).success) {
     return fail(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
   }
@@ -82,4 +77,30 @@ export function resolveDispatchRoute(
     effort: configured.effort,
     ...(configured.provider === undefined ? {} : { provider: configured.provider }),
   });
+}
+
+/**
+ * The route the config pins for a role, unvalidated. Reading it is not the same as resolving it: a
+ * pinned route can be schema-legal but unroutable (an absent role, or an effort its adapter does
+ * not support), and reporting what an override displaced must not fail on the very cases the
+ * override exists to get past.
+ */
+export function configuredRoute(
+  config: ConfigV1,
+  phaseKind: RoutingPhaseKind,
+  role: RoutingRole,
+): ModelRouteV1 | undefined {
+  return config.overrides?.[phaseKind]?.[role] ?? config.roles[role];
+}
+
+export function resolveDispatchRoute(
+  config: ConfigV1,
+  phaseKind: RoutingPhaseKind,
+  role: RoutingRole,
+): DispatchRoute {
+  const configured = configuredRoute(config, phaseKind, role);
+  if (configured === undefined) {
+    return fail(createProjectError("CONFIG_INVALID", { issue_code: "route-missing" }));
+  }
+  return routeFromConfiguredRoute(configured);
 }

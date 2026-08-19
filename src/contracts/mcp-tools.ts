@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { CONSTITUTION_RESULTS, DRIFT_RESULTS, type ConstitutionResult, type DriftResult } from "./adjudication.js";
+import { configRouteSchema, type ModelRouteV1 } from "./config.js";
 import { documentArtifactV1Schema } from "./durable-document.js";
 import { implementationOutputV1Schema } from "./durable-implementation-output.js";
 import { legacyImportInitializationV1Schema } from "./durable-legacy-import.js";
@@ -66,7 +67,18 @@ export type StateInput = StateBoundaryInput | PlanningRestartInput;
 // untranscribed. Optional in the contract because receipts recorded before the echo existed must
 // keep replaying byte-identically; live handlers always emit it.
 export interface StateSuccess { readonly path: TaskPathClaim; readonly revision: number; readonly status: "running" | "succeeded" | "failed"; readonly request_digest?: Sha256Digest }
-export interface CounterReviewInput extends CommonToolInput { readonly artifact_path: TaskPathClaim }
+/**
+ * A per-dispatch substitute for the pinned routing of one counter-review call. The pinned
+ * `config.yaml` and its digest are never touched: this names the route the server should dispatch
+ * for this call only, so a reviewer CLI outage does not strand a task. It is a human decision —
+ * `reason` carries their words, and the deviation is recorded in the produced evidence.
+ */
+export type RouteOverrideDeclaration = {
+  readonly reason: string;
+  readonly "counter-reviewer"?: ModelRouteV1;
+  readonly adjudicator?: ModelRouteV1;
+};
+export interface CounterReviewInput extends CommonToolInput { readonly artifact_path: TaskPathClaim; readonly route_override?: RouteOverrideDeclaration }
 /**
  * The server decides whether the constitution review runs: it is evaluated as a second
  * server-dispatched review inside the same archflow_counter_review call whenever the pinned
@@ -169,7 +181,20 @@ export const stateInputSchema = z.object({
  * `build-request` staging path: only the full-payload arms remain, and the server dispatches
  * none of them — the names stay durable-record vocabulary for existing state.
  */
-export const counterReviewInputSchema = z.object({ ...common, artifact_path: taskPathClaimV1Schema }).strict();
+// A parentless clone, for the same reason as `provenance` above: the shared instance is registered
+// as `config#/$defs/route`, and the advertised catalogue does not carry the config document, so a
+// cross-document reference to it is unresolvable there. The clone inlines instead.
+const overrideRoute = configRouteSchema.clone(configRouteSchema.def) as z.ZodType<ModelRouteV1>;
+export const routeOverrideSchema = z.object({
+  reason: text,
+  "counter-reviewer": overrideRoute.optional(),
+  adjudicator: overrideRoute.optional(),
+}).strict().superRefine((override, context) => {
+  if (override["counter-reviewer"] === undefined && override.adjudicator === undefined) {
+    context.addIssue({ code: "custom", message: "route_override must name counter-reviewer, adjudicator, or both" });
+  }
+});
+export const counterReviewInputSchema = z.object({ ...common, artifact_path: taskPathClaimV1Schema, route_override: routeOverrideSchema.optional() }).strict();
 const humanGateChoiceSchema = z.object({ choice: text, reason: text }).strict();
 export const gateInputSchema = z.object({ ...common, phase_instance: phase, summary: text, subject_digest: digest, current_evidence: z.unknown(), kind: z.enum(GATE_KINDS), context: z.unknown(), preview_digest: digest.optional(), decision: humanGateChoiceSchema.optional() }).strict().superRefine((input, context) => {
   try { parseGateContext(input.kind, input.context); } catch (error) { context.addIssue({ code: "custom", path: ["context"], message: error instanceof Error ? error.message : "invalid gate context" }); }

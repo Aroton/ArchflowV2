@@ -1116,6 +1116,12 @@ async function computeTaskStatusDetailedInternal(
         model_family: counter.model_family,
         model: counter.model,
         effort: counter.effort,
+        // Present only when a human substituted this review's route for the pinned one. It travels
+        // with the provenance because the gate correspondence is built from this block: without it
+        // the human sees which model reviewed but never that it was not the configured one.
+        ...(counter.assurance === "server-attested" && counter.route_override !== undefined
+          ? { route_override: counter.route_override }
+          : {}),
       }),
       assessment,
     });

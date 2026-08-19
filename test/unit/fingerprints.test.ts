@@ -172,6 +172,9 @@ describe("computeRequestDigest", () => {
       ] as unknown as RequestDigestSubject[],
       archflow_counter_review: [
         { ...requestSubjects.archflow_counter_review!, operation_fields: { artifact_path: "phases/9/other.md" } },
+        { ...requestSubjects.archflow_counter_review!, operation_fields: { artifact_path: "phases/9/result.md", route_override: { reason: "codex auth outage", "counter-reviewer": { model: "claude-opus-4-6", effort: "high" } } } },
+        { ...requestSubjects.archflow_counter_review!, operation_fields: { artifact_path: "phases/9/result.md", route_override: { reason: "codex auth outage", "counter-reviewer": { model: "claude-opus-4-6", effort: "max" } } } },
+        { ...requestSubjects.archflow_counter_review!, operation_fields: { artifact_path: "phases/9/result.md", route_override: { reason: "a different reason", "counter-reviewer": { model: "claude-opus-4-6", effort: "high" } } } },
       ] as unknown as RequestDigestSubject[],
       archflow_gate: [
         { ...requestSubjects.archflow_gate!, operation_fields: { ...requestSubjects.archflow_gate!.operation_fields, phase_instance: "phase-impl-7" } },
@@ -194,6 +197,25 @@ describe("computeRequestDigest", () => {
       const baseline = computeRequestDigest(requestSubjects[name]!);
       for (const variant of variants) expect(computeRequestDigest(variant), name).not.toBe(baseline);
     }
+  });
+
+  it("separates counter-review route overrides pairwise and keeps the selector closed", () => {
+    const withOverride = (route_override: unknown): RequestDigestSubject => ({
+      ...requestSubjects.archflow_counter_review!,
+      operation_fields: { artifact_path: "phases/9/result.md", route_override },
+    } as unknown as RequestDigestSubject);
+    const digests = [
+      computeRequestDigest(requestSubjects.archflow_counter_review!),
+      computeRequestDigest(withOverride({ reason: "codex auth outage", "counter-reviewer": { model: "claude-opus-4-6", effort: "high" } })),
+      computeRequestDigest(withOverride({ reason: "codex auth outage", adjudicator: { model: "claude-opus-4-6", effort: "high" } })),
+      computeRequestDigest(withOverride({ reason: "codex auth outage", "counter-reviewer": { model: "claude-opus-4-6", effort: "high" }, adjudicator: { model: "claude-opus-4-6", effort: "high" } })),
+      computeRequestDigest(withOverride({ reason: "rate limited until tomorrow", "counter-reviewer": { model: "claude-opus-4-6", effort: "high" } })),
+    ];
+    expect(new Set(digests).size).toBe(digests.length);
+    expect(() => computeRequestDigest({
+      ...requestSubjects.archflow_counter_review!,
+      operation_fields: { artifact_path: "phases/9/result.md", unexpected: "field" },
+    } as unknown as RequestDigestSubject)).toThrow(TypeError);
   });
 
   it("binds artifact kind and recomputed digest under each pinned state operation", () => {

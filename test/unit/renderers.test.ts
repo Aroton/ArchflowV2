@@ -6,7 +6,7 @@ import { createTestAuthorityLink, createTestCurrentReviewSetAuthority, createTes
 import { createVerifiedEvidenceReference } from "../../src/contracts/internal/trust-mints.js";
 import { encodePhaseInstance } from "../../src/contracts/phase-instance.js";
 import { renderAdjudicationEvidence, renderReviewEvidence, renderTriage } from "../../src/contracts/renderers.js";
-import type { DegradedReview } from "../../src/contracts/review.js";
+import { parseReviewEvidence, type DegradedReview } from "../../src/contracts/review.js";
 import { authorityQualifier, type QualifiedAdjudicationEvidence, type QualifiedReviewEvidence } from "../../src/contracts/trust.js";
 import { validateTriage } from "../../src/contracts/triage.js";
 
@@ -42,6 +42,33 @@ describe("anti-spoofing renderers", () => {
     expect(new TextDecoder().decode(renderReviewEvidence(verified))).toContain(`evidence_digest: ${JSON.stringify(verified.evidence_digest)}`);
     expect(() => renderReviewEvidence({ ...value } as never)).toThrow(/authenticated review/);
     expect(() => renderReviewEvidence({ evidence_digest: digest("2"), evidence: value.evidence, authority: value.authority } as never)).toThrow(/authenticated review/);
+  });
+
+  it("renders and round-trips a route override on server-attested review evidence", () => {
+    const evidenceDigest = digest("3");
+    const { reason: _degradedReason, ...base } = reviewEvidence(evidenceDigest);
+    const evidence = {
+      ...base,
+      assurance: "server-attested", adapter: "claude-cli", cli_version: "2.0.0", model_family: "claude",
+      model: "claude-opus-4-6", effort: "max", invocation_id: "inv-1", envelope_input_digest: digest("d"),
+      observed_output_digest: digest("e"), result_id: "res-1",
+      route_override: { reason: "codex auth outage\nsecond line", pinned_model: "gpt-fixture", pinned_effort: "high" },
+    };
+    // The parse is the durable round-trip: an override survives the strict server-attested arm.
+    expect(parseReviewEvidence(structuredClone(evidence))).toMatchObject({
+      route_override: { reason: "codex auth outage\nsecond line", pinned_model: "gpt-fixture", pinned_effort: "high" },
+    });
+
+    const rendered = new TextDecoder().decode(renderReviewEvidence(createVerifiedEvidenceReference(parseReviewEvidence(structuredClone(evidence)))));
+    expect(rendered).toContain("## Route Override");
+    expect(rendered).toContain('pinned_model: "gpt-fixture"');
+    expect(rendered).toContain('pinned_effort: "high"');
+    // Prose escaping applies to the human's reason exactly as it does to every other rendered field.
+    expect(rendered).toContain("\\u000a");
+  });
+
+  it("omits the route override section when the dispatch ran on its pinned route", () => {
+    expect(new TextDecoder().decode(renderReviewEvidence(qualifyReview(digest("2"))))).not.toContain("## Route Override");
   });
 
   it("rejects forged and spread-cloned adjudication evidence", async () => {
