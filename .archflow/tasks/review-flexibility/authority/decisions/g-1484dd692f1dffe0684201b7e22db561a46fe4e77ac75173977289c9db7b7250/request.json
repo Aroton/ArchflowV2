@@ -1,0 +1,105 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "artifact_kind": "phase-design",
+    "baseline_commit": "dd32d669312302476da7ca8efb82d1aa4d779517",
+    "commit_message": "ArchFlow: Approve review-flexibility phase 1 design",
+    "constitution": "pass",
+    "eligible_waivers": [
+      {
+        "rule": {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      }
+    ],
+    "policy_findings": [
+      {
+        "compliance": "pass",
+        "rationale": "The subject is a phase design produced before implementation, so no code precedes an approved design. It does depart from the governing task design in eight respects (citation corrections, two extra resolver callers, a seventh PINNED_CONFIG_MISMATCH producer, the multi-writer state model, and the convergence-model correction). Each departure is enumerated, and the one that changes a parent claim (item 5) is stated to be corrected in the parent design in the same production result — and the supplied design.md D2 indeed already carries the corrected wording (\"the composition flips to the new one only at no-expected write sites\"), so the governing document is updated and re-enters review together with this phase design. The remaining items are citation-level facts I re-verified against the checkout (fingerprint.ts:79-88/:106, fingerprints.ts:24-37, transaction.ts:412-432, production.ts:378-400) and they do not alter D1-D3's decisions. Scope stays inside design.md's Phase 1 allocation (template gets `overrides` guidance only; approval_rules deferred to Phase 3). One incidental inconsistency in the parent (D2 says the self-config edit happens in \"Phase 5\" while D9 and the phase plan say Phase 3) is resolved by this artifact in favor of Phase 3, consistent with the governing plan; it is not a material departure.",
+        "rule_id": "approved-design-before-code",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "\"Deviations from the task design (facts, not decisions)\" items 1-8, e.g. item 5: \"D2's claim that 'new writes always use the new composition, so tasks naturally converge as they transact' is contradicted by the machinery it relies on... The task design's D2 wording is corrected in the same production result.\""
+      },
+      {
+        "compliance": "pass",
+        "rationale": "This phase changes no approval, gate, waiver, or commit authority. Gates keep opening and resolving exactly as today (gate conditionality is explicitly deferred to Phases 3-4), and the new `config_change` notice is an optional informational field on TaskStatusV1/the semantic view that never enters `blocking_reasons` and never changes an action kind. The next-action changes only re-route an unreadable-config condition from `restore-pinned-config`/`upgrade-tooling` to `inspect-state` with `human_required: true` — still an explicit human step, not an inferred advancement. No mechanism here lets silence, elapsed time, agent prose, or a model verdict supply approval.",
+        "rule_id": "explicit-human-authority",
+        "rule_version": 1,
+        "trigger": "not-matched",
+        "trigger_evidence": "\"Scope: task design D1-D3 only (byte-pin removal, fingerprint legacy fallback, change reporting). `approval_rules`, the template's active ruleset, gate conditionality, skill prose, and docs refresh belong to Phases 2-6.\" and \"Semantic view ... it never changes the action kind or condition.\""
+      },
+      {
+        "compliance": "pass",
+        "rationale": "The phase removes an enforcement path, so the rule's concern (a failure or uncertain state represented as success) is live — but every non-success state it touches stays visible with a safe next action. Unparseable/missing/unreadable config still fails the transaction with CONFIG_INVALID and still yields a `config-invalid` blocker plus an `inspect-state` (`human_required: true`) action naming the file and the read issue. The legacy fingerprint fallback retries exactly once and, on double mismatch, lets the existing mismatch error fire unchanged. The two places where the system deliberately says nothing — pre-cutover tasks with no `last_seen_config`, and settlement commits that never read config — are stated plainly, their honest reading is argued (\"the notice persists until the next config-observing commit\"), and both are pinned by named integration assertions rather than left implicit. The `ConfigVerification` surface keeps `{verified, issue?}`, so an unverifiable config is still reported as such.",
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "\"Unparseable config stays fail-closed (D3)\"; \"If neither matches, the resolver returns the new-composition value; the caller's existing mismatch error fires unchanged (fail-closed preserved)\"; \"absent `last_seen_config` (pre-cutover tasks) records nothing and notices nothing on the status side\"; \"The settlement writes ... deliberately leave `last_seen_config` unchanged: a change notice persists until the next config-observing commit\"."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "Changing the fingerprint composition and adding an acceptance fallback touches the machinery that binds evidence to subject bytes, so the rule is engaged. The fallback is bounded and does not weaken failing closed: it is a single retry under the pre-change field set with `config_digest` taken from the recorded creation-time `state.config_digest` (never live bytes, verified as the value the pin guaranteed at recording time), it never rewrites a recorded value, and a double mismatch still errors. Task and subject identity are untouched — `TaskStateV1.config_digest` provenance and its state-vs-initialization and receipt-vs-prepared-state agreement checks (`src/contracts/durable.ts:713-714`, `:796-798`) remain, `assertPreserved` still pins the digest as substrate, and reentry evidence continuity continues to ride the recorded predecessor-fingerprint pair. Config bytes do leave the evidence binding, but that is exactly PRD R1 and design D2, and per-dispatch route provenance remains the durable record of what ran. The `last_seen_config` write is placed inside `buildPlan` before `prepared_state`/`prepared_state_digest` derivation so committed bytes, receipt, and crash replay cannot disagree — i.e. no partial or self-inconsistent durable record is introduced.",
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "\"Legacy composition: exactly the pre-change subject field set with `config_digest = state.config_digest` (creation-time record, never live bytes). Retry-once-and-accept; no recorded value is ever rewritten.\" and \"the recorded `pending_human_revision.predecessor_input_fingerprint` pair ... which `boundToDeclaredPredecessor` compares against the evidence's own recorded fingerprint — untouched by this phase.\""
+      }
+    ],
+    "target_ref": "refs/heads/feature/review-override-flexibility"
+  },
+  "context_digest": "1e4227c43af8e0578de7b09c9b79699c82f2390321ee52120032f8a82f812471",
+  "current_evidence": {
+    "set_digest": "039ea1908ec5b674a1e54d6a8bf366c5eed615b2d955cd10180963a450d8d1c2",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "baf9ea4602f94de0ea29d0438450a54b6d4efcef024f30fe06ce2ae6bf46abd9",
+        "producer_family": "claude",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-1484dd692f1dffe0684201b7e22db561a46fe4e77ac75173977289c9db7b7250",
+  "intent_id": "afop-6fecf2908d15adc892d92e2a9b22b540047b04efbd84f720f3fc0e74a1c78556-open-gate",
+  "kind": "design-approval",
+  "opened_at_revision": 43,
+  "phase_instance": "phase-design-1",
+  "request_digest": "0b8ecc661dee4d872899367c242e88c39c75f499662558797955f16375e95d68",
+  "schema_version": "1",
+  "subject_digest": "f2e54badda2387c70cb5f0d17244137a85b075883d1fd7bbf4b8da0ab83e02e2",
+  "summary": "Phase 1 design (config as an editable input) is complete and review-clean after one revision round. It removes all seven live config byte-pin enforcement points (six comparisons plus the status-side verification), keeps the creation-time digest for provenance only, drops config from the input-fingerprint subject with a retry-once legacy-composition fallback at the three comparing sites (kernel, local envelope, gate-reentry replay validations) so in-flight tasks - including this one - keep their recorded evidence valid, and adds a last-seen config snapshot in task state driving a field-level change notice in status, recorded on every config-reading state commit before prepared-state bytes are derived. Unparseable config stays fail-closed as config-invalid with a repair next action. The same-side review's four accepted findings (sixth resolver caller, multiple state writers, corrected composition-convergence model, injection point inside buildPlan) and the counter-review's one accepted blocker (the gate-reentry seam splits into landing computations that write the new composition and replay validations that must match the recorded one) are all carried into the design; the task design's D2 convergence wording was corrected accordingly. One material risk remains: 19 hand-written files including tests - above the per-phase signal threshold - accepted because each edit is narrow and the phase has no independently verifiable split point. Material risks to weigh: removing fail-closed pinning trades machine-blocked config drift for visibility (accepted deliberately by the PRD's trusted-environment model), and the legacy fallback keeps the old composition load-bearing on the ordinary path for legacy tasks rather than converging on every transaction.",
+  "task_id": "review-flexibility"
+}

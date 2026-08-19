@@ -1,0 +1,105 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 39,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 136805
+  },
+  "artifact_digest": "25fb25f74e21bec082b5e25341ad228fbbef4a3a2e9781a3848eb22cd5620e21",
+  "input_fingerprint": "3baa571cff52e0d4b1de357e23f61e0419a92dfec065850ba1c8722fd33f7d4e",
+  "outputs": [],
+  "phase_instance": "phase-design-1",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-00fd9fd9986de5181e3107c3d8b72a4d",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [],
+      "assurance": "server-attested",
+      "cli_version": "2.1.235",
+      "constitution": "pass",
+      "drift": "aligned",
+      "drift_findings": [],
+      "effort": "medium",
+      "envelope_input_digest": "74c212575b06c7d20fb7a195fb5b9db3358d0d69201faff6e937ed084f29e48c",
+      "input_fingerprint": "3baa571cff52e0d4b1de357e23f61e0419a92dfec065850ba1c8722fd33f7d4e",
+      "invocation_id": "adjudication-invocation-af8aa21c793f98b0726aa049c9bca9b1",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "03e5acb46daed37a852b08040cd5727745e60168d7b85d462849b77557182ec0",
+      "phase_instance": "phase-design-1",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-00fd9fd9986de5181e3107c3d8b72a4d",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "The subject is a phase design produced before implementation, so no code precedes an approved design. It does depart from the governing task design in eight respects (citation corrections, two extra resolver callers, a seventh PINNED_CONFIG_MISMATCH producer, the multi-writer state model, and the convergence-model correction). Each departure is enumerated, and the one that changes a parent claim (item 5) is stated to be corrected in the parent design in the same production result — and the supplied design.md D2 indeed already carries the corrected wording (\"the composition flips to the new one only at no-expected write sites\"), so the governing document is updated and re-enters review together with this phase design. The remaining items are citation-level facts I re-verified against the checkout (fingerprint.ts:79-88/:106, fingerprints.ts:24-37, transaction.ts:412-432, production.ts:378-400) and they do not alter D1-D3's decisions. Scope stays inside design.md's Phase 1 allocation (template gets `overrides` guidance only; approval_rules deferred to Phase 3). One incidental inconsistency in the parent (D2 says the self-config edit happens in \"Phase 5\" while D9 and the phase plan say Phase 3) is resolved by this artifact in favor of Phase 3, consistent with the governing plan; it is not a material departure.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "\"Deviations from the task design (facts, not decisions)\" items 1-8, e.g. item 5: \"D2's claim that 'new writes always use the new composition, so tasks naturally converge as they transact' is contradicted by the machinery it relies on... The task design's D2 wording is corrected in the same production result.\""
+        },
+        {
+          "compliance": "pass",
+          "rationale": "This phase changes no approval, gate, waiver, or commit authority. Gates keep opening and resolving exactly as today (gate conditionality is explicitly deferred to Phases 3-4), and the new `config_change` notice is an optional informational field on TaskStatusV1/the semantic view that never enters `blocking_reasons` and never changes an action kind. The next-action changes only re-route an unreadable-config condition from `restore-pinned-config`/`upgrade-tooling` to `inspect-state` with `human_required: true` — still an explicit human step, not an inferred advancement. No mechanism here lets silence, elapsed time, agent prose, or a model verdict supply approval.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "not-matched",
+          "trigger_evidence": "\"Scope: task design D1-D3 only (byte-pin removal, fingerprint legacy fallback, change reporting). `approval_rules`, the template's active ruleset, gate conditionality, skill prose, and docs refresh belong to Phases 2-6.\" and \"Semantic view ... it never changes the action kind or condition.\""
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The phase removes an enforcement path, so the rule's concern (a failure or uncertain state represented as success) is live — but every non-success state it touches stays visible with a safe next action. Unparseable/missing/unreadable config still fails the transaction with CONFIG_INVALID and still yields a `config-invalid` blocker plus an `inspect-state` (`human_required: true`) action naming the file and the read issue. The legacy fingerprint fallback retries exactly once and, on double mismatch, lets the existing mismatch error fire unchanged. The two places where the system deliberately says nothing — pre-cutover tasks with no `last_seen_config`, and settlement commits that never read config — are stated plainly, their honest reading is argued (\"the notice persists until the next config-observing commit\"), and both are pinned by named integration assertions rather than left implicit. The `ConfigVerification` surface keeps `{verified, issue?}`, so an unverifiable config is still reported as such.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "\"Unparseable config stays fail-closed (D3)\"; \"If neither matches, the resolver returns the new-composition value; the caller's existing mismatch error fires unchanged (fail-closed preserved)\"; \"absent `last_seen_config` (pre-cutover tasks) records nothing and notices nothing on the status side\"; \"The settlement writes ... deliberately leave `last_seen_config` unchanged: a change notice persists until the next config-observing commit\"."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Changing the fingerprint composition and adding an acceptance fallback touches the machinery that binds evidence to subject bytes, so the rule is engaged. The fallback is bounded and does not weaken failing closed: it is a single retry under the pre-change field set with `config_digest` taken from the recorded creation-time `state.config_digest` (never live bytes, verified as the value the pin guaranteed at recording time), it never rewrites a recorded value, and a double mismatch still errors. Task and subject identity are untouched — `TaskStateV1.config_digest` provenance and its state-vs-initialization and receipt-vs-prepared-state agreement checks (`src/contracts/durable.ts:713-714`, `:796-798`) remain, `assertPreserved` still pins the digest as substrate, and reentry evidence continuity continues to ride the recorded predecessor-fingerprint pair. Config bytes do leave the evidence binding, but that is exactly PRD R1 and design D2, and per-dispatch route provenance remains the durable record of what ran. The `last_seen_config` write is placed inside `buildPlan` before `prepared_state`/`prepared_state_digest` derivation so committed bytes, receipt, and crash replay cannot disagree — i.e. no partial or self-inconsistent durable record is introduced.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "\"Legacy composition: exactly the pre-change subject field set with `config_digest = state.config_digest` (creation-time record, never live bytes). Retry-once-and-accept; no recorded value is ever rewritten.\" and \"the recorded `pending_human_revision.predecessor_input_fingerprint` pair ... which `boundToDeclaredPredecessor` compares against the evidence's own recorded fingerprint — untouched by this phase.\""
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "039ea1908ec5b674a1e54d6a8bf366c5eed615b2d955cd10180963a450d8d1c2",
+      "step": "adjudicate",
+      "subject_digest": "f2e54badda2387c70cb5f0d17244137a85b075883d1fd7bbf4b8da0ab83e02e2",
+      "task_id": "review-flexibility",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "review-flexibility"
+}

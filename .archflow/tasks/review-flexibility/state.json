@@ -1,6 +1,13 @@
 {
   "approvals": [
     {
+      "decision_digest": "68ddb03db09f2ddc30ab8f8609a3e537e7c8320415b7c215063576739d6bfc7e",
+      "gate_id": "g-1484dd692f1dffe0684201b7e22db561a46fe4e77ac75173977289c9db7b7250",
+      "gate_kind": "design-approval",
+      "resolved_at_revision": 44,
+      "subject_digest": "f2e54badda2387c70cb5f0d17244137a85b075883d1fd7bbf4b8da0ab83e02e2"
+    },
+    {
       "decision_digest": "3c40d90d4466733a42b731f2263d659278582209e7c85e112e06889e0aa99159",
       "gate_id": "g-76ddebb5eddc244ddb63553479ee2798a8da428ae87fc79d385cebd83fd26f59",
       "gate_kind": "artifact-approval",
@@ -53,6 +60,34 @@
       "step": "triage"
     },
     {
+      "input_fingerprint": "3baa571cff52e0d4b1de357e23f61e0419a92dfec065850ba1c8722fd33f7d4e",
+      "phase_instance": "phase-design-1",
+      "result_digest": "4ab3e6e5506deb14190df84e30db3017a850b41f1de3a8036c8e997e9b2d816f",
+      "result_id": "adjudication-result-00fd9fd9986de5181e3107c3d8b72a4d",
+      "step": "adjudicate"
+    },
+    {
+      "input_fingerprint": "3baa571cff52e0d4b1de357e23f61e0419a92dfec065850ba1c8722fd33f7d4e",
+      "phase_instance": "phase-design-1",
+      "result_digest": "f2473b2b1e271355b9b9dd12d6acc9c88c206f2577e23ec2abb444d74fa1fcbf",
+      "result_id": "result-ed50c441d2662a5b6931838a0ab96dc8",
+      "step": "counter_review"
+    },
+    {
+      "input_fingerprint": "2d1583f49e6facc497f7a2c8eb5d5a09ce11470ce2c50a6358efc067c80a37da",
+      "phase_instance": "phase-design-1",
+      "result_digest": "d49dcbe1a7f36c422c6da47d2556901bc18399e963b3049ef66c2deb415fd3a5",
+      "result_id": "state-result-28be1f3848b1d201a41cbe03b1f1a352",
+      "step": "produce"
+    },
+    {
+      "input_fingerprint": "3baa571cff52e0d4b1de357e23f61e0419a92dfec065850ba1c8722fd33f7d4e",
+      "phase_instance": "phase-design-1",
+      "result_digest": "a86c8d93e9dd46bfcd49b228ffce48a1bd4a6e8091da123f0ce1e5ba54b85004",
+      "result_id": "state-result-9dd52e77e32cf6a8d32dd4130a7f9b4e",
+      "step": "triage"
+    },
+    {
       "input_fingerprint": "643a097810100c16012bc85027c2e61c80463452d323850fab7b65cb0b08dca3",
       "phase_instance": "prd",
       "result_digest": "9c32eea4342e83d9fe1c1890a2209f6e41bcb23f3b13e96d5c834e6ca1d57860",
@@ -84,52 +119,52 @@
   "config_digest": "493173957ba07913669e2970f822f501cace89fcbd42b68d0cf7b54185880c08",
   "constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
   "initialization_digest": "8198c85109ea65a5c74550ee943d6a7373b771605e45cda4b8daa623c3432755",
-  "input_fingerprint": "21230fe376905f962767c385973884ddef7d9aeed77ec2a98b23c52f8fd9ac29",
+  "input_fingerprint": "3baa571cff52e0d4b1de357e23f61e0419a92dfec065850ba1c8722fd33f7d4e",
   "last_transition": {
-    "input_fingerprint": "21230fe376905f962767c385973884ddef7d9aeed77ec2a98b23c52f8fd9ac29",
-    "intent_id": "afop-fdaad0242bdbe20aca1063f1f5b71a4fadbfb74a95e5f8329cdc5ab8e606b88b-open-gate",
+    "input_fingerprint": "3baa571cff52e0d4b1de357e23f61e0419a92dfec065850ba1c8722fd33f7d4e",
+    "intent_id": "afop-6fecf2908d15adc892d92e2a9b22b540047b04efbd84f720f3fc0e74a1c78556-open-gate",
     "operation": "gate",
     "outcome": {
       "decision": {
-        "context_digest": "ddea3e9c616017e264f10f6c6836fca4fc6e74ab4fe0b37fb05ee7c0d012232b",
-        "gate_id": "g-b57de0b9cb1b77a6667c689fab0679866bc497b68c29f21b528c2acc98d864d5",
+        "context_digest": "1e4227c43af8e0578de7b09c9b79699c82f2390321ee52120032f8a82f812471",
+        "gate_id": "g-1484dd692f1dffe0684201b7e22db561a46fe4e77ac75173977289c9db7b7250",
         "human_provenance": {
           "actor_class": "human",
           "assurance": "declared-local-trace",
           "channel": "connected-host",
           "connection_id": "connection-1",
-          "decision_event_id": "afdecision-e9f29957efcf8a5c61c78f54681fa6e057a3d8de5369f82cabb2f76ed5d67dfb",
-          "recorded_at": "2026-08-19T19:03:29.285Z",
-          "request_id_digest": "6098a2d81c4f3d18dfab4bb2472b46437314b185b23c0920355af2e2ee1be2a4",
+          "decision_event_id": "afdecision-2aae36a17ef46e4bc01550ff064f858fd8d9aacd3ba5e9507f5bca8387d0cc85",
+          "recorded_at": "2026-08-19T19:36:03.292Z",
+          "request_id_digest": "6f42d854f1b3f91cff1d4331e9534634609deec839627c14c2dfb3a3be82c6ce",
           "schema_version": "1"
         },
         "kind": "design-approval",
         "payload": {
           "decision": "approve",
-          "reason": "Approved. Config-based trigger rules are fine for unambiguous file classes; constitution-elevated human review stays unconditional and is the intended home for semantic conditions like public-API changes, with model judgment quality accepted as a known limit."
+          "reason": "The user approved the Phase 1 design as presented: the pinning-for-visibility trade, the phased size, and the legacy composition fallback were laid out and the user chose to approve, commit the milestone, and continue."
         },
-        "phase_instance": "design",
+        "phase_instance": "phase-design-1",
         "schema_version": "1",
-        "subject_digest": "e46826fb324c29dbf63b9314c7613ab59bd39e52f1a7e7ea895da2c3c30662d3",
+        "subject_digest": "f2e54badda2387c70cb5f0d17244137a85b075883d1fd7bbf4b8da0ab83e02e2",
         "task_id": "review-flexibility"
       },
       "kind": "design-approval",
-      "notes": "Approved. Config-based trigger rules are fine for unambiguous file classes; constitution-elevated human review stays unconditional and is the intended home for semantic conditions like public-API changes, with model judgment quality accepted as a known limit.",
-      "revision": 30
+      "notes": "The user approved the Phase 1 design as presented: the pinning-for-visibility trade, the phased size, and the legacy composition fallback were laid out and the user chose to approve, commit the milestone, and continue.",
+      "revision": 44
     },
-    "outcome_digest": "5c97aaf95ee27ba8739f9cc32ee838cffc17ad8fb84b077257741fd6912a3bf7",
-    "prior_revision": 29,
-    "request_digest": "a491af3fb72b4aecd16260199f94c592a9ddb1d253787cf45271bd079c80482a",
-    "result_id": "g-b57de0b9cb1b77a6667c689fab0679866bc497b68c29f21b528c2acc98d864d5",
-    "resulting_revision": 30,
+    "outcome_digest": "24134e5a943bd8eaaa8d29ec37b17bab0bc88d9aeda28e083c6f7c84a45da222",
+    "prior_revision": 43,
+    "request_digest": "0b8ecc661dee4d872899367c242e88c39c75f499662558797955f16375e95d68",
+    "result_id": "g-1484dd692f1dffe0684201b7e22db561a46fe4e77ac75173977289c9db7b7250",
+    "resulting_revision": 44,
     "schema_version": "1",
     "tool": "archflow_gate"
   },
-  "phase_instance": "design",
+  "phase_instance": "phase-design-1",
   "planned_final_phase": 6,
   "policy_base_commit": "6549da8a2b872a2c72aabe7cc4632e1d3eb09b89",
   "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
-  "revision": 30,
+  "revision": 44,
   "schema_version": "1",
   "status": "succeeded",
   "step": "triage",
