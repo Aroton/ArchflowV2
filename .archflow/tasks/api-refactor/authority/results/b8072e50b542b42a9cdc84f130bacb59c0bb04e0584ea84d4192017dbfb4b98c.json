@@ -1,0 +1,109 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 319,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 38336919
+  },
+  "artifact_digest": "3d9bd8968d94f8ff07bd7beb105cde05bac0c078ca45173020f461f8fa59d5e2",
+  "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+  "outputs": [],
+  "phase_instance": "phase-impl-4",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-a251b411a6d9f971a009abc7b13708c6",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [],
+      "assurance": "server-attested",
+      "cli_version": "2.1.235",
+      "constitution": "pass",
+      "drift": "aligned",
+      "drift_findings": [],
+      "effort": "medium",
+      "envelope_input_digest": "3673157a68e0f903d057918d8a813b416e10ae7a9e6a20dc133de97d07eae918",
+      "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+      "invocation_id": "adjudication-invocation-561484fc5cfd2e9038b7fa3717a06d5f",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "4f3f96e3ec9dafcced0ba34cf4a53d03cefbde8d195d774a9ed3969e4c69095d",
+      "phase_instance": "phase-impl-4",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-a251b411a6d9f971a009abc7b13708c6",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "Every material departure is carried back into the governing documents in this same change set rather than left only in code: phases/4/design.md §1.3 enumerates all six amendments (merge, dev-mode replacing self-cutover reinstalls, unrestorable-missing recovery, host-proof rebinding, planned-final-phase staleness, committed-deletion adoption) with their pinned seams, the task design.md §5.7 records the second durable extension (baseline_adoptions / adopted_absences) against its 'no new coordinator state' claim, and §10's Phase 4 scope paragraph names the two ways delivery grew. The retracted reinstall steps (§1.2, §5.5, Chunk E) are explicitly withdrawn in the revised bytes rather than silently ignored. Impl-notes record the smaller deviations the design's §10 handoff requires (session.ts fallback retained, semantic-view needing no change, three latent gaps, dist not embedding skills). The design bytes are payloads of this very produce, so the amendments re-enter the applicable review boundary — this adjudication — before the commit-authorization gate that would let dependent work advance; impl-notes additionally record that the reopened design revision passed a fresh significant-revision review and approval cycle before implementation resumed. The code matches what the amended design describes (e.g. src/state/reconciliation-discovery.ts:184-223 absence overlay, src/state/next-action.ts:288-330 routing precedence, src/state/planned-final-phase.ts:105-137).",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The delivered change set departs materially from the approved Phase 4 scope: a user-directed merge of origin/main (baseline-adoption machinery), absence-aware projection union, unrestorable/committed-absent classification and routing, committed-deletion adoption in the baseline gate, and produce-time planned-final-phase re-derivation — none of which appear in the phase design's original Chunk A-E plan (phases/4/design.md §6)."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The deletion adoption is an explicit gate decision bound to exact bytes, not an inference: composeGate's open validation re-derives the live drift/deletion split under the task lock and refuses any context that is not an exact match (src/state/gates.ts:299-345, issue codes baseline-adoption-context-mismatch / -subject-mismatch / -observation-stale), the subject digest is baselineAdoptionDriftDigest over the declared sets, and application re-checks at commit time that each declared path is still the newest recorded presence at its recorded digest and still absent (gates.ts:765-790, baseline-adoption-deletion-stale). The gate interface offers only context-satisfiable choices (gate-decision-interface.ts:73), and restore-recorded-bytes is refused when no retained bytes exist rather than archiving an inapplicable decision (gates.ts:791-804). The routing correction at next-action.ts:298-330 is squarely on this rule's side: the produce re-entry is preferred while anything is re-declarable so unreviewed bytes reach the ordinary review boundary instead of being swept into a human bytes-adoption, and the human decision takes over only when nothing else can progress. Planned-final-phase re-derivation reads only the design bytes recorded by the produce itself and never invents a bound: an absent stored bound is preserved (planned-final-phase.ts:105-119) so legacy imports are not silently bound, and a derived bound below the producing phase is refused outright (derivedFinalPhaseBelowCurrentPhase plus the handler guard produce-derived-final-phase-below-current, state.ts:293-303), directing a genuinely shrunken plan to a backward planning restart. The bound-carrying design bytes remain part of the exact subject a human approves at the design-approval or commit-authorization gate, so completion authority stays explicitly recorded against those bytes; the guard closes the one direction (shrinking below the current phase) where a producer edit could otherwise change advancement semantics unreviewably.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The phase adds a new human decision (adopt-committed-deletions) that retires recorded projections, and adds produce-time re-derivation of planned_final_phase, which controls whether the task completes or offers a successor phase."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The changes convert wedges into visible non-success states with a safe next action rather than papering over them: discovery names adoption-sourced projections unrestorable and committed deletions committed_absent (reconciliation-discovery.ts:230-292, using cat-file -e exit 128 as the absence signal rather than collapsing it), reconciliation carries the markers on the findings, and next-action.ts:288-330 always yields a reachable action with an instruction that states plainly what is impossible and why. Failure-closed paths keep issue codes that name the condition (produce-design-phase-plan-invalid, produce-derived-final-phase-below-current, baseline-adoption-deletion-stale, active-gate-request-invalid) instead of proceeding. The impl notes report honestly: installs were refused and the design's reinstall steps recorded as not performed; the codex real-host probe flake is recorded with blocked_journey_hosts counts rather than only the clean rerun; the interrupted-transaction atomicity gap and the re-entry guard's phase-kind blind spot are recorded as known limitations with their manual recovery; a NUL-byte slip inside the very note documenting that hazard is disclosed and fixed. Host evidence is digest-bound to the shipped dist manifest with an always-on assertion so stale evidence fails the check rather than relying on operator memory, and the final full check result is restated against the exact shipped bytes.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The phase's central fixes concern positions where the workflow previously had no client-reachable safe next action (missing projection that could neither be restored nor re-declared; stale planned_final_phase offering a nonexistent phase 5), and the artifact reports verification outcomes including failures."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Task scoping is preserved throughout: projection targets resolve through resolveDeclaredOutputPath/resolveTaskPath with the authority's task_id and path class (reconciliation-discovery.ts:161-167, 304-311), the design payload lookup keys on the task-scoped path .archflow/tasks/<taskId>/design.md (planned-final-phase.ts:110), and the baseline observation must match task_id, phase_instance, revision and drift digest or the open fails (gates.ts:338-344). Subject binding is exact rather than inferred: loadApprovedDesignFinalPhase requires the retained manifest's artifact kind, phase, step, document path, artifact_digest === record.subject_digest and a payload whose sha256 matches content_digest before deriving anything (planned-final-phase.ts:61-87); the adoption gate re-derives the live finding set under the lock and rejects partial or stale contexts; adoption application refuses when the newest recorded projection or the worktree state has moved. The new archived/persisted request tolerance does not weaken this: parseArchivedGateRequest and parsePersistedGateRequest try strict .strict() candidates in order and return an exact match with nothing stripped, defaulted, or reordered (durable-gate.ts:418-458), so a persisted request still re-digests to its stored digest, and the tolerant baseline-adoption twin is deliberately excluded from the writer schema, activeGateV1Schema, and the published schema defs. adopted_absences is optional and joins the drift digest only when non-empty, so pre-change archives re-authenticate byte-compatibly instead of being retroactively invalidated — the failure mode the counter-review findings identified and this change closes.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The change set touches durable reconciliation, gate request parsing, and adoption records — the machinery that binds decisions and evidence to a task and subject (src/state/reconciliation-discovery.ts, src/state/gates.ts, src/contracts/durable-gate.ts)."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "1f31fb01fdba25099dc9fdc298d5de43903131e029ba60f1ab0e5893c7ae623b",
+      "step": "adjudicate",
+      "subject_digest": "ed357630d6d364da78333e7499e55b2d9c72108d82cb5c3a7065e8c6209a2714",
+      "task_id": "api-refactor",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "api-refactor"
+}

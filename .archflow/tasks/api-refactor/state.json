@@ -43,6 +43,13 @@
       "subject_digest": "2b659b48535b34239f312523eeabc3853d72943995a6f9b2f99887692ab3b285"
     },
     {
+      "decision_digest": "54e8ba9fbbe040ea9043982822ba0c8ff3b59a96feee5f54bceb3e2eac9497e5",
+      "gate_id": "g-1ad499621a4567d912188b983b00badb289df53cccc6226f682bc15010a46ad4",
+      "gate_kind": "baseline-adoption",
+      "resolved_at_revision": 292,
+      "subject_digest": "6241317882887798eef1543b45fcd869697782aeca08fd5ac043a14b119484a2"
+    },
+    {
       "decision_digest": "29abb925a23885d0d7e8ce6714589ce472da5d0515a895793c9f1b84be50798e",
       "gate_id": "g-31fbc29927493c7745134f6185863774c38b7cdcd995849f889a4945e282d8b9",
       "gate_kind": "constitution-review",
@@ -106,11 +113,39 @@
       "subject_digest": "d095d6dbfcf25d42a0af1dafdc16a9625cb5d38d2de791c3808b652180720a36"
     },
     {
+      "decision_digest": "a345b4ed156ea34e08182a1ad2b2d0c62faddbbeb192b5af0bf6b2fbbd95ebd5",
+      "gate_id": "g-8b6c4c6971a8fc49e56809615933caed40180c2d6df52f397734f04e86bd50f9",
+      "gate_kind": "baseline-adoption",
+      "resolved_at_revision": 296,
+      "subject_digest": "011189e66b875f0d10dbe8d2f75b69e1f4d2b5db95ba995935deaf01e7167f53"
+    },
+    {
       "decision_digest": "0eaab408cb502c29ce7a5dc36b8a8328f8983447d740fc28ca35cce38eaeac4e",
       "gate_id": "g-99bf3878a009a96006a4d42abc81b37b10b4b96d3b2ed776bbcf3e977155bbcb",
       "gate_kind": "commit-authorization",
       "resolved_at_revision": 100,
       "subject_digest": "2b659b48535b34239f312523eeabc3853d72943995a6f9b2f99887692ab3b285"
+    },
+    {
+      "decision_digest": "c64eb089d0e4c16968a65c900af39d4fa87ac316a4f3c0796343bcfd74a17406",
+      "gate_id": "g-a445b2c812ec9e97cec65b4fc6c2403d811956cf7d05eb4eaccdf71213f09dad",
+      "gate_kind": "constitution-review",
+      "resolved_at_revision": 324,
+      "subject_digest": "ed357630d6d364da78333e7499e55b2d9c72108d82cb5c3a7065e8c6209a2714"
+    },
+    {
+      "decision_digest": "134971f138fbd2659d9b803fb745e80fafa72aae989cd3fd75fdb5bbe06eaba5",
+      "gate_id": "g-ab49f55078a6f5cad57742aebabbb07732e80dae07feda203f7f4d88c7f28ddc",
+      "gate_kind": "baseline-adoption",
+      "resolved_at_revision": 300,
+      "subject_digest": "283c1ac255c80823b934fd73c65ab18509ccc3007634e60f984d37f8acbe41bf"
+    },
+    {
+      "decision_digest": "98f241a53d81528994893658b1ae0d3e65ffd7cd63d3e3c764ac962fe2b11bef",
+      "gate_id": "g-b19e60715501f46a4a99ac306d3ca4425deeacc335ff20fa2b78750cd0d09000",
+      "gate_kind": "commit-authorization",
+      "resolved_at_revision": 326,
+      "subject_digest": "ed357630d6d364da78333e7499e55b2d9c72108d82cb5c3a7065e8c6209a2714"
     },
     {
       "decision_digest": "349f08466f04624b66e631b89f91dab9e37dfed1dec596b140e87201e01e982e",
@@ -176,7 +211,7 @@
       "subject_digest": "801652c7f12171429cc26bb6b599864818f4b0867225b00226f21631936b0153"
     }
   ],
-  "attempt": 1,
+  "attempt": 2,
   "authoritative_results": [
     {
       "input_fingerprint": "21230fe376905f962767c385973884ddef7d9aeed77ec2a98b23c52f8fd9ac29",
@@ -400,6 +435,34 @@
       "phase_instance": "phase-impl-3",
       "result_digest": "9c8e27bfa2303dff81d9cf785c0df8e0a2b19cfaa846a3cd9948a20ffd2381d0",
       "result_id": "state-result-1c3a7b07233ebe6006984e888ee2cc36",
+      "step": "triage"
+    },
+    {
+      "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+      "phase_instance": "phase-impl-4",
+      "result_digest": "b8072e50b542b42a9cdc84f130bacb59c0bb04e0584ea84d4192017dbfb4b98c",
+      "result_id": "adjudication-result-a251b411a6d9f971a009abc7b13708c6",
+      "step": "adjudicate"
+    },
+    {
+      "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+      "phase_instance": "phase-impl-4",
+      "result_digest": "c241cfc5cab4aff4b6fd6414a9f5a778ff843fe12608e78e0696507153a12d18",
+      "result_id": "result-22808513b1d1926f9c042627ce5dddbe",
+      "step": "counter_review"
+    },
+    {
+      "input_fingerprint": "943b3d6b4bda7df56cd0d3b50e21eea183b2c33ee628a60b45115c68b77166b9",
+      "phase_instance": "phase-impl-4",
+      "result_digest": "24cb303920f36bbc546728d0fa63e4f53971a645259a27114c099d1b565fa6d2",
+      "result_id": "state-result-c550863e3667f219d546a2215593367c",
+      "step": "produce"
+    },
+    {
+      "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+      "phase_instance": "phase-impl-4",
+      "result_digest": "4b1dc6142685bb35c6f93d0eb3081ff07f38ee8dee150131bc4f8ff582570b6d",
+      "result_id": "state-result-695e5482f4e1245f730d4af8f4f6309b",
       "step": "triage"
     },
     {
@@ -635,6 +698,14 @@
       "gate_id": "g-1392c675c938f804af6b5cd37b6e37feecc0ab297adca008483b5589724a8da9"
     },
     {
+      "adopted_absences": [
+        "src/local/build-request.ts"
+      ],
+      "adopted_at_revision": 292,
+      "adopted_projections": [],
+      "gate_id": "g-1ad499621a4567d912188b983b00badb289df53cccc6226f682bc15010a46ad4"
+    },
+    {
       "adopted_at_revision": 276,
       "adopted_projections": [
         {
@@ -663,6 +734,110 @@
         }
       ],
       "gate_id": "g-5f92d67ccf76fb33c99793fae4376ef0554d66d1259499996d9c1e050aa6ec82"
+    },
+    {
+      "adopted_at_revision": 296,
+      "adopted_projections": [
+        {
+          "content_digest": "24d9e39a02f98356275d5f4d49b50f245fe17e2fd4c67bcff8bfc4eedf9b2be8",
+          "path": ".archflow/tasks/api-refactor/phases/4/impl-notes.md"
+        },
+        {
+          "content_digest": "b7741efd1df7674ec1383c2be73dba9f0a5405c388feade8c108f0d564708f57",
+          "path": "dist/archflow-local.mjs"
+        },
+        {
+          "content_digest": "6c5fabad29b00b31455e11ca241d341a52ea227b4941feaf9f99c7947a4f8ce7",
+          "path": "dist/archflow-mcp.mjs"
+        },
+        {
+          "content_digest": "aa04ebe893d5390b916a709fd1bcdce171972d528e5bd74a9a1747ef1dd21405",
+          "path": "dist/manifest.json"
+        },
+        {
+          "content_digest": "c58962f4d229873d0208b77d011dd894deb488a9f9471d06f230a1cc619efc6e",
+          "path": "dist/metafile.json"
+        },
+        {
+          "content_digest": "a91323e4a6dcf03a1e93f634d47693c28cb9018697f7ab22ad7c29eac4a85dfe",
+          "path": "docs/validation/host-selection-thresholds.json"
+        },
+        {
+          "content_digest": "058be716bec905e196256dbf8e4710a6496a500f346310e96a9d33ded9844221",
+          "path": "docs/validation/host-selection.json"
+        },
+        {
+          "content_digest": "3d36aa72c715e8e38b0758c24af7bc741619238300b202553cf4fdf452f89b29",
+          "path": "src/contracts/fingerprints.ts"
+        },
+        {
+          "content_digest": "4ec14d8a1c904933e85f01ccd5a08a0a39e141d9813dabcf75cacff5af47859b",
+          "path": "src/contracts/gates.ts"
+        },
+        {
+          "content_digest": "75fb4458e5e1777b9f3223a081f72e4d7ad60815ace00b5be9a21fc0cb18b51f",
+          "path": "src/contracts/schemas/v1/gate-contract.schema.json"
+        },
+        {
+          "content_digest": "afc4c00d1498efb8bcdfa7fea899c5097c4fd7e57a24c5b642115d15f3ab0998",
+          "path": "src/mcp/handlers/state.ts"
+        },
+        {
+          "content_digest": "9e5036ab7e6020e20328f03370ff04e3f41f2397ad552d9ae598c60a06c93439",
+          "path": "src/state/gate-decision-interface.ts"
+        },
+        {
+          "content_digest": "1ab0f27af811da0e6c3a5d0755b10387fe274291bf519881c1a7cc2c6cfe29ae",
+          "path": "src/state/gates.ts"
+        },
+        {
+          "content_digest": "690d883a7dc6012249389e2e3c0fe6bf1b7f22c5c12d7fb256be6d08e80299d3",
+          "path": "src/state/planned-final-phase.ts"
+        },
+        {
+          "content_digest": "069a5c6335f132ae559c42e63b16470b447faf33de6e91ad30eb64372a7f4506",
+          "path": "test/unit/planned-final-phase.test.ts"
+        }
+      ],
+      "gate_id": "g-8b6c4c6971a8fc49e56809615933caed40180c2d6df52f397734f04e86bd50f9"
+    },
+    {
+      "adopted_at_revision": 300,
+      "adopted_projections": [
+        {
+          "content_digest": "d835347652c0662f008ac87feeb1e769286edbde9916387edab23a6ce452b688",
+          "path": ".archflow/tasks/api-refactor/phases/4/impl-notes.md"
+        },
+        {
+          "content_digest": "6b4613dd226bde7bbc031165ef47386029d247d44fd1fc477d67b5fd9b9dbe31",
+          "path": "dist/archflow-local.mjs"
+        },
+        {
+          "content_digest": "6c98160f614ba8de9978ccd8a4484ae068376ba3c67883fc78d6003c1627b4f9",
+          "path": "dist/archflow-mcp.mjs"
+        },
+        {
+          "content_digest": "6932fdb67fedad03a53f38acb5b5bc5ee229abb591e2e26e290ba7da308f2214",
+          "path": "dist/manifest.json"
+        },
+        {
+          "content_digest": "3e35945c5d62fef07bdefa11f9953db5bf2e88d0c67340ff4d00b59e92517dc4",
+          "path": "dist/metafile.json"
+        },
+        {
+          "content_digest": "5ef4cf8196a8eeb1d20eae42c1ac7dc3363c9265901732071ee1de76e95cac60",
+          "path": "docs/validation/host-selection-thresholds.json"
+        },
+        {
+          "content_digest": "ecf9f02e6055a94ca9fad0250d4812c73c9a60612857679eff619d0b1c906b11",
+          "path": "docs/validation/host-selection.json"
+        },
+        {
+          "content_digest": "a5661bc91e3b7c6e43bacc21c0e57591942078813250965ad7cd8147105f1d1a",
+          "path": "src/contracts/durable-gate.ts"
+        }
+      ],
+      "gate_id": "g-ab49f55078a6f5cad57742aebabbb07732e80dae07feda203f7f4d88c7f28ddc"
     },
     {
       "adopted_at_revision": 236,
@@ -944,6 +1119,42 @@
       "classification": "significant",
       "evidence": [
         {
+          "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+          "phase_instance": "phase-impl-4",
+          "result_digest": "4b553ae6a0a3fb9b79db9d14424b11154a49382fcbf87fbe9e1acb31ad692a92",
+          "result_id": "adjudication-result-59c234450cb6f554d927ce6d78da9765",
+          "step": "adjudicate"
+        },
+        {
+          "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+          "phase_instance": "phase-impl-4",
+          "result_digest": "0a36fc7b079b118bd62d85301cda042fdb174c5db92272c0537ad1e4befc972c",
+          "result_id": "result-2c2f4b8625e269697f89baa2f8d6dc5b",
+          "step": "counter_review"
+        },
+        {
+          "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+          "phase_instance": "phase-impl-4",
+          "result_digest": "ad26bbc95fe55fee38d30161ccf2e060be092fb62ceaae72a20c49156079803e",
+          "result_id": "state-result-d6dfe9afd5a244313b2f346990dc3c53",
+          "step": "triage"
+        }
+      ],
+      "gate_id": "g-6c2f76102d25de3a27a01e257bafe8255e1eedd5769f070b0b87a65be204d521",
+      "gate_kind": "constitution-review",
+      "phase_instance": "phase-impl-4",
+      "predecessor_input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+      "predecessor_subject_digest": "51a98379af0eb8a0bef686c01a15d360bea5bbac74ac24fcf02c6c9047c60d79",
+      "previous_attempt": 4,
+      "rationale": "Human requested changes at the constitution gate; the revision rewrites two claims in the parent task design (the sole-durable-extension assertion and the phase-4 scope boundary) so the approved architecture matches the delivered system — a meaning change, not wording.",
+      "resulting_attempt": 1,
+      "resulting_result_digest": "2200c51fdedd43f16f157b34796ba9360ad600788f69886193ef17fecb0a19ab",
+      "resulting_subject_digest": "a72885ad63f1d46cef12a159c79a577ac392968bb8b20a3559ff455b5fb8b63f"
+    },
+    {
+      "classification": "significant",
+      "evidence": [
+        {
           "input_fingerprint": "643a097810100c16012bc85027c2e61c80463452d323850fab7b65cb0b08dca3",
           "phase_instance": "prd",
           "result_digest": "7076108bd66a2472430dc3119600297f6506617c06e7d519893f21694d98fcf2",
@@ -1050,48 +1261,26 @@
     }
   ],
   "initialization_digest": "30babbe4e47c17babce8db5b51f4774a68539757589276f7948c8f74ae62b908",
-  "input_fingerprint": "c3995439b1e516197c6c50a101dcfa2712e855a67971726bb14c5ab54bcf1ef4",
+  "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
   "last_transition": {
-    "input_fingerprint": "c3995439b1e516197c6c50a101dcfa2712e855a67971726bb14c5ab54bcf1ef4",
-    "intent_id": "afop-8033b66100121ac30657fc2f41950dcc13f5acfa75a0c152eae590fbf529017d-open-gate",
-    "operation": "gate",
+    "input_fingerprint": "1daab289df6ccd022d3e4d5341cdfa4cbc7ce02905fe8ae178305f109e8204dc",
+    "intent_id": "afop-6b62a694a1975f76ed1e87026257da006257647f114e7ecb327f59597ea1fa4c-finish-task",
+    "operation": "record-state-boundary",
     "outcome": {
-      "decision": {
-        "context_digest": "85d847180e9730930f9c5779440d093ac585bdc4c360c9bea183b0e1cc2e5443",
-        "gate_id": "g-49d4e8c65cdbceea1b6f6d0c04f666fca9aa6eafbb3151743b610881049438b4",
-        "human_provenance": {
-          "actor_class": "human",
-          "assurance": "declared-local-trace",
-          "channel": "connected-host",
-          "connection_id": "connection-1",
-          "decision_event_id": "afdecision-8f797732864b43e93cb7b61bbbdcd439838c059e28f8661ba0b0e335bd8dd8bb",
-          "recorded_at": "2026-08-19T01:19:02.927Z",
-          "request_id_digest": "b84440225fdd80d0230649d1b4a82aef4e648973cbaf483e4df861538f62cfb0",
-          "schema_version": "1"
-        },
-        "kind": "design-approval",
-        "payload": {
-          "decision": "approve",
-          "reason": "The amendment authorizes the requested planned-final-phase fix, the independent review returned zero findings and verified the fix is live (the bound re-derived to 4 on this design's own produce), and the remaining cycle re-declares the delta under review before completion."
-        },
-        "phase_instance": "phase-design-4",
-        "schema_version": "1",
-        "subject_digest": "b77564867263b832073d0bceb7a25d7912809f567496a4e3fdb74f77649d7900",
-        "task_id": "api-refactor"
-      },
-      "kind": "design-approval",
-      "notes": "The amendment authorizes the requested planned-final-phase fix, the independent review returned zero findings and verified the fix is live (the bound re-derived to 4 on this design's own produce), and the remaining cycle re-declares the delta under review before completion.",
-      "revision": 282
+      "path": "state.json",
+      "request_digest": "f8b250e9527322e8df6cdc6980aebcbe25e3f4617e8a58b08bf6ff483c41c760",
+      "revision": 327,
+      "status": "succeeded"
     },
-    "outcome_digest": "ad12c0637880b9f8fdd8a48f05f58eddb4b01363b16908cbc32f25ae865f219b",
-    "prior_revision": 281,
-    "request_digest": "fe977c062cbacd4699f08a2cdacd8614f2f41142bf139d66030cede4036192c0",
-    "result_id": "g-49d4e8c65cdbceea1b6f6d0c04f666fca9aa6eafbb3151743b610881049438b4",
-    "resulting_revision": 282,
+    "outcome_digest": "2c3adfa4b98ebbd73e284792d7c92fb50e63fadb026ac687d280bfbd17dec142",
+    "prior_revision": 326,
+    "request_digest": "f8b250e9527322e8df6cdc6980aebcbe25e3f4617e8a58b08bf6ff483c41c760",
+    "result_id": "state-result-852b30c1ab4e04d7fd19da4013e99058",
+    "resulting_revision": 327,
     "schema_version": "1",
-    "tool": "archflow_gate"
+    "tool": "archflow_state"
   },
-  "phase_instance": "phase-design-4",
+  "phase_instance": "phase-impl-4",
   "planned_final_phase": 4,
   "policy_base_commit": "8dad5260e31368b45da85bad748704d9a80b9df3",
   "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
@@ -1249,11 +1438,12 @@
       "target_phase_instance": "phase-design-4"
     }
   ],
-  "revision": 282,
+  "revision": 327,
   "schema_version": "1",
   "status": "succeeded",
   "step": "triage",
   "task_id": "api-refactor",
+  "terminal": "complete",
   "waivers": [],
   "workflow_digest": "3f5f7536f19219fbf4ade78aea07c93d22d03057ce2ed83d532e25a54a8aab9a"
 }

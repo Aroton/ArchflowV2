@@ -1,0 +1,33 @@
+{
+  "context_digest": "b62d1ea2dd63531d90b5fea7d5cfef970ecb6268d6e131ce085ab3bb5b36c623",
+  "envelope": {
+    "context_digest": "b62d1ea2dd63531d90b5fea7d5cfef970ecb6268d6e131ce085ab3bb5b36c623",
+    "gate_id": "g-6c2f76102d25de3a27a01e257bafe8255e1eedd5769f070b0b87a65be204d521",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-467ef141d67b400ffb95127efc7f73ffbe84948c6376142f34edb64ca50da220",
+      "recorded_at": "2026-08-19T05:51:40.265Z",
+      "request_id_digest": "6098a2d81c4f3d18dfab4bb2472b46437314b185b23c0920355af2e2ee1be2a4",
+      "schema_version": "1"
+    },
+    "kind": "constitution-review",
+    "payload": {
+      "decision": "revise",
+      "reason": "The parent task design is stale on two claims — the sole-durable-extension assertion and the phase-4 scope boundary — while the delivered system and the phase design's deviation record are truthful. Update the parent design to match reality and re-review, rather than approving a document that no longer describes what was built."
+    },
+    "phase_instance": "phase-impl-4",
+    "schema_version": "1",
+    "subject_digest": "51a98379af0eb8a0bef686c01a15d360bea5bbac74ac24fcf02c6c9047c60d79",
+    "task_id": "api-refactor"
+  },
+  "gate_id": "g-6c2f76102d25de3a27a01e257bafe8255e1eedd5769f070b0b87a65be204d521",
+  "kind": "constitution-review",
+  "outcome": "decided",
+  "phase_instance": "phase-impl-4",
+  "schema_version": "1",
+  "subject_digest": "51a98379af0eb8a0bef686c01a15d360bea5bbac74ac24fcf02c6c9047c60d79",
+  "task_id": "api-refactor"
+}

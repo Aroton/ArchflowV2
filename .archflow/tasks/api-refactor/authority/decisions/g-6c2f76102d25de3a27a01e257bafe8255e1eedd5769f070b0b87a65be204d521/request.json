@@ -1,0 +1,113 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "constitution": "fail",
+    "eligible_waivers": [
+      {
+        "rule": {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "adjudication-failure"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      }
+    ],
+    "failed_rules": [
+      {
+        "rule_id": "approved-design-before-code",
+        "rule_version": 1
+      }
+    ],
+    "matched_trigger_rules": [
+      {
+        "rule_id": "approved-design-before-code",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "explicit-human-authority",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 1
+      }
+    ],
+    "uncertain_rules": [],
+    "uncertain_trigger_rules": []
+  },
+  "context_digest": "b62d1ea2dd63531d90b5fea7d5cfef970ecb6268d6e131ce085ab3bb5b36c623",
+  "current_evidence": {
+    "set_digest": "41cb76ff46255833aa8e33a96e5947535e6e46a4267331cd64d12c89ed8cc204",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "b9bb3979168ba9de657d340d63f2d4c229db1e56efac0541cb8fb436c8e0700d",
+        "producer_family": "claude",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-6c2f76102d25de3a27a01e257bafe8255e1eedd5769f070b0b87a65be204d521",
+  "intent_id": "afop-8a5939149300578036a8e231525df1a7d013d2fd77bd1f7385332bc03b4f0b15-open-gate",
+  "kind": "constitution-review",
+  "opened_at_revision": 309,
+  "phase_instance": "phase-impl-4",
+  "request_digest": "99e572f6d5afeb98cac1a5069a861473a8bb6f828601a192653ab9d5585e364d",
+  "schema_version": "1",
+  "subject_digest": "51a98379af0eb8a0bef686c01a15d360bea5bbac74ac24fcf02c6c9047c60d79",
+  "summary": "The independent remediation review returned zero findings — both accepted revision intents were verified as carried out, and no new issue cleared the materiality bar. The constitution review that ran with it, however, flagged a policy question that needs a human decision, with a material-drift decision to follow.",
+  "task_id": "api-refactor"
+}

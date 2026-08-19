@@ -1,0 +1,98 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "constitution": "pass",
+    "eligible_waivers": [
+      {
+        "rule": {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      }
+    ],
+    "failed_rules": [],
+    "matched_trigger_rules": [
+      {
+        "rule_id": "approved-design-before-code",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "explicit-human-authority",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 1
+      }
+    ],
+    "uncertain_rules": [],
+    "uncertain_trigger_rules": []
+  },
+  "context_digest": "31615f4ed9572d097024da223f01b1b9d1b554b8399c5d0d136cc98fa25d39d6",
+  "current_evidence": {
+    "set_digest": "1f31fb01fdba25099dc9fdc298d5de43903131e029ba60f1ab0e5893c7ae623b",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "fb5701bd9c839bfa55927a13cd067d9b05e9898308e3160ce5e854e30671f990",
+        "producer_family": "claude",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-a445b2c812ec9e97cec65b4fc6c2403d811956cf7d05eb4eaccdf71213f09dad",
+  "intent_id": "afop-9ccd873f0b76d3143f18339d70babbc9c3ba6cf348749c50973b701c6e6f709b-open-gate",
+  "kind": "constitution-review",
+  "opened_at_revision": 323,
+  "phase_instance": "phase-impl-4",
+  "request_digest": "a56d34cc2ac1831d81350db6f21d817b6424cd7891d7d090f0ffb08bcd86f580",
+  "schema_version": "1",
+  "subject_digest": "ed357630d6d364da78333e7499e55b2d9c72108d82cb5c3a7065e8c6209a2714",
+  "summary": "The third review round returned zero rubric findings — both accepted revision intents (the open-gate tolerant read and the restated final-bytes full check) were verified as carried out. The constitution review now passes — the parent design truthfully records the second durable extension and the phase scope growth — and the upstream drift check reports aligned with no findings. This is the approval decision over that clean review evidence; commit authorization follows it.",
+  "task_id": "api-refactor"
+}

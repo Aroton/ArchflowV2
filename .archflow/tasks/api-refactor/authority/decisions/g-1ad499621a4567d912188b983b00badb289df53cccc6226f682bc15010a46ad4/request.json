@@ -1,0 +1,37 @@
+{
+  "allowed_decisions": [
+    "adopt-current-bytes",
+    "restore-recorded-bytes",
+    "adopt-committed-deletions",
+    "abort",
+    "cancel"
+  ],
+  "context": {
+    "deleted_projections": [
+      {
+        "path": "src/local/build-request.ts",
+        "recorded_digest": "a19746706d88c35c7863dc5e7cce38696ae6b10cecca3a3ea60bbdcb28317af4"
+      }
+    ],
+    "drifted_projections": []
+  },
+  "context_digest": "1fc7aced1c6cdbf287d21eb65408d20fcc1838cd4569878800334aa3ed7f7914",
+  "current_evidence": {
+    "drift_digest": "6241317882887798eef1543b45fcd869697782aeca08fd5ac043a14b119484a2",
+    "observation_kind": "projection-drift",
+    "observed_at_revision": 290,
+    "phase_instance": "phase-impl-4",
+    "schema_version": "1",
+    "task_id": "api-refactor"
+  },
+  "gate_id": "g-1ad499621a4567d912188b983b00badb289df53cccc6226f682bc15010a46ad4",
+  "intent_id": "afop-083a00be3216657b5065c26975d43afc5eb1b61acb23118f35cf7cd88b84c3f8-open-gate",
+  "kind": "baseline-adoption",
+  "opened_at_revision": 291,
+  "phase_instance": "phase-impl-4",
+  "request_digest": "b8e73998b012393f18828839ca0f7e27e8940d69ff3b4441b83e4d87f36d13bc",
+  "schema_version": "1",
+  "subject_digest": "6241317882887798eef1543b45fcd869697782aeca08fd5ac043a14b119484a2",
+  "summary": "src/local/build-request.ts was deleted by the already-authorized phase-4 milestone commit, but an older baseline-adoption record still claims it present, storing only a digest. Restoring is impossible (no retained bytes) and re-declaring the deletion in a produce is impossible (the base commit has no before-image), so the records need a human decision to accept the committed deletion as the baseline.",
+  "task_id": "api-refactor"
+}

@@ -1,0 +1,84 @@
+{
+  "allowed_decisions": [
+    "authorize-commit",
+    "revise",
+    "abort",
+    "cancel"
+  ],
+  "context": {
+    "baseline_commit": "07fde75ef16b72d127c47c51b5b5e12b67076872",
+    "commit_message": "ArchFlow: Implement api-refactor phase 4",
+    "current_artifact_digests": [
+      "ed357630d6d364da78333e7499e55b2d9c72108d82cb5c3a7065e8c6209a2714"
+    ],
+    "diff_digest": "22919efd5e1149ca97e149eb1e7067947e4cec4cbf26565b7feaf8bf43a44a89",
+    "parent_document_digests": [
+      "469b568ca4d58d7cfb72d364edb9682fe85c3fb5356cb5284e5a3f584ea712ff",
+      "5519cff95600cb635012a504577961343bc3eaf6aa2278f0c4827d4d818d16dc",
+      "66f10ea9e0441754cd0058001aa0bf2f7802b477ca645a5f13fb7cc19b40f323",
+      "e0fb4e000c18224e52d616f7a1c28cb8cd9c09ced80487f1f6b15d1df364dc95"
+    ],
+    "paths": [
+      ".archflow/tasks/api-refactor/design.md",
+      ".archflow/tasks/api-refactor/phases/4/design.md",
+      ".archflow/tasks/api-refactor/phases/4/impl-notes.md",
+      "dist/archflow-local.mjs",
+      "dist/archflow-mcp.mjs",
+      "dist/manifest.json",
+      "dist/metafile.json",
+      "docs/state/DURABLE-STATE.md",
+      "docs/validation/host-selection-thresholds.json",
+      "docs/validation/host-selection.json",
+      "docs/workflow/LIFECYCLE.md",
+      "src/contracts/durable-gate.ts",
+      "src/contracts/durable-state.ts",
+      "src/contracts/fingerprints.ts",
+      "src/contracts/gates.ts",
+      "src/contracts/schemas/v1/gate-contract.schema.json",
+      "src/contracts/schemas/v1/gate-request.schema.json",
+      "src/contracts/schemas/v1/task-state.schema.json",
+      "src/mcp/handlers/state.ts",
+      "src/state/gate-core.ts",
+      "src/state/gate-decision-interface.ts",
+      "src/state/gates.ts",
+      "src/state/next-action.ts",
+      "src/state/planned-final-phase.ts",
+      "src/state/reconciliation-discovery.ts",
+      "src/state/reconciliation.ts",
+      "src/state/status.ts",
+      "src/state/transitions.ts",
+      "test/contracts/durable-gate-v1-compatibility.test.ts",
+      "test/contracts/durable-structural-corpus.test.ts",
+      "test/integration/status-reentry-edit.test.ts",
+      "test/unit/planned-final-phase.test.ts",
+      "test/unit/state-next-action.test.ts",
+      "test/unit/state-reconciliation-discovery.test.ts",
+      "test/unit/state-reconciliation.test.ts",
+      "test/unit/state-transitions.test.ts"
+    ],
+    "target_ref": "refs/heads/feature/api-refactor"
+  },
+  "context_digest": "c52895e4a4d695a84aa741e51da8cd143c2bade8d757722b920d284d376c6be8",
+  "current_evidence": {
+    "set_digest": "1f31fb01fdba25099dc9fdc298d5de43903131e029ba60f1ab0e5893c7ae623b",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "fb5701bd9c839bfa55927a13cd067d9b05e9898308e3160ce5e854e30671f990",
+        "producer_family": "claude",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-b19e60715501f46a4a99ac306d3ca4425deeacc335ff20fa2b78750cd0d09000",
+  "intent_id": "afop-50c9c4ec407cede40f87f073a52d0723ff3d082f6c3d5401e1117557028d341a-open-gate",
+  "kind": "commit-authorization",
+  "opened_at_revision": 325,
+  "phase_instance": "phase-impl-4",
+  "request_digest": "09cfb47975748663575a2f6710cdd5d11f75a7df997fc548ec4fbd2757d98a0c",
+  "schema_version": "1",
+  "subject_digest": "ed357630d6d364da78333e7499e55b2d9c72108d82cb5c3a7065e8c6209a2714",
+  "summary": "Phase 4 implementation is complete and fully reviewed: three review rounds ended with zero findings, the constitution review passes, and drift is aligned. All verification passed on the exact shipped bytes — the full check suite (1887 passed, 32 skipped, including all 500 contract tests and 113 MCP runtime tests), a rebuilt bundle, and an 8-of-8 real-host validation run. This decision authorizes the phase 4 commit of the 33 declared output files (source, contracts, tests, rebuilt bundle, and updated documentation) with the reviewed commit message.",
+  "task_id": "api-refactor"
+}
