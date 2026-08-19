@@ -188,6 +188,13 @@ export type BaselineAdoptionRecord = {
   readonly adopted_at_revision: SafeInteger;
   /** SET — sorted by `path`, duplicates rejected. The observed digests the human adopted. */
   readonly adopted_projections: readonly ProjectionDigestRef[];
+  /**
+   * SET — sorted, duplicates rejected, disjoint from `adopted_projections`' paths. Paths whose
+   * committed absence the human adopted: the deletion was already part of git history (typically
+   * an authorized milestone commit), so the record retires the recorded presence instead of
+   * binding replacement bytes. Discovery overlays these as absence observations newest-per-path.
+   */
+  readonly adopted_absences?: readonly ProjectionDigestRef["path"][];
 };
 
 /**
@@ -462,6 +469,8 @@ export const baselineAdoptionRecordV1Schema = z.object({
   adopted_at_revision: positiveSafeInteger,
   adopted_projections: z.array(adoptedProjectionRefV1Schema)
     .refine((items) => isSortedUniqueBy(items, tupleKey("path")), "adopted projections must be sorted by path with no duplicates"),
+  adopted_absences: z.array(repositoryPathClaimV1Schema).optional()
+    .refine((items) => isSortedUniqueBy(items), "adopted absences must be sorted with no duplicates"),
 }).strict() as unknown as z.ZodType<BaselineAdoptionRecord>;
 
 export const planningRestartRecordV1Schema = z.object({

@@ -217,6 +217,131 @@ describe("discoverReconciliationInput", () => {
     }
   });
 
+  it("names an unrestorable missing path committed-absent once the deletion is committed", async () => {
+    const h = await harness();
+    const path = parseRepositoryPathClaim("tracked.txt");
+    const reference = {
+      phase_instance: PHASE, step: "produce", result_digest: D("7"), result_id: parseSafeId("result-1"),
+      input_fingerprint: D("2"),
+    } as TaskStateV1["authoritative_results"][number];
+    const current = h.state({
+      revision: parseSafeInteger(6),
+      authoritative_results: [reference],
+      baseline_adoptions: [{
+        gate_id: parsePathSafeId("gate-baseline"),
+        adopted_at_revision: parseSafeInteger(5),
+        adopted_projections: [{ path, content_digest: D("c") }],
+      }],
+    });
+    // Delete the file AND commit the deletion: an authorized commit already removed it, so no
+    // produce can re-declare the deletion either (the base holds no before-image).
+    rmSync(join(h.root, "tracked.txt"));
+    execFileSync("git", ["add", "--", "tracked.txt"], { cwd: h.root, env });
+    execFileSync("git", ["commit", "-q", "-m", "remove tracked"], { cwd: h.root, env });
+    const dependencies = {
+      ...h.services.dependencies,
+      load_retained_manifest: async () => ({
+        schema_version: "1" as const, ok: true as const,
+        value: {
+          manifest: { value: {
+            outputs: [{ path, path_class: "repository-source", operation: "modify" }],
+            projections: [{ path, content_digest: D("a") }],
+            accounting: { measured_at_revision: 4 },
+          } },
+        } as never,
+      }),
+    };
+    const discovered = await discoverReconciliationInput(dependencies, h.services.authority, canonicalDocument(current));
+    expect(discovered).toMatchObject({
+      ok: true,
+      value: { committed_absent_paths: [path] },
+    });
+    if (discovered.ok) {
+      expect(reconcileCurrentAuthority(discovered.value).findings).toContainEqual(
+        expect.objectContaining({ kind: "projection-mismatch", path, restore_unavailable: true, committed_absent: true }),
+      );
+    }
+  });
+
+  it("does not name a worktree-only deletion committed-absent", async () => {
+    const h = await harness();
+    const path = parseRepositoryPathClaim("tracked.txt");
+    const reference = {
+      phase_instance: PHASE, step: "produce", result_digest: D("7"), result_id: parseSafeId("result-1"),
+      input_fingerprint: D("2"),
+    } as TaskStateV1["authoritative_results"][number];
+    const current = h.state({
+      revision: parseSafeInteger(6),
+      authoritative_results: [reference],
+      baseline_adoptions: [{
+        gate_id: parsePathSafeId("gate-baseline"),
+        adopted_at_revision: parseSafeInteger(5),
+        adopted_projections: [{ path, content_digest: D("c") }],
+      }],
+    });
+    // The worktree copy is gone but HEAD still has the file: the deletion is producer work, not
+    // committed reality, so the produce re-entry remains the recovery.
+    rmSync(join(h.root, "tracked.txt"));
+    const dependencies = {
+      ...h.services.dependencies,
+      load_retained_manifest: async () => ({
+        schema_version: "1" as const, ok: true as const,
+        value: {
+          manifest: { value: {
+            outputs: [{ path, path_class: "repository-source", operation: "modify" }],
+            projections: [{ path, content_digest: D("a") }],
+            accounting: { measured_at_revision: 4 },
+          } },
+        } as never,
+      }),
+    };
+    const discovered = await discoverReconciliationInput(dependencies, h.services.authority, canonicalDocument(current));
+    expect(discovered).toMatchObject({ ok: true, value: {} });
+    if (discovered.ok) {
+      expect(discovered.value).not.toHaveProperty("committed_absent_paths");
+    }
+  });
+
+  it("retires a recorded presence when a deletion adoption supersedes it", async () => {
+    const h = await harness();
+    const path = parseRepositoryPathClaim("tracked.txt");
+    const reference = {
+      phase_instance: PHASE, step: "produce", result_digest: D("7"), result_id: parseSafeId("result-1"),
+      input_fingerprint: D("2"),
+    } as TaskStateV1["authoritative_results"][number];
+    const current = h.state({
+      revision: parseSafeInteger(6),
+      authoritative_results: [reference],
+      baseline_adoptions: [{
+        gate_id: parsePathSafeId("gate-deletion"),
+        adopted_at_revision: parseSafeInteger(5),
+        adopted_projections: [],
+        adopted_absences: [path],
+      }],
+    });
+    const dependencies = {
+      ...h.services.dependencies,
+      load_retained_manifest: async () => ({
+        schema_version: "1" as const, ok: true as const,
+        value: {
+          manifest: { value: {
+            outputs: [{ path, path_class: "repository-source", operation: "modify" }],
+            projections: [{ path, content_digest: D("a") }],
+            accounting: { measured_at_revision: 4 },
+          } },
+        } as never,
+      }),
+    };
+    const discovered = await discoverReconciliationInput(dependencies, h.services.authority, canonicalDocument(current));
+    expect(discovered).toMatchObject({
+      ok: true,
+      value: { recorded_projections: [], current_projections: [] },
+    });
+    if (discovered.ok) {
+      expect(reconcileCurrentAuthority(discovered.value).classification).toBe("consistent");
+    }
+  });
+
   it("uses the newest manifest generation when phases record the same projection path", async () => {
     const h = await harness();
     const path = parseRepositoryPathClaim("tracked.txt");

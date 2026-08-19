@@ -10,6 +10,7 @@ import {
   parseArchivedGateRequest,
   parseGateDecisionRecord,
   parseGateRequest,
+  parsePersistedGateRequest,
 } from "../../src/contracts/durable-gate.js";
 import { parseGateContext } from "../../src/contracts/gates.js";
 
@@ -38,6 +39,36 @@ const currentCommitRequest = (): Record<string, unknown> => {
     },
   };
 };
+
+/** A baseline-adoption request as the writer composes it today, with the five-decision tuple. */
+const currentBaselineRequest = (): Record<string, unknown> => ({
+  schema_version: "1",
+  gate_id: "gate-baseline-current-1",
+  intent_id: "intent-baseline-1",
+  request_digest: "a".repeat(64),
+  task_id: "task-1",
+  phase_instance: "phase-impl-2",
+  summary: "Decide the drifted baseline",
+  subject_digest: "b".repeat(64),
+  context_digest: "c".repeat(64),
+  current_evidence: {
+    schema_version: "1",
+    observation_kind: "projection-drift",
+    task_id: "task-1",
+    phase_instance: "phase-impl-2",
+    observed_at_revision: 12,
+    drift_digest: "d".repeat(64),
+  },
+  opened_at_revision: 13,
+  kind: "baseline-adoption",
+  allowed_decisions: ["adopt-current-bytes", "restore-recorded-bytes", "adopt-committed-deletions", "abort", "cancel"],
+  context: {
+    drifted_projections: [
+      { path: "src/a.ts", recorded_digest: "e".repeat(64), observed_digest: "f".repeat(64) },
+    ],
+    deleted_projections: [],
+  },
+});
 
 describe("durable gate V1 archive compatibility", () => {
   it("reads a retired request supersession without admitting it to the current writer shape", () => {
@@ -166,6 +197,70 @@ describe("durable gate V1 archive compatibility", () => {
       expect(() => parseGateRequest({ ...bytes, context })).toThrow();
       // It matches neither the current arm (empty `paths`) nor the archived arm (`paths` present).
       expect(() => parseArchivedGateRequest({ ...bytes, context })).toThrow();
+    });
+  });
+
+  describe("baseline-adoption archived before deletion adoption", () => {
+    // The pre-change archive differs only in the pinned four-decision tuple; the context without
+    // `deleted_projections` is already valid under the current optional field.
+    const archivedBaselineRequest = (): Record<string, unknown> => {
+      const request = currentBaselineRequest();
+      const drifted = (request.context as { drifted_projections: unknown }).drifted_projections;
+      return {
+        ...request,
+        allowed_decisions: ["adopt-current-bytes", "restore-recorded-bytes", "abort", "cancel"],
+        context: { drifted_projections: drifted },
+      };
+    };
+
+    it("reads the four-decision tuple without altering the document or its digest", () => {
+      const bytes = archivedBaselineRequest();
+      const archived = parseArchivedGateRequest(bytes);
+
+      expect(archived).toMatchObject({ gate_id: "gate-baseline-current-1", kind: "baseline-adoption" });
+      // Nothing stripped and nothing defaulted: the approval reload re-digests this value, so any
+      // added or dropped field would fail the durable-semantics contract.
+      expect(archived).toEqual(bytes);
+      expect(canonicalJsonDigest(archived as never)).toBe(canonicalJsonDigest(bytes as never));
+    });
+
+    it("still refuses the archived tuple to every current writer path", () => {
+      expect(() => parseGateRequest(archivedBaselineRequest())).toThrow();
+    });
+
+    it("reads a pre-change open gate so it keeps projecting and resolving", () => {
+      // A baseline-adoption gate left open at bundle switchover is read through the persisted
+      // parser on every open-gate path (status projection, discovery, gate resolution); the
+      // strict writer parser would return active-gate-request-invalid with no recovery.
+      const bytes = archivedBaselineRequest();
+      const persisted = parsePersistedGateRequest(bytes);
+      expect(persisted).toEqual(bytes);
+      // The decision interface iterates the request's own allowed_decisions, so a four-decision
+      // archive simply never offers adopt-committed-deletions.
+      expect(persisted.allowed_decisions).not.toContain("adopt-committed-deletions");
+      // The current writer shape reads identically through the persisted parser.
+      expect(parsePersistedGateRequest(currentBaselineRequest())).toEqual(currentBaselineRequest());
+    });
+
+    it("keeps a current-shape request on the current arm", () => {
+      const bytes = currentBaselineRequest();
+
+      expect(parseGateRequest(bytes)).toEqual(bytes);
+      expect(parseArchivedGateRequest(bytes)).toEqual(parseGateRequest(bytes));
+    });
+
+    it("relaxes nothing else about the archived context", () => {
+      // The twin admits only the older tuple; a drifted list whose digests match still fails, and
+      // an unsorted list still fails, exactly as on the current arm.
+      const bytes = archivedBaselineRequest();
+      const matching = {
+        drifted_projections: [
+          { path: "src/a.ts", recorded_digest: "e".repeat(64), observed_digest: "e".repeat(64) },
+        ],
+      };
+      expect(() => parseArchivedGateRequest({ ...bytes, context: matching })).toThrow();
+      const empty = { drifted_projections: [], deleted_projections: [] };
+      expect(() => parseArchivedGateRequest({ ...bytes, context: empty })).toThrow();
     });
   });
 });

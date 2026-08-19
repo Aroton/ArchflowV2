@@ -23229,10 +23229,22 @@ var contexts = {
   }).strict(),
   "restore-collision": external_exports.object({ path: taskPathClaimV1Schema, recorded_generation_digest: digest, current_generation_digest: digest, adoption_candidate: authorityLink.optional() }).strict(),
   "baseline-adoption": external_exports.object({
-    drifted_projections: external_exports.array(external_exports.object({ path: repositoryPathClaimV1Schema, recorded_digest: digest, observed_digest: digest }).strict()).min(1)
+    drifted_projections: external_exports.array(
+      external_exports.object({ path: repositoryPathClaimV1Schema, recorded_digest: digest, observed_digest: digest }).strict()
+    ),
+    // Optional, not defaulted: archives written before deletion adoption existed carry no such
+    // field, and the published contract must describe those archives as valid — a JSON Schema
+    // `default` is an annotation, so a required-but-defaulted field would retroactively reject
+    // decisions a human already made.
+    deleted_projections: external_exports.array(external_exports.object({ path: repositoryPathClaimV1Schema, recorded_digest: digest }).strict()).optional()
   }).strict().superRefine((value, context2) => {
+    const deleted = value.deleted_projections ?? [];
     if (!sortedUnique(value.drifted_projections, (left, right) => left.path.localeCompare(right.path))) context2.addIssue({ code: "custom", message: "drifted projections must be sorted by path with no duplicates" });
     if (value.drifted_projections.some((item) => item.recorded_digest === item.observed_digest)) context2.addIssue({ code: "custom", message: "a drifted projection must differ between its recorded and observed digests" });
+    if (!sortedUnique(deleted, (left, right) => left.path.localeCompare(right.path))) context2.addIssue({ code: "custom", message: "deleted projections must be sorted by path with no duplicates" });
+    if (value.drifted_projections.length === 0 && deleted.length === 0) context2.addIssue({ code: "custom", message: "a baseline adoption must name at least one drifted or deleted projection" });
+    const driftedPaths = new Set(value.drifted_projections.map((item) => item.path));
+    if (deleted.some((item) => driftedPaths.has(item.path))) context2.addIssue({ code: "custom", message: "a projection cannot be both drifted and deleted" });
   }),
   "migration-audit": external_exports.object({
     source_identity_digest: digest,
@@ -23262,7 +23274,7 @@ var decisions = {
   "constitution-edit": decision(["revert-edit", "start-base-amendment", "abort"]),
   "commit-authorization": decision(["authorize-commit", "revise", "abort"]),
   "restore-collision": external_exports.union([decision(["discard-and-restore", "abort"]), external_exports.object({ decision: external_exports.literal("adopt-as-new-generation"), reason, adoption_authority: authorityLink, rationale: boundedText }).strict()]),
-  "baseline-adoption": decision(["adopt-current-bytes", "restore-recorded-bytes", "abort"]),
+  "baseline-adoption": decision(["adopt-current-bytes", "restore-recorded-bytes", "adopt-committed-deletions", "abort"]),
   "migration-audit": decision(["accept-import-audit", "revise", "abort"])
 };
 var effects = Object.freeze({
@@ -23281,6 +23293,7 @@ var effects = Object.freeze({
   "adopt-as-new-generation": "advance",
   "adopt-current-bytes": "advance",
   "restore-recorded-bytes": "advance",
+  "adopt-committed-deletions": "advance",
   "accept-import-audit": "advance"
 });
 var GATE_CONTRACTS = Object.freeze(Object.fromEntries(GATE_KINDS.map((kind) => [kind, Object.freeze({ context: contexts[kind], decision: decisions[kind] })])));
@@ -23846,7 +23859,7 @@ var GATE_REQUEST_DECISIONS = {
   "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
   "commit-authorization": ["authorize-commit", "revise", "abort", "cancel"],
   "restore-collision": ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"],
-  "baseline-adoption": ["adopt-current-bytes", "restore-recorded-bytes", "abort", "cancel"],
+  "baseline-adoption": ["adopt-current-bytes", "restore-recorded-bytes", "adopt-committed-deletions", "abort", "cancel"],
   "migration-audit": ["accept-import-audit", "revise", "abort", "cancel"]
 };
 var WAIVER_DECISIONS = ["grant", "deny", "cancel"];
@@ -23890,6 +23903,12 @@ var legacyGateRequestV1Schema = armUnion(gateArms({ supersedes: legacySupersessi
 var archivedCommitAuthorizationArm = (extra) => gateArm("commit-authorization", archivedCommitAuthorizationContextSchema, allowedDecisionTuples["commit-authorization"], extra);
 var archivedCommitAuthorizationRequestV1Schema = archivedCommitAuthorizationArm({});
 var archivedLegacyCommitAuthorizationRequestV1Schema = archivedCommitAuthorizationArm({ supersedes: legacySupersession });
+var archivedBaselineAdoptionRequestV1Schema = gateArm(
+  "baseline-adoption",
+  GATE_CONTRACTS["baseline-adoption"].context,
+  literalTuple(["adopt-current-bytes", "restore-recorded-bytes", "abort", "cancel"]),
+  { current_evidence: baselineObservationRefV1Schema }
+);
 var PAYLOAD_REQUIRED_FIELDS = ["payload", "human_provenance"];
 var WAIVER_REQUIRED_FIELDS = ["granted", "scope", "origin", "notes", "human_provenance"];
 var CANCELLATION_FIELDS = ["cancelled", "reason", "human_provenance"];
@@ -23967,11 +23986,14 @@ function parseGateDecisionRecord(value) {
 }
 function parseArchivedGateRequest(value) {
   assertPlainJson(value, "archived gate request");
-  for (const candidate of [gateRequestV1Schema, archivedCommitAuthorizationRequestV1Schema, archivedLegacyCommitAuthorizationRequestV1Schema]) {
+  for (const candidate of [gateRequestV1Schema, archivedCommitAuthorizationRequestV1Schema, archivedLegacyCommitAuthorizationRequestV1Schema, archivedBaselineAdoptionRequestV1Schema]) {
     const parsed = candidate.safeParse(value);
     if (parsed.success) return parsed.data;
   }
   return legacyGateRequestV1Schema.parse(value);
+}
+function parsePersistedGateRequest(value) {
+  return parseArchivedGateRequest(value);
 }
 function parseArchivedGateDecisionRecord(value) {
   assertPlainJson(value, "archived gate decision record");
@@ -25889,7 +25911,12 @@ function computeGateContextDigest(kind, context2) {
 }
 function baselineAdoptionDriftDigest(context2) {
   const snapshot2 = materialize(context2, "baseline adoption drift subject");
-  return canonicalJsonDigest({ schema_version: "1", digest_kind: "baseline-adoption-drift", drifted_projections: snapshot2.drifted_projections });
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "baseline-adoption-drift",
+    drifted_projections: snapshot2.drifted_projections,
+    ...(snapshot2.deleted_projections ?? []).length === 0 ? {} : { deleted_projections: snapshot2.deleted_projections }
+  });
 }
 function computePinnedConfigDigest(configBytes) {
   return sha256Bytes(configBytes);
@@ -26105,7 +26132,8 @@ var adoptedProjectionRefV1Schema = external_exports.object({
 var baselineAdoptionRecordV1Schema = external_exports.object({
   gate_id: pathSafeIdV1Schema,
   adopted_at_revision: positiveSafeInteger,
-  adopted_projections: external_exports.array(adoptedProjectionRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "adopted projections must be sorted by path with no duplicates")
+  adopted_projections: external_exports.array(adoptedProjectionRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "adopted projections must be sorted by path with no duplicates"),
+  adopted_absences: external_exports.array(repositoryPathClaimV1Schema).optional().refine((items) => isSortedUniqueBy(items), "adopted absences must be sorted with no duplicates")
 }).strict();
 var planningRestartRecordV1Schema = external_exports.object({
   restart_id: pathSafeIdV1Schema,
@@ -33536,7 +33564,8 @@ function materialize3(input) {
     current_projections: input.current_projections,
     active_heads: input.active_heads,
     ...input.blocking_reasons === void 0 ? {} : { blocking_reasons: input.blocking_reasons },
-    ...input.unrestorable_paths === void 0 ? {} : { unrestorable_paths: input.unrestorable_paths }
+    ...input.unrestorable_paths === void 0 ? {} : { unrestorable_paths: input.unrestorable_paths },
+    ...input.committed_absent_paths === void 0 ? {} : { committed_absent_paths: input.committed_absent_paths }
   }, "reconciliation working set");
   let intent;
   if (input.intent !== void 0) {
@@ -33560,7 +33589,8 @@ function materialize3(input) {
     active_heads: structuredClone(input.active_heads),
     ...intent === void 0 ? {} : { intent },
     ...input.blocking_reasons === void 0 ? {} : { blocking_reasons: Object.freeze([...input.blocking_reasons]) },
-    ...input.unrestorable_paths === void 0 ? {} : { unrestorable_paths: Object.freeze([...input.unrestorable_paths]) }
+    ...input.unrestorable_paths === void 0 ? {} : { unrestorable_paths: Object.freeze([...input.unrestorable_paths]) },
+    ...input.committed_absent_paths === void 0 ? {} : { committed_absent_paths: Object.freeze([...input.committed_absent_paths]) }
   };
 }
 function ownData(value, field, label) {
@@ -33575,6 +33605,7 @@ function reconcileCurrentAuthority(value) {
   const findings = [];
   const observed2 = new Map(input.current_projections.map((projection) => [projection.path, projection.content_digest]));
   const unrestorable = new Set(input.unrestorable_paths ?? []);
+  const committedAbsent = new Set(input.committed_absent_paths ?? []);
   for (const recorded of input.recorded_projections) {
     const digest9 = observed2.get(recorded.path);
     if (digest9 !== recorded.content_digest) {
@@ -33584,6 +33615,7 @@ function reconcileCurrentAuthority(value) {
         recorded_digest: recorded.content_digest,
         ...digest9 === void 0 ? {} : { observed_digest: digest9 },
         ...digest9 === void 0 && unrestorable.has(recorded.path) ? { restore_unavailable: true } : {},
+        ...digest9 === void 0 && unrestorable.has(recorded.path) && committedAbsent.has(recorded.path) ? { committed_absent: true } : {},
         next_action: "open-baseline-adoption-gate"
       }));
     }
@@ -36745,7 +36777,7 @@ var DECISIONS = Object.freeze({
   "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
   "commit-authorization": ["authorize-commit", "revise", "abort", "cancel"],
   "restore-collision": ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"],
-  "baseline-adoption": ["adopt-current-bytes", "restore-recorded-bytes", "abort", "cancel"],
+  "baseline-adoption": ["adopt-current-bytes", "restore-recorded-bytes", "adopt-committed-deletions", "abort", "cancel"],
   "migration-audit": ["accept-import-audit", "revise", "abort", "cancel"]
 });
 function deepFreezeGateJson(value) {
@@ -37476,6 +37508,9 @@ function buildGateDecisionTemplates(active) {
       templates.push(cancellation);
       continue;
     }
+    if (request.kind === "baseline-adoption" && ((decision3 === "adopt-current-bytes" || decision3 === "restore-recorded-bytes") && request.context.drifted_projections.length === 0 || decision3 === "adopt-committed-deletions" && (request.context.deleted_projections?.length ?? 0) === 0)) {
+      continue;
+    }
     const context2 = request.context;
     const payloads = [];
     if (decision3 === "waiver-requested") {
@@ -37543,7 +37578,7 @@ var PRESENTATION_COPY = Object.freeze({
   }),
   "baseline-adoption": Object.freeze({
     title: "Decide what to do with changed files",
-    question: "These files changed after ArchFlow recorded their reviewed bytes (for example by later commits or a merge). Keep the current versions as the new baseline, restore the recorded versions, or stop?"
+    question: "These files changed after ArchFlow recorded their reviewed bytes (for example by later commits or a merge), or were deleted by an already-committed change. Keep the current state as the new baseline, restore the recorded versions, or stop?"
   }),
   "migration-audit": Object.freeze({
     title: "Review the imported task",
@@ -37564,6 +37599,7 @@ var OPTION_COPY = Object.freeze({
   "discard-and-restore": Object.freeze({ token: "restore-saved-version", label: "Restore the saved version", consequence: "Discard the conflicting workspace copy and reconstruct it from durable authority." }),
   "adopt-as-new-generation": Object.freeze({ token: "keep-current-version", label: "Keep the current version", consequence: "Treat the current workspace copy as a new generation of the artifact." }),
   "adopt-current-bytes": Object.freeze({ token: "keep-current-versions", label: "Keep the current versions", consequence: "Record the current file versions as the reviewed baseline without re-reviewing them. Nothing is lost, and the next implementation phase still reviews everything it touches." }),
+  "adopt-committed-deletions": Object.freeze({ token: "keep-the-deletions", label: "Keep the deletions", consequence: "Accept the committed deletions as the reviewed baseline. These files were already removed by an authorized commit; ArchFlow's records stop claiming them, and nothing is restored." }),
   "restore-recorded-bytes": Object.freeze({ token: "restore-recorded-versions", label: "Restore the recorded versions", consequence: "Discard the current versions of these files and rewrite the recorded ones. The discarded changes stay in git history." }),
   "accept-import-audit": Object.freeze({ token: "accept-import", label: "Accept the import", consequence: "Confirm that the imported task faithfully represents the legacy source and continue." }),
   cancel: Object.freeze({ token: "cancel", label: "Cancel this decision", consequence: "Close this decision without approving anything; the workflow will remain stopped here." }),
@@ -37628,9 +37664,16 @@ function buildHumanGatePresentation(active) {
     } : {},
     ...request.kind === "baseline-adoption" ? {
       details: Object.freeze([
-        `${request.context.drifted_projections.length} file${request.context.drifted_projections.length === 1 ? "" : "s"} changed, including:`,
-        ...request.context.drifted_projections.slice(0, 10).map((drifted) => drifted.path),
-        ...request.context.drifted_projections.length > 10 ? [`\u2026 and ${request.context.drifted_projections.length - 10} more`] : []
+        ...request.context.drifted_projections.length === 0 ? [] : [
+          `${request.context.drifted_projections.length} file${request.context.drifted_projections.length === 1 ? "" : "s"} changed, including:`,
+          ...request.context.drifted_projections.slice(0, 10).map((drifted) => drifted.path),
+          ...request.context.drifted_projections.length > 10 ? [`\u2026 and ${request.context.drifted_projections.length - 10} more`] : []
+        ],
+        ...(request.context.deleted_projections ?? []).length === 0 ? [] : [
+          `${request.context.deleted_projections.length} file${request.context.deleted_projections.length === 1 ? "" : "s"} deleted by an already-committed change:`,
+          ...request.context.deleted_projections.slice(0, 10).map((deleted) => deleted.path),
+          ...request.context.deleted_projections.length > 10 ? [`\u2026 and ${request.context.deleted_projections.length - 10} more`] : []
+        ]
       ])
     } : {},
     question: `${copy.question} Choose an option and briefly explain why.`,
@@ -37776,13 +37819,25 @@ function deriveNextAction(input) {
       );
       if (missing.length > 0) {
         const produceReentryApplies = state.step === "produce" && state.status === "succeeded" && state.authoritative_results.some((reference) => reference.phase_instance === state.phase_instance && reference.step === "produce");
-        if (produceReentryApplies && missing.some((candidate) => candidate.restore_unavailable === true)) {
+        const committedDeletions = missing.filter((candidate) => candidate.committed_absent === true && candidate.restore_unavailable === true);
+        const redeclarable = (input.reconciliation_findings ?? []).some((candidate) => candidate.kind === "projection-mismatch" && (candidate.observed_digest !== void 0 || !(candidate.committed_absent === true && candidate.restore_unavailable === true)));
+        if (produceReentryApplies && redeclarable && missing.some((candidate) => candidate.restore_unavailable === true)) {
           return action(
             "run-step",
-            "A recorded projection is missing from the worktree and has no retained bytes to restore from. Reopen the produce window and record a fresh terminal produce that re-declares the drifted paths and the deletion; the review boundary then covers the new bytes.",
+            "A recorded projection is missing from the worktree and has no retained bytes to restore from. Reopen the produce window and record a fresh terminal produce that re-declares the drifted paths and the deletion; the review boundary then covers the new bytes. A deletion already absent from HEAD cannot be re-declared and settles at its own human decision afterwards.",
             false,
             state,
             { step: "produce" }
+          );
+        }
+        if (committedDeletions.length > 0) {
+          const deletedCount = committedDeletions.length;
+          return action(
+            "open-gate",
+            `${deletedCount} file${deletedCount === 1 ? "" : "s"} ArchFlow recorded from reviewed work w${deletedCount === 1 ? "as" : "ere"} deleted by an already-committed change, and no retained bytes exist to restore. Open the baseline decision so a human chooses whether the records accept the committed deletion${deletedCount === 1 ? "" : "s"} as the baseline.`,
+            true,
+            state,
+            { gate_kind: "baseline-adoption" }
           );
         }
         return action(
@@ -38063,6 +38118,19 @@ async function discoverNewestProjections(dependencies, authority, state) {
           newest.set(projection.path, adopted);
         }
       }
+      for (const path2 of adoption.adopted_absences ?? []) {
+        const prior = newest.get(path2);
+        if (prior === void 0) return stateInvalid2(authority, "reconciliation-projection-unbound");
+        if (prior.retired) continue;
+        if (adoption.adopted_at_revision > prior.measured_at_revision) {
+          newest.set(path2, Object.freeze({
+            retired: true,
+            path: path2,
+            measured_at_revision: adoption.adopted_at_revision,
+            reference: void 0
+          }));
+        }
+      }
     }
     return ok17(newest);
   } catch {
@@ -38076,6 +38144,7 @@ async function discoverProjections(dependencies, authority, state) {
     const recorded = [];
     const current = [];
     const unrestorable = [];
+    const committedAbsent = [];
     for (const observation of [...newest.value.values()].sort((left, right) => left.path.localeCompare(right.path))) {
       if (observation.retired) continue;
       recorded.push(observation.projection);
@@ -38083,16 +38152,27 @@ async function discoverProjections(dependencies, authority, state) {
       const digest9 = await currentProjectionDigest(observation.target);
       if (digest9 !== "missing") {
         current.push(Object.freeze({ path: observation.projection.path, content_digest: digest9 }));
+      } else if (observation.reference === void 0 && !await committedAtHead(dependencies, authority, observation.projection.path)) {
+        committedAbsent.push(observation.projection.path);
       }
     }
     return ok17(Object.freeze({
       recorded: Object.freeze(recorded),
       current: Object.freeze(current),
-      unrestorable: Object.freeze(unrestorable)
+      unrestorable: Object.freeze(unrestorable),
+      committed_absent: Object.freeze(committedAbsent)
     }));
   } catch {
     return ioFailure3(authority, "discover-reconciliation-projections");
   }
+}
+async function committedAtHead(dependencies, authority, path2) {
+  const result = await dependencies.runner.run({
+    argv: ["cat-file", "-e", `HEAD:${path2}`],
+    operation: parseSafeCode("git-committed-absence-probe"),
+    expectedAbsence: [{ code: 128, stderrIncludes: "does not exist in" }]
+  });
+  return !result.absent;
 }
 async function discoverGateHead(dependencies, authority, state) {
   const open7 = state.value.open_gate;
@@ -38105,7 +38185,7 @@ async function discoverGateHead(dependencies, authority, state) {
     context: authority.context
   });
   if (!requestPath.ok) return requestPath;
-  const request = await readCanonical2(requestPath.value, "gate request", parseGateRequest);
+  const request = await readCanonical2(requestPath.value, "gate request", parsePersistedGateRequest);
   if (request === "missing") return ok17(Object.freeze({ blocker: "active-gate-request-missing" }));
   if (request === "invalid") return ok17(Object.freeze({ blocker: "active-gate-request-invalid" }));
   try {
@@ -38167,6 +38247,7 @@ async function discoverReconciliationInput(dependencies, authority, state) {
     recorded_projections: projections.value.recorded,
     current_projections: projections.value.current,
     ...projections.value.unrestorable.length === 0 ? {} : { unrestorable_paths: projections.value.unrestorable },
+    ...projections.value.committed_absent.length === 0 ? {} : { committed_absent_paths: projections.value.committed_absent },
     active_heads: Object.freeze({
       ...gate.value.head === void 0 ? {} : { gate: gate.value.head }
     }),
@@ -38179,9 +38260,12 @@ async function discoverReconciliationInput(dependencies, authority, state) {
 var ok18 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function baselineAdoptionInputFromFindings(task_id, state, findings) {
   const mismatches = findings.filter((finding) => finding.kind === "projection-mismatch");
-  if (mismatches.length === 0 || !mismatches.every((finding) => finding.observed_digest !== void 0)) return void 0;
+  const drifted = mismatches.filter((finding) => finding.observed_digest !== void 0);
+  const deleted = mismatches.filter((finding) => finding.observed_digest === void 0 && finding.restore_unavailable === true && finding.committed_absent === true);
+  if (drifted.length + deleted.length === 0 || drifted.length + deleted.length !== mismatches.length) return void 0;
   const context2 = Object.freeze({
-    drifted_projections: Object.freeze(mismatches.map((finding) => Object.freeze({ path: finding.path, recorded_digest: finding.recorded_digest, observed_digest: finding.observed_digest })).sort((left, right) => left.path.localeCompare(right.path)))
+    drifted_projections: Object.freeze(drifted.map((finding) => Object.freeze({ path: finding.path, recorded_digest: finding.recorded_digest, observed_digest: finding.observed_digest })).sort((left, right) => left.path.localeCompare(right.path))),
+    deleted_projections: Object.freeze(deleted.map((finding) => Object.freeze({ path: finding.path, recorded_digest: finding.recorded_digest })).sort((left, right) => left.path.localeCompare(right.path)))
   });
   const subjectDigest = baselineAdoptionDriftDigest(context2);
   return Object.freeze({
@@ -38256,7 +38340,7 @@ async function readArchivedGateRequest(dependencies, authority, gateId) {
     });
     if (!target.ok) return void 0;
     const bytes = new Uint8Array(await readFile10(target.value.absolute));
-    return parseGateRequest(parseCanonicalDocument(bytes, "gate request").value);
+    return parsePersistedGateRequest(parseCanonicalDocument(bytes, "gate request").value);
   } catch (error51) {
     if (error51.code === "ENOENT") return void 0;
     throw error51;

@@ -65,6 +65,14 @@ export function buildGateDecisionTemplates(active: ActiveGateV1): readonly Plain
       templates.push(cancellation);
       continue;
     }
+    // A baseline adoption offers only the decisions its context can satisfy: bytes choices need
+    // live drifted files, the deletion choice needs committed deletions. Offering an inapplicable
+    // choice would archive a decision that can never settle.
+    if (request.kind === "baseline-adoption" &&
+        ((decision === "adopt-current-bytes" || decision === "restore-recorded-bytes") && request.context.drifted_projections.length === 0 ||
+         decision === "adopt-committed-deletions" && (request.context.deleted_projections?.length ?? 0) === 0)) {
+      continue;
+    }
 
     const context = request.context as GateRequestV1["context"];
     const payloads: PlainJsonValue[] = [];
@@ -135,6 +143,7 @@ type PresentedDecision =
   | "adopt-as-new-generation"
   | "adopt-current-bytes"
   | "restore-recorded-bytes"
+  | "adopt-committed-deletions"
   | "accept-import-audit"
   | "cancel"
   | "waiver-grant"
@@ -182,7 +191,7 @@ const PRESENTATION_COPY = Object.freeze({
   }),
   "baseline-adoption": Object.freeze({
     title: "Decide what to do with changed files",
-    question: "These files changed after ArchFlow recorded their reviewed bytes (for example by later commits or a merge). Keep the current versions as the new baseline, restore the recorded versions, or stop?",
+    question: "These files changed after ArchFlow recorded their reviewed bytes (for example by later commits or a merge), or were deleted by an already-committed change. Keep the current state as the new baseline, restore the recorded versions, or stop?",
   }),
   "migration-audit": Object.freeze({
     title: "Review the imported task",
@@ -204,6 +213,7 @@ const OPTION_COPY = Object.freeze({
   "discard-and-restore": Object.freeze({ token: "restore-saved-version", label: "Restore the saved version", consequence: "Discard the conflicting workspace copy and reconstruct it from durable authority." }),
   "adopt-as-new-generation": Object.freeze({ token: "keep-current-version", label: "Keep the current version", consequence: "Treat the current workspace copy as a new generation of the artifact." }),
   "adopt-current-bytes": Object.freeze({ token: "keep-current-versions", label: "Keep the current versions", consequence: "Record the current file versions as the reviewed baseline without re-reviewing them. Nothing is lost, and the next implementation phase still reviews everything it touches." }),
+  "adopt-committed-deletions": Object.freeze({ token: "keep-the-deletions", label: "Keep the deletions", consequence: "Accept the committed deletions as the reviewed baseline. These files were already removed by an authorized commit; ArchFlow's records stop claiming them, and nothing is restored." }),
   "restore-recorded-bytes": Object.freeze({ token: "restore-recorded-versions", label: "Restore the recorded versions", consequence: "Discard the current versions of these files and rewrite the recorded ones. The discarded changes stay in git history." }),
   "accept-import-audit": Object.freeze({ token: "accept-import", label: "Accept the import", consequence: "Confirm that the imported task faithfully represents the legacy source and continue." }),
   cancel: Object.freeze({ token: "cancel", label: "Cancel this decision", consequence: "Close this decision without approving anything; the workflow will remain stopped here." }),
@@ -280,9 +290,16 @@ export function buildHumanGatePresentation(active: ActiveGateV1): HumanGatePrese
     } : {}),
     ...(request.kind === "baseline-adoption" ? {
       details: Object.freeze([
-        `${request.context.drifted_projections.length} file${request.context.drifted_projections.length === 1 ? "" : "s"} changed, including:`,
-        ...request.context.drifted_projections.slice(0, 10).map((drifted) => drifted.path),
-        ...(request.context.drifted_projections.length > 10 ? [`… and ${request.context.drifted_projections.length - 10} more`] : []),
+        ...(request.context.drifted_projections.length === 0 ? [] : [
+          `${request.context.drifted_projections.length} file${request.context.drifted_projections.length === 1 ? "" : "s"} changed, including:`,
+          ...request.context.drifted_projections.slice(0, 10).map((drifted) => drifted.path),
+          ...(request.context.drifted_projections.length > 10 ? [`… and ${request.context.drifted_projections.length - 10} more`] : []),
+        ]),
+        ...((request.context.deleted_projections ?? []).length === 0 ? [] : [
+          `${request.context.deleted_projections!.length} file${request.context.deleted_projections!.length === 1 ? "" : "s"} deleted by an already-committed change:`,
+          ...request.context.deleted_projections!.slice(0, 10).map((deleted) => deleted.path),
+          ...(request.context.deleted_projections!.length > 10 ? [`… and ${request.context.deleted_projections!.length - 10} more`] : []),
+        ]),
       ]),
     } : {}),
     question: `${copy.question} Choose an option and briefly explain why.`,

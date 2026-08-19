@@ -76,7 +76,7 @@ journeys pass" rule applied to the last journey that matters — this one.
 
 ### 1.3 Mid-phase amendments recorded at implementation (human-directed)
 
-Implementation deviated from the pinned plan in five material ways, each recorded here so
+Implementation deviated from the pinned plan in six material ways, each recorded here so
 the design stays truthful; detail and verification live in `phases/4/impl-notes.md`.
 
 1. **Main merge absorbed mid-phase (user-directed).** The task's durable state had been
@@ -138,10 +138,38 @@ the design stays truthful; detail and verification live in `phases/4/impl-notes.
    through `planStateTransition` as `derived_planned_final_phase` and computed in the state
    handler's produce settlement); an open-ended recorded design clears the bound, a produce
    that records no design document leaves it untouched, and a recorded design whose phase
-   plan does not conform fails the produce closed. Pinned by
+   plan does not conform fails the produce closed — but only while a stored bound exists to
+   go stale. A task with no stored bound (fresh, legacy-imported, or restarted to the design
+   position) preserves the absent bound: legacy imports legitimately record designs without
+   the ArchFlow phase-plan grammar and never derive the bound, and the design-approval gate
+   already enforces conformance at approval. Pinned by
    `test/unit/planned-final-phase.test.ts` and three transitions tests; the reopened
    phase-design produce of this very document is the live proof — recording it re-derives
    this task's bound from 10 to 4, and the task then completes under the fixed code.
+6. **Committed-deletion adoption in the baseline gate (user-directed, added at the terminal
+   produce).** Driving the task to its finish wedged one seam further: an authorized
+   milestone commit (`df0bdc3`) deleted `src/local/build-request.ts`, but the rev-149
+   baseline-adoption record still projected it present (digest-only, so unrestorable), and
+   the deletion could not be re-declared in any future produce because the base commit
+   holds no before-image — the two existing recoveries (restore, produce re-entry) are both
+   structurally closed for a committed deletion under an adoption-sourced record. Fix: the
+   `baseline-adoption` gate grows a deletion shape. Discovery names an unrestorable missing
+   path `committed_absent` when it is gone from HEAD as well as the worktree
+   (`git cat-file -e`); routing then offers the human gate instead of the produce re-entry;
+   the gate context carries `deleted_projections` beside the drifted ones; and the new
+   `adopt-committed-deletions` decision records `adopted_absences` on the adoption record,
+   which discovery overlays as an absence observation newest-per-path — retiring the stale
+   presence exactly like a declared deletion output. The presentation offers only the
+   choices the context can satisfy, and the drift digest stays byte-compatible with
+   pre-deletion archives (the new list joins only when non-empty). Routing precedence,
+   corrected after the first live gate opening swept the phase's own unreviewed post-produce
+   edits into a bytes adoption, and again after a purely-committed finding set offered the
+   re-entry in a loop: the produce re-entry is offered while anything re-declarable remains
+   (drifted paths, or a worktree-only deletion) — the fresh terminal produce covers those
+   bytes under review — and once only committed deletions remain, the re-entry can make no
+   progress and the human deletion decision takes over.
+   Pinned by discovery, reconciliation, next-action, structural-corpus, and a semantic
+   journey test that drives a real committed deletion through the human decision.
 
 ## 2. Upstream requirements and observable outcome
 

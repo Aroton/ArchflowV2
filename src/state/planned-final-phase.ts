@@ -1,7 +1,9 @@
 import { sha256Bytes } from "../contracts/canonical.js";
 import type { GateDecisionRecordV1 } from "../contracts/durable-gate.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
+import { decodePhaseInstance } from "../contracts/phase-instance.js";
 import type { ProjectResult } from "../contracts/errors.js";
+import type { TaskSlug } from "../contracts/evidence.js";
 import { issue, ok, type GateLifecycleDependencies } from "./gate-core.js";
 
 export function plannedFinalPhaseFromDesign(bytes: Uint8Array): number | null {
@@ -82,4 +84,54 @@ export async function loadApprovedDesignFinalPhase(
   } catch {
     return issue("STATE_INVALID", current, "approved-design-phase-count-invalid");
   }
+}
+
+/**
+ * Re-derives the planned final phase from a prepared produce result's retained payloads,
+ * but only when this produce actually recorded the task design document. Phase-boundary
+ * revisions change the phase plan through phase-design compound projections and
+ * implementation governing-document outputs long after the design position's own approval
+ * settled its bound; deriving from the bytes this very transaction records keeps the bound
+ * from going stale without waiting for another design-position approval. Returns undefined
+ * when the design document is not among the payloads, so the caller leaves the stored bound
+ * untouched; a null result (open-ended marker) clears it. A recorded design whose phase plan
+ * does not conform throws — failing the produce closed rather than silently keeping a stale
+ * bound — but only while a stored bound exists to go stale. A task with no stored bound
+ * (fresh, legacy-imported, or restarted to the design position) preserves the absent bound:
+ * legacy imports legitimately record designs without the ArchFlow phase-plan grammar, their
+ * approval path never derives the bound, and the design-approval gate already enforces
+ * phase-plan conformance at approval.
+ */
+export function plannedFinalPhaseFromRecordedPayloads(
+  taskId: TaskSlug,
+  payloads: readonly Readonly<{ path: string; bytes: Uint8Array }>[],
+  storedPlannedFinalPhase: number | null | undefined,
+): number | null | undefined {
+  const designPath = `.archflow/tasks/${taskId}/design.md`;
+  const recorded = payloads.find((payload) => payload.path === designPath);
+  if (recorded === undefined) return undefined;
+  try {
+    return plannedFinalPhaseFromDesign(recorded.bytes);
+  } catch (error) {
+    if (storedPlannedFinalPhase !== undefined) throw error;
+    return undefined;
+  }
+}
+
+/**
+ * A produce at a numbered phase may not record a design whose phase plan ends below that
+ * phase: completion is an equality test, so a lower bound can never fire and the workflow
+ * would wedge offering a nonexistent successor phase — the same wedge class the produce-time
+ * re-derivation exists to remove. PRD and design positions carry no phase number, so any
+ * conforming plan is acceptable there. The honest resolution for a genuinely shrunken plan is
+ * a backward planning restart, which this refusal directs the producer toward (mirroring the
+ * migration-audit refusal of a resume phase beyond the plan).
+ */
+export function derivedFinalPhaseBelowCurrentPhase(
+  derived: number,
+  phaseInstance: TaskStateV1["phase_instance"],
+): boolean {
+  const decoded = decodePhaseInstance(phaseInstance);
+  return (decoded.kind === "phase-impl" || decoded.kind === "phase-design") &&
+    derived < Number(decoded.phase);
 }

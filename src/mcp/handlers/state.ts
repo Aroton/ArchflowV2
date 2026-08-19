@@ -37,6 +37,7 @@ import { planPlanningRestart } from "../../state/transitions.js";
 import { installPlanningRestartAskAppend, validatePlanningRestartAskAppend } from "../../state/phase-documents.js";
 import { authenticatedApprovalIsEligibleAfterLatestRestart } from "../../state/restart-authority.js";
 import { completedPlanningRestartMatches, planningRestartId } from "../../state/planning-restart.js";
+import { derivedFinalPhaseBelowCurrentPhase, plannedFinalPhaseFromRecordedPayloads } from "../../state/planned-final-phase.js";
 import { mapHandlerErrors } from "./errors.js";
 import { openHandlerSession } from "./session.js";
 import {
@@ -240,6 +241,7 @@ export async function handleState(
           });
         }
         let preparedResult: PreparedStateResult | PreparedEvidenceResult | undefined;
+        let derivedPlannedFinalPhase: number | null | undefined;
         if (artifact?.artifact_kind === "document" || artifact?.artifact_kind === "implementation-output") {
           if (retainedBytes === undefined || scanner === undefined) {
             throw new TypeError("snapshot preparation dependencies are unavailable");
@@ -268,6 +270,37 @@ export async function handleState(
             : await prepareImplementationResult({ ...common, artifact });
           if (!prepared.ok) return prepared;
           preparedResult = prepared.value;
+          // A produce that records the task design document re-derives the planned final phase
+          // from those exact bytes in this same transaction: the bound otherwise survives from
+          // the design position's own approval and goes stale when later phase boundaries
+          // revise the phase plan. A recorded design whose phase plan cannot be parsed fails
+          // the produce closed instead of silently keeping the stale bound — but only while a
+          // stored bound exists; a boundless task (fresh, legacy-imported, or restarted to the
+          // design position) preserves the absent bound and the design-approval gate keeps
+          // enforcing conformance at approval.
+          try {
+            derivedPlannedFinalPhase = plannedFinalPhaseFromRecordedPayloads(
+              services.authority.task_id,
+              prepared.value.prepared.payloads,
+              current.value.planned_final_phase,
+            );
+          } catch {
+            return fail(createProjectError("CONTRACT_INVALID", {
+              tool: "archflow_state",
+              issue_code: "produce-design-phase-plan-invalid",
+            }));
+          }
+          // A derived bound below the producing phase can never satisfy completion's equality
+          // test and would wedge the task offering a nonexistent successor — the same class of
+          // wedge the re-derivation exists to remove. The honest route for a genuinely shrunken
+          // plan is a backward planning restart.
+          if (derivedPlannedFinalPhase !== undefined && derivedPlannedFinalPhase !== null &&
+              derivedFinalPhaseBelowCurrentPhase(derivedPlannedFinalPhase, call.input.phase_instance)) {
+            return fail(createProjectError("CONTRACT_INVALID", {
+              tool: "archflow_state",
+              issue_code: "produce-derived-final-phase-below-current",
+            }));
+          }
         }
         if (artifact?.artifact_kind === "triage") {
           const loadManifest = services.dependencies.load_retained_manifest;
@@ -502,6 +535,9 @@ export async function handleState(
           commit_observed: commitObserved,
           ...(legacyResumePhase === undefined ? {} : { legacy_resume_phase: legacyResumePhase }),
           ...(call.input.human_revision === undefined ? {} : { human_revision: call.input.human_revision }),
+          ...(derivedPlannedFinalPhase === undefined ? {} : {
+            derived_planned_final_phase: derivedPlannedFinalPhase,
+          }),
           ...(authenticatedGateApprovals.length === 0 ? {} : {
             authenticated_gate_approvals: authenticatedGateApprovals,
           }),

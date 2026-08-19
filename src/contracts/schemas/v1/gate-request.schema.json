@@ -193,6 +193,7 @@
       "const": [
         "adopt-current-bytes",
         "restore-recorded-bytes",
+        "adopt-committed-deletions",
         "abort",
         "cancel"
       ]

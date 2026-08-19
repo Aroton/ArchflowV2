@@ -299,13 +299,35 @@ export function deriveNextAction(input: NextActionInput): NextAction {
         const produceReentryApplies = state.step === "produce" && state.status === "succeeded" &&
           state.authoritative_results.some((reference) =>
             reference.phase_instance === state.phase_instance && reference.step === "produce");
-        if (produceReentryApplies && missing.some((candidate) => candidate.restore_unavailable === true)) {
+        // A committed deletion can neither be restored (adoption records are digest-only) nor
+        // re-declared in a produce (no before-image in the base). The produce re-entry is still
+        // the right next action while anything re-declarable remains — drifted paths, or a
+        // missing file whose deletion is worktree-only — because the fresh terminal produce
+        // covers those bytes under review instead of a bytes adoption. Once the only findings
+        // left are committed deletions, the re-entry can make no progress and would loop, so
+        // the human deletion decision takes over.
+        const committedDeletions = missing.filter((candidate) =>
+          candidate.committed_absent === true && candidate.restore_unavailable === true);
+        const redeclarable = (input.reconciliation_findings ?? []).some((candidate) =>
+          candidate.kind === "projection-mismatch" &&
+          (candidate.observed_digest !== undefined || !(candidate.committed_absent === true && candidate.restore_unavailable === true)));
+        if (produceReentryApplies && redeclarable && missing.some((candidate) => candidate.restore_unavailable === true)) {
           return action(
             "run-step",
-            "A recorded projection is missing from the worktree and has no retained bytes to restore from. Reopen the produce window and record a fresh terminal produce that re-declares the drifted paths and the deletion; the review boundary then covers the new bytes.",
+            "A recorded projection is missing from the worktree and has no retained bytes to restore from. Reopen the produce window and record a fresh terminal produce that re-declares the drifted paths and the deletion; the review boundary then covers the new bytes. A deletion already absent from HEAD cannot be re-declared and settles at its own human decision afterwards.",
             false,
             state,
             { step: "produce" },
+          );
+        }
+        if (committedDeletions.length > 0) {
+          const deletedCount = committedDeletions.length;
+          return action(
+            "open-gate",
+            `${deletedCount} file${deletedCount === 1 ? "" : "s"} ArchFlow recorded from reviewed work w${deletedCount === 1 ? "as" : "ere"} deleted by an already-committed change, and no retained bytes exist to restore. Open the baseline decision so a human chooses whether the records accept the committed deletion${deletedCount === 1 ? "" : "s"} as the baseline.`,
+            true,
+            state,
+            { gate_kind: "baseline-adoption" },
           );
         }
         return action(

@@ -55,6 +55,12 @@ export type TransitionPlanInput = Readonly<{
   resulting_subject_digest?: Sha256Digest;
   /** Internal gate boundary: human-requested bytes begin without consuming a review attempt. */
   human_revision_reentry?: boolean;
+  /**
+   * Re-derived phase bound from the design-document bytes this produce records. Undefined
+   * leaves the stored bound untouched; null (open-ended design) clears it. Keeps the bound
+   * truthful when phase-boundary revisions change the plan after the design approval.
+   */
+  derived_planned_final_phase?: number | null;
 }>;
 
 export type PlanningRestartPlanInput = Readonly<{
@@ -479,8 +485,12 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     revision: _revision,
     last_transition: _transition,
     pending_human_revision: pendingHumanRevision,
+    planned_final_phase: preservedPlannedFinalPhase,
     ...preserved
   } = input.current;
+  const plannedFinalPhase = input.derived_planned_final_phase !== undefined
+    ? input.derived_planned_final_phase
+    : preservedPlannedFinalPhase;
   const completingHumanRevision = pendingHumanRevision !== undefined &&
     input.target.step === "produce" && input.target.status === "succeeded";
   const significantHumanRevision = completingHumanRevision && input.human_revision?.classification === "significant";
@@ -529,6 +539,9 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     ...(!completingHumanRevision && pendingHumanRevision !== undefined
       ? { pending_human_revision: pendingHumanRevision }
       : {}),
+    ...(plannedFinalPhase === undefined || plannedFinalPhase === null
+      ? {}
+      : { planned_final_phase: parseSafeInteger(plannedFinalPhase) }),
   });
   if (
     input.result_reference === undefined &&

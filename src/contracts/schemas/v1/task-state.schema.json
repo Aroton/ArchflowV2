@@ -756,6 +756,12 @@
               ],
               "additionalProperties": false
             }
+          },
+          "adopted_absences": {
+            "type": "array",
+            "items": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+            }
           }
         },
         "required": [

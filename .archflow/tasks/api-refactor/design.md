@@ -1195,7 +1195,12 @@ subject; old approval or commit-observed facts alone cannot skip the fresh gate 
 
 ### 5.7 No new coordinator state
 
-The optional `restart_history` audit field is the sole focused durable extension and is not a job
+The optional `restart_history` audit field was the sole focused durable extension when this design
+was approved. During Phase 4 the user-directed merge from `origin/main` absorbed a second focused
+durable extension — the `baseline_adoptions` records (including `adopted_absences` for committed
+deletions) with the `baseline-adoption` gate kind — which survives alongside the retirement as
+reviewed reality; Phase 4's deviations section (`phases/4/design.md` §1.3) records its adoption.
+Neither is a job
 or coordinator record. Do not add `active_step`, heartbeats, fencing generations, background jobs, worker manifests,
 producer output channels, event delivery, pause tokens, or server session memory. The current task
 state, authenticated `last_transition`, and within-transaction recovery receipts already identify
@@ -1550,7 +1555,12 @@ adapters needed to retire their low-level dependencies; keep init/bootstrap and 
 status local; remove the four low-level tools from advertisement and retire normal
 build-request/envelope/decide/staged-request paths when unused; invert skill contract tests; update
 all affected maintained docs; annotate historical validation; measure the final catalogue and run
-representative authenticated host selection/journey tests.
+representative authenticated host selection/journey tests. Delivery grew beyond this approved scope
+in two ways, each recorded and re-reviewed through the phase design's deviations section
+(`phases/4/design.md` §1.3): the user-directed main merge plus committed-deletion adoption changed
+durable reconciliation semantics (absence-aware projection union, unrestorable and
+committed-absent classification, produce re-entry versus human deletion-gate routing), and the
+phase adds produce-time planned-final-phase re-derivation with fail-closed guards.
 
 **Exit evidence:** no normal skill or exceptional retained skill depends on an advertised low-level
 transition/gate/waiver tool; final catalogue/schema/host tests pass in Claude Code and Codex; full

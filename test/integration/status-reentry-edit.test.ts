@@ -618,6 +618,68 @@ describe("post-triage re-entry edits are expected", () => {
     expect(decided.next_action.kind).not.toBe("inspect");
   }, TIMEOUT);
 
+  it("adopts a committed deletion through the human baseline decision", async () => {
+    const fixture = await repository();
+    const prdPath = join(fixture.root, ".archflow", "tasks", task, "prd.md");
+    const prd = { skill: "archflow-prd", intent: "resume" } as const;
+    const h = semanticJourneyHarness({ root: fixture.root, taskId: task } as never);
+    restorers.push(installSemanticReviewStub(fixture.root, [[]]));
+
+    // Create the task and drive the PRD through produce and a clean review, so a recorded
+    // projection exists and later drift is strict.
+    let view = await h.status(prd);
+    expect(view.next_action.kind).toBe("initialize-task");
+    view = await applySemanticOk(h, prd, view, { kind: "task-ask", text: "Build the deletion proof." });
+    writeFileSync(join(fixture.root, ".archflow", "tasks", task, "ask.md"), "Build the deletion proof.\n");
+    writeFileSync(prdPath, "# PRD\n\nBaseline requirements.\n");
+    view = await applySemanticOk(h, prd, view, { kind: "work-result", outcome: "succeeded" });
+    view = await applySemanticOk(h, prd, view);
+
+    // Adopt once, so the newest recorded projection for the path is an adoption — digest-only,
+    // with no retained bytes to restore from.
+    writeFileSync(prdPath, "# PRD\n\nBaseline requirements, merged.\n");
+    view = await h.status(prd);
+    let opened = await applySemanticOk(h, prd, view, {
+      kind: "gate-summary", summary: "Files changed after their recorded review bytes.",
+    });
+    await applySemanticOk(h, prd, opened, {
+      kind: "decision", choice: "keep-current-versions", reason: "Keep the merged bytes.",
+    });
+
+    // Commit the task document, then delete it with another commit. The deletion is now
+    // committed reality while the recorded projection is adoption-sourced: neither a restore
+    // (no retained bytes) nor a produce re-declaration (no before-image in the base) can run,
+    // so the one honest resolution is the human adopting the deletion.
+    git(fixture.root, "add", "--", `.archflow/tasks/${task}`);
+    git(fixture.root, "commit", "-q", "-m", "task documents");
+    rmSync(prdPath);
+    git(fixture.root, "add", "--", `.archflow/tasks/${task}`);
+    git(fixture.root, "commit", "-q", "-m", "remove the PRD");
+    view = await h.status(prd);
+    expect(view.next_action.kind).toBe("decide");
+    expect(view.next_action.expected_submission).toBe("gate-summary");
+    opened = await applySemanticOk(h, prd, view, {
+      kind: "gate-summary", summary: "The PRD was deleted by an already-committed change.",
+    });
+    const tokens = opened.presentation?.options.map((option) => option.token) ?? [];
+    expect(tokens).toContain("keep-the-deletions");
+    expect(tokens).not.toContain("keep-current-versions");
+    expect(tokens).not.toContain("restore-recorded-versions");
+    const decided = await applySemanticOk(h, prd, opened, {
+      kind: "decision", choice: "keep-the-deletions", reason: "The deletion is committed history.",
+    });
+    expect(decided.next_action.kind).not.toBe("inspect");
+
+    // The retirement is durable: re-deriving discovery no longer reports the deleted path, so
+    // the pipeline resumes its pending approval and no second deletion decision is offered.
+    const followUp = await h.status(prd);
+    const followUpOpened = await applySemanticOk(h, prd, followUp, {
+      kind: "gate-summary", summary: "Resume the pending approval.",
+    });
+    const followUpTokens = followUpOpened.presentation?.options.map((option) => option.token) ?? [];
+    expect(followUpTokens).not.toContain("keep-the-deletions");
+  }, TIMEOUT);
+
   it("admits the author-initiated produce re-entry door from counter_review-succeeded", async () => {
     const fixture = await repository();
     const h = harness(fixture.root);

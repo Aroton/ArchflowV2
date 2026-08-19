@@ -107,6 +107,66 @@ describe("deriveNextAction", () => {
     expect(result.step).toBe("produce");
   });
 
+  it("keeps the produce re-entry ahead of the deletion decision while re-declarable work remains", () => {
+    const committedDeletion: ReconciliationFinding = {
+      kind: "projection-mismatch", path: parseRepositoryPathClaim("src/gone.ts"),
+      recorded_digest: D("a"), restore_unavailable: true, committed_absent: true,
+      next_action: "open-baseline-adoption-gate",
+    };
+    const drifted: ReconciliationFinding = {
+      kind: "projection-mismatch", path: parseRepositoryPathClaim("src/edited.ts"),
+      recorded_digest: D("b"), observed_digest: D("c"), next_action: "open-baseline-adoption-gate",
+    };
+    const result = deriveNextAction(input({
+      state: state({ step: "produce", status: "succeeded" }),
+      reconciliation_findings: [committedDeletion, drifted],
+    }));
+    expect(result.code).toBe("run-step");
+    expect(result.step).toBe("produce");
+  });
+
+  it("offers the deletion decision once only committed deletions remain", () => {
+    const committedDeletion: ReconciliationFinding = {
+      kind: "projection-mismatch", path: parseRepositoryPathClaim("src/gone.ts"),
+      recorded_digest: D("a"), restore_unavailable: true, committed_absent: true,
+      next_action: "open-baseline-adoption-gate",
+    };
+    const result = deriveNextAction(input({
+      state: state({ step: "produce", status: "succeeded" }),
+      reconciliation_findings: [committedDeletion],
+    }));
+    expect(result.code).toBe("open-gate");
+    expect(result.gate_kind).toBe("baseline-adoption");
+  });
+
+  it("offers the human deletion decision when no produce re-entry can run", () => {
+    const committedDeletion: ReconciliationFinding = {
+      kind: "projection-mismatch", path: parseRepositoryPathClaim("src/gone.ts"),
+      recorded_digest: D("a"), restore_unavailable: true, committed_absent: true,
+      next_action: "open-baseline-adoption-gate",
+    };
+    const result = deriveNextAction(input({
+      state: state({ step: "produce", status: "succeeded", authoritative_results: [] }),
+      reconciliation_findings: [committedDeletion],
+    }));
+    expect(result.code).toBe("open-gate");
+    expect(result.gate_kind).toBe("baseline-adoption");
+  });
+
+  it("offers the deletion decision outside a closed produce window too", () => {
+    const committedDeletion: ReconciliationFinding = {
+      kind: "projection-mismatch", path: parseRepositoryPathClaim("src/gone.ts"),
+      recorded_digest: D("a"), restore_unavailable: true, committed_absent: true,
+      next_action: "open-baseline-adoption-gate",
+    };
+    const result = deriveNextAction(input({
+      state: state({ step: "adjudicate", status: "succeeded" }),
+      reconciliation_findings: [committedDeletion],
+    }));
+    expect(result.code).toBe("open-gate");
+    expect(result.gate_kind).toBe("baseline-adoption");
+  });
+
   it("keeps the restore route for a missing projection with retained bytes", () => {
     const restorable: ReconciliationFinding = {
       kind: "projection-mismatch", path: parseRepositoryPathClaim("src/gone.ts"), recorded_digest: D("a"), next_action: "open-baseline-adoption-gate",

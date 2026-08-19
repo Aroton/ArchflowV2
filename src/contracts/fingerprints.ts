@@ -365,7 +365,14 @@ export function computeGateContextDigest(
  */
 export function baselineAdoptionDriftDigest(context: GateContext<"baseline-adoption">): Sha256Digest {
   const snapshot = materialize(context, "baseline adoption drift subject");
-  return canonicalJsonDigest({ schema_version: "1", digest_kind: "baseline-adoption-drift", drifted_projections: snapshot.drifted_projections });
+  // Deleted projections join the digest only when present: pre-deletion archives were digested
+  // without the field, and re-authenticating them must reproduce their recorded subject digest.
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "baseline-adoption-drift",
+    drifted_projections: snapshot.drifted_projections,
+    ...((snapshot.deleted_projections ?? []).length === 0 ? {} : { deleted_projections: snapshot.deleted_projections }),
+  });
 }
 
 /**

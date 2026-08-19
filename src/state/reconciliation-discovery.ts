@@ -8,7 +8,7 @@ import {
   type CanonicalDocument,
 } from "../contracts/canonical.js";
 import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
-import { parseGateRequest } from "../contracts/durable-gate.js";
+import { parsePersistedGateRequest } from "../contracts/durable-gate.js";
 import { parseIntentReceipt, type IntentReceiptV1 } from "../contracts/durable-intent.js";
 import type { ResultManifestV1 } from "../contracts/durable-result-manifest.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
@@ -17,7 +17,7 @@ import {
   validateDurableSemantics,
 } from "../contracts/durable.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
-import { parsePathSafeId } from "../contracts/evidence.js";
+import { parsePathSafeId, parseSafeCode } from "../contracts/evidence.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
 import {
   gateRequestClaim,
@@ -188,8 +188,9 @@ export async function discoverNewestProjections(
       for (const projection of adoption.adopted_projections) {
         const prior = newest.get(projection.path);
         if (prior === undefined) return stateInvalid(authority, "reconciliation-projection-unbound");
-        // An adopted path is never retirement-newest: adoption gates open only over recorded
-        // projections, and a retirement that measured later supersedes the adoption instead.
+        // An adopted path is never retirement-newest from a bytes adoption: adoption gates open
+        // only over recorded projections, and a retirement that measured later supersedes the
+        // adoption instead. A deletion adoption below may still retire it.
         if (prior.retired) continue;
         if (adoption.adopted_at_revision > prior.measured_at_revision) {
           const adopted: NewestProjection = Object.freeze({
@@ -201,6 +202,22 @@ export async function discoverNewestProjections(
             reference: undefined,
           });
           newest.set(projection.path, adopted);
+        }
+      }
+      // A deletion adoption records absence, not bytes: the human accepted that an authorized
+      // commit already removed these paths, so the record retires the stale presence exactly like
+      // a declared deletion output would. Newest-per-path applies for the same reason.
+      for (const path of adoption.adopted_absences ?? []) {
+        const prior = newest.get(path);
+        if (prior === undefined) return stateInvalid(authority, "reconciliation-projection-unbound");
+        if (prior.retired) continue;
+        if (adoption.adopted_at_revision > prior.measured_at_revision) {
+          newest.set(path, Object.freeze({
+            retired: true,
+            path,
+            measured_at_revision: adoption.adopted_at_revision,
+            reference: undefined,
+          }));
         }
       }
     }
@@ -218,6 +235,7 @@ async function discoverProjections(
   recorded: readonly ProjectionDigestRef[];
   current: readonly ProjectionDigestRef[];
   unrestorable: readonly ProjectionDigestRef["path"][];
+  committed_absent: readonly ProjectionDigestRef["path"][];
 }>>> {
   const newest = await discoverNewestProjections(dependencies, authority, state);
   if (!newest.ok) return newest;
@@ -225,6 +243,7 @@ async function discoverProjections(
     const recorded: ProjectionDigestRef[] = [];
     const current: ProjectionDigestRef[] = [];
     const unrestorable: ProjectionDigestRef["path"][] = [];
+    const committedAbsent: ProjectionDigestRef["path"][] = [];
     for (const observation of [...newest.value.values()]
       .sort((left, right) => left.path.localeCompare(right.path))) {
       if (observation.retired) continue;
@@ -235,16 +254,41 @@ async function discoverProjections(
       const digest = await currentProjectionDigest(observation.target);
       if (digest !== "missing") {
         current.push(Object.freeze({ path: observation.projection.path, content_digest: digest }));
+      } else if (observation.reference === undefined && !(await committedAtHead(dependencies, authority, observation.projection.path))) {
+        // Unrestorable and gone from HEAD too: the deletion is already committed (typically by an
+        // authorized milestone commit), so no produce can re-declare it either — the base commit
+        // holds no before-image. Routing offers the human a deletion adoption for exactly this.
+        committedAbsent.push(observation.projection.path);
       }
     }
     return ok(Object.freeze({
       recorded: Object.freeze(recorded),
       current: Object.freeze(current),
       unrestorable: Object.freeze(unrestorable),
+      committed_absent: Object.freeze(committedAbsent),
     }));
   } catch {
     return ioFailure(authority, "discover-reconciliation-projections");
   }
+}
+
+/**
+ * Whether git HEAD still contains the path. `cat-file -e` succeeds when it does and fails with
+ * code 128 and a "does not exist" fatal when it does not; the `run` result's `absent` flag
+ * carries that distinction, where `runText` would collapse an empty success and the error into
+ * the same empty string.
+ */
+async function committedAtHead(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  path: ProjectionDigestRef["path"],
+): Promise<boolean> {
+  const result = await dependencies.runner.run({
+    argv: ["cat-file", "-e", `HEAD:${path}`],
+    operation: parseSafeCode("git-committed-absence-probe"),
+    expectedAbsence: [{ code: 128, stderrIncludes: "does not exist in" }],
+  });
+  return !result.absent;
 }
 
 async function discoverGateHead(
@@ -265,7 +309,7 @@ async function discoverGateHead(
     context: authority.context,
   });
   if (!requestPath.ok) return requestPath;
-  const request = await readCanonical(requestPath.value, "gate request", parseGateRequest);
+  const request = await readCanonical(requestPath.value, "gate request", parsePersistedGateRequest);
   if (request === "missing") return ok(Object.freeze({ blocker: "active-gate-request-missing" }));
   if (request === "invalid") return ok(Object.freeze({ blocker: "active-gate-request-invalid" }));
   try {
@@ -350,6 +394,7 @@ export async function discoverReconciliationInput(
     recorded_projections: projections.value.recorded,
     current_projections: projections.value.current,
     ...(projections.value.unrestorable.length === 0 ? {} : { unrestorable_paths: projections.value.unrestorable }),
+    ...(projections.value.committed_absent.length === 0 ? {} : { committed_absent_paths: projections.value.committed_absent }),
     active_heads: Object.freeze({
       ...(gate.value.head === undefined ? {} : { gate: gate.value.head }),
     }),

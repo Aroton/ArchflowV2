@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { canonicalJsonDigest, parseCanonicalDocument, type CanonicalDocument } from "../contracts/canonical.js";
 import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
 import { parseConfigYaml } from "../contracts/config.js";
-import { exactCommitAuthorizationContext, parseActiveGate, parseGateRequest, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
+import { exactCommitAuthorizationContext, parseActiveGate, parsePersistedGateRequest, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import type { AdjudicationEvidence } from "../contracts/adjudication.js";
 import type { ProjectError, ProjectResult } from "../contracts/errors.js";
@@ -166,12 +166,21 @@ export function baselineAdoptionInputFromFindings(
   findings: readonly ReconciliationFinding[],
 ): BaselineAdoptionInput | undefined {
   const mismatches = findings.filter((finding): finding is Extract<ReconciliationFinding, { kind: "projection-mismatch" }> => finding.kind === "projection-mismatch");
-  // A missing projected file has no current bytes to adopt; next-action routing sends that case
-  // elsewhere, so here the drift set must be fully observable.
-  if (mismatches.length === 0 || !mismatches.every((finding) => finding.observed_digest !== undefined)) return undefined;
+  // The drift set splits into live-byte mismatches the human can adopt or restore, and committed
+  // deletions — missing, unrestorable (adoption-sourced), and already absent from HEAD, so no
+  // produce can re-declare them either. Any other missing projection (restorable, or deleted only
+  // in the worktree) routes to restore or produce re-entry instead, and its presence makes the
+  // set unrepresentable here.
+  const drifted = mismatches.filter((finding) => finding.observed_digest !== undefined);
+  const deleted = mismatches.filter((finding) =>
+    finding.observed_digest === undefined && finding.restore_unavailable === true && finding.committed_absent === true);
+  if (drifted.length + deleted.length === 0 || drifted.length + deleted.length !== mismatches.length) return undefined;
   const context: GateContext<"baseline-adoption"> = Object.freeze({
-    drifted_projections: Object.freeze(mismatches
+    drifted_projections: Object.freeze(drifted
       .map((finding) => Object.freeze({ path: finding.path, recorded_digest: finding.recorded_digest, observed_digest: finding.observed_digest! }))
+      .sort((left, right) => left.path.localeCompare(right.path))),
+    deleted_projections: Object.freeze(deleted
+      .map((finding) => Object.freeze({ path: finding.path, recorded_digest: finding.recorded_digest }))
       .sort((left, right) => left.path.localeCompare(right.path))),
   });
   const subjectDigest = baselineAdoptionDriftDigest(context);
@@ -423,7 +432,11 @@ async function readArchivedGateRequest(
     });
     if (!target.ok) return undefined;
     const bytes = new Uint8Array(await readFile(target.value.absolute));
-    return parseGateRequest(parseCanonicalDocument(bytes, "gate request").value);
+    // Every read of a persisted gate request goes through the tolerant archived parser: an open
+    // gate written by an older bundle (for example a pre-deletion-adoption baseline tuple) must
+    // keep projecting and resolving after switchover. Only composing a NEW request uses the
+    // strict writer shape.
+    return parsePersistedGateRequest(parseCanonicalDocument(bytes, "gate request").value);
   } catch (error) {
     if ((error as { code?: unknown }).code === "ENOENT") return undefined;
     throw error;
