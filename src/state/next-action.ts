@@ -14,8 +14,6 @@ export type NextActionCode =
   | "inspect-retained-receipt"
   | "create-fresh-intent"
   | "resolve-current-authority"
-  | "restore-pinned-config"
-  | "upgrade-tooling"
   | "open-gate"
   | "resolve-open-gate"
   | "run-step"
@@ -66,8 +64,8 @@ export type NextActionInput = Readonly<{
   repository_initialized: boolean;
   state?: TaskStateV1;
   config_verified?: boolean;
-  /** Set when the config bytes match the pinned digest but this tooling cannot parse their schema. */
-  config_schema_unsupported?: boolean;
+  /** Why the config failed to read (`config-invalid`/`config-missing`/`config-unreadable`/`config-unresolvable`). */
+  config_issue?: string;
   reconciliation_findings?: readonly ReconciliationFinding[];
   reconciliation_blocking_reasons?: readonly string[];
   assessment?: EvidenceAssessment;
@@ -259,17 +257,14 @@ export function deriveNextAction(input: NextActionInput): NextAction {
       : action("initialize-repository", "Initialize ArchFlow in this repository.", false);
   }
   if (input.config_verified !== true) {
-    if (input.config_schema_unsupported === true) {
-      return action(
-        "upgrade-tooling",
-        "The task's pinned configuration bytes are exactly the recorded ones, but this installed ArchFlow version cannot parse their schema; restoring or editing the file cannot fix this. Resume the task with tooling that accepts the pinned configuration, or restart it as a new task under the current schema.",
-        true,
-        state,
-      );
-    }
+    const readIssue = input.config_issue === "config-missing"
+      ? "missing"
+      : input.config_issue === "config-unreadable" || input.config_issue === "config-unresolvable"
+        ? "unreadable"
+        : "invalid";
     return action(
-      "restore-pinned-config",
-      "Restore the task's digest-pinned configuration before continuing; an intentional configuration change requires a new task or the explicit upgrade flow.",
+      "inspect-state",
+      `The task's config.yaml is ${readIssue}: fix the YAML so the configuration parses, then retry.`,
       true,
       state,
     );

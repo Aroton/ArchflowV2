@@ -297,6 +297,9 @@ roles:
   counter-reviewer: { model: gpt-5.6-sol, effort: high }
   adjudicator: { model: gpt-5.6-sol, effort: high }
 `),
+      // Config bytes no longer separate the repositories (config left the input fingerprint), so
+      // the cross-repository refusal is pinned on a genuinely distinct repository identity.
+      rootBytes: new TextEncoder().encode("repository-b\n"),
     });
     workspaces.push(first, second);
     const invocation = { skill: "archflow-prd", intent: "resume" } as const;

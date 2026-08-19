@@ -95,7 +95,6 @@ try {
     const subject = {
       schema_version: "1",
       workflow_digest: stateRead.document.value.workflow_digest,
-      config_digest: configRead.snapshot.digest,
       constitution_digest: stateRead.document.value.constitution_digest,
       artifact_identities: [],
       upstream_identities: [],
@@ -243,7 +242,7 @@ try {
       environment: environment.value,
       atomic: atomicWriter,
       lock: lock.createTaskLock(),
-      resolve_input_fingerprint: async () => ({ schema_version: "1", ok: true, value: subject }),
+      resolve_input_fingerprint: async () => ({ schema_version: "1", ok: true, value: { subject, fingerprint: inputFingerprint } }),
       read_state: read.readTaskState,
       read_config: read.readTaskConfig,
       read_receipt: read.readIntentReceipt,

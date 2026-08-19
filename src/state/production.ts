@@ -3,7 +3,6 @@ import { lstat, readFile, readlink } from "node:fs/promises";
 import type { BlobIdentity, OutputEntry } from "../contracts/durable-primitives.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
-import { computeInputFingerprint } from "../contracts/fingerprints.js";
 import { parseSafeInteger, type SafeCode, type SafeInteger, type TaskSlug } from "../contracts/evidence.js";
 import { parseToolCall } from "../contracts/mcp-tools.js";
 import { parseRepositoryPathClaim, parseTaskPathClaim, type RepositoryPathClaim } from "../contracts/path-claims.js";
@@ -375,7 +374,7 @@ export async function createProductionServices(input: ProductionInput): Promise<
     },
     load_retained_result: (reference) => readRetainedResult(discovered.value, authority, reference),
     load_retained_manifest: loadRetainedManifest,
-    resolve_gate_reentry_fingerprint: async ({ request, current, target_phase_instance }) => {
+    resolve_gate_reentry_fingerprint: async ({ request, current, target_phase_instance, expected_input_fingerprint }) => {
       const liveConfig = await readTaskConfig(authority.config);
       if (liveConfig.kind !== "valid") return stateFailure(current.value.phase_instance, "task-config-invalid");
       const call = parseToolCall("archflow_state", {
@@ -388,15 +387,16 @@ export async function createProductionServices(input: ProductionInput): Promise<
           step: "produce",
           status: "running",
       });
-      const subject = await resolver({
+      const resolved = await resolver({
         runner: discovered.value,
         authority,
         state: current,
         call,
         live_config: liveConfig.snapshot,
+        ...(expected_input_fingerprint !== undefined ? { expected_input_fingerprint } : {}),
         context: authority.context,
       });
-      return subject.ok ? ok(computeInputFingerprint(subject.value)) : subject;
+      return resolved.ok ? ok(resolved.value.fingerprint) : resolved;
     },
   });
   return ok(Object.freeze({

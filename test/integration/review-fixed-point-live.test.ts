@@ -138,7 +138,7 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
     const parentDocument = parseTaskPathClaim("design.md");
     await writeFile(join(h.services.authority.task_root, parentDocument), "# Test design\n");
     const fingerprint = computeInputFingerprint({
-      schema_version: "1", workflow_digest: initial.workflow_digest, config_digest: initial.config_digest,
+      schema_version: "1", workflow_digest: initial.workflow_digest,
       constitution_digest: initial.constitution_digest, artifact_identities: [], upstream_identities: [],
       rubric_digest: canonicalJsonDigest({}), phase_instance: phase, declared_inputs: [],
     });
@@ -313,7 +313,7 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
     if (!completion.ok) throw new Error(completion.error.code);
     const phaseDesign18 = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(18) });
     const phaseDesignFingerprint = computeInputFingerprint({
-      schema_version: "1", workflow_digest: initial.workflow_digest, config_digest: initial.config_digest,
+      schema_version: "1", workflow_digest: initial.workflow_digest,
       constitution_digest: initial.constitution_digest, artifact_identities: [], upstream_identities: [],
       rubric_digest: canonicalJsonDigest({}), phase_instance: phaseDesign18, declared_inputs: [],
     });
@@ -334,12 +334,12 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
 
     const finalPhase = encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(18) });
     const finalFingerprint = computeInputFingerprint({
-      schema_version: "1", workflow_digest: initial.workflow_digest, config_digest: initial.config_digest,
+      schema_version: "1", workflow_digest: initial.workflow_digest,
       constitution_digest: initial.constitution_digest, artifact_identities: [], upstream_identities: [],
       rubric_digest: canonicalJsonDigest({}), phase_instance: finalPhase, declared_inputs: [],
     });
     const finalReviewFingerprint = computeInputFingerprint({
-      schema_version: "1", workflow_digest: initial.workflow_digest, config_digest: initial.config_digest,
+      schema_version: "1", workflow_digest: initial.workflow_digest,
       constitution_digest: initial.constitution_digest, artifact_identities: [], upstream_identities: [],
       rubric_digest: canonicalRubricForPhaseKind("phase-impl").rubric_digest,
       phase_instance: finalPhase, declared_inputs: [],
@@ -561,10 +561,10 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
       live_config: h.liveConfig, context: buildServices.value.authority.context,
     });
     if (!produceSubject.ok) throw new Error(produceSubject.error.code);
-    const produceFingerprint = computeInputFingerprint(produceSubject.value);
+    const produceFingerprint = produceSubject.value.fingerprint;
     const produceArtifact = { ...placeholder.value, input_fingerprint: produceFingerprint };
     const nonProduceFingerprint = computeInputFingerprint({
-      schema_version: "1", workflow_digest: initial.workflow_digest, config_digest: initial.config_digest,
+      schema_version: "1", workflow_digest: initial.workflow_digest,
       constitution_digest: initial.constitution_digest, artifact_identities: [], upstream_identities: [],
       rubric_digest: canonicalRubricForPhaseKind("phase-impl").rubric_digest,
       phase_instance: phase, declared_inputs: [],
@@ -702,7 +702,7 @@ else {
         context: h.services.authority.context,
       });
       if (!subject.ok) throw new Error(subject.error.code);
-      fingerprints.push(computeInputFingerprint(subject.value));
+      fingerprints.push(subject.value.fingerprint);
     }
     expect(new Set(fingerprints)).toHaveLength(1);
   });

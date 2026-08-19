@@ -3,12 +3,13 @@ import { join } from "node:path";
 
 import { canonicalJsonDigest, parseCanonicalDocument, type CanonicalDocument } from "../contracts/canonical.js";
 import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
-import { parseConfigYaml } from "../contracts/config.js";
+import { parseConfigYaml, type TaskConfigSnapshot } from "../contracts/config.js";
 import { exactCommitAuthorizationContext, parseActiveGate, parsePersistedGateRequest, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
-import type { TaskStateV1 } from "../contracts/durable-state.js";
+import type { ConfigChangeEntry, TaskStateV1 } from "../contracts/durable-state.js";
+export type { ConfigChangeEntry } from "../contracts/durable-state.js";
 import type { AdjudicationEvidence } from "../contracts/adjudication.js";
 import type { ProjectError, ProjectResult } from "../contracts/errors.js";
-import { baselineAdoptionDriftDigest, computeGateContextDigest, verifyPinnedConfig } from "../contracts/fingerprints.js";
+import { baselineAdoptionDriftDigest, computeGateContextDigest } from "../contracts/fingerprints.js";
 import type { PathSafeId, Sha256Digest, TaskSlug } from "../contracts/evidence.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
 import type { BaselineObservationRef, GateContext } from "../contracts/gates.js";
@@ -22,6 +23,7 @@ import { canonicalRubricForPhaseKind, type CanonicalRubric } from "../review/rub
 import { createGitRunner, preflightGit, resolveCommit } from "../repository/git.js";
 import { discoverWorktree } from "../repository/identity.js";
 import { readTaskState } from "./read.js";
+import { computeConfigChange } from "./config-change.js";
 import type { TransactionAuthority } from "./authority.js";
 import { assertInternalTransactionAuthority, createInternalTransactionAuthority } from "./authority.js";
 import { resolvePinnedConstitution, type ResolvedConstitution } from "./constitution.js";
@@ -54,8 +56,6 @@ const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1
 
 type ConfigVerification = Readonly<{
   verified: boolean;
-  expected_digest?: Sha256Digest;
-  observed_digest?: Sha256Digest;
   issue?: string;
 }>;
 
@@ -222,6 +222,13 @@ export type TaskStatusV1 = Readonly<{
    */
   subject_digest?: Sha256Digest;
   config: ConfigVerification;
+  /**
+   * Field-level changes between the live parsed config and `state.last_seen_config`. Informational
+   * only — never a blocker and never an action-kind change. Absent `last_seen_config`
+   * (pre-cutover tasks) notices nothing: the first transaction after upgrade establishes the
+   * baseline silently.
+   */
+  config_change?: readonly ConfigChangeEntry[];
   /** The dispatched review routes for the current phase kind; the producer is the host, never routed. */
   routes?: Readonly<{ counter_reviewer: DispatchRoute; adjudicator: DispatchRoute }>;
   constitution?: Readonly<{
@@ -386,11 +393,9 @@ export function partitionExpectedReentryEdits(
   });
 }
 
-function unavailableConfig(expected?: Sha256Digest, observed?: Sha256Digest, issue?: string): ConfigVerification {
+function unavailableConfig(issue?: string): ConfigVerification {
   return Object.freeze({
     verified: false,
-    ...(expected === undefined ? {} : { expected_digest: expected }),
-    ...(observed === undefined ? {} : { observed_digest: observed }),
     ...(issue === undefined ? {} : { issue }),
   });
 }
@@ -717,7 +722,7 @@ async function computeTaskStatusDetailedInternal(
     const status = Object.freeze({
       task_id: authority.task_id,
       state: "missing" as const,
-      config: unavailableConfig(undefined, undefined, "status-authority-invalid"),
+      config: unavailableConfig("status-authority-invalid"),
       blocking_reasons: Object.freeze(["status-authority-invalid"]),
       next_action: next,
     });
@@ -730,7 +735,7 @@ async function computeTaskStatusDetailedInternal(
     const status = Object.freeze({
       task_id: authority.task_id,
       state: "missing" as const,
-      config: unavailableConfig(undefined, undefined, "state-unavailable"),
+      config: unavailableConfig("state-unavailable"),
       blocking_reasons: Object.freeze([reason]),
       next_action: next,
     });
@@ -743,29 +748,15 @@ async function computeTaskStatusDetailedInternal(
   let parsedConfig: ReturnType<typeof parseConfigYaml> | undefined;
   try {
     const read = await dependencies.read_config(authority.config);
-    if (read.kind === "invalid" && read.digest === state.config_digest) {
-      // The bytes are exactly the pinned ones, so restoring or editing the file cannot help:
-      // this build's schema no longer accepts what the task pinned. That is a different
-      // situation from a changed config and must not be reported as one.
-      config = unavailableConfig(state.config_digest, read.digest, "pinned-config-schema-unsupported");
-      blockers.push("pinned-config-schema-unsupported");
-    } else if (read.kind !== "valid") {
-      config = unavailableConfig(
-        state.config_digest,
-        read.kind === "invalid" ? read.digest : undefined,
-        `config-${read.kind}`,
-      );
+    if (read.kind !== "valid") {
+      config = unavailableConfig(`config-${read.kind}`);
       blockers.push(`config-${read.kind}`);
     } else {
-      const verified = verifyPinnedConfig(state.config_digest, read.snapshot.bytes);
-      config = verified.ok
-        ? Object.freeze({ verified: true, expected_digest: state.config_digest, observed_digest: verified.value })
-        : unavailableConfig(state.config_digest, read.snapshot.digest, "pinned-config-mismatch");
-      if (!verified.ok) blockers.push("pinned-config-mismatch");
+      config = Object.freeze({ verified: true });
       parsedConfig = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(read.snapshot.bytes), "task config");
     }
   } catch {
-    config = unavailableConfig(state.config_digest, undefined, "config-unresolvable");
+    config = unavailableConfig("config-unresolvable");
     blockers.push("config-unresolvable");
   }
 
@@ -779,6 +770,14 @@ async function computeTaskStatusDetailedInternal(
     } catch {
       blockers.push("dispatch-routes-invalid");
     }
+  }
+
+  // The change notice: diffed only when a recorded baseline exists. A pre-cutover task (no
+  // `last_seen_config`) records nothing and notices nothing until its next config-observing commit.
+  let configChange: readonly ConfigChangeEntry[] | undefined;
+  if (parsedConfig !== undefined && state.last_seen_config !== undefined) {
+    const entries = computeConfigChange(state.last_seen_config, parsedConfig as TaskConfigSnapshot);
+    if (entries.length > 0) configChange = entries;
   }
 
   let constitution: ResolvedConstitution | undefined;
@@ -1189,9 +1188,7 @@ async function computeTaskStatusDetailedInternal(
     repository_initialized: true,
     state,
     config_verified: config.verified,
-    ...(config.verified !== true && config.issue === "pinned-config-schema-unsupported"
-      ? { config_schema_unsupported: true }
-      : {}),
+    ...(config.verified !== true && config.issue !== undefined ? { config_issue: config.issue } : {}),
     ...(statusReconciliation === undefined ? {} : { reconciliation_findings: statusReconciliation.findings }),
     reconciliation_blocking_reasons: Object.freeze([
       ...reconciliationBlockers,
@@ -1269,6 +1266,7 @@ async function computeTaskStatusDetailedInternal(
     review_policy: canonicalRubricForPhaseKind(decodePhaseInstance(state.phase_instance).kind),
     ...(subjectDigest === undefined ? {} : { subject_digest: subjectDigest }),
     config,
+    ...(configChange === undefined ? {} : { config_change: configChange }),
     ...(routes === undefined ? {} : { routes }),
     ...(constitutionStatus === undefined ? {} : { constitution: constitutionStatus }),
     ...(state.open_gate === undefined ? {} : { open_gate_id: state.open_gate.gate_id }),

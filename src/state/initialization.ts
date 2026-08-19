@@ -18,7 +18,6 @@ import type { LegacyImportInitializationV1 } from "../contracts/durable-legacy-i
 import type { TaskInitializationV1 } from "../contracts/durable-task-initialization.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parseSafeCode, type Sha256Digest } from "../contracts/evidence.js";
-import { computeInputFingerprint } from "../contracts/fingerprints.js";
 import {
   assertAuthenticParsedToolCall,
   createInternalResultExpectation,
@@ -28,6 +27,7 @@ import {
   type ToolSuccess,
 } from "../contracts/mcp-tools.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
+import type { TaskConfigSnapshot } from "../contracts/config.js";
 import { parseTaskPathClaim } from "../contracts/path-claims.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { verifyRepositoryIdentity } from "../repository/identity.js";
@@ -43,6 +43,7 @@ import {
 } from "../repository/paths.js";
 import { AtomicReplaceError } from "./atomic.js";
 import { assertInternalTransactionAuthority } from "./authority.js";
+import { withLastSeenConfig } from "./config-change.js";
 import { identifyTransactionRequest } from "./request.js";
 import { IntentLayoutError, ensureAuthorityDirectory, ensureIntentDirectory } from "./layout.js";
 import { TaskLockError } from "./lock.js";
@@ -175,6 +176,7 @@ async function validateLiveInitialization(
 function initialState(
   call: StateCall,
   artifact: DurableArtifact,
+  parsedConfig: TaskConfigSnapshot,
 ): ProjectResult<TaskStateV1> {
   const initialization = initializationFor(artifact);
   if (initialization === undefined) return contract("initialization-artifact-required");
@@ -205,7 +207,9 @@ function initialState(
     approvals: [],
     waivers: [],
   };
-  return ok(state);
+  // Revision-zero seeding (pinned interface 4): the first recorded `last_seen_config`, so the
+  // committed revision-1 state and the shared identification derivation agree byte for byte.
+  return ok(withLastSeenConfig(state, parsedConfig));
 }
 
 /**
@@ -240,7 +244,14 @@ export async function identifyStateInitialization(
     const mapping = validateLegacyMapping(initialization);
     if (!mapping.ok) return mapping;
   }
-  const stateResult = initialState(request.call, artifact);
+  let config = await dependencies.read_config(request.authority.config);
+  if (config.kind === "missing" && initialization.artifact_kind === "legacy-import-initialization") {
+    const staged = await readStagedLegacyConfig(request.authority, initialization);
+    if (staged !== undefined) config = Object.freeze({ kind: "valid", snapshot: staged });
+  }
+  if (config.kind !== "valid") return config.kind === "invalid" ? contract("task-config-invalid") : io(request, "task-config-read");
+
+  const stateResult = initialState(request.call, artifact, config.snapshot.parsed);
   if (!stateResult.ok) return stateResult;
   const preparedState = canonicalDocument(stateResult.value);
   const initializationSemantics = validateDurableSemantics({
@@ -249,18 +260,6 @@ export async function identifyStateInitialization(
   });
   if (!initializationSemantics.ok) return initializationSemantics;
 
-  let config = await dependencies.read_config(request.authority.config);
-  if (config.kind === "missing" && initialization.artifact_kind === "legacy-import-initialization") {
-    const staged = await readStagedLegacyConfig(request.authority, initialization);
-    if (staged !== undefined) config = Object.freeze({ kind: "valid", snapshot: staged });
-  }
-  if (config.kind !== "valid") return config.kind === "invalid" ? contract("task-config-invalid") : io(request, "task-config-read");
-  if (config.snapshot.digest !== initialization.config_digest) {
-    return fail(createProjectError("PINNED_CONFIG_MISMATCH", {
-      expected_digest: initialization.config_digest,
-      observed_digest: config.snapshot.digest,
-    }));
-  }
   const fingerprint = await dependencies.resolve_input_fingerprint({
     runner: dependencies.runner,
     authority: request.authority,
@@ -270,8 +269,7 @@ export async function identifyStateInitialization(
     context: request.authority.context,
   });
   if (!fingerprint.ok) return fingerprint;
-  assertPlainJson(fingerprint.value, "initialization fingerprint subject");
-  const inputFingerprint = computeInputFingerprint(structuredClone(fingerprint.value));
+  const inputFingerprint = fingerprint.value.fingerprint;
   const identified = identifyTransactionRequest(request.call, request.authority, inputFingerprint);
   return ok(Object.freeze({
     call: identified.call,

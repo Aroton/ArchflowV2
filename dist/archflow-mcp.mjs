@@ -36631,7 +36631,6 @@ var PROJECT_PARAMETER_SCHEMAS = {
   HANDOFF_REQUIRED: object2({ phase_instance: phaseInstance }),
   POLICY_BASE_INVALID: object2({ expected_digest: digest2, observed_digest: digest2.optional() }),
   WORKFLOW_MISMATCH: digestsParams,
-  PINNED_CONFIG_MISMATCH: digestsParams,
   STALE_SKILLS: digestsParams,
   STATE_MISSING: object2({ phase_instance: phaseInstance }),
   STATE_INVALID: object2({ phase_instance: phaseInstance, issue_code: code }),
@@ -36706,7 +36705,6 @@ var PROJECT_ERROR_DEFINITIONS = Object.freeze({
   HANDOFF_REQUIRED: defineError("repository", false, PROJECT_PARAMETER_SCHEMAS.HANDOFF_REQUIRED, "complete-clean-handoff", "project"),
   POLICY_BASE_INVALID: defineError("policy", false, PROJECT_PARAMETER_SCHEMAS.POLICY_BASE_INVALID, "restore-policy-base", "project"),
   WORKFLOW_MISMATCH: defineError("policy", false, PROJECT_PARAMETER_SCHEMAS.WORKFLOW_MISMATCH, "restore-pinned-workflow", "project"),
-  PINNED_CONFIG_MISMATCH: defineError("policy", false, PROJECT_PARAMETER_SCHEMAS.PINNED_CONFIG_MISMATCH, "restore-pinned-config", "project"),
   STALE_SKILLS: defineError("policy", false, PROJECT_PARAMETER_SCHEMAS.STALE_SKILLS, "refresh-skills", "project"),
   STATE_MISSING: defineError("state", false, PROJECT_PARAMETER_SCHEMAS.STATE_MISSING, "initialize-state", "project"),
   STATE_INVALID: defineError("state", false, PROJECT_PARAMETER_SCHEMAS.STATE_INVALID, "inspect-current-state", "project"),
@@ -37335,7 +37333,13 @@ var commitInstructionV1Schema = external_exports.object({ paths: external_export
   }
 });
 var semanticNextActionV1Schema = external_exports.object({ kind: external_exports.enum(SEMANTIC_ACTION_KINDS), instruction: nonBlank2, offer: external_exports.string().regex(/^af1_[0-9a-f]{64}$/u).optional(), expected_submission: external_exports.enum(APPLY_SUBMISSION_KINDS).optional(), skill: nonBlank2.optional(), skill_args: external_exports.array(external_exports.string()).optional(), commit: commitInstructionV1Schema.optional(), reopen: reopenImpactV1Schema.optional() }).strict();
-var workflowViewV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, condition: external_exports.enum(WORKFLOW_CONDITIONS), headline: nonBlank2, detail: nonBlank2, position: workflowPositionV1Schema.optional(), resources: external_exports.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: external_exports.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), presentation: humanPresentationV1Schema.optional() }).strict();
+var configChangeValueV1Schema = external_exports.json();
+var configChangeEntryV1Schema = external_exports.object({
+  path: external_exports.string(),
+  before: configChangeValueV1Schema.optional(),
+  after: configChangeValueV1Schema.optional()
+}).strict();
+var workflowViewV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, condition: external_exports.enum(WORKFLOW_CONDITIONS), headline: nonBlank2, detail: nonBlank2, position: workflowPositionV1Schema.optional(), resources: external_exports.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: external_exports.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), presentation: humanPresentationV1Schema.optional(), config_change: external_exports.array(configChangeEntryV1Schema).optional() }).strict();
 var semanticErrorSummaryV1Schema = external_exports.object({
   code: nonBlank2.max(128),
   message: nonBlank2.max(4096),
@@ -43141,57 +43145,6 @@ var project_error_schema_default = {
       ],
       additionalProperties: false
     },
-    E_PINNED_CONFIG_MISMATCH: {
-      type: "object",
-      properties: {
-        schema_version: {
-          type: "string",
-          const: "1"
-        },
-        code: {
-          type: "string",
-          const: "PINNED_CONFIG_MISMATCH"
-        },
-        owner: {
-          type: "string",
-          const: "policy"
-        },
-        retryable: {
-          type: "boolean",
-          const: false
-        },
-        diagnostic: {
-          type: "object",
-          properties: {
-            template_id: {
-              type: "string",
-              const: "PINNED_CONFIG_MISMATCH"
-            },
-            parameters: {
-              $ref: "#/$defs/digests"
-            }
-          },
-          required: [
-            "template_id",
-            "parameters"
-          ],
-          additionalProperties: false
-        },
-        next_action: {
-          type: "string",
-          const: "restore-pinned-config"
-        }
-      },
-      required: [
-        "schema_version",
-        "code",
-        "owner",
-        "retryable",
-        "diagnostic",
-        "next_action"
-      ],
-      additionalProperties: false
-    },
     E_STALE_SKILLS: {
       type: "object",
       properties: {
@@ -45225,9 +45178,6 @@ var project_error_schema_default = {
       $ref: "#/$defs/E_WORKFLOW_MISMATCH"
     },
     {
-      $ref: "#/$defs/E_PINNED_CONFIG_MISMATCH"
-    },
-    {
       $ref: "#/$defs/E_STALE_SKILLS"
     },
     {
@@ -46205,6 +46155,98 @@ var task_state_schema_default = {
           }
         }
       ]
+    },
+    configRoute: {
+      type: "object",
+      properties: {
+        model: {
+          type: "string",
+          minLength: 1,
+          pattern: "\\S"
+        },
+        effort: {
+          type: "string",
+          enum: [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ]
+        },
+        provider: {
+          type: "string",
+          minLength: 1,
+          pattern: "\\S"
+        }
+      },
+      required: [
+        "model",
+        "effort"
+      ],
+      additionalProperties: false
+    },
+    configRoles: {
+      type: "object",
+      properties: {
+        producer: {
+          $ref: "#/$defs/configRoute"
+        },
+        "counter-reviewer": {
+          $ref: "#/$defs/configRoute"
+        },
+        adjudicator: {
+          $ref: "#/$defs/configRoute"
+        }
+      },
+      additionalProperties: false
+    },
+    configOverrides: {
+      type: "object",
+      properties: {
+        explore: {
+          $ref: "#/$defs/configRoles"
+        },
+        prd: {
+          $ref: "#/$defs/configRoles"
+        },
+        design: {
+          $ref: "#/$defs/configRoles"
+        },
+        "phase-design": {
+          $ref: "#/$defs/configRoles"
+        },
+        "phase-impl": {
+          $ref: "#/$defs/configRoles"
+        }
+      },
+      additionalProperties: false
+    },
+    configSnapshot: {
+      type: "object",
+      properties: {
+        schema_version: {
+          type: "string",
+          const: "1"
+        },
+        roles: {
+          $ref: "#/$defs/configRoles"
+        },
+        overrides: {
+          $ref: "#/$defs/configOverrides"
+        },
+        max_attempts: {
+          type: "integer",
+          exclusiveMinimum: 0,
+          maximum: 9007199254740991
+        }
+      },
+      required: [
+        "schema_version",
+        "roles"
+      ],
+      additionalProperties: false
     }
   },
   type: "object",
@@ -46349,6 +46391,9 @@ var task_state_schema_default = {
         ],
         additionalProperties: false
       }
+    },
+    last_seen_config: {
+      $ref: "#/$defs/configSnapshot"
     },
     last_transition: {
       $ref: "#/$defs/lastTransition"
@@ -47237,6 +47282,12 @@ var semantic_workflow_schema_default = {
             "options"
           ],
           additionalProperties: false
+        },
+        config_change: {
+          type: "array",
+          items: {
+            $ref: "#/$defs/configChangeEntry"
+          }
         }
       },
       required: [
@@ -47249,6 +47300,52 @@ var semantic_workflow_schema_default = {
         "next_action"
       ],
       additionalProperties: false
+    },
+    configChangeEntry: {
+      type: "object",
+      properties: {
+        path: {
+          type: "string"
+        },
+        before: {
+          $ref: "#/$defs/plainJson"
+        },
+        after: {
+          $ref: "#/$defs/plainJson"
+        }
+      },
+      required: [
+        "path"
+      ],
+      additionalProperties: false
+    },
+    plainJson: {
+      anyOf: [
+        {
+          type: "null"
+        },
+        {
+          type: "boolean"
+        },
+        {
+          type: "number"
+        },
+        {
+          type: "string"
+        },
+        {
+          type: "array",
+          items: {
+            $ref: "#/$defs/plainJson"
+          }
+        },
+        {
+          type: "object",
+          additionalProperties: {
+            $ref: "#/$defs/plainJson"
+          }
+        }
+      ]
     },
     applySubmission: {
       anyOf: [
@@ -47940,6 +48037,12 @@ var semantic_workflow_schema_default = {
         "options"
       ],
       additionalProperties: false
+    },
+    config_change: {
+      type: "array",
+      items: {
+        $ref: "#/$defs/configChangeEntry"
+      }
     }
   },
   required: [
@@ -49435,6 +49538,27 @@ var lastTransitionV1Schema = external_exports.object({
   prior_revision: safeIntegerV1Schema,
   resulting_revision: positiveSafeInteger
 }).strict();
+var taskConfigRouteV1Schema = configRouteSchema.clone(configRouteSchema.def);
+var taskConfigRolesV1Schema = configRolesSchema.clone({
+  ...configRolesSchema.def,
+  shape: Object.fromEntries(
+    Object.entries(configRolesSchema.shape).map(([role]) => [role, taskConfigRouteV1Schema.optional()])
+  )
+});
+var taskConfigOverridesV1Schema = configOverridesSchema.clone({
+  ...configOverridesSchema.def,
+  shape: Object.fromEntries(
+    Object.entries(configOverridesSchema.shape).map(([phase3]) => [phase3, taskConfigRolesV1Schema.optional()])
+  )
+});
+var taskConfigSnapshotV1Schema = configV1Schema.clone({
+  ...configV1Schema.def,
+  shape: {
+    ...configV1Schema.shape,
+    roles: taskConfigRolesV1Schema,
+    overrides: taskConfigOverridesV1Schema.optional()
+  }
+});
 var taskStateV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
   task_id: taskSlugV1Schema,
@@ -49459,6 +49583,7 @@ var taskStateV1Schema = external_exports.object({
   human_revision_history: external_exports.array(humanRevisionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "human_revision_history must be sorted by gate_id with no duplicates").optional(),
   restart_history: external_exports.array(planningRestartRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("restart_id")), "restart_history must be sorted by restart_id with no duplicates").optional(),
   baseline_adoptions: external_exports.array(baselineAdoptionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "baseline_adoptions must be sorted by gate_id with no duplicates").optional(),
+  last_seen_config: taskConfigSnapshotV1Schema.optional(),
   last_transition: lastTransitionV1Schema.optional(),
   terminal: external_exports.enum(TERMINAL_STATES).optional()
 }).strict().superRefine((state, context2) => {
@@ -50289,210 +50414,6 @@ async function openResolved(path2, flags) {
 // src/state/gates.ts
 import { isDeepStrictEqual as isDeepStrictEqual12 } from "node:util";
 
-// src/contracts/fingerprints.ts
-function materialize(subject, label) {
-  assertPlainJson(subject, label);
-  return structuredClone(subject);
-}
-function ordinal2(a, b) {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-function sortedSet(items, key, label) {
-  const seen = /* @__PURE__ */ new Set();
-  for (const item of items) {
-    const value = key(item);
-    if (seen.has(value)) throw new TypeError(`${label} is a set: duplicate key ${JSON.stringify(value)}`);
-    seen.add(value);
-  }
-  return [...items].sort((left, right) => ordinal2(key(left), key(right)));
-}
-var identityJson = (identity) => ({
-  path: identity.path,
-  mode: identity.mode,
-  oid: identity.oid
-});
-var declaredInputJson = (input) => ({
-  input_id: input.input_id,
-  digest: input.digest
-});
-function computeInputFingerprint(subject) {
-  const snapshot = materialize(subject, "input fingerprint subject");
-  return canonicalJsonDigest({
-    schema_version: snapshot.schema_version,
-    workflow_digest: snapshot.workflow_digest,
-    config_digest: snapshot.config_digest,
-    constitution_digest: snapshot.constitution_digest,
-    artifact_identities: sortedSet(snapshot.artifact_identities, (item) => item.path, "artifact_identities").map(identityJson),
-    upstream_identities: sortedSet(snapshot.upstream_identities, (item) => item.path, "upstream_identities").map(identityJson),
-    rubric_digest: snapshot.rubric_digest,
-    phase_instance: snapshot.phase_instance,
-    declared_inputs: sortedSet(snapshot.declared_inputs, (item) => item.input_id, "declared_inputs").map(declaredInputJson)
-  });
-}
-function computePinnedConstitutionDigest(files) {
-  const snapshot = materialize(files, "pinned constitution files");
-  return canonicalJsonDigest({
-    schema_version: "1",
-    digest_kind: "pinned-constitution",
-    files: sortedSet(snapshot, (file2) => file2.path, "pinned constitution files").map(
-      ({ path: path2, oid }) => ({ path: path2, oid })
-    )
-  });
-}
-var exactFields = (value, expected) => {
-  const actual = Object.keys(value).sort();
-  const wanted = [...expected].sort();
-  if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
-    throw new TypeError(`operation_fields must contain exactly ${wanted.join(", ")}`);
-  }
-};
-function closedOperationFields(subject) {
-  switch (subject.tool) {
-    case "archflow_state": {
-      const fields = subject.operation_fields;
-      if (subject.operation === "planning-restart") {
-        const restart = fields;
-        exactFields(fields, restart.ask_base_digest === void 0 ? ["phase_instance", "target_phase_instance", "reason"] : ["phase_instance", "target_phase_instance", "reason", "ask_base_digest"]);
-        return {
-          phase_instance: restart.phase_instance,
-          target_phase_instance: restart.target_phase_instance,
-          reason: restart.reason,
-          ...restart.ask_base_digest === void 0 ? {} : { ask_base_digest: restart.ask_base_digest }
-        };
-      }
-      if (subject.operation === "record-state-boundary") {
-        exactFields(fields, ["phase_instance", "step", "status"]);
-        const boundary = fields;
-        return { phase_instance: boundary.phase_instance, step: boundary.step, status: boundary.status };
-      }
-      const artifactFields = fields;
-      const operationForKind = {
-        "task-initialization": "adopt-task-initialization",
-        "legacy-import-initialization": "adopt-legacy-import-initialization",
-        document: "record-document-artifact",
-        "implementation-output": "record-implementation-output",
-        triage: "record-triage"
-      };
-      if (operationForKind[artifactFields.artifact_kind] !== subject.operation) {
-        throw new TypeError("invalid archflow_state operation for artifact_kind");
-      }
-      const expected = ["phase_instance", "step", "status", "artifact_kind", "artifact_digest"];
-      if (artifactFields.human_revision !== void 0) expected.push("human_revision");
-      exactFields(artifactFields, expected);
-      return {
-        phase_instance: artifactFields.phase_instance,
-        step: artifactFields.step,
-        status: artifactFields.status,
-        artifact_kind: artifactFields.artifact_kind,
-        artifact_digest: artifactFields.artifact_digest,
-        ...artifactFields.human_revision === void 0 ? {} : { human_revision: artifactFields.human_revision }
-      };
-    }
-    case "archflow_counter_review": {
-      const fields = subject.operation_fields;
-      if (subject.operation !== "counter-review") throw new TypeError("invalid archflow_counter_review operation");
-      const expected = ["artifact_path"];
-      if (fields.route_override !== void 0) expected.push("route_override");
-      exactFields(fields, expected);
-      return {
-        artifact_path: fields.artifact_path,
-        ...fields.route_override === void 0 ? {} : { route_override: fields.route_override }
-      };
-    }
-    case "archflow_gate": {
-      const fields = subject.operation_fields;
-      if (subject.operation !== "gate") throw new TypeError("invalid archflow_gate operation");
-      const expected = ["phase_instance", "summary", "subject_digest", "current_evidence", "kind", "context"];
-      if (fields.preview_digest !== void 0 || fields.decision !== void 0) {
-        if (fields.preview_digest === void 0 || fields.decision === void 0) {
-          throw new TypeError("gate preview_digest and decision must appear together");
-        }
-        expected.push("preview_digest", "decision");
-      }
-      exactFields(fields, expected);
-      const selected = {
-        phase_instance: fields.phase_instance,
-        summary: fields.summary,
-        subject_digest: fields.subject_digest,
-        current_evidence: fields.current_evidence,
-        kind: fields.kind,
-        context: fields.context,
-        ...fields.preview_digest === void 0 || fields.decision === void 0 ? {} : { preview_digest: fields.preview_digest, decision: fields.decision }
-      };
-      return selected;
-    }
-    case "archflow_waiver": {
-      const fields = subject.operation_fields;
-      if (subject.operation !== "waiver") throw new TypeError("invalid archflow_waiver operation");
-      const expected = ["origin", "rationale"];
-      if (fields.preview_digest !== void 0 || fields.decision !== void 0) {
-        if (fields.preview_digest === void 0 || fields.decision === void 0) {
-          throw new TypeError("waiver preview_digest and decision must appear together");
-        }
-        expected.push("preview_digest", "decision");
-      }
-      exactFields(fields, expected);
-      return {
-        origin: fields.origin,
-        rationale: fields.rationale,
-        ...fields.preview_digest === void 0 || fields.decision === void 0 ? {} : { preview_digest: fields.preview_digest, decision: fields.decision }
-      };
-    }
-    default: {
-      const exhaustive = subject;
-      throw new TypeError(`unknown request tool ${String(exhaustive.tool)}`);
-    }
-  }
-}
-function computeRequestDigest(subject) {
-  const snapshot = materialize(subject, "request digest subject");
-  const operationFields = closedOperationFields(snapshot);
-  return canonicalJsonDigest({
-    schema_version: snapshot.schema_version,
-    tool: snapshot.tool,
-    repository_identity_digest: snapshot.repository_identity_digest,
-    task_identity_digest: snapshot.task_identity_digest,
-    operation: snapshot.operation,
-    operation_fields: operationFields,
-    input_fingerprint: snapshot.input_fingerprint
-  });
-}
-function computeGateId(subject) {
-  const snapshot = materialize(subject, "gate identity subject");
-  return `g-${canonicalJsonDigest({
-    schema_version: "1",
-    digest_kind: "gate-identity",
-    task_identity_digest: snapshot.task_identity_digest,
-    intent_id: snapshot.intent_id,
-    request_digest: snapshot.request_digest
-  })}`;
-}
-function computeGateContextDigest(kind, context2) {
-  const snapshot = materialize(context2, "gate context digest subject");
-  return kind === "waiver" ? canonicalJsonDigest({ schema_version: "1", digest_kind: "waiver-context", ...snapshot }) : canonicalJsonDigest({ schema_version: "1", digest_kind: "gate-context", kind, context: snapshot });
-}
-function baselineAdoptionDriftDigest(context2) {
-  const snapshot = materialize(context2, "baseline adoption drift subject");
-  return canonicalJsonDigest({
-    schema_version: "1",
-    digest_kind: "baseline-adoption-drift",
-    drifted_projections: snapshot.drifted_projections,
-    ...(snapshot.deleted_projections ?? []).length === 0 ? {} : { deleted_projections: snapshot.deleted_projections }
-  });
-}
-function computePinnedConfigDigest(configBytes) {
-  return sha256Bytes(configBytes);
-}
-function verifyPinnedConfig(expected, observedBytes) {
-  const observed2 = computePinnedConfigDigest(observedBytes);
-  if (observed2 === expected) return { schema_version: "1", ok: true, value: observed2 };
-  return {
-    schema_version: "1",
-    ok: false,
-    error: createProjectError("PINNED_CONFIG_MISMATCH", { expected_digest: expected, observed_digest: observed2 })
-  };
-}
-
 // src/contracts/durable-intent.ts
 var sha256Digest6 = sha256DigestV1Schema;
 var plainJsonV1Schema = external_exports.json();
@@ -50527,13 +50448,13 @@ function intentOutcomeDigest(outcome) {
 // src/contracts/durable.ts
 import { isDeepStrictEqual as isDeepStrictEqual4 } from "node:util";
 function createPreparedIntentSubject(predecessor, receipt) {
-  materialize2(predecessor, "prepared intent predecessor document");
-  materialize2(receipt, "prepared intent receipt document");
+  materialize(predecessor, "prepared intent predecessor document");
+  materialize(receipt, "prepared intent receipt document");
   return Object.freeze({ intent_relation: Object.freeze({ mode: "prepared", predecessor, receipt }) });
 }
 function createCommittedIntentSubject(state, receipt) {
-  materialize2(state, "committed intent state document");
-  materialize2(receipt, "committed intent receipt document");
+  materialize(state, "committed intent state document");
+  materialize(receipt, "committed intent receipt document");
   return Object.freeze({ intent_relation: Object.freeze({ mode: "committed", state, receipt }) });
 }
 function openGateFrozenStateDigest(state) {
@@ -50692,7 +50613,7 @@ function ownEnumerableDataField(document2, field, label) {
   }
   return descriptor.value;
 }
-function materialize2(document2, label) {
+function materialize(document2, label) {
   const value = ownDataField(document2, "value", label);
   const digest9 = ownDataField(document2, "digest", label);
   assertPlainJson(value, `${label} value`);
@@ -50746,11 +50667,11 @@ function validateDurableSemantics(subject) {
   const gateRequestDocument = ownDataSlot(subject, "gate_request");
   const gateDecisionDocument = ownDataSlot(subject, "gate_decision");
   const relationValue = ownDataSlot(subject, "intent_relation");
-  const stateSlot = stateDocument === void 0 ? void 0 : materialize2(stateDocument, "durable state document");
-  const artifactSlot = artifactDocument === void 0 ? void 0 : materialize2(artifactDocument, "durable artifact document");
-  const resultManifestSlot = resultManifestDocument === void 0 ? void 0 : materialize2(resultManifestDocument, "durable result manifest document");
-  const gateRequestSlot = gateRequestDocument === void 0 ? void 0 : materialize2(gateRequestDocument, "durable gate request document");
-  const gateDecisionSlot = gateDecisionDocument === void 0 ? void 0 : materialize2(gateDecisionDocument, "durable gate decision document");
+  const stateSlot = stateDocument === void 0 ? void 0 : materialize(stateDocument, "durable state document");
+  const artifactSlot = artifactDocument === void 0 ? void 0 : materialize(artifactDocument, "durable artifact document");
+  const resultManifestSlot = resultManifestDocument === void 0 ? void 0 : materialize(resultManifestDocument, "durable result manifest document");
+  const gateRequestSlot = gateRequestDocument === void 0 ? void 0 : materialize(gateRequestDocument, "durable gate request document");
+  const gateDecisionSlot = gateDecisionDocument === void 0 ? void 0 : materialize(gateDecisionDocument, "durable gate decision document");
   let relation;
   if (relationValue !== void 0) {
     const mode = ownEnumerableDataField(relationValue, "mode", "durable intent relation");
@@ -50767,8 +50688,8 @@ function validateDurableSemantics(subject) {
     const receiptDocument = ownEnumerableDataField(relationValue, "receipt", "durable intent relation");
     relation = {
       mode,
-      state: materialize2(stateDocumentForRelation, `${mode} intent state document`),
-      receipt: materialize2(receiptDocument, `${mode} intent receipt document`)
+      state: materialize(stateDocumentForRelation, `${mode} intent state document`),
+      receipt: materialize(receiptDocument, `${mode} intent receipt document`)
     };
   }
   const state = stateSlot?.value;
@@ -51116,6 +51037,200 @@ function validateDurableSemantics(subject) {
     }
   }
   return OK;
+}
+
+// src/contracts/fingerprints.ts
+function materialize2(subject, label) {
+  assertPlainJson(subject, label);
+  return structuredClone(subject);
+}
+function ordinal2(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+function sortedSet(items, key, label) {
+  const seen = /* @__PURE__ */ new Set();
+  for (const item of items) {
+    const value = key(item);
+    if (seen.has(value)) throw new TypeError(`${label} is a set: duplicate key ${JSON.stringify(value)}`);
+    seen.add(value);
+  }
+  return [...items].sort((left, right) => ordinal2(key(left), key(right)));
+}
+var identityJson = (identity) => ({
+  path: identity.path,
+  mode: identity.mode,
+  oid: identity.oid
+});
+var declaredInputJson = (input) => ({
+  input_id: input.input_id,
+  digest: input.digest
+});
+function computeInputFingerprint(subject) {
+  const snapshot = materialize2(subject, "input fingerprint subject");
+  return canonicalJsonDigest({
+    schema_version: snapshot.schema_version,
+    workflow_digest: snapshot.workflow_digest,
+    constitution_digest: snapshot.constitution_digest,
+    artifact_identities: sortedSet(snapshot.artifact_identities, (item) => item.path, "artifact_identities").map(identityJson),
+    upstream_identities: sortedSet(snapshot.upstream_identities, (item) => item.path, "upstream_identities").map(identityJson),
+    rubric_digest: snapshot.rubric_digest,
+    phase_instance: snapshot.phase_instance,
+    declared_inputs: sortedSet(snapshot.declared_inputs, (item) => item.input_id, "declared_inputs").map(declaredInputJson)
+  });
+}
+function computePinnedConstitutionDigest(files) {
+  const snapshot = materialize2(files, "pinned constitution files");
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "pinned-constitution",
+    files: sortedSet(snapshot, (file2) => file2.path, "pinned constitution files").map(
+      ({ path: path2, oid }) => ({ path: path2, oid })
+    )
+  });
+}
+var exactFields = (value, expected) => {
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
+    throw new TypeError(`operation_fields must contain exactly ${wanted.join(", ")}`);
+  }
+};
+function closedOperationFields(subject) {
+  switch (subject.tool) {
+    case "archflow_state": {
+      const fields = subject.operation_fields;
+      if (subject.operation === "planning-restart") {
+        const restart = fields;
+        exactFields(fields, restart.ask_base_digest === void 0 ? ["phase_instance", "target_phase_instance", "reason"] : ["phase_instance", "target_phase_instance", "reason", "ask_base_digest"]);
+        return {
+          phase_instance: restart.phase_instance,
+          target_phase_instance: restart.target_phase_instance,
+          reason: restart.reason,
+          ...restart.ask_base_digest === void 0 ? {} : { ask_base_digest: restart.ask_base_digest }
+        };
+      }
+      if (subject.operation === "record-state-boundary") {
+        exactFields(fields, ["phase_instance", "step", "status"]);
+        const boundary = fields;
+        return { phase_instance: boundary.phase_instance, step: boundary.step, status: boundary.status };
+      }
+      const artifactFields = fields;
+      const operationForKind = {
+        "task-initialization": "adopt-task-initialization",
+        "legacy-import-initialization": "adopt-legacy-import-initialization",
+        document: "record-document-artifact",
+        "implementation-output": "record-implementation-output",
+        triage: "record-triage"
+      };
+      if (operationForKind[artifactFields.artifact_kind] !== subject.operation) {
+        throw new TypeError("invalid archflow_state operation for artifact_kind");
+      }
+      const expected = ["phase_instance", "step", "status", "artifact_kind", "artifact_digest"];
+      if (artifactFields.human_revision !== void 0) expected.push("human_revision");
+      exactFields(artifactFields, expected);
+      return {
+        phase_instance: artifactFields.phase_instance,
+        step: artifactFields.step,
+        status: artifactFields.status,
+        artifact_kind: artifactFields.artifact_kind,
+        artifact_digest: artifactFields.artifact_digest,
+        ...artifactFields.human_revision === void 0 ? {} : { human_revision: artifactFields.human_revision }
+      };
+    }
+    case "archflow_counter_review": {
+      const fields = subject.operation_fields;
+      if (subject.operation !== "counter-review") throw new TypeError("invalid archflow_counter_review operation");
+      const expected = ["artifact_path"];
+      if (fields.route_override !== void 0) expected.push("route_override");
+      exactFields(fields, expected);
+      return {
+        artifact_path: fields.artifact_path,
+        ...fields.route_override === void 0 ? {} : { route_override: fields.route_override }
+      };
+    }
+    case "archflow_gate": {
+      const fields = subject.operation_fields;
+      if (subject.operation !== "gate") throw new TypeError("invalid archflow_gate operation");
+      const expected = ["phase_instance", "summary", "subject_digest", "current_evidence", "kind", "context"];
+      if (fields.preview_digest !== void 0 || fields.decision !== void 0) {
+        if (fields.preview_digest === void 0 || fields.decision === void 0) {
+          throw new TypeError("gate preview_digest and decision must appear together");
+        }
+        expected.push("preview_digest", "decision");
+      }
+      exactFields(fields, expected);
+      const selected = {
+        phase_instance: fields.phase_instance,
+        summary: fields.summary,
+        subject_digest: fields.subject_digest,
+        current_evidence: fields.current_evidence,
+        kind: fields.kind,
+        context: fields.context,
+        ...fields.preview_digest === void 0 || fields.decision === void 0 ? {} : { preview_digest: fields.preview_digest, decision: fields.decision }
+      };
+      return selected;
+    }
+    case "archflow_waiver": {
+      const fields = subject.operation_fields;
+      if (subject.operation !== "waiver") throw new TypeError("invalid archflow_waiver operation");
+      const expected = ["origin", "rationale"];
+      if (fields.preview_digest !== void 0 || fields.decision !== void 0) {
+        if (fields.preview_digest === void 0 || fields.decision === void 0) {
+          throw new TypeError("waiver preview_digest and decision must appear together");
+        }
+        expected.push("preview_digest", "decision");
+      }
+      exactFields(fields, expected);
+      return {
+        origin: fields.origin,
+        rationale: fields.rationale,
+        ...fields.preview_digest === void 0 || fields.decision === void 0 ? {} : { preview_digest: fields.preview_digest, decision: fields.decision }
+      };
+    }
+    default: {
+      const exhaustive = subject;
+      throw new TypeError(`unknown request tool ${String(exhaustive.tool)}`);
+    }
+  }
+}
+function computeRequestDigest(subject) {
+  const snapshot = materialize2(subject, "request digest subject");
+  const operationFields = closedOperationFields(snapshot);
+  return canonicalJsonDigest({
+    schema_version: snapshot.schema_version,
+    tool: snapshot.tool,
+    repository_identity_digest: snapshot.repository_identity_digest,
+    task_identity_digest: snapshot.task_identity_digest,
+    operation: snapshot.operation,
+    operation_fields: operationFields,
+    input_fingerprint: snapshot.input_fingerprint
+  });
+}
+function computeGateId(subject) {
+  const snapshot = materialize2(subject, "gate identity subject");
+  return `g-${canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "gate-identity",
+    task_identity_digest: snapshot.task_identity_digest,
+    intent_id: snapshot.intent_id,
+    request_digest: snapshot.request_digest
+  })}`;
+}
+function computeGateContextDigest(kind, context2) {
+  const snapshot = materialize2(context2, "gate context digest subject");
+  return kind === "waiver" ? canonicalJsonDigest({ schema_version: "1", digest_kind: "waiver-context", ...snapshot }) : canonicalJsonDigest({ schema_version: "1", digest_kind: "gate-context", kind, context: snapshot });
+}
+function baselineAdoptionDriftDigest(context2) {
+  const snapshot = materialize2(context2, "baseline adoption drift subject");
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "baseline-adoption-drift",
+    drifted_projections: snapshot.drifted_projections,
+    ...(snapshot.deleted_projections ?? []).length === 0 ? {} : { deleted_projections: snapshot.deleted_projections }
+  });
+}
+function computePinnedConfigDigest(configBytes) {
+  return sha256Bytes(configBytes);
 }
 
 // src/repository/identity.ts
@@ -51731,6 +51846,58 @@ async function createInternalTransactionAuthority(input) {
   authenticAuthorities.add(authority);
   authorityDependencies.set(authority, Object.freeze({ runner: input.runner, environment: input.environment }));
   return Object.freeze({ schema_version: "1", ok: true, value: authority });
+}
+
+// src/state/config-change.ts
+function normalizeForChangeDetection(config2) {
+  if (config2.roles.producer === void 0) return config2;
+  const { producer: _retired, ...roles } = config2.roles;
+  return { ...config2, roles };
+}
+function isPlainObject3(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function appendEntry(entries, path2, before, after) {
+  entries.push({
+    path: path2,
+    ...before === void 0 ? {} : { before },
+    ...after === void 0 ? {} : { after }
+  });
+}
+function diffConfigValue(before, after, path2, entries) {
+  if (Array.isArray(before) && Array.isArray(after)) {
+    const shared = Math.min(before.length, after.length);
+    for (let index = 0; index < shared; index += 1) {
+      diffConfigValue(before[index], after[index], `${path2}.${index}`, entries);
+    }
+    for (let index = shared; index < before.length; index += 1) {
+      appendEntry(entries, `${path2}.${index}`, before[index], void 0);
+    }
+    for (let index = shared; index < after.length; index += 1) {
+      appendEntry(entries, `${path2}.${index}`, void 0, after[index]);
+    }
+    return;
+  }
+  if (isPlainObject3(before) && isPlainObject3(after)) {
+    const keys = [.../* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])].sort();
+    for (const key of keys) {
+      diffConfigValue(before[key], after[key], path2 === "" ? key : `${path2}.${key}`, entries);
+    }
+    return;
+  }
+  if (before === after) return;
+  appendEntry(entries, path2, before, after);
+}
+function computeConfigChange(before, after) {
+  const entries = [];
+  diffConfigValue(normalizeForChangeDetection(before), normalizeForChangeDetection(after), "", entries);
+  return Object.freeze(entries);
+}
+function withLastSeenConfig(draft, parsedLiveConfig) {
+  const normalized = normalizeForChangeDetection(parsedLiveConfig);
+  const seen = draft.last_seen_config;
+  if (seen !== void 0 && computeConfigChange(seen, normalized).length === 0) return draft;
+  return { ...draft, last_seen_config: normalized };
 }
 
 // src/state/gate-core.ts
@@ -57460,12 +57627,12 @@ function prepareSnapshot(input) {
     }
     return Object.freeze({ path: path2, target: target2, bytes });
   });
-  const byPath = new Map(payloads.map((payload) => [payload.path, payload]));
-  if (byPath.size !== payloads.length) return snapshotInvalid(manifest.snapshot_digest, "duplicate-payload-path");
+  const byPath2 = new Map(payloads.map((payload) => [payload.path, payload]));
+  if (byPath2.size !== payloads.length) return snapshotInvalid(manifest.snapshot_digest, "duplicate-payload-path");
   let resultBytes = 0;
   for (const output of manifest.outputs) {
     if (output.storage === "raw-payload") {
-      const payload = byPath.get(output.path);
+      const payload = byPath2.get(output.path);
       if (payload === void 0 || payload.target.path_class !== "workspace-result-payload") {
         return snapshotInvalid(manifest.snapshot_digest, "missing-payload");
       }
@@ -57473,14 +57640,14 @@ function prepareSnapshot(input) {
         return snapshotInvalid(manifest.snapshot_digest, "payload-identity-mismatch");
       }
       resultBytes += payload.bytes.byteLength;
-    } else if (byPath.has(output.path)) {
+    } else if (byPath2.has(output.path)) {
       return snapshotInvalid(manifest.snapshot_digest, "unexpected-payload");
     }
   }
   if (resultBytes > RESULT_BYTE_CAP2) {
     return fail7(createProjectError("SNAPSHOT_LIMIT", {
       limit_scope: "result",
-      offending_paths: [...byPath.keys()].sort(),
+      offending_paths: [...byPath2.keys()].sort(),
       current_bytes: resultBytes,
       byte_cap: RESULT_BYTE_CAP2
     }));
@@ -57489,7 +57656,7 @@ function prepareSnapshot(input) {
   if (taskBytes > TASK_BYTE_CAP2) {
     return fail7(createProjectError("SNAPSHOT_LIMIT", {
       limit_scope: "task",
-      offending_paths: [...byPath.keys()].sort(),
+      offending_paths: [...byPath2.keys()].sort(),
       current_bytes: taskBytes,
       byte_cap: TASK_BYTE_CAP2
     }));
@@ -57777,10 +57944,10 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
   });
   const paths = materialized.map((source) => source.path);
   if (new Set(paths).size !== paths.length) throw new TypeError("projection sources must have unique paths");
-  const byPath = new Map(materialized.map((source) => [source.path, source]));
+  const byPath2 = new Map(materialized.map((source) => [source.path, source]));
   for (const source of materialized) {
     if (source.rename_pair === void 0) continue;
-    const peer = byPath.get(source.rename_pair.peer_path);
+    const peer = byPath2.get(source.rename_pair.peer_path);
     if (peer?.rename_pair?.peer_path !== source.path || peer.rename_pair.role === source.rename_pair.role || source.rename_pair.role === "source" && source.desired.state !== "absent" || source.rename_pair.role === "destination" && (source.desired.state !== "present" || source.authenticated_before.state !== "absent")) throw new TypeError("rename projection pair is inconsistent");
   }
   const scan = await scanner.scan(materialized.flatMap((source) => source.git_tracked && source.desired.state === "present" ? [secretScanCandidateFromBytes({ virtual_path: source.path, path_class: source.target.path_class, bytes: source.desired.bytes })] : []));
@@ -60164,9 +60331,8 @@ async function validateLiveGateState(dependencies, authority, current, inputFing
   if (!validateDurableSemantics({ state: current }).ok) return issue2("STATE_INVALID", current.value, "gate-state-semantics-invalid");
   const config2 = await dependencies.read_config(authority.config);
   if (config2.kind !== "valid") return config2.kind === "invalid" ? issue2("CONTRACT_INVALID", void 0, "task-config-invalid") : io(authority, "gate-config-read");
-  if (config2.snapshot.digest !== current.value.config_digest) return fail8(createProjectError("PINNED_CONFIG_MISMATCH", { expected_digest: current.value.config_digest, observed_digest: config2.snapshot.digest }));
   if (inputFingerprint !== current.value.input_fingerprint) return fail8(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest: current.value.input_fingerprint, observed_digest: inputFingerprint }));
-  return ok6(void 0);
+  return ok6(config2.snapshot.parsed);
 }
 async function authenticateWaiverOrigin(dependencies, authority, context2) {
   const requestPath = await resolvePath6(dependencies, authority, gateRequestClaim(context2.origin.origin_gate_id), "authority-decision");
@@ -60371,7 +60537,7 @@ async function openDurableGate(dependencies, input) {
         if (!origin2.ok) return origin2;
       }
       const contextDigest = waiver === void 0 ? computeGateContextDigest(input.kind, input.context) : computeGateContextDigest("waiver", waiver);
-      const openState = stateWithOpen(current.value, { gate_id: gateId, kind: input.kind, subject_digest: input.subject_digest, context_digest: contextDigest, context: input.context });
+      const openState = stateWithOpen(withLastSeenConfig(current.value, live.value), { gate_id: gateId, kind: input.kind, subject_digest: input.subject_digest, context_digest: contextDigest, context: input.context });
       let request = parseGateRequest({
         schema_version: "1",
         gate_id: gateId,
@@ -60565,7 +60731,7 @@ async function closedStateForRecord(dependencies, authority, current, request, r
       context: authority.context
     });
     if (!fingerprintSubject.ok) return fingerprintSubject;
-    const fingerprint = computeInputFingerprint(fingerprintSubject.value);
+    const fingerprint = fingerprintSubject.value.fingerprint;
     const planned = planPlanningRestart({
       current: restartPredecessor,
       restart_id: record3.gate_id,
@@ -60574,7 +60740,10 @@ async function closedStateForRecord(dependencies, authority, current, request, r
       recomputed_input_fingerprint: fingerprint,
       human_provenance: humanProvenance.data
     });
-    return planned.ok ? ok6(canonicalDocument({ ...planned.value, revision: parseSafeInteger(current.value.revision + 1) })) : planned;
+    return planned.ok ? ok6(canonicalDocument(withLastSeenConfig(
+      { ...planned.value, revision: parseSafeInteger(current.value.revision + 1) },
+      liveConfig.snapshot.parsed
+    ))) : planned;
   }
   if (enactsReentry(record3)) {
     return planGateAuthorizedReentry(dependencies, authority, current, request, record3);
@@ -60671,7 +60840,8 @@ async function validateCompletedReentry(dependencies, authority, current, reques
   const fingerprint = await dependencies.resolve_gate_reentry_fingerprint({
     authority,
     request,
-    current
+    current,
+    expected_input_fingerprint: current.value.input_fingerprint
   });
   if (!fingerprint.ok) return fingerprint;
   return current.value.input_fingerprint === fingerprint.value ? ok6(void 0) : issue2("STATE_INVALID", current.value, "gate-reentry-replay-fingerprint-mismatch");
@@ -60693,7 +60863,8 @@ async function validateCompletedPlanningRestart(dependencies, authority, current
     authority,
     request,
     current,
-    target_phase_instance: restart.target_phase_instance
+    target_phase_instance: restart.target_phase_instance,
+    expected_input_fingerprint: current.value.input_fingerprint
   });
   if (!fingerprint.ok) return fingerprint;
   return current.value.input_fingerprint === fingerprint.value ? ok6(void 0) : issue2("STATE_INVALID", current.value, "gate-restart-replay-fingerprint-mismatch");
@@ -61802,19 +61973,33 @@ function rubricDigest(call, phase3) {
   const reviewCycle = call.name === "archflow_counter_review" || call.name === "archflow_state" && call.input.operation !== "planning_restart" && (call.input.step === "counter_review" || call.input.step === "triage");
   return reviewCycle ? canonicalRubricForPhaseKind(decodePhaseInstance(phase3).kind).rubric_digest : canonicalJsonDigest({});
 }
+var identityJson2 = (identity) => ({
+  path: identity.path,
+  mode: identity.mode,
+  oid: identity.oid
+});
+var declaredInputJson2 = (declared) => ({
+  input_id: declared.input_id,
+  digest: declared.digest
+});
+var byPath = (left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0;
+var byInputId = (left, right) => left.input_id < right.input_id ? -1 : left.input_id > right.input_id ? 1 : 0;
+function legacyInputFingerprint(subject, configDigest) {
+  return canonicalJsonDigest({
+    schema_version: subject.schema_version,
+    workflow_digest: subject.workflow_digest,
+    config_digest: configDigest,
+    constitution_digest: subject.constitution_digest,
+    artifact_identities: [...subject.artifact_identities].sort(byPath).map(identityJson2),
+    upstream_identities: [...subject.upstream_identities].sort(byPath).map(identityJson2),
+    rubric_digest: subject.rubric_digest,
+    phase_instance: subject.phase_instance,
+    declared_inputs: [...subject.declared_inputs].sort(byInputId).map(declaredInputJson2)
+  });
+}
 function createInternalInputFingerprintResolver(input) {
   return async (context2) => {
     const state = context2.state.value;
-    if (context2.live_config.digest !== state.config_digest) {
-      return Object.freeze({
-        schema_version: "1",
-        ok: false,
-        error: createProjectError("PINNED_CONFIG_MISMATCH", {
-          expected_digest: state.config_digest,
-          observed_digest: context2.live_config.digest
-        })
-      });
-    }
     const workflow = await input.read_workflow_digest(context2);
     if (!workflow.ok) return workflow;
     if (workflow.value !== state.workflow_digest) return failure(state, "workflow-pin-mismatch");
@@ -61830,7 +62015,6 @@ function createInternalInputFingerprintResolver(input) {
     const subject = {
       schema_version: "1",
       workflow_digest: workflow.value,
-      config_digest: context2.live_config.digest,
       constitution_digest: constitution.value,
       artifact_identities: structuredClone(artifacts.value),
       upstream_identities: structuredClone(upstream.value),
@@ -61838,7 +62022,15 @@ function createInternalInputFingerprintResolver(input) {
       phase_instance: phaseInstance3(context2.call, context2.context),
       declared_inputs: structuredClone(declared.value)
     };
-    return Object.freeze({ schema_version: "1", ok: true, value: subject });
+    const fingerprint = computeInputFingerprint(subject);
+    const expected = context2.expected_input_fingerprint;
+    if (expected !== void 0 && fingerprint !== expected) {
+      const legacy = legacyInputFingerprint(subject, state.config_digest);
+      if (legacy === expected) {
+        return Object.freeze({ schema_version: "1", ok: true, value: { subject, fingerprint: legacy } });
+      }
+    }
+    return Object.freeze({ schema_version: "1", ok: true, value: { subject, fingerprint } });
   };
 }
 
@@ -62138,10 +62330,14 @@ async function readTaskConfig(path2) {
   const read = await readBytes(path2);
   if (read.kind !== "bytes") return read;
   try {
-    parseConfigYaml(decoder3.decode(read.bytes), "task config");
+    const parsed = parseConfigYaml(decoder3.decode(read.bytes), "task config");
     return Object.freeze({
       kind: "valid",
-      snapshot: Object.freeze({ bytes: read.bytes, digest: sha256Bytes(read.bytes) })
+      snapshot: Object.freeze({
+        bytes: read.bytes,
+        digest: sha256Bytes(read.bytes),
+        parsed
+      })
     });
   } catch {
     return Object.freeze({ kind: "invalid", digest: sha256Bytes(read.bytes) });
@@ -62403,7 +62599,7 @@ async function createProductionServices(input) {
     },
     load_retained_result: (reference) => readRetainedResult(discovered.value, authority, reference),
     load_retained_manifest: loadRetainedManifest,
-    resolve_gate_reentry_fingerprint: async ({ request, current, target_phase_instance }) => {
+    resolve_gate_reentry_fingerprint: async ({ request, current, target_phase_instance, expected_input_fingerprint }) => {
       const liveConfig = await readTaskConfig(authority.config);
       if (liveConfig.kind !== "valid") return stateFailure(current.value.phase_instance, "task-config-invalid");
       const call = parseToolCall("archflow_state", {
@@ -62416,15 +62612,16 @@ async function createProductionServices(input) {
         step: "produce",
         status: "running"
       });
-      const subject = await resolver({
+      const resolved = await resolver({
         runner: discovered.value,
         authority,
         state: current,
         call,
         live_config: liveConfig.snapshot,
+        ...expected_input_fingerprint !== void 0 ? { expected_input_fingerprint } : {},
         context: authority.context
       });
-      return subject.ok ? ok12(computeInputFingerprint(subject.value)) : subject;
+      return resolved.ok ? ok12(resolved.value.fingerprint) : resolved;
     }
   });
   return ok12(Object.freeze({
@@ -64085,17 +64282,10 @@ function deriveNextAction(input) {
     return input.repository_initialized ? action("create-task", "Create durable state for this task.", false) : action("initialize-repository", "Initialize ArchFlow in this repository.", false);
   }
   if (input.config_verified !== true) {
-    if (input.config_schema_unsupported === true) {
-      return action(
-        "upgrade-tooling",
-        "The task's pinned configuration bytes are exactly the recorded ones, but this installed ArchFlow version cannot parse their schema; restoring or editing the file cannot fix this. Resume the task with tooling that accepts the pinned configuration, or restart it as a new task under the current schema.",
-        true,
-        state
-      );
-    }
+    const readIssue = input.config_issue === "config-missing" ? "missing" : input.config_issue === "config-unreadable" || input.config_issue === "config-unresolvable" ? "unreadable" : "invalid";
     return action(
-      "restore-pinned-config",
-      "Restore the task's digest-pinned configuration before continuing; an intentional configuration change requires a new task or the explicit upgrade flow.",
+      "inspect-state",
+      `The task's config.yaml is ${readIssue}: fix the YAML so the configuration parses, then retry.`,
       true,
       state
     );
@@ -64273,11 +64463,9 @@ function partitionExpectedReentryEdits(findings, assessment, produceSubject, sta
     expected_reentry_edits: Object.freeze(expected)
   });
 }
-function unavailableConfig(expected, observed2, issue4) {
+function unavailableConfig(issue4) {
   return Object.freeze({
     verified: false,
-    ...expected === void 0 ? {} : { expected_digest: expected },
-    ...observed2 === void 0 ? {} : { observed_digest: observed2 },
     ...issue4 === void 0 ? {} : { issue: issue4 }
   });
 }
@@ -64491,7 +64679,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     const status2 = Object.freeze({
       task_id: authority.task_id,
       state: "missing",
-      config: unavailableConfig(void 0, void 0, "status-authority-invalid"),
+      config: unavailableConfig("status-authority-invalid"),
       blocking_reasons: Object.freeze(["status-authority-invalid"]),
       next_action: next
     });
@@ -64503,7 +64691,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     const status2 = Object.freeze({
       task_id: authority.task_id,
       state: "missing",
-      config: unavailableConfig(void 0, void 0, "state-unavailable"),
+      config: unavailableConfig("state-unavailable"),
       blocking_reasons: Object.freeze([reason2]),
       next_action: next
     });
@@ -64515,24 +64703,15 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   let parsedConfig;
   try {
     const read = await dependencies.read_config(authority.config);
-    if (read.kind === "invalid" && read.digest === state.config_digest) {
-      config2 = unavailableConfig(state.config_digest, read.digest, "pinned-config-schema-unsupported");
-      blockers.push("pinned-config-schema-unsupported");
-    } else if (read.kind !== "valid") {
-      config2 = unavailableConfig(
-        state.config_digest,
-        read.kind === "invalid" ? read.digest : void 0,
-        `config-${read.kind}`
-      );
+    if (read.kind !== "valid") {
+      config2 = unavailableConfig(`config-${read.kind}`);
       blockers.push(`config-${read.kind}`);
     } else {
-      const verified = verifyPinnedConfig(state.config_digest, read.snapshot.bytes);
-      config2 = verified.ok ? Object.freeze({ verified: true, expected_digest: state.config_digest, observed_digest: verified.value }) : unavailableConfig(state.config_digest, read.snapshot.digest, "pinned-config-mismatch");
-      if (!verified.ok) blockers.push("pinned-config-mismatch");
+      config2 = Object.freeze({ verified: true });
       parsedConfig = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(read.snapshot.bytes), "task config");
     }
   } catch {
-    config2 = unavailableConfig(state.config_digest, void 0, "config-unresolvable");
+    config2 = unavailableConfig("config-unresolvable");
     blockers.push("config-unresolvable");
   }
   let routes;
@@ -64545,6 +64724,11 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     } catch {
       blockers.push("dispatch-routes-invalid");
     }
+  }
+  let configChange;
+  if (parsedConfig !== void 0 && state.last_seen_config !== void 0) {
+    const entries = computeConfigChange(state.last_seen_config, parsedConfig);
+    if (entries.length > 0) configChange = entries;
   }
   let constitution;
   let constitutionStatus;
@@ -64872,7 +65056,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     repository_initialized: true,
     state,
     config_verified: config2.verified,
-    ...config2.verified !== true && config2.issue === "pinned-config-schema-unsupported" ? { config_schema_unsupported: true } : {},
+    ...config2.verified !== true && config2.issue !== void 0 ? { config_issue: config2.issue } : {},
     ...statusReconciliation === void 0 ? {} : { reconciliation_findings: statusReconciliation.findings },
     reconciliation_blocking_reasons: Object.freeze([
       ...reconciliationBlockers,
@@ -64937,6 +65121,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     review_policy: canonicalRubricForPhaseKind(decodePhaseInstance(state.phase_instance).kind),
     ...subjectDigest === void 0 ? {} : { subject_digest: subjectDigest },
     config: config2,
+    ...configChange === void 0 ? {} : { config_change: configChange },
     ...routes === void 0 ? {} : { routes },
     ...constitutionStatus === void 0 ? {} : { constitution: constitutionStatus },
     ...state.open_gate === void 0 ? {} : { open_gate_id: state.open_gate.gate_id },
@@ -64974,10 +65159,10 @@ function importRoot(authority, initialization) {
 async function readStagedLegacyConfig(authority, initialization) {
   try {
     const bytes = new Uint8Array(await readFile9(join8(importRoot(authority, initialization), "config.yaml")));
-    parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(bytes), "staged task config");
+    const parsed = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(bytes), "staged task config");
     const digest9 = sha256Bytes(bytes);
     if (digest9 !== initialization.config_digest) return void 0;
-    return Object.freeze({ bytes, digest: digest9 });
+    return Object.freeze({ bytes, digest: digest9, parsed });
   } catch {
     return void 0;
   }
@@ -65079,7 +65264,7 @@ async function validateLiveInitialization(dependencies, request, initialization)
   }
   return ok17(void 0);
 }
-function initialState(call, artifact) {
+function initialState(call, artifact, parsedConfig) {
   const initialization = initializationFor(artifact);
   if (initialization === void 0) return contract("initialization-artifact-required");
   const expectedPhase = initialization.artifact_kind === "legacy-import-initialization" ? "design" : "prd";
@@ -65105,7 +65290,7 @@ function initialState(call, artifact) {
     approvals: [],
     waivers: []
   };
-  return ok17(state);
+  return ok17(withLastSeenConfig(state, parsedConfig));
 }
 async function identifyStateInitialization(dependencies, request) {
   assertInternalTransactionAuthority(request.authority, { runner: dependencies.runner, environment: dependencies.environment });
@@ -65130,7 +65315,13 @@ async function identifyStateInitialization(dependencies, request) {
     const mapping = validateLegacyMapping(initialization);
     if (!mapping.ok) return mapping;
   }
-  const stateResult = initialState(request.call, artifact);
+  let config2 = await dependencies.read_config(request.authority.config);
+  if (config2.kind === "missing" && initialization.artifact_kind === "legacy-import-initialization") {
+    const staged = await readStagedLegacyConfig(request.authority, initialization);
+    if (staged !== void 0) config2 = Object.freeze({ kind: "valid", snapshot: staged });
+  }
+  if (config2.kind !== "valid") return config2.kind === "invalid" ? contract("task-config-invalid") : io3(request, "task-config-read");
+  const stateResult = initialState(request.call, artifact, config2.snapshot.parsed);
   if (!stateResult.ok) return stateResult;
   const preparedState = canonicalDocument(stateResult.value);
   const initializationSemantics = validateDurableSemantics({
@@ -65138,18 +65329,6 @@ async function identifyStateInitialization(dependencies, request) {
     artifact: canonicalDocument(initialization)
   });
   if (!initializationSemantics.ok) return initializationSemantics;
-  let config2 = await dependencies.read_config(request.authority.config);
-  if (config2.kind === "missing" && initialization.artifact_kind === "legacy-import-initialization") {
-    const staged = await readStagedLegacyConfig(request.authority, initialization);
-    if (staged !== void 0) config2 = Object.freeze({ kind: "valid", snapshot: staged });
-  }
-  if (config2.kind !== "valid") return config2.kind === "invalid" ? contract("task-config-invalid") : io3(request, "task-config-read");
-  if (config2.snapshot.digest !== initialization.config_digest) {
-    return fail16(createProjectError("PINNED_CONFIG_MISMATCH", {
-      expected_digest: initialization.config_digest,
-      observed_digest: config2.snapshot.digest
-    }));
-  }
   const fingerprint = await dependencies.resolve_input_fingerprint({
     runner: dependencies.runner,
     authority: request.authority,
@@ -65159,8 +65338,7 @@ async function identifyStateInitialization(dependencies, request) {
     context: request.authority.context
   });
   if (!fingerprint.ok) return fingerprint;
-  assertPlainJson(fingerprint.value, "initialization fingerprint subject");
-  const inputFingerprint = computeInputFingerprint(structuredClone(fingerprint.value));
+  const inputFingerprint = fingerprint.value.fingerprint;
   const identified = identifyTransactionRequest(request.call, request.authority, inputFingerprint);
   return ok17(Object.freeze({
     call: identified.call,
@@ -65444,23 +65622,17 @@ async function fingerprintFor(services, call) {
   if (config2.kind !== "valid") {
     return fail17(createProjectError("CONFIG_INVALID", { issue_code: `config-${config2.kind}` }));
   }
-  if (config2.snapshot.digest !== services.state.value.config_digest) {
-    return fail17(createProjectError("PINNED_CONFIG_MISMATCH", {
-      expected_digest: services.state.value.config_digest,
-      observed_digest: config2.snapshot.digest
-    }));
-  }
   const resolved = await services.dependencies.resolve_input_fingerprint({
     runner: services.runner,
     authority: services.authority,
     state: services.state,
     call,
     live_config: config2.snapshot,
+    expected_input_fingerprint: services.state.value.input_fingerprint,
     context: services.authority.context
   });
   if (!resolved.ok) return resolved;
-  assertPlainJson(resolved.value, "envelope fingerprint subject");
-  return ok18(computeInputFingerprint(structuredClone(resolved.value)));
+  return ok18(resolved.value.fingerprint);
 }
 async function computeCallEnvelope(services, value) {
   assertPlainJson(value, "call envelope input");
@@ -66459,8 +66631,6 @@ function mapNextAction(status, snapshot) {
     case "inspect-retained-receipt":
     case "create-fresh-intent":
     case "resolve-current-authority":
-    case "restore-pinned-config":
-    case "upgrade-tooling":
       return inspect2(action2.detail);
     case "open-gate":
       return Object.freeze({
@@ -66626,6 +66796,8 @@ function projectSemanticStatus(snapshot, invocation) {
   const owns = invocation !== void 0 && (shape.action_kind === "reopen" ? reopen !== void 0 && semanticInvocationEnabled(invocation) : invocationOwnsCurrentPosition(invocation, status, shape.action_kind));
   const offer = owns && canOffer(shape) ? offerFor(snapshot, status, invocation, shape, reopen) : void 0;
   const mismatch2 = invocation !== void 0 && !owns ? ` The invoked skill does not own this current action; continue with the action shown or invoke its owning skill.` : "";
+  const configChange = status.config_change;
+  const configChangeNotice = configChange === void 0 ? "" : configChange.length === 1 ? " Task config changed since the last state transaction (1 field); see config_change." : ` Task config changed since the last state transaction (${configChange.length} fields); see config_change.`;
   const nextAction = Object.freeze({
     kind: shape.action_kind,
     instruction: shape.instruction,
@@ -66643,7 +66815,7 @@ function projectSemanticStatus(snapshot, invocation) {
     task_id: status.task_id,
     condition: shape.condition,
     headline: shape.headline,
-    detail: `${shape.detail}${mismatch2}`,
+    detail: `${shape.detail}${mismatch2}${configChangeNotice}`,
     ...position2 === void 0 ? {} : { position: position2 },
     // A settled re-entry decision is close-only authority. Document write slots become visible
     // only after the separately offered revision-entry transition commits.
@@ -66651,7 +66823,8 @@ function projectSemanticStatus(snapshot, invocation) {
     next_action: nextAction,
     ...shape.findings !== true ? {} : { findings: snapshot.full_findings },
     ...context2 === void 0 ? {} : { review_context: context2 },
-    ...shape.presentation === void 0 ? {} : { presentation: shape.presentation }
+    ...shape.presentation === void 0 ? {} : { presentation: shape.presentation },
+    ...configChange === void 0 ? {} : { config_change: configChange }
   });
   return Object.freeze({ view, ...offer === void 0 ? {} : { internal_offer: offer } });
 }
@@ -69049,10 +69222,6 @@ function ownDataField2(value, field, label) {
   }
   return descriptor.value;
 }
-function materializeFingerprint(value) {
-  assertPlainJson(value, "input fingerprint subject");
-  return structuredClone(value);
-}
 function materializeDraft(value) {
   assertPlainJson(value, "next state draft");
   if (Object.hasOwn(value, "revision") || Object.hasOwn(value, "last_transition")) {
@@ -69109,27 +69278,21 @@ async function liveIdentification(dependencies, request, current) {
   if (config2.kind !== "valid") {
     return config2.kind === "invalid" ? issue3("CONFIG_INVALID", "task-config-invalid") : io4(request.authority, "task-config-read");
   }
-  if (config2.snapshot.digest !== current.value.config_digest) {
-    return fail22(createProjectError("PINNED_CONFIG_MISMATCH", {
-      expected_digest: current.value.config_digest,
-      observed_digest: config2.snapshot.digest
-    }));
-  }
   const resolved = await dependencies.resolve_input_fingerprint({
     runner: dependencies.runner,
     authority: request.authority,
     state: current,
     call: request.call,
     live_config: config2.snapshot,
+    expected_input_fingerprint: request.call.input.input_fingerprint,
     context: request.authority.context
   });
   if (!resolved.ok) return resolved;
-  const subject = materializeFingerprint(resolved.value);
-  const inputFingerprint = computeInputFingerprint(subject);
+  const inputFingerprint = resolved.value.fingerprint;
   if (inputFingerprint !== request.call.input.input_fingerprint) {
     return fingerprintMismatch(inputFingerprint, request.call.input.input_fingerprint);
   }
-  return ok21(identifyTransactionRequest(request.call, request.authority, inputFingerprint));
+  return ok21({ ...identifyTransactionRequest(request.call, request.authority, inputFingerprint), live_config: config2.snapshot.parsed });
 }
 function identifyFromReceipt(request, receipt) {
   if (receipt.input_fingerprint !== request.call.input.input_fingerprint) {
@@ -69384,16 +69547,17 @@ function validateResultInstallationBinding(request, current, identified, plan, a
 }
 function buildPlan(request, current, identified, preparedValue, authenticatedWorktreeRoot) {
   const resultingRevision = parseSafeInteger(current.value.revision + 1);
-  const plan = materializePlan(preparedValue);
-  const correlated = correlateProjectResult(identified.call, plan.expectation, plan.result);
+  const materialized = materializePlan(preparedValue);
+  const correlated = correlateProjectResult(identified.call, materialized.expectation, materialized.result);
   if (!correlated.ok) return correlated;
-  if (plan.expectation.resulting_revision !== resultingRevision || correlated.value.revision !== resultingRevision) {
+  if (materialized.expectation.resulting_revision !== resultingRevision || correlated.value.revision !== resultingRevision) {
     throw new TypeError("prepared transaction revision is not the immediate successor");
   }
-  if (plan.next_state.input_fingerprint !== identified.input_fingerprint) {
-    return fingerprintMismatch(identified.input_fingerprint, plan.next_state.input_fingerprint);
+  if (materialized.next_state.input_fingerprint !== identified.input_fingerprint) {
+    return fingerprintMismatch(identified.input_fingerprint, materialized.next_state.input_fingerprint);
   }
-  assertPreserved(current.value, plan.next_state);
+  assertPreserved(current.value, materialized.next_state);
+  const plan = { ...materialized, next_state: withLastSeenConfig(materialized.next_state, identified.live_config) };
   const installation = validateResultInstallationBinding(
     request,
     current,
@@ -70901,12 +71065,6 @@ async function openHandlerSession(call, context2) {
   if (configRead.kind !== "valid") {
     return fail24(createProjectError("CONFIG_INVALID", { issue_code: `config-${configRead.kind}` }));
   }
-  if (state !== void 0 && state.config_digest !== configRead.snapshot.digest) {
-    return fail24(createProjectError("PINNED_CONFIG_MISMATCH", {
-      expected_digest: state.config_digest,
-      observed_digest: configRead.snapshot.digest
-    }));
-  }
   const host = context2.connection.initialization_candidates.host;
   if (host === "unknown") return fail24(createProjectError("UNSUPPORTED_HOST", { host }));
   const phaseInstance4 = state?.phase_instance ?? suppliedPhase;
@@ -71696,10 +71854,15 @@ async function handleState(call, context2) {
               state: current,
               call,
               live_config: liveConfig.snapshot,
+              // The landing is committed through the kernel, whose equality pin binds the next
+              // state's fingerprint to the request's claim — so this recompute is a comparing
+              // site: supply the claim as the expected digest and record the accepted
+              // (possibly legacy-composition) value rather than writing the new composition.
+              expected_input_fingerprint: restartInput.input_fingerprint,
               context: services.authority.context
             });
             if (!landingSubject.ok) return landingSubject;
-            landingFingerprint = computeInputFingerprint(landingSubject.value);
+            landingFingerprint = landingSubject.value.fingerprint;
             planned = planPlanningRestart({ ...planInput, recomputed_input_fingerprint: landingFingerprint });
             if (!planned.ok) return planned;
           }

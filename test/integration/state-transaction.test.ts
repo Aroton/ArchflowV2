@@ -100,7 +100,6 @@ async function transactionRepository(taskIds: readonly string[]): Promise<Readon
     const subject: InputFingerprintSubject = {
       schema_version: "1",
       workflow_digest: "a".repeat(64) as InputFingerprintSubject["workflow_digest"],
-      config_digest: sha256Bytes(configBytes),
       constitution_digest: "b".repeat(64) as InputFingerprintSubject["constitution_digest"],
       artifact_identities: [],
       upstream_identities: [],
@@ -119,7 +118,7 @@ async function transactionRepository(taskIds: readonly string[]): Promise<Readon
       attempt: 1 as TaskStateV1["attempt"],
       input_fingerprint: computeInputFingerprint(subject),
       initialization_digest: "c".repeat(64) as TaskStateV1["initialization_digest"],
-      config_digest: subject.config_digest,
+      config_digest: sha256Bytes(configBytes),
       workflow_digest: subject.workflow_digest,
       constitution_digest: subject.constitution_digest,
       policy_base_commit: policyBaseCommit as TaskStateV1["policy_base_commit"],

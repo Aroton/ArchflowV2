@@ -24440,7 +24440,6 @@ var PROJECT_PARAMETER_SCHEMAS = {
   HANDOFF_REQUIRED: object2({ phase_instance: phaseInstance2 }),
   POLICY_BASE_INVALID: object2({ expected_digest: digest6, observed_digest: digest6.optional() }),
   WORKFLOW_MISMATCH: digestsParams,
-  PINNED_CONFIG_MISMATCH: digestsParams,
   STALE_SKILLS: digestsParams,
   STATE_MISSING: object2({ phase_instance: phaseInstance2 }),
   STATE_INVALID: object2({ phase_instance: phaseInstance2, issue_code: code }),
@@ -24515,7 +24514,6 @@ var PROJECT_ERROR_DEFINITIONS = Object.freeze({
   HANDOFF_REQUIRED: defineError("repository", false, PROJECT_PARAMETER_SCHEMAS.HANDOFF_REQUIRED, "complete-clean-handoff", "project"),
   POLICY_BASE_INVALID: defineError("policy", false, PROJECT_PARAMETER_SCHEMAS.POLICY_BASE_INVALID, "restore-policy-base", "project"),
   WORKFLOW_MISMATCH: defineError("policy", false, PROJECT_PARAMETER_SCHEMAS.WORKFLOW_MISMATCH, "restore-pinned-workflow", "project"),
-  PINNED_CONFIG_MISMATCH: defineError("policy", false, PROJECT_PARAMETER_SCHEMAS.PINNED_CONFIG_MISMATCH, "restore-pinned-config", "project"),
   STALE_SKILLS: defineError("policy", false, PROJECT_PARAMETER_SCHEMAS.STALE_SKILLS, "refresh-skills", "project"),
   STATE_MISSING: defineError("state", false, PROJECT_PARAMETER_SCHEMAS.STATE_MISSING, "initialize-state", "project"),
   STATE_INVALID: defineError("state", false, PROJECT_PARAMETER_SCHEMAS.STATE_INVALID, "inspect-current-state", "project"),
@@ -25744,210 +25742,6 @@ async function ensureWorkspaceProjectionParent(authority, target) {
 // src/state/production.ts
 import { lstat as lstat6, readFile as readFile2, readlink as readlink2 } from "node:fs/promises";
 
-// src/contracts/fingerprints.ts
-function materialize(subject, label) {
-  assertPlainJson(subject, label);
-  return structuredClone(subject);
-}
-function ordinal3(a, b) {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-function sortedSet(items, key, label) {
-  const seen = /* @__PURE__ */ new Set();
-  for (const item of items) {
-    const value = key(item);
-    if (seen.has(value)) throw new TypeError(`${label} is a set: duplicate key ${JSON.stringify(value)}`);
-    seen.add(value);
-  }
-  return [...items].sort((left, right) => ordinal3(key(left), key(right)));
-}
-var identityJson = (identity) => ({
-  path: identity.path,
-  mode: identity.mode,
-  oid: identity.oid
-});
-var declaredInputJson = (input) => ({
-  input_id: input.input_id,
-  digest: input.digest
-});
-function computeInputFingerprint(subject) {
-  const snapshot2 = materialize(subject, "input fingerprint subject");
-  return canonicalJsonDigest({
-    schema_version: snapshot2.schema_version,
-    workflow_digest: snapshot2.workflow_digest,
-    config_digest: snapshot2.config_digest,
-    constitution_digest: snapshot2.constitution_digest,
-    artifact_identities: sortedSet(snapshot2.artifact_identities, (item) => item.path, "artifact_identities").map(identityJson),
-    upstream_identities: sortedSet(snapshot2.upstream_identities, (item) => item.path, "upstream_identities").map(identityJson),
-    rubric_digest: snapshot2.rubric_digest,
-    phase_instance: snapshot2.phase_instance,
-    declared_inputs: sortedSet(snapshot2.declared_inputs, (item) => item.input_id, "declared_inputs").map(declaredInputJson)
-  });
-}
-function computePinnedConstitutionDigest(files) {
-  const snapshot2 = materialize(files, "pinned constitution files");
-  return canonicalJsonDigest({
-    schema_version: "1",
-    digest_kind: "pinned-constitution",
-    files: sortedSet(snapshot2, (file2) => file2.path, "pinned constitution files").map(
-      ({ path: path2, oid }) => ({ path: path2, oid })
-    )
-  });
-}
-var exactFields = (value, expected) => {
-  const actual = Object.keys(value).sort();
-  const wanted = [...expected].sort();
-  if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
-    throw new TypeError(`operation_fields must contain exactly ${wanted.join(", ")}`);
-  }
-};
-function closedOperationFields(subject) {
-  switch (subject.tool) {
-    case "archflow_state": {
-      const fields = subject.operation_fields;
-      if (subject.operation === "planning-restart") {
-        const restart = fields;
-        exactFields(fields, restart.ask_base_digest === void 0 ? ["phase_instance", "target_phase_instance", "reason"] : ["phase_instance", "target_phase_instance", "reason", "ask_base_digest"]);
-        return {
-          phase_instance: restart.phase_instance,
-          target_phase_instance: restart.target_phase_instance,
-          reason: restart.reason,
-          ...restart.ask_base_digest === void 0 ? {} : { ask_base_digest: restart.ask_base_digest }
-        };
-      }
-      if (subject.operation === "record-state-boundary") {
-        exactFields(fields, ["phase_instance", "step", "status"]);
-        const boundary = fields;
-        return { phase_instance: boundary.phase_instance, step: boundary.step, status: boundary.status };
-      }
-      const artifactFields = fields;
-      const operationForKind = {
-        "task-initialization": "adopt-task-initialization",
-        "legacy-import-initialization": "adopt-legacy-import-initialization",
-        document: "record-document-artifact",
-        "implementation-output": "record-implementation-output",
-        triage: "record-triage"
-      };
-      if (operationForKind[artifactFields.artifact_kind] !== subject.operation) {
-        throw new TypeError("invalid archflow_state operation for artifact_kind");
-      }
-      const expected = ["phase_instance", "step", "status", "artifact_kind", "artifact_digest"];
-      if (artifactFields.human_revision !== void 0) expected.push("human_revision");
-      exactFields(artifactFields, expected);
-      return {
-        phase_instance: artifactFields.phase_instance,
-        step: artifactFields.step,
-        status: artifactFields.status,
-        artifact_kind: artifactFields.artifact_kind,
-        artifact_digest: artifactFields.artifact_digest,
-        ...artifactFields.human_revision === void 0 ? {} : { human_revision: artifactFields.human_revision }
-      };
-    }
-    case "archflow_counter_review": {
-      const fields = subject.operation_fields;
-      if (subject.operation !== "counter-review") throw new TypeError("invalid archflow_counter_review operation");
-      const expected = ["artifact_path"];
-      if (fields.route_override !== void 0) expected.push("route_override");
-      exactFields(fields, expected);
-      return {
-        artifact_path: fields.artifact_path,
-        ...fields.route_override === void 0 ? {} : { route_override: fields.route_override }
-      };
-    }
-    case "archflow_gate": {
-      const fields = subject.operation_fields;
-      if (subject.operation !== "gate") throw new TypeError("invalid archflow_gate operation");
-      const expected = ["phase_instance", "summary", "subject_digest", "current_evidence", "kind", "context"];
-      if (fields.preview_digest !== void 0 || fields.decision !== void 0) {
-        if (fields.preview_digest === void 0 || fields.decision === void 0) {
-          throw new TypeError("gate preview_digest and decision must appear together");
-        }
-        expected.push("preview_digest", "decision");
-      }
-      exactFields(fields, expected);
-      const selected = {
-        phase_instance: fields.phase_instance,
-        summary: fields.summary,
-        subject_digest: fields.subject_digest,
-        current_evidence: fields.current_evidence,
-        kind: fields.kind,
-        context: fields.context,
-        ...fields.preview_digest === void 0 || fields.decision === void 0 ? {} : { preview_digest: fields.preview_digest, decision: fields.decision }
-      };
-      return selected;
-    }
-    case "archflow_waiver": {
-      const fields = subject.operation_fields;
-      if (subject.operation !== "waiver") throw new TypeError("invalid archflow_waiver operation");
-      const expected = ["origin", "rationale"];
-      if (fields.preview_digest !== void 0 || fields.decision !== void 0) {
-        if (fields.preview_digest === void 0 || fields.decision === void 0) {
-          throw new TypeError("waiver preview_digest and decision must appear together");
-        }
-        expected.push("preview_digest", "decision");
-      }
-      exactFields(fields, expected);
-      return {
-        origin: fields.origin,
-        rationale: fields.rationale,
-        ...fields.preview_digest === void 0 || fields.decision === void 0 ? {} : { preview_digest: fields.preview_digest, decision: fields.decision }
-      };
-    }
-    default: {
-      const exhaustive = subject;
-      throw new TypeError(`unknown request tool ${String(exhaustive.tool)}`);
-    }
-  }
-}
-function computeRequestDigest(subject) {
-  const snapshot2 = materialize(subject, "request digest subject");
-  const operationFields = closedOperationFields(snapshot2);
-  return canonicalJsonDigest({
-    schema_version: snapshot2.schema_version,
-    tool: snapshot2.tool,
-    repository_identity_digest: snapshot2.repository_identity_digest,
-    task_identity_digest: snapshot2.task_identity_digest,
-    operation: snapshot2.operation,
-    operation_fields: operationFields,
-    input_fingerprint: snapshot2.input_fingerprint
-  });
-}
-function computeGateId(subject) {
-  const snapshot2 = materialize(subject, "gate identity subject");
-  return `g-${canonicalJsonDigest({
-    schema_version: "1",
-    digest_kind: "gate-identity",
-    task_identity_digest: snapshot2.task_identity_digest,
-    intent_id: snapshot2.intent_id,
-    request_digest: snapshot2.request_digest
-  })}`;
-}
-function computeGateContextDigest(kind, context2) {
-  const snapshot2 = materialize(context2, "gate context digest subject");
-  return kind === "waiver" ? canonicalJsonDigest({ schema_version: "1", digest_kind: "waiver-context", ...snapshot2 }) : canonicalJsonDigest({ schema_version: "1", digest_kind: "gate-context", kind, context: snapshot2 });
-}
-function baselineAdoptionDriftDigest(context2) {
-  const snapshot2 = materialize(context2, "baseline adoption drift subject");
-  return canonicalJsonDigest({
-    schema_version: "1",
-    digest_kind: "baseline-adoption-drift",
-    drifted_projections: snapshot2.drifted_projections,
-    ...(snapshot2.deleted_projections ?? []).length === 0 ? {} : { deleted_projections: snapshot2.deleted_projections }
-  });
-}
-function computePinnedConfigDigest(configBytes) {
-  return sha256Bytes(configBytes);
-}
-function verifyPinnedConfig(expected, observedBytes) {
-  const observed2 = computePinnedConfigDigest(observedBytes);
-  if (observed2 === expected) return { schema_version: "1", ok: true, value: observed2 };
-  return {
-    schema_version: "1",
-    ok: false,
-    error: createProjectError("PINNED_CONFIG_MISMATCH", { expected_digest: expected, observed_digest: observed2 })
-  };
-}
-
 // src/contracts/mcp-tools.ts
 import { isDeepStrictEqual as isDeepStrictEqual3 } from "node:util";
 
@@ -26258,6 +26052,27 @@ var lastTransitionV1Schema = external_exports.object({
   prior_revision: safeIntegerV1Schema,
   resulting_revision: positiveSafeInteger
 }).strict();
+var taskConfigRouteV1Schema = configRouteSchema.clone(configRouteSchema.def);
+var taskConfigRolesV1Schema = configRolesSchema.clone({
+  ...configRolesSchema.def,
+  shape: Object.fromEntries(
+    Object.entries(configRolesSchema.shape).map(([role]) => [role, taskConfigRouteV1Schema.optional()])
+  )
+});
+var taskConfigOverridesV1Schema = configOverridesSchema.clone({
+  ...configOverridesSchema.def,
+  shape: Object.fromEntries(
+    Object.entries(configOverridesSchema.shape).map(([phase3]) => [phase3, taskConfigRolesV1Schema.optional()])
+  )
+});
+var taskConfigSnapshotV1Schema = configV1Schema.clone({
+  ...configV1Schema.def,
+  shape: {
+    ...configV1Schema.shape,
+    roles: taskConfigRolesV1Schema,
+    overrides: taskConfigOverridesV1Schema.optional()
+  }
+});
 var taskStateV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
   task_id: taskSlugV1Schema,
@@ -26282,6 +26097,7 @@ var taskStateV1Schema = external_exports.object({
   human_revision_history: external_exports.array(humanRevisionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "human_revision_history must be sorted by gate_id with no duplicates").optional(),
   restart_history: external_exports.array(planningRestartRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("restart_id")), "restart_history must be sorted by restart_id with no duplicates").optional(),
   baseline_adoptions: external_exports.array(baselineAdoptionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "baseline_adoptions must be sorted by gate_id with no duplicates").optional(),
+  last_seen_config: taskConfigSnapshotV1Schema.optional(),
   last_transition: lastTransitionV1Schema.optional(),
   terminal: external_exports.enum(TERMINAL_STATES).optional()
 }).strict().superRefine((state, context2) => {
@@ -26736,6 +26552,200 @@ function createProjectionWriter() {
 // src/state/fingerprint-readers.ts
 import { lstat as lstat3, readFile } from "node:fs/promises";
 
+// src/contracts/fingerprints.ts
+function materialize(subject, label) {
+  assertPlainJson(subject, label);
+  return structuredClone(subject);
+}
+function ordinal3(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+function sortedSet(items, key, label) {
+  const seen = /* @__PURE__ */ new Set();
+  for (const item of items) {
+    const value = key(item);
+    if (seen.has(value)) throw new TypeError(`${label} is a set: duplicate key ${JSON.stringify(value)}`);
+    seen.add(value);
+  }
+  return [...items].sort((left, right) => ordinal3(key(left), key(right)));
+}
+var identityJson = (identity) => ({
+  path: identity.path,
+  mode: identity.mode,
+  oid: identity.oid
+});
+var declaredInputJson = (input) => ({
+  input_id: input.input_id,
+  digest: input.digest
+});
+function computeInputFingerprint(subject) {
+  const snapshot2 = materialize(subject, "input fingerprint subject");
+  return canonicalJsonDigest({
+    schema_version: snapshot2.schema_version,
+    workflow_digest: snapshot2.workflow_digest,
+    constitution_digest: snapshot2.constitution_digest,
+    artifact_identities: sortedSet(snapshot2.artifact_identities, (item) => item.path, "artifact_identities").map(identityJson),
+    upstream_identities: sortedSet(snapshot2.upstream_identities, (item) => item.path, "upstream_identities").map(identityJson),
+    rubric_digest: snapshot2.rubric_digest,
+    phase_instance: snapshot2.phase_instance,
+    declared_inputs: sortedSet(snapshot2.declared_inputs, (item) => item.input_id, "declared_inputs").map(declaredInputJson)
+  });
+}
+function computePinnedConstitutionDigest(files) {
+  const snapshot2 = materialize(files, "pinned constitution files");
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "pinned-constitution",
+    files: sortedSet(snapshot2, (file2) => file2.path, "pinned constitution files").map(
+      ({ path: path2, oid }) => ({ path: path2, oid })
+    )
+  });
+}
+var exactFields = (value, expected) => {
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
+    throw new TypeError(`operation_fields must contain exactly ${wanted.join(", ")}`);
+  }
+};
+function closedOperationFields(subject) {
+  switch (subject.tool) {
+    case "archflow_state": {
+      const fields = subject.operation_fields;
+      if (subject.operation === "planning-restart") {
+        const restart = fields;
+        exactFields(fields, restart.ask_base_digest === void 0 ? ["phase_instance", "target_phase_instance", "reason"] : ["phase_instance", "target_phase_instance", "reason", "ask_base_digest"]);
+        return {
+          phase_instance: restart.phase_instance,
+          target_phase_instance: restart.target_phase_instance,
+          reason: restart.reason,
+          ...restart.ask_base_digest === void 0 ? {} : { ask_base_digest: restart.ask_base_digest }
+        };
+      }
+      if (subject.operation === "record-state-boundary") {
+        exactFields(fields, ["phase_instance", "step", "status"]);
+        const boundary = fields;
+        return { phase_instance: boundary.phase_instance, step: boundary.step, status: boundary.status };
+      }
+      const artifactFields = fields;
+      const operationForKind = {
+        "task-initialization": "adopt-task-initialization",
+        "legacy-import-initialization": "adopt-legacy-import-initialization",
+        document: "record-document-artifact",
+        "implementation-output": "record-implementation-output",
+        triage: "record-triage"
+      };
+      if (operationForKind[artifactFields.artifact_kind] !== subject.operation) {
+        throw new TypeError("invalid archflow_state operation for artifact_kind");
+      }
+      const expected = ["phase_instance", "step", "status", "artifact_kind", "artifact_digest"];
+      if (artifactFields.human_revision !== void 0) expected.push("human_revision");
+      exactFields(artifactFields, expected);
+      return {
+        phase_instance: artifactFields.phase_instance,
+        step: artifactFields.step,
+        status: artifactFields.status,
+        artifact_kind: artifactFields.artifact_kind,
+        artifact_digest: artifactFields.artifact_digest,
+        ...artifactFields.human_revision === void 0 ? {} : { human_revision: artifactFields.human_revision }
+      };
+    }
+    case "archflow_counter_review": {
+      const fields = subject.operation_fields;
+      if (subject.operation !== "counter-review") throw new TypeError("invalid archflow_counter_review operation");
+      const expected = ["artifact_path"];
+      if (fields.route_override !== void 0) expected.push("route_override");
+      exactFields(fields, expected);
+      return {
+        artifact_path: fields.artifact_path,
+        ...fields.route_override === void 0 ? {} : { route_override: fields.route_override }
+      };
+    }
+    case "archflow_gate": {
+      const fields = subject.operation_fields;
+      if (subject.operation !== "gate") throw new TypeError("invalid archflow_gate operation");
+      const expected = ["phase_instance", "summary", "subject_digest", "current_evidence", "kind", "context"];
+      if (fields.preview_digest !== void 0 || fields.decision !== void 0) {
+        if (fields.preview_digest === void 0 || fields.decision === void 0) {
+          throw new TypeError("gate preview_digest and decision must appear together");
+        }
+        expected.push("preview_digest", "decision");
+      }
+      exactFields(fields, expected);
+      const selected = {
+        phase_instance: fields.phase_instance,
+        summary: fields.summary,
+        subject_digest: fields.subject_digest,
+        current_evidence: fields.current_evidence,
+        kind: fields.kind,
+        context: fields.context,
+        ...fields.preview_digest === void 0 || fields.decision === void 0 ? {} : { preview_digest: fields.preview_digest, decision: fields.decision }
+      };
+      return selected;
+    }
+    case "archflow_waiver": {
+      const fields = subject.operation_fields;
+      if (subject.operation !== "waiver") throw new TypeError("invalid archflow_waiver operation");
+      const expected = ["origin", "rationale"];
+      if (fields.preview_digest !== void 0 || fields.decision !== void 0) {
+        if (fields.preview_digest === void 0 || fields.decision === void 0) {
+          throw new TypeError("waiver preview_digest and decision must appear together");
+        }
+        expected.push("preview_digest", "decision");
+      }
+      exactFields(fields, expected);
+      return {
+        origin: fields.origin,
+        rationale: fields.rationale,
+        ...fields.preview_digest === void 0 || fields.decision === void 0 ? {} : { preview_digest: fields.preview_digest, decision: fields.decision }
+      };
+    }
+    default: {
+      const exhaustive = subject;
+      throw new TypeError(`unknown request tool ${String(exhaustive.tool)}`);
+    }
+  }
+}
+function computeRequestDigest(subject) {
+  const snapshot2 = materialize(subject, "request digest subject");
+  const operationFields = closedOperationFields(snapshot2);
+  return canonicalJsonDigest({
+    schema_version: snapshot2.schema_version,
+    tool: snapshot2.tool,
+    repository_identity_digest: snapshot2.repository_identity_digest,
+    task_identity_digest: snapshot2.task_identity_digest,
+    operation: snapshot2.operation,
+    operation_fields: operationFields,
+    input_fingerprint: snapshot2.input_fingerprint
+  });
+}
+function computeGateId(subject) {
+  const snapshot2 = materialize(subject, "gate identity subject");
+  return `g-${canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "gate-identity",
+    task_identity_digest: snapshot2.task_identity_digest,
+    intent_id: snapshot2.intent_id,
+    request_digest: snapshot2.request_digest
+  })}`;
+}
+function computeGateContextDigest(kind, context2) {
+  const snapshot2 = materialize(context2, "gate context digest subject");
+  return kind === "waiver" ? canonicalJsonDigest({ schema_version: "1", digest_kind: "waiver-context", ...snapshot2 }) : canonicalJsonDigest({ schema_version: "1", digest_kind: "gate-context", kind, context: snapshot2 });
+}
+function baselineAdoptionDriftDigest(context2) {
+  const snapshot2 = materialize(context2, "baseline adoption drift subject");
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "baseline-adoption-drift",
+    drifted_projections: snapshot2.drifted_projections,
+    ...(snapshot2.deleted_projections ?? []).length === 0 ? {} : { deleted_projections: snapshot2.deleted_projections }
+  });
+}
+function computePinnedConfigDigest(configBytes) {
+  return sha256Bytes(configBytes);
+}
+
 // src/contracts/rubric.ts
 var rubricV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
@@ -26861,19 +26871,33 @@ function rubricDigest(call, phase3) {
   const reviewCycle = call.name === "archflow_counter_review" || call.name === "archflow_state" && call.input.operation !== "planning_restart" && (call.input.step === "counter_review" || call.input.step === "triage");
   return reviewCycle ? canonicalRubricForPhaseKind(decodePhaseInstance(phase3).kind).rubric_digest : canonicalJsonDigest({});
 }
+var identityJson2 = (identity) => ({
+  path: identity.path,
+  mode: identity.mode,
+  oid: identity.oid
+});
+var declaredInputJson2 = (declared) => ({
+  input_id: declared.input_id,
+  digest: declared.digest
+});
+var byPath = (left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0;
+var byInputId = (left, right) => left.input_id < right.input_id ? -1 : left.input_id > right.input_id ? 1 : 0;
+function legacyInputFingerprint(subject, configDigest) {
+  return canonicalJsonDigest({
+    schema_version: subject.schema_version,
+    workflow_digest: subject.workflow_digest,
+    config_digest: configDigest,
+    constitution_digest: subject.constitution_digest,
+    artifact_identities: [...subject.artifact_identities].sort(byPath).map(identityJson2),
+    upstream_identities: [...subject.upstream_identities].sort(byPath).map(identityJson2),
+    rubric_digest: subject.rubric_digest,
+    phase_instance: subject.phase_instance,
+    declared_inputs: [...subject.declared_inputs].sort(byInputId).map(declaredInputJson2)
+  });
+}
 function createInternalInputFingerprintResolver(input) {
   return async (context2) => {
     const state = context2.state.value;
-    if (context2.live_config.digest !== state.config_digest) {
-      return Object.freeze({
-        schema_version: "1",
-        ok: false,
-        error: createProjectError("PINNED_CONFIG_MISMATCH", {
-          expected_digest: state.config_digest,
-          observed_digest: context2.live_config.digest
-        })
-      });
-    }
     const workflow = await input.read_workflow_digest(context2);
     if (!workflow.ok) return workflow;
     if (workflow.value !== state.workflow_digest) return failure(state, "workflow-pin-mismatch");
@@ -26889,7 +26913,6 @@ function createInternalInputFingerprintResolver(input) {
     const subject = {
       schema_version: "1",
       workflow_digest: workflow.value,
-      config_digest: context2.live_config.digest,
       constitution_digest: constitution.value,
       artifact_identities: structuredClone(artifacts.value),
       upstream_identities: structuredClone(upstream.value),
@@ -26897,7 +26920,15 @@ function createInternalInputFingerprintResolver(input) {
       phase_instance: phaseInstance3(context2.call, context2.context),
       declared_inputs: structuredClone(declared.value)
     };
-    return Object.freeze({ schema_version: "1", ok: true, value: subject });
+    const fingerprint = computeInputFingerprint(subject);
+    const expected = context2.expected_input_fingerprint;
+    if (expected !== void 0 && fingerprint !== expected) {
+      const legacy = legacyInputFingerprint(subject, state.config_digest);
+      if (legacy === expected) {
+        return Object.freeze({ schema_version: "1", ok: true, value: { subject, fingerprint: legacy } });
+      }
+    }
+    return Object.freeze({ schema_version: "1", ok: true, value: { subject, fingerprint } });
   };
 }
 
@@ -27333,10 +27364,14 @@ async function readTaskConfig(path2) {
   const read = await readBytes(path2);
   if (read.kind !== "bytes") return read;
   try {
-    parseConfigYaml(decoder3.decode(read.bytes), "task config");
+    const parsed = parseConfigYaml(decoder3.decode(read.bytes), "task config");
     return Object.freeze({
       kind: "valid",
-      snapshot: Object.freeze({ bytes: read.bytes, digest: sha256Bytes(read.bytes) })
+      snapshot: Object.freeze({
+        bytes: read.bytes,
+        digest: sha256Bytes(read.bytes),
+        parsed
+      })
     });
   } catch {
     return Object.freeze({ kind: "invalid", digest: sha256Bytes(read.bytes) });
@@ -32935,12 +32970,12 @@ function prepareSnapshot(input) {
     }
     return Object.freeze({ path: path2, target, bytes });
   });
-  const byPath = new Map(payloads.map((payload) => [payload.path, payload]));
-  if (byPath.size !== payloads.length) return snapshotInvalid(manifest.snapshot_digest, "duplicate-payload-path");
+  const byPath2 = new Map(payloads.map((payload) => [payload.path, payload]));
+  if (byPath2.size !== payloads.length) return snapshotInvalid(manifest.snapshot_digest, "duplicate-payload-path");
   let resultBytes = 0;
   for (const output of manifest.outputs) {
     if (output.storage === "raw-payload") {
-      const payload = byPath.get(output.path);
+      const payload = byPath2.get(output.path);
       if (payload === void 0 || payload.target.path_class !== "workspace-result-payload") {
         return snapshotInvalid(manifest.snapshot_digest, "missing-payload");
       }
@@ -32948,14 +32983,14 @@ function prepareSnapshot(input) {
         return snapshotInvalid(manifest.snapshot_digest, "payload-identity-mismatch");
       }
       resultBytes += payload.bytes.byteLength;
-    } else if (byPath.has(output.path)) {
+    } else if (byPath2.has(output.path)) {
       return snapshotInvalid(manifest.snapshot_digest, "unexpected-payload");
     }
   }
   if (resultBytes > RESULT_BYTE_CAP2) {
     return fail8(createProjectError("SNAPSHOT_LIMIT", {
       limit_scope: "result",
-      offending_paths: [...byPath.keys()].sort(),
+      offending_paths: [...byPath2.keys()].sort(),
       current_bytes: resultBytes,
       byte_cap: RESULT_BYTE_CAP2
     }));
@@ -32964,7 +32999,7 @@ function prepareSnapshot(input) {
   if (taskBytes > TASK_BYTE_CAP2) {
     return fail8(createProjectError("SNAPSHOT_LIMIT", {
       limit_scope: "task",
-      offending_paths: [...byPath.keys()].sort(),
+      offending_paths: [...byPath2.keys()].sort(),
       current_bytes: taskBytes,
       byte_cap: TASK_BYTE_CAP2
     }));
@@ -33217,10 +33252,10 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
   });
   const paths = materialized.map((source) => source.path);
   if (new Set(paths).size !== paths.length) throw new TypeError("projection sources must have unique paths");
-  const byPath = new Map(materialized.map((source) => [source.path, source]));
+  const byPath2 = new Map(materialized.map((source) => [source.path, source]));
   for (const source of materialized) {
     if (source.rename_pair === void 0) continue;
-    const peer = byPath.get(source.rename_pair.peer_path);
+    const peer = byPath2.get(source.rename_pair.peer_path);
     if (peer?.rename_pair?.peer_path !== source.path || peer.rename_pair.role === source.rename_pair.role || source.rename_pair.role === "source" && source.desired.state !== "absent" || source.rename_pair.role === "destination" && (source.desired.state !== "present" || source.authenticated_before.state !== "absent")) throw new TypeError("rename projection pair is inconsistent");
   }
   const scan = await scanner.scan(materialized.flatMap((source) => source.git_tracked && source.desired.state === "present" ? [secretScanCandidateFromBytes({ virtual_path: source.path, path_class: source.target.path_class, bytes: source.desired.bytes })] : []));
@@ -33540,7 +33575,7 @@ async function createProductionServices(input) {
     },
     load_retained_result: (reference) => readRetainedResult(discovered.value, authority, reference),
     load_retained_manifest: loadRetainedManifest,
-    resolve_gate_reentry_fingerprint: async ({ request, current, target_phase_instance }) => {
+    resolve_gate_reentry_fingerprint: async ({ request, current, target_phase_instance, expected_input_fingerprint }) => {
       const liveConfig = await readTaskConfig(authority.config);
       if (liveConfig.kind !== "valid") return stateFailure(current.value.phase_instance, "task-config-invalid");
       const call = parseToolCall("archflow_state", {
@@ -33553,15 +33588,16 @@ async function createProductionServices(input) {
         step: "produce",
         status: "running"
       });
-      const subject = await resolver({
+      const resolved = await resolver({
         runner: discovered.value,
         authority,
         state: current,
         call,
         live_config: liveConfig.snapshot,
+        ...expected_input_fingerprint !== void 0 ? { expected_input_fingerprint } : {},
         context: authority.context
       });
-      return subject.ok ? ok7(computeInputFingerprint(subject.value)) : subject;
+      return resolved.ok ? ok7(resolved.value.fingerprint) : resolved;
     }
   });
   return ok7(Object.freeze({
@@ -35124,6 +35160,58 @@ import { isAbsolute as isAbsolute5, join as join13, relative as relative6, sep a
 import { mkdir as mkdir6, mkdtemp as mkdtemp2, rename as rename4, rm as rm3, writeFile as writeFile3 } from "node:fs/promises";
 import { dirname as dirname7, isAbsolute as isAbsolute4, join as join12, relative as relative5 } from "node:path";
 
+// src/state/config-change.ts
+function normalizeForChangeDetection(config2) {
+  if (config2.roles.producer === void 0) return config2;
+  const { producer: _retired, ...roles } = config2.roles;
+  return { ...config2, roles };
+}
+function isPlainObject2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function appendEntry(entries, path2, before, after) {
+  entries.push({
+    path: path2,
+    ...before === void 0 ? {} : { before },
+    ...after === void 0 ? {} : { after }
+  });
+}
+function diffConfigValue(before, after, path2, entries) {
+  if (Array.isArray(before) && Array.isArray(after)) {
+    const shared = Math.min(before.length, after.length);
+    for (let index = 0; index < shared; index += 1) {
+      diffConfigValue(before[index], after[index], `${path2}.${index}`, entries);
+    }
+    for (let index = shared; index < before.length; index += 1) {
+      appendEntry(entries, `${path2}.${index}`, before[index], void 0);
+    }
+    for (let index = shared; index < after.length; index += 1) {
+      appendEntry(entries, `${path2}.${index}`, void 0, after[index]);
+    }
+    return;
+  }
+  if (isPlainObject2(before) && isPlainObject2(after)) {
+    const keys = [.../* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])].sort();
+    for (const key of keys) {
+      diffConfigValue(before[key], after[key], path2 === "" ? key : `${path2}.${key}`, entries);
+    }
+    return;
+  }
+  if (before === after) return;
+  appendEntry(entries, path2, before, after);
+}
+function computeConfigChange(before, after) {
+  const entries = [];
+  diffConfigValue(normalizeForChangeDetection(before), normalizeForChangeDetection(after), "", entries);
+  return Object.freeze(entries);
+}
+function withLastSeenConfig(draft, parsedLiveConfig) {
+  const normalized = normalizeForChangeDetection(parsedLiveConfig);
+  const seen = draft.last_seen_config;
+  if (seen !== void 0 && computeConfigChange(seen, normalized).length === 0) return draft;
+  return { ...draft, last_seen_config: normalized };
+}
+
 // src/state/request.ts
 function subjectFor(call, authority, inputFingerprint) {
   const common3 = {
@@ -35575,10 +35663,10 @@ function importRoot(authority, initialization) {
 async function readStagedLegacyConfig(authority, initialization) {
   try {
     const bytes = new Uint8Array(await readFile7(join11(importRoot(authority, initialization), "config.yaml")));
-    parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(bytes), "staged task config");
+    const parsed = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(bytes), "staged task config");
     const digest9 = sha256Bytes(bytes);
     if (digest9 !== initialization.config_digest) return void 0;
-    return Object.freeze({ bytes, digest: digest9 });
+    return Object.freeze({ bytes, digest: digest9, parsed });
   } catch {
     return void 0;
   }
@@ -35680,7 +35768,7 @@ async function validateLiveInitialization(dependencies, request, initialization)
   }
   return ok11(void 0);
 }
-function initialState(call, artifact) {
+function initialState(call, artifact, parsedConfig) {
   const initialization = initializationFor(artifact);
   if (initialization === void 0) return contract("initialization-artifact-required");
   const expectedPhase = initialization.artifact_kind === "legacy-import-initialization" ? "design" : "prd";
@@ -35706,7 +35794,7 @@ function initialState(call, artifact) {
     approvals: [],
     waivers: []
   };
-  return ok11(state);
+  return ok11(withLastSeenConfig(state, parsedConfig));
 }
 async function identifyStateInitialization(dependencies, request) {
   assertInternalTransactionAuthority(request.authority, { runner: dependencies.runner, environment: dependencies.environment });
@@ -35731,7 +35819,13 @@ async function identifyStateInitialization(dependencies, request) {
     const mapping = validateLegacyMapping(initialization);
     if (!mapping.ok) return mapping;
   }
-  const stateResult = initialState(request.call, artifact);
+  let config2 = await dependencies.read_config(request.authority.config);
+  if (config2.kind === "missing" && initialization.artifact_kind === "legacy-import-initialization") {
+    const staged = await readStagedLegacyConfig(request.authority, initialization);
+    if (staged !== void 0) config2 = Object.freeze({ kind: "valid", snapshot: staged });
+  }
+  if (config2.kind !== "valid") return config2.kind === "invalid" ? contract("task-config-invalid") : io2(request, "task-config-read");
+  const stateResult = initialState(request.call, artifact, config2.snapshot.parsed);
   if (!stateResult.ok) return stateResult;
   const preparedState = canonicalDocument(stateResult.value);
   const initializationSemantics = validateDurableSemantics({
@@ -35739,18 +35833,6 @@ async function identifyStateInitialization(dependencies, request) {
     artifact: canonicalDocument(initialization)
   });
   if (!initializationSemantics.ok) return initializationSemantics;
-  let config2 = await dependencies.read_config(request.authority.config);
-  if (config2.kind === "missing" && initialization.artifact_kind === "legacy-import-initialization") {
-    const staged = await readStagedLegacyConfig(request.authority, initialization);
-    if (staged !== void 0) config2 = Object.freeze({ kind: "valid", snapshot: staged });
-  }
-  if (config2.kind !== "valid") return config2.kind === "invalid" ? contract("task-config-invalid") : io2(request, "task-config-read");
-  if (config2.snapshot.digest !== initialization.config_digest) {
-    return fail14(createProjectError("PINNED_CONFIG_MISMATCH", {
-      expected_digest: initialization.config_digest,
-      observed_digest: config2.snapshot.digest
-    }));
-  }
   const fingerprint = await dependencies.resolve_input_fingerprint({
     runner: dependencies.runner,
     authority: request.authority,
@@ -35760,8 +35842,7 @@ async function identifyStateInitialization(dependencies, request) {
     context: request.authority.context
   });
   if (!fingerprint.ok) return fingerprint;
-  assertPlainJson(fingerprint.value, "initialization fingerprint subject");
-  const inputFingerprint = computeInputFingerprint(structuredClone(fingerprint.value));
+  const inputFingerprint = fingerprint.value.fingerprint;
   const identified = identifyTransactionRequest(request.call, request.authority, inputFingerprint);
   return ok11(Object.freeze({
     call: identified.call,
@@ -36045,23 +36126,17 @@ async function fingerprintFor(services2, call) {
   if (config2.kind !== "valid") {
     return fail15(createProjectError("CONFIG_INVALID", { issue_code: `config-${config2.kind}` }));
   }
-  if (config2.snapshot.digest !== services2.state.value.config_digest) {
-    return fail15(createProjectError("PINNED_CONFIG_MISMATCH", {
-      expected_digest: services2.state.value.config_digest,
-      observed_digest: config2.snapshot.digest
-    }));
-  }
   const resolved = await services2.dependencies.resolve_input_fingerprint({
     runner: services2.runner,
     authority: services2.authority,
     state: services2.state,
     call,
     live_config: config2.snapshot,
+    expected_input_fingerprint: services2.state.value.input_fingerprint,
     context: services2.authority.context
   });
   if (!resolved.ok) return resolved;
-  assertPlainJson(resolved.value, "envelope fingerprint subject");
-  return ok12(computeInputFingerprint(structuredClone(resolved.value)));
+  return ok12(resolved.value.fingerprint);
 }
 async function computeCallEnvelope(services2, value) {
   assertPlainJson(value, "call envelope input");
@@ -37826,17 +37901,10 @@ function deriveNextAction(input) {
     return input.repository_initialized ? action("create-task", "Create durable state for this task.", false) : action("initialize-repository", "Initialize ArchFlow in this repository.", false);
   }
   if (input.config_verified !== true) {
-    if (input.config_schema_unsupported === true) {
-      return action(
-        "upgrade-tooling",
-        "The task's pinned configuration bytes are exactly the recorded ones, but this installed ArchFlow version cannot parse their schema; restoring or editing the file cannot fix this. Resume the task with tooling that accepts the pinned configuration, or restart it as a new task under the current schema.",
-        true,
-        state
-      );
-    }
+    const readIssue = input.config_issue === "config-missing" ? "missing" : input.config_issue === "config-unreadable" || input.config_issue === "config-unresolvable" ? "unreadable" : "invalid";
     return action(
-      "restore-pinned-config",
-      "Restore the task's digest-pinned configuration before continuing; an intentional configuration change requires a new task or the explicit upgrade flow.",
+      "inspect-state",
+      `The task's config.yaml is ${readIssue}: fix the YAML so the configuration parses, then retry.`,
       true,
       state
     );
@@ -38341,11 +38409,9 @@ function partitionExpectedReentryEdits(findings, assessment, produceSubject, sta
     expected_reentry_edits: Object.freeze(expected)
   });
 }
-function unavailableConfig(expected, observed2, issue3) {
+function unavailableConfig(issue3) {
   return Object.freeze({
     verified: false,
-    ...expected === void 0 ? {} : { expected_digest: expected },
-    ...observed2 === void 0 ? {} : { observed_digest: observed2 },
     ...issue3 === void 0 ? {} : { issue: issue3 }
   });
 }
@@ -38528,7 +38594,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     const status2 = Object.freeze({
       task_id: authority.task_id,
       state: "missing",
-      config: unavailableConfig(void 0, void 0, "status-authority-invalid"),
+      config: unavailableConfig("status-authority-invalid"),
       blocking_reasons: Object.freeze(["status-authority-invalid"]),
       next_action: next
     });
@@ -38540,7 +38606,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     const status2 = Object.freeze({
       task_id: authority.task_id,
       state: "missing",
-      config: unavailableConfig(void 0, void 0, "state-unavailable"),
+      config: unavailableConfig("state-unavailable"),
       blocking_reasons: Object.freeze([reason2]),
       next_action: next
     });
@@ -38552,24 +38618,15 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   let parsedConfig;
   try {
     const read = await dependencies.read_config(authority.config);
-    if (read.kind === "invalid" && read.digest === state.config_digest) {
-      config2 = unavailableConfig(state.config_digest, read.digest, "pinned-config-schema-unsupported");
-      blockers.push("pinned-config-schema-unsupported");
-    } else if (read.kind !== "valid") {
-      config2 = unavailableConfig(
-        state.config_digest,
-        read.kind === "invalid" ? read.digest : void 0,
-        `config-${read.kind}`
-      );
+    if (read.kind !== "valid") {
+      config2 = unavailableConfig(`config-${read.kind}`);
       blockers.push(`config-${read.kind}`);
     } else {
-      const verified = verifyPinnedConfig(state.config_digest, read.snapshot.bytes);
-      config2 = verified.ok ? Object.freeze({ verified: true, expected_digest: state.config_digest, observed_digest: verified.value }) : unavailableConfig(state.config_digest, read.snapshot.digest, "pinned-config-mismatch");
-      if (!verified.ok) blockers.push("pinned-config-mismatch");
+      config2 = Object.freeze({ verified: true });
       parsedConfig = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(read.snapshot.bytes), "task config");
     }
   } catch {
-    config2 = unavailableConfig(state.config_digest, void 0, "config-unresolvable");
+    config2 = unavailableConfig("config-unresolvable");
     blockers.push("config-unresolvable");
   }
   let routes;
@@ -38582,6 +38639,11 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     } catch {
       blockers.push("dispatch-routes-invalid");
     }
+  }
+  let configChange;
+  if (parsedConfig !== void 0 && state.last_seen_config !== void 0) {
+    const entries = computeConfigChange(state.last_seen_config, parsedConfig);
+    if (entries.length > 0) configChange = entries;
   }
   let constitution;
   let constitutionStatus;
@@ -38909,7 +38971,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     repository_initialized: true,
     state,
     config_verified: config2.verified,
-    ...config2.verified !== true && config2.issue === "pinned-config-schema-unsupported" ? { config_schema_unsupported: true } : {},
+    ...config2.verified !== true && config2.issue !== void 0 ? { config_issue: config2.issue } : {},
     ...statusReconciliation === void 0 ? {} : { reconciliation_findings: statusReconciliation.findings },
     reconciliation_blocking_reasons: Object.freeze([
       ...reconciliationBlockers,
@@ -38974,6 +39036,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     review_policy: canonicalRubricForPhaseKind(decodePhaseInstance(state.phase_instance).kind),
     ...subjectDigest === void 0 ? {} : { subject_digest: subjectDigest },
     config: config2,
+    ...configChange === void 0 ? {} : { config_change: configChange },
     ...routes === void 0 ? {} : { routes },
     ...constitutionStatus === void 0 ? {} : { constitution: constitutionStatus },
     ...state.open_gate === void 0 ? {} : { open_gate_id: state.open_gate.gate_id },

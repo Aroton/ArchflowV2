@@ -2,21 +2,28 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
-import { parseGitOid, parseGitTreeMode } from "../../src/contracts/canonical.js";
-import { parseSafeId, parseSha256Digest } from "../../src/contracts/evidence.js";
+import { canonicalDocument, canonicalJsonDigest, parseGitOid, parseGitTreeMode, sha256Bytes, type CanonicalDocument } from "../../src/contracts/canonical.js";
+import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
+import { parseSafeCode, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import {
   computeInputFingerprint,
   computePinnedConstitutionDigest,
   computePinnedConfigDigest,
   computeRequestDigest,
-  verifyPinnedConfig,
   type DeclaredInputRef,
   type GitIdentityRef,
   type InputFingerprintSubject,
   type RequestDigestSubject,
 } from "../../src/contracts/fingerprints.js";
+import { parseToolCall, type ParsedToolCall } from "../../src/contracts/mcp-tools.js";
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
+import type { RepositoryOperationContext } from "../../src/repository/git.js";
+import type { RootBoundGitRunner } from "../../src/repository/identity.js";
+import { canonicalRubricForPhaseKind } from "../../src/review/rubrics.js";
+import type { TransactionAuthority } from "../../src/state/authority.js";
+import { createInternalInputFingerprintResolver } from "../../src/state/fingerprint.js";
+import type { FingerprintReadContext } from "../../src/state/read.js";
 
 const digest = (seed: string): ReturnType<typeof parseSha256Digest> => parseSha256Digest(seed.repeat(64).slice(0, 64));
 const oid = (seed: string): ReturnType<typeof parseGitOid> => parseGitOid(seed.repeat(40).slice(0, 40));
@@ -45,7 +52,6 @@ const declaredInputs: readonly DeclaredInputRef[] = [
 const subject: InputFingerprintSubject = {
   schema_version: "1",
   workflow_digest: digest("a"),
-  config_digest: digest("b"),
   constitution_digest: digest("c"),
   artifact_identities: artifacts,
   upstream_identities: upstream,
@@ -156,10 +162,10 @@ describe("computePinnedConstitutionDigest", () => {
 describe("computeRequestDigest", () => {
   it("pins stable golden digests for every closed selector", () => {
     expect(Object.fromEntries(Object.entries(requestSubjects).map(([name, value]) => [name, computeRequestDigest(value)]))).toEqual({
-      archflow_state: "9e18ce122452f01f99faa4f2b1f2c99364c580049e1cd5296bd295d37b0f7217",
-      archflow_counter_review: "f00c61cf8fb83a4d1fab1f0cddf81036e9027c019f4c0285740896db73e6b57c",
-      archflow_gate: "5f7f07061477f4ab21f866c6f2d75752aa3ab7c8d08b7a1e7456eb0f300ef2f3",
-      archflow_waiver: "4e33a76257d46725b8dea7647eb3230651349090d9c63f1e44c66edce4615221",
+      archflow_state: "cbca6b1b7793de5edcfdbf3f4b4de1036309bab6c3ce06068cba8a42cee07a75",
+      archflow_counter_review: "9b9c104471d275365527ac67fcfdadf22bad2f289cbf9ec73e437567b291ea5f",
+      archflow_gate: "4e37f9d88c98c1ab8c15ed352d052a47fd052999155ef5f4c756298375c6d621",
+      archflow_waiver: "13863ae006859443e4cd654f166b33f54a0567cfdb8aefa822adbf3cdc236c03",
     });
   });
 
@@ -350,36 +356,140 @@ describe("split-observation defence", () => {
   });
 });
 
-describe("pinned config digest", () => {
-  it("accepts the exact pinned bytes", async () => {
+describe("creation-time config provenance digest", () => {
+  it("names the exact creation bytes and distinguishes every byte-level edit", async () => {
+    // Provenance only: nothing compares live config against this digest anymore. It exists so
+    // the initialization records can name the bytes the task was created with.
     const bytes = new Uint8Array(await readFile(configUrl));
     const pinned = computePinnedConfigDigest(bytes);
-    const result = verifyPinnedConfig(pinned, bytes);
-    expect(result).toEqual({ schema_version: "1", ok: true, value: pinned });
-  });
-
-  it("rejects a one-byte change, a trailing newline, and a key reordering with no config content", async () => {
-    const bytes = new Uint8Array(await readFile(configUrl));
-    const pinned = computePinnedConfigDigest(bytes);
+    expect(pinned).toBe(sha256Bytes(bytes));
 
     const oneByte = Uint8Array.from(bytes);
     oneByte[oneByte.length - 2] = oneByte[oneByte.length - 2]! ^ 0x20;
     const extraNewline = Uint8Array.from([...bytes, 0x0a]);
     const reordered = new Uint8Array(await readFile(reorderedConfigUrl));
-
     for (const observedBytes of [oneByte, extraNewline, reordered]) {
-      const result = verifyPinnedConfig(pinned, observedBytes);
-      expect(result.ok).toBe(false);
-      if (result.ok) throw new Error("unreachable");
-      expect(result.error.code).toBe("PINNED_CONFIG_MISMATCH");
-      expect(result.error.diagnostic.parameters).toEqual({
-        expected_digest: pinned,
-        observed_digest: computePinnedConfigDigest(observedBytes),
-      });
-      const serialized = JSON.stringify(result);
-      for (const secret of ["claude-opus-5", "gpt-5-codex", "counter-reviewer", "effort"]) {
-        expect(serialized).not.toContain(secret);
-      }
+      expect(computePinnedConfigDigest(observedBytes)).not.toBe(pinned);
     }
+  });
+});
+
+describe("internal input fingerprint resolver", () => {
+  const ok = <T>(value: T) => Object.freeze({ schema_version: "1" as const, ok: true as const, value });
+
+  const recordedState: CanonicalDocument<TaskStateV1> = canonicalDocument({
+    schema_version: "1",
+    task_id: parseTaskSlug("task-1"),
+    repository_identity_digest: digest("e"),
+    revision: parseSafeInteger(4),
+    phase_instance: phaseInstance,
+    step: "counter_review",
+    status: "succeeded",
+    attempt: parseSafeInteger(1),
+    input_fingerprint: digest("0"),
+    initialization_digest: digest("3"),
+    // The creation-time config bytes' digest — the only config value the resolver ever reads,
+    // and only on the legacy fallback path.
+    config_digest: digest("b"),
+    workflow_digest: digest("a"),
+    constitution_digest: digest("c"),
+    policy_base_commit: "abcdef0123456789abcdef0123456789abcdef01" as TaskStateV1["policy_base_commit"],
+    authoritative_results: [],
+    approvals: [],
+    waivers: [],
+  });
+
+  /** The pre-cutover composition: the same fields plus the creation-time config digest. */
+  const legacyComposition = (): ReturnType<typeof parseSha256Digest> => canonicalJsonDigest({
+    schema_version: "1",
+    workflow_digest: recordedState.value.workflow_digest,
+    config_digest: recordedState.value.config_digest,
+    constitution_digest: recordedState.value.constitution_digest,
+    artifact_identities: [...artifacts].sort((left, right) => left.path < right.path ? -1 : 1)
+      .map(({ path, mode, oid: identityOid }) => ({ path, mode, oid: identityOid })),
+    upstream_identities: [...upstream].sort((left, right) => left.path < right.path ? -1 : 1)
+      .map(({ path, mode, oid: identityOid }) => ({ path, mode, oid: identityOid })),
+    rubric_digest: canonicalRubricForPhaseKind("phase-impl").rubric_digest,
+    phase_instance: phaseInstance,
+    declared_inputs: [...declaredInputs].sort((left, right) => left.input_id < right.input_id ? -1 : 1)
+      .map(({ input_id, digest: inputDigest }) => ({ input_id, digest: inputDigest })),
+  });
+
+  const context = (call: ParsedToolCall, expected?: ReturnType<typeof digest>): FingerprintReadContext<"archflow_counter_review"> => ({
+    runner: {} as RootBoundGitRunner,
+    authority: {} as TransactionAuthority,
+    state: recordedState,
+    call: call as never,
+    // The live config the post-cutover edit produced: bytes and digest entirely unlike the
+    // creation-time record. The resolver must never read it into any composition.
+    live_config: { bytes: new Uint8Array(), digest: digest("f"), parsed: {} as never },
+    ...(expected === undefined ? {} : { expected_input_fingerprint: expected }),
+    context: {
+      task_id: parseTaskSlug("task-1"),
+      phase_instance: phaseInstance,
+      operation: parseSafeCode("resolver-test"),
+      attempt: parseSafeInteger(1),
+    } satisfies RepositoryOperationContext,
+  } as never);
+
+  const counterReviewCall = (fingerprint: ReturnType<typeof digest>) => parseToolCall("archflow_counter_review", {
+    schema_version: "1",
+    task_id: "task-1",
+    intent_id: "resolver-contract",
+    expected_revision: 4,
+    input_fingerprint: fingerprint,
+    artifact_path: "phases/6/result.md",
+  });
+
+  const resolver = createInternalInputFingerprintResolver({
+    read_workflow_digest: async () => ok(recordedState.value.workflow_digest),
+    read_constitution_digest: async () => ok(recordedState.value.constitution_digest),
+    read_artifact_identities: async () => ok(structuredClone(artifacts)),
+    read_upstream_identities: async () => ok(structuredClone(upstream)),
+    read_declared_inputs: async () => ok(structuredClone(declaredInputs)),
+  });
+
+  it("returns the new composition when no expected fingerprint is supplied", async () => {
+    const result = await resolver(context(counterReviewCall(digest("0"))));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.fingerprint).toBe(computeInputFingerprint({
+      ...subject,
+      rubric_digest: canonicalRubricForPhaseKind("phase-impl").rubric_digest,
+    }));
+    expect(Object.hasOwn(result.value.subject, "config_digest")).toBe(false);
+  });
+
+  it("accepts when the expected fingerprint equals the new composition", async () => {
+    const expected = computeInputFingerprint({ ...subject, rubric_digest: canonicalRubricForPhaseKind("phase-impl").rubric_digest });
+    const result = await resolver(context(counterReviewCall(expected), expected));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.fingerprint).toBe(expected);
+  });
+
+  it("falls back to the legacy composition so a pre-cutover edit does not invalidate the record", async () => {
+    // The recorded fingerprint was computed before config left the subject; the live bytes have
+    // since changed (their digest is nothing like the creation-time record). The accepted value
+    // still equals the recorded one, built from `state.config_digest`, never live bytes.
+    const recorded = legacyComposition();
+    const result = await resolver(context(counterReviewCall(recorded), recorded));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.fingerprint).toBe(recorded);
+    expect(result.value.fingerprint).not.toBe(computeInputFingerprint({
+      ...subject,
+      rubric_digest: canonicalRubricForPhaseKind("phase-impl").rubric_digest,
+    }));
+  });
+
+  it("returns the new composition when the expected value matches neither composition", async () => {
+    const result = await resolver(context(counterReviewCall(digest("9")), digest("9")));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // The caller's existing mismatch error fires unchanged against this value.
+    expect(result.value.fingerprint).toBe(computeInputFingerprint({
+      ...subject,
+      rubric_digest: canonicalRubricForPhaseKind("phase-impl").rubric_digest,
+    }));
   });
 });

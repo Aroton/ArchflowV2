@@ -756,6 +756,8 @@ describe("absence is omission, never null", () => {
     expect(offenders).toStrictEqual([
       "intent-receipt.schema.json",
       "intent-receipt.schema.json/$defs/plainJson/anyOf/0/type",
+      "semantic-workflow.schema.json",
+      "semantic-workflow.schema.json/$defs/plainJson/anyOf/0/type",
       "task-state.schema.json",
       "task-state.schema.json/$defs/plainJson/anyOf/0/type",
     ]);

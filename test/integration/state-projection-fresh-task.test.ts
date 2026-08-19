@@ -17,7 +17,7 @@ import {
   canonicalJsonBytes,
   canonicalJsonDigest,
 } from "../../src/contracts/canonical.js";
-import type { ConfigV1 } from "../../src/contracts/config.js";
+import type { ConfigV1, TaskConfigSnapshot } from "../../src/contracts/config.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import {
   parseSafeCode,
@@ -127,7 +127,6 @@ const config: ConfigV1 = {
 const SUBJECT: InputFingerprintSubject = {
   schema_version: "1",
   workflow_digest: canonicalJsonDigest({ workflow: 1 }),
-  config_digest: canonicalJsonDigest(config as never),
   constitution_digest: constitution.digest,
   artifact_identities: [{
     path: parseRepositoryPathClaim(`.archflow/tasks/${task}/phases/phase-3-output.md`),
@@ -203,7 +202,7 @@ async function fixture(): Promise<Harness> {
     resolve_input_fingerprint: async () => ({
       schema_version: "1",
       ok: true,
-      value: structuredClone(SUBJECT),
+      value: { subject: structuredClone(SUBJECT), fingerprint: FINGERPRINT },
     }),
     read_state: readTaskState,
     read_config: async () => ({
@@ -211,6 +210,7 @@ async function fixture(): Promise<Harness> {
       snapshot: {
         bytes: canonicalJsonBytes(config as never),
         digest: canonicalJsonDigest(config as never),
+        parsed: structuredClone(config) as TaskConfigSnapshot,
       },
     }),
     read_receipt: readIntentReceipt,

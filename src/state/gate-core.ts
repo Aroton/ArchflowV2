@@ -65,6 +65,8 @@ export type GateReentryFingerprintResolver = (
     request: GateRequestV1;
     current: CanonicalDocument<TaskStateV1>;
     target_phase_instance?: TaskStateV1["phase_instance"];
+    /** The recorded fingerprint a replay validation compares against; landing computations omit it. */
+    expected_input_fingerprint?: Sha256Digest;
   }>,
 ) => Promise<ProjectResult<Sha256Digest>>;
 

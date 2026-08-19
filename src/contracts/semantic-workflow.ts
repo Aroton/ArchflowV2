@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { TaskStateV1 } from "./durable-state.js";
+import type { ConfigChangeEntry, TaskStateV1 } from "./durable-state.js";
 import type { Sha256Digest, TaskSlug } from "./evidence.js";
 import { sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
 import type { PlainJsonValue } from "./plain-json.js";
@@ -128,6 +128,11 @@ export type WorkflowViewV1 = {
   readonly findings?: readonly PublicFindingV1[];
   readonly review_context?: PublicReviewContextV1;
   readonly presentation?: HumanPresentationV1;
+  /**
+   * Informational field-level config changes since the last config-observing commit, projected
+   * verbatim from the status notice. Never changes the condition or the next action.
+   */
+  readonly config_change?: readonly ConfigChangeEntry[];
 };
 
 export type HumanRevisionDeclarationV1 = {
@@ -282,7 +287,21 @@ const commitInstructionV1Schema = z.object({ paths: z.array(nonBlank).min(1), me
   }
 });
 export const semanticNextActionV1Schema = z.object({ kind: z.enum(SEMANTIC_ACTION_KINDS), instruction: nonBlank, offer: z.string().regex(/^af1_[0-9a-f]{64}$/u).optional(), expected_submission: z.enum(APPLY_SUBMISSION_KINDS).optional(), skill: nonBlank.optional(), skill_args: z.array(z.string()).optional(), commit: commitInstructionV1Schema.optional(), reopen: reopenImpactV1Schema.optional() }).strict();
-export const workflowViewV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, condition: z.enum(WORKFLOW_CONDITIONS), headline: nonBlank, detail: nonBlank, position: workflowPositionV1Schema.optional(), resources: z.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: z.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), presentation: humanPresentationV1Schema.optional() }).strict() as unknown as z.ZodType<WorkflowViewV1>;
+/**
+ * This document's own plain-json value instance, shared by both sides of a config-change entry —
+ * the same self-containment rule as `task-state`'s and `intent-receipt`'s `plainJson` defs: one
+ * instance, registered once, so every appearance `$ref`s it instead of minting shared defs.
+ */
+export const configChangeValueV1Schema = z.json();
+
+/** Mirrors `ConfigChangeEntry` (durable-state) for the view's informational `config_change` field. */
+export const configChangeEntryV1Schema = z.object({
+  path: z.string(),
+  before: configChangeValueV1Schema.optional(),
+  after: configChangeValueV1Schema.optional(),
+}).strict() as unknown as z.ZodType<ConfigChangeEntry>;
+
+export const workflowViewV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, condition: z.enum(WORKFLOW_CONDITIONS), headline: nonBlank, detail: nonBlank, position: workflowPositionV1Schema.optional(), resources: z.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: z.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), presentation: humanPresentationV1Schema.optional(), config_change: z.array(configChangeEntryV1Schema).optional() }).strict() as unknown as z.ZodType<WorkflowViewV1>;
 
 export const semanticErrorSummaryV1Schema = z.object({
   code: nonBlank.max(128),

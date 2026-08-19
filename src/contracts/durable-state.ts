@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import type { GitOid } from "./canonical.js";
 import { gitOidV1Schema } from "./canonical.js";
+import type { TaskConfigSnapshot } from "./config.js";
+import { configOverridesSchema, configRolesSchema, configRouteSchema, configV1Schema } from "./config.js";
 import type { PathSafeId, SafeCode, SafeId, SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
 import { pathSafeIdV1Schema, safeCodeV1Schema, safeIdV1Schema, safeIntegerV1Schema, sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
 import type { GateKind, WaiverScope } from "./gates.js";
@@ -296,8 +298,26 @@ export type TaskStateV1 = {
   readonly restart_history?: readonly PlanningRestartRecord[];
   /** Human-approved re-baselines of drifted projections; see `BaselineAdoptionRecord`. */
   readonly baseline_adoptions?: readonly BaselineAdoptionRecord[];
+  /**
+   * The parsed config this task's state last transacted against — the baseline the status change
+   * notice diffs the live parsed config over. Written only by commit-time normalization and
+   * revision-zero seeding; a settlement commit that never reads config leaves it unchanged. Absent
+   * (pre-cutover tasks) records nothing and notices nothing.
+   */
+  readonly last_seen_config?: TaskConfigSnapshot;
   readonly last_transition?: LastTransition;
   readonly terminal?: TerminalState;
+};
+
+/**
+ * One leaf-level config change for the status change notice: `path` is a dot-separated segment
+ * string (array items addressed by index); an absent side omits its field (added or removed leaf).
+ * Informational only — a change entry is never a blocker and never changes an action kind.
+ */
+export type ConfigChangeEntry = {
+  readonly path: string;
+  readonly before?: PlainJsonValue;
+  readonly after?: PlainJsonValue;
 };
 
 const sha256Digest = sha256DigestV1Schema as unknown as z.ZodType<Sha256Digest>;
@@ -508,6 +528,36 @@ export const lastTransitionV1Schema = z.object({
   resulting_revision: positiveSafeInteger,
 }).strict() as unknown as z.ZodType<LastTransition>;
 
+// Task-state owns its own config-snapshot mirror rather than $ref-ing the `config` document's
+// defs — the same self-containment rule as the projection-ref mirror above. Every config schema
+// instance is registered under `config#/$defs/...`, and task-state does not carry that document,
+// so a shared instance would emit an unresolvable cross-document `$ref` here. Each level is a
+// parentless clone that keeps its source's own def and re-parents its nested schemas onto the
+// clones, so the mirror shares every check with the config parser and re-derives its structure
+// from the source shapes at module load — it cannot drift silently. The clones register as this
+// document's own `$defs` (see the schema-generation manifest), so each shape emits once.
+export const taskConfigRouteV1Schema = configRouteSchema.clone(configRouteSchema.def);
+export const taskConfigRolesV1Schema = configRolesSchema.clone({
+  ...configRolesSchema.def,
+  shape: Object.fromEntries(
+    Object.entries(configRolesSchema.shape).map(([role]) => [role, taskConfigRouteV1Schema.optional()]),
+  ) as typeof configRolesSchema.shape,
+});
+export const taskConfigOverridesV1Schema = configOverridesSchema.clone({
+  ...configOverridesSchema.def,
+  shape: Object.fromEntries(
+    Object.entries(configOverridesSchema.shape).map(([phase]) => [phase, taskConfigRolesV1Schema.optional()]),
+  ) as typeof configOverridesSchema.shape,
+});
+export const taskConfigSnapshotV1Schema = configV1Schema.clone({
+  ...configV1Schema.def,
+  shape: {
+    ...configV1Schema.shape,
+    roles: taskConfigRolesV1Schema,
+    overrides: taskConfigOverridesV1Schema.optional(),
+  },
+});
+
 /**
  * The authority. Each of the three set fields calls `isSortedUniqueBy` with `tupleKey` over its
  * pinned property list — the shared exported ordering predicates — so each ordering rule is
@@ -547,6 +597,7 @@ export const taskStateV1Schema = z.object({
   baseline_adoptions: z.array(baselineAdoptionRecordV1Schema)
     .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "baseline_adoptions must be sorted by gate_id with no duplicates")
     .optional(),
+  last_seen_config: taskConfigSnapshotV1Schema.optional(),
   last_transition: lastTransitionV1Schema.optional(),
   terminal: z.enum(TERMINAL_STATES).optional(),
 }).strict().superRefine((state, context) => {

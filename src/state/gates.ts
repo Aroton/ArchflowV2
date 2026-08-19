@@ -2,7 +2,6 @@ import { isDeepStrictEqual } from "node:util";
 
 import { canonicalDocument, canonicalJsonDigest, sha256Bytes, type CanonicalDocument } from "../contracts/canonical.js";
 import { assertAuthenticInvocationContext, type InvocationContext } from "../contracts/contexts.js";
-import { computeInputFingerprint } from "../contracts/fingerprints.js";
 import {
   parseActiveGate,
   parseArchivedGateDecisionRecord,
@@ -33,6 +32,7 @@ import { baselineAdoptionDriftDigest, computeGateContextDigest, computeGateId } 
 import { gateDecisionEffect, type BaselineObservationRef } from "../contracts/gates.js";
 import type { HumanDecisionProvenance } from "../contracts/gates.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
+import type { TaskConfigSnapshot } from "../contracts/config.js";
 import {
   gateDecisionClaim,
   gateRequestClaim,
@@ -44,6 +44,7 @@ import {
 import { verifyRepositoryIdentity } from "../repository/identity.js";
 import { resolveCommit } from "../repository/git.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
+import { withLastSeenConfig } from "./config-change.js";
 import {
   DECISIONS,
   activeProjection,
@@ -128,15 +129,16 @@ async function validateLiveGateState(
   authority: TransactionAuthority,
   current: CanonicalDocument<TaskStateV1>,
   inputFingerprint: Sha256Digest,
-): Promise<ProjectResult<void>> {
+): Promise<ProjectResult<TaskConfigSnapshot>> {
   const identity = verifyRepositoryIdentity(current.value.repository_identity_digest, authority.repository_identity);
   if (!identity.ok) return identity;
   if (!validateDurableSemantics({ state: current }).ok) return issue("STATE_INVALID", current.value, "gate-state-semantics-invalid");
   const config = await dependencies.read_config(authority.config);
   if (config.kind !== "valid") return config.kind === "invalid" ? issue("CONTRACT_INVALID", undefined, "task-config-invalid") : io(authority, "gate-config-read");
-  if (config.snapshot.digest !== current.value.config_digest) return fail(createProjectError("PINNED_CONFIG_MISMATCH", { expected_digest: current.value.config_digest, observed_digest: config.snapshot.digest }));
   if (inputFingerprint !== current.value.input_fingerprint) return fail(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest: current.value.input_fingerprint, observed_digest: inputFingerprint }));
-  return ok(undefined);
+  // The parsed live config rides back to the one caller that commits state in the same operation
+  // (gate open); the settlement callers validated with it and deliberately change nothing.
+  return ok(config.snapshot.parsed);
 }
 
 async function authenticateWaiverOrigin(
@@ -425,7 +427,7 @@ export async function openDurableGate(
       const contextDigest = waiver === undefined
         ? computeGateContextDigest(input.kind, input.context as never)
         : computeGateContextDigest("waiver", waiver);
-      const openState = stateWithOpen(current.value, { gate_id: gateId, kind: input.kind, subject_digest: input.subject_digest, context_digest: contextDigest, context: input.context } as Pick<GateRequestV1, "gate_id" | "kind" | "subject_digest" | "context_digest" | "context">);
+      const openState = stateWithOpen(withLastSeenConfig(current.value, live.value), { gate_id: gateId, kind: input.kind, subject_digest: input.subject_digest, context_digest: contextDigest, context: input.context } as Pick<GateRequestV1, "gate_id" | "kind" | "subject_digest" | "context_digest" | "context">);
       let request = parseGateRequest({
         schema_version: "1", gate_id: gateId, intent_id: input.intent_id, request_digest: input.request_digest,
         task_id: input.authority.task_id, phase_instance: input.phase_instance, summary: input.summary,
@@ -689,7 +691,7 @@ async function closedStateForRecord(
       context: authority.context,
     });
     if (!fingerprintSubject.ok) return fingerprintSubject;
-    const fingerprint = computeInputFingerprint(fingerprintSubject.value);
+    const fingerprint = fingerprintSubject.value.fingerprint;
     const planned = planPlanningRestart({
       current: restartPredecessor,
       restart_id: record.gate_id,
@@ -699,7 +701,10 @@ async function closedStateForRecord(
       human_provenance: humanProvenance.data,
     });
     return planned.ok
-      ? ok(canonicalDocument({ ...planned.value, revision: parseSafeInteger(current.value.revision + 1) } as TaskStateV1))
+      ? ok(canonicalDocument(withLastSeenConfig(
+          { ...planned.value, revision: parseSafeInteger(current.value.revision + 1) } as TaskStateV1,
+          liveConfig.snapshot.parsed,
+        )))
       : planned;
   }
   if (enactsReentry(record)) {
@@ -861,6 +866,7 @@ async function validateCompletedReentry(
     authority,
     request,
     current,
+    expected_input_fingerprint: current.value.input_fingerprint,
   });
   if (!fingerprint.ok) return fingerprint;
   return current.value.input_fingerprint === fingerprint.value
@@ -897,6 +903,7 @@ async function validateCompletedPlanningRestart(
     request,
     current,
     target_phase_instance: restart.target_phase_instance,
+    expected_input_fingerprint: current.value.input_fingerprint,
   });
   if (!fingerprint.ok) return fingerprint;
   return current.value.input_fingerprint === fingerprint.value

@@ -30,8 +30,9 @@ const killAt = async (point, path) => {
 };
 
 try {
-  const [tools, git, identity, authorityModule, atomic, lock, read, initialization] = await Promise.all([
+  const [tools, fingerprints, git, identity, authorityModule, atomic, lock, read, initialization] = await Promise.all([
     vite.ssrLoadModule("/src/contracts/mcp-tools.ts"),
+    vite.ssrLoadModule("/src/contracts/fingerprints.ts"),
     vite.ssrLoadModule("/src/repository/git.ts"),
     vite.ssrLoadModule("/src/repository/identity.ts"),
     vite.ssrLoadModule("/src/state/authority.ts"),
@@ -78,7 +79,11 @@ try {
     environment: environment.value,
     atomic: cutPoint === "none" ? atomic.createAtomicWriter() : crashAtomic,
     lock: lock.createTaskLock(),
-    resolve_input_fingerprint: async () => ({ schema_version: "1", ok: true, value: input.subject }),
+    resolve_input_fingerprint: async () => ({
+      schema_version: "1",
+      ok: true,
+      value: { subject: input.subject, fingerprint: fingerprints.computeInputFingerprint(input.subject) },
+    }),
     read_state: read.readTaskState,
     read_config: read.readTaskConfig,
     read_receipt: read.readIntentReceipt,

@@ -490,6 +490,7 @@ describe("the phase's exclusions hold", () => {
     // Optional durable fields still use omission. Generic PlainJson outcomes allow null as data.
     expect(nullNodes).toEqual([
       "intent-receipt/$defs/plainJson/anyOf/0/type",
+      "semantic-workflow/$defs/plainJson/anyOf/0/type",
       "task-state/$defs/plainJson/anyOf/0/type",
     ]);
   });

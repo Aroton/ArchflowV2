@@ -27,6 +27,12 @@ export type TaskWorkspaceOptions = Readonly<{
   operation?: string;
   /** Complete replacement bytes for the scaffolded `.archflow/config.yaml`. */
   configBytes?: Uint8Array;
+  /**
+   * Replacement bytes for the root-commit README. Distinct bytes give the workspace a genuinely
+   * distinct repository identity (the identity digest covers the root commits); config bytes no
+   * longer do, because task config is not part of the input fingerprint.
+   */
+  rootBytes?: Uint8Array;
 }>;
 
 export type TaskWorkspace = Readonly<{
@@ -65,7 +71,7 @@ export async function createTaskWorkspace(options: TaskWorkspaceOptions): Promis
 
   try {
     git(root, "-c", "init.defaultBranch=main", "init", "-q");
-    writeFileSync(join(root, "README.md"), "repository\n");
+    writeFileSync(join(root, "README.md"), options.rootBytes ?? new TextEncoder().encode("repository\n"));
     git(root, "add", "--", "README.md");
     git(root, "commit", "-q", "-m", "root");
 

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { canonicalDocument, canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
+import { parseConfigYaml, type TaskConfigSnapshot } from "../../src/contracts/config.js";
 import { parseActiveGate, parseGateRequest } from "../../src/contracts/durable-gate.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parsePathSafeId, parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
@@ -313,7 +314,7 @@ describe("computeTaskStatus", () => {
     expect(status.value.blocking_reasons).not.toContain(`approval-${gateId}-unavailable`);
   });
 
-  it("degrades config and missing gate archive disagreements without throwing", async () => {
+  it("degrades a missing gate archive disagreement without throwing, even over an edited config", async () => {
     const h = await harness();
     const context = { artifact_kind: "phase-implementation" } as const;
     const active = parseActiveGate({
@@ -345,18 +346,17 @@ describe("computeTaskStatus", () => {
     expect(status).toMatchObject({
       ok: true,
       value: {
-        config: { verified: false },
-        next_action: {
-          code: "restore-pinned-config",
-          detail: expect.stringContaining("new task or the explicit upgrade flow"),
-        },
+        config: { verified: true },
+        next_action: { code: "resolve-current-authority" },
       },
     });
     if (status.ok) {
       expect(status.value.blocking_reasons).toContain("active-gate-request-missing");
       expect(status.value).not.toHaveProperty("open_gate");
+      // This task predates the change notice: with no recorded last_seen_config, an edit is
+      // verified and unnoted — the next transaction silently establishes the baseline.
+      expect(status.value).not.toHaveProperty("config_change");
     }
-    writeFileSync(h.services.authority.config.absolute, configText);
     const gateBlocked = await computeTaskStatus(h.services.dependencies, h.services.authority);
     expect(gateBlocked).toMatchObject({
       ok: true,
@@ -365,32 +365,46 @@ describe("computeTaskStatus", () => {
     if (gateBlocked.ok) expect(gateBlocked.value).not.toHaveProperty("open_gate");
   });
 
-  it("reports a pinned config the installed schema cannot parse as a tooling mismatch, not a change", async () => {
+  it("reports a field-level config change as informational without moving the action", async () => {
     const h = await harness();
-    // Bytes the current schema rejects, pinned exactly: restoring or editing the file cannot
-    // help, so the blocker must name the real situation instead of the impossible restore advice.
-    const pinnedBytes = Buffer.from('schema_version: "1"\nroles:\n  reviewer: { model: claude-opus-4-6, effort: high }\n');
-    writeFileSync(h.services.authority.config.absolute, pinnedBytes);
+    const baseline = parseConfigYaml(configText, "baseline") as TaskConfigSnapshot;
     writeFileSync(h.services.authority.state.absolute, canonicalDocument(h.state({
-      config_digest: sha256Bytes(pinnedBytes),
+      last_seen_config: baseline,
+    })).bytes);
+    writeFileSync(h.services.authority.config.absolute, `${configText}max_attempts: 4\n`);
+    const status = await computeTaskStatus(h.services.dependencies, h.services.authority);
+    expect(status).toMatchObject({
+      ok: true,
+      value: {
+        config: { verified: true },
+        next_action: { code: "run-step", step: "produce" },
+      },
+    });
+    if (!status.ok) return;
+    expect(status.value.config_change).toEqual([{ path: "max_attempts", after: 4 }]);
+    expect(status.value.blocking_reasons).not.toContain("config-invalid");
+  });
+
+  it("blocks on an unparseable config with repair advice rather than a restore demand", async () => {
+    const h = await harness();
+    // Bytes the current schema rejects: editing or restoring the file cannot recover them, so
+    // the blocker names the config file and the next action says to fix the YAML.
+    const invalidBytes = Buffer.from('schema_version: "1"\nroles:\n  reviewer: { model: claude-opus-4-6, effort: high }\n');
+    writeFileSync(h.services.authority.config.absolute, invalidBytes);
+    writeFileSync(h.services.authority.state.absolute, canonicalDocument(h.state({
+      config_digest: sha256Bytes(invalidBytes),
     })).bytes);
     const status = await computeTaskStatus(h.services.dependencies, h.services.authority);
     expect(status).toMatchObject({
       ok: true,
       value: {
-        config: {
-          verified: false,
-          issue: "pinned-config-schema-unsupported",
-          expected_digest: sha256Bytes(pinnedBytes),
-          observed_digest: sha256Bytes(pinnedBytes),
-        },
-        blocking_reasons: expect.arrayContaining(["pinned-config-schema-unsupported"]),
-        next_action: { code: "upgrade-tooling", human_required: true },
+        config: { verified: false, issue: "config-invalid" },
+        blocking_reasons: expect.arrayContaining(["config-invalid"]),
+        next_action: { code: "inspect-state", human_required: true },
       },
     });
     if (status.ok) {
-      expect(status.value.blocking_reasons).not.toContain("config-invalid");
-      expect(status.value.next_action.detail).not.toMatch(/Restore/u);
+      expect(status.value.next_action.detail).toContain("fix the YAML");
       expect(status.value.next_action.detail).not.toContain("new task or the explicit upgrade flow");
     }
   });

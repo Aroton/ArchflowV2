@@ -53,7 +53,7 @@ function fullStatus(nextAction: NextAction, extra: Partial<TaskStatusV1> = {}): 
       digest: digestA,
       active_rules: [{ id: "trust", version: 1, text: "Require explicit approval." }],
     },
-    config: { verified: true, expected_digest: digestA, observed_digest: digestA },
+    config: { verified: true },
     next_action: nextAction,
     ...extra,
   } as TaskStatusV1;
@@ -83,8 +83,7 @@ describe("semantic status projection", () => {
   it("maps every current NextActionCode without exposing a protocol action", () => {
     const codes = [
       "initialize-repository", "create-task", "resume-exact-intent",
-      "inspect-retained-receipt", "create-fresh-intent", "resolve-current-authority", "restore-pinned-config",
-      "upgrade-tooling",
+      "inspect-retained-receipt", "create-fresh-intent", "resolve-current-authority",
       "open-gate", "resolve-open-gate", "run-step", "commit-artifacts", "commit-phase", "advance-phase",
       "complete-task", "task-complete", "inspect-state",
     ] as const satisfies readonly NextActionCode[];
@@ -104,6 +103,22 @@ describe("semantic status projection", () => {
       expect(result.view.next_action.kind).toBeTruthy();
       expect(JSON.stringify(result.view)).not.toContain("request_digest");
     }
+  });
+
+  it("projects a config change notice without changing the action kind", () => {
+    const entries = [
+      { path: "roles.counter-reviewer.effort", before: "xhigh", after: "high" },
+      { path: "max_attempts", after: 4 },
+    ] as const;
+    const status = fullStatus(action("run-step", { step: "produce" }), {
+      config_change: entries,
+    } as Partial<TaskStatusV1>);
+    const projected = projectSemanticStatus(snapshot(status), invocation);
+    // Informational only: the entries ride along verbatim and the prose gains one line, but
+    // the condition and the action are exactly what an unedited config would produce.
+    expect(projected.view.next_action.kind).toBe("begin-work");
+    expect(projected.view.config_change).toEqual([...entries]);
+    expect(projected.view.detail).toContain("2 fields");
   });
 
   it("projects work, review, empty triage, triage, and honest implementation commit states", () => {

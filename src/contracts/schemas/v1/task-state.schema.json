@@ -627,6 +627,98 @@
           }
         }
       ]
+    },
+    "configRoute": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "effort": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ]
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      },
+      "required": [
+        "model",
+        "effort"
+      ],
+      "additionalProperties": false
+    },
+    "configRoles": {
+      "type": "object",
+      "properties": {
+        "producer": {
+          "$ref": "#/$defs/configRoute"
+        },
+        "counter-reviewer": {
+          "$ref": "#/$defs/configRoute"
+        },
+        "adjudicator": {
+          "$ref": "#/$defs/configRoute"
+        }
+      },
+      "additionalProperties": false
+    },
+    "configOverrides": {
+      "type": "object",
+      "properties": {
+        "explore": {
+          "$ref": "#/$defs/configRoles"
+        },
+        "prd": {
+          "$ref": "#/$defs/configRoles"
+        },
+        "design": {
+          "$ref": "#/$defs/configRoles"
+        },
+        "phase-design": {
+          "$ref": "#/$defs/configRoles"
+        },
+        "phase-impl": {
+          "$ref": "#/$defs/configRoles"
+        }
+      },
+      "additionalProperties": false
+    },
+    "configSnapshot": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "roles": {
+          "$ref": "#/$defs/configRoles"
+        },
+        "overrides": {
+          "$ref": "#/$defs/configOverrides"
+        },
+        "max_attempts": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "schema_version",
+        "roles"
+      ],
+      "additionalProperties": false
     }
   },
   "type": "object",
@@ -771,6 +863,9 @@
         ],
         "additionalProperties": false
       }
+    },
+    "last_seen_config": {
+      "$ref": "#/$defs/configSnapshot"
     },
     "last_transition": {
       "$ref": "#/$defs/lastTransition"

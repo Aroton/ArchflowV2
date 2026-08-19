@@ -62,7 +62,7 @@ const PROVENANCE = {
   decision_event_id: "gate-decision", helper_invocation_id: "gate-helper", recorded_at: "2026-07-30T12:00:00.000Z",
 } as const;
 const SUBJECT: InputFingerprintSubject = {
-  schema_version: "1", workflow_digest: D("5"), config_digest: D("4"), constitution_digest: D("6"),
+  schema_version: "1", workflow_digest: D("5"), constitution_digest: D("6"),
   artifact_identities: [], upstream_identities: [], rubric_digest: D("7"), phase_instance: PHASE, declared_inputs: [],
 };
 const FINGERPRINT = computeInputFingerprint(SUBJECT);
@@ -114,9 +114,16 @@ async function harness(): Promise<Harness> {
     environment: environment.value,
     atomic: createAtomicWriter(),
     lock: { runExclusive: async <T>(_root: ResolvedTaskWorkspacePath, work: () => Promise<T>) => work() },
-    resolve_input_fingerprint: async () => ({ schema_version: "1", ok: true, value: SUBJECT }),
+    resolve_input_fingerprint: async () => ({ schema_version: "1", ok: true, value: { subject: SUBJECT, fingerprint: FINGERPRINT } }),
     read_state: readTaskState,
-    read_config: async () => ({ kind: "valid", snapshot: { bytes: new Uint8Array(), digest: D("4") } }),
+    read_config: async () => ({
+      kind: "valid",
+      snapshot: {
+        bytes: new TextEncoder().encode('schema_version: "1"\nroles: {}\n'),
+        digest: D("4"),
+        parsed: { schema_version: "1", roles: {} },
+      },
+    }),
     read_receipt: readIntentReceipt,
   };
   return { root, authority: authority.value, dependencies, runner: discovered.value, environment: environment.value };
@@ -907,7 +914,7 @@ describe("durable gate lifecycle", () => {
     expect(state.kind === "canonical" ? state.document.value.open_gate : undefined).toBeUndefined();
   });
 
-  it("revalidates config, repository identity, state, and fingerprint before resolving after a wait", async () => {
+  it("revalidates config parseability, repository identity, state, and fingerprint before resolving after a wait", async () => {
     for (const changed of ["config", "repository", "state", "fingerprint"] as const) {
       const h = await harness();
       const input = gateInput(h, `changed-during-wait-${changed}`);
@@ -916,7 +923,7 @@ describe("durable gate lifecycle", () => {
       writeFileSync(decisionPath(h), canonicalDocument(envelope(opened.value.request.value)).bytes);
       let dependencies: GateLifecycleDependencies = h.dependencies;
       let resumedInput = input;
-      if (changed === "config") dependencies = { ...dependencies, read_config: async () => ({ kind: "valid", snapshot: { bytes: new Uint8Array(), digest: D("0") } }) };
+      if (changed === "config") dependencies = { ...dependencies, read_config: async () => ({ kind: "invalid", digest: D("0") }) };
       if (changed === "fingerprint") resumedInput = { ...input, input_fingerprint: D("0") };
       if (changed === "repository" || changed === "state") {
         const read = await readTaskState(h.authority.state);

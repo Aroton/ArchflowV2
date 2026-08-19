@@ -18,6 +18,7 @@ import { discoverWorktree } from "../../src/repository/identity.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
 import { resolvePinnedConstitution } from "../../src/state/constitution.js";
 import { createProductionServices } from "../../src/state/production.js";
+import { readTaskConfig } from "../../src/state/read.js";
 import { composeRequest } from "../../src/state/request-composition.js";
 import { deriveDeclaredSnapshotDigest } from "../../src/state/snapshots.js";
 import { cleanupTemporaryRepositories, createTempRepository } from "../helpers/temp-repository.js";
@@ -68,7 +69,6 @@ Preserve explicit human review gates.
   const fingerprint = computeInputFingerprint({
     schema_version: "1",
     workflow_digest: workflowDigest,
-    config_digest: configDigest,
     constitution_digest: constitution.value.digest,
     artifact_identities: [],
     upstream_identities: [],
@@ -246,5 +246,85 @@ describe("state handler durable integration", () => {
       h.invocation("restart-to-prd-replay"),
     );
     expect(replay).toEqual(first);
+  });
+
+  it("restarts a legacy-composition task to PRD while preserving its recorded fingerprint", async () => {
+    const h = await fixture();
+    const services = await createProductionServices({
+      working_directory: h.repository.path,
+      task_id: TASK,
+      operation: parseSafeCode("compose-planning-restart-legacy"),
+    });
+    if (!services.ok || services.value.state === undefined) throw new Error("restart services unavailable");
+
+    writeFileSync(join(h.authority.task_root, "ask.md"), "# Original ask\n");
+
+    // Recreate a pre-cutover recording: the legacy composition is the restart call's accepted
+    // subject with the creation-time config digest folded back in (the pre-change field set).
+    const composedShape = await composeRequest(services.value, {
+      kind: "planning-restart",
+      intent_id: "restart-to-prd-legacy",
+      invocation: { skill: "archflow-prd", intent: "reopen" },
+      reason: "Implementation exposed incorrect product requirements.",
+    });
+    expect(composedShape.ok).toBe(true);
+    if (!composedShape.ok) return;
+    const config = await readTaskConfig(services.value.authority.config);
+    if (config.kind !== "valid") throw new Error("live config unavailable");
+    const current = parseCanonicalDocument<TaskStateV1>(
+      readFileSync(h.authority.state.absolute), "current state",
+    );
+    const probe = await services.value.dependencies.resolve_input_fingerprint({
+      runner: services.value.runner,
+      authority: services.value.authority,
+      state: current,
+      call: parseToolCall("archflow_state", composedShape.value.envelope.request.input),
+      live_config: config.snapshot,
+      context: services.value.authority.context,
+    });
+    if (!probe.ok) throw new Error(probe.error.code);
+    const legacy = canonicalJsonDigest({
+      schema_version: probe.value.subject.schema_version,
+      workflow_digest: probe.value.subject.workflow_digest,
+      config_digest: current.value.config_digest,
+      constitution_digest: probe.value.subject.constitution_digest,
+      artifact_identities: probe.value.subject.artifact_identities,
+      upstream_identities: probe.value.subject.upstream_identities,
+      rubric_digest: probe.value.subject.rubric_digest,
+      phase_instance: probe.value.subject.phase_instance,
+      declared_inputs: probe.value.subject.declared_inputs,
+    });
+    expect(probe.value.fingerprint).not.toBe(legacy);
+    writeFileSync(h.authority.state.absolute, canonicalDocument({ ...current.value, input_fingerprint: legacy }).bytes);
+
+    // A fresh services instance reads the rewritten state, so the recomposed request claims the
+    // recorded legacy value (the envelope's expected-digest seam accepts it through the fallback);
+    // the restart landing is a comparing site, so the landing keeps the legacy composition instead
+    // of failing the kernel's equality pin.
+    const legacyServices = await createProductionServices({
+      working_directory: h.repository.path,
+      task_id: TASK,
+      operation: parseSafeCode("compose-planning-restart-legacy-claim"),
+    });
+    if (!legacyServices.ok || legacyServices.value.state === undefined) throw new Error("legacy restart services unavailable");
+    const composed = await composeRequest(legacyServices.value, {
+      kind: "planning-restart",
+      intent_id: "restart-to-prd-legacy",
+      invocation: { skill: "archflow-prd", intent: "reopen" },
+      reason: "Implementation exposed incorrect product requirements.",
+    });
+    expect(composed.ok).toBe(true);
+    if (!composed.ok) return;
+    expect((composed.value.envelope.request.input as Record<string, unknown>).input_fingerprint).toBe(legacy);
+    const restarted = await handleState(
+      parseToolCall("archflow_state", composed.value.envelope.request.input),
+      h.invocation("restart-to-prd-legacy-call"),
+    );
+    expect(restarted).toMatchObject({ ok: true, value: { status: "running" } });
+    const landed = parseCanonicalDocument<TaskStateV1>(
+      readFileSync(h.authority.state.absolute), "restarted state",
+    ).value;
+    expect(landed.phase_instance).toBe("prd");
+    expect(landed.input_fingerprint).toBe(legacy);
   });
 });

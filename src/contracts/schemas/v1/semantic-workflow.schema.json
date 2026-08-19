@@ -667,6 +667,12 @@
             "options"
           ],
           "additionalProperties": false
+        },
+        "config_change": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/configChangeEntry"
+          }
         }
       },
       "required": [
@@ -679,6 +685,52 @@
         "next_action"
       ],
       "additionalProperties": false
+    },
+    "configChangeEntry": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "before": {
+          "$ref": "#/$defs/plainJson"
+        },
+        "after": {
+          "$ref": "#/$defs/plainJson"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "plainJson": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/plainJson"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/plainJson"
+          }
+        }
+      ]
     },
     "applySubmission": {
       "anyOf": [
@@ -1370,6 +1422,12 @@
         "options"
       ],
       "additionalProperties": false
+    },
+    "config_change": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/configChangeEntry"
+      }
     }
   },
   "required": [

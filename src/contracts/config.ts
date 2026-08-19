@@ -42,6 +42,24 @@ export const configV1Schema = z.object({
 export type ModelRouteV1 = z.infer<typeof configRouteSchema>;
 export type ConfigV1 = z.infer<typeof configV1Schema>;
 
+/**
+ * Strips the `| undefined` zod's `.optional()` infers from every optional field, recursively:
+ * under `exactOptionalPropertyTypes` that explicit `undefined` would break the `PlainJsonValue`
+ * constraint every persisted-reachable shape must satisfy — an absent field is simply absent,
+ * never `undefined`. The mapping is homomorphic, so optionality and `readonly` survive.
+ */
+type AbsentIsAbsence<T> = T extends readonly (infer Item)[] ? readonly AbsentIsAbsence<Item>[]
+  : T extends object ? { [Key in keyof T]: AbsentIsAbsence<Exclude<T[Key], undefined>> }
+  : T;
+
+/**
+ * The parsed config value as durably recorded (`TaskStateV1.last_seen_config`) and diffed by the
+ * status change notice: `ConfigV1` with zod's inferred `undefined`s stripped, so the shape is a
+ * plain-JSON value. Defined from the one `z.infer` of `configV1Schema`, beside it, so the
+ * persisted snapshot type cannot drift from the parser's own output type.
+ */
+export type TaskConfigSnapshot = AbsentIsAbsence<ConfigV1>;
+
 export function parseConfigV1(value: unknown): ConfigV1 {
   assertPlainJson(value, "config");
   return configV1Schema.parse(value);

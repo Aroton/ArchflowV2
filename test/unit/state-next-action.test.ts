@@ -197,8 +197,7 @@ describe("deriveNextAction", () => {
       ["initialize-repository", { repository_initialized: false }],
       ["create-task", { repository_initialized: true }],
       ...reconciliationCases.map(([finding, code]) => [code, input({ reconciliation_findings: [finding] })] as const),
-      ["restore-pinned-config", input({ config_verified: false })],
-      ["upgrade-tooling", input({ config_verified: false, config_schema_unsupported: true })],
+      ["inspect-state", input({ config_verified: false })],
       ["resolve-open-gate", input({ state: state({ open_gate: gate }) })],
       ["run-step", input({ assessment: assessment("triage") })],
       ["open-gate", input({ assessment: assessment("advance") })],
@@ -278,24 +277,35 @@ describe("deriveNextAction", () => {
       opened_at_revision: parseSafeInteger(4),
     };
     expect(deriveNextAction(input({ config_verified: false, state: state({ open_gate: openGate }) })).code)
-      .toBe("restore-pinned-config");
+      .toBe("inspect-state");
     expect(deriveNextAction(input({ reconciliation_findings: [reconciliationCases[0]![0]], assessment: assessment("advance") })).code)
       .toBe("resume-exact-intent");
     expect(deriveNextAction(input({ state: state({ terminal: "complete", open_gate: openGate }) })).code)
       .toBe("task-complete");
   });
 
-  it("directs intentional pinned-config changes to a new task or explicit upgrade", () => {
+  it("directs a config that no longer parses to state inspection with repair advice", () => {
     const next = deriveNextAction(input({ config_verified: false }));
-    expect(next).toMatchObject({ code: "restore-pinned-config", human_required: true });
-    expect(next.detail).toContain("new task or the explicit upgrade flow");
+    expect(next).toMatchObject({ code: "inspect-state", human_required: true });
+    expect(next.detail).toContain("config.yaml is invalid");
+    expect(next.detail).toContain("fix the YAML");
   });
 
-  it("names the tooling, not the file, when pinned bytes no longer parse", () => {
-    const next = deriveNextAction(input({ config_verified: false, config_schema_unsupported: true }));
-    expect(next).toMatchObject({ code: "upgrade-tooling", human_required: true });
-    expect(next.detail).not.toMatch(/Restore/u);
-    expect(next.detail).not.toContain("new task or the explicit upgrade flow");
+  it("names the actual read issue behind a failed config verification", () => {
+    expect(deriveNextAction(input({ config_verified: false, config_issue: "config-missing" })).detail)
+      .toContain("config.yaml is missing");
+    expect(deriveNextAction(input({ config_verified: false, config_issue: "config-unreadable" })).detail)
+      .toContain("config.yaml is unreadable");
+    expect(deriveNextAction(input({ config_verified: false, config_issue: "config-unresolvable" })).detail)
+      .toContain("config.yaml is unreadable");
+  });
+
+  it("keeps the ordinary action for a verified config edit", () => {
+    // An edited config is still a verified config: the field-level notice lives in the status
+    // value, and the derived action is exactly the one the unedited task would get.
+    const baseline = deriveNextAction(input());
+    expect(baseline.code).toBe("run-step");
+    expect(deriveNextAction(input({ config_verified: true })).code).toBe("run-step");
   });
 
   it("does not guess between ambiguous retained successor receipts", () => {

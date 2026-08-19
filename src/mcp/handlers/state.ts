@@ -1,7 +1,6 @@
 import type { InvocationContext } from "../../contracts/contexts.js";
 import { createProjectError, type ProjectResult } from "../../contracts/errors.js";
 import { canonicalJsonDigest, sha256Bytes } from "../../contracts/canonical.js";
-import { computeInputFingerprint } from "../../contracts/fingerprints.js";
 import { parseSafeId, parseSafeInteger } from "../../contracts/evidence.js";
 import {
   createInternalResultExpectation,
@@ -203,10 +202,15 @@ export async function handleState(
               state: current,
               call,
               live_config: liveConfig.snapshot,
+              // The landing is committed through the kernel, whose equality pin binds the next
+              // state's fingerprint to the request's claim — so this recompute is a comparing
+              // site: supply the claim as the expected digest and record the accepted
+              // (possibly legacy-composition) value rather than writing the new composition.
+              expected_input_fingerprint: restartInput.input_fingerprint,
               context: services.authority.context,
             });
             if (!landingSubject.ok) return landingSubject;
-            landingFingerprint = computeInputFingerprint(landingSubject.value);
+            landingFingerprint = landingSubject.value.fingerprint;
             // The append is now installed; bind the landing state to the post-append observation.
             planned = planPlanningRestart({ ...planInput, recomputed_input_fingerprint: landingFingerprint });
             if (!planned.ok) return planned;

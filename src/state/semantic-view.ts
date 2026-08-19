@@ -243,8 +243,6 @@ function mapNextAction(status: TaskStatusV1, snapshot: SemanticStatusSnapshotV1)
     case "inspect-retained-receipt":
     case "create-fresh-intent":
     case "resolve-current-authority":
-    case "restore-pinned-config":
-    case "upgrade-tooling":
       return inspect(action.detail);
     case "open-gate":
       return Object.freeze({
@@ -404,6 +402,12 @@ export function projectSemanticStatus(
   const mismatch = invocation !== undefined && !owns
     ? ` The invoked skill does not own this current action; continue with the action shown or invoke its owning skill.`
     : "";
+  // Informational only: a config change notice never changes the condition or the action kind, so
+  // it appends one prose line and the verbatim entries rather than routing through the shape.
+  const configChange = status.config_change;
+  const configChangeNotice = configChange === undefined ? "" : configChange.length === 1
+    ? " Task config changed since the last state transaction (1 field); see config_change."
+    : ` Task config changed since the last state transaction (${configChange.length} fields); see config_change.`;
   const nextAction: SemanticNextActionV1 = Object.freeze({
     kind: shape.action_kind,
     instruction: shape.instruction,
@@ -421,7 +425,7 @@ export function projectSemanticStatus(
     task_id: status.task_id,
     condition: shape.condition,
     headline: shape.headline,
-    detail: `${shape.detail}${mismatch}`,
+    detail: `${shape.detail}${mismatch}${configChangeNotice}`,
     ...(position === undefined ? {} : { position }),
     // A settled re-entry decision is close-only authority. Document write slots become visible
     // only after the separately offered revision-entry transition commits.
@@ -430,6 +434,7 @@ export function projectSemanticStatus(
     ...(shape.findings !== true ? {} : { findings: snapshot.full_findings }),
     ...(context === undefined ? {} : { review_context: context }),
     ...(shape.presentation === undefined ? {} : { presentation: shape.presentation }),
+    ...(configChange === undefined ? {} : { config_change: configChange }),
   });
   return Object.freeze({ view, ...(offer === undefined ? {} : { internal_offer: offer }) });
 }

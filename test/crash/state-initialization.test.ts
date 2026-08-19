@@ -63,8 +63,9 @@ async function setup(kind: "normal" | "legacy" = "normal") {
   const authority = await createInternalTransactionAuthority({ runner: discovered.value, environment: preflight.value, task_id: taskId, context });
   if (!authority.ok) throw new Error("authority setup failed");
   const config = new TextEncoder().encode('schema_version: "1"\nroles: {}\n'); await writeFile(join(taskRoot, "config.yaml"), config);
+  const configDigest = sha256Bytes(config);
   const subject: InputFingerprintSubject = { schema_version: "1", workflow_digest: "5".repeat(64) as never,
-    config_digest: sha256Bytes(config), constitution_digest: "6".repeat(64) as never, artifact_identities: [],
+    constitution_digest: "6".repeat(64) as never, artifact_identities: [],
     upstream_identities: [], rubric_digest: "7".repeat(64) as never, phase_instance: context.phase_instance, declared_inputs: [] };
   const fingerprint = computeInputFingerprint(subject);
   const headCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repository, env, encoding: "utf8" }).trim() as never;
@@ -74,7 +75,7 @@ async function setup(kind: "normal" | "legacy" = "normal") {
     code_baseline_commit: headCommit, policy_base_commit: headCommit,
     canonical_paths: { task_root: `.archflow/tasks/${taskId}` as never, config: `.archflow/tasks/${taskId}/config.yaml` as never,
       state: `.archflow/tasks/${taskId}/state.json` as never, workflow: ".archflow/workflow.yaml" as never,
-      constitution_root: ".archflow/constitution" as never }, config_digest: subject.config_digest,
+      constitution_root: ".archflow/constitution" as never }, config_digest: configDigest,
     workflow_digest: subject.workflow_digest, constitution_digest: subject.constitution_digest };
   const artifact: TaskInitializationV1 | LegacyImportInitializationV1 = kind === "legacy"
     ? {

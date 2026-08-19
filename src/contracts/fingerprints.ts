@@ -1,7 +1,5 @@
 import type { GitOid, GitTreeMode } from "./canonical.js";
 import { canonicalJsonDigest, sha256Bytes } from "./canonical.js";
-import type { ProjectResult } from "./errors.js";
-import { createProjectError } from "./errors.js";
 import type { PathSafeId, SafeId, Sha256Digest } from "./evidence.js";
 import type { GateContext, GateKind, WaiverOriginRef } from "./gates.js";
 import type { CommonToolInput, CounterReviewInput, GateInput, PlanningRestartInput, StateInput, ToolInput, WaiverInput } from "./mcp-tools.js";
@@ -24,7 +22,6 @@ export type GitIdentityRef = {
 export type InputFingerprintSubject = {
   readonly schema_version: "1";
   readonly workflow_digest: Sha256Digest;
-  readonly config_digest: Sha256Digest;
   readonly constitution_digest: Sha256Digest;
   /** SET — sorted by `path` and checked for duplicates before hashing. */
   readonly artifact_identities: readonly GitIdentityRef[];
@@ -173,7 +170,6 @@ export function computeInputFingerprint(subject: InputFingerprintSubject): Sha25
   return canonicalJsonDigest({
     schema_version: snapshot.schema_version,
     workflow_digest: snapshot.workflow_digest,
-    config_digest: snapshot.config_digest,
     constitution_digest: snapshot.constitution_digest,
     artifact_identities: sortedSet(snapshot.artifact_identities, (item) => item.path, "artifact_identities").map(identityJson),
     upstream_identities: sortedSet(snapshot.upstream_identities, (item) => item.path, "upstream_identities").map(identityJson),
@@ -381,25 +377,10 @@ export function baselineAdoptionDriftDigest(context: GateContext<"baseline-adopt
 }
 
 /**
- * Config pinning is `sha256` over the exact whole `config.yaml` bytes. There is no in-task
- * amendment and no re-pin schema: an intentional routing, model, or effort change requires a
- * distinct task or the explicit upgrade flow.
+ * Creation-time config provenance: `sha256` over the exact whole `config.yaml` bytes recorded by
+ * the initialization writers. Config is an ordinary editable input, so live bytes are never
+ * compared against this digest — it only names the bytes the task was created with.
  */
 export function computePinnedConfigDigest(configBytes: Uint8Array): Sha256Digest {
   return sha256Bytes(configBytes);
-}
-
-/**
- * Any byte difference produces `PINNED_CONFIG_MISMATCH` carrying only the two digests. The error
- * never carries config content: the pinned config is exactly the kind of document whose bytes must
- * not leak into a diagnostic.
- */
-export function verifyPinnedConfig(expected: Sha256Digest, observedBytes: Uint8Array): ProjectResult<Sha256Digest> {
-  const observed = computePinnedConfigDigest(observedBytes);
-  if (observed === expected) return { schema_version: "1", ok: true, value: observed };
-  return {
-    schema_version: "1",
-    ok: false,
-    error: createProjectError("PINNED_CONFIG_MISMATCH", { expected_digest: expected, observed_digest: observed }),
-  };
 }

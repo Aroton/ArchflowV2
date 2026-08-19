@@ -14,7 +14,7 @@ import {
   sha256Bytes,
 } from "../../src/contracts/canonical.js";
 import type { AdjudicationEvidence } from "../../src/contracts/adjudication.js";
-import type { ConfigV1 } from "../../src/contracts/config.js";
+import type { ConfigV1, TaskConfigSnapshot } from "../../src/contracts/config.js";
 import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
 import type { ResultManifestV1 } from "../../src/contracts/durable-result-manifest.js";
 import type {
@@ -187,7 +187,6 @@ function fingerprintSubject(version: number): InputFingerprintSubject {
   return {
     schema_version: "1",
     workflow_digest: canonicalJsonDigest({ workflow: 1 }),
-    config_digest: canonicalJsonDigest(config as never),
     constitution_digest: constitution.digest,
     artifact_identities: [{
       path: parseRepositoryPathClaim(
@@ -297,7 +296,7 @@ async function createDependencies(
     resolve_input_fingerprint: async () => ({
       schema_version: "1",
       ok: true,
-      value: structuredClone(subject),
+      value: { subject: structuredClone(subject), fingerprint: computeInputFingerprint(subject) },
     }),
     read_state: readTaskState,
     read_config: async () => ({
@@ -305,6 +304,7 @@ async function createDependencies(
       snapshot: {
         bytes: canonicalJsonBytes(config as never),
         digest: canonicalJsonDigest(config as never),
+        parsed: structuredClone(config) as TaskConfigSnapshot,
       },
     }),
     read_receipt: readIntentReceipt,
