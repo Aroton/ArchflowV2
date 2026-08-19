@@ -70,6 +70,20 @@ export type NextActionInput = Readonly<{
   config_schema_unsupported?: boolean;
   reconciliation_findings?: readonly ReconciliationFinding[];
   reconciliation_blocking_reasons?: readonly string[];
+  /**
+   * Task documents recorded by the current phase's work result whose worktree bytes have since
+   * changed, set only while a review of that result is still owed. The review re-reads exactly
+   * these before it dispatches, so while any remain it cannot record a terminal result — and no
+   * human baseline decision can help, because adoption re-baselines a *path* while the recorded
+   * result stays pinned to the bytes it recorded. Re-recording the result is the only move.
+   */
+  produce_subject_drift?: readonly string[];
+  /**
+   * The same drift on an approved upstream document (the PRD, the design, the phase design),
+   * which the pending review also re-reads. The current phase cannot re-record another phase's
+   * document, so the only recovery is putting the recorded bytes back.
+   */
+  upstream_document_drift?: readonly string[];
   assessment?: EvidenceAssessment;
   evidence_available?: boolean;
   subject_digest?: Sha256Digest;
@@ -135,6 +149,36 @@ function runStepDetail(state: TaskStateV1, step: PipelineStep): string {
   if (state.step === step && state.status === "running") return `Record the terminal ${step} result.`;
   if (state.step === step && state.status === "failed") return `Retry the ${step} pipeline step.`;
   return `Run the ${step} pipeline step.`;
+}
+
+/**
+ * The one move that can clear drift inside the live work result: record it again over the bytes
+ * that are actually there. Named in plain language because it reaches the human as-is.
+ */
+function produceSubjectDriftAction(state: TaskStateV1, paths: readonly string[]): NextAction {
+  const shown = paths.slice(0, 5);
+  const listed = shown.join(", ");
+  const rest = paths.length - shown.length;
+  return action(
+    "run-step",
+    `${paths.length === 1 ? "A file" : `${paths.length} files`} this phase's recorded work result covers changed afterwards (${listed}${rest > 0 ? `, and ${rest} more` : ""}). The independent review re-reads them and will not review bytes the result never recorded, and no baseline decision can re-bind a recorded result to different bytes. Re-open the work window and submit a fresh result over the current bytes; the review then covers what is actually there.`,
+    false,
+    state,
+    { step: "produce" },
+  );
+}
+
+/**
+ * The recorded bytes of an approved upstream document are what the pending review reads it
+ * through, and no action in this phase can re-record another phase's document.
+ */
+function upstreamDocumentDriftAction(state: TaskStateV1, paths: readonly string[]): NextAction {
+  return action(
+    "inspect-state",
+    `${paths.length === 1 ? "An approved planning document" : `${paths.length} approved planning documents`} the independent review reads this phase through changed after approval (${paths.slice(0, 5).join(", ")}). Nothing in this phase can re-record another phase's document, so put the recorded bytes back before continuing; keeping the new ones means reopening the phase that owns them.`,
+    true,
+    state,
+  );
 }
 
 function matchingApproval(input: NextActionInput, kind: GateKind): boolean {
@@ -285,6 +329,16 @@ export function deriveNextAction(input: NextActionInput): NextAction {
           gate_kind: state.open_gate.gate_kind,
         });
       }
+      // Drift inside the live work result's own documents outranks the baseline decision. That
+      // gate re-baselines a path, which is enough for a completed phase's committed bytes but
+      // can never re-bind the recorded result the review is about to be dispatched over — so
+      // offering it here would spend a human decision and leave the review exactly as stuck.
+      if ((input.produce_subject_drift ?? []).length > 0) {
+        return produceSubjectDriftAction(state, input.produce_subject_drift!);
+      }
+      if ((input.upstream_document_drift ?? []).length > 0) {
+        return upstreamDocumentDriftAction(state, input.upstream_document_drift!);
+      }
       // A projected file absent from the worktree cannot be adopted (there are no current bytes to
       // keep); the honest recovery is the per-output restore, so route there instead of a gate —
       // unless the recorded projection has no retained bytes to restore from (an adoption records
@@ -381,6 +435,15 @@ export function deriveNextAction(input: NextActionInput): NextAction {
   // must not re-route the next action while the artifact is being rewritten.
   if (state.step === "produce" && state.status !== "succeeded") {
     return action("run-step", runStepDetail(state, "produce"), false, state, { step: "produce" });
+  }
+  // Reached when reconciliation is already consistent — most often because a human adopted the
+  // changed bytes as the new baseline for the path. The recorded work result still is not the
+  // bytes on disk, so the pipeline would otherwise keep offering a review that cannot run.
+  if ((input.produce_subject_drift ?? []).length > 0) {
+    return produceSubjectDriftAction(state, input.produce_subject_drift!);
+  }
+  if ((input.upstream_document_drift ?? []).length > 0) {
+    return upstreamDocumentDriftAction(state, input.upstream_document_drift!);
   }
   const next = input.assessment?.next;
   if (next !== undefined) {

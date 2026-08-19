@@ -35,7 +35,7 @@ import {
 } from "./gate-decision-interface.js";
 import { activeProjection, type GateLifecycleDependencies } from "./gate-core.js";
 import { deriveNextAction, type NextAction } from "./next-action.js";
-import { expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject, produceUpstreamBindingsForSubject } from "./produce-subject.js";
+import { expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject, produceOwnedTaskDocumentPaths, produceProjectionPins, produceUpstreamBindingsForSubject, readProduceProjection, readProduceProjectionSet } from "./produce-subject.js";
 import type { CurrentProduceSubject } from "./produce-subject.js";
 import { designArtifactCommittedAtCurrentTarget, implementationOutputCommittedAtCurrentTarget, type DesignMilestoneMiss } from "./implementation-manifest.js";
 import { phaseStatusResources, type StatusResource } from "./phase-documents.js";
@@ -1058,6 +1058,44 @@ async function computeTaskStatusDetailedInternal(
     });
   }
 
+  // Documents a still-pending review must re-read from the worktree that no longer hold the
+  // bytes durable authority recorded for them.
+  //
+  // Only a review dispatch reads these; every other consumer of a produce result works from its
+  // manifest. So the check runs exactly when the fixed point still owes a review, and drift that
+  // appears after the review is already current stays the human baseline decision's business —
+  // which is what that decision was built for.
+  //
+  // Reconciliation cannot answer this question. It asks "which bytes are authoritative for this
+  // path", and a human baseline adoption re-answers it — silencing the drift finding while the
+  // recorded result the review is dispatched over stays pinned to the bytes it recorded. Left
+  // unsaid, that combination offers a review that refuses to run, forever.
+  const produceSubjectDrift: string[] = [];
+  const upstreamDocumentDrift: string[] = [];
+  if (!midProduce && produceSubject !== undefined && assessment?.next === "counter_review") {
+    // Reported repository-relative: these reach a human who is about to look for the file.
+    const repositoryPath = (claim: string) => `.archflow/tasks/${state.task_id}/${claim}`;
+    try {
+      for (const pin of produceProjectionPins(produceSubject.artifact)) {
+        const projection = await readProduceProjection(
+          dependencies.runner, authority, produceSubject, pin.path,
+        );
+        if (!projection.ok) produceSubjectDrift.push(repositoryPath(pin.path));
+      }
+      const coProduced = produceOwnedTaskDocumentPaths(produceSubject.artifact);
+      for (const binding of produceUpstreamBindingsForSubject(state, produceSubject.artifact)) {
+        const upstream = await loadProduceUpstreamSubject(dependencies, authority, state, binding);
+        if (!upstream.ok) continue;
+        const projections = await readProduceProjectionSet(
+          dependencies.runner, authority, upstream.value, binding.path, coProduced,
+        );
+        if (!projections.ok) upstreamDocumentDrift.push(repositoryPath(binding.path));
+      }
+    } catch {
+      blockers.push("review-projection-unavailable");
+    }
+  }
+
   let statusReconciliation: StatusReconciliation | undefined;
   if (reconciliation !== undefined) {
     const partitioned = partitionExpectedReentryEdits(
@@ -1198,6 +1236,12 @@ async function computeTaskStatusDetailedInternal(
       ...(gateBindingBlocker === undefined ? [] : [gateBindingBlocker]),
     ]),
     ...(assessment === undefined ? {} : { assessment }),
+    ...(produceSubjectDrift.length === 0
+      ? {}
+      : { produce_subject_drift: Object.freeze([...produceSubjectDrift]) }),
+    ...(upstreamDocumentDrift.length === 0
+      ? {}
+      : { upstream_document_drift: Object.freeze([...upstreamDocumentDrift]) }),
     evidence_available: evidence.available,
     ...(subjectDigest === undefined ? {} : { subject_digest: subjectDigest }),
     authenticated_approvals: approvalFacts,

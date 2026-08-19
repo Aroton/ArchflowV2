@@ -12,7 +12,7 @@ import { parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } fro
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { createGitRunner } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
-import { expectedProduceUpstreamBindings, loadProduceUpstreamSubject, produceOwnedTaskDocumentPaths, produceProjectionSetDigest, produceUpstreamBindingsForSubject, readProduceProjection, readProduceProjectionSet, renderProduceReviewMaterial, resolveProduceUpstreamBinding, type CurrentProduceSubject } from "../../src/state/produce-subject.js";
+import { expectedProduceUpstreamBindings, loadProduceUpstreamSubject, produceOwnedTaskDocumentPaths, produceProjectionPins, produceProjectionSetDigest, produceUpstreamBindingsForSubject, readProduceProjection, readProduceProjectionSet, renderProduceReviewMaterial, resolveProduceUpstreamBinding, type CurrentProduceSubject } from "../../src/state/produce-subject.js";
 import type { TransactionAuthority } from "../../src/state/authority.js";
 import { cleanupTemporaryRepositories, createTempRepository } from "../helpers/temp-repository.js";
 
@@ -350,5 +350,52 @@ describe("retained produce review material", () => {
     expect(new TextEncoder().encode(JSON.stringify(rendered)).byteLength).toBeLessThan(100_000);
     expect(JSON.stringify(rendered)).not.toContain("large-source-sentinel");
     expect(JSON.stringify(rendered)).not.toContain("old code");
+  });
+  it("pins exactly the documents a dispatch re-reads, never the declared repository outputs", () => {
+    const taskId = parseTaskSlug("pin-task");
+    const notesPath = parseTaskPathClaim("phases/1/impl-notes.md");
+    const phaseDesignPath = parseTaskPathClaim("phases/1/design.md");
+    const fixture = JSON.parse(readFileSync(
+      new URL("../fixtures/contracts/durable/implementation-output.valid.json", import.meta.url),
+      "utf8",
+    )) as ImplementationOutputV1;
+    const implementation = {
+      ...fixture,
+      task_id: taskId,
+      outputs: [
+        { ...fixture.outputs[0]!, path: parseRepositoryPathClaim("src/index.ts") },
+        { ...fixture.outputs[0]!, path: parseRepositoryPathClaim(`.archflow/tasks/${taskId}/${notesPath}`) },
+      ],
+      parent_documents: [
+        { document_path: notesPath, content_digest: parseSha256Digest("a".repeat(64)), role: "impl-notes" as const },
+        // Governing documents the result did not co-produce stay upstream pins, not subject pins.
+        { document_path: phaseDesignPath, content_digest: parseSha256Digest("b".repeat(64)), role: "phase-design" as const },
+      ],
+    } as ImplementationOutputV1;
+    expect(produceProjectionPins(implementation)).toEqual([
+      { path: notesPath, content_digest: parseSha256Digest("a".repeat(64)) },
+    ]);
+
+    const documentBytes = new TextEncoder().encode("# Design\n");
+    const prdBytes = new TextEncoder().encode("# PRD\n");
+    const designPath = parseTaskPathClaim("design.md");
+    const prdPath = parseTaskPathClaim("prd.md");
+    const compound: DocumentArtifactV1 = {
+      schema_version: "1", artifact_kind: "document", task_id: taskId,
+      phase_instance: encodePhaseInstance({ kind: "design" }),
+      step: "produce", document_path: designPath, path_class: "document",
+      byte_count: parseSafeInteger(documentBytes.byteLength), content_digest: sha256Bytes(documentBytes),
+      declared_inputs: [], input_fingerprint: parseSha256Digest("1".repeat(64)),
+      snapshot_digest: parseSha256Digest("2".repeat(64)),
+      projection_target: `.archflow/tasks/${taskId}/${designPath}` as never,
+      additional_documents: [{
+        document_path: prdPath, byte_count: parseSafeInteger(prdBytes.byteLength),
+        content_digest: sha256Bytes(prdBytes), projection_target: `.archflow/tasks/${taskId}/${prdPath}` as never,
+      }],
+    };
+    expect(produceProjectionPins(compound)).toEqual([
+      { path: designPath, content_digest: sha256Bytes(documentBytes) },
+      { path: prdPath, content_digest: sha256Bytes(prdBytes) },
+    ]);
   });
 });

@@ -243,8 +243,9 @@ export function legalRunStepStatus(
     // Withdraw-and-redo: a succeeded produce may re-enter its own running state (attempt + 1).
     return step === "produce" && current.status === "succeeded" ? "running" : undefined;
   }
-  if (current.status !== "succeeded") return undefined;
+  // The produce window re-opens from anywhere in the phase; see `legalMovement`.
   if (step === "produce") return "running";
+  if (current.status !== "succeeded") return undefined;
   const steps = pipeline(current.phase_instance);
   const index = steps.indexOf(current.step);
   return index >= 0 && steps[index + 1] === step ? "running" : undefined;
@@ -278,15 +279,26 @@ function legalMovement(input: TransitionPlanInput): boolean {
     // A succeeded step re-entering itself is legal only through the backward-to-produce rule
     // below (produce-succeeded -> produce-running, withdraw-and-redo); fall through to it.
   }
-  if (current.status !== "succeeded" || target.status !== "running") return false;
-  if (target.phase_instance === current.phase_instance && target.step === "produce") {
-    // Author-initiated produce re-entry from any succeeded pipeline step (attempt + 1): the
-    // triage case is the accepted-finding re-entry, the produce/counter_review cases are the
-    // sanctioned new-information door — downstream evidence simply goes stale.
+  if (
+    target.phase_instance === current.phase_instance &&
+    target.step === "produce" && target.status === "running"
+  ) {
+    // Author-initiated produce re-entry from anywhere else in the phase (attempt + 1): the triage
+    // case is the accepted-finding re-entry, the counter_review case is the sanctioned
+    // new-information door — downstream evidence simply goes stale.
+    //
+    // A step still running or already failed re-enters here too, and that arm is load-bearing: a
+    // step whose terminal result cannot be recorded — a review that cannot be dispatched over
+    // documents that changed under it, say — has no forward edge, and the same-step retry rule
+    // only repeats the impossible work. The produce window is the phase's root and the only door
+    // that is never a dead end. Abandoning the entry costs the attempt a retry would have cost,
+    // and re-entry above still cannot skip the produce/running case: that is `sameSubject` work
+    // in flight, settled by the running branch before control ever reaches here.
     return input.human_revision_reentry === true
       ? target.attempt === current.attempt
       : target.attempt === current.attempt + 1;
   }
+  if (current.status !== "succeeded" || target.status !== "running") return false;
   const steps = pipeline(current.phase_instance);
   const index = steps.indexOf(current.step);
   if (index < 0) return false;
