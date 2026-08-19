@@ -45,7 +45,7 @@ export async function openHandlerSession(
   let configRead = await services.value.dependencies.read_config(services.value.authority.config);
   if (
     configRead.kind === "missing" && state === undefined && call.name === "archflow_state" &&
-    call.input.artifact?.artifact_kind === "legacy-import-initialization"
+    call.input.operation !== "planning_restart" && call.input.artifact?.artifact_kind === "legacy-import-initialization"
   ) {
     const staged = await readStagedLegacyConfig(services.value.authority, call.input.artifact);
     if (staged !== undefined) configRead = Object.freeze({ kind: "valid", snapshot: staged });

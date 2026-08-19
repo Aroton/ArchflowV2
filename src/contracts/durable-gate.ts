@@ -234,7 +234,7 @@ const GATE_REQUEST_DECISIONS = {
   "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
   "commit-authorization": ["authorize-commit", "revise", "abort", "cancel"],
   "restore-collision": ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"],
-  "baseline-adoption": ["adopt-current-bytes", "restore-recorded-bytes", "abort", "cancel"],
+  "baseline-adoption": ["adopt-current-bytes", "restore-recorded-bytes", "adopt-committed-deletions", "abort", "cancel"],
   "migration-audit": ["accept-import-audit", "revise", "abort", "cancel"],
 } as const satisfies Readonly<Record<GateKind, readonly [string, ...string[]]>>;
 
@@ -313,6 +313,22 @@ const archivedCommitAuthorizationArm = (extra: Record<string, z.ZodType>) =>
   gateArm("commit-authorization", archivedCommitAuthorizationContextSchema, allowedDecisionTuples["commit-authorization"], extra);
 const archivedCommitAuthorizationRequestV1Schema = archivedCommitAuthorizationArm({});
 const archivedLegacyCommitAuthorizationRequestV1Schema = archivedCommitAuthorizationArm({ supersedes: legacySupersession });
+
+/**
+ * A baseline-adoption request written before deletion adoption existed pinned only the four
+ * bytes decisions in `allowed_decisions`. The current writer pins the five-element tuple with
+ * `adopt-committed-deletions`, and a pinned tuple admits no subset — without this twin every
+ * pre-change baseline adoption would fail `parseArchivedGateRequest`, so `composeGate`'s
+ * approval reload would refuse to open any later gate. Like the commit-authorization twin, it
+ * is deliberately absent from `gateRequestArms`, `activeGateV1Schema` and
+ * `gateRequestSchemaDefs`: the published schema keeps advertising only the writer shape.
+ */
+const archivedBaselineAdoptionRequestV1Schema = gateArm(
+  "baseline-adoption",
+  GATE_CONTRACTS["baseline-adoption"].context,
+  literalTuple(["adopt-current-bytes", "restore-recorded-bytes", "abort", "cancel"]),
+  { current_evidence: baselineObservationRefV1Schema },
+);
 
 const PAYLOAD_REQUIRED_FIELDS = ["payload", "human_provenance"] as const;
 const WAIVER_REQUIRED_FIELDS = ["granted", "scope", "origin", "notes", "human_provenance"] as const;
@@ -419,11 +435,26 @@ export function parseGateDecisionRecord(value: unknown): GateDecisionRecordV1 {
  */
 export function parseArchivedGateRequest(value: unknown): ArchivedGateRequestV1 {
   assertPlainJson(value, "archived gate request");
-  for (const candidate of [gateRequestV1Schema, archivedCommitAuthorizationRequestV1Schema, archivedLegacyCommitAuthorizationRequestV1Schema]) {
+  for (const candidate of [gateRequestV1Schema, archivedCommitAuthorizationRequestV1Schema, archivedLegacyCommitAuthorizationRequestV1Schema, archivedBaselineAdoptionRequestV1Schema]) {
     const parsed = candidate.safeParse(value);
     if (parsed.success) return parsed.data as ArchivedGateRequestV1;
   }
   return legacyGateRequestV1Schema.parse(value) as ArchivedGateRequestV1;
+}
+
+/**
+ * The one parser every read of a *persisted* gate request uses — an open gate's request.json in
+ * status projection, discovery, and gate resolution, exactly like `parseArchivedGateRequest` for
+ * decided archives. A gate opened by an older bundle (for example a baseline adoption pinned
+ * before `adopt-committed-deletions` existed) must keep projecting and resolving after bundle
+ * switchover; only `parseGateRequest` — composing or validating a NEW request — enforces the
+ * strict writer shape. The compatibility arms differ from the writer shape only in fields the
+ * consumers already treat as data (the `allowed_decisions` list the decision interface iterates,
+ * the optional `deleted_projections`, the retired `supersedes` extra), so the runtime type is
+ * the honest projection of every accepted form.
+ */
+export function parsePersistedGateRequest(value: unknown): GateRequestV1 {
+  return parseArchivedGateRequest(value) as GateRequestV1;
 }
 
 /** Strictly reads retired supplemental ledgers without filtering or changing their digest. */

@@ -98,13 +98,12 @@
     "runtime": false
   },
   {
-    "label": "runtime-only-project-error-path-byte-limit",
+    "label": "portable-project-error-path-byte-limit",
     "tool": "archflow_state",
     "member": "output",
-    "classification": "runtime-semantic",
-    "semantic_category": "project-error-path-utf8",
+    "classification": "portable-structure",
     "materialization": "project-error-path-utf8",
-    "portable": true,
+    "portable": false,
     "runtime": false
   },
   {
@@ -241,13 +240,12 @@
     "runtime": false
   },
   {
-    "label": "runtime-only-project-error-path-order",
+    "label": "portable-project-error-path-order",
     "tool": "archflow_state",
     "member": "output",
-    "classification": "runtime-semantic",
-    "semantic_category": "project-error-sorted-unique",
+    "classification": "portable-structure",
     "materialization": "project-error-order",
-    "portable": true,
+    "portable": false,
     "runtime": false
   },
   {

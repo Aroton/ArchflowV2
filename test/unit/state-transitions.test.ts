@@ -510,10 +510,10 @@ describe("planStateTransition", () => {
     const restarted = planPlanningRestart({
       current,
       target_phase_instance: parsePhaseInstanceId("design"),
-      input_fingerprint: D("8"),
+      recomputed_input_fingerprint: D("8"),
       restart_id: parsePathSafeId("restart-1"),
       reason: "Phase planning exposed incorrect requirements.",
-      provenance: {
+      human_provenance: {
         schema_version: "1", actor_class: "human", assurance: "connected-request-trace", channel: "connected-host",
         connection_id: parseSafeId("connection-1"), invocation_id: parseSafeId("invocation-1"), request_id_digest: D("9"), request_digest: D("a"),
       },
@@ -526,7 +526,7 @@ describe("planStateTransition", () => {
     });
     expect(restarted.value.planned_final_phase).toBeUndefined();
     expect(restarted.value.restart_history?.at(-1)).toMatchObject({
-      from_phase_instance: "phase-impl-1", to_phase_instance: "design",
+      source_phase_instance: "phase-impl-1", target_phase_instance: "design",
       superseded_results: [resultRefs[1], resultRefs[2]],
       cleared_waivers: current.waivers,
     });
@@ -540,10 +540,10 @@ describe("planStateTransition", () => {
     const restarted = planPlanningRestart({
       current,
       target_phase_instance: phase("phase-design", 2),
-      input_fingerprint: D("8"),
+      recomputed_input_fingerprint: D("8"),
       restart_id: parsePathSafeId("restart-2"),
       reason: "Implementation exposed a plan defect.",
-      provenance: {
+      human_provenance: {
         schema_version: "1", actor_class: "human", assurance: "connected-request-trace", channel: "connected-host",
         connection_id: parseSafeId("connection-1"), invocation_id: parseSafeId("invocation-2"), request_id_digest: D("9"), request_digest: D("a"),
       },
@@ -569,5 +569,88 @@ describe("planStateTransition", () => {
       artifact: artifact as never,
     });
     expect(result.ok ? undefined : result.error.code).toBe("TRANSITION_INVALID");
+  });
+
+  it("re-derives the planned final phase from a produce that records the design document", () => {
+    const current = state({ planned_final_phase: parseSafeInteger(10), step: "produce" });
+    const artifact = {
+      artifact_kind: "document",
+      task_id: current.task_id,
+      phase_instance: current.phase_instance,
+      step: "produce",
+      input_fingerprint: D("8"),
+    } as never;
+    const reference = {
+      phase_instance: current.phase_instance,
+      step: "produce" as const,
+      result_digest: D("9"),
+      result_id: parseSafeId("result-1"),
+      input_fingerprint: D("8"),
+    };
+    const result = planStateTransition({
+      current,
+      target: { phase_instance: current.phase_instance, step: "produce", status: "succeeded", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"),
+      artifact,
+      result_reference: reference,
+      derived_planned_final_phase: 4,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.planned_final_phase).toBe(parseSafeInteger(4));
+  });
+
+  it("clears the planned final phase when a recorded open-ended design replaces it", () => {
+    const current = state({ planned_final_phase: parseSafeInteger(10), step: "produce" });
+    const artifact = {
+      artifact_kind: "document",
+      task_id: current.task_id,
+      phase_instance: current.phase_instance,
+      step: "produce",
+      input_fingerprint: D("8"),
+    } as never;
+    const reference = {
+      phase_instance: current.phase_instance,
+      step: "produce" as const,
+      result_digest: D("9"),
+      result_id: parseSafeId("result-1"),
+      input_fingerprint: D("8"),
+    };
+    const result = planStateTransition({
+      current,
+      target: { phase_instance: current.phase_instance, step: "produce", status: "succeeded", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"),
+      artifact,
+      result_reference: reference,
+      derived_planned_final_phase: null,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).not.toHaveProperty("planned_final_phase");
+  });
+
+  it("keeps the stored planned final phase when the produce records no design document", () => {
+    const current = state({ planned_final_phase: parseSafeInteger(10), step: "produce" });
+    const artifact = {
+      artifact_kind: "document",
+      task_id: current.task_id,
+      phase_instance: current.phase_instance,
+      step: "produce",
+      input_fingerprint: D("8"),
+    } as never;
+    const reference = {
+      phase_instance: current.phase_instance,
+      step: "produce" as const,
+      result_digest: D("9"),
+      result_id: parseSafeId("result-1"),
+      input_fingerprint: D("8"),
+    };
+    const result = planStateTransition({
+      current,
+      target: { phase_instance: current.phase_instance, step: "produce", status: "succeeded", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"),
+      artifact,
+      result_reference: reference,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.planned_final_phase).toBe(parseSafeInteger(10));
   });
 });

@@ -1,6 +1,6 @@
 # COMPLEXITY
 
-**Explored:** 2026-08-14 · **Commit:** `6637099` · **Covers:** the whole repository
+**Explored:** 2026-08-16 · **Commit:** `d60da73` · **Covers:** the whole repository
 
 A per-subsystem audit of where the machinery is heaviest, what it buys, and what could be simplified. Written to support iterating on the workflow — each item states the concrete problem the complexity solves so a simplification can be judged against it, per the engineering priorities in CLAUDE.md.
 
@@ -14,9 +14,7 @@ Three categories recur:
 
 ## Current top target: the client orchestration surface
 
-The workflow's durable machinery is more coherent than its public interface. A routine client action currently crosses status, a request template, one of nine `build-request` kinds, a call envelope or staged reference, and one of four low-level MCP tools. An already-started, no-rework document phase uses seven MCP mutations, each normally surrounded by CLI composition and status reads. The worst gate inversion is resolved: a read-only preview now precedes the human conversation, and the selected decision travels in one freshness-bound MCP call instead of a blocked call, status polling, and a second CLI writer. The broader client still coordinates too many deterministic transitions itself.
-
-This is now the highest-value open simplification. Before task-design approval, keep the interactive workflow behind client-intent operations such as inspect, start, submit, and decide. After approval, move to a control plane over one autonomous run: start/resume, optional observation, rare escalation decisions, and explicit pause/cancel. Work submission, review triage, verification, commits, and phase advance then become private runner operations. MCP becomes the only supported public workflow transport, canonical truth stays durable, and one repository-fenced coordinator becomes the exclusive live mutation gateway. The CLI shrinks to bootstrap and task-state-read-only unavailable-server diagnosis, while exceptional health and recovery knowledge moves to a separate `$archflow-doctor` skill. The full action map, evidence, policy dependency, proposed boundaries, and follow-up acceptance criteria are in [`validation/client-interface-audit.md`](validation/client-interface-audit.md).
+The cutover is complete. The public catalogue is exactly `archflow_status` and `archflow_apply`, and every workflow — document production, phase implementation, status reporting, and legacy adoption after its local staging and adoption steps — runs through the one read-only-view-plus-bounded-action loop. The retired legacy client loop (request templates, the request-building CLI door, staged request files, the preview/decide CLI pair, the local commit command, and the four low-level tool handlers' MCP-facing halves) is deleted rather than maintained in parallel; the request composer, the state and counter-review services, and the direct decision services survive as the semantic surface's internal machinery. The gate inversion stays resolved: a `gate-summary` opens a nonblocking presentation, and the selected decision archives and settles through freshness-bound substeps instead of a blocked call, status polling, and a second CLI writer. The simplification never moved authorship into the server: Claude Code or Codex still produces documents and code, runs verification, supplies triage and human decisions, and owns Git — every commit is client-created from the returned authorized facts and observed by read-only status. What remains of the local CLI is deliberate: bootstrap, the legacy-upgrade adapter, diagnostics, and the degraded classifier.
 
 ## Ranked simplification targets
 
@@ -38,7 +36,7 @@ Agent-facing shapes existed as JSON Schema *and* a Zod mirror, with `assertZodAg
 
 ### 5. Four CLI commands overlap `build-request` — resolved 2026-08-11
 
-`task-init`, `build-document`, and `build-implementation-output` were each mostly subsumed by a `build-request` kind; their last remaining callers went away with the degraded-mode retirement (#1) and a phase-impl skill update, and all three are retired. `hash` stays as a low-level diagnostic tool; the optional gate-counter recipe that once depended on it has been removed.
+`task-init`, `build-document`, and `build-implementation-output` were each mostly subsumed by a `build-request` kind; their last remaining callers went away with the degraded-mode retirement (#1) and a phase-impl skill update, and all three are retired. `hash` stays as a low-level diagnostic tool; the optional gate-counter recipe that once depended on it has been removed. (The request-building command itself later left with the semantic cutover — see #10.)
 
 ### 6. `fixed-point.ts` gate satisfaction — resolved 2026-08-11
 
@@ -61,8 +59,14 @@ The child-CLI lockdown argvs (long literal flag lists per host) and the regex-ba
 - **`workflow.ts`** parses workflow YAML and then rejects anything that doesn't deep-equal a hard-coded constant — a full file/schema/parse pipeline validating a compile-time value. Deliberate keep (2026-08-11): 47 tested lines; the pinned graph now also anchors the generated `workflow.schema.json` emission, so removal is no longer free.
 - **Orphaned schemas** — resolved 2026-08-12: the true orphans (`authority-link`, `evidence-reference`, and the retired dependency-review receipt) are deleted; only the release manifest stays by declared exception as a hand-written input to `release-support.mjs`.
 - **`internal/test-capabilities.ts`** — resolved 2026-08-11: the three production-imported factories now live in `internal/trust-mints.ts` (mints beside the `trust-brands.ts` registries they register with); `test-capabilities.ts` keeps only test-only factories and no production module imports it.
-- **Advertised-schema pruning** in `mcp/tools.ts` — a small custom JSON-Schema `$ref` resolver owned forever, motivated by a measured 179 KB saving; worth keeping only while that saving matters.
+- **Advertised-schema pruning** in `mcp/tools.ts` — resolved with the catalogue cutover: the advertised catalogue is now the two generated semantic schemas, and the custom `$ref` resolver with its legacy merge branches is deleted rather than owned forever.
 - **The `unified-diff` tier** — with 40 context lines it's nearly full-file for most real files; it's fair to ask whether the hand-rolled Myers diff (~200 lines, with an 8 MB worst-case allocation pattern) earns its place over "embed or digest-only."
+
+### 10. The semantic façade coexisted with the legacy surface — resolved with the cutover
+
+This duplication was intentionally transitional and is now gone. `src/state/request-composition.ts` is the single derivation service, called only by the semantic action planner; the thin legacy adapter that exposed it as a CLI command is deleted. `semantic-actions.ts` plans one fixed action and returns; it does not dispatch producer work or cross into a newly offered action. Direct gate decisions are archived immutably and then settled in a separate authenticated substep. A revision settlement closes the gate only; `revise-enter` separately opens the write window, preventing decision authority from also becoming document-write authority.
+
+The internal planning-restart operation remains the bounded restart kernel's entry point, while semantic reopen derives its target and impact rather than accepting those mechanical fields from the client. The four low-level tool names stay exported as durable-record vocabulary — existing state cites them in transitions, gate archives, and receipts — which is what let the cutover retire advertisement and dispatch without invalidating a single durable record.
 
 ## What is genuinely load-bearing (don't soften)
 
@@ -81,5 +85,5 @@ For balance — machinery that directly implements the trust boundaries and shou
 1. ~~Decide the degraded-mode question (#1)~~ — decided and done: degraded mode is read-only status only.
 2. ~~Split `gates.ts` (#2) and name the predicates in `fixed-point.ts` (#6)~~ — done: six focused gate modules; named binding-failure predicates.
 3. ~~Pick one shape authority (#4)~~ — done: Zod generates the schemas; Ajv is dev-only.
-4. ~~Sweep the small items (#7, #9)~~ — done except the two deliberate keeps: the advertised-schema pruner (still buying its measured saving) and the `unified-diff` tier (documented limitation; behavior-changing to remove).
+4. ~~Sweep the small items (#7, #9)~~ — done except one deliberate keep: the `unified-diff` tier (documented limitation; behavior-changing to remove). The advertised-schema pruner left with the two-tool cutover.
 5. ~~Revisit SDK distrust (#3)~~ — decided and done: the pinned, probed SDK is the JSON-RPC authority; the session layer is retired.

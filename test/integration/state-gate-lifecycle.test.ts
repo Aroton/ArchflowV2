@@ -6,11 +6,8 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { canonicalDocument, canonicalJsonDigest, parseCanonicalDocument, sha256Bytes, type CanonicalDocument } from "../../src/contracts/canonical.js";
-import {
-  parseAndDeriveAdjudication,
-  type AdjudicationEvidence,
-} from "../../src/contracts/adjudication.js";
-import type { ConstitutionRegistry } from "../../src/contracts/constitution.js";
+import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
+import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
 import type { GateDecisionRecordV1, GateRequestV1 } from "../../src/contracts/durable-gate.js";
 import type { IntentReceiptV1 } from "../../src/contracts/durable-intent.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
@@ -26,15 +23,24 @@ import { discoverWorktree, type RootBoundGitRunner } from "../../src/repository/
 import type { ResolvedPath, ResolvedTaskPath, ResolvedTaskWorkspacePath } from "../../src/repository/paths.js";
 import { AtomicReplaceError, createAtomicWriter, createProjectionWriter } from "../../src/state/atomic.js";
 import { createInternalTransactionAuthority, type TransactionAuthority } from "../../src/state/authority.js";
-import { openDurableGate, resolveDurableGate, runDurableGate, type GateLifecycleDependencies, type GateOpenInput } from "../../src/state/gates.js";
+import {
+  archiveDirectSemanticGateDecision,
+  enterDirectSemanticRevisionCheckpoint,
+  openDurableGate,
+  resolveDurableGate,
+  settleDirectSemanticGateDecision,
+  type GateLifecycleDependencies,
+  type GateOpenInput,
+} from "../../src/state/gates.js";
+import { resolveInterfaceGateDecision } from "../helpers/resolve-interface-gate.js";
 import { readIntentReceipt, readTaskState } from "../../src/state/read.js";
+import { computeAuthoritativeSemanticStatus } from "../../src/state/semantic-status.js";
+import { executeSemanticAction } from "../../src/state/semantic-actions.js";
+import { projectSemanticStatus } from "../../src/state/semantic-view.js";
+import type { ProductionServices } from "../../src/state/production.js";
 import type { TransactionDependencies } from "../../src/state/transaction.js";
 import { captureProjectionTarget, projectionGenerationDigest, type ProjectionPlan } from "../../src/state/snapshots.js";
 import { planStateTransition } from "../../src/state/transitions.js";
-import {
-  selectAdjudicationGate,
-  type AdjudicationGateRequest,
-} from "../../src/review/adjudication.js";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -283,7 +289,7 @@ function restoreEnvelope(request: GateRequestV1, decision: "discard-and-restore"
 }
 
 describe("durable gate lifecycle", () => {
-  it("opens exactly one durable gate, clears the prior transition, and abort leaves it pending", async () => {
+  it("opens exactly one durable gate, clears the prior transition, and leaves it pending", async () => {
     const h = await harness();
     const opened = await openDurableGate(h.dependencies, gateInput(h));
     expect(opened.ok, opened.ok ? undefined : JSON.stringify({ error: opened.error, root: h.root, files: readFileSync(h.authority.state.absolute, "utf8") })).toBe(true);
@@ -293,11 +299,7 @@ describe("durable gate lifecycle", () => {
     expect(existsSync(join(h.authority.task_root, "authority", "decisions", opened.value.gate_id, "request.json"))).toBe(true);
     expect(existsSync(gatePath(h))).toBe(true);
 
-    const controller = new AbortController();
-    controller.abort();
-    const aborted = await runDurableGate(h.dependencies, { ...gateInput(h), signal: controller.signal });
-    expect(aborted.ok).toBe(false);
-    if (!aborted.ok) expect(aborted.error.code).toBe("CANCELLED");
+    // No consumer path closes the gate implicitly: it stays pending until a decision resolves it.
     const state = await readTaskState(h.authority.state);
     expect(state.kind).toBe("canonical");
     if (state.kind === "canonical") expect(state.document.value.open_gate?.gate_id).toBe(opened.value.gate_id);
@@ -334,7 +336,7 @@ describe("durable gate lifecycle", () => {
     writeFileSync(decisionPath(h), canonicalDocument(envelope(retried.value.request.value)).bytes);
     const tampered = { ...retried.value.state.value, status: "running" as const };
     writeFileSync(h.authority.state.absolute, canonicalDocument(tampered).bytes);
-    const rejected = await runDurableGate(h.dependencies, { ...retriedInput, signal: new AbortController().signal });
+    const rejected = await resolveInterfaceGateDecision(h.dependencies, h.authority, retried.value.gate_id, FINGERPRINT);
     expect(rejected.ok).toBe(false);
     expect(existsSync(archivePath(h, retried.value.gate_id))).toBe(false);
   });
@@ -348,7 +350,10 @@ describe("durable gate lifecycle", () => {
       if (damage === "missing") rmSync(gatePath(h));
       else writeFileSync(gatePath(h), "{not canonical json");
       writeFileSync(decisionPath(h), canonicalDocument(envelope(opened.value.request.value)).bytes);
-      const resolved = await runDurableGate(h.dependencies, { ...input, signal: new AbortController().signal });
+      // Re-opening republishes the missing or damaged active-gate interface before resolution.
+      const republished = await openDurableGate(h.dependencies, input);
+      expect(republished.ok, republished.ok ? undefined : JSON.stringify(republished.error)).toBe(true);
+      const resolved = await resolveInterfaceGateDecision(h.dependencies, h.authority, opened.value.gate_id);
       expect(resolved.ok, resolved.ok ? undefined : JSON.stringify(resolved.error)).toBe(true);
       const state = await readTaskState(h.authority.state);
       expect(state.kind === "canonical" ? state.document.value.approvals : []).toHaveLength(1);
@@ -377,7 +382,7 @@ describe("durable gate lifecycle", () => {
     writeFileSync(decisionPath(h), canonicalDocument(envelope(opened.value.request.value)).bytes);
     const injected = { ...opened.value.state.value, last_transition: { ...initialState(h.authority).last_transition!, result_id: "injected-result" as never } };
     writeFileSync(h.authority.state.absolute, canonicalDocument(injected).bytes);
-    const rejected = await runDurableGate(h.dependencies, { ...input, signal: new AbortController().signal });
+    const rejected = await resolveInterfaceGateDecision(h.dependencies, h.authority, opened.value.gate_id, FINGERPRINT);
     expect(rejected.ok).toBe(false);
     expect(existsSync(archivePath(h, opened.value.gate_id))).toBe(false);
   });
@@ -387,7 +392,7 @@ describe("durable gate lifecycle", () => {
     const opened = await openDurableGate(h.dependencies, gateInput(h));
     if (!opened.ok) throw new Error("gate open failed");
     writeFileSync(decisionPath(h), canonicalDocument(envelope(opened.value.request.value)).bytes);
-    const resolved = await runDurableGate(h.dependencies, { ...gateInput(h), signal: new AbortController().signal });
+    const resolved = await resolveInterfaceGateDecision(h.dependencies, h.authority, opened.value.gate_id);
     expect(resolved.ok, resolved.ok ? undefined : JSON.stringify(resolved.error)).toBe(true);
     if (!resolved.ok || !("record" in resolved.value)) return;
     expect(resolved.value.effect).toBe("advance");
@@ -398,7 +403,7 @@ describe("durable gate lifecycle", () => {
     expect(existsSync(gatePath(h))).toBe(false);
     expect(existsSync(decisionPath(h))).toBe(false);
 
-    const replay = await runDurableGate(h.dependencies, { ...gateInput(h), signal: new AbortController().signal });
+    const replay = await resolveInterfaceGateDecision(h.dependencies, h.authority, opened.value.gate_id);
     expect(replay.ok).toBe(true);
     if (replay.ok && "record" in replay.value) {
       expect(replay.value.replayed).toBe(true);
@@ -605,206 +610,117 @@ describe("durable gate lifecycle", () => {
     });
   });
 
-  it("turns amend-upstream material drift into a durable restart of the affected plan", async () => {
+  it("restarts material drift at the authenticated phase that actually produced the upstream", async () => {
     const h = await harness();
-    const target = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(12) });
-    const upstreamReference = {
-      phase_instance: target,
-      step: "produce",
-      result_id: parseSafeId("phase-design-result"),
-      result_digest: D("f"),
-      input_fingerprint: D("b"),
+    const phaseDesign12 = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(12) });
+    const phaseDesign11 = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(11) });
+    const phase12Bytes = new TextEncoder().encode("# Phase 12\n");
+    const phase12Artifact = {
+      schema_version: "1", artifact_kind: "document", task_id: TASK,
+      phase_instance: phaseDesign12, step: "produce",
+      document_path: parseTaskPathClaim("phases/12/design.md"), path_class: "document",
+      byte_count: parseSafeInteger(phase12Bytes.byteLength), content_digest: sha256Bytes(phase12Bytes),
+      declared_inputs: [], input_fingerprint: FINGERPRINT, snapshot_digest: D("2"),
+      projection_target: `.archflow/tasks/${TASK}/phases/12/design.md` as never,
+    } as DocumentArtifactV1;
+    const phase11Bytes = new TextEncoder().encode("# Phase 11\n");
+    const designBytes = new TextEncoder().encode("# Architecture from phase 11\n");
+    const compoundArtifact = {
+      ...phase12Artifact,
+      phase_instance: phaseDesign11, document_path: parseTaskPathClaim("phases/11/design.md"),
+      byte_count: parseSafeInteger(phase11Bytes.byteLength), content_digest: sha256Bytes(phase11Bytes),
+      projection_target: `.archflow/tasks/${TASK}/phases/11/design.md` as never,
+      additional_documents: [{
+        document_path: parseTaskPathClaim("design.md"), byte_count: parseSafeInteger(designBytes.byteLength),
+        content_digest: sha256Bytes(designBytes), projection_target: `.archflow/tasks/${TASK}/design.md` as never,
+      }],
+    } as DocumentArtifactV1;
+    const phase12Digest = canonicalJsonDigest(phase12Artifact);
+    const compoundDigest = canonicalJsonDigest(compoundArtifact);
+    const phase12Ref = {
+      phase_instance: "phase-design-12", step: "produce", result_digest: D("1"),
+      result_id: parseSafeId("phase-12-result"), input_fingerprint: FINGERPRINT,
+    } as TaskStateV1["authoritative_results"][number];
+    const compoundRef = {
+      phase_instance: "phase-design-11", step: "produce", result_digest: D("2"),
+      result_id: parseSafeId("compound-result"), input_fingerprint: FINGERPRINT,
     } as TaskStateV1["authoritative_results"][number];
     writeFileSync(h.authority.state.absolute, canonicalDocument({
       ...initialState(h.authority),
       step: "triage",
       status: "succeeded",
       attempt: parseSafeInteger(2),
-      authoritative_results: [upstreamReference],
+      authoritative_results: [compoundRef, phase12Ref],
+      approvals: [
+        { gate_id: parsePathSafeId("compound-approval"), gate_kind: "design-approval", subject_digest: compoundDigest, decision_digest: D("4"), resolved_at_revision: parseSafeInteger(6) },
+        { gate_id: parsePathSafeId("phase-12-approval"), gate_kind: "design-approval", subject_digest: phase12Digest, decision_digest: D("3"), resolved_at_revision: parseSafeInteger(5) },
+      ],
     }).bytes);
+    const retained = (artifact: DocumentArtifactV1, measuredAtRevision: number) => ({
+      manifest: { value: {
+        source_artifact: artifact, artifact_digest: canonicalJsonDigest(artifact),
+        accounting: { measured_at_revision: measuredAtRevision }, projections: [], outputs: [],
+      } },
+    });
     const dependencies: GateLifecycleDependencies = {
       ...h.dependencies,
-      load_retained_result: async () => ({
-        schema_version: "1",
-        ok: true,
-        value: {
-          prepared: { manifest: { value: {
-            artifact_digest: D("1"),
-            source_artifact: { artifact_kind: "document", phase_instance: target },
-          } } },
-          projection_plan: { entries: [] },
-        } as never,
+      load_retained_manifest: async (reference) => ({
+        schema_version: "1", ok: true,
+        value: (reference.result_id === compoundRef.result_id
+          ? retained(compoundArtifact, 6)
+          : retained(phase12Artifact, 5)) as never,
       }),
-      resolve_gate_reentry_fingerprint: async ({ target_phase_instance }) => {
-        expect(target_phase_instance).toBe(target);
-        return { schema_version: "1", ok: true, value: D("e") };
-      },
     };
-    const restartInput: GateOpenInput = {
-      ...gateInput(h, "restart-material"),
-      kind: "material-drift",
-      subject_digest: D("2"),
-      context: {
-        affected_upstream: { kind: "phase-design", digest: D("1") },
-        drift: "material",
-        affected_claim_ids: ["plan-conflict"],
-      },
-    };
-    const opened = await openDurableGate(dependencies, restartInput);
-    expect(opened.ok).toBe(true);
-    if (!opened.ok) return;
-    const request = opened.value.request.value;
-    writeFileSync(decisionPath(h), canonicalDocument({
-      schema_version: "1", gate_id: request.gate_id, task_id: request.task_id,
-      phase_instance: request.phase_instance, kind: request.kind,
-      subject_digest: request.subject_digest, context_digest: request.context_digest,
-      human_provenance: PROVENANCE,
-      payload: { decision: "amend-upstream", reason: "The phase design must match implementation reality" },
-    }).bytes);
-
-    const resolved = await resolveDurableGate(dependencies, h.authority, request.gate_id);
-    expect(resolved).toMatchObject({
-      ok: true,
-      value: {
-        effect: "redirect-upstream",
-        state: { value: {
-          phase_instance: target,
-          step: "produce",
-          status: "running",
-          attempt: 1,
-          input_fingerprint: D("e"),
-          authoritative_results: [],
-          restart_history: [{
-            from_phase_instance: PHASE,
-            to_phase_instance: target,
-            reason: "The phase design must match implementation reality",
-            superseded_results: [upstreamReference],
-            provenance: PROVENANCE,
-          }],
-        } },
-      },
-    });
-    await expect(openDurableGate(dependencies, restartInput)).resolves.toMatchObject({
-      ok: true,
-      value: { replay: { value: { outcome: "decided" } }, state: { value: { phase_instance: target } } },
-    });
-  });
-
-  it("serializes two material upstream gates with re-adjudication and different decisions", async () => {
-    const h = await harness();
-    writeFileSync(h.authority.state.absolute, canonicalDocument({
-      ...initialState(h.authority),
-      step: "triage",
-      status: "succeeded",
-      attempt: parseSafeInteger(2),
-    }).bytes);
-    const corpus = JSON.parse(readFileSync(
-      new URL("../fixtures/corpus/adjudication-scenarios.json", import.meta.url),
-      "utf8",
-    )) as {
-      scenarios: Array<{ name: string; output: Record<string, unknown> }>;
-    };
-    const registry: ConstitutionRegistry = new Map([[
-      "plain-rule",
-      {
-        id: "plain-rule",
-        version: 1,
-        status: "active",
-        text: "The artifact must not contain a seeded defect.",
-        review_trigger: "Review when DEFECT-SEED is present.",
-      },
-    ]]);
-    const selected = (name: string) => {
-      const scenario = corpus.scenarios.find((entry) => entry.name === name);
-      if (scenario === undefined) throw new Error(`missing scenario ${name}`);
-      const {
-        constitution: _constitution,
-        drift: _drift,
-        matched_rule_versions: _matched,
-        uncertain_rule_versions: _uncertain,
-        ...rawOutput
-      } = scenario.output;
-      const gate = selectAdjudicationGate(
-        registry,
-        parseAndDeriveAdjudication(rawOutput) as unknown as AdjudicationEvidence,
-      );
-      if (gate?.kind !== "material-drift") throw new Error(`expected material gate for ${name}`);
-      return gate as AdjudicationGateRequest<"material-drift">;
-    };
-
-    const firstGate = selected("two-material-upstreams");
-    expect(firstGate.context.affected_upstream.digest).toBe(D("1"));
     const firstInput: GateOpenInput = {
       ...gateInput(h, "first-material"),
       request_digest: D("1"),
-      kind: firstGate.kind,
-      subject_digest: firstGate.subject_digest,
-      context: firstGate.context,
+      kind: "material-drift",
+      context: {
+        affected_upstream: { kind: "architecture", digest: compoundDigest },
+        drift: "material",
+        affected_claim_ids: ["claim-one"],
+      },
     };
-    const firstOpened = await openDurableGate(h.dependencies, firstInput);
-    expect(firstOpened.ok).toBe(true);
+    const firstOpened = await openDurableGate(dependencies, firstInput);
+    expect(firstOpened.ok, JSON.stringify(firstOpened)).toBe(true);
     if (!firstOpened.ok) return;
     const firstRequest = firstOpened.value.request.value;
     writeFileSync(decisionPath(h), canonicalDocument({
       schema_version: "1", gate_id: firstRequest.gate_id, task_id: firstRequest.task_id,
       phase_instance: firstRequest.phase_instance, kind: firstRequest.kind,
       subject_digest: firstRequest.subject_digest, context_digest: firstRequest.context_digest,
-      human_provenance: PROVENANCE,
-      payload: { decision: "reject", reason: "Do not amend the first upstream" },
-    }).bytes);
+      human_provenance: {
+        schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "connected-host",
+        decision_event_id: firstRequest.gate_id, connection_id: "connection-material-drift",
+        request_id_digest: D("f"), recorded_at: "2026-07-30T12:00:00.000Z",
+      },
+      payload: { decision: "amend-upstream", reason: "Amend the first upstream" },    }).bytes);
     const firstResolved = await resolveDurableGate(
-      h.dependencies, h.authority, firstRequest.gate_id,
+      dependencies, h.authority, firstRequest.gate_id,
     );
-    expect(firstResolved).toMatchObject({
+    expect(firstResolved, JSON.stringify(firstResolved)).toMatchObject({
       ok: true,
       value: {
-        effect: "non-advancing",
-        state: { value: { step: "triage", status: "succeeded", attempt: 2 } },
+        effect: "redirect-upstream",        state: { value: {
+          phase_instance: "phase-design-11", step: "produce", status: "running", attempt: 1,
+          restart_history: [{
+            restart_id: firstRequest.gate_id,
+            source_phase_instance: PHASE,
+            target_phase_instance: "phase-design-11",
+            reason: "Amend the first upstream",
+          }],
+        } },
       },
     });
     if (!firstResolved.ok) return;
-
-    const secondGate = selected("second-material-upstream-after-readjudication");
-    expect(secondGate.context.affected_upstream.digest).toBe(D("2"));
-    const nextFingerprint = D("e");
-    const dependencies: GateLifecycleDependencies = {
-      ...h.dependencies,
-      resolve_gate_reentry_fingerprint: async () => ({
-        schema_version: "1", ok: true, value: nextFingerprint,
-      }),
-    };
-    const secondInput: GateOpenInput = {
-      ...gateInput(h, "second-material"),
-      expected_revision: firstResolved.value.state.value.revision,
-      request_digest: D("2"),
-      kind: secondGate.kind,
-      subject_digest: secondGate.subject_digest,
-      context: secondGate.context,
-    };
-    const secondOpened = await openDurableGate(dependencies, secondInput);
-    expect(secondOpened.ok).toBe(true);
-    if (!secondOpened.ok) return;
-    const secondRequest = secondOpened.value.request.value;
-    writeFileSync(decisionPath(h), canonicalDocument({
-      schema_version: "1", gate_id: secondRequest.gate_id, task_id: secondRequest.task_id,
-      phase_instance: secondRequest.phase_instance, kind: secondRequest.kind,
-      subject_digest: secondRequest.subject_digest, context_digest: secondRequest.context_digest,
-      human_provenance: PROVENANCE,
-      payload: { decision: "revise-current", reason: "Revise for the second upstream" },
-    }).bytes);
-    const secondResolved = await resolveDurableGate(
-      dependencies, h.authority, secondRequest.gate_id,
-    );
-    expect(secondResolved).toMatchObject({
+    const replay = await resolveDurableGate(dependencies, h.authority, firstRequest.gate_id);
+    expect(replay).toMatchObject({ ok: true, value: { replayed: true, effect: "redirect-upstream" } });
+    // Re-opening the same completed restart request replays it too: the archived decision
+    // authenticates the already-landed restart instead of opening a competing gate.
+    const reopened = await openDurableGate(dependencies, firstInput);
+    expect(reopened, reopened.ok ? undefined : JSON.stringify(reopened.error)).toMatchObject({
       ok: true,
-      value: {
-        effect: "retry",
-        state: { value: {
-          step: "produce", status: "running", attempt: 2,
-          input_fingerprint: nextFingerprint,
-          pending_human_revision: { gate_kind: "material-drift", attempt: 2 },
-        } },
-      },
+      value: { replay: { value: { gate_id: firstRequest.gate_id } }, state: { value: { phase_instance: "phase-design-11" } } },
     });
   });
 
@@ -899,54 +815,15 @@ describe("durable gate lifecycle", () => {
   });
 
   it("refuses every unreadable decision shape without advancing durable authority", async () => {
-    for (const issueCode of ["decision-missing", "decision-noncanonical", "decision-invalid"] as const) {
+    for (const issueCode of ["decision-missing", "decision-noncanonical"] as const) {
       const h = await harness();
-      const baseInput = gateInput(h, `refused-${issueCode}`);
-      const input: GateOpenInput = issueCode === "decision-invalid"
-        ? {
-            ...baseInput,
-            kind: "constitution-review",
-            context: {
-              constitution: "pass", failed_rules: [], uncertain_rules: [],
-              matched_trigger_rules: [{ rule_id: "review-required", rule_version: 1 }],
-              uncertain_trigger_rules: [], eligible_waivers: [],
-            },
-          }
-        : baseInput;
+      const input = gateInput(h, `refused-${issueCode}`);
       const opened = await openDurableGate(h.dependencies, input);
       if (!opened.ok) throw new Error("gate open failed");
       if (issueCode === "decision-noncanonical") writeFileSync(decisionPath(h), "{not canonical json");
-      if (issueCode === "decision-invalid") {
-        const request = opened.value.request.value;
-        writeFileSync(decisionPath(h), canonicalDocument({
-          schema_version: "1", gate_id: request.gate_id, task_id: request.task_id,
-          phase_instance: request.phase_instance, kind: request.kind,
-          subject_digest: request.subject_digest, context_digest: request.context_digest,
-          human_provenance: PROVENANCE,
-          payload: { decision: "revise", reason: "Revise current artifact" },
-        }).bytes);
-      }
       const before = await refusalPostcondition(h, input.intent_id);
-      let refused;
-      let observedLocks = 0;
-      if (issueCode === "decision-invalid") {
-        let locks = 0;
-        const dependencies: GateLifecycleDependencies = {
-          ...h.dependencies,
-          lock: {
-            runExclusive: async <T>(_root: ResolvedTaskWorkspacePath, work: () => Promise<T>) => {
-              locks += 1;
-              observedLocks = locks;
-              if (locks === 3) writeFileSync(decisionPath(h), "{not canonical json");
-              return work();
-            },
-          },
-        };
-        refused = await runDurableGate(dependencies, { ...input, signal: new AbortController().signal });
-      } else {
-        refused = await resolveDurableGate(h.dependencies, h.authority, opened.value.gate_id);
-      }
-      expect(refused.ok, `${issueCode} locks=${observedLocks}`).toBe(false);
+      const refused = await resolveDurableGate(h.dependencies, h.authority, opened.value.gate_id);
+      expect(refused.ok, issueCode).toBe(false);
       if (!refused.ok) {
         expect(refused.error.code, issueCode).toBe("GATE_DECISION_INVALID");
         expect(refused.error.diagnostic.parameters, issueCode).toMatchObject({ issue_code: issueCode });
@@ -1002,7 +879,7 @@ describe("durable gate lifecycle", () => {
         continue;
       }
       writeFileSync(decisionPath(h), canonicalDocument(waiverInterface(opened.value.request.value, outcome === "grant")).bytes);
-      const resolved = await runDurableGate(h.dependencies, { ...input, signal: new AbortController().signal });
+      const resolved = await resolveInterfaceGateDecision(h.dependencies, h.authority, opened.value.gate_id);
       expect(resolved.ok).toBe(true);
       if (!resolved.ok || !("record" in resolved.value)) continue;
       expect(resolved.value.record.value.outcome).toBe("waiver-decided");
@@ -1049,7 +926,9 @@ describe("durable gate lifecycle", () => {
           : { ...read.document.value, status: "failed" as const };
         writeFileSync(h.authority.state.absolute, canonicalDocument(mutated).bytes);
       }
-      const rejected = await runDurableGate(dependencies, { ...resumedInput, signal: new AbortController().signal });
+      const rejected = changed === "fingerprint"
+        ? await resolveInterfaceGateDecision(dependencies, h.authority, opened.value.gate_id, resumedInput.input_fingerprint)
+        : await resolveInterfaceGateDecision(dependencies, h.authority, opened.value.gate_id);
       expect(rejected.ok, `${changed} change unexpectedly resolved`).toBe(false);
       expect(existsSync(archivePath(h, opened.value.gate_id))).toBe(false);
     }
@@ -1095,7 +974,7 @@ describe("durable gate lifecycle", () => {
     expect(opened.ok).toBe(true);
     if (!opened.ok) return;
     writeFileSync(decisionPath(h), canonicalDocument(restoreEnvelope(opened.value.request.value, "discard-and-restore")).bytes);
-    const resolved = await runDurableGate(restore.dependencies, { ...restore.input, signal: new AbortController().signal });
+    const resolved = await resolveInterfaceGateDecision(restore.dependencies, h.authority, opened.value.gate_id);
     expect(resolved.ok).toBe(true);
     expect(readFileSync(restore.target.absolute)).toEqual(Buffer.from(restore.desired));
     expect(restore.writerEvents).toEqual(["replace-regular"]);
@@ -1131,7 +1010,7 @@ describe("durable gate lifecycle", () => {
     const beforeState = await refusalPostcondition(h, restore.input.intent_id);
     writeFileSync(decisionPath(h), canonicalDocument(restoreEnvelope(opened.value.request.value, "discard-and-restore")).bytes);
 
-    const rejected = await runDurableGate(restore.dependencies, { ...restore.input, signal: new AbortController().signal });
+    const rejected = await resolveInterfaceGateDecision(restore.dependencies, h.authority, opened.value.gate_id);
 
     expect(rejected.ok).toBe(false);
     if (!rejected.ok) expect(rejected.error.code, JSON.stringify(rejected.error)).toBe("SECRET_DETECTED");
@@ -1153,7 +1032,7 @@ describe("durable gate lifecycle", () => {
     if (!opened.ok) return;
     writeFileSync(restore.target.absolute, "newer human generation\n");
     writeFileSync(decisionPath(h), canonicalDocument(restoreEnvelope(opened.value.request.value, "discard-and-restore")).bytes);
-    const rejected = await runDurableGate(restore.dependencies, { ...restore.input, signal: new AbortController().signal });
+    const rejected = await resolveInterfaceGateDecision(restore.dependencies, h.authority, opened.value.gate_id);
     expect(rejected.ok).toBe(false);
     if (!rejected.ok) expect(rejected.error.code).toBe("STATE_INVALID");
     expect(restore.writerEvents).toEqual([]);
@@ -1168,7 +1047,7 @@ describe("durable gate lifecycle", () => {
     if (!opened.ok) return;
     const before = readFileSync(restore.target.absolute);
     writeFileSync(decisionPath(h), canonicalDocument(restoreEnvelope(opened.value.request.value, "adopt-as-new-generation")).bytes);
-    const resolved = await runDurableGate(restore.dependencies, { ...restore.input, signal: new AbortController().signal });
+    const resolved = await resolveInterfaceGateDecision(restore.dependencies, h.authority, opened.value.gate_id);
     expect(resolved.ok, resolved.ok ? undefined : JSON.stringify(resolved.error)).toBe(true);
     expect(restore.writerEvents).toEqual([]);
     expect(readFileSync(restore.target.absolute)).toEqual(before);
@@ -1191,10 +1070,10 @@ describe("durable gate lifecycle", () => {
         await realAtomic.replace(path, bytes);
       },
     } };
-    const first = await runDurableGate(crashing, { ...restore.input, signal: new AbortController().signal });
+    const first = await resolveInterfaceGateDecision(crashing, h.authority, opened.value.gate_id);
     expect(first.ok).toBe(false);
     expect(readFileSync(restore.target.absolute)).toEqual(Buffer.from(restore.desired));
-    const resumed = await runDurableGate(restore.dependencies, { ...restore.input, signal: new AbortController().signal });
+    const resumed = await resolveInterfaceGateDecision(restore.dependencies, h.authority, opened.value.gate_id);
     expect(resumed.ok).toBe(true);
     const state = await readTaskState(h.authority.state);
     expect(state.kind === "canonical" ? state.document.value.approvals : []).toHaveLength(1);
@@ -1231,7 +1110,7 @@ describe("durable gate lifecycle", () => {
     writeFileSync(peerTarget.absolute, "peer changed after gate\n");
     const primaryBefore = readFileSync(restore.target.absolute);
     writeFileSync(decisionPath(h), canonicalDocument(restoreEnvelope(opened.value.request.value, "discard-and-restore")).bytes);
-    const rejected = await runDurableGate(dependencies, { ...restore.input, signal: new AbortController().signal });
+    const rejected = await resolveInterfaceGateDecision(dependencies, h.authority, opened.value.gate_id);
     expect(rejected.ok).toBe(false);
     expect(restore.writerEvents).toEqual([]);
     expect(readFileSync(restore.target.absolute)).toEqual(primaryBefore);
@@ -1283,12 +1162,12 @@ describe("durable gate lifecycle", () => {
         replaceSymlink: async (...args) => { writes += 1; if (writes === 2) throw new Error("simulated process death"); await writer.replaceSymlink(...args); },
         remove: async (...args) => { writes += 1; if (writes === 2) throw new Error("simulated process death"); await writer.remove(...args); },
       } };
-      const crashed = await runDurableGate(crashing, { ...input, signal: new AbortController().signal });
+      const crashed = await resolveInterfaceGateDecision(crashing, h.authority, opened.value.gate_id);
       expect(crashed.ok).toBe(false);
       expect(existsSync(restore.target.absolute)).toBe(false);
       expect(existsSync(peerTarget.absolute)).toBe(false);
       if (thirdGeneration) writeFileSync(peerTarget.absolute, "third generation\n");
-      const resumed = await runDurableGate(dependencies, { ...input, signal: new AbortController().signal });
+      const resumed = await resolveInterfaceGateDecision(dependencies, h.authority, opened.value.gate_id);
       expect(resumed.ok, resumed.ok ? undefined : JSON.stringify(resumed.error)).toBe(!thirdGeneration);
       expect(existsSync(restore.target.absolute)).toBe(false);
       expect(thirdGeneration ? readFileSync(peerTarget.absolute, "utf8") : readFileSync(peerTarget.absolute)).toEqual(
@@ -1335,7 +1214,7 @@ describe("durable gate lifecycle", () => {
     if (!opened.ok) throw new Error("rename restore open failed");
     writeFileSync(decisionPath(h), canonicalDocument(restoreEnvelope(opened.value.request.value, "discard-and-restore")).bytes);
     writeFileSync(peerTarget.absolute, desiredPeer);
-    const resumed = await runDurableGate(dependencies, { ...input, signal: new AbortController().signal });
+    const resumed = await resolveInterfaceGateDecision(dependencies, h.authority, opened.value.gate_id);
     expect(resumed.ok, resumed.ok ? undefined : JSON.stringify(resumed.error)).toBe(true);
     expect(existsSync(restore.target.absolute)).toBe(false);
     expect(readFileSync(peerTarget.absolute)).toEqual(Buffer.from(desiredPeer));
@@ -1370,7 +1249,7 @@ describe("durable gate lifecycle", () => {
     const opened = await openDurableGate(dependencies, restore.input);
     if (!opened.ok) throw new Error("rename destination gate open failed");
     writeFileSync(decisionPath(h), canonicalDocument(restoreEnvelope(opened.value.request.value, "discard-and-restore")).bytes);
-    const resolved = await runDurableGate(dependencies, { ...restore.input, signal: new AbortController().signal });
+    const resolved = await resolveInterfaceGateDecision(dependencies, h.authority, opened.value.gate_id);
     expect(resolved.ok, resolved.ok ? undefined : JSON.stringify(resolved.error)).toBe(true);
     expect(readFileSync(restore.target.absolute)).toEqual(Buffer.from(restore.desired));
     expect(existsSync(sourceTarget.absolute)).toBe(false);
@@ -1382,7 +1261,7 @@ describe("durable gate lifecycle", () => {
     const opened = await openDurableGate(h.dependencies, input);
     if (!opened.ok) throw new Error("gate open failed");
     writeFileSync(decisionPath(h), canonicalDocument(envelope(opened.value.request.value)).bytes);
-    const closed = await runDurableGate(h.dependencies, { ...input, signal: new AbortController().signal });
+    const closed = await resolveInterfaceGateDecision(h.dependencies, h.authority, opened.value.gate_id);
     if (!closed.ok) throw new Error("gate resolution failed");
     const oldGateProjection = JSON.parse(readFileSync(join(h.authority.task_root, "authority", "decisions", opened.value.gate_id, "request.json"), "utf8")) as Record<string, unknown>;
     const foreignId = "g-ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" as GateOpenInput["intent_id"];
@@ -1407,9 +1286,280 @@ describe("durable gate lifecycle", () => {
       }
       return result;
     } } };
-    const replayed = await runDurableGate(raced, { ...input, signal: new AbortController().signal });
+    const replayed = await resolveInterfaceGateDecision(raced, h.authority, opened.value.gate_id);
     expect(replayed.ok, replayed.ok ? undefined : JSON.stringify(replayed.error)).toBe(true);
     expect(existsSync(gatePath(h))).toBe(true);
     expect(existsSync(decisionPath(h))).toBe(true);
+  });
+
+  it("archives a connected-host semantic choice once, closes re-entry first, and enters revision separately", async () => {
+    const h = await harness();
+    writeFileSync(h.authority.state.absolute, canonicalDocument({
+      ...initialState(h.authority), step: "triage", status: "succeeded",
+    } as TaskStateV1).bytes);
+    const dependencies: GateLifecycleDependencies = {
+      ...h.dependencies,
+      resolve_gate_reentry_fingerprint: async () => ({ schema_version: "1", ok: true, value: FINGERPRINT }),
+    };
+    const opened = await openDurableGate(dependencies, gateInput(h, "semantic-reentry-gate"));
+    if (!opened.ok) throw new Error("semantic gate open failed");
+    const connection = connectionContextFactory.captureStartup({
+      connection_id: "semantic-gate-connection",
+      startup_repository_candidate: { working_directory: h.root },
+    }).initialize({ client: { name: "Codex", version: "test" }, host: "codex", protocol_version: "2025-06-18" });
+    const invocation = createInvocationContext(connection, {
+      invocation_id: "semantic-gate-call",
+      transport_metadata: { request_id: 71, operation: "tools/call" },
+    }, new AbortController().signal);
+    const operationDigest = D("e");
+    const archiveInput = {
+      authority: h.authority,
+      operation_digest: operationDigest,
+      intent_id: parsePathSafeId(`afop-${operationDigest}-decision-archive`),
+      choice: "request-changes",
+      reason: "Revise the reviewed work",
+      invocation_context: invocation,
+    } as const;
+    const archived = await archiveDirectSemanticGateDecision(dependencies, archiveInput);
+    expect(archived.ok, archived.ok ? undefined : JSON.stringify(archived.error)).toBe(true);
+    if (!archived.ok) return;
+    expect(archived.value.replayed).toBe(false);
+    expect(existsSync(decisionPath(h))).toBe(false);
+    const connectedStatus = await computeAuthoritativeSemanticStatus(dependencies, h.authority);
+    expect(connectedStatus.ok && connectedStatus.value.archived_decision).toMatchObject({
+      status: "exact", operation_digest: operationDigest,
+    });
+    const replay = await archiveDirectSemanticGateDecision(dependencies, archiveInput);
+    expect(replay.ok && replay.value.replayed).toBe(true);
+    if (!replay.ok) return;
+    expect(replay.value.record.bytes).toEqual(archived.value.record.bytes);
+
+    const settled = await settleDirectSemanticGateDecision(dependencies, {
+      authority: h.authority,
+      operation_digest: operationDigest,
+      intent_id: parsePathSafeId(`afop-${operationDigest}-decision-settle`),
+    });
+    expect(settled.ok, settled.ok ? undefined : JSON.stringify(settled.error)).toBe(true);
+    if (!settled.ok) return;
+    expect(settled.value.state.value).toMatchObject({ step: "triage", status: "succeeded", attempt: 1 });
+    expect(settled.value.state.value.open_gate).toBeUndefined();
+    expect(settled.value.state.value.pending_human_revision).toBeUndefined();
+    expect(settled.value.state.value.last_transition).toMatchObject({
+      tool: "archflow_gate", operation: "semantic-revision-requested",
+      intent_id: `afop-${operationDigest}-decision-settle`,
+    });
+
+    const revisionOperation = D("f");
+    const entered = await enterDirectSemanticRevisionCheckpoint(dependencies, {
+      authority: h.authority,
+      operation_digest: revisionOperation,
+      intent_id: parsePathSafeId(`afop-${revisionOperation}-revise-enter`),
+    });
+    expect(entered.ok, entered.ok ? undefined : JSON.stringify(entered.error)).toBe(true);
+    if (!entered.ok) return;
+    expect(entered.value.value).toMatchObject({ step: "produce", status: "running", attempt: 1 });
+    expect(entered.value.value.pending_human_revision).toMatchObject({
+      gate_id: opened.value.gate_id,
+      predecessor_input_fingerprint: FINGERPRINT,
+      attempt: 1,
+    });
+    expect(entered.value.value.last_transition).toMatchObject({
+      tool: "archflow_gate", operation: "semantic-revision-enter",
+      intent_id: `afop-${revisionOperation}-revise-enter`,
+      result_id: opened.value.gate_id,
+      prior_revision: settled.value.state.value.revision,
+      resulting_revision: entered.value.value.revision,
+    });
+    const replayedEntry = await enterDirectSemanticRevisionCheckpoint(dependencies, {
+      authority: h.authority,
+      operation_digest: revisionOperation,
+      intent_id: parsePathSafeId(`afop-${revisionOperation}-revise-enter`),
+    });
+    expect(replayedEntry.ok, replayedEntry.ok ? undefined : JSON.stringify(replayedEntry.error)).toBe(true);
+    if (replayedEntry.ok) expect(replayedEntry.value.bytes).toEqual(entered.value.bytes);
+  });
+
+  it("settles an archive-before-state local revise through its digest-bound continuation", async () => {
+    const h = await harness();
+    const legacyPhase = encodePhaseInstance({ kind: "prd" });
+    writeFileSync(h.authority.state.absolute, canonicalDocument({
+      ...initialState(h.authority), phase_instance: legacyPhase,
+      step: "triage", status: "succeeded", attempt: parseSafeInteger(3),
+    }).bytes);
+    const liveDependencies: GateLifecycleDependencies = {
+      ...h.dependencies,
+      resolve_gate_reentry_fingerprint: async () => ({ schema_version: "1", ok: true, value: D("e") }),
+    };
+    const input: GateOpenInput = {
+      ...gateInput(h, "legacy-reentry-archive"), phase_instance: legacyPhase, kind: "constitution-review",
+      context: {
+        constitution: "pass", failed_rules: [], uncertain_rules: [],
+        matched_trigger_rules: [{ rule_id: "review-required", rule_version: 1 }],
+        uncertain_trigger_rules: [], eligible_waivers: [],
+      },
+    };
+    const opened = await openDurableGate(liveDependencies, input);
+    expect(opened.ok, opened.ok ? undefined : JSON.stringify(opened.error)).toBe(true);
+    if (!opened.ok) return;
+    const request = opened.value.request.value;
+    writeFileSync(decisionPath(h), canonicalDocument({
+      schema_version: "1", gate_id: request.gate_id, task_id: request.task_id,
+      phase_instance: request.phase_instance, kind: request.kind,
+      subject_digest: request.subject_digest, context_digest: request.context_digest,
+      human_provenance: PROVENANCE,
+      payload: { decision: "revise", reason: "Revise current artifact" },
+    }).bytes);
+    const realAtomic = liveDependencies.atomic;
+    const archiveOnly: GateLifecycleDependencies = { ...liveDependencies, atomic: {
+      ...realAtomic,
+      replace: async (path, bytes) => {
+        if (path.path_class === "task-state") {
+          throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: false, collision: false });
+        }
+        await realAtomic.replace(path, bytes);
+      },
+    } };
+    const crashed = await resolveDurableGate(archiveOnly, h.authority, opened.value.gate_id);
+    expect(crashed.ok).toBe(false);
+    const archived = parseCanonicalDocument<GateDecisionRecordV1>(readFileSync(archivePath(h, opened.value.gate_id)));
+    const operation = canonicalJsonDigest({
+      schema_version: "1", digest_kind: "legacy-local-decision-settlement",
+      gate_request_digest: opened.value.request.digest, gate_decision_digest: archived.digest,
+    });
+    const legacyStatus = await computeAuthoritativeSemanticStatus(liveDependencies, h.authority);
+    expect(legacyStatus.ok && legacyStatus.value.archived_decision).toMatchObject({
+      status: "exact", operation_digest: operation, provenance: "pre-facade",
+    });
+    if (archived.value.outcome !== "decided") throw new Error("fixture archive was not decided");
+    const malformedConnected = canonicalDocument({
+      ...archived.value,
+      envelope: {
+        ...archived.value.envelope,
+        human_provenance: {
+          schema_version: "1", actor_class: "human", assurance: "declared-local-trace",
+          channel: "connected-host", decision_event_id: "malformed-event",
+          connection_id: "malformed-connection", request_id_digest: D("a"),
+          recorded_at: "2026-07-30T12:00:00.000Z",
+        },
+      },
+    } as GateDecisionRecordV1);
+    writeFileSync(archivePath(h, opened.value.gate_id), malformedConnected.bytes);
+    const malformedStatus = await computeAuthoritativeSemanticStatus(liveDependencies, h.authority);
+    expect(malformedStatus.ok && malformedStatus.value.archived_decision).toEqual({ status: "invalid" });
+    writeFileSync(archivePath(h, opened.value.gate_id), archived.bytes);
+    const afterCrash = await readTaskState(h.authority.state);
+    expect(afterCrash.kind === "canonical" && afterCrash.document.value.open_gate?.gate_id).toBe(opened.value.gate_id);
+
+    const forgedOperation = D("0");
+    const forged = await settleDirectSemanticGateDecision(liveDependencies, {
+      authority: h.authority, operation_digest: forgedOperation,
+      intent_id: parsePathSafeId(`afop-${forgedOperation}-decision-settle`),
+    });
+    expect(forged.ok).toBe(false);
+    const settled = await settleDirectSemanticGateDecision(liveDependencies, {
+      authority: h.authority, operation_digest: operation,
+      intent_id: parsePathSafeId(`afop-${operation}-decision-settle`),
+    });
+    expect(settled.ok, settled.ok ? undefined : JSON.stringify(settled.error)).toBe(true);
+    if (!settled.ok) return;
+    expect(settled.value).toMatchObject({
+      replayed: false, effect: "retry",
+      state: { value: {
+        step: "triage", status: "succeeded", attempt: 3,
+        last_transition: {
+          tool: "archflow_gate", operation: "semantic-revision-requested",
+          intent_id: `afop-${operation}-decision-settle`, result_id: opened.value.gate_id,
+        },
+      } },
+      record: { value: { envelope: { human_provenance: { channel: "archflow-local" } } } },
+    });
+    expect(settled.value.state.value.open_gate).toBeUndefined();
+    const replayed = await settleDirectSemanticGateDecision(liveDependencies, {
+      authority: h.authority, operation_digest: operation,
+      intent_id: parsePathSafeId(`afop-${operation}-decision-settle`),
+    });
+    expect(replayed.ok && replayed.value.replayed).toBe(true);
+    const checkpointStatus = await computeAuthoritativeSemanticStatus(liveDependencies, h.authority);
+    expect(checkpointStatus.ok && checkpointStatus.value.revision_checkpoint).toMatchObject({
+      status: "valid", operation_digest: operation, provenance: "pre-facade",
+    });
+    if (!checkpointStatus.ok) return;
+    const invocation = { skill: "archflow-prd" as const, intent: "resume" as const };
+    const ready = projectSemanticStatus(checkpointStatus.value, invocation).view;
+    expect(ready.next_action).toMatchObject({ kind: "revise", expected_submission: "none" });
+    expect(ready.next_action.offer).toBeDefined();
+    const afterRevise = await executeSemanticAction(
+      { authority: h.authority, runner: h.runner } as ProductionServices,
+      checkpointStatus.value,
+      { schema_version: "1", task_id: TASK, invocation, action: { offer: ready.next_action.offer! } },
+      {
+        enter_revision_checkpoint: (plan) => enterDirectSemanticRevisionCheckpoint(liveDependencies, {
+          authority: h.authority, operation_digest: plan.operation_digest, intent_id: plan.intent_id,
+        }),
+        refresh_snapshot: async () => {
+          const refreshed = await computeAuthoritativeSemanticStatus(liveDependencies, h.authority);
+          if (!refreshed.ok) throw new Error(JSON.stringify(refreshed.error));
+          return refreshed.value;
+        },
+      },
+    );
+    expect(afterRevise.position).toEqual({ kind: "prd" });
+    const enteredState = await readTaskState(h.authority.state);
+    expect(enteredState.kind === "canonical" && enteredState.document.value).toMatchObject({
+      phase_instance: legacyPhase, step: "produce", status: "running", attempt: 3,
+    });
+  });
+
+  it("replays direct retry-once revision entry with its authenticated predecessor attempt", async () => {
+    const h = await harness();
+    writeFileSync(h.authority.state.absolute, canonicalDocument({
+      ...initialState(h.authority), step: "triage", status: "succeeded", attempt: parseSafeInteger(3),
+    }).bytes);
+    const dependencies: GateLifecycleDependencies = {
+      ...h.dependencies,
+      resolve_gate_reentry_fingerprint: async () => ({ schema_version: "1", ok: true, value: D("e") }),
+    };
+    const opened = await openDurableGate(dependencies, {
+      ...gateInput(h, "semantic-retry-once"), kind: "attempts-exhausted",
+      context: { step: "triage", attempts: 3, maximum_attempts: 3 },
+    });
+    expect(opened.ok, opened.ok ? undefined : JSON.stringify(opened.error)).toBe(true);
+    if (!opened.ok) return;
+    const connection = connectionContextFactory.captureStartup({
+      connection_id: "semantic-retry-connection", startup_repository_candidate: { working_directory: h.root },
+    }).initialize({ client: { name: "Codex", version: "test" }, host: "codex", protocol_version: "2025-06-18" });
+    const invocation = createInvocationContext(connection, {
+      invocation_id: "semantic-retry-call", transport_metadata: { request_id: 72, operation: "tools/call" },
+    }, new AbortController().signal);
+    const decisionOperation = D("d");
+    const archived = await archiveDirectSemanticGateDecision(dependencies, {
+      authority: h.authority, operation_digest: decisionOperation,
+      intent_id: parsePathSafeId(`afop-${decisionOperation}-decision-archive`),
+      choice: "try-review-again", reason: "Authorize one more attempt", invocation_context: invocation,
+    });
+    expect(archived.ok, archived.ok ? undefined : JSON.stringify(archived.error)).toBe(true);
+    if (!archived.ok) return;
+    const settled = await settleDirectSemanticGateDecision(dependencies, {
+      authority: h.authority, operation_digest: decisionOperation,
+      intent_id: parsePathSafeId(`afop-${decisionOperation}-decision-settle`),
+    });
+    expect(settled.ok, settled.ok ? undefined : JSON.stringify(settled.error)).toBe(true);
+    if (!settled.ok) return;
+    const revisionOperation = D("e");
+    const entered = await enterDirectSemanticRevisionCheckpoint(dependencies, {
+      authority: h.authority, operation_digest: revisionOperation,
+      intent_id: parsePathSafeId(`afop-${revisionOperation}-revise-enter`),
+    });
+    expect(entered.ok, entered.ok ? undefined : JSON.stringify(entered.error)).toBe(true);
+    if (!entered.ok) return;
+    expect(entered.value.value).toMatchObject({ step: "produce", status: "running", attempt: 4 });
+    expect(entered.value.value.pending_human_revision).toBeUndefined();
+    expect(entered.value.value.last_transition?.outcome).toMatchObject({ predecessor_attempt: 3 });
+    const replayed = await enterDirectSemanticRevisionCheckpoint(dependencies, {
+      authority: h.authority, operation_digest: revisionOperation,
+      intent_id: parsePathSafeId(`afop-${revisionOperation}-revise-enter`),
+    });
+    expect(replayed.ok, replayed.ok ? undefined : JSON.stringify(replayed.error)).toBe(true);
+    if (replayed.ok) expect(replayed.value.bytes).toEqual(entered.value.bytes);
   });
 });

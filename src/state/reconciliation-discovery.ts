@@ -8,7 +8,7 @@ import {
   type CanonicalDocument,
 } from "../contracts/canonical.js";
 import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
-import { parseGateRequest } from "../contracts/durable-gate.js";
+import { parsePersistedGateRequest } from "../contracts/durable-gate.js";
 import { parseIntentReceipt, type IntentReceiptV1 } from "../contracts/durable-intent.js";
 import type { ResultManifestV1 } from "../contracts/durable-result-manifest.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
@@ -17,7 +17,7 @@ import {
   validateDurableSemantics,
 } from "../contracts/durable.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
-import { parsePathSafeId } from "../contracts/evidence.js";
+import { parsePathSafeId, parseSafeCode } from "../contracts/evidence.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
 import {
   gateRequestClaim,
@@ -98,17 +98,33 @@ function outputClassFor(
 }
 
 /**
- * The newest recorded projection per path, with the worktree target it resolves to and the
- * retained result that owns it. `reference` is `undefined` when the newest record is a human
- * baseline adoption — those bytes exist only in the worktree and git, never in a manifest —
- * which is exactly what a restore needs to know before promising to rewrite them.
+ * One retained manifest's newest word on a projected path. A presence projection says the path was
+ * materialized at a digest; a declared delete or rename source says the path is retired. Revisions
+ * order the observations, and only a path whose newest observation is a presence contributes a
+ * recorded projection — otherwise an earlier phase's stale present-projection would outlive a later
+ * phase's declared deletion and wedge reconciliation demanding "restored" bytes.
+ *
+ * The non-retired arm also carries the retained result that owns the projection. `reference` is
+ * `undefined` when the newest record is a human baseline adoption — those bytes exist only in the
+ * worktree and git, never in a manifest — which is exactly what a restore needs to know before
+ * promising to rewrite them.
  */
-export type NewestProjection = Readonly<{
-  projection: ProjectionDigestRef;
-  measured_at_revision: number;
-  target: ResolvedPath;
-  reference: import("../contracts/durable-state.js").AuthoritativeResultRef | undefined;
-}>;
+export type NewestProjection = Readonly<
+  | {
+    retired: false;
+    path: ProjectionDigestRef["path"];
+    projection: ProjectionDigestRef;
+    measured_at_revision: number;
+    target: ResolvedPath;
+    reference: import("../contracts/durable-state.js").AuthoritativeResultRef | undefined;
+  }
+  | {
+    retired: true;
+    path: ProjectionDigestRef["path"];
+    measured_at_revision: number;
+    reference: undefined;
+  }
+>;
 
 export async function discoverNewestProjections(
   dependencies: GateLifecycleDependencies,
@@ -125,6 +141,20 @@ export async function discoverNewestProjections(
       const loaded = await loadManifest(reference);
       if (!loaded.ok) return loaded;
       const manifest = loaded.value.manifest.value;
+      for (const output of manifest.outputs) {
+        if (output.operation !== "delete" && output.operation !== "rename") continue;
+        const retiredPath = output.operation === "delete" ? output.path : output.previous_path;
+        const prior = newest.get(retiredPath);
+        if (prior === undefined || manifest.accounting.measured_at_revision > prior.measured_at_revision) {
+          const retirement: NewestProjection = Object.freeze({
+            retired: true,
+            path: retiredPath,
+            measured_at_revision: manifest.accounting.measured_at_revision,
+            reference: undefined,
+          });
+          newest.set(retiredPath, retirement);
+        }
+      }
       for (const projection of manifest.projections) {
         const pathClass = outputClassFor(manifest, projection.path);
         if (pathClass === undefined) return stateInvalid(authority, "reconciliation-projection-unbound");
@@ -139,12 +169,15 @@ export async function discoverNewestProjections(
         const measuredAtRevision = manifest.accounting.measured_at_revision;
         const prior = newest.get(projection.path);
         if (prior === undefined || measuredAtRevision > prior.measured_at_revision) {
-          newest.set(projection.path, Object.freeze({
+          const candidate: NewestProjection = Object.freeze({
+            retired: false,
+            path: projection.path,
             projection,
             measured_at_revision: measuredAtRevision,
             target: target.value,
             reference,
-          }));
+          });
+          newest.set(projection.path, candidate);
         }
       }
     }
@@ -155,11 +188,34 @@ export async function discoverNewestProjections(
       for (const projection of adoption.adopted_projections) {
         const prior = newest.get(projection.path);
         if (prior === undefined) return stateInvalid(authority, "reconciliation-projection-unbound");
+        // An adopted path is never retirement-newest from a bytes adoption: adoption gates open
+        // only over recorded projections, and a retirement that measured later supersedes the
+        // adoption instead. A deletion adoption below may still retire it.
+        if (prior.retired) continue;
         if (adoption.adopted_at_revision > prior.measured_at_revision) {
-          newest.set(projection.path, Object.freeze({
+          const adopted: NewestProjection = Object.freeze({
+            retired: false,
+            path: projection.path,
             projection,
             measured_at_revision: adoption.adopted_at_revision,
             target: prior.target,
+            reference: undefined,
+          });
+          newest.set(projection.path, adopted);
+        }
+      }
+      // A deletion adoption records absence, not bytes: the human accepted that an authorized
+      // commit already removed these paths, so the record retires the stale presence exactly like
+      // a declared deletion output would. Newest-per-path applies for the same reason.
+      for (const path of adoption.adopted_absences ?? []) {
+        const prior = newest.get(path);
+        if (prior === undefined) return stateInvalid(authority, "reconciliation-projection-unbound");
+        if (prior.retired) continue;
+        if (adoption.adopted_at_revision > prior.measured_at_revision) {
+          newest.set(path, Object.freeze({
+            retired: true,
+            path,
+            measured_at_revision: adoption.adopted_at_revision,
             reference: undefined,
           }));
         }
@@ -178,24 +234,61 @@ async function discoverProjections(
 ): Promise<ProjectResult<Readonly<{
   recorded: readonly ProjectionDigestRef[];
   current: readonly ProjectionDigestRef[];
+  unrestorable: readonly ProjectionDigestRef["path"][];
+  committed_absent: readonly ProjectionDigestRef["path"][];
 }>>> {
   const newest = await discoverNewestProjections(dependencies, authority, state);
   if (!newest.ok) return newest;
   try {
     const recorded: ProjectionDigestRef[] = [];
     const current: ProjectionDigestRef[] = [];
-    for (const candidate of [...newest.value.values()]
-      .sort((left, right) => left.projection.path.localeCompare(right.projection.path))) {
-      recorded.push(candidate.projection);
-      const digest = await currentProjectionDigest(candidate.target);
+    const unrestorable: ProjectionDigestRef["path"][] = [];
+    const committedAbsent: ProjectionDigestRef["path"][] = [];
+    for (const observation of [...newest.value.values()]
+      .sort((left, right) => left.path.localeCompare(right.path))) {
+      if (observation.retired) continue;
+      recorded.push(observation.projection);
+      // An adoption-sourced projection (no retained manifest reference) recorded only a digest;
+      // there are no retained bytes to restore if the worktree copy goes missing.
+      if (observation.reference === undefined) unrestorable.push(observation.projection.path);
+      const digest = await currentProjectionDigest(observation.target);
       if (digest !== "missing") {
-        current.push(Object.freeze({ path: candidate.projection.path, content_digest: digest }));
+        current.push(Object.freeze({ path: observation.projection.path, content_digest: digest }));
+      } else if (observation.reference === undefined && !(await committedAtHead(dependencies, authority, observation.projection.path))) {
+        // Unrestorable and gone from HEAD too: the deletion is already committed (typically by an
+        // authorized milestone commit), so no produce can re-declare it either — the base commit
+        // holds no before-image. Routing offers the human a deletion adoption for exactly this.
+        committedAbsent.push(observation.projection.path);
       }
     }
-    return ok(Object.freeze({ recorded: Object.freeze(recorded), current: Object.freeze(current) }));
+    return ok(Object.freeze({
+      recorded: Object.freeze(recorded),
+      current: Object.freeze(current),
+      unrestorable: Object.freeze(unrestorable),
+      committed_absent: Object.freeze(committedAbsent),
+    }));
   } catch {
     return ioFailure(authority, "discover-reconciliation-projections");
   }
+}
+
+/**
+ * Whether git HEAD still contains the path. `cat-file -e` succeeds when it does and fails with
+ * code 128 and a "does not exist" fatal when it does not; the `run` result's `absent` flag
+ * carries that distinction, where `runText` would collapse an empty success and the error into
+ * the same empty string.
+ */
+async function committedAtHead(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  path: ProjectionDigestRef["path"],
+): Promise<boolean> {
+  const result = await dependencies.runner.run({
+    argv: ["cat-file", "-e", `HEAD:${path}`],
+    operation: parseSafeCode("git-committed-absence-probe"),
+    expectedAbsence: [{ code: 128, stderrIncludes: "does not exist in" }],
+  });
+  return !result.absent;
 }
 
 async function discoverGateHead(
@@ -216,7 +309,7 @@ async function discoverGateHead(
     context: authority.context,
   });
   if (!requestPath.ok) return requestPath;
-  const request = await readCanonical(requestPath.value, "gate request", parseGateRequest);
+  const request = await readCanonical(requestPath.value, "gate request", parsePersistedGateRequest);
   if (request === "missing") return ok(Object.freeze({ blocker: "active-gate-request-missing" }));
   if (request === "invalid") return ok(Object.freeze({ blocker: "active-gate-request-invalid" }));
   try {
@@ -300,6 +393,8 @@ export async function discoverReconciliationInput(
     state,
     recorded_projections: projections.value.recorded,
     current_projections: projections.value.current,
+    ...(projections.value.unrestorable.length === 0 ? {} : { unrestorable_paths: projections.value.unrestorable }),
+    ...(projections.value.committed_absent.length === 0 ? {} : { committed_absent_paths: projections.value.committed_absent }),
     active_heads: Object.freeze({
       ...(gate.value.head === undefined ? {} : { gate: gate.value.head }),
     }),

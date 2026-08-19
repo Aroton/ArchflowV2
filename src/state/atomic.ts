@@ -11,6 +11,7 @@ export type ExclusiveCreateResult = "created" | "exists";
 export type AtomicWriter = Readonly<{
   createExclusive(path: WritableResolvedPath, bytes: Uint8Array): Promise<ExclusiveCreateResult>;
   replace(path: WritableResolvedPath, bytes: Uint8Array): Promise<void>;
+  replaceTaskAsk(path: ResolvedPath, bytes: Uint8Array): Promise<void>;
   removeGateInterface(path: ResolvedWorkspacePath): Promise<void>;
 }>;
 
@@ -20,6 +21,16 @@ export type ProjectionWriter = Readonly<{
   replaceSymlink(path: WritableResolvedPath, target: string): Promise<void>;
   remove(path: WritableResolvedPath): Promise<void>;
 }>;
+
+/** Narrow authority for the one non-projectable task ask mutation used by planning restart. */
+export async function replaceTaskAsk(
+  writer: Pick<AtomicWriter, "replaceTaskAsk">,
+  path: WritableResolvedPath,
+  bytes: Uint8Array,
+): Promise<void> {
+  if (path.path_class !== "task-ask") throw new TypeError("task ask replacement requires task-ask authority");
+  await writer.replaceTaskAsk(path, bytes);
+}
 
 export class AtomicReplaceError extends Error {
   public readonly operation: "create-exclusive" | "replace";
@@ -133,8 +144,13 @@ async function removeGateInterface(path: ResolvedWorkspacePath): Promise<void> {
   }
 }
 
+async function replaceResolvedTaskAsk(path: ResolvedPath, bytes: Uint8Array): Promise<void> {
+  if (path.path_class !== "task-ask") throw new TypeError("replaceTaskAsk requires a task-ask resolved path");
+  await replaceRegularBytes(path.absolute, bytes, 0o644);
+}
+
 export function createAtomicWriter(): AtomicWriter {
-  return Object.freeze({ createExclusive, replace, removeGateInterface });
+  return Object.freeze({ createExclusive, replace, replaceTaskAsk: replaceResolvedTaskAsk, removeGateInterface });
 }
 
 const PROJECTABLE = new Set([

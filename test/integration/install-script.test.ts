@@ -155,20 +155,19 @@ describe("installer", () => {
 
     git(root, "add", "--", ".gitattributes", ".archflow/.gitignore", ".archflow/workflow.yaml", ".archflow/constitution", ".archflow/config.yaml");
     git(root, "commit", "-q", "-m", "approve policy");
-    const taskInit = spawnSync(join(bin, "archflow-local"), ["build-request", "--task", "demo"], {
+    const hashed = spawnSync(join(bin, "archflow-local"), ["hash"], {
       cwd: root, encoding: "utf8", env: hostEnvironment, timeout: TEST_TIMEOUT_MS,
-      input: JSON.stringify({ kind: "initialize" }),
+      input: JSON.stringify({ portable: "payload" }),
     });
-    expect(taskInit.status, taskInit.stderr).toBe(0);
-    expect(JSON.parse(taskInit.stdout)).toMatchObject({
-      ok: true,
-      value: { tool: "archflow_state", request: { input: { artifact: { artifact_kind: "task-initialization" } } } },
+    expect(hashed.status, hashed.stderr).toBe(0);
+    expect(JSON.parse(hashed.stdout)).toEqual({
+      digest: expect.stringMatching(/^[0-9a-f]{64}$/u),
     });
 
     const portable = [
       await readFile(join(root, ".mcp.json"), "utf8"),
       await readFile(join(root, ".codex", "config.toml"), "utf8"),
-      taskInit.stdout,
+      hashed.stdout,
     ].join("\n");
     expect(portable).not.toContain(home);
     expect(portable).not.toContain(join(home, "archflow-home"));

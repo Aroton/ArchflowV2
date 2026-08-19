@@ -19,7 +19,7 @@
     "id": "call-missing",
     "method": "tools/call",
     "params": {
-      "name": "archflow_state"
+      "name": "archflow_status"
     }
   },
   "non_object_arguments": {
@@ -27,7 +27,7 @@
     "id": "call-non-object",
     "method": "tools/call",
     "params": {
-      "name": "archflow_state",
+      "name": "archflow_status",
       "arguments": "not-an-object"
     }
   },
@@ -36,16 +36,10 @@
     "id": "call-disabled",
     "method": "tools/call",
     "params": {
-      "name": "archflow_state",
+      "name": "archflow_status",
       "arguments": {
         "schema_version": "1",
-        "task_id": "task-1",
-        "intent_id": "intent-1",
-        "expected_revision": 2,
-        "input_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "phase_instance": "phase-impl-2",
-        "step": "produce",
-        "status": "succeeded"
+        "task_id": "task-1"
       }
     }
   }

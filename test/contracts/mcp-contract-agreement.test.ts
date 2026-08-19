@@ -2,10 +2,9 @@ import { readFile } from "node:fs/promises";
 import { specTypeSchemas } from "@modelcontextprotocol/server";
 import { describe, expect, it } from "vitest";
 import { parseTransportRequestId } from "../../src/contracts/contexts.js";
-import { classifyToolCallInput, parseStagedRequestReference, parseToolCall, resultExpectationDataSchema, TOOL_DEFINITIONS, validateProjectResultStructure } from "../../src/contracts/mcp-tools.js";
+import { parseToolCall, resultExpectationDataSchema, TOOL_DEFINITIONS, validateProjectResultStructure } from "../../src/contracts/mcp-tools.js";
 import { TOOL_NAMES } from "../../src/contracts/tool-names.js";
 import { createJsonSchemaValidator } from "../helpers/json-schema.js";
-import { ADVERTISED_TOOL_CATALOGUE } from "../../src/mcp/tools.js";
 
 const load = async (path: string) => JSON.parse(await readFile(new URL(path, import.meta.url), "utf8")) as object;
 const durableReferences = async () => Promise.all([
@@ -44,35 +43,26 @@ describe("MCP contract schema agreement", () => {
     expect(Object.values(TOOL_DEFINITIONS).every((definition) => definition.input_schema_id.startsWith("https://archflow.dev/schemas/v1/mcp-tools#/$defs/"))).toBe(true);
   });
 
-  it("admits the staged-reference arm of every tool input union in both authorities", async () => {
+  it("keeps every durable input arm closed against the retired staged-reference shape", async () => {
     const mcp = await load("../../src/contracts/schemas/v1/mcp-tools.schema.json") as { $defs: Record<string, { input: object }> };
     const references = [await load("../../src/contracts/schemas/v1/primitives.schema.json"), await load("../../src/contracts/schemas/v1/project-error.schema.json"), await load("../../src/contracts/schemas/v1/rubric.schema.json"), await load("../../src/contracts/schemas/v1/path-claim.schema.json"), await load("../../src/contracts/schemas/v1/evidence-slots.schema.json"), await load("../../src/contracts/schemas/v1/gate-contract.schema.json"), await load("../../src/contracts/schemas/v1/gate-decision.schema.json"), ...(await durableReferences())];
     const reference = { schema_version: "1", task_id: "task-1", intent_id: "produce-20260810T120000-ab12", request_digest: "b".repeat(64) };
     const fullState = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: "a".repeat(64), phase_instance: "phase-impl-2", step: "produce", status: "running" };
     for (const tool of TOOL_NAMES) {
       const validator = createJsonSchemaValidator({ $schema: "https://json-schema.org/draft/2020-12/schema", ...mcp.$defs[tool]!.input, $defs: mcp.$defs }, references);
-      expect(validator.validate(reference), `${tool} reference arm`).toBe(true);
-      expect(validator.validate({ ...reference, extra: true }), `${tool} reference strictness`).toBe(false);
-      expect(validator.validate({ ...reference, request_digest: "not-a-digest" }), `${tool} reference digest`).toBe(false);
-      // The runtime union agrees: the reference arm classifies as a staged reference and never
-      // as a full-payload call, while a full payload still parses as its call.
-      const classified = classifyToolCallInput(tool, reference);
-      expect(classified.kind).toBe("staged-reference");
+      // The staged-reference arm retired with the local build-request staging path: every
+      // durable input rejects the four-field reference shape, and the runtime parse agrees.
+      expect(validator.validate(reference), `${tool} rejects retired staged reference`).toBe(false);
       expect(() => parseToolCall(tool, reference)).toThrow();
     }
     expect(createJsonSchemaValidator({ $schema: "https://json-schema.org/draft/2020-12/schema", ...mcp.$defs.archflow_state!.input, $defs: mcp.$defs }, references).validate(fullState)).toBe(true);
-    const classifiedFull = classifyToolCallInput("archflow_state", fullState);
-    expect(classifiedFull.kind).toBe("call");
-    expect(parseStagedRequestReference(reference)).toEqual(reference);
-    expect(() => parseStagedRequestReference(fullState)).toThrow();
+    expect(parseToolCall("archflow_state", fullState).name).toBe("archflow_state");
   });
 
   it("keeps waiver success rule versions within the shared positive safe-integer bounds", async () => {
     const mcp = await load("../../src/contracts/schemas/v1/mcp-tools.schema.json") as { $defs: Record<string, { result?: object }> };
     const references = [await load("../../src/contracts/schemas/v1/primitives.schema.json"), await load("../../src/contracts/schemas/v1/project-error.schema.json"), await load("../../src/contracts/schemas/v1/rubric.schema.json"), await load("../../src/contracts/schemas/v1/path-claim.schema.json"), await load("../../src/contracts/schemas/v1/evidence-slots.schema.json"), await load("../../src/contracts/schemas/v1/gate-contract.schema.json"), await load("../../src/contracts/schemas/v1/gate-decision.schema.json"), ...(await durableReferences())];
     const normative = createJsonSchemaValidator({ $schema: "https://json-schema.org/draft/2020-12/schema", ...mcp.$defs.archflow_waiver!.result, $defs: mcp.$defs }, references);
-    const advertisedSchema = ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === "archflow_waiver")!.outputSchema;
-    const advertised = createJsonSchemaValidator(advertisedSchema);
     const digest = (character: string) => character.repeat(64);
     const provenance = { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "Decision:1", helper_invocation_id: "Helper:1", recorded_at: "2026-07-27T12:00:00.000Z" };
     const scope = { operation: "review-trigger", boundary: "subject" } as const;
@@ -82,13 +72,11 @@ describe("MCP contract schema agreement", () => {
     for (const boundary of [1, Number.MAX_SAFE_INTEGER]) {
       const candidate = output(boundary);
       expect(normative.validate(candidate), `normative ${boundary}`).toBe(true);
-      expect(advertised.validate(candidate), `advertised ${boundary}`).toBe(true);
       expect(validateProjectResultStructure(parseToolCall("archflow_waiver", rawCall(boundary)), candidate).ok, `runtime ${boundary}`).toBe(true);
     }
     for (const adjacent of [0, Number.MAX_SAFE_INTEGER + 1]) {
       const candidate = output(adjacent);
       expect(normative.validate(candidate), `normative ${adjacent}`).toBe(false);
-      expect(advertised.validate(candidate), `advertised ${adjacent}`).toBe(false);
       expect(() => validateProjectResultStructure(parseToolCall("archflow_waiver", rawCall(1)), candidate), `runtime ${adjacent}`).toThrow();
     }
   });

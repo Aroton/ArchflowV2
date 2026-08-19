@@ -4,7 +4,7 @@ import type { ProjectResult } from "./errors.js";
 import { createProjectError } from "./errors.js";
 import type { PathSafeId, SafeId, Sha256Digest } from "./evidence.js";
 import type { GateContext, GateKind, WaiverOriginRef } from "./gates.js";
-import type { CommonToolInput, CounterReviewInput, GateInput, StateInput, ToolInput, WaiverInput } from "./mcp-tools.js";
+import type { CommonToolInput, CounterReviewInput, GateInput, PlanningRestartInput, StateInput, ToolInput, WaiverInput } from "./mcp-tools.js";
 import type { RepositoryPathClaim } from "./path-claims.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
 import { assertPlainJson, type PlainJsonObject, type PlainJsonValue } from "./plain-json.js";
@@ -67,12 +67,12 @@ export type RequestDigestSubject = RequestDigestCommon & ({
   readonly operation_fields: Pick<StateInput, "phase_instance" | "step" | "status">;
 } | {
   readonly tool: "archflow_state";
-  readonly operation: "restart-planning";
-  readonly operation_fields: Pick<StateInput, "phase_instance" | "step" | "status" | "planning_restart">;
-} | {
-  readonly tool: "archflow_state";
   readonly operation: StateArtifactOperation;
   readonly operation_fields: StateArtifactOperationFields;
+} | {
+  readonly tool: "archflow_state";
+  readonly operation: "planning-restart";
+  readonly operation_fields: Pick<Extract<StateInput, { readonly operation: "planning_restart" }>, "phase_instance" | "target_phase_instance" | "reason" | "ask_base_digest">;
 } | {
   readonly tool: "archflow_counter_review";
   readonly operation: "counter-review";
@@ -88,16 +88,16 @@ export type RequestDigestSubject = RequestDigestCommon & ({
 });
 
 type SelectorKeys = {
-  readonly archflow_state: "phase_instance" | "step" | "status" | "artifact" | "human_revision" | "planning_restart";
+  readonly archflow_state: "phase_instance" | "step" | "status" | "artifact" | "human_revision" | "operation" | "target_phase_instance" | "reason" | "ask_base_digest";
   readonly archflow_counter_review: "artifact_path" | "route_override";
   readonly archflow_gate: "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "kind" | "context" | "preview_digest" | "decision";
   readonly archflow_waiver: "origin" | "rationale" | "preview_digest" | "decision";
 };
-type ExactSelectorCoverage = {
-  readonly [K in ToolName]: Exclude<keyof ToolInput<K>, keyof CommonToolInput> extends SelectorKeys[K]
+type ExactSelectorCoverage = { readonly [K in Exclude<ToolName, "archflow_state">]:
+  Exclude<keyof ToolInput<K>, keyof CommonToolInput> extends SelectorKeys[K]
     ? Exclude<SelectorKeys[K], Exclude<keyof ToolInput<K>, keyof CommonToolInput>> extends never ? true : never
-    : never;
-};
+    : never
+} & { readonly archflow_state: true };
 const exactSelectorCoverage: ExactSelectorCoverage = {
   archflow_state: true,
   archflow_counter_review: true,
@@ -212,22 +212,22 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
   switch (subject.tool) {
     case "archflow_state": {
       const fields = (subject as Extract<RequestDigestSubject, { tool: "archflow_state" }>).operation_fields;
+      if (subject.operation === "planning-restart") {
+        const restart = fields as Pick<PlanningRestartInput, "phase_instance" | "target_phase_instance" | "reason" | "ask_base_digest">;
+        exactFields(fields, restart.ask_base_digest === undefined
+          ? ["phase_instance", "target_phase_instance", "reason"]
+          : ["phase_instance", "target_phase_instance", "reason", "ask_base_digest"]);
+        return {
+          phase_instance: restart.phase_instance,
+          target_phase_instance: restart.target_phase_instance,
+          reason: restart.reason,
+          ...(restart.ask_base_digest === undefined ? {} : { ask_base_digest: restart.ask_base_digest }),
+        };
+      }
       if (subject.operation === "record-state-boundary") {
         exactFields(fields, ["phase_instance", "step", "status"]);
-        return { phase_instance: fields.phase_instance, step: fields.step, status: fields.status };
-      }
-      if (subject.operation === "restart-planning") {
-        const restartFields = (subject as Extract<RequestDigestSubject, {
-          tool: "archflow_state";
-          operation: "restart-planning";
-        }>).operation_fields;
-        exactFields(restartFields, ["phase_instance", "step", "status", "planning_restart"]);
-        return {
-          phase_instance: restartFields.phase_instance,
-          step: restartFields.step,
-          status: restartFields.status,
-          planning_restart: restartFields.planning_restart as unknown as PlainJsonValue,
-        };
+        const boundary = fields as Pick<StateInput, "phase_instance" | "step" | "status">;
+        return { phase_instance: boundary.phase_instance, step: boundary.step, status: boundary.status };
       }
       const artifactFields = fields as StateArtifactOperationFields;
       const operationForKind: Readonly<Record<StateArtifactOperationFields["artifact_kind"], StateArtifactOperation>> = {
@@ -266,7 +266,15 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
     case "archflow_gate": {
       const fields = (subject as Extract<RequestDigestSubject, { tool: "archflow_gate" }>).operation_fields;
       if (subject.operation !== "gate") throw new TypeError("invalid archflow_gate operation");
-      const expected = ["phase_instance", "summary", "subject_digest", "current_evidence", "kind", "context", "preview_digest", "decision"];
+      // The bounded-decision pair is all-or-nothing: present together on a single-call decision,
+      // absent on an open-and-wait gate. The digest must differ between the two request shapes.
+      const expected = ["phase_instance", "summary", "subject_digest", "current_evidence", "kind", "context"];
+      if (fields.preview_digest !== undefined || fields.decision !== undefined) {
+        if (fields.preview_digest === undefined || fields.decision === undefined) {
+          throw new TypeError("gate preview_digest and decision must appear together");
+        }
+        expected.push("preview_digest", "decision");
+      }
       exactFields(fields, expected);
       const selected = {
         phase_instance: fields.phase_instance,
@@ -275,20 +283,29 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
         current_evidence: fields.current_evidence as unknown as PlainJsonValue,
         kind: fields.kind,
         context: fields.context as unknown as PlainJsonValue,
-        preview_digest: fields.preview_digest,
-        decision: fields.decision as unknown as PlainJsonValue,
+        ...(fields.preview_digest === undefined || fields.decision === undefined
+          ? {}
+          : { preview_digest: fields.preview_digest, decision: fields.decision as unknown as PlainJsonValue }),
       } satisfies PlainJsonObject;
       return selected as PlainJsonObject;
     }
     case "archflow_waiver": {
       const fields = (subject as Extract<RequestDigestSubject, { tool: "archflow_waiver" }>).operation_fields;
       if (subject.operation !== "waiver") throw new TypeError("invalid archflow_waiver operation");
-      exactFields(fields, ["origin", "rationale", "preview_digest", "decision"]);
+      const expected = ["origin", "rationale"];
+      if (fields.preview_digest !== undefined || fields.decision !== undefined) {
+        if (fields.preview_digest === undefined || fields.decision === undefined) {
+          throw new TypeError("waiver preview_digest and decision must appear together");
+        }
+        expected.push("preview_digest", "decision");
+      }
+      exactFields(fields, expected);
       return {
         origin: fields.origin as unknown as PlainJsonValue,
         rationale: fields.rationale,
-        preview_digest: fields.preview_digest,
-        decision: fields.decision as unknown as PlainJsonValue,
+        ...(fields.preview_digest === undefined || fields.decision === undefined
+          ? {}
+          : { preview_digest: fields.preview_digest, decision: fields.decision as unknown as PlainJsonValue }),
       };
     }
     default: {
@@ -353,7 +370,14 @@ export function computeGateContextDigest(
  */
 export function baselineAdoptionDriftDigest(context: GateContext<"baseline-adoption">): Sha256Digest {
   const snapshot = materialize(context, "baseline adoption drift subject");
-  return canonicalJsonDigest({ schema_version: "1", digest_kind: "baseline-adoption-drift", drifted_projections: snapshot.drifted_projections });
+  // Deleted projections join the digest only when present: pre-deletion archives were digested
+  // without the field, and re-authenticating them must reproduce their recorded subject digest.
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "baseline-adoption-drift",
+    drifted_projections: snapshot.drifted_projections,
+    ...((snapshot.deleted_projections ?? []).length === 0 ? {} : { deleted_projections: snapshot.deleted_projections }),
+  });
 }
 
 /**

@@ -1,6 +1,6 @@
 # PATTERNS
 
-**Explored:** 2026-08-12 · **Commit:** `247df34` · **Covers:** `src/`, `test/`, `scripts/`, repository policy
+**Explored:** 2026-08-16 · **Commit:** `d60da73` · **Covers:** `src/`, `test/`, `scripts/`, repository policy
 
 This is a strict TypeScript/Node package whose conventions are enforced primarily by the type checker, runtime validators, and tests. There is no configured linter or formatter. Match the surrounding file: contract registries intentionally use dense declarations, while state, repository, and MCP algorithms favor expanded control flow and rationale-heavy comments.
 
@@ -32,7 +32,7 @@ This is a strict TypeScript/Node package whose conventions are enforced primaril
 | Internal locals/options | camelCase | `runnerMaxBuffer`, `materializedSpec` |
 | Error codes | upper snake case | `STATE_CONFLICT`, `PATH_ESCAPE` |
 | Error owners/actions | lowercase; actions are kebab-case | `"state"`, `"reread-and-retry-intent"` |
-| MCP tools | `archflow_` plus snake_case | `archflow_state`, `archflow_counter_review` |
+| MCP tools | `archflow_` plus snake_case | `archflow_status`, `archflow_apply` |
 | Tests/files | behavior or exported-symbol name, never workflow phase number | `state-transaction.test.ts`, `local-cli-stdin-discipline.test.ts` |
 
 Vocabulary is represented as a constant tuple plus a derived union, not a TypeScript `enum`. For example, `PIPELINE_STEPS` and `PipelineStep` in `src/contracts/vocabulary.ts` let Zod, JSON Schema generation/validation, and TypeScript share one vocabulary.
@@ -64,6 +64,15 @@ Digests, safe integers, task slugs, Git OIDs, path claims, and resolved paths ar
 - Exhaustive switches bind the remainder to `never`; `operationFor` in `src/state/transaction.ts` is representative.
 - Registries use `as const satisfies Record<Code, ...>` so a new vocabulary member cannot omit its definition. The project/protocol error registries in `src/contracts/errors.ts` are the dominant example.
 - Persisted arrays that model sets are required to be sorted and unique. They are validated, never silently sorted or deduplicated. Shared helpers such as `isSortedUniqueBy` and `tupleKey` in `src/contracts/validators.ts` keep Zod and Ajv behavior aligned.
+- Public semantic action projection is exhaustive over `NextActionCode`. A new durable next-action code must acquire an explicit human-facing mapping or the `never` fence fails; it must never fall through to a guessed mutation.
+
+### Semantic views hide mechanics, offers bind them
+
+`projectSemanticStatus` receives the full authenticated status join, not brief status. The public `WorkflowViewV1` carries only what the client or human needs: position, condition, resources, full finding prose, review policy text, presentation, commit instruction when exact facts exist, and one ordinary-language action. The internal `SemanticActionOfferV1` carries the revision, fingerprint, repository identity, invocation, current action, and applicable evidence identities. Its public `af1_` token is the canonical digest of that object; no authority fields are encoded for the caller to reconstruct.
+
+Invocation is part of authority. Generic status omits it and can never mint a mutation offer. Resume owns its exact current phase; an exact successor invocation may own only the authenticated `advance-phase` handoff target. Reopen is a distinct intent and can target only a server-derived strictly earlier PRD, design, or numbered phase design impact. A semantic-looking `afop-...` intent is not replay proof by itself: the last transition must also authenticate its operation, fingerprint, request, legal successor, and closed named substep.
+
+Semantic execution keeps compound work explicit. Review owns the outer dispatch FIFO and uses the handler's direct inner seam. Triage enters its ordinary running boundary before terminal disposition recording. Human decisions archive and settle separately; a revision settlement is close-only, and `revise-enter` alone restores writable resources. Refreshing services between these substeps prevents a stale authority object from crossing a committed boundary.
 
 ## Validation and caller-owned objects
 
@@ -142,6 +151,8 @@ Durable objects and capability handles are commonly frozen. Authentic internal a
 
 ### Durable writes and transaction ownership
 
+Planning restart is the one narrow transaction that may clear active gate-related authority. The generic preservation rule stays strict; `isExactPlanningRestartDraft` independently proves one new sorted restart record, the strictly earlier planning target, exact result/waiver/pending-revision movement, attempt reset, and planned-final-phase treatment before the transaction may commit.
+
 - `src/state/atomic.ts` centralizes exclusive immutable authority creation, atomic replacement, projection writes, and disposable-interface removal. Operations are restricted by `path_class`; ordinary source code does not write authority directly.
 - Durable result manifests and decision archives are created exclusively. Replaceable projections such as `state.json` use atomic replacement; request staging, recovery receipts, locks, rendered gate UI, and diagnostic attempts belong under ignored `.archflow/runtime/tasks/<task>/`.
 - `runStateTransaction` in `src/state/transaction.ts` is the write coordinator: authenticate request authority, acquire the work-root task lock, recompute fingerprints/digests, prepare a draft that cannot set kernel-owned revision/transition fields, stage recovery bytes, publish canonical state with `last_transition`, install current result authority/projections, clean successful buffers and superseded authority, and arbitrate uncertain outcomes for replay.
@@ -162,13 +173,13 @@ Vitest runs in Node with explicit imports (`describe`, `it`, `expect`, hooks); g
 
 | Directory | Files | Role |
 |---|---:|---|
-| `test/unit/` | 106 | Module-level behavior and boundary tests; dependencies are usually injected rather than module-mocked |
-| `test/contracts/` | 21 | JSON Schema/Zod agreement, cross-authority parity, durable structural and semantic corpora |
-| `test/integration/` | 32 | Real Git repositories, process wiring, local CLI, MCP handlers/stdio, initialization, replay, and state lifecycle |
-| `test/crash/` | 4 | Child-process fault injection and recovery/idempotence |
+| `test/unit/` | 104 | Module-level behavior and boundary tests; dependencies are usually injected rather than module-mocked |
+| `test/contracts/` | 26 | JSON Schema/Zod agreement, cross-authority parity, durable structural and semantic corpora |
+| `test/integration/` | 37 | Real Git repositories, process wiring, local CLI, MCP handlers/stdio, initialization, replay, and state lifecycle |
+| `test/crash/` | 3 | Child-process fault injection and recovery/idempotence |
 | `test/real-host/` | 5 | Live host/preflight/terminal journeys and benchmark coverage |
-| `test/helpers/` | 4 | Reusable repository, workspace, constitution, and host harnesses |
-| `test/fixtures/` | 64 | JSON/YAML corpora, fake CLIs, legacy layouts, and crash helpers |
+| `test/helpers/` | 5 | Reusable repository, workspace, constitution, and host harnesses |
+| `test/fixtures/` | 81 | JSON/YAML corpora, fake CLIs, legacy layouts, and crash helpers |
 | `test/types/` | 1 | Compile-only MCP SDK public-surface probe included by `tsc` |
 
 Representative practices:

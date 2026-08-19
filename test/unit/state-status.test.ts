@@ -255,15 +255,13 @@ describe("computeTaskStatus", () => {
     expect(status.value.review_policy?.rubric_digest)
       .toBe(canonicalJsonDigest(status.value.review_policy!.rubric as never));
     // The harness state is produce-running with no authoritative produce result: the derived
-    // action must name the terminal record, and its prefilled request must target succeeded —
-    // never the repeat running entry the server rejects. Mid-produce there is no subject yet,
-    // so subject_digest is correctly absent rather than stale.
+    // action must name the terminal record — never the repeat running entry the server rejects.
+    // Mid-produce there is no subject yet, so subject_digest is correctly absent rather than
+    // stale.
     expect(status.value.next_action).toMatchObject({
       code: "run-step", step: "produce",
       detail: "Record the terminal produce result.",
-      request: { tool: "archflow_state", input: { step: "produce", status: "succeeded" } },
     });
-    expect(status.value.next_action.guidance).toContain("archflow-local envelope");
     expect(status.value).not.toHaveProperty("subject_digest");
     expect(status.value.workspace).toMatchObject({ cleanup_pending: false });
   });

@@ -172,13 +172,13 @@ describe("task workspace cleanup", () => {
       waivers: [],
       restart_history: [{
         restart_id: parsePathSafeId("restart-gate"),
-        from_phase_instance: phase,
-        to_phase_instance: parsePhaseInstanceId("phase-design-2"),
+        source_phase_instance: phase,
+        target_phase_instance: parsePhaseInstanceId("phase-design-2"),
         reason: "Implementation exposed an upstream design flaw.",
         restarted_at_revision: parseSafeInteger(8),
         superseded_results: [],
         cleared_waivers: [],
-        provenance: {
+        human_provenance: {
           schema_version: "1",
           actor_class: "human",
           assurance: "connected-request-trace",

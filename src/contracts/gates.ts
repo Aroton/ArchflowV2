@@ -73,7 +73,7 @@ export interface GateContractByKind {
    * pins the exact byte set the human decision covers: the adoption records `observed_digest`, the
    * restore rewrites to `recorded_digest`, and neither can be re-pointed at other bytes.
    */
-  readonly "baseline-adoption": { readonly context: { readonly drifted_projections: readonly BaselineDriftedProjection[] }; readonly decision: { readonly decision: "adopt-current-bytes" | "restore-recorded-bytes" | "abort"; readonly reason: string } };
+  readonly "baseline-adoption": { readonly context: { readonly drifted_projections: readonly BaselineDriftedProjection[]; /** Absent on archives written before deletion adoption existed; fresh contexts always carry it. */ readonly deleted_projections?: readonly BaselineDeletedProjection[] }; readonly decision: { readonly decision: "adopt-current-bytes" | "restore-recorded-bytes" | "adopt-committed-deletions" | "abort"; readonly reason: string } };
   readonly "migration-audit": { readonly context: { readonly source_identity_digest: Sha256Digest; readonly destination_identity_digest: Sha256Digest; readonly import_digest: Sha256Digest; readonly code_baseline_digest: Sha256Digest; readonly policy_baseline_digest: Sha256Digest; readonly resume_phase?: PhaseInstanceId; readonly planned_final_phase?: number; readonly imported_documents?: readonly { readonly path: RepositoryPathClaim; readonly content_digest: Sha256Digest }[]; readonly target_ref?: string; readonly baseline_commit?: GitOid; readonly commit_message?: string }; readonly decision: { readonly decision: "accept-import-audit" | "revise" | "abort"; readonly reason: string } };
 }
 
@@ -89,6 +89,18 @@ export type BaselineDriftedProjection = {
   readonly recorded_digest: Sha256Digest;
   /** Digest of the live bytes the human is asked to judge; always differs from `recorded_digest`. */
   readonly observed_digest: Sha256Digest;
+};
+
+/**
+ * One projection whose recorded bytes outlive the file itself: the worktree copy is gone and the
+ * deletion is already committed, so there are no live bytes to adopt and (when the newest record
+ * is an adoption) no retained bytes to restore. Binding the recorded digest pins exactly which
+ * claimed presence the human decision retires.
+ */
+export type BaselineDeletedProjection = {
+  readonly path: RepositoryPathClaim;
+  /** Digest the newest retained projection still records for this path. */
+  readonly recorded_digest: Sha256Digest;
 };
 
 /**
@@ -205,10 +217,21 @@ const contexts = {
   }).strict(),
   "restore-collision": z.object({ path: taskPathClaimV1Schema, recorded_generation_digest: digest, current_generation_digest: digest, adoption_candidate: authorityLink.optional() }).strict(),
   "baseline-adoption": z.object({
-    drifted_projections: z.array(z.object({ path: repositoryPathClaimV1Schema, recorded_digest: digest, observed_digest: digest }).strict()).min(1),
+    drifted_projections: z.array(z.object({ path: repositoryPathClaimV1Schema, recorded_digest: digest, observed_digest: digest }).strict(),
+      ),
+    // Optional, not defaulted: archives written before deletion adoption existed carry no such
+    // field, and the published contract must describe those archives as valid — a JSON Schema
+    // `default` is an annotation, so a required-but-defaulted field would retroactively reject
+    // decisions a human already made.
+    deleted_projections: z.array(z.object({ path: repositoryPathClaimV1Schema, recorded_digest: digest }).strict()).optional(),
   }).strict().superRefine((value, context) => {
+    const deleted = value.deleted_projections ?? [];
     if (!sortedUnique(value.drifted_projections, (left, right) => left.path.localeCompare(right.path))) context.addIssue({ code: "custom", message: "drifted projections must be sorted by path with no duplicates" });
     if (value.drifted_projections.some((item) => item.recorded_digest === item.observed_digest)) context.addIssue({ code: "custom", message: "a drifted projection must differ between its recorded and observed digests" });
+    if (!sortedUnique(deleted, (left, right) => left.path.localeCompare(right.path))) context.addIssue({ code: "custom", message: "deleted projections must be sorted by path with no duplicates" });
+    if (value.drifted_projections.length === 0 && deleted.length === 0) context.addIssue({ code: "custom", message: "a baseline adoption must name at least one drifted or deleted projection" });
+    const driftedPaths = new Set(value.drifted_projections.map((item) => item.path));
+    if (deleted.some((item) => driftedPaths.has(item.path))) context.addIssue({ code: "custom", message: "a projection cannot be both drifted and deleted" });
   }),
   "migration-audit": z.object({
     source_identity_digest: digest,
@@ -250,12 +273,12 @@ const decisions = {
   "constitution-edit": decision(["revert-edit", "start-base-amendment", "abort"]),
   "commit-authorization": decision(["authorize-commit", "revise", "abort"]),
   "restore-collision": z.union([decision(["discard-and-restore", "abort"]), z.object({ decision: z.literal("adopt-as-new-generation"), reason, adoption_authority: authorityLink, rationale: boundedText }).strict()]),
-  "baseline-adoption": decision(["adopt-current-bytes", "restore-recorded-bytes", "abort"]),
+  "baseline-adoption": decision(["adopt-current-bytes", "restore-recorded-bytes", "adopt-committed-deletions", "abort"]),
   "migration-audit": decision(["accept-import-audit", "revise", "abort"]),
 } as const;
 
 const effects = Object.freeze({
-  approve: "advance", revise: "retry", reject: "non-advancing", "waiver-requested": "redirect-waiver", "amend-upstream": "redirect-upstream", "revise-current": "retry", "retry-once": "retry", abort: "non-advancing", "revert-edit": "retry", "start-base-amendment": "redirect-upstream", "authorize-commit": "advance", "discard-and-restore": "advance", "adopt-as-new-generation": "advance", "adopt-current-bytes": "advance", "restore-recorded-bytes": "advance", "accept-import-audit": "advance",
+  approve: "advance", revise: "retry", reject: "non-advancing", "waiver-requested": "redirect-waiver", "amend-upstream": "redirect-upstream", "revise-current": "retry", "retry-once": "retry", abort: "non-advancing", "revert-edit": "retry", "start-base-amendment": "redirect-upstream", "authorize-commit": "advance", "discard-and-restore": "advance", "adopt-as-new-generation": "advance", "adopt-current-bytes": "advance", "restore-recorded-bytes": "advance", "adopt-committed-deletions": "advance", "accept-import-audit": "advance",
 } as const satisfies Readonly<Record<GateDecisionPayload<GateKind>["decision"], GateEffect>>);
 
 export const GATE_CONTRACTS = Object.freeze(Object.fromEntries(GATE_KINDS.map((kind) => [kind, Object.freeze({ context: contexts[kind], decision: decisions[kind] })]))) as Readonly<{ [K in GateKind]: { readonly context: (typeof contexts)[K]; readonly decision: (typeof decisions)[K] } }>;

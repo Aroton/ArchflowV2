@@ -8,10 +8,9 @@ import { INPUT_FREE_COMMANDS, LOCAL_COMMAND_CONTRACTS, LOCAL_COMMANDS, runLocalC
 
 function usageText(): string {
   return [
-    "usage: archflow-local <command> [--task <task>] [--input <json-file>] [--brief]",
+    "usage: archflow-local <command> [--task <task>] [--input <json-file>]",
     "       payload commands read JSON from --input <json-file>, or from stdin when --input is omitted",
     "       input-free commands never read stdin",
-    "       --brief (status only) projects position, blockers, and next action without rendered bodies",
     "commands (payload; --task):",
     ...LOCAL_COMMANDS.map((command) => {
       const contract = LOCAL_COMMAND_CONTRACTS[command];
@@ -46,24 +45,25 @@ async function readInput(command: LocalCommand, path: string | undefined): Promi
 async function main(): Promise<void> {
   const parsed = parseArgs({
     args: process.argv.slice(2), allowPositionals: true, strict: true,
-    options: { task: { type: "string" }, input: { type: "string" }, brief: { type: "boolean" }, help: { type: "boolean", short: "h" } },
+    options: { task: { type: "string" }, input: { type: "string" }, help: { type: "boolean", short: "h" } },
   });
   if (parsed.values.help || parsed.positionals.length === 0) {
     process.stdout.write(usageText());
     return;
   }
-  if (parsed.positionals.length !== 1 || !LOCAL_COMMANDS.includes(parsed.positionals[0] as LocalCommand)) {
+  // `upgrade adopt` is the one two-token command form: the skill-facing shape of the input-free
+  // adoption adapter registered as `upgrade-adopt`.
+  const upgradeAdoptForm = parsed.positionals.length === 2 &&
+    parsed.positionals[0] === "upgrade" && parsed.positionals[1] === "adopt";
+  if (!upgradeAdoptForm && (parsed.positionals.length !== 1 || !LOCAL_COMMANDS.includes(parsed.positionals[0] as LocalCommand))) {
     throw new TypeError(`unknown archflow-local command "${parsed.positionals.join(" ")}"; run archflow-local --help for the command list`);
   }
-  const command = parsed.positionals[0] as LocalCommand;
+  const command = (upgradeAdoptForm ? "upgrade-adopt" : parsed.positionals[0]) as LocalCommand;
   if (LOCAL_COMMAND_CONTRACTS[command].task === "required" && parsed.values.task === undefined) {
     throw new TypeError(`${command} requires --task <task>`);
   }
-  if (parsed.values.brief === true && command !== "status") {
-    throw new TypeError("--brief is only supported by the status command");
-  }
   const value = INPUT_FREE_COMMANDS.has(command) ? undefined : await readInput(command, parsed.values.input);
-  const result = await runLocalCommand({ command, working_directory: process.cwd(), ...(parsed.values.task === undefined ? {} : { task_id: parsed.values.task }), ...(value === undefined ? {} : { value }), ...(parsed.values.brief === true ? { brief: true } : {}) });
+  const result = await runLocalCommand({ command, working_directory: process.cwd(), ...(parsed.values.task === undefined ? {} : { task_id: parsed.values.task }), ...(value === undefined ? {} : { value }) });
   assertPlainJson(result, "local command result");
   if (result !== null && typeof result === "object" && !Array.isArray(result) && (result as Record<string, unknown>).ok === false) {
     process.exitCode = 1;

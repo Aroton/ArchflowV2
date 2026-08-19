@@ -6,21 +6,23 @@ import { ADVERTISED_TOOL_CATALOGUE } from "../../src/mcp/tools.js";
 import { startMcpRuntime, type McpRuntimeHandle } from "../../src/mcp/sdk-adapter.js";
 import type { ToolHandlerRegistry } from "../../src/mcp/server.js";
 
-const digest = "a".repeat(64);
-const stateInput = {
+const statusInput = {
+  schema_version: "1",
+  task_id: "task-1"
+} as const;
+const applyInput = {
   schema_version: "1",
   task_id: "task-1",
-  intent_id: "intent-1",
-  expected_revision: 2,
-  input_fingerprint: digest,
-  phase_instance: "phase-impl-3",
-  step: "produce",
-  status: "succeeded"
+  invocation: { skill: "archflow-prd", intent: "resume" },
+  action: { offer: `af1_${"a".repeat(64)}` }
 } as const;
-const stateSuccess = {
+const semanticSuccess = {
   schema_version: "1",
   ok: true,
-  value: { path: "phases/3/result.json", revision: 3, status: "succeeded" }
+  value: {
+    schema_version: "1", task_id: "task-1", condition: "ready", headline: "Ready", detail: "Continue.", resources: [],
+    next_action: { kind: "inspect", instruction: "Inspect status." },
+  }
 } as const;
 
 const initialize = (id: string | number, clientInfo: unknown = { name: "Codex", version: "1" }) => ({
@@ -134,13 +136,31 @@ describe("MCP SDK adapter", () => {
     await runtime.handle.close();
   });
 
+  it("serves an injected semantic handler through the compact result envelope", async () => {
+    const view = {
+      schema_version: "1", task_id: "task-1", condition: "ready", headline: "Ready", detail: "Continue.", resources: [],
+      next_action: { kind: "inspect", instruction: "Inspect status." },
+    } as const;
+    const runtime = await harness({
+      archflow_status: () => ({ schema_version: "1", ok: true, value: view }),
+    });
+    await ready(runtime);
+    runtime.send({ jsonrpc: "2.0", id: "semantic", method: "tools/call", params: { name: "archflow_status", arguments: { schema_version: "1", task_id: "task-1" } } });
+    await runtime.waitForLines(2);
+    expect(JSON.parse(runtime.lines[1]!)).toMatchObject({
+      id: "semantic",
+      result: { structuredContent: { schema_version: "1", ok: true, value: view }, isError: false },
+    });
+    await runtime.handle.close();
+  });
+
   it("captures the connection only through the SDK initialized hook and answers -32603 before it", async () => {
     const runtime = await harness();
     runtime.send(initialize("init"));
     await runtime.waitForLines(1);
     // No branded outcome can exist before the connection is captured, so the
     // handler-side invariant answers a prose-free internal error.
-    runtime.send({ jsonrpc: "2.0", id: "early", method: "tools/call", params: { name: "archflow_state", arguments: {} } });
+    runtime.send({ jsonrpc: "2.0", id: "early", method: "tools/call", params: { name: "archflow_status", arguments: {} } });
     await runtime.waitForLines(2);
     expect(runtime.lines[1]).toBe('{"jsonrpc":"2.0","id":"early","error":{"code":-32603,"message":"Internal error"}}');
 
@@ -149,7 +169,7 @@ describe("MCP SDK adapter", () => {
     runtime.input.write(
       `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized", params: null })}\n` +
       `${JSON.stringify({ jsonrpc: "2.0", id: "list-open", method: "tools/list", params: {} })}\n` +
-      `${JSON.stringify({ jsonrpc: "2.0", id: "still-early", method: "tools/call", params: { name: "archflow_state", arguments: {} } })}\n`
+      `${JSON.stringify({ jsonrpc: "2.0", id: "still-early", method: "tools/call", params: { name: "archflow_status", arguments: {} } })}\n`
     );
     await runtime.waitForLines(4);
     expect(JSON.parse(runtime.lines[2]!)).toEqual({
@@ -203,16 +223,17 @@ describe("MCP SDK adapter", () => {
   it("routes missing arguments to the boundary and lets the SDK reject non-object arguments", async () => {
     const runtime = await harness();
     await ready(runtime);
-    runtime.send({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "archflow_state" } });
+    runtime.send({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "archflow_status" } });
     await runtime.waitForLines(2);
-    runtime.send({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "archflow_state", arguments: "bad" } });
+    runtime.send({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "archflow_status", arguments: "bad" } });
     await runtime.waitForLines(3);
     runtime.send({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "unknown", arguments: {} } });
-    runtime.send({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "archflow_state", arguments: stateInput } });
+    runtime.send({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "archflow_apply", arguments: applyInput } });
     await runtime.waitForLines(5);
     const responses = runtime.lines.slice(1).map((line) => JSON.parse(line) as Record<string, unknown>);
-    const missingArguments = responses[0] as { result: { structuredContent: { error: { code: string } }; isError: boolean } };
-    expect(missingArguments.result.structuredContent.error.code).toBe("CONTRACT_INVALID");
+    const missingArguments = responses[0] as { result: { structuredContent: { ok: boolean; error?: { code: string } }; isError: boolean } };
+    expect(missingArguments.result.structuredContent.ok).toBe(false);
+    expect(missingArguments.result.structuredContent.error?.code).toBe("CONTRACT_INVALID");
     expect(missingArguments.result.isError).toBe(true);
     const nonObjectArguments = responses[1] as { id: number; error: { code: number; message: string } };
     expect(nonObjectArguments.id).toBe(2);
@@ -239,7 +260,7 @@ describe("MCP SDK adapter", () => {
       jsonrpc: "2.0",
       id: 2,
       method: "tools/call",
-      params: { name: "archflow_state", task: "invalid", arguments: {} }
+      params: { name: "archflow_status", task: "invalid", arguments: {} }
     });
     await runtime.waitForLines(2);
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -261,11 +282,11 @@ describe("MCP SDK adapter", () => {
     const gate = new Promise<void>((resolve) => { release = resolve; });
     let signal: AbortSignal | undefined;
     const runtime = await harness({
-      archflow_state: async (_call, context) => {
+      archflow_status: async (_call, context) => {
         signal = context.signal;
         started();
         await gate;
-        return stateSuccess;
+        return semanticSuccess;
       }
     });
     await ready(runtime);
@@ -273,7 +294,7 @@ describe("MCP SDK adapter", () => {
       jsonrpc: "2.0",
       id: "call",
       method: "tools/call",
-      params: { name: "archflow_state", arguments: stateInput }
+      params: { name: "archflow_status", arguments: statusInput }
     });
     await didStart;
     runtime.send({
@@ -301,7 +322,7 @@ describe("MCP SDK adapter", () => {
     let aborted!: () => void;
     const didAbort = new Promise<void>((resolve) => { aborted = resolve; });
     const runtime = await harness({
-      archflow_state: async (_call, context) => {
+      archflow_status: async (_call, context) => {
         started();
         await new Promise<never>((_resolve, reject) => {
           context.signal.addEventListener("abort", () => {
@@ -316,7 +337,7 @@ describe("MCP SDK adapter", () => {
       jsonrpc: "2.0",
       id: 7,
       method: "tools/call",
-      params: { name: "archflow_state", arguments: stateInput }
+      params: { name: "archflow_status", arguments: statusInput }
     });
     await didStart;
     runtime.send({
@@ -339,10 +360,10 @@ describe("MCP SDK adapter", () => {
     const didStart = new Promise<void>((resolve) => { started = resolve; });
     const gate = new Promise<void>((resolve) => { release = resolve; });
     const runtime = await harness({
-      archflow_state: async () => {
+      archflow_status: async () => {
         started();
         await gate;
-        return stateSuccess;
+        return semanticSuccess;
       }
     });
     await ready(runtime);
@@ -350,7 +371,7 @@ describe("MCP SDK adapter", () => {
       jsonrpc: "2.0",
       id: "late",
       method: "tools/call",
-      params: { name: "archflow_state", arguments: stateInput }
+      params: { name: "archflow_status", arguments: statusInput }
     });
     await didStart;
     await runtime.handle.close();
@@ -363,9 +384,9 @@ describe("MCP SDK adapter", () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
     const runtime = await harness({
-      archflow_state: async () => {
+      archflow_status: async () => {
         await gate;
-        return stateSuccess;
+        return semanticSuccess;
       }
     });
     runtime.send(initialize("init"));
@@ -374,7 +395,7 @@ describe("MCP SDK adapter", () => {
       jsonrpc: "2.0",
       id: "slow",
       method: "tools/call",
-      params: { name: "archflow_state", arguments: stateInput }
+      params: { name: "archflow_status", arguments: statusInput }
     });
     runtime.input.end();
     await runtime.waitForLines(1);
@@ -392,11 +413,11 @@ describe("MCP SDK adapter", () => {
     let started!: () => void;
     const didStart = new Promise<void>((resolve) => { started = resolve; });
     const runtime = await harness({
-      archflow_state: async (_input, context) => {
+      archflow_status: async (_input, context) => {
         abortable = context.signal;
         started();
         await new Promise<never>(() => undefined);
-        return stateSuccess;
+        return semanticSuccess;
       }
     });
     await ready(runtime);
@@ -404,7 +425,7 @@ describe("MCP SDK adapter", () => {
       jsonrpc: "2.0",
       id: "doomed",
       method: "tools/call",
-      params: { name: "archflow_state", arguments: stateInput }
+      params: { name: "archflow_status", arguments: statusInput }
     });
     await didStart;
     runtime.send({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: "doomed" } });

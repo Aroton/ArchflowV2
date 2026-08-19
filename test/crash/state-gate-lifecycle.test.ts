@@ -216,8 +216,14 @@ describe("gate process and SIGKILL boundaries", { timeout: 20_000 }, () => {
       const state = await readTaskState(input.authority.state);
       expect(state.kind === "canonical" ? state.document.value.approvals : []).toHaveLength(1);
       expect(existsSync(join(input.taskRoot, "authority", "decisions", gateId, "decision.json"))).toBe(true);
-      expect(existsSync(join(input.authority.workspace_root, "cache", "gates", "gate.json"))).toBe(false);
-      expect(existsSync(join(input.authority.workspace_root, "cache", "gates", "gate.decision"))).toBe(false);
+      // A kill before the state replacement resumes through the full completion path, which
+      // removes both workspace interfaces. A kill after it resumes as a pure replay: the
+      // retained resolution surface no longer re-cleans interfaces on replay (that cleanup
+      // retired with the runDurableGate wait flow), so the superseded projection — a
+      // disposable interface the next gate open replaces — is left in place.
+      const supersededInterfacesRemain = cut === "state-resolved" || cut === "interface-remove-before";
+      expect(existsSync(join(input.authority.workspace_root, "cache", "gates", "gate.json"))).toBe(supersededInterfacesRemain);
+      expect(existsSync(join(input.authority.workspace_root, "cache", "gates", "gate.decision"))).toBe(supersededInterfacesRemain);
     });
   }
 

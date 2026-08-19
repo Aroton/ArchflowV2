@@ -3,7 +3,6 @@ import { PassThrough } from "node:stream";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { createProjectError } from "../../src/contracts/errors.js";
 import {
   runMcpProcess,
   type ProcessBindings,
@@ -92,7 +91,7 @@ describe("MCP process runner", () => {
   it("forwards a non-empty handler registry into the runtime seam", async () => {
     const base = harness();
     const handlers: NonNullable<ProcessBindings["handlers"]> = Object.freeze({
-      archflow_state: async () => ({ schema_version: "1", ok: false }),
+      archflow_status: async () => ({ schema_version: "1", ok: false, error: { code: "WORKFLOW_INVALID", message: "unused", retryable: false } }),
     }) as NonNullable<ProcessBindings["handlers"]>;
     const bindings: ProcessBindings = { ...base.bindings, handlers };
     const start = vi.fn<RuntimeStarter>().mockResolvedValue(
@@ -122,29 +121,20 @@ describe("MCP process runner", () => {
     const failure = {
       schema_version: "1",
       ok: false,
-      error: createProjectError("CONTRACT_INVALID", {
-        tool: "archflow_state",
-        issue_code: "handler-seam-test",
-      }),
+      error: { code: "WORKFLOW_INVALID", message: "handler-seam-test", retryable: false },
     } as const;
     const handlers: NonNullable<ProcessBindings["handlers"]> = Object.freeze({
-      archflow_state: async () => failure,
+      archflow_status: async () => failure,
     });
     const call = {
       jsonrpc: "2.0",
       id: "call",
       method: "tools/call",
       params: {
-        name: "archflow_state",
+        name: "archflow_status",
         arguments: {
           schema_version: "1",
           task_id: "task-1",
-          intent_id: "intent-1",
-          expected_revision: 2,
-          input_fingerprint: "a".repeat(64),
-          phase_instance: "phase-impl-2",
-          step: "produce",
-          status: "succeeded",
         },
       },
     };

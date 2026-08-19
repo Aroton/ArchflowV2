@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { canonicalJsonDigest, parseCanonicalDocument, type CanonicalDocument } from "../contracts/canonical.js";
 import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
 import { parseConfigYaml } from "../contracts/config.js";
-import { exactCommitAuthorizationContext, parseActiveGate, parseGateRequest, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
+import { exactCommitAuthorizationContext, parseActiveGate, parsePersistedGateRequest, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import type { AdjudicationEvidence } from "../contracts/adjudication.js";
 import type { ProjectError, ProjectResult } from "../contracts/errors.js";
@@ -27,6 +27,7 @@ import { assertInternalTransactionAuthority, createInternalTransactionAuthority 
 import { resolvePinnedConstitution, type ResolvedConstitution } from "./constitution.js";
 import { deriveCurrentEvidenceSet, loadRetainedEvidence, type RetainedEvidenceSet } from "./evidence-results.js";
 import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "./gate-approvals.js";
+import { authenticatedApprovalIsEligibleAfterLatestRestart } from "./restart-authority.js";
 import {
   buildGateDecisionTemplates,
   buildHumanGatePresentation,
@@ -34,7 +35,6 @@ import {
 } from "./gate-decision-interface.js";
 import { activeProjection, type GateLifecycleDependencies } from "./gate-core.js";
 import { deriveNextAction, type NextAction } from "./next-action.js";
-import { buildNextActionRequest } from "./request-templates.js";
 import { expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject, produceUpstreamBindingsForSubject } from "./produce-subject.js";
 import type { CurrentProduceSubject } from "./produce-subject.js";
 import { designArtifactCommittedAtCurrentTarget, implementationOutputCommittedAtCurrentTarget, type DesignMilestoneMiss } from "./implementation-manifest.js";
@@ -166,12 +166,21 @@ export function baselineAdoptionInputFromFindings(
   findings: readonly ReconciliationFinding[],
 ): BaselineAdoptionInput | undefined {
   const mismatches = findings.filter((finding): finding is Extract<ReconciliationFinding, { kind: "projection-mismatch" }> => finding.kind === "projection-mismatch");
-  // A missing projected file has no current bytes to adopt; next-action routing sends that case
-  // elsewhere, so here the drift set must be fully observable.
-  if (mismatches.length === 0 || !mismatches.every((finding) => finding.observed_digest !== undefined)) return undefined;
+  // The drift set splits into live-byte mismatches the human can adopt or restore, and committed
+  // deletions — missing, unrestorable (adoption-sourced), and already absent from HEAD, so no
+  // produce can re-declare them either. Any other missing projection (restorable, or deleted only
+  // in the worktree) routes to restore or produce re-entry instead, and its presence makes the
+  // set unrepresentable here.
+  const drifted = mismatches.filter((finding) => finding.observed_digest !== undefined);
+  const deleted = mismatches.filter((finding) =>
+    finding.observed_digest === undefined && finding.restore_unavailable === true && finding.committed_absent === true);
+  if (drifted.length + deleted.length === 0 || drifted.length + deleted.length !== mismatches.length) return undefined;
   const context: GateContext<"baseline-adoption"> = Object.freeze({
-    drifted_projections: Object.freeze(mismatches
+    drifted_projections: Object.freeze(drifted
       .map((finding) => Object.freeze({ path: finding.path, recorded_digest: finding.recorded_digest, observed_digest: finding.observed_digest! }))
+      .sort((left, right) => left.path.localeCompare(right.path))),
+    deleted_projections: Object.freeze(deleted
+      .map((finding) => Object.freeze({ path: finding.path, recorded_digest: finding.recorded_digest }))
       .sort((left, right) => left.path.localeCompare(right.path))),
   });
   const subjectDigest = baselineAdoptionDriftDigest(context);
@@ -252,6 +261,16 @@ export type TaskStatusV1 = Readonly<{
 }>;
 
 /**
+ * Authenticated inputs retained by the detailed status read for internal semantic projection.
+ * This is intentionally not part of the serialized legacy status contract.
+ */
+export type DetailedTaskStatusV1 = Readonly<{
+  status: TaskStatusV1;
+  state?: TaskStateV1;
+  retained: RetainedEvidenceSet;
+}>;
+
+/**
  * The routine-loop projection of {@link TaskStatusV1}: position, blockers, and the one next
  * action, with every rendered body stripped — no constitution rule text, no counter-review
  * prompt, no decision-template bodies, no evidence detail. Everything here is derived from the
@@ -277,12 +296,12 @@ export type BriefTaskStatusV1 = Readonly<{
   }>;
   /** Included in the routine view only when cleanup work remains. */
   workspace?: WorkspaceCleanupReport;
-  next_action: Omit<NextAction, "request" | "guidance" | "gate_id">;
+  next_action: Omit<NextAction, "gate_id">;
 }>;
 
-/** Keep routing identity in brief status without carrying request templates or their prose. */
-function projectBriefNextAction(next: NextAction): Omit<NextAction, "request" | "guidance" | "gate_id"> {
-  const { request: _request, guidance: _guidance, gate_id: _gateId, ...identity } = next;
+/** Keep routing identity in brief status without gate-internal material. */
+function projectBriefNextAction(next: NextAction): Omit<NextAction, "gate_id"> {
+  const { gate_id: _gateId, ...identity } = next;
   return Object.freeze(identity);
 }
 
@@ -413,14 +432,53 @@ async function readArchivedGateRequest(
     });
     if (!target.ok) return undefined;
     const bytes = new Uint8Array(await readFile(target.value.absolute));
-    return parseGateRequest(parseCanonicalDocument(bytes, "gate request").value);
+    // Every read of a persisted gate request goes through the tolerant archived parser: an open
+    // gate written by an older bundle (for example a pre-deletion-adoption baseline tuple) must
+    // keep projecting and resolving after switchover. Only composing a NEW request uses the
+    // strict writer shape.
+    return parsePersistedGateRequest(parseCanonicalDocument(bytes, "gate request").value);
   } catch (error) {
     if ((error as { code?: unknown }).code === "ENOENT") return undefined;
     throw error;
   }
 }
 
-async function currentApprovedUpstreams(
+/**
+ * The review predecessor the fixed-point assessor must see: the current produce artifact's
+ * declared editorial predecessor, or — when a one-hop simple human revision reused the prior
+ * review — the predecessor that revision recorded. Shared by the status projection and the gate
+ * composer so both assess exactly the same subject.
+ */
+export function currentReviewPredecessor(
+  state: TaskStateV1,
+  produceSubject: CurrentProduceSubject | undefined,
+): Readonly<{ subject_digest: Sha256Digest; input_fingerprint: Sha256Digest }> | undefined {
+  const midProduce = state.step === "produce" && state.status !== "succeeded";
+  const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document"
+    ? produceSubject.artifact.editorial_predecessor
+    : undefined;
+  const currentProduceReference = state.authoritative_results.find((reference) =>
+    reference.phase_instance === state.phase_instance && reference.step === "produce");
+  const simpleHumanRevision = currentProduceReference === undefined
+    ? undefined
+    : [...(state.human_revision_history ?? [])].reverse().find((revision) =>
+        revision.phase_instance === state.phase_instance &&
+        revision.classification === "simple" &&
+        revision.resulting_result_digest === currentProduceReference.result_digest);
+  return declaredPredecessor === undefined
+    ? simpleHumanRevision === undefined
+      ? undefined
+      : Object.freeze({
+          subject_digest: simpleHumanRevision.predecessor_subject_digest,
+          input_fingerprint: simpleHumanRevision.predecessor_input_fingerprint,
+        })
+    : Object.freeze({
+        subject_digest: declaredPredecessor.subject_digest,
+        input_fingerprint: declaredPredecessor.input_fingerprint,
+      });
+}
+
+export async function currentApprovedUpstreams(
   dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
   state: TaskStateV1,
@@ -446,6 +504,9 @@ async function currentApprovedUpstreams(
     const approval = [...authenticated]
       .filter((item) => {
         if (item.approval.subject_digest !== loaded.value.artifact_digest) return false;
+        if (!authenticatedApprovalIsEligibleAfterLatestRestart(
+          state, item, loaded.value.artifact.phase_instance,
+        )) return false;
         return (item.approval.gate_kind === "design-approval" &&
             item.request.kind === "design-approval" &&
             item.request.context.artifact_kind === ownerKind) ||
@@ -642,10 +703,10 @@ export async function buildDesignApprovalInput(
 }
 
 /** Computes reconciled normal-mode status without mutating any durable authority. */
-export async function computeTaskStatus(
+async function computeTaskStatusDetailedInternal(
   dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
-): Promise<ProjectResult<TaskStatusV1>> {
+): Promise<ProjectResult<DetailedTaskStatusV1>> {
   const blockers: string[] = [];
   let stateRead: Awaited<ReturnType<typeof readTaskState>>;
   try {
@@ -653,25 +714,27 @@ export async function computeTaskStatus(
     stateRead = await readTaskState(authority.state);
   } catch {
     const next = deriveNextAction({ repository_initialized: true });
-    return ok(Object.freeze({
+    const status = Object.freeze({
       task_id: authority.task_id,
       state: "missing" as const,
       config: unavailableConfig(undefined, undefined, "status-authority-invalid"),
       blocking_reasons: Object.freeze(["status-authority-invalid"]),
-      next_action: attachNextActionRequest(next, { task_id: authority.task_id }),
-    }));
+      next_action: next,
+    });
+    return ok(Object.freeze({ status, retained: new Map() }));
   }
 
   if (stateRead.kind !== "canonical") {
     const reason = stateRead.kind === "missing" ? "state-missing" : `state-${stateRead.kind}`;
     const next = deriveNextAction({ repository_initialized: true });
-    return ok(Object.freeze({
+    const status = Object.freeze({
       task_id: authority.task_id,
       state: "missing" as const,
       config: unavailableConfig(undefined, undefined, "state-unavailable"),
       blocking_reasons: Object.freeze([reason]),
-      next_action: attachNextActionRequest(next, { task_id: authority.task_id }),
-    }));
+      next_action: next,
+    });
+    return ok(Object.freeze({ status, retained: new Map() }));
   }
   const stateDocument = stateRead.document;
   const state = stateDocument.value;
@@ -810,6 +873,7 @@ export async function computeTaskStatus(
     try {
       const loaded = await loadAuthenticatedGateApproval(dependencies, authority, approval);
       if (loaded.ok) {
+        if (!authenticatedApprovalIsEligibleAfterLatestRestart(state, loaded.value)) continue;
         authenticatedApprovals.push(loaded.value);
         approvalFacts.push(Object.freeze({ gate_kind: approval.gate_kind, subject_digest: approval.subject_digest }));
       } else {
@@ -957,25 +1021,7 @@ export async function computeTaskStatus(
   const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document"
     ? produceSubject.artifact.editorial_predecessor
     : undefined;
-  const currentProduceReference = state.authoritative_results.find((reference) =>
-    reference.phase_instance === state.phase_instance && reference.step === "produce");
-  const simpleHumanRevision = currentProduceReference === undefined
-    ? undefined
-    : [...(state.human_revision_history ?? [])].reverse().find((revision) =>
-        revision.phase_instance === state.phase_instance &&
-        revision.classification === "simple" &&
-        revision.resulting_result_digest === currentProduceReference.result_digest);
-  const reviewPredecessor = declaredPredecessor === undefined
-    ? simpleHumanRevision === undefined
-      ? undefined
-      : Object.freeze({
-          subject_digest: simpleHumanRevision.predecessor_subject_digest,
-          input_fingerprint: simpleHumanRevision.predecessor_input_fingerprint,
-        })
-    : Object.freeze({
-        subject_digest: declaredPredecessor.subject_digest,
-        input_fingerprint: declaredPredecessor.input_fingerprint,
-      });
+  const reviewPredecessor = currentReviewPredecessor(state, produceSubject);
   let assessment: EvidenceAssessment | undefined;
   if (constitution !== undefined && subjectDigest !== undefined) {
     const resolvedAssessment = await resolveStatusEvidenceAssessment(
@@ -1129,33 +1175,16 @@ export async function computeTaskStatus(
   if (assessment?.next === "adjudication-gate" && constitution !== undefined) {
     pendingGates = pendingAdjudicationGates(state, constitution, retained, authenticatedApprovals);
   }
-  const adjudicationGate = pendingGates[0];
-  const adjudicationGateKind = adjudicationGate?.kind;
+  const adjudicationGateKind = pendingGates[0]?.kind;
   const legacyInitialization = await loadLegacyImportInitialization(dependencies, authority, state);
   const migrationAuditRequired = legacyInitialization.ok && legacyInitialization.value !== undefined &&
     state.phase_instance === "design" &&
     !authenticatedApprovals.some((item) => item.request.kind === "migration-audit" && item.decision.envelope.payload.decision === "accept-import-audit");
-  const migrationAuditContext: GateContext<"migration-audit"> | undefined =
-    migrationAuditRequired && legacyInitialization.ok && legacyInitialization.value?.resume_phase !== undefined &&
-    legacyInitialization.value.planned_final_phase !== undefined && legacyInitialization.value.target_ref !== undefined &&
-    legacyInitialization.value.commit_message !== undefined
-      ? Object.freeze({
-          source_identity_digest: legacyInitialization.value.source_identity_digest,
-          destination_identity_digest: authority.task_identity_digest,
-          import_digest: legacyInitialization.value.import_digest,
-          code_baseline_digest: canonicalJsonDigest({ schema_version: "1", digest_kind: "code-baseline-commit", commit: legacyInitialization.value.code_baseline_commit }),
-          policy_baseline_digest: canonicalJsonDigest({ schema_version: "1", digest_kind: "policy-base-commit", commit: legacyInitialization.value.policy_base_commit }),
-          resume_phase: legacyInitialization.value.resume_phase,
-          planned_final_phase: legacyInitialization.value.planned_final_phase,
-          imported_documents: Object.freeze(legacyInitialization.value.mapping.map((entry) => Object.freeze({
-            path: entry.destination_path,
-            content_digest: legacyInitialization.value!.staged_payload_refs.find((reference) => reference.legacy_path === entry.legacy_path)!.digest,
-          })).sort((left, right) => left.path.localeCompare(right.path))),
-          target_ref: legacyInitialization.value.target_ref,
-          baseline_commit: legacyInitialization.value.code_baseline_commit,
-          commit_message: legacyInitialization.value.commit_message,
-        })
-      : undefined;
+  // Once the audit is accepted, the design phase exits to the import's authenticated resume
+  // point, so status reports the server-derived resume skill instead of a phase-1 hand-off.
+  const migrationAuditAccepted = legacyInitialization.ok && legacyInitialization.value !== undefined &&
+    state.phase_instance === "design" &&
+    authenticatedApprovals.some((item) => item.request.kind === "migration-audit" && item.decision.envelope.payload.decision === "accept-import-audit");
   const nextAction = deriveNextAction({
     repository_initialized: true,
     state,
@@ -1179,10 +1208,12 @@ export async function computeTaskStatus(
     ...(adjudicationGateKind === undefined ? {} : { adjudication_gate_kind: adjudicationGateKind }),
     ...(pendingGates.length === 0 ? {} : { pending_adjudication_gate_kinds: pendingGates.map((gate) => gate.kind) }),
     migration_audit_required: migrationAuditRequired,
+    ...(migrationAuditAccepted && legacyInitialization.value?.resume_phase !== undefined
+      ? { legacy_resume_phase: legacyInitialization.value.resume_phase }
+      : {}),
   });
 
   let gateInput: CommitAuthorizationInput | undefined;
-  let designGateInput: DesignApprovalInput | undefined;
   let baselineAdoptionInput: BaselineAdoptionInput | undefined;
   if (
     nextAction.code === "open-gate" && nextAction.gate_kind === "commit-authorization" &&
@@ -1202,31 +1233,6 @@ export async function computeTaskStatus(
   ) {
     baselineAdoptionInput = baselineAdoptionInputFromFindings(authority.task_id, state, statusReconciliation.findings);
   }
-  if (
-    nextAction.code === "open-gate" && nextAction.gate_kind === "design-approval" && evidence.available
-  ) {
-    const target = await currentTargetRef(dependencies);
-    designGateInput = await buildDesignApprovalInput(dependencies, state, retained, target);
-  }
-  const nextActionWithRequest = attachNextActionRequest(nextAction, {
-    task_id: authority.task_id,
-    state,
-    // Gate templates bind the retained produce artifact digest. After an editorial revision the
-    // derived review set stays bound to the predecessor bytes, so the review-set subject would
-    // name the wrong artifact.
-    ...(evidence.available
-      ? {
-          subject_digest: subjectDigest ?? evidence.subject_digest,
-          current_evidence: evidence.current_evidence,
-        }
-      : {}),
-    ...(gateInput === undefined ? {} : { commit_authorization: gateInput }),
-    ...(designGateInput === undefined ? {} : { design_approval: designGateInput }),
-    ...(baselineAdoptionInput === undefined ? {} : { baseline_adoption: baselineAdoptionInput }),
-    ...(migrationAuditContext === undefined ? {} : { migration_audit: migrationAuditContext }),
-    ...(adjudicationGate === undefined ? {} : { adjudication_gate: adjudicationGate }),
-    maximum_attempts: parsedConfig?.max_attempts ?? DEFAULT_MAX_ATTEMPTS,
-  });
 
   let workspace: WorkspaceCleanupReport;
   try {
@@ -1250,7 +1256,7 @@ export async function computeTaskStatus(
     });
   }
 
-  return ok(Object.freeze({
+  const status: TaskStatusV1 = Object.freeze({
     task_id: authority.task_id,
     state: state.terminal ?? "active",
     revision: state.revision,
@@ -1275,18 +1281,26 @@ export async function computeTaskStatus(
     ...(baselineAdoptionInput === undefined ? {} : { baseline_adoption_gate: baselineAdoptionInput }),
     workspace,
     blocking_reasons: Object.freeze([...new Set(blockers)]),
-    next_action: nextActionWithRequest,
-  }));
+    next_action: nextAction,
+  });
+  return ok(Object.freeze({ status, state, retained }));
 }
 
-function attachNextActionRequest(
-  next: NextAction,
-  facts: Parameters<typeof buildNextActionRequest>[1],
-): NextAction {
-  const built = buildNextActionRequest(next, facts);
-  return built === undefined
-    ? next
-    : Object.freeze({ ...next, request: built.request, guidance: built.guidance });
+/** Computes status and exposes the exact authenticated state/evidence read to internal consumers. */
+export async function computeTaskStatusDetailed(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+): Promise<ProjectResult<DetailedTaskStatusV1>> {
+  return computeTaskStatusDetailedInternal(dependencies, authority);
+}
+
+/** Computes reconciled normal-mode status without exposing internal authority material. */
+export async function computeTaskStatus(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+): Promise<ProjectResult<TaskStatusV1>> {
+  const detailed = await computeTaskStatusDetailedInternal(dependencies, authority);
+  return detailed.ok ? ok(detailed.value.status) : detailed;
 }
 
 type UnreadableStateDetails = Readonly<{

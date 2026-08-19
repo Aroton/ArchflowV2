@@ -46,13 +46,27 @@ export type HumanRevisionDeclaration = {
   readonly rationale: string;
   readonly user_override?: HumanRevisionOverride;
 };
-export type PlanningRestartDeclaration = { readonly reason: string };
-export type StateInput = CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly step: "produce" | "counter_review" | "triage"; readonly status: "running" | "succeeded" | "failed"; readonly artifact?: DurableArtifact; readonly human_revision?: HumanRevisionDeclaration; readonly planning_restart?: PlanningRestartDeclaration };
+export type StateBoundaryInput = CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly step: "produce" | "counter_review" | "triage"; readonly status: "running" | "succeeded" | "failed"; readonly artifact?: DurableArtifact; readonly human_revision?: HumanRevisionDeclaration; readonly operation?: never; readonly target_phase_instance?: never; readonly reason?: never; readonly ask_base_digest?: never };
+/** Additive migration adapter for the bounded planning-restart kernel. */
+export type PlanningRestartInput = CommonToolInput & {
+  readonly operation: "planning_restart";
+  /** Authenticated current/source phase. */
+  readonly phase_instance: PhaseInstanceId;
+  /** Strictly earlier planning target; the transition kernel remains authoritative. */
+  readonly target_phase_instance: PhaseInstanceId;
+  readonly reason: string;
+  readonly ask_base_digest?: Sha256Digest;
+  readonly step: "produce";
+  readonly status: "running";
+  readonly artifact?: never;
+  readonly human_revision?: never;
+};
+export type StateInput = StateBoundaryInput | PlanningRestartInput;
 // Every success value optionally echoes the request_digest the server recorded for the call, so
 // a client can compare one string against its envelope output to prove the arguments arrived
 // untranscribed. Optional in the contract because receipts recorded before the echo existed must
 // keep replaying byte-identically; live handlers always emit it.
-export interface StateSuccess { readonly path: TaskPathClaim; readonly revision: number; readonly status: StateInput["status"]; readonly request_digest?: Sha256Digest }
+export interface StateSuccess { readonly path: TaskPathClaim; readonly revision: number; readonly status: "running" | "succeeded" | "failed"; readonly request_digest?: Sha256Digest }
 /**
  * A per-dispatch substitute for the pinned routing of one counter-review call. The pinned
  * `config.yaml` and its digest are never touched: this names the route the server should dispatch
@@ -75,9 +89,14 @@ export type CounterReviewConstitutionOutcome =
   | Readonly<{ status: "not-run"; reason: "no-active-constitution-rules" }>;
 export interface CounterReviewSuccess { readonly path: RepositoryPathClaim; readonly verdict: "pass" | "advisory" | "fail"; readonly blocking_count: number; readonly constitution: CounterReviewConstitutionOutcome; readonly revision: number; readonly request_digest?: Sha256Digest }
 export type HumanGateChoice = { readonly choice: string; readonly reason: string };
-export type GateInput = { readonly [K in GateKind]: CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly summary: string; readonly subject_digest: Sha256Digest; readonly current_evidence: GateEvidenceByKind<K>; readonly kind: K; readonly context: GateContext<K>; readonly preview_digest: Sha256Digest; readonly decision: HumanGateChoice } }[GateKind];
+/**
+ * The bounded-decision pair is optional and all-or-nothing: supply `preview_digest` + `decision`
+ * together to settle the gate in one authenticated call, or omit both to open the gate and wait
+ * for the human decision written through the disposable interface.
+ */
+export type GateInput = { readonly [K in GateKind]: CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly summary: string; readonly subject_digest: Sha256Digest; readonly current_evidence: GateEvidenceByKind<K>; readonly kind: K; readonly context: GateContext<K>; readonly preview_digest?: Sha256Digest; readonly decision?: HumanGateChoice } }[GateKind];
 export type GateSuccess = { readonly [K in GateKind]: { readonly kind: K; readonly decision: GateDecisionEnvelope<K>; readonly notes: string; readonly revision: number; readonly request_digest?: Sha256Digest } }[GateKind];
-export type WaiverInput = CommonToolInput & { readonly origin: WaiverOriginRef; readonly rationale: string; readonly preview_digest: Sha256Digest; readonly decision: HumanGateChoice };
+export type WaiverInput = CommonToolInput & { readonly origin: WaiverOriginRef; readonly rationale: string; readonly preview_digest?: Sha256Digest; readonly decision?: HumanGateChoice };
 export interface WaiverDecisionBinding { readonly origin_gate_id: PathSafeId; readonly waiver_gate_id: PathSafeId; readonly task_id: TaskSlug; readonly rule_id: string; readonly rule_version: number; readonly subject_digest: Sha256Digest; readonly current_evidence_set_digest: Sha256Digest; readonly scope: WaiverScope; readonly human_provenance: HumanDecisionProvenance }
 export type WaiverSuccess = (WaiverDecisionBinding & { readonly granted: true; readonly expires: "task-complete"; readonly notes: string; readonly revision: number; readonly request_digest?: Sha256Digest }) | (WaiverDecisionBinding & { readonly granted: false; readonly notes: string; readonly revision: number; readonly request_digest?: Sha256Digest });
 export interface ToolContract<Input, Success> { readonly input: Input; readonly success: Success }
@@ -114,29 +133,54 @@ const humanRevisionDeclarationSchema = z.object({
     context.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
   }
 });
-export const planningRestartDeclarationSchema = z.object({ reason: text }).strict();
-export const stateInputSchema = z.object({ ...common, phase_instance: phase, step: z.enum(["produce", "counter_review", "triage"]), status: z.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional(), human_revision: humanRevisionDeclarationSchema.optional(), planning_restart: planningRestartDeclarationSchema.optional() }).strict().superRefine((input, context) => {
+export const stateBoundaryInputSchema = z.object({ ...common, phase_instance: phase, step: z.enum(["produce", "counter_review", "triage"]), status: z.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional(), human_revision: humanRevisionDeclarationSchema.optional() }).strict().superRefine((input, context) => {
   if (input.human_revision !== undefined && (input.step !== "produce" || input.status !== "succeeded")) {
     context.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
   }
-  if (input.planning_restart !== undefined &&
-      (input.step !== "produce" || input.status !== "running" || input.artifact !== undefined || input.human_revision !== undefined)) {
-    context.addIssue({ code: "custom", path: ["planning_restart"], message: "planning_restart is allowed only on an artifact-free produce-running transition" });
-  }
 });
+export const planningRestartInputSchema = z.object({
+  ...common,
+  operation: z.literal("planning_restart"),
+  phase_instance: phase,
+  target_phase_instance: phase,
+  reason: text,
+  ask_base_digest: digest.optional(),
+  step: z.literal("produce"),
+  status: z.literal("running"),
+}).strict();
 /**
- * The staged-request reference arm shared by every tool input union. It is structurally disjoint
- * from every full-payload arm: strictness rejects any full payload (extra fields), and every full
- * payload requires `expected_revision`/`input_fingerprint`, which the reference lacks — so
- * classification between the arms is never ambiguous. The server resolves the reference to the
- * staged file `build-request` wrote and refuses on any digest disagreement.
+ * One plain object root. Some MCP hosts flatten root unions into a zero-field object, so the
+ * additive operation shares a union-of-properties root and the runtime refinement enforces arms.
  */
-const stagedReferenceInput = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, request_digest: digest }).strict();
-export type StagedRequestReference = Readonly<{ schema_version: "1"; task_id: TaskSlug; intent_id: PathSafeId; request_digest: Sha256Digest }>;
-export function parseStagedRequestReference(value: unknown): StagedRequestReference {
-  assertPlainJson(value, "staged request reference");
-  return deepFreeze(stagedReferenceInput.parse(structuredClone(value))) as StagedRequestReference;
-}
+export const stateInputSchema = z.object({
+  ...common,
+  phase_instance: phase,
+  step: z.enum(["produce", "counter_review", "triage"]),
+  status: z.enum(["running", "succeeded", "failed"]),
+  artifact: durableArtifact.optional(),
+  human_revision: humanRevisionDeclarationSchema.optional(),
+  operation: z.literal("planning_restart").optional(),
+  target_phase_instance: phase.optional(),
+  reason: text.optional(),
+  ask_base_digest: digest.optional(),
+}).strict().superRefine((input, context) => {
+  if (input.operation === "planning_restart") {
+    if (input.target_phase_instance === undefined) context.addIssue({ code: "custom", path: ["target_phase_instance"], message: "planning_restart requires target_phase_instance" });
+    if (input.reason === undefined) context.addIssue({ code: "custom", path: ["reason"], message: "planning_restart requires reason" });
+    if (input.step !== "produce" || input.status !== "running") context.addIssue({ code: "custom", path: ["step"], message: "planning_restart lands at produce/running" });
+    if (input.artifact !== undefined || input.human_revision !== undefined) context.addIssue({ code: "custom", path: ["artifact"], message: "planning_restart cannot carry an artifact or human revision" });
+    if (input.target_phase_instance === "prd" && input.ask_base_digest === undefined) context.addIssue({ code: "custom", path: ["ask_base_digest"], message: "PRD planning_restart requires ask_base_digest" });
+    if (input.target_phase_instance !== "prd" && input.ask_base_digest !== undefined) context.addIssue({ code: "custom", path: ["ask_base_digest"], message: "ask_base_digest is PRD-only" });
+    return;
+  }
+  if (input.target_phase_instance !== undefined || input.reason !== undefined || input.ask_base_digest !== undefined) context.addIssue({ code: "custom", path: ["operation"], message: "restart fields require planning_restart" });
+  if (input.human_revision !== undefined && (input.step !== "produce" || input.status !== "succeeded")) context.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
+}) as unknown as z.ZodType<StateInput>;
+/**
+ * The staged-request reference arm shared by every tool input union retired with the local
+ * `build-request` staging path: only the full-payload arms remain, and the server dispatches
+ * none of them — the names stay durable-record vocabulary for existing state.
+ */
 // A parentless clone, for the same reason as `provenance` above: the shared instance is registered
 // as `config#/$defs/route`, and the advertised catalogue does not carry the config document, so a
 // cross-document reference to it is unresolvable there. The clone inlines instead.
@@ -152,17 +196,23 @@ export const routeOverrideSchema = z.object({
 });
 export const counterReviewInputSchema = z.object({ ...common, artifact_path: taskPathClaimV1Schema, route_override: routeOverrideSchema.optional() }).strict();
 const humanGateChoiceSchema = z.object({ choice: text, reason: text }).strict();
-export const gateInputSchema = z.object({ ...common, phase_instance: phase, summary: text, subject_digest: digest, current_evidence: z.unknown(), kind: z.enum(GATE_KINDS), context: z.unknown(), preview_digest: digest, decision: humanGateChoiceSchema }).strict().superRefine((input, context) => {
+export const gateInputSchema = z.object({ ...common, phase_instance: phase, summary: text, subject_digest: digest, current_evidence: z.unknown(), kind: z.enum(GATE_KINDS), context: z.unknown(), preview_digest: digest.optional(), decision: humanGateChoiceSchema.optional() }).strict().superRefine((input, context) => {
   try { parseGateContext(input.kind, input.context); } catch (error) { context.addIssue({ code: "custom", path: ["context"], message: error instanceof Error ? error.message : "invalid gate context" }); }
   try {
     // Baseline adoption opens pre-review: its evidence is the drift observation, not a review set.
     if (input.kind === "baseline-adoption") parseBaselineObservationRef(input.current_evidence);
     else parseCurrentEvidenceSetRef(input.current_evidence);
   } catch (error) { context.addIssue({ code: "custom", path: ["current_evidence"], message: error instanceof Error ? error.message : "invalid current evidence" }); }
+  if ((input.preview_digest === undefined) !== (input.decision === undefined)) {
+    context.addIssue({ code: "custom", path: ["preview_digest"], message: "preview_digest and decision must be supplied together (bounded single-call decision) or both omitted (gate opens and awaits the human decision)" });
+  }
 });
 const waiverOrigin = z.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest, origin_context_digest: digest, task_id: taskSlugV1Schema, phase_instance: phase, subject_digest: digest, current_evidence_set_digest: digest, rule, scope }).strict();
-export const waiverInputSchema = z.object({ ...common, origin: waiverOrigin, rationale: text, preview_digest: digest, decision: humanGateChoiceSchema }).strict().superRefine((input, context) => {
+export const waiverInputSchema = z.object({ ...common, origin: waiverOrigin, rationale: text, preview_digest: digest.optional(), decision: humanGateChoiceSchema.optional() }).strict().superRefine((input, context) => {
   if (input.task_id !== input.origin.task_id) context.addIssue({ code: "custom", path: ["task_id"], message: "waiver task_id must match origin task_id" });
+  if ((input.preview_digest === undefined) !== (input.decision === undefined)) {
+    context.addIssue({ code: "custom", path: ["preview_digest"], message: "preview_digest and decision must be supplied together (bounded single-call waiver decision) or both omitted (waiver gate opens and awaits the human decision)" });
+  }
 });
 
 function inputFor<K extends ToolName>(name: K, value: unknown): ToolInput<K> {
@@ -198,22 +248,6 @@ export function parseToolCall<K extends ToolName>(name: K, value: unknown): Extr
   parsedCalls.add(call);
   return call;
 }
-export type ClassifiedToolCallInput<K extends ToolName> =
-  | Readonly<{ kind: "call"; call: Extract<ParsedToolCall, { name: K }> }>
-  | Readonly<{ kind: "staged-reference"; tool: K; reference: StagedRequestReference }>;
-/**
- * The union entry for every tool input: a full payload parses to an authentic call, and the
- * staged-request reference arm is returned for the server to rehydrate from durable staging.
- */
-export function classifyToolCallInput<K extends ToolName>(name: K, value: unknown): ClassifiedToolCallInput<K> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) throw new TypeError("unknown tool");
-  assertPlainJson(value, `${name} input`);
-  const reference = stagedReferenceInput.safeParse(structuredClone(value));
-  if (reference.success) {
-    return Object.freeze({ kind: "staged-reference", tool: name, reference: deepFreeze(reference.data) as StagedRequestReference });
-  }
-  return Object.freeze({ kind: "call", call: parseToolCall(name, value) });
-}
 export type RequestIdentifiedToolCall<K extends ToolName = ToolName> = ParsedToolCall<K> & { readonly request_digest: Sha256Digest };
 export function bindParsedToolCallRequest<K extends ToolName>(call: Extract<ParsedToolCall, { name: K }>, requestDigest: Sha256Digest): Extract<RequestIdentifiedToolCall, { name: K }> { if (!parsedCalls.has(call)) throw new TypeError("an authentic parsed tool call is required"); digest.parse(requestDigest); requestDigests.set(call, requestDigest); return call as Extract<RequestIdentifiedToolCall, { name: K }>; }
 
@@ -235,8 +269,7 @@ export const toolSuccessSchemas = {
 } as const;
 /**
  * The shared `mcp-tools.schema.json` leaf `$defs` the generator emits, keyed by committed def
- * name. The advertised catalogue in `src/mcp/tools.ts` reaches `integer` and `durableArtifact`
- * by pointer and the gate-input emission references the rest, so every name here is pinned.
+ * name. The gate-input emission references these by pointer, so every name here is pinned.
  * Registering these local instances keeps each use site a `#/$defs/<name>` reference instead of
  * an inline copy, mirroring the def layout the hand-written document established.
  */
@@ -249,11 +282,14 @@ export const mcpToolsSchemaDefs: Readonly<Record<string, z.ZodType>> = Object.fr
   durableArtifact,
   rule,
   scope,
-  stagedReference: stagedReferenceInput,
 });
 function successFor<K extends ToolName>(call: Extract<ParsedToolCall, { name: K }>, value: unknown): ToolSuccess<K> {
   const parsed = toolSuccessSchemas[call.name].parse(value) as ToolSuccess<K>;
-  if (call.name === "archflow_state" && (parsed as StateSuccess).status !== (call.input as ParsedToolInput<"archflow_state">).status) throw new TypeError("state status mismatch");
+  if (call.name === "archflow_state") {
+    const input = call.input as ParsedToolInput<"archflow_state">;
+    const expectedStatus = input.operation === "planning_restart" ? "running" : input.status;
+    if ((parsed as StateSuccess).status !== expectedStatus) throw new TypeError("state status mismatch");
+  }
   if (call.name === "archflow_gate") {
     const input = call.input as ParsedToolInput<"archflow_gate">;
     const result = parsed as GateSuccess;

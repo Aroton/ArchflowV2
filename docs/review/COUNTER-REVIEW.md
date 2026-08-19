@@ -1,8 +1,8 @@
 # review/COUNTER-REVIEW
 
-**Explored:** 2026-08-13 · **Commit:** `66c4c9b` · **Covers:** `src/review/`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
+**Explored:** 2026-08-16 · **Commit:** `d60da73` · **Covers:** `src/review/`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
 
-Counter-review is the system's adversarial check: every artifact is reviewed by a server-dispatched reviewer — the producer's *opposite model family* by default (the shipped template's choice), either family by explicit config — so the evidence is something the producer cannot author. One `archflow_counter_review` call covers up to two dispatches: the rubric counter-review, and — only when the pinned constitution has active rules, a decision the server makes alone — the constitution review (see below). This page covers the review envelope, the review flow, the constitution review, and waivers.
+Counter-review is the system's adversarial check: every artifact is reviewed by a server-dispatched reviewer — the producer's *opposite model family* by default (the shipped template's choice), either family by explicit config — so the evidence is something the producer cannot author. One offered semantic `review` action reaches the direct handler seam and covers up to two dispatches: the rubric counter-review, and — only when the pinned constitution has active rules, a decision the server makes alone — the constitution review (see below). Semantic review owns the outer process FIFO across replay, dispatch, and commit; the direct inner seam never queues itself again. This page covers the review envelope, the review flow, the constitution review, and waivers.
 
 ## The dispatch envelope
 
@@ -17,7 +17,7 @@ flowchart TB
         S["subject — the binding:<br/>task, phase, attempt, digests,<br/>fingerprint, producer family"]
         W["workspace (optional)<br/>baseline checkout or sealed<br/>post-change snapshot"]
     end
-    ENV -->|stdin| Child["Opposite-family CLI<br/>+ sealed read-only repository view"]
+    ENV -->|stdin| Child["Reviewer CLI<br/>+ sealed read-only repository view"]
     Child -->|JSON verdict + findings| Server
 ```
 
@@ -71,7 +71,7 @@ The 1 MiB cap remains a control-plane safeguard. An overflow now means compact d
 ## The flow, end to end
 
 1. **Produce** — the artifact is recorded durably; its digest becomes the subject digest.
-2. **Counter-review call** — `archflow_counter_review` with the artifact path and fingerprint; in the normal flow `build-request` derives both. The server selects the rubric. Everything through step 6 happens inside this one call.
+2. **Counter-review call** — one offered `review` action reaches the direct seam, with the artifact, subject, and pinned transcript derived entirely from durable authority. The server selects the rubric. Everything through step 6 happens inside this one call.
 3. **Server assembles** the review material (document text or compact implementation metadata), pins context (failing closed on authority violations), and seals the envelope under the cap. Document reviews receive a checkout at HEAD. Implementation reviews receive the attested base tree with the retained after-images applied, producing the exact post-change snapshot.
 4. **Rubric dispatch** — the configured reviewer CLI runs headless (see `../mcp/DISPATCH.md`); output is parsed and bound to its provenance (adapter, CLI version, route, envelope digest). Reviewer families are recorded in the evidence as provenance — the template defaults to the producer's opposite family, and a route may name a cc-switch `provider` to run a non-claude model through the claude CLI. If the configured reviewer is unreachable — its CLI missing, logged out, rate-limited, or too old — the call may carry a **route override** (see below) that substitutes the route for this dispatch only.
 5. **Constitution dispatch** — when the pinned constitution has active rules, the server then dispatches a second reviewer child that performs the constitution and drift review (see below). The child returns only its per-rule and per-upstream judgments. The server deterministically derives the constitution, drift, matched-trigger, and uncertain-trigger summaries before attestation, so redundant model-authored rollups cannot contradict those judgments. The server alone decides whether this runs; with no active rules the drift check is also skipped and the result records `constitution: {status: "not-run", reason: "no-active-constitution-rules"}`, which is normal.
@@ -96,7 +96,7 @@ Editing the artifact changes its digest, which invalidates downstream evidence. 
 
 ## Constitution review
 
-The constitution review judges the artifact against the repository's **constitution** — the versioned policy rules in `.archflow/constitution/`, pinned per task at a human-approved commit — and checks for drift against the approved upstream documents. It is *not* "reviewer A vs reviewer B" arbitration; disagreements between reviews are resolved by triage. It runs inside the same `archflow_counter_review` call as the rubric review, as a second sequential dispatch, and only when the pinned constitution has active rules — the server decides, never the agent.
+The constitution review judges the artifact against the repository's **constitution** — the versioned policy rules in `.archflow/constitution/`, pinned per task at a human-approved commit — and checks for drift against the approved upstream documents. It is *not* "reviewer A vs reviewer B" arbitration; disagreements between reviews are resolved by triage. It runs inside the same review action as the rubric review, as a second sequential dispatch, and only when the pinned constitution has active rules — the server decides, never the agent.
 
 Each numbered Markdown file in `.archflow/constitution/` is exactly one rule: frontmatter carries a stable `id`, a `version`, a `status`, and a `review_trigger` (a condition that should open a human gate); the prose body is the normative text. Rule IDs are append-only — content changes bump the version, deprecation replaces deletion. The four shipped rules are a good summary of the product's values:
 
@@ -129,7 +129,7 @@ flowchart TB
     T -->|"material drift"| GD{{"material-drift gate<br/>resolving re-enters production"}}
     GF -->|human approves| Adv
     GF -->|human revises| P[re-enter produce]
-    GF -->|"human: waiver-requested<br/>(names rule + axis)"| W["archflow_waiver"]
+    GF -->|"human: waiver-requested<br/>(names rule + axis)"| W["open-waiver offer"]
     W -->|granted on every eligible rule and axis| Adv
 ```
 
@@ -137,7 +137,7 @@ Compliance ("did the subject violate this rule") and trigger ("does this rule's 
 
 Material drift stays its own gate. It concerns a different subject — an approved upstream document — and resolving it re-enters production, so it is deliberately serialized behind the constitution decision.
 
-`archflow-local status` derives the pending gate. `archflow-local gate-preview` then renders the current presentation and a digest over its revision, phase, kind, subject, context, evidence, and choices. After presenting those words and receiving one human answer, `archflow-local build-request` (kind `"gate"`) recomputes the preview and composes the complete request mechanically from retained adjudication evidence plus the supplied `{choice, reason}`. A stale preview or unavailable choice is rejected before staging and checked again by the handler. The connected handler resolves that decision in the same MCP call; it does not poll for a second CLI writer. When a review demands more than one gate, status also reports `pending_gate_kinds` on the next action, so the human can be told up front how many decisions the review will cost instead of discovering the next gate after answering the last.
+Status derives the pending gate. A skill-authored `gate-summary` opens the current presentation — title, summary, direct question, material evidence, and labeled choices — derived from its revision, phase, kind, subject, context, evidence, and retained adjudication evidence. After presenting those words and receiving one human answer, the offered decision action archives the selected token and `{reason}` immutably and settles the gate in a separate substep; a stale or superseded subject is rejected rather than approved, and a retried call replays the archive without recording the decision twice. When a review demands more than one gate, status also reports `pending_gate_kinds` on the next action, so the human can be told up front how many decisions the review will cost instead of discovering the next gate after answering the last.
 
 ### Waivers
 
@@ -145,7 +145,7 @@ A waiver is a durable, human-granted exemption from **one specific rule version*
 
 A waiver also names **one axis**: `adjudication-failure` exempts the rule's compliance verdict, `review-trigger` exempts its matched trigger. Waiving one says nothing about the other, so a gate that flagged a rule on both axes is satisfied by the waiver path only when both are granted.
 
-Waivers are requested from an existing gate, never conjured: the origin must be a `constitution-review` or combined `design-approval` whose recorded decision literally says `waiver-requested`, naming a rule and axis pair the gate actually offered in `eligible_waivers`. The server re-reads and re-authenticates the archived request and decision before binding the waiver. The normal path runs a waiver `gate-preview`, asks once, and sends the answer through decision-carrying `build-request` kind `"waiver"`; its bounded handler authenticates the origin and preview again before resolving. A `waiver-requested` decision is not approval; a denied or cancelled waiver grants nothing.
+Waivers are requested from an existing gate, never conjured: the origin must be a `constitution-review` or combined `design-approval` whose recorded decision literally says `waiver-requested`, naming a rule and axis pair the gate actually offered in `eligible_waivers`. The server re-reads and re-authenticates the archived request and decision before binding the waiver. The normal path applies the separate no-submission `open-waiver` offer, presents the waiver choices in the same conversational way, asks once, and submits the selected opaque token and human reason through the offered action, which authenticates the origin again before resolving. A `waiver-requested` decision is not approval; a denied or cancelled waiver grants nothing.
 
 ### Durable decisions
 

@@ -89,31 +89,36 @@ export function isPlanningPhaseInstance(instance: PhaseInstanceId): boolean {
   return decodePhaseInstance(instance).kind !== "phase-impl";
 }
 
-/**
- * The fixed lifecycle order, used only for comparing already-valid instances. The numeric form
- * deliberately leaves PRD and design before the per-phase pairs:
- * `prd < design < phase-design-1 < phase-impl-1 < phase-design-2 < ...`.
- */
-export function comparePhaseInstances(left: PhaseInstanceId, right: PhaseInstanceId): number {
-  const leftDecoded = decodePhaseInstance(left);
-  const rightDecoded = decodePhaseInstance(right);
-  const prefixRank = (kind: PhaseInstance["kind"]): number =>
-    kind === "prd" ? 0 : kind === "design" ? 1 : 2;
-  const prefix = prefixRank(leftDecoded.kind) - prefixRank(rightDecoded.kind);
-  if (prefix !== 0) return prefix;
-  if ((leftDecoded.kind === "prd" || leftDecoded.kind === "design") ||
-      (rightDecoded.kind === "prd" || rightDecoded.kind === "design")) return 0;
-  const phaseDifference = Number(leftDecoded.phase) - Number(rightDecoded.phase);
-  if (phaseDifference !== 0) return phaseDifference;
-  return leftDecoded.kind === rightDecoded.kind ? 0 : leftDecoded.kind === "phase-design" ? -1 : 1;
-}
-
 /** A restart target must be a planning stage strictly earlier than current durable work. */
 export function isEarlierPlanningPhase(
   target: PhaseInstanceId,
   current: PhaseInstanceId,
 ): boolean {
   return isPlanningPhaseInstance(target) && comparePhaseInstances(target, current) < 0;
+}
+
+/**
+ * Compares phase instances in the canonical workflow order:
+ * `prd < design < phase-design-1 < phase-impl-1 < phase-design-2 < ...`.
+ */
+export function comparePhaseInstances(left: PhaseInstanceId, right: PhaseInstanceId): number {
+  const a = decodePhaseInstance(left);
+  const b = decodePhaseInstance(right);
+  if (a.kind === "prd") return b.kind === "prd" ? 0 : -1;
+  if (b.kind === "prd") return 1;
+  if (a.kind === "design") return b.kind === "design" ? 0 : -1;
+  if (b.kind === "design") return 1;
+  if (a.phase !== b.phase) return a.phase - b.phase;
+  if (a.kind === b.kind) return 0;
+  return a.kind === "phase-design" ? -1 : 1;
+}
+
+/** True only when `target` is an earlier planning boundary, never an implementation phase. */
+export function isStrictlyEarlierPlanningPhase(
+  target: PhaseInstanceId,
+  current: PhaseInstanceId,
+): boolean {
+  return decodePhaseInstance(target).kind !== "phase-impl" && comparePhaseInstances(target, current) < 0;
 }
 
 /**

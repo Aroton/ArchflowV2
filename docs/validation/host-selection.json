@@ -1,0 +1,75 @@
+{
+  "host_selection_result_digest": "c82885f694e66ba83ffb27844dfbd00a4df490cb0e8aad58e15e6a725889fc7f",
+  "observation_payload": {
+    "bundle_manifest_sha256": "f7a412b1f1a0716a6f44613517f732f052e0c592afa706c0015e57efba54bd11",
+    "hosts": {
+      "claude": {
+        "advertisement": {
+          "status": "passed",
+          "tool_names": [
+            "archflow_apply",
+            "archflow_status"
+          ]
+        },
+        "cli_version": "2.1.235 (Claude Code)",
+        "first_call_selection": {
+          "first_archflow_tool": "archflow_status",
+          "prompt": "What is the current status of the ArchFlow task hostsel-claude? Answer in one sentence.",
+          "status": "passed",
+          "task_id": "hostsel-claude"
+        },
+        "journey": {
+          "final_next_action_kind": "submit-work",
+          "initialize_task_apply_seen": true,
+          "reason": "",
+          "status": "completed",
+          "task_state": {
+            "phase_instance": "prd",
+            "revision": 1,
+            "status": "running",
+            "step": "produce"
+          }
+        },
+        "requested_model": "claude-opus-5"
+      },
+      "codex": {
+        "advertisement": {
+          "status": "passed",
+          "tool_names": [
+            "archflow_apply",
+            "archflow_status"
+          ]
+        },
+        "cli_version": "codex-cli 0.147.0",
+        "first_call_selection": {
+          "first_archflow_tool": "archflow_status",
+          "prompt": "What is the current status of the ArchFlow task hostsel-codex? Answer in one sentence.",
+          "status": "passed",
+          "task_id": "hostsel-codex"
+        },
+        "journey": {
+          "final_next_action_kind": "submit-work",
+          "initialize_task_apply_seen": true,
+          "reason": "",
+          "status": "completed",
+          "task_state": {
+            "phase_instance": "prd",
+            "revision": 1,
+            "status": "running",
+            "step": "produce"
+          }
+        },
+        "requested_model": "gpt-5.6-sol"
+      }
+    },
+    "observed_metrics": {
+      "advertisement_hosts": 2,
+      "blocked_journey_hosts": 0,
+      "completed_journey_hosts": 2,
+      "first_call_selection_hosts": 2
+    },
+    "schema_version": "1",
+    "suite": "test/real-host/host-selection.test.ts"
+  },
+  "schema_version": "1"
+}

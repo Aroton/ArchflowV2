@@ -41,6 +41,7 @@ import {
   type ProjectionSource,
 } from "./snapshots.js";
 import type { RetainedManifest, RetainedResultInstallation } from "./transaction.js";
+import { retainedResultReferences } from "./retained-result-graph.js";
 
 export type ProductionServices = Readonly<{
   runner: RootBoundGitRunner;
@@ -363,15 +364,7 @@ export async function createProductionServices(input: ProductionInput): Promise<
       const current = await readTaskState(authority.state);
       if (current.kind !== "canonical") return parseSafeInteger(0);
       let total = 0;
-      const retainedReferences = [
-        ...current.document.value.authoritative_results,
-        ...(current.document.value.human_revision_history ?? []).flatMap((revision) => revision.evidence),
-        ...(current.document.value.restart_history ?? []).flatMap((restart) => [
-          ...restart.superseded_results,
-          ...(restart.cleared_pending_human_revision?.evidence ?? []),
-        ]),
-      ].filter((reference, index, references) => references.findIndex((candidate) =>
-        candidate.result_digest === reference.result_digest) === index);
+      const retainedReferences = retainedResultReferences(current.document.value);
       for (const reference of retainedReferences) {
         if (reference.result_digest === excluded?.result_digest) continue;
         const retained = await loadRetainedManifest(reference);

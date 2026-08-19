@@ -428,7 +428,6 @@
       "type": "object",
       "properties": {
         "drifted_projections": {
-          "minItems": 1,
           "type": "array",
           "items": {
             "type": "object",
@@ -447,6 +446,25 @@
               "path",
               "recorded_digest",
               "observed_digest"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "deleted_projections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+              },
+              "recorded_digest": {
+                "$ref": "#/$defs/digest"
+              }
+            },
+            "required": [
+              "path",
+              "recorded_digest"
             ],
             "additionalProperties": false
           }
@@ -797,6 +815,7 @@
           "enum": [
             "adopt-current-bytes",
             "restore-recorded-bytes",
+            "adopt-committed-deletions",
             "abort"
           ]
         },

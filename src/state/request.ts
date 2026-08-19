@@ -18,20 +18,20 @@ function subjectFor(call: ParsedToolCall, authority: TransactionAuthority, input
   };
   switch (call.name) {
     case "archflow_state":
+      if (call.input.operation === "planning_restart") {
+        return {
+          ...common,
+          tool: call.name,
+          operation: "planning-restart",
+          operation_fields: {
+            phase_instance: call.input.phase_instance,
+            target_phase_instance: call.input.target_phase_instance,
+            reason: call.input.reason,
+            ...(call.input.ask_base_digest === undefined ? {} : { ask_base_digest: call.input.ask_base_digest }),
+          },
+        };
+      }
       if (call.input.artifact === undefined) {
-        if (call.input.planning_restart !== undefined) {
-          return {
-            ...common,
-            tool: call.name,
-            operation: "restart-planning",
-            operation_fields: {
-              phase_instance: call.input.phase_instance,
-              step: call.input.step,
-              status: call.input.status,
-              planning_restart: call.input.planning_restart,
-            },
-          };
-        }
         return { ...common, tool: call.name, operation: "record-state-boundary", operation_fields: { phase_instance: call.input.phase_instance, step: call.input.step, status: call.input.status } };
       }
       return {
@@ -70,8 +70,11 @@ function subjectFor(call: ParsedToolCall, authority: TransactionAuthority, input
         current_evidence: call.input.current_evidence,
         kind: call.input.kind,
         context: call.input.context,
-        preview_digest: call.input.preview_digest,
-        decision: call.input.decision,
+        // assertPlainJson rejects undefined property values, so the optional bounded-decision
+        // pair is omitted entirely on the open-and-wait arm rather than passed as undefined.
+        ...(call.input.preview_digest === undefined || call.input.decision === undefined
+          ? {}
+          : { preview_digest: call.input.preview_digest, decision: call.input.decision }),
       };
       return { ...common, tool: call.name, operation: "gate", operation_fields };
     }
@@ -79,8 +82,9 @@ function subjectFor(call: ParsedToolCall, authority: TransactionAuthority, input
       return { ...common, tool: call.name, operation: "waiver", operation_fields: {
         origin: call.input.origin,
         rationale: call.input.rationale,
-        preview_digest: call.input.preview_digest,
-        decision: call.input.decision,
+        ...(call.input.preview_digest === undefined || call.input.decision === undefined
+          ? {}
+          : { preview_digest: call.input.preview_digest, decision: call.input.decision }),
       } };
     default: {
       const exhaustive: never = call;

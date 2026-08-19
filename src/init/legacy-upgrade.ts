@@ -4,6 +4,7 @@ import { isAbsolute, join, relative, sep } from "node:path";
 import {
   canonicalDocument,
   canonicalJsonDigest,
+  parseCanonicalDocument,
   parseGitOid,
   sha256Bytes,
 } from "../contracts/canonical.js";
@@ -43,7 +44,13 @@ import {
 import { createProjectionWriter, type ProjectionWriter } from "../state/atomic.js";
 import { createInternalTransactionAuthority } from "../state/authority.js";
 import { detectTaskLocalConstitutionEdit } from "../state/constitution.js";
+import { runStateInitialization } from "../state/initialization.js";
 import { ensureWorkspaceProjectionParent } from "../state/layout.js";
+import { parseLegacyImportInitialization } from "../contracts/durable-legacy-import.js";
+import { computeCallEnvelope } from "../local/call-envelope.js";
+import { parseToolCall } from "../contracts/mcp-tools.js";
+import { parsePathSafeId } from "../contracts/evidence.js";
+import { createProductionServices } from "../state/production.js";
 import { createSecretlintScanner, secretScanCandidateFromBytes } from "../state/secret-scan.js";
 import {
   canonicalTaskPaths,
@@ -83,6 +90,13 @@ export type DiscardLegacyUpgradeInput = Readonly<{
   working_directory: string;
   task_id: string;
   import_digest: string;
+}>;
+
+export type AdoptLegacyUpgradeOutcome = Readonly<{
+  task_id: ReturnType<typeof parseTaskSlug>;
+  import_digest: string;
+  resume_phase: PhaseInstanceId;
+  replayed: boolean;
 }>;
 
 type SelectedFile = Readonly<{ legacy_path: RepositoryPathClaim; bytes: Uint8Array }>;
@@ -472,4 +486,124 @@ export async function discardLegacyUpgrade(input: DiscardLegacyUpgradeInput): Pr
   }
   await rm(join(root, ".archflow", "runtime", "tasks", taskId, "cache", "imports", digest), { recursive: true, force: true });
   return ok(Object.freeze({ discarded: true as const }));
+}
+
+type StagedImportDescriptor = Readonly<{
+  import_digest: string;
+  resume_phase: PhaseInstanceId;
+}>;
+
+async function stagedImportDescriptor(
+  importsRoot: string,
+  taskId: ReturnType<typeof parseTaskSlug>,
+): Promise<ProjectResult<StagedImportDescriptor>> {
+  let digests: string[];
+  try { digests = (await readdir(importsRoot)).filter((entry) => /^[a-f0-9]{64}$/u.test(entry)).sort(ordinal); } catch {
+    return fail(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-stage-missing" }));
+  }
+  const matches: StagedImportDescriptor[] = [];
+  for (const digest of digests) {
+    let parsed: unknown;
+    try { parsed = JSON.parse(await readFile(join(importsRoot, digest, "stage.json"), "utf8")); } catch { continue; }
+    if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") continue;
+    const stage = parsed as Record<string, unknown>;
+    if (stage.task_id !== taskId || stage.import_digest !== digest) continue;
+    try {
+      matches.push(Object.freeze({
+        import_digest: digest,
+        resume_phase: parsePhaseInstanceId(String(stage.resume_phase)),
+      }));
+    } catch { /* A malformed stage descriptor is not an adoptable stage. */ }
+  }
+  if (matches.length === 0) {
+    return fail(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-stage-missing" }));
+  }
+  if (matches.length > 1) {
+    return fail(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-stage-ambiguous" }));
+  }
+  return ok(matches[0]!);
+}
+
+/**
+ * Atomically adopts the one staged, preview-approved legacy import for this task by running the
+ * existing initialization transaction over the staged `legacy-import-initialization` artifact.
+ * The transaction authenticates every staged byte (config digest, payload digests, commit
+ * baselines) and inherits its own staged-config fallback, so any unexpected staged-bytes mismatch
+ * fails closed without publishing a visible destination. The intent id is derived from the import
+ * digest, so an interrupted adoption replays to the same committed revision instead of duplicating
+ * effects.
+ */
+export async function adoptLegacyUpgrade(input: Readonly<{
+  working_directory: string;
+  task_id: string;
+}>): Promise<ProjectResult<AdoptLegacyUpgradeOutcome>> {
+  const taskId = parseTaskSlug(input.task_id);
+  const context: RepositoryOperationContext = Object.freeze({
+    task_id: taskId,
+    phase_instance: parsePhaseInstanceId("prd"),
+    operation: parseSafeCode("adopt-legacy-upgrade"),
+    attempt: parseSafeInteger(1),
+  });
+  const created = await createProductionServices({
+    working_directory: input.working_directory,
+    task_id: taskId,
+    operation: parseSafeCode("adopt-legacy-upgrade"),
+  });
+  if (!created.ok) return created;
+  const services = created.value;
+  try {
+    const descriptor = await stagedImportDescriptor(join(services.authority.workspace_root, "cache", "imports"), taskId);
+    if (!descriptor.ok) return descriptor;
+
+    // The manifest bytes are re-authenticated canonically; replaced or tampered staging fails here.
+    const manifestBytes = new Uint8Array(await readFile(
+      join(services.authority.workspace_root, "cache", "imports", descriptor.value.import_digest, "manifest.json"),
+    ));
+    const manifest = parseCanonicalDocument(manifestBytes, "staged legacy import manifest");
+    const initialization = parseLegacyImportInitialization(manifest.value);
+    if (initialization.task_id !== taskId || initialization.import_digest !== descriptor.value.import_digest) {
+      return fail(createProjectError("CONTRACT_INVALID", { issue_code: "legacy-stage-manifest-mismatch" }));
+    }
+
+    // A deterministic intent id makes adoption retry-safe: the transaction replays exactly this
+    // adoption, and any other existing state refuses as an already-adopted task.
+    const intentId = parsePathSafeId(`adopt-legacy-import-${descriptor.value.import_digest}`);
+    if (services.state !== undefined) {
+      const transition = services.state.value.last_transition;
+      if (services.state.value.revision !== 1 || transition?.intent_id !== intentId) {
+        return fail(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-stage-already-adopted" }));
+      }
+    }
+
+    // The envelope resolves the initialization fingerprint (running the same identification the
+    // server performs, staged legacy config fallback included) and validates every staged byte.
+    const draft = {
+      schema_version: "1" as const,
+      task_id: taskId,
+      intent_id: intentId,
+      expected_revision: 0,
+      input_fingerprint: "0".repeat(64),
+      phase_instance: "design" as const,
+      step: "produce" as const,
+      status: "running" as const,
+      artifact: initialization as unknown as Record<string, unknown>,
+    };
+    const envelope = await computeCallEnvelope(services, { tool: "archflow_state", input: draft as never });
+    if (!envelope.ok) return envelope;
+    const adopted = await runStateInitialization(services.dependencies, {
+      authority: services.authority,
+      call: parseToolCall("archflow_state", envelope.value.request.input),
+    });
+    if (!adopted.ok) return adopted;
+    const resumePhase = initialization.resume_phase ?? descriptor.value.resume_phase;
+    return ok(Object.freeze({
+      task_id: taskId,
+      import_digest: descriptor.value.import_digest,
+      resume_phase: resumePhase,
+      replayed: adopted.value.replayed,
+    }));
+  } catch (error) {
+    if (error instanceof GitInvocationError) return fail(projectErrorForGitFailure(error, services.runner, context));
+    return fail(ioError(context));
+  }
 }

@@ -2,8 +2,6 @@ import type { TaskStateV1 } from "../contracts/durable-state.js";
 import type { GateKind } from "../contracts/gates.js";
 import type { PathSafeId, Sha256Digest } from "../contracts/evidence.js";
 import { decodePhaseInstance, nextPhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
-import type { PlainJsonValue } from "../contracts/plain-json.js";
-import type { ToolName } from "../contracts/tool-names.js";
 import { WORKFLOW_V1 } from "../contracts/workflow.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
 import type { EvidenceAssessment } from "../review/fixed-point.js";
@@ -27,17 +25,6 @@ export type NextActionCode =
   | "complete-task"
   | "task-complete"
   | "inspect-state";
-
-/**
- * A mechanically complete request for the named tool, in the one canonical request shape:
- * `{tool, input}` is byte-acceptable `archflow-local envelope` stdin, and `input` is the tool
- * call's argument object. Placeholder prose marks every field the agent or human must author;
- * all other fields are prefilled from authenticated status facts.
- */
-export type NextActionRequest = Readonly<{
-  tool: ToolName;
-  input: PlainJsonValue;
-}>;
 
 export type NextAction = Readonly<{
   code: NextActionCode;
@@ -68,8 +55,6 @@ export type NextAction = Readonly<{
   pending_gate_kinds?: readonly GateKind[];
   /** Set on the produce run-step routed by `editorial_revision_required`: the produce re-entry applies exactly the accepted editorial revision intents and preserves review evidence. */
   editorial_revision?: boolean;
-  request?: NextActionRequest;
-  guidance?: string;
 }>;
 
 export type AuthenticatedApprovalFact = Readonly<{
@@ -112,6 +97,12 @@ export type NextActionInput = Readonly<{
   /** Every constitution gate still pending, in the order they open; the first is `adjudication_gate_kind`. */
   pending_adjudication_gate_kinds?: readonly GateKind[];
   migration_audit_required?: boolean;
+  /**
+   * The authenticated resume point of an accepted legacy import. The design phase exits to this
+   * phase instead of the fixed graph successor, so the reported skill is the server-derived
+   * resume skill rather than a generic phase-1 hand-off.
+   */
+  legacy_resume_phase?: PhaseInstanceId;
 }>;
 
 function action(
@@ -168,6 +159,13 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
       : undefined;
   const legacyDesignApproval = designPhase && hasLegacyDesignApproval(input);
   const migrationApproval = designPhase && matchingApproval(input, "migration-audit");
+  // The imported design exits through its one migration audit, never a design-approval gate —
+  // the same rule the adjudication branch applies when constitution gates are pending.
+  if (designPhase && input.migration_audit_required === true) {
+    return action("open-gate", "Open the reviewed migration audit for the exact imported documents and resume point.", true, state, {
+      gate_kind: "migration-audit",
+    });
+  }
   if (requiredKind !== undefined && !matchingApproval(input, requiredKind) && !legacyDesignApproval && !migrationApproval) {
     return action("open-gate", `Open the required ${requiredKind} gate.`, true, state, {
       gate_kind: requiredKind,
@@ -225,7 +223,11 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
       skill_args: Object.freeze([String(phase.phase)]),
     });
   }
-  const target = nextPhaseInstance(state.phase_instance);
+  // An accepted migration audit exits the imported design phase straight to the import's
+  // authenticated resume point; every other advance follows the fixed workflow graph.
+  const target = designPhase && migrationApproval && input.legacy_resume_phase !== undefined
+    ? input.legacy_resume_phase
+    : nextPhaseInstance(state.phase_instance);
   if (target === undefined) {
     return action(
       "inspect-state",
@@ -275,9 +277,59 @@ export function deriveNextAction(input: NextActionInput): NextAction {
   const finding = input.reconciliation_findings?.[0];
   if (finding !== undefined) {
     if (finding.kind === "projection-mismatch") {
+      // An already-open human gate outranks opening the drift decision: the baseline gate stands
+      // open until the human decides, and re-offering to open it would loop the offer forever.
+      if (state.open_gate !== undefined) {
+        return action("resolve-open-gate", "Resolve the currently open human gate.", true, state, {
+          gate_id: state.open_gate.gate_id,
+          gate_kind: state.open_gate.gate_kind,
+        });
+      }
       // A projected file absent from the worktree cannot be adopted (there are no current bytes to
-      // keep); the honest recovery is the per-output restore, so route there instead of a gate.
-      if (input.reconciliation_findings?.some((candidate) => candidate.kind === "projection-mismatch" && candidate.observed_digest === undefined)) {
+      // keep); the honest recovery is the per-output restore, so route there instead of a gate —
+      // unless the recorded projection has no retained bytes to restore from (an adoption records
+      // digests only). Restore is then impossible, so the one honest recovery is reopening the
+      // produce window: the fresh terminal produce re-declares the drifted paths and the deletion,
+      // and the normal review boundary covers the new bytes.
+      const missing = (input.reconciliation_findings ?? []).filter(
+        (candidate): candidate is Extract<ReconciliationFinding, { kind: "projection-mismatch" }> =>
+          candidate.kind === "projection-mismatch" && candidate.observed_digest === undefined,
+      );
+      if (missing.length > 0) {
+        const produceReentryApplies = state.step === "produce" && state.status === "succeeded" &&
+          state.authoritative_results.some((reference) =>
+            reference.phase_instance === state.phase_instance && reference.step === "produce");
+        // A committed deletion can neither be restored (adoption records are digest-only) nor
+        // re-declared in a produce (no before-image in the base). The produce re-entry is still
+        // the right next action while anything re-declarable remains — drifted paths, or a
+        // missing file whose deletion is worktree-only — because the fresh terminal produce
+        // covers those bytes under review instead of a bytes adoption. Once the only findings
+        // left are committed deletions, the re-entry can make no progress and would loop, so
+        // the human deletion decision takes over.
+        const committedDeletions = missing.filter((candidate) =>
+          candidate.committed_absent === true && candidate.restore_unavailable === true);
+        const redeclarable = (input.reconciliation_findings ?? []).some((candidate) =>
+          candidate.kind === "projection-mismatch" &&
+          (candidate.observed_digest !== undefined || !(candidate.committed_absent === true && candidate.restore_unavailable === true)));
+        if (produceReentryApplies && redeclarable && missing.some((candidate) => candidate.restore_unavailable === true)) {
+          return action(
+            "run-step",
+            "A recorded projection is missing from the worktree and has no retained bytes to restore from. Reopen the produce window and record a fresh terminal produce that re-declares the drifted paths and the deletion; the review boundary then covers the new bytes. A deletion already absent from HEAD cannot be re-declared and settles at its own human decision afterwards.",
+            false,
+            state,
+            { step: "produce" },
+          );
+        }
+        if (committedDeletions.length > 0) {
+          const deletedCount = committedDeletions.length;
+          return action(
+            "open-gate",
+            `${deletedCount} file${deletedCount === 1 ? "" : "s"} ArchFlow recorded from reviewed work w${deletedCount === 1 ? "as" : "ere"} deleted by an already-committed change, and no retained bytes exist to restore. Open the baseline decision so a human chooses whether the records accept the committed deletion${deletedCount === 1 ? "" : "s"} as the baseline.`,
+            true,
+            state,
+            { gate_kind: "baseline-adoption" },
+          );
+        }
         return action(
           "inspect-state",
           "A file ArchFlow recorded from reviewed work is missing from the worktree; inspect the projection and restore its recorded bytes per output before continuing.",

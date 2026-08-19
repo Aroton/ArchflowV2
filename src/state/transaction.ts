@@ -76,6 +76,7 @@ import {
   type ProjectionPlan,
 } from "./snapshots.js";
 import { cleanTaskWorkspace, cleanTerminalTaskWorkspace, removeSupersededPhaseDocuments } from "./workspace-cleanup.js";
+import { isExactPlanningRestartDraft } from "./restart-authority.js";
 
 const MAX_RECEIPT_BYTES = 1024 * 1024;
 
@@ -331,11 +332,12 @@ function assertPreserved(current: TaskStateV1, next: NextStateDraft): void {
   ) {
     throw new TypeError("next state draft changed a transaction-substrate identity or pin");
   }
-  if (
-    !isDeepStrictEqual(next.open_gate, current.open_gate) ||
-    !isDeepStrictEqual(next.approvals, current.approvals) ||
-    !isDeepStrictEqual(next.waivers, current.waivers)
-  ) {
+  const gateAuthorityPreserved =
+    isDeepStrictEqual(next.open_gate, current.open_gate) &&
+    isDeepStrictEqual(next.approvals, current.approvals) &&
+    isDeepStrictEqual(next.waivers, current.waivers);
+  const restartHistoryChanged = !isDeepStrictEqual(next.restart_history, current.restart_history);
+  if ((!gateAuthorityPreserved || restartHistoryChanged) && !isExactPlanningRestartDraft(current, next)) {
     throw new TypeError("next state draft changed gate authority");
   }
 }
@@ -796,6 +798,9 @@ function buildPlan<K extends ToolName>(
   if (plan.expectation.resulting_revision !== resultingRevision || correlated.value.revision !== resultingRevision) {
     throw new TypeError("prepared transaction revision is not the immediate successor");
   }
+  if (plan.next_state.input_fingerprint !== identified.input_fingerprint) {
+    return fingerprintMismatch(identified.input_fingerprint, plan.next_state.input_fingerprint);
+  }
   assertPreserved(current.value, plan.next_state);
   const installation = validateResultInstallationBinding(
     request, current, identified, plan, authenticatedWorktreeRoot,
@@ -1000,7 +1005,7 @@ async function cleanupCommittedWorkspace(
     const restart = (committed.restart_history ?? []).find((record) =>
       record.restarted_at_revision === committed.revision);
     if (restart !== undefined) {
-      await removeSupersededPhaseDocuments(dependencies, authority, restart.to_phase_instance);
+      await removeSupersededPhaseDocuments(dependencies, authority, restart.target_phase_instance);
     }
     await cleanTaskWorkspace(dependencies, authority, committed);
   } catch {

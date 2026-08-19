@@ -4,13 +4,13 @@ import type { GitOid } from "./canonical.js";
 import { gitOidV1Schema } from "./canonical.js";
 import type { PathSafeId, SafeCode, SafeId, SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
 import { pathSafeIdV1Schema, safeCodeV1Schema, safeIdV1Schema, safeIntegerV1Schema, sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
-import type { GateKind, HumanDecisionProvenance, WaiverScope } from "./gates.js";
+import type { GateKind, WaiverScope } from "./gates.js";
 import { GATE_KINDS } from "./gates.js";
 import type { PlainJsonValue } from "./plain-json.js";
 import type { ProjectionDigestRef } from "./durable-primitives.js";
 import { repositoryPathClaimV1Schema } from "./path-claims.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
-import { isEarlierPlanningPhase, phaseInstanceIdV1Schema } from "./phase-instance.js";
+import { isStrictlyEarlierPlanningPhase, phaseInstanceIdV1Schema } from "./phase-instance.js";
 import { isSortedUniqueBy, tupleKey } from "./validators.js";
 import type { PipelineStep } from "./vocabulary.js";
 import { PIPELINE_STEPS } from "./vocabulary.js";
@@ -127,19 +127,10 @@ export type HumanRevisionRecord = {
   readonly evidence: readonly AuthoritativeResultRef[];
 };
 
-/** A backward planning transition and the authority it removed from the active result set. */
-export type PlanningRestartRecord = {
-  readonly restart_id: PathSafeId;
-  readonly from_phase_instance: PhaseInstanceId;
-  readonly to_phase_instance: PhaseInstanceId;
-  readonly reason: string;
-  readonly restarted_at_revision: SafeInteger;
-  readonly superseded_results: readonly AuthoritativeResultRef[];
-  readonly cleared_waivers: readonly WaiverRef[];
-  readonly cleared_pending_human_revision?: PendingHumanRevision;
-  readonly provenance: HumanDecisionProvenance | PlanningRestartConnectedProvenance;
-};
-
+/**
+ * Server-attested provenance for a planning restart decided through a connected host: the request
+ * the server actually authenticated is bound by digest, not merely declared.
+ */
 export type PlanningRestartConnectedProvenance = {
   readonly schema_version: "1";
   readonly actor_class: "human";
@@ -149,6 +140,39 @@ export type PlanningRestartConnectedProvenance = {
   readonly invocation_id: SafeId;
   readonly request_id_digest: Sha256Digest;
   readonly request_digest: Sha256Digest;
+};
+
+/** Human provenance captured for an explicit planning restart through either supported channel. */
+export type PlanningRestartHumanProvenance = {
+  readonly schema_version: "1";
+  readonly actor_class: "human";
+  readonly assurance: "declared-local-trace";
+  readonly channel: "connected-host";
+  readonly decision_event_id: string;
+  readonly connection_id: string;
+  readonly request_id_digest: Sha256Digest;
+  readonly recorded_at: string;
+} | {
+  readonly schema_version: "1";
+  readonly actor_class: "human";
+  readonly assurance: "declared-local-trace";
+  readonly channel: "archflow-local";
+  readonly decision_event_id: string;
+  readonly helper_invocation_id: string;
+  readonly recorded_at: string;
+} | PlanningRestartConnectedProvenance;
+
+/** Audit authority moved out of the active graph by one explicit backward planning restart. */
+export type PlanningRestartRecord = {
+  readonly restart_id: PathSafeId;
+  readonly source_phase_instance: PhaseInstanceId;
+  readonly target_phase_instance: PhaseInstanceId;
+  readonly reason: string;
+  readonly restarted_at_revision: SafeInteger;
+  readonly superseded_results: readonly AuthoritativeResultRef[];
+  readonly cleared_waivers: readonly WaiverRef[];
+  readonly cleared_pending_human_revision?: PendingHumanRevision;
+  readonly human_provenance: PlanningRestartHumanProvenance;
 };
 
 /**
@@ -164,6 +188,13 @@ export type BaselineAdoptionRecord = {
   readonly adopted_at_revision: SafeInteger;
   /** SET — sorted by `path`, duplicates rejected. The observed digests the human adopted. */
   readonly adopted_projections: readonly ProjectionDigestRef[];
+  /**
+   * SET — sorted, duplicates rejected, disjoint from `adopted_projections`' paths. Paths whose
+   * committed absence the human adopted: the deletion was already part of git history (typically
+   * an authorized milestone commit), so the record retires the recorded presence instead of
+   * binding replacement bytes. Discovery overlays these as absence observations newest-per-path.
+   */
+  readonly adopted_absences?: readonly ProjectionDigestRef["path"][];
 };
 
 /**
@@ -261,7 +292,7 @@ export type TaskStateV1 = {
   readonly open_gate?: OpenGateRef;
   readonly pending_human_revision?: PendingHumanRevision;
   readonly human_revision_history?: readonly HumanRevisionRecord[];
-  /** Immutable audit history for explicit restarts to an earlier planning stage. */
+  /** Sorted by `restart_id`; absent means no planning restart has occurred. */
   readonly restart_history?: readonly PlanningRestartRecord[];
   /** Human-approved re-baselines of drifted projections; see `BaselineAdoptionRecord`. */
   readonly baseline_adoptions?: readonly BaselineAdoptionRecord[];
@@ -387,28 +418,44 @@ export const humanRevisionRecordV1Schema = z.object({
   }
 }) as unknown as z.ZodType<HumanRevisionRecord>;
 
-// Keep task-state self-contained: the shared provenance union and each of its arms are registered
-// under gate-decision documents that are not part of every schema catalogue loading task-state.
-const provenanceBase = {
+const planningRestartConnectedHostProvenanceV1Schema = z.object({
   schema_version: z.literal("1"),
-  actor_class: z.enum(["human", "archforge"]),
+  actor_class: z.literal("human"),
   assurance: z.literal("declared-local-trace"),
+  channel: z.literal("connected-host"),
   decision_event_id: safeIdV1Schema,
+  connection_id: safeIdV1Schema,
+  request_id_digest: sha256Digest,
   recorded_at: z.string().datetime({ offset: false, local: false, precision: 3 }),
-} as const;
-const planningRestartHumanProvenanceV1Schema = z.union([
-  z.object({
-    ...provenanceBase,
-    channel: z.literal("connected-host"),
-    connection_id: safeIdV1Schema,
-    request_id_digest: sha256Digest,
-  }).strict(),
-  z.object({
-    ...provenanceBase,
-    channel: z.literal("archflow-local"),
-    helper_invocation_id: safeIdV1Schema,
-  }).strict(),
-]) as z.ZodType<HumanDecisionProvenance>;
+}).strict();
+
+const planningRestartLocalProvenanceV1Schema = z.object({
+  schema_version: z.literal("1"),
+  actor_class: z.literal("human"),
+  assurance: z.literal("declared-local-trace"),
+  channel: z.literal("archflow-local"),
+  decision_event_id: safeIdV1Schema,
+  helper_invocation_id: safeIdV1Schema,
+  recorded_at: z.string().datetime({ offset: false, local: false, precision: 3 }),
+}).strict();
+
+/** Server-attested arm: the server binds the authenticated request by digest at record time. */
+const planningRestartServerAttestedProvenanceV1Schema = z.object({
+  schema_version: z.literal("1"),
+  actor_class: z.literal("human"),
+  assurance: z.literal("connected-request-trace"),
+  channel: z.literal("connected-host"),
+  connection_id: safeIdV1Schema,
+  invocation_id: safeIdV1Schema,
+  request_id_digest: sha256Digest,
+  request_digest: sha256Digest,
+}).strict();
+
+export const planningRestartHumanProvenanceV1Schema = z.union([
+  planningRestartConnectedHostProvenanceV1Schema,
+  planningRestartLocalProvenanceV1Schema,
+  planningRestartServerAttestedProvenanceV1Schema,
+]) as unknown as z.ZodType<PlanningRestartHumanProvenance>;
 
 // Task-state owns its own projection-ref mirror rather than $ref-ing result-manifest's def: this
 // schema catalogue stays self-contained, exactly like the shared reference shapes above.
@@ -422,35 +469,25 @@ export const baselineAdoptionRecordV1Schema = z.object({
   adopted_at_revision: positiveSafeInteger,
   adopted_projections: z.array(adoptedProjectionRefV1Schema)
     .refine((items) => isSortedUniqueBy(items, tupleKey("path")), "adopted projections must be sorted by path with no duplicates"),
+  adopted_absences: z.array(repositoryPathClaimV1Schema).optional()
+    .refine((items) => isSortedUniqueBy(items), "adopted absences must be sorted with no duplicates"),
 }).strict() as unknown as z.ZodType<BaselineAdoptionRecord>;
 
 export const planningRestartRecordV1Schema = z.object({
   restart_id: pathSafeIdV1Schema,
-  from_phase_instance: phaseInstanceIdV1Schema,
-  to_phase_instance: phaseInstanceIdV1Schema,
+  source_phase_instance: phaseInstanceIdV1Schema,
+  target_phase_instance: phaseInstanceIdV1Schema,
   reason: z.string().min(1).max(4096).regex(/\S/u),
   restarted_at_revision: positiveSafeInteger,
   superseded_results: z.array(authoritativeResultRefV1Schema)
-    .refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "superseded restart results must be sorted by (phase_instance, step) with no duplicates"),
+    .refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "superseded_results must be sorted by (phase_instance, step) with no duplicates"),
   cleared_waivers: z.array(waiverRefV1Schema)
-    .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "cleared restart waivers must be sorted by gate_id with no duplicates"),
+    .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "cleared_waivers must be sorted by gate_id with no duplicates"),
   cleared_pending_human_revision: pendingHumanRevisionV1Schema.optional(),
-  provenance: z.union([
-    planningRestartHumanProvenanceV1Schema,
-    z.object({
-      schema_version: z.literal("1"),
-      actor_class: z.literal("human"),
-      assurance: z.literal("connected-request-trace"),
-      channel: z.literal("connected-host"),
-      connection_id: safeIdV1Schema,
-      invocation_id: safeIdV1Schema,
-      request_id_digest: sha256Digest,
-      request_digest: sha256Digest,
-    }).strict(),
-  ]),
+  human_provenance: planningRestartHumanProvenanceV1Schema,
 }).strict().superRefine((record, context) => {
-  if (!isEarlierPlanningPhase(record.to_phase_instance, record.from_phase_instance)) {
-    context.addIssue({ code: "custom", path: ["to_phase_instance"], message: "a planning restart target must be strictly earlier than its source" });
+  if (!isStrictlyEarlierPlanningPhase(record.target_phase_instance, record.source_phase_instance)) {
+    context.addIssue({ code: "custom", path: ["target_phase_instance"], message: "restart target must be a strictly earlier planning phase" });
   }
 }) as unknown as z.ZodType<PlanningRestartRecord>;
 
@@ -513,12 +550,16 @@ export const taskStateV1Schema = z.object({
   last_transition: lastTransitionV1Schema.optional(),
   terminal: z.enum(TERMINAL_STATES).optional(),
 }).strict().superRefine((state, context) => {
-  if (state.restart_history?.some((record) => record.restarted_at_revision > state.revision)) {
-    context.addIssue({ code: "custom", path: ["restart_history"], message: "restart history cannot name a future revision" });
-  }
-  if (state.baseline_adoptions?.some((record) => record.adopted_at_revision > state.revision)) {
-    context.addIssue({ code: "custom", path: ["baseline_adoptions"], message: "baseline adoptions cannot name a future revision" });
-  }
+  state.restart_history?.forEach((restart, index) => {
+    if (restart.restarted_at_revision > state.revision) {
+      context.addIssue({ code: "custom", path: ["restart_history", index, "restarted_at_revision"], message: "restart revision cannot exceed the current state revision" });
+    }
+  });
+  state.baseline_adoptions?.forEach((adoption, index) => {
+    if (adoption.adopted_at_revision > state.revision) {
+      context.addIssue({ code: "custom", path: ["baseline_adoptions", index, "adopted_at_revision"], message: "baseline adoption revision cannot exceed the current state revision" });
+    }
+  });
   const pending = state.pending_human_revision;
   if (pending === undefined) return;
   if (state.open_gate !== undefined || state.terminal !== undefined || state.step !== "produce" ||
