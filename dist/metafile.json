@@ -4487,7 +4487,7 @@
       }
     },
     "src/contracts/schemas/v1/semantic-workflow.schema.json": {
-      "bytes": 36626,
+      "bytes": 39393,
       "format": "esm",
       "imports": [],
       "with": {
@@ -4545,13 +4545,18 @@
       ]
     },
     "src/contracts/semantic-workflow.ts": {
-      "bytes": 20005,
+      "bytes": 21222,
       "format": "esm",
       "imports": [
         {
           "kind": "import-statement",
           "original": "zod",
           "path": "node_modules/zod/index.js"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./config.js",
+          "path": "src/contracts/config.ts"
         },
         {
           "kind": "import-statement",
@@ -8303,7 +8308,7 @@
       ]
     },
     "src/state/semantic-actions.ts": {
-      "bytes": 42394,
+      "bytes": 43938,
       "format": "esm",
       "imports": [
         {
@@ -8415,7 +8420,7 @@
       ]
     },
     "src/state/semantic-view.ts": {
-      "bytes": 21718,
+      "bytes": 21872,
       "format": "esm",
       "imports": [
         {
@@ -8497,7 +8502,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 65081,
+      "bytes": 65144,
       "format": "esm",
       "imports": [
         {
@@ -10068,7 +10073,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2855873,
+      "bytes": 2860118,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -11130,7 +11135,7 @@
           "bytesInOutput": 1231
         },
         "src/contracts/mcp-tools.ts": {
-          "bytesInOutput": 18689
+          "bytesInOutput": 18692
         },
         "src/contracts/path-claims.ts": {
           "bytesInOutput": 3097
@@ -11196,7 +11201,7 @@
           "bytesInOutput": 3020
         },
         "src/contracts/schemas/v1/semantic-workflow.schema.json": {
-          "bytesInOutput": 34998
+          "bytesInOutput": 37669
         },
         "src/contracts/schemas/v1/task-initialization.schema.json": {
           "bytesInOutput": 1432
@@ -11211,7 +11216,7 @@
           "bytesInOutput": 1255
         },
         "src/contracts/semantic-workflow.ts": {
-          "bytesInOutput": 11169
+          "bytesInOutput": 11835
         },
         "src/contracts/tool-names.ts": {
           "bytesInOutput": 495
@@ -11439,13 +11444,13 @@
           "bytesInOutput": 4909
         },
         "src/state/semantic-actions.ts": {
-          "bytesInOutput": 33011
+          "bytesInOutput": 33770
         },
         "src/state/semantic-status.ts": {
           "bytesInOutput": 16652
         },
         "src/state/semantic-view.ts": {
-          "bytesInOutput": 18662
+          "bytesInOutput": 18808
         },
         "src/state/snapshots.ts": {
           "bytesInOutput": 26332

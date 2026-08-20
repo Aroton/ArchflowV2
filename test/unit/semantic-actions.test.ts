@@ -152,6 +152,139 @@ describe("semantic one-action planning", () => {
     expect(apply(empty, invocation)).toMatchObject({ substeps: ["review-empty-triage"], execution: "compose-request", request_facts: { kind: "triage", dispositions: [] } });
   });
 
+  it("accepts a reviewer-substitution dispatch on the review action, tolerates its absence, and binds it into the operation identity", () => {
+    const pending = snapshot(state("produce", "succeeded"), {
+      code: "run-step", detail: "Run review.", human_required: false, phase_instance: "phase-impl-1" as TaskStateV1["phase_instance"], step: "counter_review",
+    });
+    const substitution = (reason: string): ApplySubmissionV1 => ({
+      kind: "review-dispatch",
+      route_override: { reason, "counter-reviewer": { model: "gpt-5.6-outage-fallback", effort: "high" } },
+    });
+
+    // The dispatching review offer names review-dispatch, and an override-less apply still plans.
+    expect(projectSemanticStatus(pending, invocation).view.next_action).toMatchObject({ kind: "review", expected_submission: "review-dispatch" });
+    const plain = apply(pending, invocation);
+    expect(plain).toMatchObject({ action_kind: "review", substeps: ["review-enter", "review-run", "review-empty-triage"] });
+    expect(plain.route_override).toBeUndefined();
+
+    const substituted = apply(pending, invocation, substitution("codex CLI auth outage; substitute the reviewer"));
+    expect(substituted).toMatchObject({ action_kind: "review", route_override: { reason: "codex CLI auth outage; substitute the reviewer" } });
+    // The submission is authenticated: the same declaration replays to one operation digest and a
+    // different declaration (or none) binds a different one.
+    expect(apply(pending, invocation, substitution("codex CLI auth outage; substitute the reviewer")).operation_digest)
+      .toBe(substituted.operation_digest);
+    expect(substituted.operation_digest).not.toBe(plain.operation_digest);
+    expect(apply(pending, invocation, substitution("a different human reason")).operation_digest)
+      .not.toBe(substituted.operation_digest);
+
+    // Any other submission kind is still refused on the review action.
+    expect(() => apply(pending, invocation, { kind: "gate-summary", summary: "Wrong." }))
+      .toThrowError(expect.objectContaining({ code: "SEMANTIC_SUBMISSION_MISMATCH" }));
+  });
+
+  it("refuses a reviewer-substitution dispatch at non-review actions and every submission where none is expected", () => {
+    const work = snapshot(state("produce", "running"), {
+      code: "run-step", detail: "Submit produce.", human_required: false, phase_instance: "phase-impl-1" as TaskStateV1["phase_instance"], step: "produce",
+    });
+    expect(() => apply(work, invocation, {
+      kind: "review-dispatch", route_override: { reason: "outage", "counter-reviewer": { model: "gpt-5.6-outage-fallback", effort: "high" } },
+    })).toThrowError(/expects work-result submission, received review-dispatch/u);
+
+    const gate = snapshot(state("triage", "succeeded"), {
+      code: "open-gate", detail: "Open gate.", human_required: true, phase_instance: "phase-impl-1" as TaskStateV1["phase_instance"], gate_kind: "commit-authorization",
+    });
+    expect(() => apply(gate, invocation, {
+      kind: "review-dispatch", route_override: { reason: "outage", adjudicator: { model: "gpt-5.6-outage-fallback", effort: "high" } },
+    })).toThrowError(/expects gate-summary submission, received review-dispatch/u);
+
+    // "none" still forbids any submission, the substitution included.
+    const revise = snapshot(state("triage", "succeeded"), {
+      code: "run-step", detail: "Revise.", human_required: false, phase_instance: "phase-impl-1" as TaskStateV1["phase_instance"], step: "produce",
+    });
+    expect(() => apply(revise, invocation, {
+      kind: "review-dispatch", route_override: { reason: "outage", "counter-reviewer": { model: "gpt-5.6-outage-fallback", effort: "high" } },
+    })).toThrowError(/expects none submission, received review-dispatch/u);
+  });
+
+  it("keeps a planned substitution alive through the in-process review-run continuation", async () => {
+    const pending = snapshot(state("produce", "succeeded"), {
+      code: "run-step", detail: "Run review.", human_required: false, phase_instance: "phase-impl-1" as TaskStateV1["phase_instance"], step: "counter_review",
+    });
+    const dispatch: ApplySubmissionV1 = {
+      kind: "review-dispatch",
+      route_override: { reason: "codex CLI auth outage; substitute the reviewer", "counter-reviewer": { model: "gpt-5.6-outage-fallback", effort: "high" } },
+    };
+    const offered = projectSemanticStatus(pending, invocation).view.next_action.offer!;
+    const input = { schema_version: "1", task_id: "api-refactor", invocation, action: { offer: offered, submission: dispatch } } as const;
+    const initial = planSemanticAction(pending, input);
+    expect(initial.route_override).toEqual(dispatch.route_override);
+
+    // The state a crash or substep boundary leaves behind: review-enter committed under the
+    // substituted operation, review-run not yet run.
+    const enteredBase = { ...state("counter_review", "running"), revision: 8 as TaskStateV1["revision"], input_fingerprint: digest("7") };
+    const enteredState = { ...enteredBase, last_transition: {
+      schema_version: "1", tool: "archflow_state", operation: "record-state-boundary", intent_id: initial.intent_id,
+      request_digest: digest("b"), input_fingerprint: digest("7"), result_id: "result-1", outcome: { ok: true }, outcome_digest: digest("c"),
+      prior_revision: 7, resulting_revision: 8,
+    } } as unknown as TaskStateV1;
+    const entered = snapshot(enteredState, {
+      code: "run-step", detail: "Continue review.", human_required: false, phase_instance: enteredState.phase_instance, step: "counter_review",
+    });
+
+    // The chained review-run substep plan is built by substepPlan, which forwards no request
+    // submission: the plan's override field must carry the declaration into its facts.
+    const sentinel = new Error("stop after the review-run continuation plan");
+    let continued: ReturnType<typeof apply> | undefined;
+    await expect(executeSemanticAction({} as ProductionServices, pending, input, {
+      compose_request: async (_services, facts) => ({ schema_version: "1", ok: true, value: { envelope: {} as never, intent_id: (facts as { intent_id: never }).intent_id } }),
+      execute_composed_request: async () => ({ ok: true }),
+      refresh_snapshot: async () => entered,
+      run_counter_review: async (plan) => { continued = plan; throw sentinel; },
+    })).rejects.toBe(sentinel);
+    expect(continued).toMatchObject({
+      action_kind: "review", next_substep: "review-run", operation_digest: initial.operation_digest,
+      request_facts: { kind: "counter-review", route_override: dispatch.route_override },
+    });
+    expect(continued?.operation_key).toBeUndefined();
+    expect(parseSemanticSubstepIntentId(continued!.intent_id)).toEqual({ operation_digest: initial.operation_digest, substep: "review-run" });
+  });
+
+  it("recovers a review continuation at request level: the lost value dispatches plain, a resent substitution rides the recovered operation", () => {
+    const pending = snapshot(state("produce", "succeeded"), {
+      code: "run-step", detail: "Run review.", human_required: false, phase_instance: "phase-impl-1" as TaskStateV1["phase_instance"], step: "counter_review",
+    });
+    const dispatch: ApplySubmissionV1 = {
+      kind: "review-dispatch",
+      route_override: { reason: "codex CLI auth outage; substitute the reviewer", "counter-reviewer": { model: "gpt-5.6-outage-fallback", effort: "high" } },
+    };
+    const original = apply(pending, invocation, dispatch);
+    const runningBase = { ...state("counter_review", "running"), revision: 8 as TaskStateV1["revision"], input_fingerprint: digest("7") };
+    const runningState = { ...runningBase, last_transition: {
+      schema_version: "1", tool: "archflow_state", operation: "record-state-boundary",
+      intent_id: semanticSubstepIntentId(original.operation_digest, "review-enter"),
+      request_digest: digest("b"), input_fingerprint: digest("7"), result_id: "result-1", outcome: { ok: true }, outcome_digest: digest("c"),
+      prior_revision: 7, resulting_revision: 8,
+    } } as unknown as TaskStateV1;
+    const running = snapshot(runningState, {
+      code: "run-step", detail: "Continue review.", human_required: false, phase_instance: runningState.phase_instance, step: "counter_review",
+    });
+
+    // Crash-window recovery without the value: the digest recovered from the boundary was computed
+    // over the substitution, but the resumed facts cannot carry it — the dispatch runs plain.
+    const plain = apply(running, invocation);
+    expect(plain.operation_digest).toBe(original.operation_digest);
+    expect(plain.request_facts).toMatchObject({ kind: "counter-review" });
+    expect(plain.request_facts).not.toHaveProperty("route_override");
+
+    // Re-requesting the substitution on the re-offered review action stays on the recovered
+    // operation identity; the declaration re-enters through the request facts alone.
+    const resent = apply(running, invocation, dispatch);
+    expect(resent.operation_digest).toBe(original.operation_digest);
+    expect(resent.operation_key).toBeUndefined();
+    expect(resent.request_facts).toMatchObject({ kind: "counter-review", route_override: dispatch.route_override });
+    expect(resent.intent_id).toBe(plain.intent_id);
+  });
+
   it("plans triage, revision entry, gate opening, and handoff as bounded single actions", () => {
     const finding = { finding_id: "finding-1", severity: "major" as const, blocking: false, summary: "Issue", evidence: "Evidence", suggested_resolution: "Fix" };
     const triage = snapshot(state("triage", "running"), {

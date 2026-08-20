@@ -37140,6 +37140,83 @@ function createSendQueue(output, onBackpressureChange, onFatal) {
 // src/mcp/server.ts
 import { createHash as createHash2 } from "node:crypto";
 
+// src/contracts/yaml.ts
+var import_yaml = __toESM(require_dist2(), 1);
+function locatedMessage(label, error51) {
+  const position2 = error51.linePos?.[0];
+  return position2 === void 0 ? `${label}: ${error51.message}` : `${label}:${position2.line}:${position2.col}: ${error51.message}`;
+}
+function parseSingleYamlDocument(source, label) {
+  if (typeof source !== "string") throw new TypeError(`${label}: YAML source must be a string`);
+  const lineCounter = new import_yaml.LineCounter();
+  const documents = (0, import_yaml.parseAllDocuments)(source, {
+    version: "1.2",
+    schema: "core",
+    strict: true,
+    uniqueKeys: true,
+    merge: false,
+    customTags: [],
+    lineCounter,
+    prettyErrors: true
+  });
+  if (documents.length !== 1) throw new SyntaxError(`${label}: expected exactly one YAML document, found ${documents.length}`);
+  const document2 = documents[0];
+  if (document2.errors.length > 0) throw new SyntaxError(locatedMessage(label, document2.errors[0]));
+  if (document2.warnings.length > 0) throw new SyntaxError(locatedMessage(label, document2.warnings[0]));
+  let aliasOffset;
+  (0, import_yaml.visit)(document2, (_key, node) => {
+    if ((0, import_yaml.isAlias)(node)) {
+      aliasOffset = node.range?.[0];
+      return import_yaml.visit.BREAK;
+    }
+    return void 0;
+  });
+  if (aliasOffset !== void 0) {
+    const position2 = lineCounter.linePos(aliasOffset);
+    throw new SyntaxError(`${label}:${position2.line}:${position2.col}: YAML aliases are not allowed`);
+  }
+  const value = document2.toJS({ maxAliasCount: 0 });
+  assertPlainJson(value, label);
+  return value;
+}
+
+// src/contracts/config.ts
+var REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"];
+var configRouteSchema = external_exports.object({
+  model: external_exports.string().min(1).regex(/\S/, "model must contain a non-whitespace character"),
+  effort: external_exports.enum(REASONING_EFFORTS),
+  // Optional cc-switch provider id; claude routes only. Unset means a direct
+  // CLI launch with no wrapper.
+  provider: external_exports.string().trim().min(1).regex(/\S/, "provider must contain a non-whitespace character").optional()
+}).strict();
+var configRolesSchema = external_exports.object({
+  // Retired; accepted on read only so configs pinned before the producer role was removed
+  // round-trip unchanged. The producer is the connected host; nothing consumes this.
+  producer: configRouteSchema.optional(),
+  "counter-reviewer": configRouteSchema.optional(),
+  adjudicator: configRouteSchema.optional()
+}).strict();
+var configOverridesSchema = external_exports.object({
+  explore: configRolesSchema.optional(),
+  prd: configRolesSchema.optional(),
+  design: configRolesSchema.optional(),
+  "phase-design": configRolesSchema.optional(),
+  "phase-impl": configRolesSchema.optional()
+}).strict();
+var configV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  roles: configRolesSchema,
+  overrides: configOverridesSchema.optional(),
+  max_attempts: external_exports.number().int().positive().safe().optional()
+}).strict();
+function parseConfigV1(value) {
+  assertPlainJson(value, "config");
+  return configV1Schema.parse(value);
+}
+function parseConfigYaml(source, label = "config.yaml") {
+  return parseConfigV1(parseSingleYamlDocument(source, label));
+}
+
 // src/contracts/review.ts
 var REVIEW_VERDICTS = ["pass", "advisory", "fail"];
 var REVIEW_ROLES = ["counter-review"];
@@ -37262,7 +37339,7 @@ var SEMANTIC_ACTION_KINDS = [
   "inspect",
   "none"
 ];
-var APPLY_SUBMISSION_KINDS = ["none", "task-ask", "work-result", "triage", "gate-summary", "reopening-request", "decision"];
+var APPLY_SUBMISSION_KINDS = ["none", "task-ask", "work-result", "triage", "gate-summary", "reopening-request", "decision", "review-dispatch"];
 var SEMANTIC_SUBSTEPS = [
   "initialize-task",
   "begin-work",
@@ -37352,6 +37429,16 @@ var humanRevisionDeclarationV1Schema = external_exports.object({ classification:
   if (revision.user_override?.agent_classification === revision.classification) context2.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
 });
 var implementationFactsV1Schema = external_exports.object({ base_commit: nonBlank2, outputs: external_exports.array(nonBlank2), restore_targets: external_exports.array(nonBlank2), declared_inputs: external_exports.array(external_exports.object({ input_id: nonBlank2, path: nonBlank2 }).strict()) }).strict();
+var overrideRoute = configRouteSchema.clone(configRouteSchema.def);
+var routeOverrideDeclarationV1Schema = external_exports.object({
+  reason: boundedText2,
+  "counter-reviewer": overrideRoute.optional(),
+  adjudicator: overrideRoute.optional()
+}).strict().superRefine((override, context2) => {
+  if (override["counter-reviewer"] === void 0 && override.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, adjudicator, or both" });
+  }
+});
 var applySubmissionV1Schema = external_exports.union([
   external_exports.object({ kind: external_exports.literal("task-ask"), text: boundedText2 }).strict(),
   external_exports.object({ kind: external_exports.literal("reopening-request"), request: boundedText2 }).strict(),
@@ -37359,7 +37446,8 @@ var applySubmissionV1Schema = external_exports.union([
   external_exports.object({ kind: external_exports.literal("work-result"), outcome: external_exports.literal("failed"), reason: boundedText2 }).strict(),
   external_exports.object({ kind: external_exports.literal("triage"), dispositions: external_exports.array(triageDispositionV1Schema) }).strict(),
   external_exports.object({ kind: external_exports.literal("gate-summary"), summary: boundedText2 }).strict(),
-  external_exports.object({ kind: external_exports.literal("decision"), choice: nonBlank2, reason: boundedText2, option_rationale: boundedText2.optional() }).strict()
+  external_exports.object({ kind: external_exports.literal("decision"), choice: nonBlank2, reason: boundedText2, option_rationale: boundedText2.optional() }).strict(),
+  external_exports.object({ kind: external_exports.literal("review-dispatch"), route_override: routeOverrideDeclarationV1Schema }).strict()
 ]);
 var archFlowApplyInputV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema, action: external_exports.object({ offer: external_exports.string().regex(/^af1_[0-9a-f]{64}$/u), submission: applySubmissionV1Schema.optional() }).strict() }).strict();
 var archFlowStatusInputV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema.optional() }).strict();
@@ -46949,7 +47037,8 @@ var semantic_workflow_schema_default = {
             "triage",
             "gate-summary",
             "reopening-request",
-            "decision"
+            "decision",
+            "review-dispatch"
           ]
         },
         skill: {
@@ -47673,6 +47762,97 @@ var semantic_workflow_schema_default = {
             "kind",
             "choice",
             "reason"
+          ],
+          additionalProperties: false
+        },
+        {
+          type: "object",
+          properties: {
+            kind: {
+              type: "string",
+              const: "review-dispatch"
+            },
+            route_override: {
+              type: "object",
+              properties: {
+                reason: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096,
+                  pattern: "\\S"
+                },
+                "counter-reviewer": {
+                  type: "object",
+                  properties: {
+                    model: {
+                      type: "string",
+                      minLength: 1,
+                      pattern: "\\S"
+                    },
+                    effort: {
+                      type: "string",
+                      enum: [
+                        "low",
+                        "medium",
+                        "high",
+                        "xhigh",
+                        "max",
+                        "ultra"
+                      ]
+                    },
+                    provider: {
+                      type: "string",
+                      minLength: 1,
+                      pattern: "\\S"
+                    }
+                  },
+                  required: [
+                    "model",
+                    "effort"
+                  ],
+                  additionalProperties: false
+                },
+                adjudicator: {
+                  type: "object",
+                  properties: {
+                    model: {
+                      type: "string",
+                      minLength: 1,
+                      pattern: "\\S"
+                    },
+                    effort: {
+                      type: "string",
+                      enum: [
+                        "low",
+                        "medium",
+                        "high",
+                        "xhigh",
+                        "max",
+                        "ultra"
+                      ]
+                    },
+                    provider: {
+                      type: "string",
+                      minLength: 1,
+                      pattern: "\\S"
+                    }
+                  },
+                  required: [
+                    "model",
+                    "effort"
+                  ],
+                  additionalProperties: false
+                }
+              },
+              required: [
+                "reason"
+              ],
+              additionalProperties: false
+            }
+          },
+          required: [
+            "kind",
+            "route_override"
           ],
           additionalProperties: false
         }
@@ -49007,83 +49187,6 @@ function parseActiveGate(value) {
 // src/contracts/mcp-tools.ts
 import { isDeepStrictEqual as isDeepStrictEqual3 } from "node:util";
 
-// src/contracts/yaml.ts
-var import_yaml = __toESM(require_dist2(), 1);
-function locatedMessage(label, error51) {
-  const position2 = error51.linePos?.[0];
-  return position2 === void 0 ? `${label}: ${error51.message}` : `${label}:${position2.line}:${position2.col}: ${error51.message}`;
-}
-function parseSingleYamlDocument(source, label) {
-  if (typeof source !== "string") throw new TypeError(`${label}: YAML source must be a string`);
-  const lineCounter = new import_yaml.LineCounter();
-  const documents = (0, import_yaml.parseAllDocuments)(source, {
-    version: "1.2",
-    schema: "core",
-    strict: true,
-    uniqueKeys: true,
-    merge: false,
-    customTags: [],
-    lineCounter,
-    prettyErrors: true
-  });
-  if (documents.length !== 1) throw new SyntaxError(`${label}: expected exactly one YAML document, found ${documents.length}`);
-  const document2 = documents[0];
-  if (document2.errors.length > 0) throw new SyntaxError(locatedMessage(label, document2.errors[0]));
-  if (document2.warnings.length > 0) throw new SyntaxError(locatedMessage(label, document2.warnings[0]));
-  let aliasOffset;
-  (0, import_yaml.visit)(document2, (_key, node) => {
-    if ((0, import_yaml.isAlias)(node)) {
-      aliasOffset = node.range?.[0];
-      return import_yaml.visit.BREAK;
-    }
-    return void 0;
-  });
-  if (aliasOffset !== void 0) {
-    const position2 = lineCounter.linePos(aliasOffset);
-    throw new SyntaxError(`${label}:${position2.line}:${position2.col}: YAML aliases are not allowed`);
-  }
-  const value = document2.toJS({ maxAliasCount: 0 });
-  assertPlainJson(value, label);
-  return value;
-}
-
-// src/contracts/config.ts
-var REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"];
-var configRouteSchema = external_exports.object({
-  model: external_exports.string().min(1).regex(/\S/, "model must contain a non-whitespace character"),
-  effort: external_exports.enum(REASONING_EFFORTS),
-  // Optional cc-switch provider id; claude routes only. Unset means a direct
-  // CLI launch with no wrapper.
-  provider: external_exports.string().trim().min(1).regex(/\S/, "provider must contain a non-whitespace character").optional()
-}).strict();
-var configRolesSchema = external_exports.object({
-  // Retired; accepted on read only so configs pinned before the producer role was removed
-  // round-trip unchanged. The producer is the connected host; nothing consumes this.
-  producer: configRouteSchema.optional(),
-  "counter-reviewer": configRouteSchema.optional(),
-  adjudicator: configRouteSchema.optional()
-}).strict();
-var configOverridesSchema = external_exports.object({
-  explore: configRolesSchema.optional(),
-  prd: configRolesSchema.optional(),
-  design: configRolesSchema.optional(),
-  "phase-design": configRolesSchema.optional(),
-  "phase-impl": configRolesSchema.optional()
-}).strict();
-var configV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  roles: configRolesSchema,
-  overrides: configOverridesSchema.optional(),
-  max_attempts: external_exports.number().int().positive().safe().optional()
-}).strict();
-function parseConfigV1(value) {
-  assertPlainJson(value, "config");
-  return configV1Schema.parse(value);
-}
-function parseConfigYaml(source, label = "config.yaml") {
-  return parseConfigV1(parseSingleYamlDocument(source, label));
-}
-
 // src/contracts/validators.ts
 function isSortedUniqueBy(items, key = String) {
   return Array.isArray(items) && items.every((value, index) => index === 0 || key(items[index - 1]) < key(value));
@@ -49768,11 +49871,11 @@ var stateInputSchema = external_exports.object({
   if (input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "restart fields require planning_restart" });
   if (input.human_revision !== void 0 && (input.step !== "produce" || input.status !== "succeeded")) context2.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
 });
-var overrideRoute = configRouteSchema.clone(configRouteSchema.def);
+var overrideRoute2 = configRouteSchema.clone(configRouteSchema.def);
 var routeOverrideSchema = external_exports.object({
   reason: text3,
-  "counter-reviewer": overrideRoute.optional(),
-  adjudicator: overrideRoute.optional()
+  "counter-reviewer": overrideRoute2.optional(),
+  adjudicator: overrideRoute2.optional()
 }).strict().superRefine((override, context2) => {
   if (override["counter-reviewer"] === void 0 && override.adjudicator === void 0) {
     context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, adjudicator, or both" });
@@ -66561,8 +66664,8 @@ function mapRunStep(status, action2, snapshot) {
         headline: "Independent review is ready",
         detail: action2.detail,
         action_kind: "review",
-        instruction: "Run or resume the server-owned independent review action.",
-        expected_submission: "none"
+        instruction: "Run or resume the server-owned independent review action, carrying a review-dispatch submission with route_override only when requesting a human-authorized reviewer substitution with a reason.",
+        expected_submission: "review-dispatch"
       });
     case "triage":
       return snapshot.full_findings.length === 0 ? Object.freeze({
@@ -67647,7 +67750,8 @@ function expectedSubmissionMessage(expected, actual) {
 }
 function assertSubmissionMatches(expected, submission) {
   const actual = submissionKind(submission);
-  if (expected === "none" ? submission !== void 0 : actual !== expected) {
+  const matches = expected === "none" ? submission === void 0 : submission === void 0 ? expected === "review-dispatch" : actual === expected;
+  if (!matches) {
     throw new SemanticActionPlanError("SEMANTIC_SUBMISSION_MISMATCH", expectedSubmissionMessage(expected, actual));
   }
 }
@@ -67879,7 +67983,17 @@ function requestFacts(action2, substep, intentId, submission) {
     }
     case "review":
       if (substep === "review-enter") return { execution: "compose-request", facts: { kind: "running", step: "counter_review", intent_id: intentId } };
-      if (substep === "review-run") return { execution: "counter-review-handler", facts: { kind: "counter-review", intent_id: intentId } };
+      if (substep === "review-run") return {
+        execution: "counter-review-handler",
+        facts: {
+          kind: "counter-review",
+          intent_id: intentId,
+          // The declaration is plain-json-asserted at parse time; the cast only sheds zod's
+          // inferred optional `undefined` (not a PlainJsonValue) — the composer applies the same
+          // idiom to this value in composeCounterReview.
+          ...submission?.kind === "review-dispatch" ? { route_override: submission.route_override } : {}
+        }
+      };
       return { execution: "compose-request", facts: { kind: "triage", intent_id: intentId, dispositions: [] } };
     case "triage":
       if (submission?.kind !== "triage") throw new TypeError("validated triage is unavailable");
@@ -68014,7 +68128,8 @@ function planSemanticAction(snapshot, value) {
     ...requestFactsValue === void 0 ? {} : { request_facts: requestFactsValue },
     ...input.action.submission?.kind !== "task-ask" ? {} : { task_ask: input.action.submission.text },
     ...input.action.submission?.kind !== "reopening-request" ? {} : { reopening_request: input.action.submission.request },
-    ...input.action.submission?.kind !== "decision" ? {} : { decision_submission: input.action.submission }
+    ...input.action.submission?.kind !== "decision" ? {} : { decision_submission: input.action.submission },
+    ...input.action.submission?.kind !== "review-dispatch" ? {} : { route_override: input.action.submission.route_override }
   });
 }
 async function executeSemanticActionSubstep(services, plan, capabilities2 = {}) {
@@ -68082,7 +68197,8 @@ function markerStatus2(value) {
 }
 function substepPlan(original, substep) {
   const intentId = semanticSubstepIntentId(original.operation_digest, substep);
-  const request = requestFacts(original.action_kind, substep, intentId, void 0);
+  const submission = original.route_override === void 0 ? void 0 : { kind: "review-dispatch", route_override: original.route_override };
+  const request = requestFacts(original.action_kind, substep, intentId, submission);
   return Object.freeze({
     action_kind: original.action_kind,
     operation_digest: original.operation_digest,

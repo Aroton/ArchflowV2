@@ -14,7 +14,7 @@ import type { PathSafeId, Sha256Digest, TaskSlug } from "../contracts/evidence.j
 import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
 import type { BaselineObservationRef, GateContext } from "../contracts/gates.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
-import type { ReviewEvidence } from "../contracts/review.js";
+import type { ReviewEvidence, RouteOverrideRecord } from "../contracts/review.js";
 import type { CurrentEvidenceSetRef } from "../contracts/trust.js";
 import { resolveDispatchRoute, type DispatchRoute } from "../dispatch/routing.js";
 import { designApprovalPolicyContext, selectAdjudicationGates } from "../review/adjudication.js";
@@ -90,6 +90,7 @@ type StatusEvidence = Readonly<{
     model_family: string;
     model: string;
     effort: string;
+    route_override?: RouteOverrideRecord;
   }>;
   assessment: EvidenceAssessment;
 }>;

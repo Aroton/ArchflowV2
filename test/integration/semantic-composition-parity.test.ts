@@ -148,6 +148,52 @@ describe("transport-neutral request composition", () => {
     roots.pop();
   });
 
+  it("composes a counter-review route override into the request digest while the subject fingerprint stays neutral", async () => {
+    const fixture = await createTaskWorkspace({ taskId: "composition-review-dispatch", label: "composition-review-dispatch" });
+    roots.push(fixture.root);
+    writeFileSync(join(fixture.services.authority.task_root, "ask.md"), "Compose the review dispatch.\n");
+    writeFileSync(join(fixture.services.authority.task_root, "prd.md"), "# Review dispatch\n");
+
+    // The counter-review request composes from its running review position.
+    const initial = fixture.services.state!.value;
+    const { last_transition: _transition, ...withoutTransition } = initial;
+    await fixture.services.dependencies.atomic.replace(fixture.services.authority.state, canonicalDocument({
+      ...withoutTransition,
+      revision: parseSafeInteger(initial.revision + 1),
+      step: "counter_review",
+      status: "running",
+    }).bytes);
+    const atReview = await createProductionServices({
+      working_directory: fixture.root, task_id: fixture.taskId, operation: parseSafeCode("composition-review-dispatch"),
+    });
+    if (!atReview.ok || atReview.value.state === undefined) throw new Error("review composition services unavailable");
+
+    const declaration = {
+      reason: "codex CLI auth outage; substitute the reviewer for this dispatch",
+      "counter-reviewer": { model: "gpt-5.6-outage-fallback", effort: "high" },
+    } as const;
+    const plain = await composeRequest(atReview.value, { kind: "counter-review", intent_id: "review-dispatch-plain" });
+    expect(plain.ok, plain.ok ? undefined : plain.error.code).toBe(true);
+    const substituted = await composeRequest(atReview.value, {
+      kind: "counter-review", intent_id: "review-dispatch-plain", route_override: declaration,
+    });
+    expect(substituted.ok, substituted.ok ? undefined : substituted.error.code).toBe(true);
+    if (!plain.ok || !substituted.ok) return;
+
+    const plainInput = plain.value.envelope.request.input as Record<string, unknown>;
+    const substitutedInput = substituted.value.envelope.request.input as Record<string, unknown>;
+    expect(plainInput).not.toHaveProperty("route_override");
+    expect(substitutedInput.route_override).toEqual(declaration);
+    // The substitution is request-scoped: it changes what the call asks for, never the identity of
+    // the reviewed subject.
+    expect(substituted.value.envelope.request_digest).not.toBe(plain.value.envelope.request_digest);
+    expect(substituted.value.envelope.input_fingerprint).toBe(plain.value.envelope.input_fingerprint);
+    expect(substitutedInput.input_fingerprint).toBe(plainInput.input_fingerprint);
+
+    fixture.dispose();
+    roots.pop();
+  });
+
   it("derives the pending waiver request entirely from authenticated gate archives", async () => {
     const fixture = await createTaskWorkspace({ taskId: "composition-waiver", label: "composition-waiver" });
     roots.push(fixture.root);
