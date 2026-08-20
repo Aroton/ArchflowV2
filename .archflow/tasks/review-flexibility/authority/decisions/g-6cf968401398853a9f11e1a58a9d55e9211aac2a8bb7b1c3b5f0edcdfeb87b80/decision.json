@@ -1,0 +1,33 @@
+{
+  "context_digest": "3694be69e15eb3c45b8e747fcdb70bc91a8922bd888b02a1040d1b4531592e7d",
+  "envelope": {
+    "context_digest": "3694be69e15eb3c45b8e747fcdb70bc91a8922bd888b02a1040d1b4531592e7d",
+    "gate_id": "g-6cf968401398853a9f11e1a58a9d55e9211aac2a8bb7b1c3b5f0edcdfeb87b80",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-7c459e0119b2f96fb8beef4d4b667b436d3c724b13f6cd5521ff5975805838f0",
+      "recorded_at": "2026-08-20T03:48:42.445Z",
+      "request_id_digest": "9be8ba9e1c1872da38935d4d238c83e18c06934e8a639f0577452c2c86728614",
+      "schema_version": "1"
+    },
+    "kind": "design-approval",
+    "payload": {
+      "decision": "approve",
+      "reason": "Approving: the design covers all ten acceptance sites with an atomic receipt, keeps constitution policy arms and exception gates unconditional, stages the commit-boundary work to Phase 4, and survived three counter-review rounds ending clean."
+    },
+    "phase_instance": "phase-design-3",
+    "schema_version": "1",
+    "subject_digest": "7ea2dc7e609db76103676715b6d0b8a28d106d1e716089acf6bb01faefa269f4",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-6cf968401398853a9f11e1a58a9d55e9211aac2a8bb7b1c3b5f0edcdfeb87b80",
+  "kind": "design-approval",
+  "outcome": "decided",
+  "phase_instance": "phase-design-3",
+  "schema_version": "1",
+  "subject_digest": "7ea2dc7e609db76103676715b6d0b8a28d106d1e716089acf6bb01faefa269f4",
+  "task_id": "review-flexibility"
+}

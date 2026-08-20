@@ -1,0 +1,68 @@
+{
+  "allowed_decisions": [
+    "authorize-commit",
+    "revise",
+    "abort",
+    "cancel"
+  ],
+  "context": {
+    "baseline_commit": "4f58174f012b4256995dea9628784673aedeb44a",
+    "commit_message": "ArchFlow: Implement review-flexibility phase 2",
+    "current_artifact_digests": [
+      "4b86c35660fe9dd33932e6d90185ae8658fa5e2b724d467d2359171904aa2839"
+    ],
+    "diff_digest": "c63db2fa084107514b606b43fa52ee83cc4308cf135db59ac385bff302191661",
+    "parent_document_digests": [
+      "4a3136fe9ed0390477b7926f15444873d2cb78a0346173556d5b3f63c1767e79",
+      "53db4cf6023aa4f7295fb1921c519b8a9ab51ba775106ef42d2457d77dd4ec37",
+      "72f94d225051b2270be7fc3db86a1830b09948930fe50ce7045125a649026264",
+      "f29a3dec3530214074e4211dcd33a011c84f598f31b4c1ccda54d2b93b0b7c4b"
+    ],
+    "paths": [
+      ".archflow/tasks/review-flexibility/phases/2/impl-notes.md",
+      "dist/archflow-mcp.mjs",
+      "dist/manifest.json",
+      "dist/metafile.json",
+      "skills/archflow-design/SKILL.md",
+      "skills/archflow-init/SKILL.md",
+      "skills/archflow-phase-design/SKILL.md",
+      "skills/archflow-phase-impl/SKILL.md",
+      "skills/archflow-prd/SKILL.md",
+      "skills/archflow-upgrade/SKILL.md",
+      "src/contracts/schemas/v1/semantic-workflow.schema.json",
+      "src/contracts/semantic-workflow.ts",
+      "src/state/semantic-actions.ts",
+      "src/state/semantic-view.ts",
+      "src/state/status.ts",
+      "test/contracts/mcp-advertised-schema.test.ts",
+      "test/contracts/skill-contract-server-outage.test.ts",
+      "test/integration/review-dispatch-override.test.ts",
+      "test/integration/semantic-composition-parity.test.ts",
+      "test/unit/semantic-actions.test.ts"
+    ],
+    "target_ref": "refs/heads/feature/review-override-flexibility"
+  },
+  "context_digest": "c6082cff56379b4dab9aace4b8a8f8ae075101d67125c55a79823c26731578a2",
+  "current_evidence": {
+    "set_digest": "d60bb9cec0f2d61a84e4c7df64b2aed67592f6d1ace99db31ec16609c0573b95",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "e4d526e673111cf6ab095fff067824e5dae5d88d82e8b9b6a830d0925f97c785",
+        "producer_family": "claude",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-b1b52675cba62d93af5a2f3cdc1cb594eae274845bb15e2262759c5370e8ddcf",
+  "intent_id": "afop-4c4bdf2934bfc7341c933e826c9230be1e5be85da5e6f79d130bddb7e4d90fce-open-gate",
+  "kind": "commit-authorization",
+  "opened_at_revision": 87,
+  "phase_instance": "phase-impl-2",
+  "request_digest": "354d9785b7f7d44fe3e75635e0f735250003f6c5a260731e2d78c7c1479d0b74",
+  "schema_version": "1",
+  "subject_digest": "4b86c35660fe9dd33932e6d90185ae8658fa5e2b724d467d2359171904aa2839",
+  "summary": "Commit authorization for phase 2 of review-flexibility. The change makes the reviewer route override reachable through the public workflow apply path (new review-dispatch submission, honest offer advertisement, plan-field continuation threading, request-scoped crash-window semantics), documents the outage procedure in the reviewing skills and the config overrides section in init, adds the upgrade carve-out, closes a one-line pre-existing status provenance type gap, and ships the matching tests plus the rebuilt tracked bundle. Nineteen repository paths: five source files (contracts, schema, two state modules, status types), six skill files, five test files (one new journey suite), three bundle artifacts. Verification fully green (typecheck; 1165 unit, 502 contract, 221 integration after the bundle rebuild, 34 crash tests; offline release check), with the pre-rebuild stale-bundle failure recorded in the transcript. Independent review is complete: the dispatched counter-review and a same-side fresh-context review both returned zero findings, and the constitution review gate was approved by the human. The commit lands on the feature branch from base 4f58174; task workflow records stay out of it per the usual durable-state follow-up.",
+  "task_id": "review-flexibility"
+}

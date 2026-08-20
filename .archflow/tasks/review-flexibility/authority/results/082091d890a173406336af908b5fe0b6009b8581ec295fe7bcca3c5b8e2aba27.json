@@ -1,0 +1,118 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 81,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 10390512
+  },
+  "artifact_digest": "e38c53547364e59f339a1925cc2e6dca2bf3098702e2420b3adb673495727a46",
+  "input_fingerprint": "88d3e6b96f68ae37fed1ee5d59a602ce78c0eb7b0939b00ed9a0151cf72c4dfb",
+  "outputs": [],
+  "phase_instance": "phase-impl-2",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-d0bf13d1ab6347306b4ffb3f29ff7bb3",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [
+        "6973b6ff7fc1842cf2463c0b55744c6511565f37d88561e9187124f1634e1fab"
+      ],
+      "assurance": "server-attested",
+      "cli_version": "2.1.236",
+      "constitution": "pass",
+      "drift": "aligned",
+      "drift_findings": [
+        {
+          "affected_claim_ids": [],
+          "drift": "aligned",
+          "rationale": "The implementation matches the approved phase-2 design, the parent design's D4/D10 Phase-2 share, and PRD R3. All six pinned cross-chunk interfaces are implemented as written (arm shape with required route_override; plan field set at plan time and consumed by the continuation; the single-point matcher rule; offer honesty on the dispatching shape only; fingerprint neutrality; schema locality via a parentless local $def). The design's own recorded deviations from the task design (P2-1 honest advertisement, required arm field, plan carrier, crash-window semantics, archflow-upgrade carve-out) were carried into the parent in the same production result and are reflected in the approved upstream text supplied here, so no governing document is left stale. The implementation's additional departures — the status.ts provenance type line, the plain-json cast, and the failing-stub crash simulation — are incidental: they change no approved claim, add no new interface or durable surface, and are disclosed in the phase implementation notes.",
+          "upstream_digest": "6973b6ff7fc1842cf2463c0b55744c6511565f37d88561e9187124f1634e1fab"
+        }
+      ],
+      "effort": "medium",
+      "envelope_input_digest": "ce9b5e0b0065f9dba8661c8e6a323477c882cf0436266ffbf75dbfe2930d0859",
+      "input_fingerprint": "88d3e6b96f68ae37fed1ee5d59a602ce78c0eb7b0939b00ed9a0151cf72c4dfb",
+      "invocation_id": "adjudication-invocation-14c748f21f7d9afeccf6932b14807811",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "42c7b568525039fa93f57e7270f9e8b124fa53f4f79f6bb1dfa6e1be40f780be",
+      "phase_instance": "phase-impl-2",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-d0bf13d1ab6347306b4ffb3f29ff7bb3",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "The implementation realizes the approved phase design's pinned cross-chunk interfaces literally: the single-point matcher rule (src/state/semantic-actions.ts:85-98), the plan-field carrier and continuation reconstruction (:66-67, :515, :621-638), review-run facts threading (:358-370), the required `route_override` arm with a parentless local route clone (src/contracts/semantic-workflow.ts:101,164,323-346), and the honest `expected_submission: \"review-dispatch\"` on the dispatching review offer only (src/state/semantic-view.ts:182-188). The three departures are disclosed in impl-notes and are incidental rather than material: a one-line type-only field on StatusEvidence.counter_review_provenance (src/state/status.ts:87-94) closing a pre-existing gap the phase's success criterion names, a targeted plain-json cast following the existing composer idiom, and a failing-stub rather than SIGKILL crash-window simulation producing the same durable aftermath. No pinned canonical skill assertion needed editing (grep-confirmed no pin covered the reworded sentences), so the design's conditional pin-update instruction is satisfied vacuously. No approved architecture claim is contradicted.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The artifact is a phase-impl production result for phase-impl-2 whose declared inputs include the approved phase design (53db4cf6...) and task design (f29a3dec...); the changed source files are exactly the phase design's Chunk A–E file list."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "No approval, gate, waiver, or commit authority is created or inferred. The override parameterizes which reviewer runs; it never skips or replaces the counter-review (asserted in skill prose across the four reviewing skills, e.g. skills/archflow-prd/SKILL.md:40) and no gate condition consults it. Human authority is required and carried explicitly: the declaration's `reason` is schema-required and non-blank (src/contracts/semantic-workflow.ts:328-336), the skills instruct the session to ask the human for the substitute route and reason and to relay the human's words, and archflow-upgrade's generic follow-`expected_submission` rule gained an explicit carve-out (skills/archflow-upgrade/SKILL.md:32) so an upgrade session cannot fabricate an authorization it was never given. The submission is bound into the authenticated operation identity via submission_digest (src/state/semantic-actions.ts:135-151), so a client cannot substitute a different declaration under an existing authorization. Untouched review shapes keep `expected_submission: \"none\"`, which still forbids submissions.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The change adds a new client-submitted submission kind (`review-dispatch`) that redirects a review dispatch, and rewrites gate-adjacent skill prose in six SKILL.md files."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Failure and loss are represented honestly. The advertised interface stops lying about the dispatching review shape (it now names `review-dispatch` rather than `none`), which is what makes the capability reachable at all rather than nominally present. Evidence records the route that actually ran: the override with its human reason is stamped on retained evidence and surfaced in status provenance when a substitution applied, and test/integration/review-dispatch-override.test.ts:256-259 pins that no RouteOverrideRecord appears when none applied — no fabricated provenance. The P2-3 crash window (override lost between review-enter and review-run) resumes under the configured route rather than silently claiming the substitute, and a re-submitted override proceeds as a genuinely fresh request; this limitation is documented in the impl notes and pinned by test at unit and journey level. The skills explicitly scope the procedure to a server-reachable route-only failure and state that it is not the degraded-operation stop path, preserving the existing safe next action when the workflow tools themselves are unreachable.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The change concerns behavior during a reviewer-route outage — a dispatch-failure path — and introduces a crash window in which a requested override is lost."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "No cross-task read or write is introduced; every touched path is repository source, the phase's own impl-notes, or the rebuilt dist payload, and the single undeclared change (.archflow/tasks/review-flexibility/state.json) is this task's own state under its own task directory. Subject binding is preserved exactly: the override enters submission_digest, the operation digest, and the request digest only, while the reviewed subject's input fingerprint is untouched — pinned by test/integration/semantic-composition-parity.test.ts (request digest changes with the override, subject input fingerprint identical), satisfying pinned interface 5. The schema-locality decision (parentless clone rather than a cross-document `config#/$defs/route` reference) keeps the advertised catalogue self-contained and unresolvable references out of it. Absent or mismatched submissions still fail closed through SEMANTIC_SUBMISSION_MISMATCH at the single matcher; the one tolerated absence is the deliberate, honestly advertised optional kind, not a relaxation of subject-identity checking.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The change writes route-override provenance onto durable review evidence and adds a submission that participates in operation- and request-digest composition."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "d60bb9cec0f2d61a84e4c7df64b2aed67592f6d1ace99db31ec16609c0573b95",
+      "step": "adjudicate",
+      "subject_digest": "4b86c35660fe9dd33932e6d90185ae8658fa5e2b724d467d2359171904aa2839",
+      "task_id": "review-flexibility",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "review-flexibility"
+}

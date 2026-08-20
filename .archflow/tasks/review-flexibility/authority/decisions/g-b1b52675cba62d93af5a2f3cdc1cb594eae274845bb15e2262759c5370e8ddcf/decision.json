@@ -1,0 +1,33 @@
+{
+  "context_digest": "c6082cff56379b4dab9aace4b8a8f8ae075101d67125c55a79823c26731578a2",
+  "envelope": {
+    "context_digest": "c6082cff56379b4dab9aace4b8a8f8ae075101d67125c55a79823c26731578a2",
+    "gate_id": "g-b1b52675cba62d93af5a2f3cdc1cb594eae274845bb15e2262759c5370e8ddcf",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-890495b5f3c4fb81a3d0330f499f7713c2bf1714ab9780a46b11ee3bc47cf74f",
+      "recorded_at": "2026-08-20T01:53:59.403Z",
+      "request_id_digest": "5655bbb92e5adfbd70abd00dee80912c8d24d3f13008e9238a0a7e5c276ece63",
+      "schema_version": "1"
+    },
+    "kind": "commit-authorization",
+    "payload": {
+      "decision": "authorize-commit",
+      "reason": "Authorized: verification is fully green, both independent reviews returned zero findings, and the policy gate is approved. Commit the exact reviewed changes."
+    },
+    "phase_instance": "phase-impl-2",
+    "schema_version": "1",
+    "subject_digest": "4b86c35660fe9dd33932e6d90185ae8658fa5e2b724d467d2359171904aa2839",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-b1b52675cba62d93af5a2f3cdc1cb594eae274845bb15e2262759c5370e8ddcf",
+  "kind": "commit-authorization",
+  "outcome": "decided",
+  "phase_instance": "phase-impl-2",
+  "schema_version": "1",
+  "subject_digest": "4b86c35660fe9dd33932e6d90185ae8658fa5e2b724d467d2359171904aa2839",
+  "task_id": "review-flexibility"
+}

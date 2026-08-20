@@ -15,6 +15,13 @@
       "subject_digest": "14150941946efa99b0061db640bf141f808f9ffcf7bee93416dbe32052b6cec5"
     },
     {
+      "decision_digest": "9918ffc057f289922aff5f0221e43de1ac21c31af1556e1f3a67c88093ea488f",
+      "gate_id": "g-6cf968401398853a9f11e1a58a9d55e9211aac2a8bb7b1c3b5f0edcdfeb87b80",
+      "gate_kind": "design-approval",
+      "resolved_at_revision": 108,
+      "subject_digest": "7ea2dc7e609db76103676715b6d0b8a28d106d1e716089acf6bb01faefa269f4"
+    },
+    {
       "decision_digest": "3c40d90d4466733a42b731f2263d659278582209e7c85e112e06889e0aa99159",
       "gate_id": "g-76ddebb5eddc244ddb63553479ee2798a8da428ae87fc79d385cebd83fd26f59",
       "gate_kind": "artifact-approval",
@@ -34,6 +41,13 @@
       "gate_kind": "design-approval",
       "resolved_at_revision": 78,
       "subject_digest": "6973b6ff7fc1842cf2463c0b55744c6511565f37d88561e9187124f1634e1fab"
+    },
+    {
+      "decision_digest": "b0fe48e763ece9811fe331a2e5e3d9c13b5fea793cbdbdce5063f0d2517e9c35",
+      "gate_id": "g-b1b52675cba62d93af5a2f3cdc1cb594eae274845bb15e2262759c5370e8ddcf",
+      "gate_kind": "commit-authorization",
+      "resolved_at_revision": 88,
+      "subject_digest": "4b86c35660fe9dd33932e6d90185ae8658fa5e2b724d467d2359171904aa2839"
     },
     {
       "decision_digest": "03bd7d0a8c7ee69b71c24278bee8f48326c157b501ce428a4204a20767ed619b",
@@ -62,9 +76,16 @@
       "gate_kind": "baseline-adoption",
       "resolved_at_revision": 54,
       "subject_digest": "ae6ad67cc32cc329530812e325fc8de9870bea6d5e4c862a59c68488e38472af"
+    },
+    {
+      "decision_digest": "9d6a61387f849d7c1903638154bcfe474d6db166b017a26b728684090d585c1f",
+      "gate_id": "g-dca85186eba60d39f0ab50a256855be986c855ed2ddcfb222034bfccafd775d5",
+      "gate_kind": "constitution-review",
+      "resolved_at_revision": 86,
+      "subject_digest": "4b86c35660fe9dd33932e6d90185ae8658fa5e2b724d467d2359171904aa2839"
     }
   ],
-  "attempt": 2,
+  "attempt": 3,
   "authoritative_results": [
     {
       "input_fingerprint": "21230fe376905f962767c385973884ddef7d9aeed77ec2a98b23c52f8fd9ac29",
@@ -151,6 +172,34 @@
       "step": "triage"
     },
     {
+      "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+      "phase_instance": "phase-design-3",
+      "result_digest": "facc97fed81fc2edf7f1a6433cb9922c1bfb1da344f0cbb348b3610aa7c39bd3",
+      "result_id": "adjudication-result-d85d39648d58915138ea7363fd7d8f6b",
+      "step": "adjudicate"
+    },
+    {
+      "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+      "phase_instance": "phase-design-3",
+      "result_digest": "b02707696690abbc2059330560a570d25261c8c50ec9a1ca032f35180682815b",
+      "result_id": "result-f4e5ed664e72b4101422a7464d25f720",
+      "step": "counter_review"
+    },
+    {
+      "input_fingerprint": "c9070d869c88a6505aa4311b055502b06ac238b08545d58475ac05a97cde53cc",
+      "phase_instance": "phase-design-3",
+      "result_digest": "27eea301babec015ff7ec51bff04f0a810486976a370a429e5af590f35139a47",
+      "result_id": "state-result-2a1a1dcbf452360b71eed74efa132af5",
+      "step": "produce"
+    },
+    {
+      "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+      "phase_instance": "phase-design-3",
+      "result_digest": "cf4de995c69004226f4b71969340968254967caa4a2f3328187a34b007477190",
+      "result_id": "state-result-84d2fcf07d42f23c2f2b0dd17353b996",
+      "step": "triage"
+    },
+    {
       "input_fingerprint": "469bdda474c3e3bb3096096592481d3cc8e5dc12dcfb7c052202ce1fbd8db465",
       "phase_instance": "phase-impl-1",
       "result_digest": "971005f2d5028d163111d3bfeeb2136230a962b5e9d87f0fc241e7f0ea34a08c",
@@ -176,6 +225,34 @@
       "phase_instance": "phase-impl-1",
       "result_digest": "4670fd9dd636eb1822f2c0e627b5155c2d39ad67350ba8f97b7435d9fbaea31e",
       "result_id": "state-result-4a4debca2adad3489a6a444ec958d96c",
+      "step": "triage"
+    },
+    {
+      "input_fingerprint": "88d3e6b96f68ae37fed1ee5d59a602ce78c0eb7b0939b00ed9a0151cf72c4dfb",
+      "phase_instance": "phase-impl-2",
+      "result_digest": "082091d890a173406336af908b5fe0b6009b8581ec295fe7bcca3c5b8e2aba27",
+      "result_id": "adjudication-result-d0bf13d1ab6347306b4ffb3f29ff7bb3",
+      "step": "adjudicate"
+    },
+    {
+      "input_fingerprint": "88d3e6b96f68ae37fed1ee5d59a602ce78c0eb7b0939b00ed9a0151cf72c4dfb",
+      "phase_instance": "phase-impl-2",
+      "result_digest": "9251b1aab1836435832ea9a4bd587420e495948463128c383b731aa0d5a18384",
+      "result_id": "result-b79867a78aa2b1870e29dbcd3a46c95a",
+      "step": "counter_review"
+    },
+    {
+      "input_fingerprint": "ec3cb52a51f3ec56beeb2b22266b32f3f5532173e2fc8359b073b599b6c371fc",
+      "phase_instance": "phase-impl-2",
+      "result_digest": "6621cb386810ae28bf29499b58e5f99918d59d5ce93b0950cf7f1f64de82d2b4",
+      "result_id": "state-result-10e54a84b1a7480262953a0695c9282d",
+      "step": "produce"
+    },
+    {
+      "input_fingerprint": "88d3e6b96f68ae37fed1ee5d59a602ce78c0eb7b0939b00ed9a0151cf72c4dfb",
+      "phase_instance": "phase-impl-2",
+      "result_digest": "a8b6eab5b40711031dab3cdea03b6aaf7ec127f8ed6bb632a449a9cf205a8eca",
+      "result_id": "state-result-ca07c0e5f9d5ded07a2dc1cd2221c0d5",
       "step": "triage"
     },
     {
@@ -232,52 +309,52 @@
   "config_digest": "493173957ba07913669e2970f822f501cace89fcbd42b68d0cf7b54185880c08",
   "constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
   "initialization_digest": "8198c85109ea65a5c74550ee943d6a7373b771605e45cda4b8daa623c3432755",
-  "input_fingerprint": "603f0175f930a2b6f3eeed939550d10b450eb68c6608d94ab87fd2fe761a58b1",
+  "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
   "last_transition": {
-    "input_fingerprint": "603f0175f930a2b6f3eeed939550d10b450eb68c6608d94ab87fd2fe761a58b1",
-    "intent_id": "afop-6ab0ecff000b500dca50f1242f65719a07c9a79c6de52590039a650fda4d0671-open-gate",
+    "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+    "intent_id": "afop-8e7951bffeed2a03eaca3233ff8aff5ea15446b99daa507607a8ca1862b39b28-open-gate",
     "operation": "gate",
     "outcome": {
       "decision": {
-        "context_digest": "466cea5d07c49b5c3977380fe128e16ced992ed02997211a6b440aabc4cd0699",
-        "gate_id": "g-9d52098d0738f2795581a61d258e8744ff4bb2c74da85d643445c5fc4380b7c8",
+        "context_digest": "3694be69e15eb3c45b8e747fcdb70bc91a8922bd888b02a1040d1b4531592e7d",
+        "gate_id": "g-6cf968401398853a9f11e1a58a9d55e9211aac2a8bb7b1c3b5f0edcdfeb87b80",
         "human_provenance": {
           "actor_class": "human",
           "assurance": "declared-local-trace",
           "channel": "connected-host",
           "connection_id": "connection-1",
-          "decision_event_id": "afdecision-6da8d25155558dacee623011f22b32d340cf9874137da6fd2a3ec5e8d13cb460",
-          "recorded_at": "2026-08-19T23:11:14.008Z",
-          "request_id_digest": "b84440225fdd80d0230649d1b4a82aef4e648973cbaf483e4df861538f62cfb0",
+          "decision_event_id": "afdecision-7c459e0119b2f96fb8beef4d4b667b436d3c724b13f6cd5521ff5975805838f0",
+          "recorded_at": "2026-08-20T03:48:42.445Z",
+          "request_id_digest": "9be8ba9e1c1872da38935d4d238c83e18c06934e8a639f0577452c2c86728614",
           "schema_version": "1"
         },
         "kind": "design-approval",
         "payload": {
           "decision": "approve",
-          "reason": "Human approved the reviewed phase-2 design bytes after the presented outcome, review history, material tradeoffs, and constitution details."
+          "reason": "Approving: the design covers all ten acceptance sites with an atomic receipt, keeps constitution policy arms and exception gates unconditional, stages the commit-boundary work to Phase 4, and survived three counter-review rounds ending clean."
         },
-        "phase_instance": "phase-design-2",
+        "phase_instance": "phase-design-3",
         "schema_version": "1",
-        "subject_digest": "6973b6ff7fc1842cf2463c0b55744c6511565f37d88561e9187124f1634e1fab",
+        "subject_digest": "7ea2dc7e609db76103676715b6d0b8a28d106d1e716089acf6bb01faefa269f4",
         "task_id": "review-flexibility"
       },
       "kind": "design-approval",
-      "notes": "Human approved the reviewed phase-2 design bytes after the presented outcome, review history, material tradeoffs, and constitution details.",
-      "revision": 78
+      "notes": "Approving: the design covers all ten acceptance sites with an atomic receipt, keeps constitution policy arms and exception gates unconditional, stages the commit-boundary work to Phase 4, and survived three counter-review rounds ending clean.",
+      "revision": 108
     },
-    "outcome_digest": "815ad2d8ea3eddde02df063508368a83b5185e8308b92d46cc366f4eb45b5641",
-    "prior_revision": 77,
-    "request_digest": "11a23b30d26a600e0dfafa755a3bfad45ecf0cb87faf695ec8bb03541ab3a094",
-    "result_id": "g-9d52098d0738f2795581a61d258e8744ff4bb2c74da85d643445c5fc4380b7c8",
-    "resulting_revision": 78,
+    "outcome_digest": "61e18119d49e01dccf18cd649c47627e2fc78ff9676c08cfdd66814dbd35788a",
+    "prior_revision": 107,
+    "request_digest": "f642744ca1a1ca9a02e386b07a83eb9a5740a40d65aadc261eba9e457b0dfef5",
+    "result_id": "g-6cf968401398853a9f11e1a58a9d55e9211aac2a8bb7b1c3b5f0edcdfeb87b80",
+    "resulting_revision": 108,
     "schema_version": "1",
     "tool": "archflow_gate"
   },
-  "phase_instance": "phase-design-2",
+  "phase_instance": "phase-design-3",
   "planned_final_phase": 6,
   "policy_base_commit": "6549da8a2b872a2c72aabe7cc4632e1d3eb09b89",
   "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
-  "revision": 78,
+  "revision": 108,
   "schema_version": "1",
   "status": "succeeded",
   "step": "triage",

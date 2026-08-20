@@ -1,0 +1,33 @@
+{
+  "context_digest": "31615f4ed9572d097024da223f01b1b9d1b554b8399c5d0d136cc98fa25d39d6",
+  "envelope": {
+    "context_digest": "31615f4ed9572d097024da223f01b1b9d1b554b8399c5d0d136cc98fa25d39d6",
+    "gate_id": "g-dca85186eba60d39f0ab50a256855be986c855ed2ddcfb222034bfccafd775d5",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-be35225e5aa0441bd1fe4355ff2ba09542a99f75083cd6064457c936a7b51430",
+      "recorded_at": "2026-08-20T01:52:53.263Z",
+      "request_id_digest": "346639cd6a32ffadbfb9f424698c60c2088663920a3e76ea13dc03d97f0bc530",
+      "schema_version": "1"
+    },
+    "kind": "constitution-review",
+    "payload": {
+      "decision": "approve",
+      "reason": "Approve the phase-2 policy review: the implementation matches the approved design, verification is green, and both independent reviews returned zero findings. Continue to commit authorization."
+    },
+    "phase_instance": "phase-impl-2",
+    "schema_version": "1",
+    "subject_digest": "4b86c35660fe9dd33932e6d90185ae8658fa5e2b724d467d2359171904aa2839",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-dca85186eba60d39f0ab50a256855be986c855ed2ddcfb222034bfccafd775d5",
+  "kind": "constitution-review",
+  "outcome": "decided",
+  "phase_instance": "phase-impl-2",
+  "schema_version": "1",
+  "subject_digest": "4b86c35660fe9dd33932e6d90185ae8658fa5e2b724d467d2359171904aa2839",
+  "task_id": "review-flexibility"
+}

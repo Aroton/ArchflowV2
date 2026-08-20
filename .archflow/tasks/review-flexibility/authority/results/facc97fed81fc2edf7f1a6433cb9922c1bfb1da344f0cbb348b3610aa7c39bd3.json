@@ -1,0 +1,109 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 103,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 10490326
+  },
+  "artifact_digest": "bd7977fb050035e77fc8ba2b31c1b6632ab26e0697a671d6a3438bb32a7b6254",
+  "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+  "outputs": [],
+  "phase_instance": "phase-design-3",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-d85d39648d58915138ea7363fd7d8f6b",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [],
+      "assurance": "server-attested",
+      "cli_version": "2.1.237",
+      "constitution": "pass",
+      "drift": "aligned",
+      "drift_findings": [],
+      "effort": "medium",
+      "envelope_input_digest": "0a4c91543322290fdb36a4de2783ace8eb64a20588af77ee2883516a247518fe",
+      "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+      "invocation_id": "adjudication-invocation-91d95395d5c4f652c134f06fca53a504",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "da58748816da085e74c926c4566bec58547b551dec2cec024871f9ea6823420f",
+      "phase_instance": "phase-design-3",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-d85d39648d58915138ea7363fd7d8f6b",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "The deviations are declared, not silent, and the governing document is updated in the same production result: the pinned design.md already carries the refinements (D6 now names rule_advances as the single durable representation, the triple sorted-unique key, restart-cutoff eligibility, the guard-mirror settle condition, planned_final_phase derived at the gateless design settle, the four additional acceptance sites, and migration-audit's traditionallyApproved as an untouched boundary; the Phase 3 file list matches the phase design's list). Both documents therefore re-enter this review boundary together, and implementation is scheduled only after this phase design is reviewed. The design also keeps the honesty half of the rule intact for the machinery it builds: the phase-impl carve-out is stated as a temporary condition Phase 4 removes rather than presented as complete, and D9's self-application cutover keeps this task's own remaining phases (prd, design, phase-design, phase-impl) explicitly gated so its later phase designs are still human-approved before code. Repository checks support the factual basis for the deviations: next-action.ts:167 does open the phase-kind gate unconditionally as described, implementation-manifest.ts:280-284 does require the decisions request/decision pair (the missing-recovery-authority wedge the receipt arm exists to prevent), and restart-authority.ts:99-100 does spread ...preserved in the exact-restart draft, which is exactly what forces the triple key and the separate ruleAdvanceIsEligibleAfterLatestRestart filter.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The subject is a phase design that governs implementation of D5–D7/D9/D10 and departs from the parent task design in six enumerated ways (\"Deviations from the task design\": four extra acceptance sites, a sharpened Phase 3/4 boundary, composeGate realized at the advanceAction seam, corrected receipt mechanics, extra schema-surface files, widened cutover scope), and it changes the shape of the D6 approval machinery the parent design specified."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Nothing here infers human authority over a gate that opened, and the design is explicit that a receipt is bookkeeping rather than approval. Every gate that does open still requires an explicit, subject-bound human decision with unchanged presentations and decision sets; the constitution policy arm (unsatisfied findings, failing/uncertain rule, eligible waivers) opens design-approval regardless of any rule (P3-3, next-action.ts:401-405 untouched), adjudicationGateSatisfied accepts no receipts so constitution findings stay human-dischargeable, migration-audit's traditionallyApproved (gates.ts:384-391) accepts no receipts, and every other exception gate is untouched. P3-5 mints a receipt only when the settle-path evidence assembly reaches the clean-advance path with no pending adjudication gate — exactly the condition under which the fixed point would otherwise demand only the approval being replaced. Eligibility is digest-bound plus a restart cutoff so a surviving receipt cannot auto-authorize a restarted subject during the reconsideration window where the approval arm fails closed. Self-application under the v1 rule is handled rather than assumed: P3-8's cutover adds subjects: [prd, design, phase-design, phase-impl] to this task's own config in the same phase that lands the conditionality, so this task's remaining phases keep explicit human gates until the R8 amendment lands in Phase 5 — the sequencing the parent design and PRD deliberately chose. The residual concern, that shipped template defaults let other projects advance phase-design gatelessly before the v1 text is amended, is product behavior authorized by PRD R4/R6 and closed by the same task's Phase 5 amendment; it does not amount to inferred authority over an opened gate.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The phase design makes document-subject gate opening rule-conditional (P3-3: advanceAction opens artifact/design approval only when rule_conclusion.wait) and introduces RuleAdvanceV1 receipts that stand in for a human approval at ten approval-requiring sites (P3-6), i.e. it builds the machinery by which advancement can occur without an explicitly recorded human decision, while the constitution pinned for this review still carries explicit-human-authority at version 1."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Each of these is kept visible with a safe next action rather than smoothed over. A malformed phase plan hard-fails the gateless settle on the existing approved-design-phase-count-invalid grammar — explicitly chosen over the silent absent bound that plannedFinalPhaseFromRecordedPayloads would preserve — leaving the client a concrete fix. Pending adjudication findings mean no receipt is written and the policy-arm design-approval gate is advertised instead. P3-7 identifies and fixes a genuine irrecoverable wedge (implementation-manifest.ts:280-284 would return missing-recovery-authority for a gateless milestone, routing to the permanent inspect-state at next-action.ts:179-188) instead of letting a fully autonomous project stall silently, and Tests 6(b) pins that first-gateless-milestone case. A config edit between status and gate apply surfaces as gate-fixed-point-disagreement rather than a silently different conclusion (Test 8). The document is also honest about its own limits: the withdrawn authority/rule-advances record file is recorded with its reason (the kernel plan allowlist admits no such slot), the phase-impl carve-out is named as temporary and made observable in tests, and the ~22-file count is flagged as above the ~10–15 signal with its causes rather than understated.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The design specifies several non-success paths: the gateless design settle when the phase plan is malformed (P3-6.6), settles under a pending adjudication gate (P3-5), the milestone recovery-authority miss that today routes to a permanent inspect-state (P3-7), and config edits racing the gate apply (P3-2)."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The receipt identifies the exact bytes and position it governs and fails closed otherwise: acceptance requires subject_digest equality with the digest being checked, the producing step's phase_instance, and passage of a restart cutoff via the new ruleAdvanceIsEligibleAfterLatestRestart, mirroring approvalIsEligibleAfterLatestRestart (restart-authority.ts:26-33). The design correctly identifies that digest binding alone would be weaker than the approval arm in the byte-identical restart case — verified against restart-authority.ts:94-104, where ...preserved carries collections through an exact restart verbatim — and adds the cutoff rather than relying on the digest. Receipts live only in the task's own state.json under the existing sorted-unique/revision-bound pattern, join no retained-result graph or fingerprint composition, and cross no task boundary; the milestone proof's new arm reads the same task-scoped state.json blob already required in the commit and matches the expected (phase_instance, subject_digest) pair. Duplicate/invalid receipt cases (bad revision bound, duplicate pair, stale pre-restart receipt at every acceptance site) are pinned in Tests 2 and 9. Latest-eligible-wins mirrors the existing approval resolution rule, so no stale or mismatched receipt can authorize advancement.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "P3-4 introduces a new durable authority-substituting artifact (RuleAdvanceV1 with task_id, phase_instance, subject_digest, config_digest, settled_at_revision) that ten sites (P3-6) consult in place of an authenticated approval, and P3-7 has the milestone proof read a receipt out of the committed state.json blob."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "4c8fcfc8f58f1188cb99466d7b05cf52b7a3ea461013561528eb3cd18516f691",
+      "step": "adjudicate",
+      "subject_digest": "7ea2dc7e609db76103676715b6d0b8a28d106d1e716089acf6bb01faefa269f4",
+      "task_id": "review-flexibility",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "review-flexibility"
+}
