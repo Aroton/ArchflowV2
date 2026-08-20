@@ -42,6 +42,18 @@ roles:
 #       model: claude-opus-5
 #       effort: high
 
+# Optional. Approval triggers declare which completed steps should wait after the
+# constitution activates targeted gates. `subjects` may contain prd, design,
+# phase-design, or phase-impl. `content` rules watch repository paths touched by a
+# phase-impl change. This release evaluates and records both outcomes, but retains
+# explicit human approval for every document and implementation commit while the
+# current constitution remains active. The shipped future defaults target the first
+# PRD, the architecture/design, and SQL changes.
+approval_rules:
+  subjects: [prd, design]
+  content:
+    - paths: ["**/*.sql"]
+
 # Codex-host orientation (replace the active document above with this block):
 # schema_version: "1"
 # roles:

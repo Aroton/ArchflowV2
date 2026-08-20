@@ -8,15 +8,19 @@ import { afterEach, describe, expect, it } from "vitest";
 import { canonicalDocument, canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
 import { parseConfigYaml, type TaskConfigSnapshot } from "../../src/contracts/config.js";
 import { parseActiveGate, parseGateRequest } from "../../src/contracts/durable-gate.js";
+import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parsePathSafeId, parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { computeGateContextDigest } from "../../src/contracts/fingerprints.js";
+import { parseRepositoryPathClaim, parseTaskPathClaim } from "../../src/contracts/path-claims.js";
+import { encodePhaseInstance } from "../../src/contracts/phase-instance.js";
 import { resolvePinnedConstitution } from "../../src/state/constitution.js";
 import { createProductionServices } from "../../src/state/production.js";
 import {
   buildCommitAuthorizationInput,
   buildDesignApprovalInput,
   computeTaskStatus,
+  currentApprovedUpstreams,
   partitionExpectedReentryEdits,
   resolveStatusEvidenceAssessment,
 } from "../../src/state/status.js";
@@ -145,6 +149,57 @@ describe("computeTaskStatus", () => {
       () => { throw new TypeError("evidence bindings disagree"); },
     );
     expect(fixedPointFailure).toEqual({ blocking_reason: "fixed-point-disagreement" });
+  });
+
+  it("does not accept a rule settlement as upstream authority when no approval authenticates", async () => {
+    const h = await harness();
+    const prdPhase = encodePhaseInstance({ kind: "prd" });
+    const prdArtifact: DocumentArtifactV1 = {
+      schema_version: "1", artifact_kind: "document", task_id: TASK,
+      phase_instance: prdPhase, step: "produce",
+      document_path: parseTaskPathClaim("prd.md"), path_class: "document",
+      byte_count: parseSafeInteger(2), content_digest: D("6"),
+      declared_inputs: [], input_fingerprint: D("2"),
+      snapshot_digest: D("6"), projection_target: parseRepositoryPathClaim(`.archflow/tasks/${TASK}/prd.md`),
+    };
+    const upstreamDigest = canonicalJsonDigest(prdArtifact);
+    const retained = {
+      manifest: { value: {
+        artifact_digest: upstreamDigest, source_artifact: prdArtifact,
+        accounting: { measured_at_revision: parseSafeInteger(2) },
+      } },
+    };
+    const dependencies = {
+      load_retained_manifest: async () => Object.freeze({ schema_version: "1" as const, ok: true, value: retained }),
+    } as unknown as Parameters<typeof currentApprovedUpstreams>[0];
+    // The state names a candidate approval, but no archived decision authenticates it.
+    const approvalEntry = {
+      gate_id: parsePathSafeId("gate-1"), gate_kind: "artifact-approval" as const,
+      subject_digest: upstreamDigest, decision_digest: D("d"), resolved_at_revision: parseSafeInteger(3),
+    };
+    const reference = {
+      phase_instance: prdPhase, step: "produce" as const, result_digest: D("9"),
+      result_id: "prd-result" as never, input_fingerprint: D("2"),
+    };
+    const receipt = {
+      task_id: TASK, phase_instance: prdPhase, step: "adjudicate" as const,
+      subject_digest: upstreamDigest, conclusion: { wait: false, match: null } as const,
+      config_digest: D("7"), settled_at_revision: parseSafeInteger(3),
+    };
+    const withUpstream = (ruleAdvances: readonly [typeof receipt]): TaskStateV1 => h.state({
+      phase_instance: encodePhaseInstance({ kind: "design" }),
+      authoritative_results: [reference],
+      approvals: [approvalEntry],
+      rule_settlements: ruleAdvances,
+    });
+
+    // The exact digest-bound settlement remains evidence only.
+    await expect(currentApprovedUpstreams(dependencies, h.services.authority, withUpstream([receipt]), [], undefined))
+      .rejects.toThrow("current upstream produced authority lacks approval");
+    // A settlement for different bytes fails closed as well.
+    await expect(currentApprovedUpstreams(
+      dependencies, h.services.authority, withUpstream([{ ...receipt, subject_digest: D("e") }]), [], undefined,
+    )).rejects.toThrow("current upstream produced authority lacks approval");
   });
 
   it("materializes sorted retained commit-authorization resume facts without a rubric digest", () => {

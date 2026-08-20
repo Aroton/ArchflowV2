@@ -210,7 +210,7 @@ function missed(
 }
 
 /**
- * Proves the automatic design milestone commit authorized by the combined human gate. The commit
+ * Proves the design milestone commit authorized by the human gate. The commit
  * must be the direct child of the approved baseline, touch only this task, contain the reviewed
  * document plus durable recovery authority, and leave the task root clean.
  *
@@ -225,7 +225,9 @@ export async function designArtifactCommittedAtCurrentTarget(
   artifact: DocumentArtifactV1,
   outputs: readonly OutputEntry[],
   context: Pick<GateContext<"design-approval">, "target_ref" | "baseline_commit" | "commit_message"> &
-    Readonly<{ authorized_document_paths?: readonly RepositoryPathClaim[] }>,
+    Readonly<{
+      authorized_document_paths?: readonly RepositoryPathClaim[];
+    }>,
 ): Promise<DesignMilestoneObservation> {
   const symbolicRef = await runner.runText({
     argv: ["symbolic-ref", "--quiet", "HEAD"],
@@ -278,10 +280,10 @@ export async function designArtifactCommittedAtCurrentTarget(
   const outsideTask = changed.filter((path) => !path.startsWith(prefix));
   if (outsideTask.length > 0) return missed("paths-outside-task", outsideTask);
   if (!changed.includes(`${prefix}state.json`)) return missed("missing-recovery-authority");
-  if (!changed.some((path) => path.startsWith(`${prefix}authority/decisions/`) && path.endsWith("/request.json")) ||
-      !changed.some((path) => path.startsWith(`${prefix}authority/decisions/`) && path.endsWith("/decision.json"))) {
-    return missed("missing-recovery-authority");
-  }
+  const archivedDecisionPair =
+    changed.some((path) => path.startsWith(`${prefix}authority/decisions/`) && path.endsWith("/request.json")) &&
+    changed.some((path) => path.startsWith(`${prefix}authority/decisions/`) && path.endsWith("/decision.json"));
+  if (!archivedDecisionPair) return missed("missing-recovery-authority");
 
   for (const path of approvedDocumentPaths) {
     const output = outputs.find((entry) => entry.path === path);

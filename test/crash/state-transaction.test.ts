@@ -16,6 +16,7 @@ import {
   type ParsedToolCall,
 } from "../../src/contracts/mcp-tools.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
+import type { RuleSettlementV1 } from "../../src/contracts/durable-state.js";
 import { createGitRunner, preflightGit, type RepositoryOperationContext } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import { createAtomicWriter, type AtomicWriter } from "../../src/state/atomic.js";
@@ -69,7 +70,7 @@ type Fixture = Readonly<{
   }>;
 }>;
 
-async function fixture(): Promise<Fixture> {
+async function fixture(settleReceipt?: RuleSettlementV1): Promise<Fixture> {
   const repository = await mkdtemp(join(tmpdir(), "archflow-transaction-crash-"));
   roots.push(repository);
   execFileSync("git", ["-c", "init.defaultBranch=main", "init", "-q"], { cwd: repository, env: gitEnvironment });
@@ -190,7 +191,11 @@ async function fixture(): Promise<Fixture> {
           success,
         }),
         result: validateProjectResultStructure(call, { schema_version: "1", ok: true, value: success }),
-        next_state: { ...nextState, status: "succeeded" },
+        next_state: {
+          ...nextState,
+          status: "succeeded",
+          ...(settleReceipt === undefined ? {} : { rule_settlements: [settleReceipt] }),
+        },
       };
       return { schema_version: "1", ok: true, value };
     };
@@ -415,6 +420,36 @@ describe("state transaction crash boundaries", () => {
       value: { replayed: true, state: { value: { revision: 2 } } },
     });
     expect(restart.prepare.calls()).toBe(0);
+  });
+
+  it("replays an embedded rule settlement with identical bytes and no second authority file", async () => {
+    const receipt: RuleSettlementV1 = {
+      task_id: "crash-task" as RuleSettlementV1["task_id"],
+      phase_instance: "phase-impl-9" as RuleSettlementV1["phase_instance"],
+      step: "triage",
+      subject_digest: "d".repeat(64) as RuleSettlementV1["subject_digest"],
+      conclusion: { wait: false, match: null },
+      config_digest: sha256Bytes(new TextEncoder().encode('schema_version: "1"\nroles: {}\n')),
+      settled_at_revision: 2 as RuleSettlementV1["settled_at_revision"],
+    };
+    const input = await fixture(receipt);
+    const settle = await run(input, createAtomicWriter());
+    expect(settle.result).toMatchObject({ ok: true, value: { replayed: false } });
+    const committedBytes = await readFile(input.authority.state.absolute);
+    const committed = await readTaskState(input.authority.state);
+    if (committed.kind !== "canonical") throw new Error("settled state is unavailable");
+    expect(committed.document.value.rule_settlements).toEqual([receipt]);
+
+    const retryCall = parseToolCall("archflow_state", { ...input.call.input, expected_revision: 2 });
+    const replay = await run(input, createAtomicWriter(), input.prepare(), retryCall);
+    expect(replay.result).toMatchObject({ ok: true, value: { replayed: true } });
+    expect(replay.prepare.calls()).toBe(0);
+    expect(await readFile(input.authority.state.absolute)).toEqual(committedBytes);
+    // The receipt lives only inside the settled state the plan carried; replay must not add a
+    // parallel durable record that could drift from it. The commit's cleanup already removed the
+    // intent record, so the replay must leave the intents directory empty rather than re-authoring
+    // anything.
+    expect(await readdir(join(input.authority.workspace_root, "transient", "intents"))).toEqual([]);
   });
 
   it("leaves a SIGKILL-abandoned lock blocking until exact explicit confirmed repair", async () => {

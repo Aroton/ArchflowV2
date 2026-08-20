@@ -35,7 +35,9 @@ import {
   type PreparedEvidenceResult,
 } from "../../state/evidence-results.js";
 import { loadAuthenticatedGateApproval } from "../../state/gates.js";
-import { authenticatedApprovalIsEligibleAfterLatestRestart } from "../../state/restart-authority.js";
+import {
+  authenticatedApprovalIsEligibleAfterLatestRestart,
+} from "../../state/restart-authority.js";
 import {
   loadCurrentProduceSubject,
   loadProduceUpstreamSubject,
@@ -347,7 +349,7 @@ export async function handleCounterReview(
       const upstreams = await deriveApprovedUpstreams(services, call.name, state.value, produce.value);
       if (!upstreams.ok) return upstreams;
       const approvedUpstreamDigests = requireApprovedUpstreamDigests(
-        state.value.approvals,
+        state.value,
         upstreams.value.map((item) => item.upstream_digest),
       );
       const constitutionResultId = stableId("adjudication-result", call.input.intent_id);

@@ -452,7 +452,7 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     const workspace = await createTaskWorkspace({ taskId: "semantic-impl-exhausted", label: "semantic-impl-exhausted" });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
-    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], blocker, blocker, blocker]));
+    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], blocker, blocker, blocker, []]));
     const h = semanticJourneyHarness(workspace);
     const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
 
@@ -518,29 +518,36 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(view.resources.length).toBeGreaterThan(0);
     expect(reviewCountAt(workspace)).toBe(reviewsAtGate);
 
-    // One-hop simple-classified revision: the client fixes the work, captures a fresh transcript,
-    // and resubmits declaring the simple human revision. The retained review is reused for the
-    // one hop — no child is re-dispatched — and the boundary returns to the retained triage.
-    const revisionWork = writeClientImplementation(workspace, view, "exhausted-simple-revision");
+    // Exporting new observable behavior is significant, even when the diff is small. A `simple`
+    // declaration cannot preserve the old review and reopen triage, where the accepted material
+    // finding could otherwise be relabelled rejected without a fresh reviewer.
+    const revisionWork = writeClientImplementation(workspace, view, "exhausted-significant-revision");
     const reviewsBeforeRevision = reviewCountAt(workspace);
-    const simpleSubmission = implementationSubmission(workspace, revisionWork.outputs);
-    view = await applied(h, invocation, view, {
-      ...simpleSubmission,
-      human_revision: { classification: "simple", rationale: "The requested change is a scoped fix to the observable export." },
+    const revisionSubmission = implementationSubmission(workspace, revisionWork.outputs);
+    const refusedSimple = await h.apply(invocation, view, {
+      ...revisionSubmission,
+      human_revision: { classification: "simple", rationale: "Only a small source edit was required." },
     });
-    expect(view.next_action).toMatchObject({ kind: "triage", expected_submission: "triage" });
-    expect(view.findings?.map((finding) => finding.finding_id)).toEqual(["impl-blocking-gap"]);
+    expect(refusedSimple.ok).toBe(false);
+    if (refusedSimple.ok) return;
+    expect(refusedSimple.error.message).toContain(
+      "simple-human-revision-cannot-resolve-accepted-finding",
+    );
     expect(reviewCountAt(workspace)).toBe(reviewsBeforeRevision);
 
-    // SOURCE DEFECT (reported, not pinned): the retained accepted finding makes the fixed point
-    // demand a re-triage while durable state sits at produce-succeeded, but the fixed pipeline
-    // [produce, counter_review, triage] has no produce-succeeded -> triage edge, and the fixed
-    // workflow's status projection offers exactly that unreachable `triage` action. Applying it
-    // fails with TRANSITION_INVALID {"phase_instance":"phase-impl-1","from":"produce-succeeded",
-    // "to":"triage-succeeded"} (the semantic triage executor's running-entry plan only fires from
-    // counter_review-succeeded, and a running/triage composition from produce-succeeded is
-    // equally illegal). The journey therefore cannot reach the next gate-summary to prove the
-    // composer still opens attempts-exhausted after the one-hop simple revision; it stops here.
+    // The honest significant classification archives the predecessor evidence and requires the
+    // server-dispatched counter-review to assess the revised bytes from scratch.
+    view = await applied(h, invocation, view, {
+      ...revisionSubmission,
+      human_revision: { classification: "significant", rationale: "The requested change adds observable exported behavior." },
+    });
+    expect(view.next_action).toMatchObject({ kind: "review", expected_submission: "review-dispatch" });
+    expect(reviewCountAt(workspace)).toBe(reviewsBeforeRevision);
+    view = await applied(h, invocation, view);
+    expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    expect(view.detail).toMatch(/commit-authorization/u);
+    expect(view.findings).toEqual([]);
+    expect(reviewCountAt(workspace)).toBe(reviewsBeforeRevision + 1);
   });
 
   it("resolves material upstream drift by moving the task to the earlier planning boundary", async () => {

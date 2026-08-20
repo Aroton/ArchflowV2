@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 
-import type { ApprovalRef, TaskStateV1 } from "../contracts/durable-state.js";
+import type { ApprovalRef, RuleSettlementV1, TaskStateV1 } from "../contracts/durable-state.js";
 import { comparePhaseInstances, decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
 import type { AuthenticatedGateApproval } from "./gate-approvals.js";
 
@@ -30,6 +30,37 @@ export function approvalIsEligibleAfterLatestRestart(
 ): boolean {
   const cutoff = latestRestartRevisionAffectingPhase(state, authorityPhase);
   return cutoff === undefined || approval.resolved_at_revision > cutoff;
+}
+
+/**
+ * The settlement twin of `approvalIsEligibleAfterLatestRestart`: the same latest-restart scan over
+ * `settled_at_revision`. Digest binding alone is not equivalent — an exact planning restart that
+ * re-produces byte-identical bytes leaves a digest-matching settlement in the state, and
+ * during that reconsideration window the approval arm deliberately fails closed, so a surviving
+ * settlement must not auto-authorize the restarted subject either. Eligibility at an acceptance site
+ * is this cutoff AND the digest match.
+ */
+export function ruleSettlementIsEligibleAfterLatestRestart(
+  state: TaskStateV1,
+  settlement: RuleSettlementV1,
+  authorityPhase: PhaseInstanceId,
+): boolean {
+  const cutoff = latestRestartRevisionAffectingPhase(state, authorityPhase);
+  return cutoff === undefined || settlement.settled_at_revision > cutoff;
+}
+
+/** Selects the numerically latest digest-bound settlement that survives the phase's restart cut. */
+export function latestEligibleRuleSettlement(
+  state: TaskStateV1,
+  subjectDigest: RuleSettlementV1["subject_digest"],
+  authorityPhase: PhaseInstanceId,
+): RuleSettlementV1 | undefined {
+  return [...(state.rule_settlements ?? [])]
+    .filter((settlement) =>
+      settlement.phase_instance === authorityPhase &&
+      settlement.subject_digest === subjectDigest &&
+      ruleSettlementIsEligibleAfterLatestRestart(state, settlement, authorityPhase))
+    .sort((left, right) => right.settled_at_revision - left.settled_at_revision)[0];
 }
 
 /**

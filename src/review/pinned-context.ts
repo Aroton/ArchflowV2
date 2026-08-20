@@ -168,8 +168,9 @@ const fail = <T>(phase: PhaseInstanceId, issue_code: string): ProjectResult<T> =
  * Every later phase pins its exact canonical upstream documents — the same
  * `expectedProduceUpstreamBindings` set adjudication authenticates — each one required to hold a
  * durable `artifact-approval` for its exact current artifact digest and its worktree bytes
- * re-hashed against the retained projection digest. Any missing result, absent approval, or byte
- * drift fails closed: upstream pinning restates durable authority, never observes around it.
+ * re-hashed against the retained projection
+ * digest. Any missing result, absent approval, or byte drift fails closed: upstream pinning
+ * restates durable authority, never observes around it.
  *
  * Every phase kind additionally pins the previous round's triage record when one is retained
  * (see {@link priorTriageEvidence}), so a re-entry reviewer sees which findings were already

@@ -109,13 +109,11 @@ export function plannedFinalPhaseFromRecordedPayloads(
 ): number | null | undefined {
   const designPath = `.archflow/tasks/${taskId}/design.md`;
   const recorded = payloads.find((payload) => payload.path === designPath);
-  if (recorded === undefined) return undefined;
-  try {
-    return plannedFinalPhaseFromDesign(recorded.bytes);
-  } catch (error) {
-    if (storedPlannedFinalPhase !== undefined) throw error;
-    return undefined;
-  }
+  // Fresh design bytes are not approved authority. Only an already human-approved bound may be
+  // refreshed by a later governing-document produce; the design-approval decision is the writer
+  // that establishes the first bound.
+  if (recorded === undefined || storedPlannedFinalPhase === undefined) return undefined;
+  return plannedFinalPhaseFromDesign(recorded.bytes);
 }
 
 /**

@@ -52,12 +52,16 @@ export const APPROVAL_ARTIFACT_KINDS = {
 import { baselineAdoptionInputFromFindings, buildCommitAuthorizationInput, buildDesignApprovalInput, computeTaskStatus, currentApprovedUpstreams, currentReviewPredecessor, currentTargetRef, pendingAdjudicationGate } from "./status.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { legalRunStepStatus } from "./transitions.js";
-import { authenticatedApprovalIsEligibleAfterLatestRestart } from "./restart-authority.js";
+import {
+  authenticatedApprovalIsEligibleAfterLatestRestart,
+  latestEligibleRuleSettlement,
+} from "./restart-authority.js";
 import { assessCurrentEvidence, DEFAULT_MAX_ATTEMPTS } from "../review/fixed-point.js";
 import { computeCallEnvelope, type CallEnvelope } from "../local/call-envelope.js";
 import { planningRestartTarget, semanticPlanningRestartId } from "./planning-restart.js";
 import { resolveTaskPath } from "../repository/paths.js";
 import { derivePendingWaiverRequest } from "./pending-waiver.js";
+import { approvalRuleGateSummary } from "./approval-rules.js";
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 const fail = <T = never>(error: ProjectError): ProjectResult<T> =>
@@ -555,6 +559,12 @@ async function composeGate(
   }
   const subject = await loadCurrentProduceSubject(services.dependencies, state);
   if (!subject.ok) return subject;
+  const settledRule = latestEligibleRuleSettlement(
+    state, subject.value.artifact_digest, state.phase_instance,
+  );
+  const approvalSummary = settledRule?.conclusion.wait === true
+    ? approvalRuleGateSummary(summary, settledRule.conclusion.match)
+    : summary;
   const loadRetainedManifest = services.dependencies.load_retained_manifest;
   if (loadRetainedManifest === undefined) throw new TypeError("retained evidence loading is unavailable");
   const loaded = await loadRetainedEvidence(
@@ -683,7 +693,7 @@ async function composeGate(
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
-      summary,
+      summary: approvalSummary,
       subject_digest: subject.value.artifact_digest,
       current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
       kind: "design-approval",
@@ -720,7 +730,7 @@ async function composeGate(
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
-      summary,
+      summary: approvalSummary,
       subject_digest: subject.value.artifact_digest,
       current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
       kind: "artifact-approval",

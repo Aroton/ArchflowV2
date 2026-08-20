@@ -7,6 +7,10 @@ import { parseSingleYamlDocument } from "./yaml.js";
 // describes only the roles the server dispatches.
 export const ROUTING_ROLES = ["counter-reviewer", "adjudicator"] as const;
 export const REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"] as const;
+export const WORKFLOW_SUBJECTS = ["prd", "design", "phase-design", "phase-impl"] as const;
+export type WorkflowSubject = (typeof WORKFLOW_SUBJECTS)[number];
+
+export const workflowSubjectV1Schema = z.enum(WORKFLOW_SUBJECTS);
 
 export const configRouteSchema = z.object({
   model: z.string().min(1).regex(/\S/, "model must contain a non-whitespace character"),
@@ -32,11 +36,27 @@ export const configOverridesSchema = z.object({
   "phase-impl": configRolesSchema.optional(),
 }).strict();
 
+/**
+ * Declarative approval triggers: `subjects` gates a workflow subject's steps wholesale; `content`
+ * gates the implementation step on the repository paths it changed. Evaluation lives in
+ * `src/state/approval-rules.ts` — content rules apply to the phase-impl subject only, so a
+ * Markdown content rule never gates a design document. Both lists are human-authored config, so
+ * their order is free; `subjects` rejects repeats, and nothing here demands a sorted hand.
+ */
+export const approvalRulesSchema = z.object({
+  subjects: z.array(workflowSubjectV1Schema)
+    .refine((subjects) => new Set(subjects).size === subjects.length, "approval rule subjects must not repeat"),
+  content: z.array(z.object({
+    paths: z.array(z.string().min(1).regex(/\S/u, "path pattern must contain a non-whitespace character")),
+  }).strict()),
+}).strict();
+
 export const configV1Schema = z.object({
   schema_version: z.literal("1"),
   roles: configRolesSchema,
   overrides: configOverridesSchema.optional(),
   max_attempts: z.number().int().positive().safe().optional(),
+  approval_rules: approvalRulesSchema.optional(),
 }).strict();
 
 export type ModelRouteV1 = z.infer<typeof configRouteSchema>;

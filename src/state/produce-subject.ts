@@ -13,7 +13,9 @@ import { resolveTaskPath } from "../repository/paths.js";
 import type { TransactionAuthority } from "./authority.js";
 import type { TransactionDependencies, RetainedManifest } from "./transaction.js";
 import { loadLegacyImportInitialization } from "./legacy-import-resume.js";
-import { approvalIsEligibleAfterLatestRestart } from "./restart-authority.js";
+import {
+  approvalIsEligibleAfterLatestRestart,
+} from "./restart-authority.js";
 
 /** Throwing decoder for document projections, which must be UTF-8 text — no base64 fallback. */
 const fatalUtf8 = new TextDecoder("utf-8", { fatal: true });
@@ -78,7 +80,11 @@ export function resolveProduceUpstreamBinding(
   return expectedProduceUpstreamBindings(state).find((binding) => binding.path === path);
 }
 
-/** Loads and authenticates the retained document artifact that currently owns an upstream path. */
+/**
+ * Loads and authenticates the retained document artifact that currently owns an upstream path.
+ * Ownership authority is an eligible artifact/design approval. Rule settlements record the
+ * conditional-gate evaluation, but do not replace the human approval boundary in this phase.
+ */
 export async function loadProduceUpstreamSubject(
   dependencies: Pick<TransactionDependencies, "load_retained_manifest" | "runner">,
   authority: TransactionAuthority,

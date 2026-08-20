@@ -369,22 +369,16 @@ describe("deriveNextAction", () => {
     }
   });
 
-  it("requires the phase-specific approval before advancing", () => {
-    for (const phaseInstance of [
-      encodePhaseInstance({ kind: "prd" }),
-      encodePhaseInstance({ kind: "design" }),
-      phaseDesign(2),
-      implementation(2),
-    ]) {
-      const action = deriveNextAction(input({ state: state({ phase_instance: phaseInstance }), assessment: assessment("advance") }));
-      expect(action).toMatchObject({
-        code: "open-gate",
-        gate_kind: phaseInstance === "prd"
-          ? "artifact-approval"
-          : phaseInstance === "design" || phaseInstance === phaseDesign(2)
-            ? "design-approval"
-            : "commit-authorization",
-      });
+  it("opens a document gate until durable human approval exists", () => {
+    for (const [phaseInstance, gateKind] of [
+      [encodePhaseInstance({ kind: "prd" }), "artifact-approval"],
+      [encodePhaseInstance({ kind: "design" }), "design-approval"],
+      [phaseDesign(2), "design-approval"],
+    ] as const) {
+      expect(deriveNextAction(input({
+        state: state({ phase_instance: phaseInstance }),
+        assessment: assessment("advance"),
+      }))).toMatchObject({ code: "open-gate", gate_kind: gateKind, human_required: true });
     }
 
     // A gate already recorded under the former document-only contract may finish without
@@ -401,6 +395,76 @@ describe("deriveNextAction", () => {
       skill: "archflow-phase-impl",
       skill_args: ["2"],
     });
+  });
+
+  it("keeps commit-authorization unconditional until Phase 4", () => {
+    // The commit boundary keeps its unconditional open until Phase 4 makes it rule-driven; this
+    // pin exists so that removal is observable — an explicit wait:false still opens the gate here.
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: implementation(2) }),
+      assessment: assessment("advance"),
+    }))).toMatchObject({ code: "open-gate", gate_kind: "commit-authorization", human_required: true });
+  });
+
+  it("keeps both rule-settlement conclusions behind human document approval", () => {
+    const receipt = {
+      task_id: parseTaskSlug("task-1"),
+      phase_instance: encodePhaseInstance({ kind: "prd" }),
+      step: "adjudicate",
+      subject_digest: D("a"),
+      conclusion: { wait: false, match: null },
+      config_digest: D("4"),
+      settled_at_revision: parseSafeInteger(3),
+    } as const;
+    // A wait:false conclusion records that no configured rule matched, but does not replace the
+    // repository's mandatory human document approval boundary in this phase.
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: encodePhaseInstance({ kind: "prd" }), rule_settlements: [receipt] }),
+      assessment: assessment("advance"),
+    }))).toMatchObject({ code: "open-gate", gate_kind: "artifact-approval", human_required: true });
+    // A stale conclusion is equally incapable of authorizing the document.
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: encodePhaseInstance({ kind: "prd" }), rule_settlements: [{ ...receipt, subject_digest: D("b") }] }),
+      assessment: assessment("advance"),
+    }))).toMatchObject({ code: "open-gate", gate_kind: "artifact-approval", human_required: true });
+    // A persisted wait conclusion preserves trigger evidence and also opens the ordinary gate.
+    expect(deriveNextAction(input({
+      state: state({
+        phase_instance: encodePhaseInstance({ kind: "prd" }),
+        rule_settlements: [{
+          ...receipt,
+          conclusion: { wait: true, match: { kind: "subject", subject: "prd" } },
+        }],
+      }),
+      assessment: assessment("advance"),
+    }))).toMatchObject({ code: "open-gate", gate_kind: "artifact-approval", human_required: true });
+    expect(deriveNextAction(input({
+      state: state({
+        phase_instance: encodePhaseInstance({ kind: "prd" }),
+        rule_settlements: [receipt, {
+          ...receipt,
+          conclusion: { wait: true, match: { kind: "subject", subject: "prd" } },
+          settled_at_revision: parseSafeInteger(4),
+        }],
+      }),
+      assessment: assessment("advance"),
+    }))).toMatchObject({ code: "open-gate", gate_kind: "artifact-approval", human_required: true });
+  });
+
+  it("keeps the constitution policy arm opening design approval regardless of the subject rules", () => {
+    // Unsatisfied constitution findings always open the combined design approval.
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: encodePhaseInstance({ kind: "design" }) }),
+      assessment: assessment("adjudication-gate"),
+      adjudication_gate_kind: "constitution-review",
+    }))).toMatchObject({ code: "open-gate", gate_kind: "design-approval", human_required: true });
+    // Clean adjudication still fails closed to the ordinary design gate; live config and persisted
+    // settlements are not human authority.
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: encodePhaseInstance({ kind: "design" }) }),
+      assessment: assessment("advance"),
+      design_commit: designCommit,
+    }))).toMatchObject({ code: "open-gate", gate_kind: "design-approval", human_required: true });
   });
 
   it("routes every phase handoff to the destination skill and arguments", () => {

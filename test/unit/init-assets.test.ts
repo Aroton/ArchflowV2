@@ -80,4 +80,26 @@ describe("repository asset scaffolding", () => {
     expect(readFileSync(workflow, "utf8")).toBe("human edit\n");
     expect(() => readFileSync(join(root, ".archflow", "config.yaml"))).toThrow();
   });
+
+  it("refuses a pre-existing live config instead of adopting new template defaults", async () => {
+    const root = repository();
+    const liveConfig = join(root, ".archflow", "config.yaml");
+    const existing = "schema_version: \"1\"\nroles: {}\n";
+    const { mkdirSync } = await import("node:fs");
+    mkdirSync(join(root, ".archflow"), { recursive: true });
+    writeFileSync(liveConfig, existing);
+
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const result = await scaffoldRepositoryAssets({ working_directory: root });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("CONFIG_INVALID");
+    expect(result.error.diagnostic.parameters).toEqual({ issue_code: "scaffold-diverged" });
+    expect(stderr).toHaveBeenCalledWith(
+      "ArchFlow scaffold differs at .archflow/config.yaml. Review or delete that file, then re-run archflow-local init.\n",
+    );
+    expect(readFileSync(liveConfig, "utf8")).toBe(existing);
+    expect(() => readFileSync(join(root, ".archflow", "workflow.yaml"))).toThrow();
+  });
 });

@@ -248,6 +248,72 @@ describe("review services", () => {
     expect(significant).toMatchObject({ next: "counter_review", exhausted: false });
   });
 
+  it("never lets a simple human revision clear an accepted material finding", () => {
+    const predecessorSubject = D("8");
+    const predecessorFingerprint = D("2");
+    const resultingSubject = D("a");
+    const resultingFingerprint = D("9");
+    const produceResultDigest = D("f");
+    const accepted = retained(predecessorSubject, predecessorFingerprint, 1);
+    const exactRevision = {
+      phase_instance: "phase-impl-14",
+      gate_id: "simple-revision",
+      gate_kind: "attempts-exhausted",
+      predecessor_subject_digest: predecessorSubject,
+      predecessor_input_fingerprint: predecessorFingerprint,
+      resulting_subject_digest: resultingSubject,
+      resulting_result_digest: produceResultDigest,
+      classification: "simple",
+      rationale: "Wording only.",
+      previous_attempt: 3,
+      resulting_attempt: 3,
+      evidence: [],
+    } as const;
+    const currentProduce = {
+      phase_instance: "phase-impl-14",
+      step: "produce",
+      result_digest: produceResultDigest,
+      result_id: "current-produce",
+      input_fingerprint: resultingFingerprint,
+    } as const;
+    const subject = {
+      subject_digest: resultingSubject,
+      input_fingerprint: resultingFingerprint,
+      constitution,
+      max_attempts: 3,
+      review_predecessor: {
+        subject_digest: predecessorSubject,
+        input_fingerprint: predecessorFingerprint,
+      },
+    } as const;
+    const completed = assessCurrentEvidence(state({
+      step: "produce",
+      status: "succeeded",
+      attempt: 3,
+      input_fingerprint: resultingFingerprint,
+      authoritative_results: [currentProduce],
+      human_revision_history: [exactRevision],
+    }), accepted, subject);
+    expect(completed).toMatchObject({ next: "triage", blocker_remains: false, exhausted: false });
+
+    for (const mismatch of [
+      { ...exactRevision, classification: "significant" as const },
+      { ...exactRevision, resulting_subject_digest: D("b") },
+      { ...exactRevision, resulting_result_digest: D("c") },
+      { ...exactRevision, predecessor_input_fingerprint: D("d") },
+    ]) {
+      const rejected = assessCurrentEvidence(state({
+        step: "produce",
+        status: "succeeded",
+        attempt: 3,
+        input_fingerprint: resultingFingerprint,
+        authoritative_results: [currentProduce],
+        human_revision_history: [mismatch],
+      }), accepted, subject);
+      expect(rejected).toMatchObject({ next: "triage", blocker_remains: false });
+    }
+  });
+
   it("never exhausts on an editorial revision, even at the final attempt slot", () => {
     // The shared movement rule makes the editorial produce re-entry consume a durable attempt
     // slot (attempt + 1); the fixed point stays honest by evaluating exhaustion only at demanded
@@ -726,8 +792,42 @@ describe("review services", () => {
       decision_digest: D("9"),
       resolved_at_revision: 2,
     } as const;
-    expect(requireApprovedUpstreamDigests([approval as never], [D("8")])).toEqual([D("8")]);
-    expect(() => requireApprovedUpstreamDigests([], [D("8")])).toThrow(/lacks current/u);
+    expect(requireApprovedUpstreamDigests(state({ approvals: [approval as never] }), [D("8")])).toEqual([D("8")]);
+    expect(() => requireApprovedUpstreamDigests(state(), [D("8")])).toThrow(/lacks current/u);
+
+    // Settlements preserve rule-evaluation evidence but cannot substitute for approval.
+    const receipt = {
+      task_id: "task",
+      phase_instance: "prd",
+      step: "triage",
+      subject_digest: D("8"),
+      conclusion: { wait: false, match: null },
+      config_digest: D("a"),
+      settled_at_revision: 4,
+    } as const;
+    expect(() => requireApprovedUpstreamDigests(
+      state({ rule_settlements: [receipt as never] }), [D("8")],
+    )).toThrow(/lacks current/u);
+    expect(() => requireApprovedUpstreamDigests(state({
+      rule_settlements: [{
+        ...receipt,
+        conclusion: { wait: true, match: { kind: "subject", subject: "prd" } },
+      } as never],
+    }), [D("8")])).toThrow(/lacks current/u);
+    const superseded = state({
+      rule_settlements: [receipt as never],
+      restart_history: [{
+        restart_id: "restart-1",
+        source_phase_instance: "phase-impl-14",
+        target_phase_instance: "prd",
+        reason: "reconsider the plan",
+        restarted_at_revision: 6,
+        superseded_results: [],
+        cleared_waivers: [],
+        human_provenance: {} as never,
+      } as never],
+    });
+    expect(() => requireApprovedUpstreamDigests(superseded, [D("8")])).toThrow(/lacks current/u);
 
     const live = state({
       waivers: [{

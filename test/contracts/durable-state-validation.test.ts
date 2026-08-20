@@ -54,6 +54,93 @@ describe("task-state validation under the Zod authority", () => {
     }
   });
 
+  /**
+   * A rule settlement freezes both autonomous and wait outcomes. Its set rule is the TRIPLE
+   * `(phase_instance, subject_digest,
+   * settled_at_revision)`: an exact planning restart legally re-settles the same pair at a new
+   * revision, so a pair key would reject the settling transaction's own history. The revision
+   * bound is Zod-only (generation retired such keywords), like the set ordering above.
+   */
+  const ruleSettlement = (
+    settledAtRevision: number,
+    conclusion: JsonObject = { wait: false, match: null },
+  ): JsonObject => ({
+    task_id: "mcp-integration",
+    phase_instance: "phase-design-1",
+    step: "triage",
+    subject_digest: "d".repeat(64),
+    conclusion,
+    config_digest: "e".repeat(64),
+    settled_at_revision: settledAtRevision,
+  });
+
+  it("accepts both rule-settlement conclusions, including a same-pair resettlement", () => {
+    const sample = fixture("task-state.valid");
+    accepts({
+      ...sample,
+      rule_settlements: [
+        ruleSettlement(5),
+        ruleSettlement(6, { wait: true, match: { kind: "subject", subject: "phase-design" } }),
+        ruleSettlement(7, { wait: true, match: { kind: "content", paths: ["db/a.sql", "db/b.sql"] } }),
+      ],
+    }, "rule settlements");
+    accepts({ ...sample, rule_settlements: [] }, "empty rule settlements");
+  });
+
+  it("rejects a rule settlement beyond the current revision, in the Zod authority", () => {
+    const sample = fixture("task-state.valid");
+    const future = { ...sample, rule_settlements: [ruleSettlement(8)] };
+    expect(validator.validate(future), "generated schema kept a retired keyword").toBe(true);
+    expect(taskStateV1Schema.safeParse(future).success, "Zod accepted").toBe(false);
+  });
+
+  it("rejects a rule settlement at revision 0", () => {
+    const sample = fixture("task-state.valid");
+    expect(taskStateV1Schema.safeParse({ ...sample, rule_settlements: [ruleSettlement(0)] }).success).toBe(false);
+  });
+
+  it("orders settlement revisions numerically across 9→10 and 99→100", () => {
+    const sample = { ...fixture("task-state.valid"), revision: 100 };
+    const canonical = [9, 10, 99, 100].map((revision) => ruleSettlement(revision));
+    accepts({ ...sample, rule_settlements: canonical }, "numeric canonical order");
+    for (const [label, entries] of [
+      ["reverse numeric order", [...canonical].reverse()],
+      ["duplicate triple", [canonical[0], { ...canonical[0] }]],
+    ] as const) {
+      const value = { ...sample, rule_settlements: entries };
+      expect(validator.validate(value), `${label}: generated schema kept a retired keyword`).toBe(true);
+      expect(taskStateV1Schema.safeParse(value).success, `${label}: Zod accepted`).toBe(false);
+    }
+  });
+
+  it("rejects a content match whose paths are empty or not a sorted set", () => {
+    const sample = fixture("task-state.valid");
+    for (const paths of [[], ["db/b.sql", "db/a.sql"]]) {
+      expect(taskStateV1Schema.safeParse({
+        ...sample,
+        rule_settlements: [ruleSettlement(6, { wait: true, match: { kind: "content", paths } })],
+      }).success).toBe(false);
+    }
+  });
+
+  it("rejects contradictory conclusions and unknown properties", () => {
+    const sample = fixture("task-state.valid");
+    expect(taskStateV1Schema.safeParse({
+      ...sample,
+      rule_settlements: [{ ...ruleSettlement(6), archflow_unknown_property: "x" }],
+    }).success).toBe(false);
+    for (const conclusion of [
+      { wait: false, match: { kind: "subject", subject: "design" } },
+      { wait: true, match: null },
+      { wait: false, match: null, extra: true },
+    ]) {
+      expect(taskStateV1Schema.safeParse({
+        ...sample,
+        rule_settlements: [ruleSettlement(6, conclusion)],
+      }).success).toBe(false);
+    }
+  });
+
   it("rejects retired state compatibility fields", () => {
     const sample = fixture("task-state.valid");
     expect(taskStateV1Schema.safeParse({ ...sample, committed_intent: {} }).success).toBe(false);

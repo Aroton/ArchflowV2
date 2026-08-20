@@ -136,9 +136,13 @@ function runStepDetail(state: TaskStateV1, step: PipelineStep): string {
 }
 
 function matchingApproval(input: NextActionInput, kind: GateKind): boolean {
-  return input.subject_digest !== undefined &&
+  const subjectDigest = input.subject_digest;
+  if (subjectDigest !== undefined &&
     (input.authenticated_approvals ?? []).some((approval) =>
-      approval.gate_kind === kind && approval.subject_digest === input.subject_digest);
+      approval.gate_kind === kind && approval.subject_digest === subjectDigest)) {
+    return true;
+  }
+  return false;
 }
 
 function hasLegacyDesignApproval(input: NextActionInput): boolean {
@@ -164,6 +168,9 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
       gate_kind: "migration-audit",
     });
   }
+  // Phase 3 records the rule conclusion but does not yet let it replace human document authority.
+  // Every document still returns to its ordinary approval gate; the constitution changes that
+  // boundary only in Phase 5. Commit authorization likewise remains unconditional.
   if (requiredKind !== undefined && !matchingApproval(input, requiredKind) && !legacyDesignApproval && !migrationApproval) {
     return action("open-gate", `Open the required ${requiredKind} gate.`, true, state, {
       gate_kind: requiredKind,

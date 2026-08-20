@@ -37182,6 +37182,8 @@ function parseSingleYamlDocument(source, label) {
 
 // src/contracts/config.ts
 var REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"];
+var WORKFLOW_SUBJECTS = ["prd", "design", "phase-design", "phase-impl"];
+var workflowSubjectV1Schema = external_exports.enum(WORKFLOW_SUBJECTS);
 var configRouteSchema = external_exports.object({
   model: external_exports.string().min(1).regex(/\S/, "model must contain a non-whitespace character"),
   effort: external_exports.enum(REASONING_EFFORTS),
@@ -37203,11 +37205,18 @@ var configOverridesSchema = external_exports.object({
   "phase-design": configRolesSchema.optional(),
   "phase-impl": configRolesSchema.optional()
 }).strict();
+var approvalRulesSchema = external_exports.object({
+  subjects: external_exports.array(workflowSubjectV1Schema).refine((subjects) => new Set(subjects).size === subjects.length, "approval rule subjects must not repeat"),
+  content: external_exports.array(external_exports.object({
+    paths: external_exports.array(external_exports.string().min(1).regex(/\S/u, "path pattern must contain a non-whitespace character"))
+  }).strict())
+}).strict();
 var configV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
   roles: configRolesSchema,
   overrides: configOverridesSchema.optional(),
-  max_attempts: external_exports.number().int().positive().safe().optional()
+  max_attempts: external_exports.number().int().positive().safe().optional(),
+  approval_rules: approvalRulesSchema.optional()
 }).strict();
 function parseConfigV1(value) {
   assertPlainJson(value, "config");
@@ -46155,6 +46164,134 @@ var task_state_schema_default = {
       ],
       additionalProperties: false
     },
+    ruleSettlementConclusion: {
+      oneOf: [
+        {
+          type: "object",
+          properties: {
+            wait: {
+              type: "boolean",
+              const: false
+            },
+            match: {
+              type: "null",
+              const: null
+            }
+          },
+          required: [
+            "wait",
+            "match"
+          ],
+          additionalProperties: false
+        },
+        {
+          type: "object",
+          properties: {
+            wait: {
+              type: "boolean",
+              const: true
+            },
+            match: {
+              oneOf: [
+                {
+                  type: "object",
+                  properties: {
+                    kind: {
+                      type: "string",
+                      const: "subject"
+                    },
+                    subject: {
+                      type: "string",
+                      enum: [
+                        "prd",
+                        "design",
+                        "phase-design",
+                        "phase-impl"
+                      ]
+                    }
+                  },
+                  required: [
+                    "kind",
+                    "subject"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    kind: {
+                      type: "string",
+                      const: "content"
+                    },
+                    paths: {
+                      minItems: 1,
+                      type: "array",
+                      items: {
+                        type: "string"
+                      }
+                    }
+                  },
+                  required: [
+                    "kind",
+                    "paths"
+                  ],
+                  additionalProperties: false
+                }
+              ]
+            }
+          },
+          required: [
+            "wait",
+            "match"
+          ],
+          additionalProperties: false
+        }
+      ]
+    },
+    ruleSettlement: {
+      type: "object",
+      properties: {
+        task_id: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        phase_instance: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+        },
+        step: {
+          type: "string",
+          enum: [
+            "produce",
+            "counter_review",
+            "triage",
+            "adjudicate"
+          ]
+        },
+        subject_digest: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        conclusion: {
+          $ref: "#/$defs/ruleSettlementConclusion"
+        },
+        config_digest: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        settled_at_revision: {
+          type: "integer",
+          minimum: 1,
+          maximum: 9007199254740991
+        }
+      },
+      required: [
+        "task_id",
+        "phase_instance",
+        "step",
+        "subject_digest",
+        "conclusion",
+        "config_digest",
+        "settled_at_revision"
+      ],
+      additionalProperties: false
+    },
     lastTransition: {
       type: "object",
       properties: {
@@ -46311,6 +46448,48 @@ var task_state_schema_default = {
       },
       additionalProperties: false
     },
+    configApprovalRules: {
+      type: "object",
+      properties: {
+        subjects: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: [
+              "prd",
+              "design",
+              "phase-design",
+              "phase-impl"
+            ]
+          }
+        },
+        content: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              paths: {
+                type: "array",
+                items: {
+                  type: "string",
+                  minLength: 1,
+                  pattern: "\\S"
+                }
+              }
+            },
+            required: [
+              "paths"
+            ],
+            additionalProperties: false
+          }
+        }
+      },
+      required: [
+        "subjects",
+        "content"
+      ],
+      additionalProperties: false
+    },
     configSnapshot: {
       type: "object",
       properties: {
@@ -46328,6 +46507,9 @@ var task_state_schema_default = {
           type: "integer",
           exclusiveMinimum: 0,
           maximum: 9007199254740991
+        },
+        approval_rules: {
+          $ref: "#/$defs/configApprovalRules"
         }
       },
       required: [
@@ -46478,6 +46660,12 @@ var task_state_schema_default = {
           "adopted_projections"
         ],
         additionalProperties: false
+      }
+    },
+    rule_settlements: {
+      type: "array",
+      items: {
+        $ref: "#/$defs/ruleSettlement"
       }
     },
     last_seen_config: {
@@ -49479,6 +49667,16 @@ var HUMAN_REVISION_GATE_KINDS = [
   "commit-authorization",
   "migration-audit"
 ];
+function compareRuleSettlements(left, right) {
+  const phase3 = left.phase_instance < right.phase_instance ? -1 : left.phase_instance > right.phase_instance ? 1 : 0;
+  if (phase3 !== 0) return phase3;
+  const digest9 = left.subject_digest < right.subject_digest ? -1 : left.subject_digest > right.subject_digest ? 1 : 0;
+  if (digest9 !== 0) return digest9;
+  return left.settled_at_revision - right.settled_at_revision;
+}
+function isSortedUniqueRuleSettlements(items) {
+  return items.every((item, index) => index === 0 || compareRuleSettlements(items[index - 1], item) < 0);
+}
 var sha256Digest5 = sha256DigestV1Schema;
 var stepStatusV1Schema = external_exports.enum(STEP_STATUSES);
 var gateKindV1Schema = external_exports.enum(GATE_KINDS);
@@ -49612,6 +49810,26 @@ var baselineAdoptionRecordV1Schema = external_exports.object({
   adopted_projections: external_exports.array(adoptedProjectionRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "adopted projections must be sorted by path with no duplicates"),
   adopted_absences: external_exports.array(repositoryPathClaimV1Schema).optional().refine((items) => isSortedUniqueBy(items), "adopted absences must be sorted with no duplicates")
 }).strict();
+var ruleSettlementMatchV1Schema = external_exports.discriminatedUnion("kind", [
+  external_exports.object({ kind: external_exports.literal("subject"), subject: workflowSubjectV1Schema }).strict(),
+  external_exports.object({
+    kind: external_exports.literal("content"),
+    paths: external_exports.array(external_exports.string()).min(1).refine((items) => isSortedUniqueBy(items), "content match paths must be sorted with no duplicates")
+  }).strict()
+]);
+var ruleSettlementConclusionV1Schema = external_exports.discriminatedUnion("wait", [
+  external_exports.object({ wait: external_exports.literal(false), match: external_exports.literal(null) }).strict(),
+  external_exports.object({ wait: external_exports.literal(true), match: ruleSettlementMatchV1Schema }).strict()
+]);
+var ruleSettlementV1Schema = external_exports.object({
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: external_exports.enum(PIPELINE_STEPS),
+  subject_digest: sha256Digest5,
+  conclusion: ruleSettlementConclusionV1Schema,
+  config_digest: sha256Digest5,
+  settled_at_revision: positiveSafeInteger
+}).strict();
 var planningRestartRecordV1Schema = external_exports.object({
   restart_id: pathSafeIdV1Schema,
   source_phase_instance: phaseInstanceIdV1Schema,
@@ -49654,12 +49872,14 @@ var taskConfigOverridesV1Schema = configOverridesSchema.clone({
     Object.entries(configOverridesSchema.shape).map(([phase3]) => [phase3, taskConfigRolesV1Schema.optional()])
   )
 });
+var taskConfigApprovalRulesV1Schema = approvalRulesSchema.clone(approvalRulesSchema.def);
 var taskConfigSnapshotV1Schema = configV1Schema.clone({
   ...configV1Schema.def,
   shape: {
     ...configV1Schema.shape,
     roles: taskConfigRolesV1Schema,
-    overrides: taskConfigOverridesV1Schema.optional()
+    overrides: taskConfigOverridesV1Schema.optional(),
+    approval_rules: taskConfigApprovalRulesV1Schema.optional()
   }
 });
 var taskStateV1Schema = external_exports.object({
@@ -49686,6 +49906,7 @@ var taskStateV1Schema = external_exports.object({
   human_revision_history: external_exports.array(humanRevisionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "human_revision_history must be sorted by gate_id with no duplicates").optional(),
   restart_history: external_exports.array(planningRestartRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("restart_id")), "restart_history must be sorted by restart_id with no duplicates").optional(),
   baseline_adoptions: external_exports.array(baselineAdoptionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "baseline_adoptions must be sorted by gate_id with no duplicates").optional(),
+  rule_settlements: external_exports.array(ruleSettlementV1Schema).refine(isSortedUniqueRuleSettlements, "rule_settlements must be sorted by (phase_instance, subject_digest, settled_at_revision) with no duplicates").optional(),
   last_seen_config: taskConfigSnapshotV1Schema.optional(),
   last_transition: lastTransitionV1Schema.optional(),
   terminal: external_exports.enum(TERMINAL_STATES).optional()
@@ -49698,6 +49919,11 @@ var taskStateV1Schema = external_exports.object({
   state.baseline_adoptions?.forEach((adoption, index) => {
     if (adoption.adopted_at_revision > state.revision) {
       context2.addIssue({ code: "custom", path: ["baseline_adoptions", index, "adopted_at_revision"], message: "baseline adoption revision cannot exceed the current state revision" });
+    }
+  });
+  state.rule_settlements?.forEach((settlement, index) => {
+    if (settlement.settled_at_revision > state.revision) {
+      context2.addIssue({ code: "custom", path: ["rule_settlements", index, "settled_at_revision"], message: "rule settlement revision cannot exceed the current state revision" });
     }
   });
   const pending = state.pending_human_revision;
@@ -57022,9 +57248,8 @@ async function designArtifactCommittedAtCurrentTarget(runner, taskId, artifact, 
   const outsideTask = changed.filter((path2) => !path2.startsWith(prefix));
   if (outsideTask.length > 0) return missed("paths-outside-task", outsideTask);
   if (!changed.includes(`${prefix}state.json`)) return missed("missing-recovery-authority");
-  if (!changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/request.json")) || !changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/decision.json"))) {
-    return missed("missing-recovery-authority");
-  }
+  const archivedDecisionPair = changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/request.json")) && changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/decision.json"));
+  if (!archivedDecisionPair) return missed("missing-recovery-authority");
   for (const path2 of approvedDocumentPaths) {
     const output = outputs.find((entry) => entry.path === path2);
     if (output === void 0 || output.operation === "delete") return missed("approved-document-mismatch", [path2]);
@@ -58905,13 +59130,8 @@ async function loadApprovedDesignFinalPhase(dependencies, current, record3) {
 function plannedFinalPhaseFromRecordedPayloads(taskId, payloads, storedPlannedFinalPhase) {
   const designPath = `.archflow/tasks/${taskId}/design.md`;
   const recorded = payloads.find((payload) => payload.path === designPath);
-  if (recorded === void 0) return void 0;
-  try {
-    return plannedFinalPhaseFromDesign(recorded.bytes);
-  } catch (error51) {
-    if (storedPlannedFinalPhase !== void 0) throw error51;
-    return void 0;
-  }
+  if (recorded === void 0 || storedPlannedFinalPhase === void 0) return void 0;
+  return plannedFinalPhaseFromDesign(recorded.bytes);
 }
 function derivedFinalPhaseBelowCurrentPhase(derived, phaseInstance4) {
   const decoded = decodePhaseInstance(phaseInstance4);
@@ -59138,6 +59358,17 @@ function hasAuthenticatedArtifactApproval(input) {
 function hasAuthenticatedCombinedDesignApproval(input) {
   return (input.authenticated_gate_approvals ?? []).some((authenticated) => authenticated.request.kind === "design-approval" && authenticated.approval.gate_kind === "design-approval" && authenticated.approval.subject_digest === input.completion_subject_digest && authenticated.decision.envelope.payload.decision === "approve");
 }
+function validRuleSettlementBoundary(input, settlement) {
+  if (settlement.task_id !== input.current.task_id || settlement.phase_instance !== input.current.phase_instance || settlement.step !== input.target.step || settlement.settled_at_revision !== input.current.revision + 1 || input.target.phase_instance !== input.current.phase_instance || input.target.status !== "succeeded") return false;
+  if (input.target.step === "triage") {
+    return input.current.step === "triage" && input.current.status === "running" && input.artifact?.artifact_kind === "triage" && input.artifact.evidence.subject_digest === settlement.subject_digest;
+  }
+  if (input.target.step !== "produce" || input.current.step !== "produce" || input.current.status !== "running" || input.resulting_subject_digest !== settlement.subject_digest) {
+    return false;
+  }
+  const editorial = input.artifact?.artifact_kind === "document" && input.artifact.editorial_predecessor !== void 0;
+  return editorial && input.current.pending_human_revision === void 0 && input.human_revision === void 0;
+}
 function legalRunStepStatus(current, step) {
   if (current.terminal !== void 0 || current.open_gate !== void 0) return void 0;
   if (current.step === step) {
@@ -59181,6 +59412,12 @@ function legalMovement(input) {
     return target2.phase_instance === current.phase_instance && target2.step === steps[index + 1] && target2.attempt === current.attempt;
   }
   if (current.phase_instance === "design" && target2.step === "produce" && target2.attempt === 1 && target2.phase_instance !== nextPhaseInstance(current.phase_instance) && hasAuthenticatedMigrationAudit(input)) return true;
+  const following = nextPhaseInstance(current.phase_instance);
+  return following !== void 0 && target2.phase_instance === following && target2.step === pipeline(following)[0] && target2.attempt === 1;
+}
+function legalSettledDocumentProduceExitMovement(input) {
+  const { current, target: target2 } = input;
+  if (phaseKind(current.phase_instance) === "phase-impl" || current.step !== "produce" || current.status !== "succeeded" || target2.status !== "running") return false;
   const following = nextPhaseInstance(current.phase_instance);
   return following !== void 0 && target2.phase_instance === following && target2.step === pipeline(following)[0] && target2.attempt === 1;
 }
@@ -59258,6 +59495,10 @@ function planStateTransition(value) {
   if (input.target.input_fingerprint !== input.recomputed_input_fingerprint) {
     return fingerprintFailure(input.recomputed_input_fingerprint, input.target.input_fingerprint);
   }
+  const ruleSettlement = input.rule_settlement;
+  if (ruleSettlement !== void 0 && !validRuleSettlementBoundary(input, ruleSettlement)) {
+    return invalid(input, from, to);
+  }
   const committedOutput = hasAuthenticatedCommittedOutput(input);
   const decodedCurrent = decodePhaseInstance(input.current.phase_instance);
   const crossesPhase = input.target.phase_instance !== input.current.phase_instance;
@@ -59271,7 +59512,8 @@ function planStateTransition(value) {
   // same authenticated approval legalMovement's design-jump rule settles on.
   !(decodedCurrent.kind === "design" && hasAuthenticatedMigrationAudit(input))) return invalid(input, from, to);
   if ((decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") && crossesPhase && hasAuthenticatedCombinedDesignApproval(input) && input.commit_observed !== true) return invalid(input, from, to);
-  if (!legalMovement(input) || !artifactMatches(input) || !resultReferenceMatches(input) || !constitutionReferenceMatches(input) || !pendingHumanRevisionMatches(input)) {
+  const legalMovementFromCurrentCursor = legalMovement(input) || crossesPhase && legalSettledDocumentProduceExitMovement(input);
+  if (!legalMovementFromCurrentCursor || !artifactMatches(input) || !resultReferenceMatches(input) || !constitutionReferenceMatches(input) || !pendingHumanRevisionMatches(input)) {
     return invalid(input, from, to);
   }
   const {
@@ -59311,6 +59553,7 @@ function planStateTransition(value) {
       [...humanRevisionHistory ?? [], record3].sort((left, right) => left.gate_id.localeCompare(right.gate_id))
     );
   }
+  const ruleSettlements = ruleSettlement === void 0 ? preserved.rule_settlements : Object.freeze([...preserved.rule_settlements ?? [], ruleSettlement].sort(compareRuleSettlements));
   const draft = Object.freeze({
     ...preserved,
     phase_instance: input.target.phase_instance,
@@ -59321,7 +59564,8 @@ function planStateTransition(value) {
     authoritative_results: authoritativeResults,
     ...humanRevisionHistory === void 0 ? {} : { human_revision_history: humanRevisionHistory },
     ...!completingHumanRevision && pendingHumanRevision !== void 0 ? { pending_human_revision: pendingHumanRevision } : {},
-    ...plannedFinalPhase === void 0 || plannedFinalPhase === null ? {} : { planned_final_phase: parseSafeInteger(plannedFinalPhase) }
+    ...plannedFinalPhase === void 0 || plannedFinalPhase === null ? {} : { planned_final_phase: parseSafeInteger(plannedFinalPhase) },
+    ...ruleSettlements === void 0 ? {} : { rule_settlements: ruleSettlements }
   });
   if (input.result_reference === void 0 && input.constitution_result_reference === void 0 && !isDeepStrictEqual10(draft.authoritative_results, input.current.authoritative_results)) {
     throw new TypeError("transition planning changed authoritative results");
@@ -59350,6 +59594,13 @@ function latestRestartRevisionAffectingPhase(state, authorityPhase) {
 function approvalIsEligibleAfterLatestRestart(state, approval, authorityPhase) {
   const cutoff = latestRestartRevisionAffectingPhase(state, authorityPhase);
   return cutoff === void 0 || approval.resolved_at_revision > cutoff;
+}
+function ruleSettlementIsEligibleAfterLatestRestart(state, settlement, authorityPhase) {
+  const cutoff = latestRestartRevisionAffectingPhase(state, authorityPhase);
+  return cutoff === void 0 || settlement.settled_at_revision > cutoff;
+}
+function latestEligibleRuleSettlement(state, subjectDigest, authorityPhase) {
+  return [...state.rule_settlements ?? []].filter((settlement) => settlement.phase_instance === authorityPhase && settlement.subject_digest === subjectDigest && ruleSettlementIsEligibleAfterLatestRestart(state, settlement, authorityPhase)).sort((left, right) => right.settled_at_revision - left.settled_at_revision)[0];
 }
 function approvalRequestAuthorityPhase(authenticated) {
   return authenticated.request.phase_instance;
@@ -60421,6 +60672,1141 @@ async function cleanTerminalTaskWorkspace(dependencies, authority) {
   }
 }
 
+// src/contracts/internal/trust-mints.ts
+function createReviewObservationCapability(binding) {
+  const copiedBinding = deepFreeze5(structuredClone(binding));
+  const capability = Object.freeze({ kind: copiedBinding.kind });
+  registerObservationCapability(capability, copiedBinding);
+  return capability;
+}
+function createAdjudicationObservationCapability(binding) {
+  const copiedBinding = deepFreeze5(structuredClone(binding));
+  const capability = Object.freeze({ kind: copiedBinding.kind });
+  registerObservationCapability(capability, copiedBinding);
+  return capability;
+}
+function createVerifiedEvidenceReference(evidence) {
+  const parsed = evidence.step === "adjudicate" ? parseAdjudicationEvidence(evidence) : parseReviewEvidence(evidence);
+  const evidenceDigest = canonicalJsonDigest(parsed);
+  const verified = deepFreeze5({
+    evidence_digest: evidenceDigest,
+    evidence: parsed
+  });
+  const kind = parsed.step === "adjudicate" ? "adjudication" : "review";
+  registerVerifiedEvidence(verified, { kind, assurance: parsed.assurance });
+  return verified;
+}
+function deepFreeze5(value) {
+  if (value !== null && typeof value === "object") {
+    for (const nested of Object.values(value)) deepFreeze5(nested);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+// src/contracts/renderers.ts
+var encoder2 = new TextEncoder();
+var ESCAPE = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069`<>&]/gu;
+var visibleJsonString = (value) => JSON.stringify(value).replace(/\\n/gu, "\\u000a").replace(/\\r/gu, "\\u000d").replace(/\\t/gu, "\\u0009").replace(/\\b/gu, "\\u0008").replace(/\\f/gu, "\\u000c").replace(ESCAPE, (character) => `\\u${character.codePointAt(0).toString(16).padStart(4, "0")}`);
+var canonical = (value) => typeof value === "string" ? visibleJsonString(value) : JSON.stringify(value);
+var optional2 = (value) => value === void 0 ? "none" : canonical(value);
+var linesToBytes = (lines) => encoder2.encode(`${lines.join("\n")}
+`);
+var metadata = (entries) => entries.map(([key, value]) => `${key}: ${optional2(value)}`);
+var prose = (label, value, indent = "  ") => `${indent}${label}: ${visibleJsonString(value)}`;
+function provenanceMetadata(evidence) {
+  return [
+    ["assurance", evidence.assurance],
+    ["adapter", evidence.assurance === "server-attested" ? evidence.adapter : void 0],
+    ["cli_version", evidence.assurance === "server-attested" ? evidence.cli_version : void 0],
+    ["model_family", evidence.model_family],
+    ["model", evidence.model],
+    ["effort", evidence.effort],
+    ["invocation_id", evidence.assurance === "server-attested" ? evidence.invocation_id : void 0],
+    ["result_id", evidence.assurance === "server-attested" ? evidence.result_id : void 0]
+  ];
+}
+function renderReviewFinding(finding) {
+  return [`### Finding ${visibleJsonString(finding.finding_id)}`, `severity: ${canonical(finding.severity)}`, `blocking: ${canonical(finding.blocking)}`, prose("summary", finding.summary), prose("evidence", finding.evidence), prose("suggested_resolution", finding.suggested_resolution)];
+}
+function renderRouteOverride(override) {
+  const displaced = override.pinned_model === void 0 ? ["pinned_route: none configured for this role"] : [`pinned_model: ${canonical(override.pinned_model)}`, `pinned_effort: ${canonical(override.pinned_effort)}`];
+  return ["", "## Route Override", ...displaced, prose("reason", override.reason)];
+}
+function renderReviewEvidence(value) {
+  const evidence = value.evidence;
+  const authenticated = authenticQualifiedEvidence(value, "review", evidence.assurance) || authenticVerifiedEvidence(value, { kind: "review", assurance: evidence.assurance });
+  if (!authenticated) throw new TypeError("authenticated review evidence is required");
+  const lines = ["# ArchFlow Review Evidence", ...metadata([
+    ["schema_version", evidence.schema_version],
+    ["task_id", evidence.task_id],
+    ["phase_instance", evidence.phase_instance],
+    ["step", evidence.step],
+    ["role", evidence.role],
+    ["subject_digest", evidence.subject_digest],
+    ["input_fingerprint", evidence.input_fingerprint],
+    ["evidence_digest", value.evidence_digest],
+    ["verdict", evidence.verdict],
+    ["blocking_count", evidence.blocking_count],
+    ["matched_rule_versions", evidence.matched_rule_versions.map((rule4) => `${rule4.rule_id}@${rule4.rule_version}`)],
+    ...provenanceMetadata(evidence)
+  ]), "", "## Findings"];
+  for (const finding of evidence.findings) lines.push("", ...renderReviewFinding(finding));
+  if (evidence.assurance === "degraded") lines.push("", "## Degraded Assurance", prose("reason", evidence.reason));
+  if (evidence.assurance === "server-attested" && evidence.route_override !== void 0) lines.push(...renderRouteOverride(evidence.route_override));
+  return linesToBytes(lines);
+}
+function renderDisposition(disposition) {
+  const lines = [`### ${canonical(disposition.disposition)} ${visibleJsonString(disposition.review_evidence_digest)} ${visibleJsonString(disposition.finding_id)}`, prose("rationale", disposition.rationale)];
+  if (disposition.disposition === "rejected") lines.push(prose("evidence", disposition.evidence));
+  else lines.push(prose("revision_intent", disposition.revision_intent));
+  return lines;
+}
+function renderTriage(value) {
+  if (!authenticValidatedTriage(value)) throw new TypeError("validated triage is required");
+  const lines = ["# ArchFlow Review Triage", ...metadata([
+    ["schema_version", value.schema_version],
+    ["task_id", value.task_id],
+    ["phase_instance", value.phase_instance],
+    ["step", value.step],
+    ["subject_digest", value.subject_digest],
+    ["input_fingerprint", value.input_fingerprint],
+    ["current_evidence_set_digest", value.current_evidence_set_digest],
+    ["source_evidence_digests", value.source_evidence_digests],
+    ["accepted_count", value.accepted_count],
+    ["accepted_editorial_count", value.accepted_editorial_count],
+    ["rejected_count", value.rejected_count]
+  ]), "", "## Dispositions"];
+  for (const disposition of value.dispositions) lines.push("", ...renderDisposition(disposition));
+  return linesToBytes(lines);
+}
+function renderAdjudicationEvidence(value) {
+  const evidence = value.evidence;
+  const authenticated = authenticQualifiedEvidence(value, "adjudication", evidence.assurance) || authenticVerifiedEvidence(value, { kind: "adjudication", assurance: evidence.assurance });
+  if (!authenticated) throw new TypeError("authenticated adjudication evidence is required");
+  const lines = ["# ArchFlow Adjudication Evidence", ...metadata([
+    ["schema_version", evidence.schema_version],
+    ["task_id", evidence.task_id],
+    ["phase_instance", evidence.phase_instance],
+    ["step", evidence.step],
+    ["subject_digest", evidence.subject_digest],
+    ["input_fingerprint", evidence.input_fingerprint],
+    ["evidence_digest", value.evidence_digest],
+    ["pinned_constitution_digest", evidence.pinned_constitution_digest],
+    ["approved_upstream_digests", evidence.approved_upstream_digests],
+    ["source_evidence_set_digest", evidence.source_evidence_set_digest],
+    ["constitution", evidence.constitution],
+    ["drift", evidence.drift],
+    ["matched_rule_versions", evidence.matched_rule_versions.map((rule4) => `${rule4.rule_id}@${rule4.rule_version}`)],
+    ["uncertain_rule_versions", evidence.uncertain_rule_versions.map((rule4) => `${rule4.rule_id}@${rule4.rule_version}`)],
+    ...provenanceMetadata(evidence)
+  ]), "", "## Constitution Findings"];
+  for (const finding of evidence.rule_findings) {
+    lines.push("", `### Rule ${visibleJsonString(`${finding.rule_id}@${finding.rule_version}`)}`, `compliance: ${canonical(finding.compliance)}`, `trigger: ${canonical(finding.trigger)}`, prose("rationale", finding.rationale), prose("trigger_evidence", finding.trigger_evidence));
+  }
+  lines.push("", "## Drift Findings");
+  for (const finding of evidence.drift_findings) lines.push("", `### Upstream ${visibleJsonString(finding.upstream_digest)}`, `drift: ${canonical(finding.drift)}`, `affected_claim_ids: ${canonical(finding.affected_claim_ids)}`, prose("rationale", finding.rationale));
+  if (evidence.assurance === "degraded") lines.push("", "## Degraded Assurance", prose("reason", evidence.reason));
+  if (evidence.assurance === "server-attested" && evidence.route_override !== void 0) lines.push(...renderRouteOverride(evidence.route_override));
+  return linesToBytes(lines);
+}
+
+// src/state/evidence-results.ts
+var ok10 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+function qualifyAndRender(value) {
+  if (value.kind === "review") {
+    const verified = createVerifiedEvidenceReference(value.evidence);
+    return Object.freeze({
+      artifact: Object.freeze({
+        schema_version: "1",
+        artifact_kind: "review-evidence",
+        evidence: verified.evidence
+      }),
+      bytes: renderReviewEvidence(verified),
+      evidence_digest: verified.evidence_digest,
+      phase_instance: verified.evidence.phase_instance,
+      step: verified.evidence.step,
+      task_id: verified.evidence.task_id,
+      input_fingerprint: verified.evidence.input_fingerprint
+    });
+  }
+  if (value.kind === "adjudication") {
+    const verified = createVerifiedEvidenceReference(value.evidence);
+    return Object.freeze({
+      artifact: Object.freeze({
+        schema_version: "1",
+        artifact_kind: "adjudication-evidence",
+        evidence: verified.evidence
+      }),
+      bytes: renderAdjudicationEvidence(verified),
+      evidence_digest: verified.evidence_digest,
+      phase_instance: verified.evidence.phase_instance,
+      step: verified.evidence.step,
+      task_id: verified.evidence.task_id,
+      input_fingerprint: verified.evidence.input_fingerprint
+    });
+  }
+  const triage = validateTriage(value.current_reviews, value.evidence);
+  return Object.freeze({
+    artifact: Object.freeze({
+      schema_version: "1",
+      artifact_kind: "triage",
+      evidence: triage
+    }),
+    bytes: renderTriage(triage),
+    evidence_digest: canonicalJsonDigest(triage),
+    phase_instance: triage.phase_instance,
+    step: triage.step,
+    task_id: triage.task_id,
+    input_fingerprint: triage.input_fingerprint
+  });
+}
+async function prepareEvidenceResult(input) {
+  assertInternalTransactionAuthority(input.authority);
+  const qualified = qualifyAndRender(input.value);
+  if (qualified.task_id !== input.authority.task_id || qualified.phase_instance !== input.authority.context.phase_instance) {
+    throw new TypeError("evidence scope does not match transaction authority");
+  }
+  if (input.value.kind !== "triage" && input.value.evidence.assurance === "server-attested" && input.value.evidence.result_id !== input.result_id) {
+    throw new TypeError("server-attested evidence result_id does not match prepared result");
+  }
+  const renderedDigest = sha256Bytes(qualified.bytes);
+  const snapshotDigest = deriveDeclaredSnapshotDigest([], []);
+  const workspaceClaim = input.value.kind === "triage" ? triageReviewClaim(qualified.phase_instance) : input.value.kind === "adjudication" ? adjudicationReviewClaim(qualified.phase_instance) : counterReviewClaim(qualified.phase_instance);
+  const projectionTarget = await resolveTaskWorkspacePath({
+    runner: input.runner,
+    taskId: input.authority.task_id,
+    claim: workspaceClaim,
+    expectedClass: "workspace-review",
+    context: input.authority.context
+  });
+  if (!projectionTarget.ok) return projectionTarget;
+  const repositoryClaim = projectionTarget.value.repositoryRelative;
+  const captured = await captureProjectionTarget(projectionTarget.value);
+  let secretScan;
+  const capturingScanner = Object.freeze({
+    scan: async (candidates) => {
+      const result = parseSecretScanResult(await input.scanner.scan(candidates));
+      secretScan = result;
+      return result;
+    }
+  });
+  const source = Object.freeze({
+    path: repositoryClaim,
+    target: projectionTarget.value,
+    desired: Object.freeze({ state: "present", file_type: "regular", mode: "100644", bytes: qualified.bytes }),
+    authenticated_before: captured.observation,
+    ...captured.observation.state === "present" ? { rollback: captured.rollback } : {},
+    git_tracked: false
+  });
+  const projectionPlan = await prepareProjectionPlan(
+    [source],
+    capturingScanner,
+    input.runner.location.worktreeRoot
+  );
+  if (!projectionPlan.ok) return projectionPlan;
+  if (secretScan === void 0 || secretScan.outcome !== "clean") {
+    throw new TypeError("successful evidence projection requires a clean secret scan");
+  }
+  const manifestValue = Object.freeze({
+    schema_version: "1",
+    task_id: qualified.task_id,
+    repository_identity_digest: input.authority.repository_identity_digest,
+    result_id: input.result_id,
+    phase_instance: qualified.phase_instance,
+    step: qualified.step,
+    artifact_digest: qualified.evidence_digest,
+    source_artifact: qualified.artifact,
+    input_fingerprint: qualified.input_fingerprint,
+    snapshot_digest: snapshotDigest,
+    outputs: Object.freeze([]),
+    projections: Object.freeze([]),
+    accounting: Object.freeze({
+      schema_version: "1",
+      result_bytes: parseSafeInteger(0),
+      task_bytes: input.retained_task_bytes,
+      result_byte_cap: 26214400,
+      task_byte_cap: 262144e3,
+      counted_entries: Object.freeze([]),
+      measured_at_revision: input.measured_at_revision
+    }),
+    secret_scan: secretScan
+  });
+  const manifest = canonicalDocument(manifestValue);
+  const manifestTarget = await resolveTaskPath({
+    runner: input.runner,
+    taskId: input.authority.task_id,
+    claim: resultAuthorityClaim(manifest.digest),
+    expectedClass: "authority-result",
+    context: input.authority.context
+  });
+  if (!manifestTarget.ok) return manifestTarget;
+  const prepared = prepareSnapshot({
+    manifest: manifestValue,
+    payloads: Object.freeze([]),
+    retained_task_bytes: input.retained_task_bytes,
+    validate_manifest: parseResultManifest
+  });
+  if (!prepared.ok) return prepared;
+  const reference = Object.freeze({
+    phase_instance: qualified.phase_instance,
+    step: qualified.step,
+    result_digest: prepared.value.result_digest,
+    result_id: input.result_id,
+    input_fingerprint: qualified.input_fingerprint
+  });
+  return ok10(Object.freeze({
+    reference,
+    prepared: prepared.value,
+    manifest_target: manifestTarget.value,
+    projection_plan: projectionPlan.value,
+    evidence_digest: qualified.evidence_digest,
+    rendered_digest: renderedDigest
+  }));
+}
+function expectedSourceKind(step) {
+  if (step === "counter_review") return "review-evidence";
+  if (step === "triage") return "triage";
+  if (step === "adjudicate") return "adjudication-evidence";
+  return void 0;
+}
+function validateLoadedEvidence(reference, loaded) {
+  const document2 = canonicalDocument(parseResultManifest(loaded.manifest.value));
+  if (document2.digest !== loaded.manifest.digest || !Buffer.from(document2.bytes).equals(Buffer.from(loaded.manifest.bytes)) || reference.result_digest !== document2.digest || loaded.manifest_target.path_class !== "authority-result") {
+    throw new TypeError("loaded evidence result identity disagrees");
+  }
+  const manifest = document2.value;
+  const expectedKind = expectedSourceKind(reference.step);
+  if (expectedKind === void 0 || manifest.source_artifact.artifact_kind !== expectedKind || manifest.result_id !== reference.result_id || manifest.phase_instance !== reference.phase_instance || manifest.step !== reference.step || manifest.input_fingerprint !== reference.input_fingerprint) {
+    throw new TypeError("loaded evidence result correlation disagrees");
+  }
+  if (manifest.source_artifact.artifact_kind === "review-evidence" && reference.step === "counter_review" && manifest.source_artifact.evidence.role !== "counter-review") {
+    throw new TypeError("loaded review evidence role disagrees with its step");
+  }
+  if (!validateDurableSemantics({ result_manifest: document2 }).ok) {
+    throw new TypeError("loaded evidence manifest semantics are invalid");
+  }
+  return manifest;
+}
+async function loadRetainedEvidence(dependencies, state, phase_instance) {
+  const loadManifest = dependencies.load_retained_manifest;
+  if (loadManifest === void 0) {
+    throw new TypeError("retained evidence loading is unavailable");
+  }
+  const retained = /* @__PURE__ */ new Map();
+  for (const reference of state.authoritative_results) {
+    if (reference.phase_instance !== phase_instance || expectedSourceKind(reference.step) === void 0) {
+      continue;
+    }
+    if (retained.has(reference.step)) {
+      throw new TypeError("phase has duplicate retained evidence for one step");
+    }
+    const loaded = await loadManifest(reference);
+    if (!loaded.ok) return loaded;
+    const manifest = validateLoadedEvidence(reference, loaded.value);
+    retained.set(reference.step, Object.freeze({
+      reference: structuredClone(reference),
+      manifest
+    }));
+  }
+  return ok10(retained);
+}
+function deriveCurrentEvidenceSet(retained) {
+  const counterEntry = retained.get("counter_review");
+  if (counterEntry === void 0) {
+    throw new TypeError("current review reconstruction requires counter evidence");
+  }
+  const counterSource = counterEntry.manifest.source_artifact;
+  if (counterSource.artifact_kind !== "review-evidence") {
+    throw new TypeError("current review manifests have the wrong source kind");
+  }
+  const derived = deriveEvidenceSetFromCounter(counterSource.evidence);
+  if (derived.reviews[0].evidence_digest !== counterEntry.manifest.artifact_digest) {
+    throw new TypeError("retained review evidence digest does not match its manifest");
+  }
+  return derived;
+}
+function deriveEvidenceSetFromCounter(counter) {
+  if (counter.role !== "counter-review" || counter.assurance !== "server-attested" && counter.assurance !== "degraded") {
+    throw new TypeError("retained reviews do not form one current review set");
+  }
+  const verifiedCounter = createVerifiedEvidenceReference(counter);
+  const slots = parseRequiredReviewSlots([{
+    role: "counter-review",
+    evidence_digest: verifiedCounter.evidence_digest,
+    assurance: counter.assurance,
+    producer_family: counter.producer_family,
+    reviewer_family: counter.model_family
+  }]);
+  return Object.freeze({
+    task_id: counter.task_id,
+    phase_instance: counter.phase_instance,
+    subject_digest: counter.subject_digest,
+    input_fingerprint: counter.input_fingerprint,
+    current_evidence_set: currentEvidenceSetRef(slots),
+    reviews: Object.freeze([
+      verifiedCounter
+    ])
+  });
+}
+async function currentProduceSubject(dependencies, state) {
+  return loadCurrentProduceSubject(dependencies, state);
+}
+function retainedEditorialTriage(retained) {
+  const entry = retained.get("triage");
+  const source = entry?.manifest.source_artifact;
+  if (entry === void 0 || source?.artifact_kind !== "triage") return void 0;
+  const triage = source.evidence;
+  if (triage.accepted_count !== 0 || (triage.accepted_editorial_count ?? 0) === 0) return void 0;
+  let derived;
+  try {
+    derived = deriveCurrentEvidenceSet(retained);
+  } catch {
+    return void 0;
+  }
+  if (triage.subject_digest !== derived.subject_digest || triage.input_fingerprint !== derived.input_fingerprint || triage.current_evidence_set_digest !== derived.current_evidence_set.set_digest || triage.source_evidence_digests.length !== derived.current_evidence_set.slots.length || triage.source_evidence_digests.some((digest9, index) => digest9 !== derived.current_evidence_set.slots[index].evidence_digest)) return void 0;
+  return Object.freeze({ triage, triage_result_digest: entry.reference.result_digest });
+}
+async function derivePendingEditorialPredecessor(dependencies, state) {
+  const retained = await loadRetainedEvidence(dependencies, state, state.phase_instance);
+  if (!retained.ok) return void 0;
+  const editorial = retainedEditorialTriage(retained.value);
+  if (editorial === void 0) return void 0;
+  const produced = await currentProduceSubject(dependencies, state);
+  if (!produced.ok || produced.value.artifact.artifact_kind !== "document") return void 0;
+  if (editorial.triage.subject_digest !== produced.value.artifact_digest) return void 0;
+  return Object.freeze({
+    subject_digest: produced.value.artifact_digest,
+    input_fingerprint: editorial.triage.input_fingerprint,
+    triage_result_digest: editorial.triage_result_digest
+  });
+}
+async function validateEditorialPredecessorDeclaration(dependencies, state, artifact) {
+  const declared = artifact.editorial_predecessor;
+  if (declared === void 0) return ok10(void 0);
+  const invalid2 = (issue4) => Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("STATE_INVALID", {
+      phase_instance: state.phase_instance,
+      issue_code: issue4
+    })
+  });
+  const produced = await currentProduceSubject(dependencies, state);
+  if (!produced.ok || produced.value.artifact.artifact_kind !== "document" || produced.value.artifact_digest !== declared.subject_digest) return invalid2("editorial-predecessor-not-current-produce");
+  const retained = await loadRetainedEvidence(dependencies, state, state.phase_instance);
+  if (!retained.ok) return invalid2("editorial-authorizing-triage-invalid");
+  const editorial = retainedEditorialTriage(retained.value);
+  if (editorial === void 0 || editorial.triage.subject_digest !== declared.subject_digest || editorial.triage.input_fingerprint !== declared.input_fingerprint || editorial.triage_result_digest !== declared.triage_result_digest) return invalid2("editorial-authorizing-triage-invalid");
+  if (artifact.content_digest === produced.value.artifact.content_digest) {
+    return invalid2("editorial-revision-unchanged-bytes");
+  }
+  const companionSet = (document2) => JSON.stringify(
+    (document2.additional_documents ?? []).map((entry) => ({
+      document_path: entry.document_path,
+      content_digest: entry.content_digest,
+      projection_target: entry.projection_target
+    }))
+  );
+  if (companionSet(artifact) !== companionSet(produced.value.artifact)) {
+    return invalid2("editorial-revision-companion-changed");
+  }
+  return ok10(void 0);
+}
+async function loadCurrentReviewSet(dependencies, authority, phase_instance) {
+  assertInternalTransactionAuthority(authority);
+  if (authority.context.phase_instance !== phase_instance) {
+    throw new TypeError("current review phase does not match transaction authority");
+  }
+  const stateRead = await dependencies.read_state(authority.state);
+  if (stateRead.kind !== "canonical") {
+    throw new TypeError("current review reconstruction requires canonical durable state");
+  }
+  const stateDocument = canonicalDocument(stateRead.document.value);
+  if (stateDocument.digest !== stateRead.document.digest || !Buffer.from(stateDocument.bytes).equals(Buffer.from(stateRead.document.bytes)) || stateDocument.value.task_id !== authority.task_id || stateDocument.value.repository_identity_digest !== authority.repository_identity_digest || stateDocument.value.phase_instance !== phase_instance) {
+    throw new TypeError("durable state does not match current review authority");
+  }
+  const semantics = validateDurableSemantics({ state: stateDocument });
+  if (!semantics.ok) return semantics;
+  const retained = await loadRetainedEvidence(
+    { load_retained_manifest: dependencies.load_retained_manifest },
+    stateDocument.value,
+    phase_instance
+  );
+  if (!retained.ok) return retained;
+  const derived = deriveCurrentEvidenceSet(retained.value);
+  if (derived.task_id !== authority.task_id || derived.phase_instance !== phase_instance) {
+    throw new TypeError("retained reviews do not form one current review set");
+  }
+  if (derived.input_fingerprint !== stateDocument.value.input_fingerprint) {
+    const produced = await currentProduceSubject(
+      { load_retained_manifest: dependencies.load_retained_manifest },
+      stateDocument.value
+    );
+    const predecessor = produced.ok && produced.value.artifact.artifact_kind === "document" ? produced.value.artifact.editorial_predecessor : void 0;
+    if (predecessor === void 0 || derived.subject_digest !== predecessor.subject_digest || derived.input_fingerprint !== predecessor.input_fingerprint) {
+      throw new TypeError("retained reviews do not form one current review set");
+    }
+  }
+  const current = Object.freeze({
+    ...derived
+  });
+  registerCurrentReviewSet(current);
+  return ok10(current);
+}
+
+// src/contracts/constitution.ts
+var frontmatterSchema = external_exports.object({
+  id: external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
+  version: external_exports.number().int().positive().safe(),
+  status: external_exports.enum(["active", "deprecated"]),
+  review_trigger: external_exports.string().min(1).regex(/\S/, "review_trigger must contain a non-whitespace character").optional(),
+  enforced_by: external_exports.array(external_exports.string().min(1).regex(/\S/, "enforced_by entries must contain a non-whitespace character")).min(1).optional()
+}).strict();
+var constitutionRuleV1Schema = frontmatterSchema.extend({ text: external_exports.string().min(1).regex(/\S/, "text must contain a non-whitespace character") }).strict();
+function parseConstitutionRuleV1(value) {
+  assertPlainJson(value, "constitution rule");
+  const parsed = constitutionRuleV1Schema.parse(value);
+  return {
+    id: parsed.id,
+    version: parsed.version,
+    status: parsed.status,
+    text: parsed.text,
+    ...parsed.review_trigger === void 0 ? {} : { review_trigger: parsed.review_trigger },
+    ...parsed.enforced_by === void 0 ? {} : { enforced_by: parsed.enforced_by }
+  };
+}
+function parseConstitutionRuleMarkdown(source, label) {
+  const normalized = source.replaceAll("\r\n", "\n");
+  if (!normalized.startsWith("---\n")) throw new Error(`${label}: expected opening YAML frontmatter delimiter`);
+  const close = normalized.indexOf("\n---\n", 4);
+  if (close < 0) throw new Error(`${label}: expected closing YAML frontmatter delimiter`);
+  const frontmatter = parseSingleYamlDocument(normalized.slice(4, close), `${label} frontmatter`);
+  const text4 = normalized.slice(close + 5).trim();
+  return parseConstitutionRuleV1({ ...frontmatter, text: text4 });
+}
+function registryFromRules(rules2) {
+  const registry2 = /* @__PURE__ */ new Map();
+  for (const candidate of rules2) {
+    const rule4 = parseConstitutionRuleV1(candidate);
+    if (registry2.has(rule4.id)) throw new Error(`Duplicate constitution rule id: ${rule4.id}`);
+    registry2.set(rule4.id, Object.freeze(rule4));
+  }
+  return registry2;
+}
+function parseConstitutionRuleFiles(files) {
+  return registryFromRules(Object.keys(files).sort().map((path2) => parseConstitutionRuleMarkdown(files[path2], path2)));
+}
+
+// src/state/constitution.ts
+var CONSTITUTION_DIRECTORY = ".archflow/constitution";
+var RULE_FILE = /^\.archflow\/constitution\/[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
+var decoder2 = new TextDecoder("utf-8", { fatal: true });
+var authenticResolvedConstitutions = /* @__PURE__ */ new WeakSet();
+function assertResolvedConstitution(value) {
+  if (value === null || typeof value !== "object" || !authenticResolvedConstitutions.has(value)) {
+    throw new TypeError("an authentic resolved constitution is required");
+  }
+}
+function immutableRegistry(rules2) {
+  const entries = [...rules2].map(([id6, rule4]) => {
+    const frozenRule = Object.freeze({
+      ...rule4,
+      ...rule4.enforced_by === void 0 ? {} : { enforced_by: Object.freeze([...rule4.enforced_by]) }
+    });
+    return Object.freeze([id6, frozenRule]);
+  });
+  const backing = new Map(entries);
+  let registry2;
+  registry2 = Object.freeze({
+    get size() {
+      return backing.size;
+    },
+    has: (key) => backing.has(key),
+    get: (key) => backing.get(key),
+    entries: () => backing.entries(),
+    keys: () => backing.keys(),
+    values: () => backing.values(),
+    [Symbol.iterator]: () => backing[Symbol.iterator](),
+    forEach: (callback, thisArg) => backing.forEach((value, key) => callback.call(thisArg, value, key, registry2))
+  });
+  return registry2;
+}
+var ok11 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail10 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+async function readConstitutionTreeFiles(runner, commit) {
+  const listed = await readCommitTreeEntries(runner, commit, CONSTITUTION_DIRECTORY);
+  return Object.freeze(listed.filter((entry) => RULE_FILE.test(entry.path)).map((entry) => Object.freeze({
+    path: parseRepositoryPathClaim(entry.path),
+    oid: parseGitOid(entry.oid)
+  })).sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
+}
+function invalidPolicyBase(policyBaseCommit, observed2) {
+  const expected = canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "policy-base-commit",
+    commit: policyBaseCommit
+  });
+  return createProjectError("POLICY_BASE_INVALID", {
+    expected_digest: expected,
+    ...observed2 === void 0 ? {} : { observed_digest: observed2 }
+  });
+}
+async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
+  try {
+    const selected = await readConstitutionTreeFiles(runner, policyBaseCommit);
+    if (selected.length === 0) return fail10(invalidPolicyBase(policyBaseCommit));
+    const sources = {};
+    for (const file2 of selected) {
+      sources[file2.path] = decoder2.decode(await readGitBlobBytes(runner, file2.oid));
+    }
+    let rules2;
+    try {
+      rules2 = parseConstitutionRuleFiles(sources);
+    } catch {
+      return fail10(invalidPolicyBase(policyBaseCommit));
+    }
+    if (rules2.size === 0) return fail10(invalidPolicyBase(policyBaseCommit));
+    const resolved = Object.freeze({
+      digest: computePinnedConstitutionDigest(selected),
+      rules: immutableRegistry(rules2),
+      files: Object.freeze(selected.map((file2) => Object.freeze({ ...file2 })))
+    });
+    authenticResolvedConstitutions.add(resolved);
+    return ok11(resolved);
+  } catch (error51) {
+    if (error51 instanceof GitInvocationError) {
+      return fail10(projectErrorForGitFailure(error51, runner, context2));
+    }
+    if (error51 instanceof TypeError || error51 instanceof RangeError) {
+      return fail10(invalidPolicyBase(policyBaseCommit));
+    }
+    throw error51;
+  }
+}
+var PINNED_WORKFLOW_PATH = parseRepositoryPathClaim(".archflow/workflow.yaml");
+
+// src/review/adjudication.ts
+var AdjudicationServiceError = class extends Error {
+  constructor(project_error) {
+    super(project_error.code);
+    this.project_error = project_error;
+    this.name = "AdjudicationServiceError";
+  }
+  project_error;
+};
+var invalidOutput = (issueCode, adapter2) => {
+  if (adapter2 === void 0) {
+    throw new TypeError("the dispatch adapter is required to classify invalid model output");
+  }
+  throw new AdjudicationServiceError(createProjectError("MODEL_OUTPUT_INVALID", {
+    adapter: adapter2,
+    attempt: 1,
+    issue_code: issueCode
+  }));
+};
+function crossCheckRuleFindings(registry2, adjudication, adapter2) {
+  const active = [...registry2.values()].filter((rule4) => rule4.status === "active").sort((left, right) => left.id.localeCompare(right.id));
+  if (adjudication.rule_findings.length !== active.length) {
+    return invalidOutput("constitution-rule-coverage", adapter2);
+  }
+  for (let index = 0; index < active.length; index += 1) {
+    const rule4 = active[index];
+    const finding = adjudication.rule_findings[index];
+    if (finding.rule_id !== rule4.id || finding.rule_version !== rule4.version) {
+      return invalidOutput("constitution-rule-version", adapter2);
+    }
+  }
+  return adjudication;
+}
+function rulesForEnvelope(registry2) {
+  return Object.freeze([...registry2.values()].filter((rule4) => rule4.status === "active").sort((left, right) => left.id.localeCompare(right.id) || left.version - right.version).map((rule4) => Object.freeze({
+    id: rule4.id,
+    version: rule4.version,
+    text: rule4.text,
+    ...rule4.review_trigger === void 0 ? {} : { review_trigger: rule4.review_trigger },
+    enforced_by: Object.freeze([...rule4.enforced_by ?? []])
+  })));
+}
+function refs(rules2) {
+  return canonicalRuleRefs(rules2.map((rule4) => Object.freeze({ rule_id: rule4.id, rule_version: rule4.version })));
+}
+function canonicalRuleRefs(rules2) {
+  return Object.freeze([...rules2].sort((left, right) => left.rule_id.localeCompare(right.rule_id) || left.rule_version - right.rule_version));
+}
+function eligibleWaivers(entries) {
+  const unique = /* @__PURE__ */ new Map();
+  for (const entry of entries) {
+    unique.set(`${entry.rule.rule_id}:${entry.rule.rule_version}:${entry.operation}`, entry);
+  }
+  return Object.freeze([...unique.values()].map((entry) => Object.freeze({
+    rule: entry.rule,
+    scope: Object.freeze({ operation: entry.operation, boundary: "subject" })
+  })).sort((left, right) => left.rule.rule_id.localeCompare(right.rule.rule_id) || left.rule.rule_version - right.rule.rule_version || left.scope.operation.localeCompare(right.scope.operation)));
+}
+function designApprovalPolicyContext(evidence) {
+  const failedOrUncertain = evidence.rule_findings.filter((item) => item.compliance !== "pass");
+  const triggered = evidence.rule_findings.filter((item) => item.trigger !== "not-matched");
+  return Object.freeze({
+    constitution: evidence.constitution,
+    policy_findings: Object.freeze(evidence.rule_findings.map((item) => Object.freeze({
+      rule_id: item.rule_id,
+      rule_version: item.rule_version,
+      compliance: item.compliance,
+      rationale: item.rationale,
+      trigger: item.trigger,
+      trigger_evidence: item.trigger_evidence
+    }))),
+    eligible_waivers: eligibleWaivers([
+      ...failedOrUncertain.map((item) => ({
+        rule: Object.freeze({ rule_id: item.rule_id, rule_version: item.rule_version }),
+        operation: "adjudication-failure"
+      })),
+      ...triggered.map((item) => ({
+        rule: Object.freeze({ rule_id: item.rule_id, rule_version: item.rule_version }),
+        operation: "review-trigger"
+      }))
+    ])
+  });
+}
+function selectAdjudicationGates(registry2, evidence) {
+  const gates = [];
+  const failed = evidence.rule_findings.filter((item) => item.compliance === "fail");
+  const uncertain = evidence.rule_findings.filter((item) => item.compliance === "uncertain");
+  const failedRules = refs(failed.map((item) => registry2.get(item.rule_id)));
+  const uncertainRules = refs(uncertain.map((item) => registry2.get(item.rule_id)));
+  const matchedTriggers = evidence.matched_rule_versions;
+  const uncertainTriggers = evidence.uncertain_rule_versions;
+  if (failedRules.length > 0 || uncertainRules.length > 0 || matchedTriggers.length > 0 || uncertainTriggers.length > 0) {
+    gates.push(Object.freeze({
+      kind: "constitution-review",
+      subject_digest: evidence.subject_digest,
+      context: Object.freeze({
+        constitution: evidence.constitution,
+        failed_rules: failedRules,
+        uncertain_rules: uncertainRules,
+        matched_trigger_rules: matchedTriggers,
+        uncertain_trigger_rules: uncertainTriggers,
+        eligible_waivers: eligibleWaivers([
+          ...[...failedRules, ...uncertainRules].map((rule4) => ({ rule: rule4, operation: "adjudication-failure" })),
+          ...[...matchedTriggers, ...uncertainTriggers].map((rule4) => ({ rule: rule4, operation: "review-trigger" }))
+        ])
+      })
+    }));
+  }
+  const material = evidence.drift_findings.find((item) => item.drift === "material");
+  if (material !== void 0) {
+    gates.push(Object.freeze({
+      kind: "material-drift",
+      subject_digest: evidence.subject_digest,
+      context: Object.freeze({
+        affected_upstream: Object.freeze({
+          kind: "implementation-result",
+          digest: material.upstream_digest
+        }),
+        drift: "material",
+        affected_claim_ids: Object.freeze([...material.affected_claim_ids].sort())
+      })
+    }));
+  }
+  return Object.freeze(gates);
+}
+
+// src/review/fixed-point.ts
+var DEFAULT_MAX_ATTEMPTS = 3;
+var EVIDENCE_STEPS = Object.freeze([
+  "counter_review",
+  "triage",
+  "adjudicate"
+]);
+function evidencePayload(manifest) {
+  const source = manifest.source_artifact;
+  if (source.artifact_kind === "review-evidence" || source.artifact_kind === "triage" || source.artifact_kind === "adjudication-evidence") return source.evidence;
+  return void 0;
+}
+function boundToSubjectExactly(bound, subject) {
+  return bound.subject_digest === subject.subject_digest && bound.input_fingerprint === subject.input_fingerprint;
+}
+function boundToDeclaredPredecessor(bound, subject) {
+  const predecessor = subject.review_predecessor ?? subject.editorial_predecessor;
+  return predecessor !== void 0 && bound.subject_digest === predecessor.subject_digest && bound.input_fingerprint === predecessor.input_fingerprint;
+}
+function boundToSubjectOrDeclaredPredecessor(bound, subject) {
+  return boundToSubjectExactly(bound, subject) || boundToDeclaredPredecessor(bound, subject);
+}
+function subjectCurrent(evidence, subject, allowPredecessor) {
+  if (evidence === void 0) return false;
+  return boundToSubjectExactly(evidence, subject) || allowPredecessor && boundToDeclaredPredecessor(evidence, subject);
+}
+function currentReviewSet(retained, subject) {
+  try {
+    const derived = deriveCurrentEvidenceSet(retained);
+    return boundToSubjectOrDeclaredPredecessor(derived, subject) ? derived : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function currentFor(retained, step, subject, reviews) {
+  if (step === "counter_review") return reviews !== void 0;
+  const entry = retained.get(step);
+  const evidence = entry === void 0 ? void 0 : evidencePayload(entry.manifest);
+  if (!subjectCurrent(evidence, subject, true) || reviews === void 0) return false;
+  if (step === "triage") {
+    const triage = evidence;
+    return triage.current_evidence_set_digest === reviews.current_evidence_set.set_digest && triage.source_evidence_digests.length === reviews.current_evidence_set.slots.length && triage.source_evidence_digests.every((digest9, index) => digest9 === reviews.current_evidence_set.slots[index].evidence_digest);
+  }
+  if (step === "adjudicate") {
+    const adjudication = evidence;
+    return adjudication.source_evidence_set_digest === reviews.current_evidence_set.set_digest && adjudication.approved_upstream_digests.length === (subject.approved_upstream_digests ?? []).length && adjudication.approved_upstream_digests.every((digest9, index) => digest9 === (subject.approved_upstream_digests ?? [])[index]);
+  }
+  return false;
+}
+function triageAt(retained) {
+  const source = retained.get("triage")?.manifest.source_artifact;
+  return source?.artifact_kind === "triage" ? source.evidence : void 0;
+}
+function adjudicationAt(retained) {
+  const source = retained.get("adjudicate")?.manifest.source_artifact;
+  return source?.artifact_kind === "adjudication-evidence" ? source.evidence : void 0;
+}
+function approvalBindingFailure(approval, gate) {
+  if (approval.gate_kind !== gate.kind) return "approval-gate-kind";
+  if (approval.subject_digest !== gate.subject_digest) return "approval-subject-digest";
+  return void 0;
+}
+function requestBindingFailure(request, gate, contextDigest, phaseInstance4) {
+  if (request.kind !== gate.kind) return "request-gate-kind";
+  if (request.subject_digest !== gate.subject_digest) return "request-subject-digest";
+  if (request.context_digest !== contextDigest) return "request-context-digest";
+  if (request.phase_instance !== phaseInstance4) return "request-phase-instance";
+  return void 0;
+}
+function decisionBindingFailure(decision3, contextDigest) {
+  if (decision3.context_digest !== contextDigest) return "decision-context-digest";
+  if (decision3.envelope.context_digest !== contextDigest) return "decision-envelope-context-digest";
+  return void 0;
+}
+function evidenceBindingFailure(request, evidence, subject) {
+  if (request.kind === "baseline-adoption") return "request-gate-kind";
+  const { counter_review_digest: counterDigest, triage, adjudication } = evidence;
+  if (counterDigest === void 0) return "counter-review-evidence-missing";
+  if (triage === void 0) return "triage-evidence-missing";
+  if (adjudication === void 0) return "adjudication-evidence-missing";
+  if (!boundToSubjectOrDeclaredPredecessor(triage, subject)) return "triage-not-bound-to-subject";
+  if (!boundToSubjectOrDeclaredPredecessor(adjudication, subject)) {
+    return "adjudication-not-bound-to-subject";
+  }
+  if (adjudication.source_evidence_set_digest !== request.current_evidence.set_digest) {
+    return "adjudication-evidence-set-digest";
+  }
+  if (request.current_evidence.set_digest !== triage.current_evidence_set_digest) {
+    return "triage-evidence-set-digest";
+  }
+  if (request.current_evidence.slots[0].evidence_digest !== counterDigest) {
+    return "counter-review-slot-digest";
+  }
+  return void 0;
+}
+function gateApprovalBindingFailure(authenticated, gate, contextDigest, state, subject, evidence) {
+  assertAuthenticatedGateApproval(authenticated);
+  const { approval, request, decision: decision3 } = authenticated;
+  return approvalBindingFailure(approval, gate) ?? requestBindingFailure(request, gate, contextDigest, state.phase_instance) ?? decisionBindingFailure(decision3, contextDigest) ?? evidenceBindingFailure(request, evidence, subject);
+}
+function waiverPathSatisfiesGate(state, gate) {
+  if (gate.kind !== "constitution-review" || !("eligible_waivers" in gate.context)) return false;
+  const required2 = gate.context.eligible_waivers;
+  return required2.length > 0 && required2.every((eligible) => waiverInForce(
+    state,
+    eligible.rule,
+    gate.subject_digest,
+    eligible.scope
+  ) !== void 0);
+}
+function adjudicationGateSatisfied(state, retained, subject, gate) {
+  const phaseKind2 = state.phase_instance === "design" || state.phase_instance.startsWith("phase-design-");
+  if (phaseKind2 && gate.kind === "constitution-review") {
+    const designApproval = (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
+      assertAuthenticatedGateApproval(authenticated);
+      return authenticated.approval.gate_kind === "design-approval" && authenticated.approval.subject_digest === subject.subject_digest && authenticated.request.kind === "design-approval" && authenticated.request.phase_instance === state.phase_instance && authenticated.request.subject_digest === subject.subject_digest && authenticated.request.current_evidence.set_digest === deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest && authenticated.decision.envelope.payload.decision === "approve";
+    });
+    const migrationApproval = (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
+      assertAuthenticatedGateApproval(authenticated);
+      return authenticated.approval.gate_kind === "migration-audit" && authenticated.approval.subject_digest === subject.subject_digest && authenticated.request.kind === "migration-audit" && authenticated.request.phase_instance === state.phase_instance && authenticated.request.subject_digest === subject.subject_digest && authenticated.request.current_evidence.set_digest === deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest && authenticated.decision.envelope.payload.decision === "accept-import-audit";
+    });
+    if (designApproval || migrationApproval) return true;
+  }
+  const contextDigest = computeGateContextDigest(gate.kind, gate.context);
+  const evidence = Object.freeze({
+    counter_review_digest: retained.get("counter_review")?.manifest.artifact_digest,
+    triage: triageAt(retained),
+    adjudication: adjudicationAt(retained)
+  });
+  const approvalSatisfies = (subject.authenticated_gate_approvals ?? []).some((authenticated) => gateApprovalBindingFailure(
+    authenticated,
+    gate,
+    contextDigest,
+    state,
+    subject,
+    evidence
+  ) === void 0);
+  return approvalSatisfies || waiverPathSatisfiesGate(state, gate);
+}
+function adjudicationGatePending(state, gate) {
+  const open6 = state.open_gate;
+  return open6 !== void 0 && open6.gate_kind === gate.kind && open6.subject_digest === gate.subject_digest && open6.context_digest === computeGateContextDigest(gate.kind, gate.context);
+}
+function dispositionState(retained, reviews, triage) {
+  const counter = reviews?.reviews[0]?.evidence;
+  if (reviews === void 0 || counter === void 0 || triage === void 0) {
+    return Object.freeze({ complete: false, blocker: false, accepted: false });
+  }
+  const counterDigest = reviews.current_evidence_set.slots[0].evidence_digest;
+  const expected = /* @__PURE__ */ new Map();
+  for (const finding of counter.findings) {
+    expected.set(`${counterDigest}:${finding.finding_id}`, finding.blocking);
+  }
+  const actual = new Map(triage.dispositions.map((item) => [
+    `${item.review_evidence_digest}:${item.finding_id}`,
+    item.disposition
+  ]));
+  const complete = actual.size === expected.size && [...expected.keys()].every((key) => actual.has(key));
+  const blocker = [...expected].some(([key, blocking]) => blocking && actual.get(key) !== "rejected");
+  return Object.freeze({
+    complete,
+    blocker,
+    accepted: triage.accepted_count > 0
+  });
+}
+function assertSubjectMatchesDurableState(state, retained, subject) {
+  assertResolvedConstitution(subject.constitution);
+  if (subject.constitution.digest !== state.constitution_digest) {
+    throw new TypeError("fixed-point constitution does not match durable state");
+  }
+  const retainedAdjudication = adjudicationAt(retained);
+  if (retainedAdjudication !== void 0 && retainedAdjudication.pinned_constitution_digest !== subject.constitution.digest) {
+    throw new TypeError("retained adjudication does not match the pinned constitution");
+  }
+}
+function resolveMaxAttempts(subject) {
+  const maximum = subject.max_attempts ?? DEFAULT_MAX_ATTEMPTS;
+  if (!Number.isSafeInteger(maximum) || maximum < 1) {
+    throw new TypeError("max_attempts must be a positive safe integer");
+  }
+  return maximum;
+}
+function constitutionReviewRequired(constitution) {
+  return [...constitution.rules.values()].some((rule4) => rule4.status === "active");
+}
+function acceptedFindingsForceReentry(state, disposition) {
+  return disposition.accepted && state.step === "triage" && state.status === "succeeded";
+}
+function editorialRevisionPending(triageCurrent, disposition, subject) {
+  return triageCurrent !== void 0 && disposition.complete && triageCurrent.accepted_count === 0 && (triageCurrent.accepted_editorial_count ?? 0) > 0 && boundToSubjectExactly(triageCurrent, subject);
+}
+function decision2(next, flags) {
+  return Object.freeze({
+    next,
+    reentry_required: flags?.reentry_required ?? false,
+    editorial_revision_required: flags?.editorial_revision_required ?? false,
+    adjudication_gate_pending: flags?.adjudication_gate_pending ?? false
+  });
+}
+function resolveAdjudicationGateStep(state, retained, subject) {
+  const adjudication = adjudicationAt(retained);
+  const gates = adjudication === void 0 ? [] : selectAdjudicationGates(subject.constitution.rules, adjudication);
+  const gate = gates.find((candidate) => !adjudicationGateSatisfied(state, retained, subject, candidate));
+  if (gate === void 0) return decision2("advance");
+  return decision2("adjudication-gate", {
+    adjudication_gate_pending: adjudicationGatePending(state, gate)
+  });
+}
+function decideNextAction(state, retained, subject, current, disposition, triageCurrent) {
+  if (acceptedFindingsForceReentry(state, disposition)) {
+    return decision2("produce", { reentry_required: true });
+  }
+  if (!current.includes("counter_review")) return decision2("counter_review");
+  if (constitutionReviewRequired(subject.constitution) && !current.includes("adjudicate")) {
+    return decision2("produce", { reentry_required: true });
+  }
+  if (!current.includes("triage") || !disposition.complete) return decision2("triage");
+  if (disposition.accepted) return decision2("triage");
+  if (editorialRevisionPending(triageCurrent, disposition, subject)) {
+    return decision2("produce", { editorial_revision_required: true });
+  }
+  return resolveAdjudicationGateStep(state, retained, subject);
+}
+function assessCurrentEvidence(state, retained, subject) {
+  assertSubjectMatchesDurableState(state, retained, subject);
+  const maximum = resolveMaxAttempts(subject);
+  const reviews = currentReviewSet(retained, subject);
+  const candidateTriage = triageAt(retained);
+  const triageCurrent = currentFor(
+    retained,
+    "triage",
+    subject,
+    reviews
+  ) ? candidateTriage : void 0;
+  const current = EVIDENCE_STEPS.filter((step) => currentFor(retained, step, subject, reviews));
+  const stale = EVIDENCE_STEPS.filter((step) => retained.has(step) && !current.includes(step));
+  const disposition = dispositionState(retained, reviews, triageCurrent);
+  const action2 = decideNextAction(
+    state,
+    retained,
+    subject,
+    current,
+    disposition,
+    triageCurrent
+  );
+  const exhausted = action2.reentry_required && state.attempt >= maximum;
+  return Object.freeze({
+    current: Object.freeze([...current]),
+    stale: Object.freeze([...stale]),
+    every_finding_dispositioned: disposition.complete,
+    blocker_remains: disposition.blocker,
+    reentry_required: action2.reentry_required,
+    editorial_revision_required: action2.editorial_revision_required,
+    exhausted,
+    adjudication_gate_pending: action2.adjudication_gate_pending,
+    next: exhausted ? "attempts-exhausted" : action2.next
+  });
+}
+function requireApprovedUpstreamDigests(state, upstreamDigests) {
+  const sorted = [...upstreamDigests].sort();
+  if (new Set(sorted).size !== sorted.length) {
+    throw new TypeError("approved upstream digests must be unique");
+  }
+  for (const digest9 of sorted) {
+    const approved = state.approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === digest9);
+    if (!approved) {
+      throw new TypeError(`upstream ${digest9} lacks current document approval`);
+    }
+  }
+  return Object.freeze(sorted);
+}
+function waiverInForce(state, rule4, subjectDigest, scope3) {
+  if (state.terminal !== void 0) return void 0;
+  return state.waivers.find((waiver) => waiver.granted && waiver.expires === "task-complete" && waiver.rule_id === rule4.rule_id && waiver.rule_version === rule4.rule_version && waiver.subject_digest === subjectDigest && waiver.scope.operation === scope3.operation && waiver.scope.boundary === scope3.boundary);
+}
+
+// src/state/approval-rules.ts
+var GATE_SUMMARY_MAX_LENGTH = 4096;
+var RULE_MATCH_SUMMARY_MAX_LENGTH = 1536;
+function approvalRuleMatchSummary(match) {
+  if (match.kind === "subject") {
+    return `Approval rule trigger: this project requires human approval for the "${match.subject}" subject.`;
+  }
+  const paths = match.paths.map((path2) => `- ${path2}`).join("\n");
+  return `Approval rule trigger: these changed paths matched the project's content rules:
+${paths}`;
+}
+function boundedApprovalRuleMatchSummary(match) {
+  const full = approvalRuleMatchSummary(match);
+  if (full.length <= RULE_MATCH_SUMMARY_MAX_LENGTH || match.kind === "subject") return full;
+  const header = "Approval rule trigger: these changed paths matched the project's content rules:";
+  let shown = header;
+  let shownCount = 0;
+  for (const path2 of match.paths) {
+    const line = `
+- ${path2}`;
+    const remaining = match.paths.length - shownCount - 1;
+    const notice = remaining === 0 ? "" : `
+- \u2026 ${remaining} additional matched path${remaining === 1 ? "" : "s"} omitted; exact paths remain in durable settlement evidence.`;
+    if (shown.length + line.length + notice.length > RULE_MATCH_SUMMARY_MAX_LENGTH) break;
+    shown += line;
+    shownCount += 1;
+  }
+  const omitted = match.paths.length - shownCount;
+  return omitted === 0 ? shown : `${shown}
+- \u2026 ${omitted} additional matched path${omitted === 1 ? "" : "s"} omitted; exact paths remain in durable settlement evidence.`;
+}
+function approvalRuleGateSummary(summary, match) {
+  const trigger = boundedApprovalRuleMatchSummary(match);
+  const separator = "\n\n";
+  const prose2 = summary.trimEnd();
+  if (prose2.length + separator.length + trigger.length <= GATE_SUMMARY_MAX_LENGTH) {
+    return `${prose2}${separator}${trigger}`;
+  }
+  const notice = "\n\u2026 Gate summary truncated to preserve the approval-rule trigger.";
+  const proseLimit = GATE_SUMMARY_MAX_LENGTH - separator.length - trigger.length;
+  const shortened = `${prose2.slice(0, Math.max(0, proseLimit - notice.length)).trimEnd()}${notice}`;
+  return `${shortened}${separator}${trigger}`;
+}
+function segmentMatches(pattern, segment, patternAt, segmentAt) {
+  while (patternAt < pattern.length) {
+    const character = pattern[patternAt];
+    if (character === "*") {
+      for (let skip = segmentAt; skip <= segment.length; skip += 1) {
+        if (segmentMatches(pattern, segment, patternAt + 1, skip)) return true;
+      }
+      return false;
+    }
+    if (segmentAt >= segment.length) return false;
+    if (character !== "?" && character !== segment[segmentAt]) return false;
+    patternAt += 1;
+    segmentAt += 1;
+  }
+  return segmentAt === segment.length;
+}
+function segmentsMatch(pattern, path2, patternAt, pathAt) {
+  while (patternAt < pattern.length) {
+    const segment = pattern[patternAt];
+    if (segment === "**") {
+      for (let skip = pathAt; skip <= path2.length; skip += 1) {
+        if (segmentsMatch(pattern, path2, patternAt + 1, skip)) return true;
+      }
+      return false;
+    }
+    if (pathAt >= path2.length || !segmentMatches(segment, path2[pathAt], 0, 0)) return false;
+    patternAt += 1;
+    pathAt += 1;
+  }
+  return pathAt === path2.length;
+}
+function globPatternMatches(pattern, path2) {
+  return segmentsMatch(pattern.split("/"), path2.split("/"), 0, 0);
+}
+function evaluateApprovalRules(config2, subject, changedPaths) {
+  const rules2 = config2?.approval_rules;
+  if (rules2 !== void 0 && rules2.subjects.includes(subject)) {
+    return Object.freeze({ wait: true, match: Object.freeze({ kind: "subject", subject }) });
+  }
+  if (subject === "phase-impl" && rules2 !== void 0) {
+    const matched = [...new Set(changedPaths.filter((path2) => rules2.content.some((rule4) => rule4.paths.some((pattern) => globPatternMatches(pattern, path2)))))].sort();
+    if (matched.length > 0) {
+      return Object.freeze({ wait: true, match: Object.freeze({ kind: "content", paths: Object.freeze(matched) }) });
+    }
+  }
+  return Object.freeze({ wait: false, match: null });
+}
+var subjectGateKind = Object.freeze({
+  prd: "artifact-approval",
+  design: "design-approval",
+  "phase-design": "design-approval",
+  "phase-impl": "commit-authorization"
+});
+function approvalRuleContext(state, produceSubject, config2) {
+  const artifact = produceSubject?.artifact;
+  const changedPaths = artifact?.artifact_kind === "implementation-output" ? [...new Set(artifact.outputs.flatMap(
+    (output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]
+  ))].sort() : [];
+  return Object.freeze({
+    subject: decodePhaseInstance(state.phase_instance).kind,
+    changedPaths: Object.freeze(changedPaths),
+    config: config2
+  });
+}
+function buildRuleSettlement(state, subjectDigest, configDigest, conclusion) {
+  return Object.freeze({
+    task_id: state.task_id,
+    phase_instance: state.phase_instance,
+    step: state.step,
+    subject_digest: subjectDigest,
+    conclusion: structuredClone(conclusion),
+    config_digest: configDigest,
+    settled_at_revision: parseSafeInteger(state.revision + 1)
+  });
+}
+
 // src/state/gates.ts
 async function cleanupCommittedGateWorkspace(dependencies, authority, state) {
   try {
@@ -60707,6 +62093,113 @@ function nextStateForRecord(state, record3, digest9, plannedFinalPhase) {
   const preserved = plannedFinalPhase === void 0 ? { ...withoutPlannedFinalPhase, ...existingPlannedFinalPhase === void 0 ? {} : { planned_final_phase: existingPlannedFinalPhase } } : { ...withoutPlannedFinalPhase, ...plannedFinalPhase === null ? {} : { planned_final_phase: parseSafeInteger(plannedFinalPhase) } };
   return canonicalDocument({ ...preserved, revision, approvals, waivers });
 }
+function waiverReviewPredecessor(state, produce) {
+  const declared = produce.artifact.artifact_kind === "document" ? produce.artifact.editorial_predecessor : void 0;
+  if (declared !== void 0) return Object.freeze({
+    subject_digest: declared.subject_digest,
+    input_fingerprint: declared.input_fingerprint
+  });
+  const reference = state.authoritative_results.find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "produce");
+  const simple = reference === void 0 ? void 0 : [...state.human_revision_history ?? []].reverse().find((revision) => revision.phase_instance === state.phase_instance && revision.classification === "simple" && revision.resulting_result_digest === reference.result_digest);
+  return simple === void 0 ? void 0 : Object.freeze({
+    subject_digest: simple.predecessor_subject_digest,
+    input_fingerprint: simple.predecessor_input_fingerprint
+  });
+}
+async function stateAfterPolicyWaiverSettlement(dependencies, authority, current, request, record3, digest9) {
+  const waiver = waiverContext(request.context);
+  if (!record3.granted || waiver === void 0 || record3.origin.origin_gate_id !== waiver.origin.origin_gate_id || record3.origin.subject_digest !== request.subject_digest || request.subject_digest !== current.value.open_gate?.subject_digest || request.phase_instance !== current.value.phase_instance || current.value.status !== "succeeded") return issue2("STATE_INVALID", current.value, "policy-waiver-settlement-boundary-invalid");
+  const originAuthenticated = await authenticateWaiverOrigin(dependencies, authority, waiver);
+  if (!originAuthenticated.ok) return originAuthenticated;
+  const produce = await loadCurrentProduceSubject(dependencies, current.value);
+  if (!produce.ok) return produce;
+  if (produce.value.artifact_digest !== request.subject_digest) {
+    return issue2("STATE_INVALID", current.value, "policy-waiver-settlement-subject-stale");
+  }
+  const finalTriage = current.value.step === "triage";
+  const editorialReentry = current.value.step === "produce" && produce.value.artifact.artifact_kind === "document" && produce.value.artifact.editorial_predecessor !== void 0 && current.value.pending_human_revision === void 0;
+  if (!finalTriage && !editorialReentry) {
+    return ok6(nextStateForRecord(current.value, record3, digest9));
+  }
+  if (dependencies.load_retained_manifest === void 0) {
+    return issue2("STATE_INVALID", current.value, "policy-waiver-settlement-evidence-unavailable");
+  }
+  const retained = await loadRetainedEvidence(
+    { load_retained_manifest: dependencies.load_retained_manifest },
+    current.value,
+    current.value.phase_instance
+  );
+  if (!retained.ok) return retained;
+  const constitution = await resolvePinnedConstitution(
+    dependencies.runner,
+    current.value.policy_base_commit,
+    authority.context
+  );
+  if (!constitution.ok) return constitution;
+  const authenticated = [];
+  for (const approval of current.value.approvals) {
+    const loaded = await loadAuthenticatedGateApproval(dependencies, authority, approval);
+    if (!loaded.ok) return loaded;
+    if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
+    assertAuthenticatedGateApproval(loaded.value);
+    authenticated.push(loaded.value);
+  }
+  const upstreamDigests = /* @__PURE__ */ new Set();
+  for (const binding of produceUpstreamBindingsForSubject(current.value, produce.value.artifact)) {
+    const upstream = await loadProduceUpstreamSubject(dependencies, authority, current.value, binding);
+    if (!upstream.ok) return upstream;
+    if ("imported_projection" in upstream.value) {
+      if (current.value.phase_instance !== "design" && !authenticated.some((approval) => approval.request.kind === "migration-audit" && approval.decision.envelope.payload.decision === "accept-import-audit")) {
+        return issue2("STATE_INVALID", current.value, "policy-waiver-settlement-upstream-invalid");
+      }
+    } else {
+      const humanApproved = authenticated.some((approval) => approval.approval.subject_digest === upstream.value.artifact_digest && (approval.request.kind === "artifact-approval" || approval.request.kind === "design-approval"));
+      if (!humanApproved) {
+        return issue2("STATE_INVALID", current.value, "policy-waiver-settlement-upstream-invalid");
+      }
+    }
+    upstreamDigests.add(upstream.value.artifact_digest);
+  }
+  const prospective = nextStateForRecord(current.value, record3, digest9);
+  const config2 = await dependencies.read_config(authority.config);
+  if (config2.kind !== "valid") {
+    return issue2("STATE_INVALID", current.value, "policy-waiver-settlement-config-unavailable");
+  }
+  const predecessor = waiverReviewPredecessor(prospective.value, produce.value);
+  let assessment;
+  try {
+    assessment = assessCurrentEvidence(prospective.value, retained.value, {
+      subject_digest: produce.value.artifact_digest,
+      input_fingerprint: prospective.value.input_fingerprint,
+      constitution: constitution.value,
+      approved_upstream_digests: Object.freeze([...upstreamDigests].sort()),
+      authenticated_gate_approvals: authenticated,
+      ...predecessor === void 0 ? {} : { review_predecessor: predecessor },
+      ...config2.snapshot.parsed.max_attempts === void 0 ? {} : { max_attempts: config2.snapshot.parsed.max_attempts }
+    });
+  } catch {
+    return issue2("STATE_INVALID", current.value, "policy-waiver-settlement-fixed-point-invalid");
+  }
+  if (assessment.next !== "advance") return ok6(prospective);
+  const ruleContext = approvalRuleContext(current.value, produce.value, config2.snapshot.parsed);
+  const conclusion = evaluateApprovalRules(
+    ruleContext.config,
+    ruleContext.subject,
+    ruleContext.changedPaths
+  );
+  const settled = nextStateForRecord(current.value, record3, digest9);
+  const settlement = buildRuleSettlement(
+    current.value,
+    produce.value.artifact_digest,
+    config2.snapshot.digest,
+    conclusion
+  );
+  const ruleSettlements = Object.freeze([
+    ...settled.value.rule_settlements ?? [],
+    settlement
+  ].sort(compareRuleSettlements));
+  return ok6(canonicalDocument({ ...settled.value, rule_settlements: ruleSettlements }));
+}
 function enactsReentry(record3) {
   if (record3.outcome !== "decided") return false;
   const decision3 = record3.envelope.payload.decision;
@@ -60850,6 +62343,16 @@ async function closedStateForRecord(dependencies, authority, current, request, r
   }
   if (enactsReentry(record3)) {
     return planGateAuthorizedReentry(dependencies, authority, current, request, record3);
+  }
+  if (record3.outcome === "waiver-decided" && record3.granted && waiverContext(request.context) !== void 0 && (current.value.step === "triage" || current.value.step === "produce") && current.value.status === "succeeded" && request.phase_instance === current.value.phase_instance && request.subject_digest === current.value.open_gate?.subject_digest && record3.origin.subject_digest === request.subject_digest) {
+    return stateAfterPolicyWaiverSettlement(
+      dependencies,
+      authority,
+      current,
+      request,
+      record3,
+      digest9
+    );
   }
   if (record3.outcome === "decided" && record3.kind === "design-approval" && record3.envelope.payload.decision === "approve" && request.kind === "design-approval") {
     const symbolicRef = await dependencies.runner.runText({
@@ -62137,139 +63640,8 @@ function createInternalInputFingerprintResolver(input) {
   };
 }
 
-// src/contracts/constitution.ts
-var frontmatterSchema = external_exports.object({
-  id: external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
-  version: external_exports.number().int().positive().safe(),
-  status: external_exports.enum(["active", "deprecated"]),
-  review_trigger: external_exports.string().min(1).regex(/\S/, "review_trigger must contain a non-whitespace character").optional(),
-  enforced_by: external_exports.array(external_exports.string().min(1).regex(/\S/, "enforced_by entries must contain a non-whitespace character")).min(1).optional()
-}).strict();
-var constitutionRuleV1Schema = frontmatterSchema.extend({ text: external_exports.string().min(1).regex(/\S/, "text must contain a non-whitespace character") }).strict();
-function parseConstitutionRuleV1(value) {
-  assertPlainJson(value, "constitution rule");
-  const parsed = constitutionRuleV1Schema.parse(value);
-  return {
-    id: parsed.id,
-    version: parsed.version,
-    status: parsed.status,
-    text: parsed.text,
-    ...parsed.review_trigger === void 0 ? {} : { review_trigger: parsed.review_trigger },
-    ...parsed.enforced_by === void 0 ? {} : { enforced_by: parsed.enforced_by }
-  };
-}
-function parseConstitutionRuleMarkdown(source, label) {
-  const normalized = source.replaceAll("\r\n", "\n");
-  if (!normalized.startsWith("---\n")) throw new Error(`${label}: expected opening YAML frontmatter delimiter`);
-  const close = normalized.indexOf("\n---\n", 4);
-  if (close < 0) throw new Error(`${label}: expected closing YAML frontmatter delimiter`);
-  const frontmatter = parseSingleYamlDocument(normalized.slice(4, close), `${label} frontmatter`);
-  const text4 = normalized.slice(close + 5).trim();
-  return parseConstitutionRuleV1({ ...frontmatter, text: text4 });
-}
-function registryFromRules(rules2) {
-  const registry2 = /* @__PURE__ */ new Map();
-  for (const candidate of rules2) {
-    const rule4 = parseConstitutionRuleV1(candidate);
-    if (registry2.has(rule4.id)) throw new Error(`Duplicate constitution rule id: ${rule4.id}`);
-    registry2.set(rule4.id, Object.freeze(rule4));
-  }
-  return registry2;
-}
-function parseConstitutionRuleFiles(files) {
-  return registryFromRules(Object.keys(files).sort().map((path2) => parseConstitutionRuleMarkdown(files[path2], path2)));
-}
-
-// src/state/constitution.ts
-var CONSTITUTION_DIRECTORY = ".archflow/constitution";
-var RULE_FILE = /^\.archflow\/constitution\/[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
-var decoder2 = new TextDecoder("utf-8", { fatal: true });
-var authenticResolvedConstitutions = /* @__PURE__ */ new WeakSet();
-function assertResolvedConstitution(value) {
-  if (value === null || typeof value !== "object" || !authenticResolvedConstitutions.has(value)) {
-    throw new TypeError("an authentic resolved constitution is required");
-  }
-}
-function immutableRegistry(rules2) {
-  const entries = [...rules2].map(([id6, rule4]) => {
-    const frozenRule = Object.freeze({
-      ...rule4,
-      ...rule4.enforced_by === void 0 ? {} : { enforced_by: Object.freeze([...rule4.enforced_by]) }
-    });
-    return Object.freeze([id6, frozenRule]);
-  });
-  const backing = new Map(entries);
-  let registry2;
-  registry2 = Object.freeze({
-    get size() {
-      return backing.size;
-    },
-    has: (key) => backing.has(key),
-    get: (key) => backing.get(key),
-    entries: () => backing.entries(),
-    keys: () => backing.keys(),
-    values: () => backing.values(),
-    [Symbol.iterator]: () => backing[Symbol.iterator](),
-    forEach: (callback, thisArg) => backing.forEach((value, key) => callback.call(thisArg, value, key, registry2))
-  });
-  return registry2;
-}
-var ok10 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail10 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-async function readConstitutionTreeFiles(runner, commit) {
-  const listed = await readCommitTreeEntries(runner, commit, CONSTITUTION_DIRECTORY);
-  return Object.freeze(listed.filter((entry) => RULE_FILE.test(entry.path)).map((entry) => Object.freeze({
-    path: parseRepositoryPathClaim(entry.path),
-    oid: parseGitOid(entry.oid)
-  })).sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
-}
-function invalidPolicyBase(policyBaseCommit, observed2) {
-  const expected = canonicalJsonDigest({
-    schema_version: "1",
-    digest_kind: "policy-base-commit",
-    commit: policyBaseCommit
-  });
-  return createProjectError("POLICY_BASE_INVALID", {
-    expected_digest: expected,
-    ...observed2 === void 0 ? {} : { observed_digest: observed2 }
-  });
-}
-async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
-  try {
-    const selected = await readConstitutionTreeFiles(runner, policyBaseCommit);
-    if (selected.length === 0) return fail10(invalidPolicyBase(policyBaseCommit));
-    const sources = {};
-    for (const file2 of selected) {
-      sources[file2.path] = decoder2.decode(await readGitBlobBytes(runner, file2.oid));
-    }
-    let rules2;
-    try {
-      rules2 = parseConstitutionRuleFiles(sources);
-    } catch {
-      return fail10(invalidPolicyBase(policyBaseCommit));
-    }
-    if (rules2.size === 0) return fail10(invalidPolicyBase(policyBaseCommit));
-    const resolved = Object.freeze({
-      digest: computePinnedConstitutionDigest(selected),
-      rules: immutableRegistry(rules2),
-      files: Object.freeze(selected.map((file2) => Object.freeze({ ...file2 })))
-    });
-    authenticResolvedConstitutions.add(resolved);
-    return ok10(resolved);
-  } catch (error51) {
-    if (error51 instanceof GitInvocationError) {
-      return fail10(projectErrorForGitFailure(error51, runner, context2));
-    }
-    if (error51 instanceof TypeError || error51 instanceof RangeError) {
-      return fail10(invalidPolicyBase(policyBaseCommit));
-    }
-    throw error51;
-  }
-}
-var PINNED_WORKFLOW_PATH = parseRepositoryPathClaim(".archflow/workflow.yaml");
-
 // src/state/fingerprint-readers.ts
-var ok11 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok12 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail11 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function stateIssue(input, issueCode) {
   return createProjectError("STATE_INVALID", {
@@ -62293,7 +63665,7 @@ var readCanonicalWorkflowDigest = async (input) => {
       argv: ["cat-file", "blob", entry.oid],
       operation: "git-workflow-read"
     });
-    return ok11(sha256Bytes(bytes.stdout));
+    return ok12(sha256Bytes(bytes.stdout));
   } catch (error51) {
     if (error51 instanceof GitInvocationError) {
       return fail11(projectErrorForGitFailure(error51, input.runner, input.context));
@@ -62307,7 +63679,7 @@ var readCanonicalConstitutionDigest = async (input) => {
     input.state.value.policy_base_commit,
     input.context
   );
-  return resolved.ok ? ok11(resolved.value.digest) : resolved;
+  return resolved.ok ? ok12(resolved.value.digest) : resolved;
 };
 function artifactPaths(_input) {
   return Object.freeze([]);
@@ -62316,7 +63688,7 @@ function upstreamPaths(_input) {
   return Object.freeze([]);
 }
 async function identitiesFor(input, claims, missingIssue) {
-  if (claims.length === 0) return ok11(Object.freeze([]));
+  if (claims.length === 0) return ok12(Object.freeze([]));
   const resolved = [];
   for (const claim of claims) {
     const path2 = await resolveTaskPath({
@@ -62356,18 +63728,18 @@ async function identitiesFor(input, claims, missingIssue) {
     }));
   }
   identities.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
-  return ok11(Object.freeze(identities));
+  return ok12(Object.freeze(identities));
 }
 var readCanonicalArtifactIdentities = async (input) => identitiesFor(input, artifactPaths(input), "fingerprint-artifact-missing");
 var readCanonicalUpstreamIdentities = async (input) => identitiesFor(input, upstreamPaths(input), "fingerprint-upstream-missing");
 var readCanonicalDeclaredInputs = async (input) => {
   const call = input.call;
   if (call.name !== "archflow_state" || call.input.artifact === void 0) {
-    return ok11(Object.freeze([]));
+    return ok12(Object.freeze([]));
   }
   const artifact = call.input.artifact;
   const declared = artifact.artifact_kind === "document" || artifact.artifact_kind === "implementation-output" ? artifact.declared_inputs : [];
-  return ok11(Object.freeze(structuredClone(declared)));
+  return ok12(Object.freeze(structuredClone(declared)));
 };
 function createProductionInputFingerprintResolver() {
   return createInternalInputFingerprintResolver({
@@ -62382,10 +63754,10 @@ function createProductionInputFingerprintResolver() {
 // src/state/read.ts
 import { constants as fsConstants5 } from "node:fs";
 var decoder3 = new TextDecoder("utf-8", { fatal: true });
-function deepFreeze5(value) {
+function deepFreeze6(value) {
   if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {
     Object.freeze(value);
-    for (const child of Object.values(value)) deepFreeze5(child);
+    for (const child of Object.values(value)) deepFreeze6(child);
   }
   return value;
 }
@@ -62410,7 +63782,7 @@ async function readTaskState(path2) {
   try {
     const document2 = parseCanonicalDocument(read.bytes, "task state");
     taskStateV1Schema.parse(document2.value);
-    deepFreeze5(document2.value);
+    deepFreeze6(document2.value);
     return Object.freeze({ kind: "canonical", document: document2 });
   } catch {
     return Object.freeze({ kind: "noncanonical" });
@@ -62448,7 +63820,7 @@ async function readTaskConfig(path2) {
 }
 
 // src/state/production.ts
-var ok12 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok13 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail12 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function context(input, phase3, attempt) {
   return Object.freeze({ task_id: input.task_id, phase_instance: phase3, operation: input.operation, attempt });
@@ -62482,7 +63854,7 @@ async function readRetainedManifest(runner, authority, reference) {
   if (!read.ok) return read;
   const manifest = read.value.value;
   if (manifest.result_id !== reference.result_id || manifest.phase_instance !== reference.phase_instance || manifest.step !== reference.step || manifest.input_fingerprint !== reference.input_fingerprint) return stateFailure(authority.context.phase_instance, "retained-result-reference-mismatch");
-  return ok12(Object.freeze({ manifest: read.value, manifest_target: manifestTarget.value }));
+  return ok13(Object.freeze({ manifest: read.value, manifest_target: manifestTarget.value }));
 }
 async function readRetainedResult(runner, authority, reference) {
   const loaded = await readRetainedManifest(runner, authority, reference);
@@ -62535,7 +63907,7 @@ async function readRetainedResult(runner, authority, reference) {
         if (restored.byteLength !== output.payload_bytes || sha256Bytes(restored) !== output.payload_digest) {
           return bytes;
         }
-        bytes = ok12(restored);
+        bytes = ok13(restored);
       } catch {
         return stateFailure(authority.context.phase_instance, "active-result-cache-missing-rerun-required");
       }
@@ -62591,7 +63963,7 @@ async function readRetainedResult(runner, authority, reference) {
       runner,
       worktree_root: runner.location.worktreeRoot,
       output_path: output.path
-    }) : ok12(output.file_type === "symlink" ? Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes: cached2 }) : Object.freeze({ state: "present", file_type: "regular", mode: output.operation === "delete" ? "100644" : output.after.mode, bytes: cached2 }));
+    }) : ok13(output.file_type === "symlink" ? Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes: cached2 }) : Object.freeze({ state: "present", file_type: "regular", mode: output.operation === "delete" ? "100644" : output.after.mode, bytes: cached2 }));
     if (!desired.ok) return desired;
     const before = output.operation === "add" ? void 0 : await beforeImage(output.before, output.operation === "rename" ? output.previous_path : output.path);
     sources.push(Object.freeze({
@@ -62623,7 +63995,7 @@ async function readRetainedResult(runner, authority, reference) {
     runner.location.worktreeRoot
   );
   if (!projectionPlan.ok) return projectionPlan;
-  return ok12(Object.freeze({
+  return ok13(Object.freeze({
     prepared: Object.freeze({ manifest: manifestDocument, result_digest: manifestDocument.digest, payloads: Object.freeze(payloads) }),
     manifest_target: manifestTarget,
     projection_plan: projectionPlan.value,
@@ -62724,10 +64096,10 @@ async function createProductionServices(input) {
         ...expected_input_fingerprint !== void 0 ? { expected_input_fingerprint } : {},
         context: authority.context
       });
-      return resolved.ok ? ok12(resolved.value.fingerprint) : resolved;
+      return resolved.ok ? ok13(resolved.value.fingerprint) : resolved;
     }
   });
-  return ok12(Object.freeze({
+  return ok13(Object.freeze({
     runner: discovered.value,
     environment: environment.value,
     authority,
@@ -62831,7 +64203,7 @@ import { readFile as readFile11 } from "node:fs/promises";
 import { mkdir as mkdir3, open as open4, readFile as readFile6 } from "node:fs/promises";
 import { dirname as dirname5, join as join7 } from "node:path";
 var decoder4 = new TextDecoder("utf-8", { fatal: true });
-var ok13 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok14 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail13 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function errno(error51, code2) {
   return error51 instanceof Error && error51.code === code2;
@@ -62906,7 +64278,7 @@ async function stageTaskAsk(input) {
       return stageTaskAsk(input);
     }
   }
-  return ok13(Object.freeze({
+  return ok14(Object.freeze({
     path: parseRepositoryPathClaim(`.archflow/tasks/${taskId}/ask.md`),
     byte_count: bytes.byteLength,
     digest: sha256Bytes(bytes)
@@ -62934,7 +64306,7 @@ async function resolveInitializationPolicyBase(runner, commit, context2) {
     } catch {
       return fail13(policyBaseInvalid(commit));
     }
-    return ok13(Object.freeze({
+    return ok14(Object.freeze({
       constitution_digest: constitution.value.digest,
       workflow_digest: sha256Bytes(workflowBytes)
     }));
@@ -62976,7 +64348,7 @@ async function stageTaskInitialization(input) {
     const head = parseGitOid(await readHeadCommit(runner));
     const policy = await resolveInitializationPolicyBase(runner, head, context2);
     if (!policy.ok) return policy;
-    return ok13(Object.freeze({
+    return ok14(Object.freeze({
       schema_version: "1",
       artifact_kind: "task-initialization",
       task_id: taskId,
@@ -63001,7 +64373,7 @@ async function stageTaskInitialization(input) {
 }
 
 // src/state/document-artifact.ts
-var ok14 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok15 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail14 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function ioFailure2(authority) {
   return fail14(createProjectError("IO_ERROR", {
@@ -63013,7 +64385,7 @@ async function readResolvedBytes(target2, authority) {
   try {
     const handle = await openResolved(target2.absolute, 0);
     try {
-      return ok14(new Uint8Array(await handle.readFile()));
+      return ok15(new Uint8Array(await handle.readFile()));
     } finally {
       await handle.close();
     }
@@ -63072,7 +64444,7 @@ async function buildDocumentArtifact(runner, authority, input) {
       }
       throw error51;
     }
-    return ok14(Object.freeze({
+    return ok15(Object.freeze({
       document_path: documentPath,
       projection_target: resolved.value.repositoryRelative,
       bytes: read.value,
@@ -63128,7 +64500,7 @@ async function buildDocumentArtifact(runner, authority, input) {
       projection_target: observed2.projection_target
     }))
   );
-  return ok14(parseDocumentArtifact({
+  return ok15(parseDocumentArtifact({
     schema_version: "1",
     artifact_kind: "document",
     task_id: authority.task_id,
@@ -63144,489 +64516,6 @@ async function buildDocumentArtifact(runner, authority, input) {
     projection_target: toRepositoryPathClaim(authority.task_id, materialized.document_path),
     ...additionalDocuments.length === 0 ? {} : { additional_documents: additionalDocuments }
   }));
-}
-
-// src/contracts/internal/trust-mints.ts
-function createReviewObservationCapability(binding) {
-  const copiedBinding = deepFreeze6(structuredClone(binding));
-  const capability = Object.freeze({ kind: copiedBinding.kind });
-  registerObservationCapability(capability, copiedBinding);
-  return capability;
-}
-function createAdjudicationObservationCapability(binding) {
-  const copiedBinding = deepFreeze6(structuredClone(binding));
-  const capability = Object.freeze({ kind: copiedBinding.kind });
-  registerObservationCapability(capability, copiedBinding);
-  return capability;
-}
-function createVerifiedEvidenceReference(evidence) {
-  const parsed = evidence.step === "adjudicate" ? parseAdjudicationEvidence(evidence) : parseReviewEvidence(evidence);
-  const evidenceDigest = canonicalJsonDigest(parsed);
-  const verified = deepFreeze6({
-    evidence_digest: evidenceDigest,
-    evidence: parsed
-  });
-  const kind = parsed.step === "adjudicate" ? "adjudication" : "review";
-  registerVerifiedEvidence(verified, { kind, assurance: parsed.assurance });
-  return verified;
-}
-function deepFreeze6(value) {
-  if (value !== null && typeof value === "object") {
-    for (const nested of Object.values(value)) deepFreeze6(nested);
-    Object.freeze(value);
-  }
-  return value;
-}
-
-// src/contracts/renderers.ts
-var encoder2 = new TextEncoder();
-var ESCAPE = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069`<>&]/gu;
-var visibleJsonString = (value) => JSON.stringify(value).replace(/\\n/gu, "\\u000a").replace(/\\r/gu, "\\u000d").replace(/\\t/gu, "\\u0009").replace(/\\b/gu, "\\u0008").replace(/\\f/gu, "\\u000c").replace(ESCAPE, (character) => `\\u${character.codePointAt(0).toString(16).padStart(4, "0")}`);
-var canonical = (value) => typeof value === "string" ? visibleJsonString(value) : JSON.stringify(value);
-var optional2 = (value) => value === void 0 ? "none" : canonical(value);
-var linesToBytes = (lines) => encoder2.encode(`${lines.join("\n")}
-`);
-var metadata = (entries) => entries.map(([key, value]) => `${key}: ${optional2(value)}`);
-var prose = (label, value, indent = "  ") => `${indent}${label}: ${visibleJsonString(value)}`;
-function provenanceMetadata(evidence) {
-  return [
-    ["assurance", evidence.assurance],
-    ["adapter", evidence.assurance === "server-attested" ? evidence.adapter : void 0],
-    ["cli_version", evidence.assurance === "server-attested" ? evidence.cli_version : void 0],
-    ["model_family", evidence.model_family],
-    ["model", evidence.model],
-    ["effort", evidence.effort],
-    ["invocation_id", evidence.assurance === "server-attested" ? evidence.invocation_id : void 0],
-    ["result_id", evidence.assurance === "server-attested" ? evidence.result_id : void 0]
-  ];
-}
-function renderReviewFinding(finding) {
-  return [`### Finding ${visibleJsonString(finding.finding_id)}`, `severity: ${canonical(finding.severity)}`, `blocking: ${canonical(finding.blocking)}`, prose("summary", finding.summary), prose("evidence", finding.evidence), prose("suggested_resolution", finding.suggested_resolution)];
-}
-function renderRouteOverride(override) {
-  const displaced = override.pinned_model === void 0 ? ["pinned_route: none configured for this role"] : [`pinned_model: ${canonical(override.pinned_model)}`, `pinned_effort: ${canonical(override.pinned_effort)}`];
-  return ["", "## Route Override", ...displaced, prose("reason", override.reason)];
-}
-function renderReviewEvidence(value) {
-  const evidence = value.evidence;
-  const authenticated = authenticQualifiedEvidence(value, "review", evidence.assurance) || authenticVerifiedEvidence(value, { kind: "review", assurance: evidence.assurance });
-  if (!authenticated) throw new TypeError("authenticated review evidence is required");
-  const lines = ["# ArchFlow Review Evidence", ...metadata([
-    ["schema_version", evidence.schema_version],
-    ["task_id", evidence.task_id],
-    ["phase_instance", evidence.phase_instance],
-    ["step", evidence.step],
-    ["role", evidence.role],
-    ["subject_digest", evidence.subject_digest],
-    ["input_fingerprint", evidence.input_fingerprint],
-    ["evidence_digest", value.evidence_digest],
-    ["verdict", evidence.verdict],
-    ["blocking_count", evidence.blocking_count],
-    ["matched_rule_versions", evidence.matched_rule_versions.map((rule4) => `${rule4.rule_id}@${rule4.rule_version}`)],
-    ...provenanceMetadata(evidence)
-  ]), "", "## Findings"];
-  for (const finding of evidence.findings) lines.push("", ...renderReviewFinding(finding));
-  if (evidence.assurance === "degraded") lines.push("", "## Degraded Assurance", prose("reason", evidence.reason));
-  if (evidence.assurance === "server-attested" && evidence.route_override !== void 0) lines.push(...renderRouteOverride(evidence.route_override));
-  return linesToBytes(lines);
-}
-function renderDisposition(disposition) {
-  const lines = [`### ${canonical(disposition.disposition)} ${visibleJsonString(disposition.review_evidence_digest)} ${visibleJsonString(disposition.finding_id)}`, prose("rationale", disposition.rationale)];
-  if (disposition.disposition === "rejected") lines.push(prose("evidence", disposition.evidence));
-  else lines.push(prose("revision_intent", disposition.revision_intent));
-  return lines;
-}
-function renderTriage(value) {
-  if (!authenticValidatedTriage(value)) throw new TypeError("validated triage is required");
-  const lines = ["# ArchFlow Review Triage", ...metadata([
-    ["schema_version", value.schema_version],
-    ["task_id", value.task_id],
-    ["phase_instance", value.phase_instance],
-    ["step", value.step],
-    ["subject_digest", value.subject_digest],
-    ["input_fingerprint", value.input_fingerprint],
-    ["current_evidence_set_digest", value.current_evidence_set_digest],
-    ["source_evidence_digests", value.source_evidence_digests],
-    ["accepted_count", value.accepted_count],
-    ["accepted_editorial_count", value.accepted_editorial_count],
-    ["rejected_count", value.rejected_count]
-  ]), "", "## Dispositions"];
-  for (const disposition of value.dispositions) lines.push("", ...renderDisposition(disposition));
-  return linesToBytes(lines);
-}
-function renderAdjudicationEvidence(value) {
-  const evidence = value.evidence;
-  const authenticated = authenticQualifiedEvidence(value, "adjudication", evidence.assurance) || authenticVerifiedEvidence(value, { kind: "adjudication", assurance: evidence.assurance });
-  if (!authenticated) throw new TypeError("authenticated adjudication evidence is required");
-  const lines = ["# ArchFlow Adjudication Evidence", ...metadata([
-    ["schema_version", evidence.schema_version],
-    ["task_id", evidence.task_id],
-    ["phase_instance", evidence.phase_instance],
-    ["step", evidence.step],
-    ["subject_digest", evidence.subject_digest],
-    ["input_fingerprint", evidence.input_fingerprint],
-    ["evidence_digest", value.evidence_digest],
-    ["pinned_constitution_digest", evidence.pinned_constitution_digest],
-    ["approved_upstream_digests", evidence.approved_upstream_digests],
-    ["source_evidence_set_digest", evidence.source_evidence_set_digest],
-    ["constitution", evidence.constitution],
-    ["drift", evidence.drift],
-    ["matched_rule_versions", evidence.matched_rule_versions.map((rule4) => `${rule4.rule_id}@${rule4.rule_version}`)],
-    ["uncertain_rule_versions", evidence.uncertain_rule_versions.map((rule4) => `${rule4.rule_id}@${rule4.rule_version}`)],
-    ...provenanceMetadata(evidence)
-  ]), "", "## Constitution Findings"];
-  for (const finding of evidence.rule_findings) {
-    lines.push("", `### Rule ${visibleJsonString(`${finding.rule_id}@${finding.rule_version}`)}`, `compliance: ${canonical(finding.compliance)}`, `trigger: ${canonical(finding.trigger)}`, prose("rationale", finding.rationale), prose("trigger_evidence", finding.trigger_evidence));
-  }
-  lines.push("", "## Drift Findings");
-  for (const finding of evidence.drift_findings) lines.push("", `### Upstream ${visibleJsonString(finding.upstream_digest)}`, `drift: ${canonical(finding.drift)}`, `affected_claim_ids: ${canonical(finding.affected_claim_ids)}`, prose("rationale", finding.rationale));
-  if (evidence.assurance === "degraded") lines.push("", "## Degraded Assurance", prose("reason", evidence.reason));
-  if (evidence.assurance === "server-attested" && evidence.route_override !== void 0) lines.push(...renderRouteOverride(evidence.route_override));
-  return linesToBytes(lines);
-}
-
-// src/state/evidence-results.ts
-var ok15 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-function qualifyAndRender(value) {
-  if (value.kind === "review") {
-    const verified = createVerifiedEvidenceReference(value.evidence);
-    return Object.freeze({
-      artifact: Object.freeze({
-        schema_version: "1",
-        artifact_kind: "review-evidence",
-        evidence: verified.evidence
-      }),
-      bytes: renderReviewEvidence(verified),
-      evidence_digest: verified.evidence_digest,
-      phase_instance: verified.evidence.phase_instance,
-      step: verified.evidence.step,
-      task_id: verified.evidence.task_id,
-      input_fingerprint: verified.evidence.input_fingerprint
-    });
-  }
-  if (value.kind === "adjudication") {
-    const verified = createVerifiedEvidenceReference(value.evidence);
-    return Object.freeze({
-      artifact: Object.freeze({
-        schema_version: "1",
-        artifact_kind: "adjudication-evidence",
-        evidence: verified.evidence
-      }),
-      bytes: renderAdjudicationEvidence(verified),
-      evidence_digest: verified.evidence_digest,
-      phase_instance: verified.evidence.phase_instance,
-      step: verified.evidence.step,
-      task_id: verified.evidence.task_id,
-      input_fingerprint: verified.evidence.input_fingerprint
-    });
-  }
-  const triage = validateTriage(value.current_reviews, value.evidence);
-  return Object.freeze({
-    artifact: Object.freeze({
-      schema_version: "1",
-      artifact_kind: "triage",
-      evidence: triage
-    }),
-    bytes: renderTriage(triage),
-    evidence_digest: canonicalJsonDigest(triage),
-    phase_instance: triage.phase_instance,
-    step: triage.step,
-    task_id: triage.task_id,
-    input_fingerprint: triage.input_fingerprint
-  });
-}
-async function prepareEvidenceResult(input) {
-  assertInternalTransactionAuthority(input.authority);
-  const qualified = qualifyAndRender(input.value);
-  if (qualified.task_id !== input.authority.task_id || qualified.phase_instance !== input.authority.context.phase_instance) {
-    throw new TypeError("evidence scope does not match transaction authority");
-  }
-  if (input.value.kind !== "triage" && input.value.evidence.assurance === "server-attested" && input.value.evidence.result_id !== input.result_id) {
-    throw new TypeError("server-attested evidence result_id does not match prepared result");
-  }
-  const renderedDigest = sha256Bytes(qualified.bytes);
-  const snapshotDigest = deriveDeclaredSnapshotDigest([], []);
-  const workspaceClaim = input.value.kind === "triage" ? triageReviewClaim(qualified.phase_instance) : input.value.kind === "adjudication" ? adjudicationReviewClaim(qualified.phase_instance) : counterReviewClaim(qualified.phase_instance);
-  const projectionTarget = await resolveTaskWorkspacePath({
-    runner: input.runner,
-    taskId: input.authority.task_id,
-    claim: workspaceClaim,
-    expectedClass: "workspace-review",
-    context: input.authority.context
-  });
-  if (!projectionTarget.ok) return projectionTarget;
-  const repositoryClaim = projectionTarget.value.repositoryRelative;
-  const captured = await captureProjectionTarget(projectionTarget.value);
-  let secretScan;
-  const capturingScanner = Object.freeze({
-    scan: async (candidates) => {
-      const result = parseSecretScanResult(await input.scanner.scan(candidates));
-      secretScan = result;
-      return result;
-    }
-  });
-  const source = Object.freeze({
-    path: repositoryClaim,
-    target: projectionTarget.value,
-    desired: Object.freeze({ state: "present", file_type: "regular", mode: "100644", bytes: qualified.bytes }),
-    authenticated_before: captured.observation,
-    ...captured.observation.state === "present" ? { rollback: captured.rollback } : {},
-    git_tracked: false
-  });
-  const projectionPlan = await prepareProjectionPlan(
-    [source],
-    capturingScanner,
-    input.runner.location.worktreeRoot
-  );
-  if (!projectionPlan.ok) return projectionPlan;
-  if (secretScan === void 0 || secretScan.outcome !== "clean") {
-    throw new TypeError("successful evidence projection requires a clean secret scan");
-  }
-  const manifestValue = Object.freeze({
-    schema_version: "1",
-    task_id: qualified.task_id,
-    repository_identity_digest: input.authority.repository_identity_digest,
-    result_id: input.result_id,
-    phase_instance: qualified.phase_instance,
-    step: qualified.step,
-    artifact_digest: qualified.evidence_digest,
-    source_artifact: qualified.artifact,
-    input_fingerprint: qualified.input_fingerprint,
-    snapshot_digest: snapshotDigest,
-    outputs: Object.freeze([]),
-    projections: Object.freeze([]),
-    accounting: Object.freeze({
-      schema_version: "1",
-      result_bytes: parseSafeInteger(0),
-      task_bytes: input.retained_task_bytes,
-      result_byte_cap: 26214400,
-      task_byte_cap: 262144e3,
-      counted_entries: Object.freeze([]),
-      measured_at_revision: input.measured_at_revision
-    }),
-    secret_scan: secretScan
-  });
-  const manifest = canonicalDocument(manifestValue);
-  const manifestTarget = await resolveTaskPath({
-    runner: input.runner,
-    taskId: input.authority.task_id,
-    claim: resultAuthorityClaim(manifest.digest),
-    expectedClass: "authority-result",
-    context: input.authority.context
-  });
-  if (!manifestTarget.ok) return manifestTarget;
-  const prepared = prepareSnapshot({
-    manifest: manifestValue,
-    payloads: Object.freeze([]),
-    retained_task_bytes: input.retained_task_bytes,
-    validate_manifest: parseResultManifest
-  });
-  if (!prepared.ok) return prepared;
-  const reference = Object.freeze({
-    phase_instance: qualified.phase_instance,
-    step: qualified.step,
-    result_digest: prepared.value.result_digest,
-    result_id: input.result_id,
-    input_fingerprint: qualified.input_fingerprint
-  });
-  return ok15(Object.freeze({
-    reference,
-    prepared: prepared.value,
-    manifest_target: manifestTarget.value,
-    projection_plan: projectionPlan.value,
-    evidence_digest: qualified.evidence_digest,
-    rendered_digest: renderedDigest
-  }));
-}
-function expectedSourceKind(step) {
-  if (step === "counter_review") return "review-evidence";
-  if (step === "triage") return "triage";
-  if (step === "adjudicate") return "adjudication-evidence";
-  return void 0;
-}
-function validateLoadedEvidence(reference, loaded) {
-  const document2 = canonicalDocument(parseResultManifest(loaded.manifest.value));
-  if (document2.digest !== loaded.manifest.digest || !Buffer.from(document2.bytes).equals(Buffer.from(loaded.manifest.bytes)) || reference.result_digest !== document2.digest || loaded.manifest_target.path_class !== "authority-result") {
-    throw new TypeError("loaded evidence result identity disagrees");
-  }
-  const manifest = document2.value;
-  const expectedKind = expectedSourceKind(reference.step);
-  if (expectedKind === void 0 || manifest.source_artifact.artifact_kind !== expectedKind || manifest.result_id !== reference.result_id || manifest.phase_instance !== reference.phase_instance || manifest.step !== reference.step || manifest.input_fingerprint !== reference.input_fingerprint) {
-    throw new TypeError("loaded evidence result correlation disagrees");
-  }
-  if (manifest.source_artifact.artifact_kind === "review-evidence" && reference.step === "counter_review" && manifest.source_artifact.evidence.role !== "counter-review") {
-    throw new TypeError("loaded review evidence role disagrees with its step");
-  }
-  if (!validateDurableSemantics({ result_manifest: document2 }).ok) {
-    throw new TypeError("loaded evidence manifest semantics are invalid");
-  }
-  return manifest;
-}
-async function loadRetainedEvidence(dependencies, state, phase_instance) {
-  const loadManifest = dependencies.load_retained_manifest;
-  if (loadManifest === void 0) {
-    throw new TypeError("retained evidence loading is unavailable");
-  }
-  const retained = /* @__PURE__ */ new Map();
-  for (const reference of state.authoritative_results) {
-    if (reference.phase_instance !== phase_instance || expectedSourceKind(reference.step) === void 0) {
-      continue;
-    }
-    if (retained.has(reference.step)) {
-      throw new TypeError("phase has duplicate retained evidence for one step");
-    }
-    const loaded = await loadManifest(reference);
-    if (!loaded.ok) return loaded;
-    const manifest = validateLoadedEvidence(reference, loaded.value);
-    retained.set(reference.step, Object.freeze({
-      reference: structuredClone(reference),
-      manifest
-    }));
-  }
-  return ok15(retained);
-}
-function deriveCurrentEvidenceSet(retained) {
-  const counterEntry = retained.get("counter_review");
-  if (counterEntry === void 0) {
-    throw new TypeError("current review reconstruction requires counter evidence");
-  }
-  const counterSource = counterEntry.manifest.source_artifact;
-  if (counterSource.artifact_kind !== "review-evidence") {
-    throw new TypeError("current review manifests have the wrong source kind");
-  }
-  const derived = deriveEvidenceSetFromCounter(counterSource.evidence);
-  if (derived.reviews[0].evidence_digest !== counterEntry.manifest.artifact_digest) {
-    throw new TypeError("retained review evidence digest does not match its manifest");
-  }
-  return derived;
-}
-function deriveEvidenceSetFromCounter(counter) {
-  if (counter.role !== "counter-review" || counter.assurance !== "server-attested" && counter.assurance !== "degraded") {
-    throw new TypeError("retained reviews do not form one current review set");
-  }
-  const verifiedCounter = createVerifiedEvidenceReference(counter);
-  const slots = parseRequiredReviewSlots([{
-    role: "counter-review",
-    evidence_digest: verifiedCounter.evidence_digest,
-    assurance: counter.assurance,
-    producer_family: counter.producer_family,
-    reviewer_family: counter.model_family
-  }]);
-  return Object.freeze({
-    task_id: counter.task_id,
-    phase_instance: counter.phase_instance,
-    subject_digest: counter.subject_digest,
-    input_fingerprint: counter.input_fingerprint,
-    current_evidence_set: currentEvidenceSetRef(slots),
-    reviews: Object.freeze([
-      verifiedCounter
-    ])
-  });
-}
-async function currentProduceSubject(dependencies, state) {
-  return loadCurrentProduceSubject(dependencies, state);
-}
-function retainedEditorialTriage(retained) {
-  const entry = retained.get("triage");
-  const source = entry?.manifest.source_artifact;
-  if (entry === void 0 || source?.artifact_kind !== "triage") return void 0;
-  const triage = source.evidence;
-  if (triage.accepted_count !== 0 || (triage.accepted_editorial_count ?? 0) === 0) return void 0;
-  let derived;
-  try {
-    derived = deriveCurrentEvidenceSet(retained);
-  } catch {
-    return void 0;
-  }
-  if (triage.subject_digest !== derived.subject_digest || triage.input_fingerprint !== derived.input_fingerprint || triage.current_evidence_set_digest !== derived.current_evidence_set.set_digest || triage.source_evidence_digests.length !== derived.current_evidence_set.slots.length || triage.source_evidence_digests.some((digest9, index) => digest9 !== derived.current_evidence_set.slots[index].evidence_digest)) return void 0;
-  return Object.freeze({ triage, triage_result_digest: entry.reference.result_digest });
-}
-async function derivePendingEditorialPredecessor(dependencies, state) {
-  const retained = await loadRetainedEvidence(dependencies, state, state.phase_instance);
-  if (!retained.ok) return void 0;
-  const editorial = retainedEditorialTriage(retained.value);
-  if (editorial === void 0) return void 0;
-  const produced = await currentProduceSubject(dependencies, state);
-  if (!produced.ok || produced.value.artifact.artifact_kind !== "document") return void 0;
-  if (editorial.triage.subject_digest !== produced.value.artifact_digest) return void 0;
-  return Object.freeze({
-    subject_digest: produced.value.artifact_digest,
-    input_fingerprint: editorial.triage.input_fingerprint,
-    triage_result_digest: editorial.triage_result_digest
-  });
-}
-async function validateEditorialPredecessorDeclaration(dependencies, state, artifact) {
-  const declared = artifact.editorial_predecessor;
-  if (declared === void 0) return ok15(void 0);
-  const invalid2 = (issue4) => Object.freeze({
-    schema_version: "1",
-    ok: false,
-    error: createProjectError("STATE_INVALID", {
-      phase_instance: state.phase_instance,
-      issue_code: issue4
-    })
-  });
-  const produced = await currentProduceSubject(dependencies, state);
-  if (!produced.ok || produced.value.artifact.artifact_kind !== "document" || produced.value.artifact_digest !== declared.subject_digest) return invalid2("editorial-predecessor-not-current-produce");
-  const retained = await loadRetainedEvidence(dependencies, state, state.phase_instance);
-  if (!retained.ok) return invalid2("editorial-authorizing-triage-invalid");
-  const editorial = retainedEditorialTriage(retained.value);
-  if (editorial === void 0 || editorial.triage.subject_digest !== declared.subject_digest || editorial.triage.input_fingerprint !== declared.input_fingerprint || editorial.triage_result_digest !== declared.triage_result_digest) return invalid2("editorial-authorizing-triage-invalid");
-  if (artifact.content_digest === produced.value.artifact.content_digest) {
-    return invalid2("editorial-revision-unchanged-bytes");
-  }
-  const companionSet = (document2) => JSON.stringify(
-    (document2.additional_documents ?? []).map((entry) => ({
-      document_path: entry.document_path,
-      content_digest: entry.content_digest,
-      projection_target: entry.projection_target
-    }))
-  );
-  if (companionSet(artifact) !== companionSet(produced.value.artifact)) {
-    return invalid2("editorial-revision-companion-changed");
-  }
-  return ok15(void 0);
-}
-async function loadCurrentReviewSet(dependencies, authority, phase_instance) {
-  assertInternalTransactionAuthority(authority);
-  if (authority.context.phase_instance !== phase_instance) {
-    throw new TypeError("current review phase does not match transaction authority");
-  }
-  const stateRead = await dependencies.read_state(authority.state);
-  if (stateRead.kind !== "canonical") {
-    throw new TypeError("current review reconstruction requires canonical durable state");
-  }
-  const stateDocument = canonicalDocument(stateRead.document.value);
-  if (stateDocument.digest !== stateRead.document.digest || !Buffer.from(stateDocument.bytes).equals(Buffer.from(stateRead.document.bytes)) || stateDocument.value.task_id !== authority.task_id || stateDocument.value.repository_identity_digest !== authority.repository_identity_digest || stateDocument.value.phase_instance !== phase_instance) {
-    throw new TypeError("durable state does not match current review authority");
-  }
-  const semantics = validateDurableSemantics({ state: stateDocument });
-  if (!semantics.ok) return semantics;
-  const retained = await loadRetainedEvidence(
-    { load_retained_manifest: dependencies.load_retained_manifest },
-    stateDocument.value,
-    phase_instance
-  );
-  if (!retained.ok) return retained;
-  const derived = deriveCurrentEvidenceSet(retained.value);
-  if (derived.task_id !== authority.task_id || derived.phase_instance !== phase_instance) {
-    throw new TypeError("retained reviews do not form one current review set");
-  }
-  if (derived.input_fingerprint !== stateDocument.value.input_fingerprint) {
-    const produced = await currentProduceSubject(
-      { load_retained_manifest: dependencies.load_retained_manifest },
-      stateDocument.value
-    );
-    const predecessor = produced.ok && produced.value.artifact.artifact_kind === "document" ? produced.value.artifact.editorial_predecessor : void 0;
-    if (predecessor === void 0 || derived.subject_digest !== predecessor.subject_digest || derived.input_fingerprint !== predecessor.input_fingerprint) {
-      throw new TypeError("retained reviews do not form one current review set");
-    }
-  }
-  const current = Object.freeze({
-    ...derived
-  });
-  registerCurrentReviewSet(current);
-  return ok15(current);
 }
 
 // src/state/phase-documents.ts
@@ -63882,400 +64771,6 @@ function resolveDispatchRoute(config2, phaseKind2, role) {
   return routeFromConfiguredRoute(configured);
 }
 
-// src/review/adjudication.ts
-var AdjudicationServiceError = class extends Error {
-  constructor(project_error) {
-    super(project_error.code);
-    this.project_error = project_error;
-    this.name = "AdjudicationServiceError";
-  }
-  project_error;
-};
-var invalidOutput = (issueCode, adapter2) => {
-  if (adapter2 === void 0) {
-    throw new TypeError("the dispatch adapter is required to classify invalid model output");
-  }
-  throw new AdjudicationServiceError(createProjectError("MODEL_OUTPUT_INVALID", {
-    adapter: adapter2,
-    attempt: 1,
-    issue_code: issueCode
-  }));
-};
-function crossCheckRuleFindings(registry2, adjudication, adapter2) {
-  const active = [...registry2.values()].filter((rule4) => rule4.status === "active").sort((left, right) => left.id.localeCompare(right.id));
-  if (adjudication.rule_findings.length !== active.length) {
-    return invalidOutput("constitution-rule-coverage", adapter2);
-  }
-  for (let index = 0; index < active.length; index += 1) {
-    const rule4 = active[index];
-    const finding = adjudication.rule_findings[index];
-    if (finding.rule_id !== rule4.id || finding.rule_version !== rule4.version) {
-      return invalidOutput("constitution-rule-version", adapter2);
-    }
-  }
-  return adjudication;
-}
-function rulesForEnvelope(registry2) {
-  return Object.freeze([...registry2.values()].filter((rule4) => rule4.status === "active").sort((left, right) => left.id.localeCompare(right.id) || left.version - right.version).map((rule4) => Object.freeze({
-    id: rule4.id,
-    version: rule4.version,
-    text: rule4.text,
-    ...rule4.review_trigger === void 0 ? {} : { review_trigger: rule4.review_trigger },
-    enforced_by: Object.freeze([...rule4.enforced_by ?? []])
-  })));
-}
-function refs(rules2) {
-  return canonicalRuleRefs(rules2.map((rule4) => Object.freeze({ rule_id: rule4.id, rule_version: rule4.version })));
-}
-function canonicalRuleRefs(rules2) {
-  return Object.freeze([...rules2].sort((left, right) => left.rule_id.localeCompare(right.rule_id) || left.rule_version - right.rule_version));
-}
-function eligibleWaivers(entries) {
-  const unique = /* @__PURE__ */ new Map();
-  for (const entry of entries) {
-    unique.set(`${entry.rule.rule_id}:${entry.rule.rule_version}:${entry.operation}`, entry);
-  }
-  return Object.freeze([...unique.values()].map((entry) => Object.freeze({
-    rule: entry.rule,
-    scope: Object.freeze({ operation: entry.operation, boundary: "subject" })
-  })).sort((left, right) => left.rule.rule_id.localeCompare(right.rule.rule_id) || left.rule.rule_version - right.rule.rule_version || left.scope.operation.localeCompare(right.scope.operation)));
-}
-function designApprovalPolicyContext(evidence) {
-  const failedOrUncertain = evidence.rule_findings.filter((item) => item.compliance !== "pass");
-  const triggered = evidence.rule_findings.filter((item) => item.trigger !== "not-matched");
-  return Object.freeze({
-    constitution: evidence.constitution,
-    policy_findings: Object.freeze(evidence.rule_findings.map((item) => Object.freeze({
-      rule_id: item.rule_id,
-      rule_version: item.rule_version,
-      compliance: item.compliance,
-      rationale: item.rationale,
-      trigger: item.trigger,
-      trigger_evidence: item.trigger_evidence
-    }))),
-    eligible_waivers: eligibleWaivers([
-      ...failedOrUncertain.map((item) => ({
-        rule: Object.freeze({ rule_id: item.rule_id, rule_version: item.rule_version }),
-        operation: "adjudication-failure"
-      })),
-      ...triggered.map((item) => ({
-        rule: Object.freeze({ rule_id: item.rule_id, rule_version: item.rule_version }),
-        operation: "review-trigger"
-      }))
-    ])
-  });
-}
-function selectAdjudicationGates(registry2, evidence) {
-  const gates = [];
-  const failed = evidence.rule_findings.filter((item) => item.compliance === "fail");
-  const uncertain = evidence.rule_findings.filter((item) => item.compliance === "uncertain");
-  const failedRules = refs(failed.map((item) => registry2.get(item.rule_id)));
-  const uncertainRules = refs(uncertain.map((item) => registry2.get(item.rule_id)));
-  const matchedTriggers = evidence.matched_rule_versions;
-  const uncertainTriggers = evidence.uncertain_rule_versions;
-  if (failedRules.length > 0 || uncertainRules.length > 0 || matchedTriggers.length > 0 || uncertainTriggers.length > 0) {
-    gates.push(Object.freeze({
-      kind: "constitution-review",
-      subject_digest: evidence.subject_digest,
-      context: Object.freeze({
-        constitution: evidence.constitution,
-        failed_rules: failedRules,
-        uncertain_rules: uncertainRules,
-        matched_trigger_rules: matchedTriggers,
-        uncertain_trigger_rules: uncertainTriggers,
-        eligible_waivers: eligibleWaivers([
-          ...[...failedRules, ...uncertainRules].map((rule4) => ({ rule: rule4, operation: "adjudication-failure" })),
-          ...[...matchedTriggers, ...uncertainTriggers].map((rule4) => ({ rule: rule4, operation: "review-trigger" }))
-        ])
-      })
-    }));
-  }
-  const material = evidence.drift_findings.find((item) => item.drift === "material");
-  if (material !== void 0) {
-    gates.push(Object.freeze({
-      kind: "material-drift",
-      subject_digest: evidence.subject_digest,
-      context: Object.freeze({
-        affected_upstream: Object.freeze({
-          kind: "implementation-result",
-          digest: material.upstream_digest
-        }),
-        drift: "material",
-        affected_claim_ids: Object.freeze([...material.affected_claim_ids].sort())
-      })
-    }));
-  }
-  return Object.freeze(gates);
-}
-
-// src/review/fixed-point.ts
-var DEFAULT_MAX_ATTEMPTS = 3;
-var EVIDENCE_STEPS = Object.freeze([
-  "counter_review",
-  "triage",
-  "adjudicate"
-]);
-function evidencePayload(manifest) {
-  const source = manifest.source_artifact;
-  if (source.artifact_kind === "review-evidence" || source.artifact_kind === "triage" || source.artifact_kind === "adjudication-evidence") return source.evidence;
-  return void 0;
-}
-function boundToSubjectExactly(bound, subject) {
-  return bound.subject_digest === subject.subject_digest && bound.input_fingerprint === subject.input_fingerprint;
-}
-function boundToDeclaredPredecessor(bound, subject) {
-  const predecessor = subject.review_predecessor ?? subject.editorial_predecessor;
-  return predecessor !== void 0 && bound.subject_digest === predecessor.subject_digest && bound.input_fingerprint === predecessor.input_fingerprint;
-}
-function boundToSubjectOrDeclaredPredecessor(bound, subject) {
-  return boundToSubjectExactly(bound, subject) || boundToDeclaredPredecessor(bound, subject);
-}
-function subjectCurrent(evidence, subject, allowPredecessor) {
-  if (evidence === void 0) return false;
-  return boundToSubjectExactly(evidence, subject) || allowPredecessor && boundToDeclaredPredecessor(evidence, subject);
-}
-function currentReviewSet(retained, subject) {
-  try {
-    const derived = deriveCurrentEvidenceSet(retained);
-    return boundToSubjectOrDeclaredPredecessor(derived, subject) ? derived : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function currentFor(retained, step, subject, reviews) {
-  if (step === "counter_review") return reviews !== void 0;
-  const entry = retained.get(step);
-  const evidence = entry === void 0 ? void 0 : evidencePayload(entry.manifest);
-  if (!subjectCurrent(evidence, subject, true) || reviews === void 0) return false;
-  if (step === "triage") {
-    const triage = evidence;
-    return triage.current_evidence_set_digest === reviews.current_evidence_set.set_digest && triage.source_evidence_digests.length === reviews.current_evidence_set.slots.length && triage.source_evidence_digests.every((digest9, index) => digest9 === reviews.current_evidence_set.slots[index].evidence_digest);
-  }
-  if (step === "adjudicate") {
-    const adjudication = evidence;
-    return adjudication.source_evidence_set_digest === reviews.current_evidence_set.set_digest && adjudication.approved_upstream_digests.length === (subject.approved_upstream_digests ?? []).length && adjudication.approved_upstream_digests.every((digest9, index) => digest9 === (subject.approved_upstream_digests ?? [])[index]);
-  }
-  return false;
-}
-function triageAt(retained) {
-  const source = retained.get("triage")?.manifest.source_artifact;
-  return source?.artifact_kind === "triage" ? source.evidence : void 0;
-}
-function adjudicationAt(retained) {
-  const source = retained.get("adjudicate")?.manifest.source_artifact;
-  return source?.artifact_kind === "adjudication-evidence" ? source.evidence : void 0;
-}
-function approvalBindingFailure(approval, gate) {
-  if (approval.gate_kind !== gate.kind) return "approval-gate-kind";
-  if (approval.subject_digest !== gate.subject_digest) return "approval-subject-digest";
-  return void 0;
-}
-function requestBindingFailure(request, gate, contextDigest, phaseInstance4) {
-  if (request.kind !== gate.kind) return "request-gate-kind";
-  if (request.subject_digest !== gate.subject_digest) return "request-subject-digest";
-  if (request.context_digest !== contextDigest) return "request-context-digest";
-  if (request.phase_instance !== phaseInstance4) return "request-phase-instance";
-  return void 0;
-}
-function decisionBindingFailure(decision3, contextDigest) {
-  if (decision3.context_digest !== contextDigest) return "decision-context-digest";
-  if (decision3.envelope.context_digest !== contextDigest) return "decision-envelope-context-digest";
-  return void 0;
-}
-function evidenceBindingFailure(request, evidence, subject) {
-  if (request.kind === "baseline-adoption") return "request-gate-kind";
-  const { counter_review_digest: counterDigest, triage, adjudication } = evidence;
-  if (counterDigest === void 0) return "counter-review-evidence-missing";
-  if (triage === void 0) return "triage-evidence-missing";
-  if (adjudication === void 0) return "adjudication-evidence-missing";
-  if (!boundToSubjectOrDeclaredPredecessor(triage, subject)) return "triage-not-bound-to-subject";
-  if (!boundToSubjectOrDeclaredPredecessor(adjudication, subject)) {
-    return "adjudication-not-bound-to-subject";
-  }
-  if (adjudication.source_evidence_set_digest !== request.current_evidence.set_digest) {
-    return "adjudication-evidence-set-digest";
-  }
-  if (request.current_evidence.set_digest !== triage.current_evidence_set_digest) {
-    return "triage-evidence-set-digest";
-  }
-  if (request.current_evidence.slots[0].evidence_digest !== counterDigest) {
-    return "counter-review-slot-digest";
-  }
-  return void 0;
-}
-function gateApprovalBindingFailure(authenticated, gate, contextDigest, state, subject, evidence) {
-  assertAuthenticatedGateApproval(authenticated);
-  const { approval, request, decision: decision3 } = authenticated;
-  return approvalBindingFailure(approval, gate) ?? requestBindingFailure(request, gate, contextDigest, state.phase_instance) ?? decisionBindingFailure(decision3, contextDigest) ?? evidenceBindingFailure(request, evidence, subject);
-}
-function waiverPathSatisfiesGate(state, gate) {
-  if (gate.kind !== "constitution-review" || !("eligible_waivers" in gate.context)) return false;
-  const required2 = gate.context.eligible_waivers;
-  return required2.length > 0 && required2.every((eligible) => waiverInForce(
-    state,
-    eligible.rule,
-    gate.subject_digest,
-    eligible.scope
-  ) !== void 0);
-}
-function adjudicationGateSatisfied(state, retained, subject, gate) {
-  const phaseKind2 = state.phase_instance === "design" || state.phase_instance.startsWith("phase-design-");
-  if (phaseKind2 && gate.kind === "constitution-review") {
-    const designApproval = (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
-      assertAuthenticatedGateApproval(authenticated);
-      return authenticated.approval.gate_kind === "design-approval" && authenticated.approval.subject_digest === subject.subject_digest && authenticated.request.kind === "design-approval" && authenticated.request.phase_instance === state.phase_instance && authenticated.request.subject_digest === subject.subject_digest && authenticated.request.current_evidence.set_digest === deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest && authenticated.decision.envelope.payload.decision === "approve";
-    });
-    const migrationApproval = (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
-      assertAuthenticatedGateApproval(authenticated);
-      return authenticated.approval.gate_kind === "migration-audit" && authenticated.approval.subject_digest === subject.subject_digest && authenticated.request.kind === "migration-audit" && authenticated.request.phase_instance === state.phase_instance && authenticated.request.subject_digest === subject.subject_digest && authenticated.request.current_evidence.set_digest === deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest && authenticated.decision.envelope.payload.decision === "accept-import-audit";
-    });
-    if (designApproval || migrationApproval) return true;
-  }
-  const contextDigest = computeGateContextDigest(gate.kind, gate.context);
-  const evidence = Object.freeze({
-    counter_review_digest: retained.get("counter_review")?.manifest.artifact_digest,
-    triage: triageAt(retained),
-    adjudication: adjudicationAt(retained)
-  });
-  const approvalSatisfies = (subject.authenticated_gate_approvals ?? []).some((authenticated) => gateApprovalBindingFailure(
-    authenticated,
-    gate,
-    contextDigest,
-    state,
-    subject,
-    evidence
-  ) === void 0);
-  return approvalSatisfies || waiverPathSatisfiesGate(state, gate);
-}
-function adjudicationGatePending(state, gate) {
-  const open6 = state.open_gate;
-  return open6 !== void 0 && open6.gate_kind === gate.kind && open6.subject_digest === gate.subject_digest && open6.context_digest === computeGateContextDigest(gate.kind, gate.context);
-}
-function dispositionState(retained, reviews, triage) {
-  const counter = reviews?.reviews[0]?.evidence;
-  if (reviews === void 0 || counter === void 0 || triage === void 0) {
-    return Object.freeze({ complete: false, blocker: false, accepted: false });
-  }
-  const counterDigest = reviews.current_evidence_set.slots[0].evidence_digest;
-  const expected = /* @__PURE__ */ new Map();
-  for (const finding of counter.findings) {
-    expected.set(`${counterDigest}:${finding.finding_id}`, finding.blocking);
-  }
-  const actual = new Map(triage.dispositions.map((item) => [
-    `${item.review_evidence_digest}:${item.finding_id}`,
-    item.disposition
-  ]));
-  const complete = actual.size === expected.size && [...expected.keys()].every((key) => actual.has(key));
-  const blocker = [...expected].some(([key, blocking]) => blocking && actual.get(key) !== "rejected");
-  return Object.freeze({
-    complete,
-    blocker,
-    accepted: triage.accepted_count > 0
-  });
-}
-function assertSubjectMatchesDurableState(state, retained, subject) {
-  assertResolvedConstitution(subject.constitution);
-  if (subject.constitution.digest !== state.constitution_digest) {
-    throw new TypeError("fixed-point constitution does not match durable state");
-  }
-  const retainedAdjudication = adjudicationAt(retained);
-  if (retainedAdjudication !== void 0 && retainedAdjudication.pinned_constitution_digest !== subject.constitution.digest) {
-    throw new TypeError("retained adjudication does not match the pinned constitution");
-  }
-}
-function resolveMaxAttempts(subject) {
-  const maximum = subject.max_attempts ?? DEFAULT_MAX_ATTEMPTS;
-  if (!Number.isSafeInteger(maximum) || maximum < 1) {
-    throw new TypeError("max_attempts must be a positive safe integer");
-  }
-  return maximum;
-}
-function constitutionReviewRequired(constitution) {
-  return [...constitution.rules.values()].some((rule4) => rule4.status === "active");
-}
-function acceptedFindingsForceReentry(state, disposition) {
-  return disposition.accepted && state.step === "triage" && state.status === "succeeded";
-}
-function editorialRevisionPending(triageCurrent, disposition, subject) {
-  return triageCurrent !== void 0 && disposition.complete && triageCurrent.accepted_count === 0 && (triageCurrent.accepted_editorial_count ?? 0) > 0 && boundToSubjectExactly(triageCurrent, subject);
-}
-function decision2(next, flags) {
-  return Object.freeze({
-    next,
-    reentry_required: flags?.reentry_required ?? false,
-    editorial_revision_required: flags?.editorial_revision_required ?? false,
-    adjudication_gate_pending: flags?.adjudication_gate_pending ?? false
-  });
-}
-function resolveAdjudicationGateStep(state, retained, subject) {
-  const adjudication = adjudicationAt(retained);
-  const gates = adjudication === void 0 ? [] : selectAdjudicationGates(subject.constitution.rules, adjudication);
-  const gate = gates.find((candidate) => !adjudicationGateSatisfied(state, retained, subject, candidate));
-  if (gate === void 0) return decision2("advance");
-  return decision2("adjudication-gate", {
-    adjudication_gate_pending: adjudicationGatePending(state, gate)
-  });
-}
-function decideNextAction(state, retained, subject, current, disposition, triageCurrent) {
-  if (acceptedFindingsForceReentry(state, disposition)) {
-    return decision2("produce", { reentry_required: true });
-  }
-  if (!current.includes("counter_review")) return decision2("counter_review");
-  if (constitutionReviewRequired(subject.constitution) && !current.includes("adjudicate")) {
-    return decision2("produce", { reentry_required: true });
-  }
-  if (!current.includes("triage") || !disposition.complete) return decision2("triage");
-  if (disposition.accepted) return decision2("triage");
-  if (editorialRevisionPending(triageCurrent, disposition, subject)) {
-    return decision2("produce", { editorial_revision_required: true });
-  }
-  return resolveAdjudicationGateStep(state, retained, subject);
-}
-function assessCurrentEvidence(state, retained, subject) {
-  assertSubjectMatchesDurableState(state, retained, subject);
-  const maximum = resolveMaxAttempts(subject);
-  const reviews = currentReviewSet(retained, subject);
-  const candidateTriage = triageAt(retained);
-  const triageCurrent = currentFor(
-    retained,
-    "triage",
-    subject,
-    reviews
-  ) ? candidateTriage : void 0;
-  const current = EVIDENCE_STEPS.filter((step) => currentFor(retained, step, subject, reviews));
-  const stale = EVIDENCE_STEPS.filter((step) => retained.has(step) && !current.includes(step));
-  const disposition = dispositionState(retained, reviews, triageCurrent);
-  const action2 = decideNextAction(state, retained, subject, current, disposition, triageCurrent);
-  const exhausted = action2.reentry_required && state.attempt >= maximum;
-  return Object.freeze({
-    current: Object.freeze([...current]),
-    stale: Object.freeze([...stale]),
-    every_finding_dispositioned: disposition.complete,
-    blocker_remains: disposition.blocker,
-    reentry_required: action2.reentry_required,
-    editorial_revision_required: action2.editorial_revision_required,
-    exhausted,
-    adjudication_gate_pending: action2.adjudication_gate_pending,
-    next: exhausted ? "attempts-exhausted" : action2.next
-  });
-}
-function requireApprovedUpstreamDigests(approvals, upstreamDigests) {
-  const sorted = [...upstreamDigests].sort();
-  if (new Set(sorted).size !== sorted.length) {
-    throw new TypeError("approved upstream digests must be unique");
-  }
-  for (const digest9 of sorted) {
-    if (!approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === digest9)) {
-      throw new TypeError(`upstream ${digest9} lacks current document approval`);
-    }
-  }
-  return Object.freeze(sorted);
-}
-function waiverInForce(state, rule4, subjectDigest, scope3) {
-  if (state.terminal !== void 0) return void 0;
-  return state.waivers.find((waiver) => waiver.granted && waiver.expires === "task-complete" && waiver.rule_id === rule4.rule_id && waiver.rule_version === rule4.rule_version && waiver.subject_digest === subjectDigest && waiver.scope.operation === scope3.operation && waiver.scope.boundary === scope3.boundary);
-}
-
 // src/state/next-action.ts
 function action(code2, detail, humanRequired, state, extra = {}) {
   if (state === void 0) return Object.freeze({ code: code2, detail, human_required: humanRequired, ...extra });
@@ -64296,7 +64791,11 @@ function runStepDetail(state, step) {
   return `Run the ${step} pipeline step.`;
 }
 function matchingApproval(input, kind) {
-  return input.subject_digest !== void 0 && (input.authenticated_approvals ?? []).some((approval) => approval.gate_kind === kind && approval.subject_digest === input.subject_digest);
+  const subjectDigest = input.subject_digest;
+  if (subjectDigest !== void 0 && (input.authenticated_approvals ?? []).some((approval) => approval.gate_kind === kind && approval.subject_digest === subjectDigest)) {
+    return true;
+  }
+  return false;
 }
 function hasLegacyDesignApproval(input) {
   return matchingApproval(input, "artifact-approval");
@@ -66246,6 +66745,12 @@ async function composeGate(services, state, intentId, snapshot) {
   }
   const subject = await loadCurrentProduceSubject(services.dependencies, state);
   if (!subject.ok) return subject;
+  const settledRule = latestEligibleRuleSettlement(
+    state,
+    subject.value.artifact_digest,
+    state.phase_instance
+  );
+  const approvalSummary = settledRule?.conclusion.wait === true ? approvalRuleGateSummary(summary, settledRule.conclusion.match) : summary;
   const loadRetainedManifest = services.dependencies.load_retained_manifest;
   if (loadRetainedManifest === void 0) throw new TypeError("retained evidence loading is unavailable");
   const loaded = await loadRetainedEvidence(
@@ -66352,7 +66857,7 @@ async function composeGate(services, state, intentId, snapshot) {
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
-      summary,
+      summary: approvalSummary,
       subject_digest: subject.value.artifact_digest,
       current_evidence: derived.current_evidence_set,
       kind: "design-approval",
@@ -66389,7 +66894,7 @@ async function composeGate(services, state, intentId, snapshot) {
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
-      summary,
+      summary: approvalSummary,
       subject_digest: subject.value.artifact_digest,
       current_evidence: derived.current_evidence_set,
       kind: "artifact-approval",
@@ -71427,7 +71932,7 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
       const upstreams = await deriveApprovedUpstreams(services, call.name, state.value, produce.value);
       if (!upstreams.ok) return upstreams;
       const approvedUpstreamDigests = requireApprovedUpstreamDigests(
-        state.value.approvals,
+        state.value,
         upstreams.value.map((item) => item.upstream_digest)
       );
       const constitutionResultId = stableId("adjudication-result", call.input.intent_id);
@@ -71848,6 +72353,62 @@ function restartProvenance(context2, requestDigest) {
     request_digest: requestDigest
   });
 }
+async function settleApprovalRules(services, current, prospective, produce, retained, config2) {
+  if (config2 === void 0) return void 0;
+  try {
+    const constitution = await resolvePinnedConstitution(
+      services.runner,
+      current.policy_base_commit,
+      services.authority.context
+    );
+    if (!constitution.ok) return void 0;
+    const authenticated = [];
+    for (const approval of current.approvals) {
+      const loaded = await loadAuthenticatedGateApproval(services.dependencies, services.authority, approval);
+      if (!loaded.ok) return void 0;
+      if (!authenticatedApprovalIsEligibleAfterLatestRestart(current, loaded.value)) continue;
+      authenticated.push(loaded.value);
+    }
+    const approvedUpstreams = await currentApprovedUpstreams(
+      services.dependencies,
+      services.authority,
+      current,
+      authenticated,
+      produce
+    );
+    const legacyInitialization = await loadLegacyImportInitialization(
+      services.dependencies,
+      services.authority,
+      current
+    );
+    if (!legacyInitialization.ok) return void 0;
+    if (legacyInitialization.value !== void 0 && current.phase_instance === "design" && !authenticated.some((approval) => approval.request.kind === "migration-audit" && approval.decision.envelope.payload.decision === "accept-import-audit")) return void 0;
+    const predecessor = currentReviewPredecessor(current, produce);
+    const assessment = assessCurrentEvidence(
+      prospective,
+      retained,
+      {
+        subject_digest: produce.artifact_digest,
+        input_fingerprint: current.input_fingerprint,
+        constitution: constitution.value,
+        approved_upstream_digests: approvedUpstreams,
+        authenticated_gate_approvals: authenticated,
+        ...predecessor === void 0 ? {} : { review_predecessor: predecessor },
+        ...config2.parsed.max_attempts === void 0 ? {} : { max_attempts: config2.parsed.max_attempts }
+      }
+    );
+    if (assessment.next !== "advance") return void 0;
+    const ruleContext = approvalRuleContext(current, produce, config2.parsed);
+    const conclusion = evaluateApprovalRules(
+      ruleContext.config,
+      ruleContext.subject,
+      ruleContext.changedPaths
+    );
+    return buildRuleSettlement(current, produce.artifact_digest, config2.digest, conclusion);
+  } catch {
+    return void 0;
+  }
+}
 async function handleState(call, context2) {
   return mapHandlerErrors(context2.invocation_id, async () => {
     const session = await openHandlerSession(call, context2);
@@ -72013,6 +72574,8 @@ async function handleState(call, context2) {
         }
         let preparedResult;
         let derivedPlannedFinalPhase;
+        let settlementEvidence;
+        let settlementProduce;
         if (artifact?.artifact_kind === "document" || artifact?.artifact_kind === "implementation-output") {
           if (retainedBytes === void 0 || scanner === void 0) {
             throw new TypeError("snapshot preparation dependencies are unavailable");
@@ -72024,6 +72587,25 @@ async function handleState(call, context2) {
               artifact
             );
             if (!authorized.ok) return authorized;
+          }
+          if (current.value.pending_human_revision !== void 0 && call.input.human_revision?.classification === "simple") {
+            const loadManifest = services.dependencies.load_retained_manifest;
+            if (loadManifest === void 0) {
+              throw new TypeError("evidence preparation dependencies are unavailable");
+            }
+            const retained = await loadRetainedEvidence(
+              { load_retained_manifest: loadManifest },
+              current.value,
+              current.value.phase_instance
+            );
+            if (!retained.ok) return retained;
+            const triage = retained.value.get("triage")?.manifest.source_artifact;
+            if (triage?.artifact_kind === "triage" && triage.evidence.accepted_count > 0) {
+              return fail26(createProjectError("CONTRACT_INVALID", {
+                tool: "archflow_state",
+                issue_code: "simple-human-revision-cannot-resolve-accepted-finding"
+              }));
+            }
           }
           const common3 = {
             services,
@@ -72052,6 +72634,35 @@ async function handleState(call, context2) {
               tool: "archflow_state",
               issue_code: "produce-derived-final-phase-below-current"
             }));
+          }
+          const settlesProduceReentry = call.input.phase_instance === current.value.phase_instance && call.input.step === "produce" && call.input.status === "succeeded" && artifact.artifact_kind === "document" && artifact.editorial_predecessor !== void 0 && current.value.pending_human_revision === void 0 && call.input.human_revision === void 0;
+          if (settlesProduceReentry) {
+            const loadManifest = services.dependencies.load_retained_manifest;
+            if (loadManifest === void 0) throw new TypeError("evidence preparation dependencies are unavailable");
+            const retained = await loadRetainedEvidence(
+              { load_retained_manifest: loadManifest },
+              current.value,
+              current.value.phase_instance
+            );
+            if (!retained.ok) return retained;
+            settlementEvidence = retained.value;
+            const manifest = prepared.value.prepared.manifest.value;
+            const source = manifest.source_artifact;
+            if (source.artifact_kind !== "document" && source.artifact_kind !== "implementation-output") {
+              return fail26(createProjectError("STATE_INVALID", {
+                phase_instance: current.value.phase_instance,
+                issue_code: "produce-reentry-subject-invalid"
+              }));
+            }
+            settlementProduce = Object.freeze({
+              artifact_digest: manifest.artifact_digest,
+              artifact: source,
+              reference: prepared.value.reference,
+              retained: Object.freeze({
+                manifest: prepared.value.prepared.manifest,
+                manifest_target: prepared.value.manifest_target
+              })
+            });
           }
         }
         if (artifact?.artifact_kind === "triage") {
@@ -72088,6 +72699,19 @@ async function handleState(call, context2) {
           });
           if (!prepared.ok) return prepared;
           preparedResult = prepared.value;
+          if (call.input.phase_instance === current.value.phase_instance && call.input.step === "triage" && call.input.status === "succeeded") {
+            const retained = await loadRetainedEvidence(
+              { load_retained_manifest: loadManifest },
+              current.value,
+              current.value.phase_instance
+            );
+            if (!retained.ok) return retained;
+            settlementEvidence = new Map(retained.value).set("triage", Object.freeze({
+              reference: prepared.value.reference,
+              manifest: prepared.value.prepared.manifest.value
+            }));
+            settlementProduce = produce.value;
+          }
         }
         const installation = preparedResult === void 0 ? void 0 : prepareResultInstallation({
           reference: preparedResult.reference,
@@ -72233,7 +72857,7 @@ async function handleState(call, context2) {
             }
           }
         }
-        const next = planStateTransition({
+        const transitionInput = {
           current: current.value,
           target: {
             phase_instance: call.input.phase_instance,
@@ -72258,8 +72882,35 @@ async function handleState(call, context2) {
           ...authenticatedGateApprovals2.length === 0 ? {} : {
             authenticated_gate_approvals: authenticatedGateApprovals2
           }
-        });
+        };
+        let next = planStateTransition(transitionInput);
         if (!next.ok) return next;
+        let ruleSettlement;
+        if (settlementEvidence !== void 0 && settlementProduce !== void 0) {
+          const configRead = await services.dependencies.read_config(services.authority.config);
+          if (configRead.kind !== "valid") {
+            return fail26(createProjectError("CONFIG_INVALID", { issue_code: `config-${configRead.kind}` }));
+          }
+          const prospective = {
+            ...next.value,
+            revision
+          };
+          ruleSettlement = await settleApprovalRules(
+            services,
+            current.value,
+            prospective,
+            settlementProduce,
+            settlementEvidence,
+            configRead.snapshot
+          );
+          if (ruleSettlement !== void 0) {
+            next = planStateTransition({
+              ...transitionInput,
+              rule_settlement: ruleSettlement
+            });
+            if (!next.ok) return next;
+          }
+        }
         return Object.freeze({
           schema_version: "1",
           ok: true,

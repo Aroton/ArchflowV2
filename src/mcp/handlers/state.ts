@@ -2,6 +2,7 @@ import type { InvocationContext } from "../../contracts/contexts.js";
 import { createProjectError, type ProjectResult } from "../../contracts/errors.js";
 import { canonicalJsonDigest, sha256Bytes } from "../../contracts/canonical.js";
 import { parseSafeId, parseSafeInteger } from "../../contracts/evidence.js";
+import type { Sha256Digest } from "../../contracts/evidence.js";
 import {
   createInternalResultExpectation,
   validateProjectResultStructure,
@@ -10,33 +11,64 @@ import {
 } from "../../contracts/mcp-tools.js";
 import { parseTaskPathClaim } from "../../contracts/path-claims.js";
 import { resolveTaskPath } from "../../repository/paths.js";
-import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "../../state/gate-approvals.js";
-import { findLegacyImportResumePhase } from "../../state/legacy-import-resume.js";
+import { resolveCommit } from "../../repository/git.js";
+import {
+  loadAuthenticatedGateApproval,
+  type AuthenticatedGateApproval,
+} from "../../state/gate-approvals.js";
+import { resolvePinnedConstitution } from "../../state/constitution.js";
+import { findLegacyImportResumePhase, loadLegacyImportInitialization } from "../../state/legacy-import-resume.js";
 import {
   loadCurrentReviewSet,
+  loadRetainedEvidence,
   prepareEvidenceResult,
   validateEditorialPredecessorDeclaration,
   type EvidenceResultValue,
   type PreparedEvidenceResult,
+  type RetainedEvidenceSet,
 } from "../../state/evidence-results.js";
 import { runStateInitialization } from "../../state/initialization.js";
 import { identifyTransactionRequest } from "../../state/request.js";
 import { loadCurrentProduceSubject, type CurrentProduceSubject } from "../../state/produce-subject.js";
-import { designArtifactCommittedAtCurrentTarget, implementationOutputCommittedAtCurrentTarget } from "../../state/implementation-manifest.js";
+import {
+  designArtifactCommittedAtCurrentTarget,
+  implementationOutputCommittedAtCurrentTarget,
+} from "../../state/implementation-manifest.js";
 import { decodePhaseInstance } from "../../contracts/phase-instance.js";
 import { exactCommitAuthorizationContext } from "../../contracts/durable-gate.js";
-import type { PlanningRestartConnectedProvenance } from "../../contracts/durable-state.js";
+import type {
+  PlanningRestartConnectedProvenance,
+  RuleSettlementV1,
+  TaskStateV1,
+} from "../../contracts/durable-state.js";
 import {
   prepareResultInstallation,
   runStateTransaction,
   type PreparedTransaction,
 } from "../../state/transaction.js";
+import type { ProductionServices } from "../../state/production.js";
+import type { LiveConfigSnapshot } from "../../state/read.js";
+import { assessCurrentEvidence } from "../../review/fixed-point.js";
+import {
+  approvalRuleContext,
+  buildRuleSettlement,
+  evaluateApprovalRules,
+} from "../../state/approval-rules.js";
+import {
+  currentApprovedUpstreams,
+  currentReviewPredecessor,
+} from "../../state/status.js";
 import { planStateTransition } from "../../state/transitions.js";
 import { planPlanningRestart } from "../../state/transitions.js";
 import { installPlanningRestartAskAppend, validatePlanningRestartAskAppend } from "../../state/phase-documents.js";
-import { authenticatedApprovalIsEligibleAfterLatestRestart } from "../../state/restart-authority.js";
+import {
+  authenticatedApprovalIsEligibleAfterLatestRestart,
+} from "../../state/restart-authority.js";
 import { completedPlanningRestartMatches, planningRestartId } from "../../state/planning-restart.js";
-import { derivedFinalPhaseBelowCurrentPhase, plannedFinalPhaseFromRecordedPayloads } from "../../state/planned-final-phase.js";
+import {
+  derivedFinalPhaseBelowCurrentPhase,
+  plannedFinalPhaseFromRecordedPayloads,
+} from "../../state/planned-final-phase.js";
 import { mapHandlerErrors } from "./errors.js";
 import { openHandlerSession } from "./session.js";
 import {
@@ -70,6 +102,86 @@ function restartProvenance(
     }),
     request_digest: requestDigest,
   });
+}
+
+/**
+ * The settle-path rule determination (P3-5). This is a specified evidence observation, never an
+ * assumption: the preparation assembles the same evidence the composeGate disagreement-guard mirror
+ * assembles — the retained evidence set with the triage result this very transaction installs
+ * overlaid into it, the pinned constitution, authenticated approvals, approved upstream digests —
+ * and runs the same assessment against the post-settle state. A settlement is returned only when that
+ * assessment reaches the clean-advance path, which no pending adjudication gate can coexist with
+ * (unsatisfied constitution findings, a failing or uncertain rule, or eligible waivers all route
+ * elsewhere), and only when the preparation's own single config read both parsed and concluded no
+ * rule conclusion is frozen. Every failure along the way means no settlement — fail closed; the
+ * settle itself is legitimate work either way, and the post-settle status advertises the next
+ * action the status seam derives.
+ */
+async function settleApprovalRules(
+  services: ProductionServices,
+  current: TaskStateV1,
+  prospective: TaskStateV1,
+  produce: CurrentProduceSubject,
+  retained: RetainedEvidenceSet,
+  config: LiveConfigSnapshot | undefined,
+): Promise<RuleSettlementV1 | undefined> {
+  if (config === undefined) return undefined;
+  try {
+    const constitution = await resolvePinnedConstitution(
+      services.runner, current.policy_base_commit, services.authority.context,
+    );
+    if (!constitution.ok) return undefined;
+    const authenticated: AuthenticatedGateApproval[] = [];
+    for (const approval of current.approvals) {
+      const loaded = await loadAuthenticatedGateApproval(services.dependencies, services.authority, approval);
+      if (!loaded.ok) return undefined;
+      if (!authenticatedApprovalIsEligibleAfterLatestRestart(current, loaded.value)) continue;
+      authenticated.push(loaded.value);
+    }
+    const approvedUpstreams = await currentApprovedUpstreams(
+      services.dependencies, services.authority, current, authenticated, produce,
+    );
+    // A pending migration audit is a human gate this settlement must not stand in for: the settlement
+    // is alternative authority to an approval, and an imported design's advance still requires the
+    // audit decision — its phase bound comes from the import, never the legacy document's grammar.
+    // This is the same `migration_audit_required` fact the composeGate mirror's adjudication
+    // branch opens its gate from.
+    const legacyInitialization = await loadLegacyImportInitialization(
+      services.dependencies, services.authority, current,
+    );
+    if (!legacyInitialization.ok) return undefined;
+    if (
+      legacyInitialization.value !== undefined &&
+      current.phase_instance === "design" &&
+      !authenticated.some((approval) =>
+        approval.request.kind === "migration-audit" &&
+        approval.decision.envelope.payload.decision === "accept-import-audit")
+    ) return undefined;
+    const predecessor = currentReviewPredecessor(current, produce);
+    const assessment = assessCurrentEvidence(
+      prospective,
+      retained,
+      {
+        subject_digest: produce.artifact_digest,
+        input_fingerprint: current.input_fingerprint,
+        constitution: constitution.value,
+        approved_upstream_digests: approvedUpstreams,
+        authenticated_gate_approvals: authenticated,
+        ...(predecessor === undefined ? {} : { review_predecessor: predecessor }),
+        ...(config.parsed.max_attempts === undefined ? {} : { max_attempts: config.parsed.max_attempts }),
+      },
+    );
+    if (assessment.next !== "advance") return undefined;
+    const ruleContext = approvalRuleContext(current, produce, config.parsed);
+    const conclusion = evaluateApprovalRules(
+      ruleContext.config, ruleContext.subject, ruleContext.changedPaths,
+    );
+    return buildRuleSettlement(current, produce.artifact_digest, config.digest, conclusion);
+  } catch {
+    // The guard mirror turns these throws into gate-fixed-point-disagreement; a settle that
+    // cannot observe a clean fixed point simply mints no settlement.
+    return undefined;
+  }
 }
 
 export async function handleState(
@@ -246,6 +358,8 @@ export async function handleState(
         }
         let preparedResult: PreparedStateResult | PreparedEvidenceResult | undefined;
         let derivedPlannedFinalPhase: number | null | undefined;
+        let settlementEvidence: RetainedEvidenceSet | undefined;
+        let settlementProduce: CurrentProduceSubject | undefined;
         if (artifact?.artifact_kind === "document" || artifact?.artifact_kind === "implementation-output") {
           if (retainedBytes === undefined || scanner === undefined) {
             throw new TypeError("snapshot preparation dependencies are unavailable");
@@ -262,6 +376,26 @@ export async function handleState(
             );
             if (!authorized.ok) return authorized;
           }
+          if (
+            current.value.pending_human_revision !== undefined &&
+            call.input.human_revision?.classification === "simple"
+          ) {
+            const loadManifest = services.dependencies.load_retained_manifest;
+            if (loadManifest === undefined) {
+              throw new TypeError("evidence preparation dependencies are unavailable");
+            }
+            const retained = await loadRetainedEvidence(
+              { load_retained_manifest: loadManifest }, current.value, current.value.phase_instance,
+            );
+            if (!retained.ok) return retained;
+            const triage = retained.value.get("triage")?.manifest.source_artifact;
+            if (triage?.artifact_kind === "triage" && triage.evidence.accepted_count > 0) {
+              return fail(createProjectError("CONTRACT_INVALID", {
+                tool: "archflow_state",
+                issue_code: "simple-human-revision-cannot-resolve-accepted-finding",
+              }));
+            }
+          }
           const common = {
             services,
             result_id: stateResultId(call.input.intent_id),
@@ -274,14 +408,10 @@ export async function handleState(
             : await prepareImplementationResult({ ...common, artifact });
           if (!prepared.ok) return prepared;
           preparedResult = prepared.value;
-          // A produce that records the task design document re-derives the planned final phase
-          // from those exact bytes in this same transaction: the bound otherwise survives from
-          // the design position's own approval and goes stale when later phase boundaries
-          // revise the phase plan. A recorded design whose phase plan cannot be parsed fails
-          // the produce closed instead of silently keeping the stale bound — but only while a
-          // stored bound exists; a boundless task (fresh, legacy-imported, or restarted to the
-          // design position) preserves the absent bound and the design-approval gate keeps
-          // enforcing conformance at approval.
+          // Once human design approval has established the planned final phase, a later produce
+          // that records design.md re-derives that existing bound from the exact new bytes. Fresh
+          // or restarted design bytes leave the bound absent until approval; malformed later
+          // governing-document revisions fail closed instead of silently retaining stale authority.
           try {
             derivedPlannedFinalPhase = plannedFinalPhaseFromRecordedPayloads(
               services.authority.task_id,
@@ -304,6 +434,36 @@ export async function handleState(
               tool: "archflow_state",
               issue_code: "produce-derived-final-phase-below-current",
             }));
+          }
+          const settlesProduceReentry = call.input.phase_instance === current.value.phase_instance &&
+            call.input.step === "produce" && call.input.status === "succeeded" &&
+            artifact.artifact_kind === "document" && artifact.editorial_predecessor !== undefined &&
+            current.value.pending_human_revision === undefined && call.input.human_revision === undefined;
+          if (settlesProduceReentry) {
+            const loadManifest = services.dependencies.load_retained_manifest;
+            if (loadManifest === undefined) throw new TypeError("evidence preparation dependencies are unavailable");
+            const retained = await loadRetainedEvidence(
+              { load_retained_manifest: loadManifest }, current.value, current.value.phase_instance,
+            );
+            if (!retained.ok) return retained;
+            settlementEvidence = retained.value;
+            const manifest = prepared.value.prepared.manifest.value;
+            const source = manifest.source_artifact;
+            if (source.artifact_kind !== "document" && source.artifact_kind !== "implementation-output") {
+              return fail(createProjectError("STATE_INVALID", {
+                phase_instance: current.value.phase_instance,
+                issue_code: "produce-reentry-subject-invalid",
+              }));
+            }
+            settlementProduce = Object.freeze({
+              artifact_digest: manifest.artifact_digest,
+              artifact: source,
+              reference: prepared.value.reference,
+              retained: Object.freeze({
+                manifest: prepared.value.prepared.manifest,
+                manifest_target: prepared.value.manifest_target,
+              }),
+            });
           }
         }
         if (artifact?.artifact_kind === "triage") {
@@ -340,6 +500,21 @@ export async function handleState(
           });
           if (!prepared.ok) return prepared;
           preparedResult = prepared.value;
+          if (
+            call.input.phase_instance === current.value.phase_instance &&
+            call.input.step === "triage" &&
+            call.input.status === "succeeded"
+          ) {
+            const retained = await loadRetainedEvidence(
+              { load_retained_manifest: loadManifest }, current.value, current.value.phase_instance,
+            );
+            if (!retained.ok) return retained;
+            settlementEvidence = new Map(retained.value).set("triage", Object.freeze({
+              reference: prepared.value.reference,
+              manifest: prepared.value.prepared.manifest.value,
+            }));
+            settlementProduce = produce.value;
+          }
         }
         const installation = preparedResult === undefined ? undefined : prepareResultInstallation({
           reference: preparedResult.reference,
@@ -371,7 +546,7 @@ export async function handleState(
           ok: true,
           value: success,
         });
-        let completionSubjectDigest;
+        let completionSubjectDigest: Sha256Digest | undefined;
         let commitObserved = false;
         let legacyResumePhase;
         const authenticatedGateApprovals: AuthenticatedGateApproval[] = [];
@@ -515,7 +690,7 @@ export async function handleState(
             }
           }
         }
-        const next = planStateTransition({
+        const transitionInput = {
           current: current.value,
           target: {
             phase_instance: call.input.phase_instance,
@@ -545,8 +720,30 @@ export async function handleState(
           ...(authenticatedGateApprovals.length === 0 ? {} : {
             authenticated_gate_approvals: authenticatedGateApprovals,
           }),
-        });
+        } as const;
+        let next = planStateTransition(transitionInput);
         if (!next.ok) return next;
+        let ruleSettlement: RuleSettlementV1 | undefined;
+        if (settlementEvidence !== undefined && settlementProduce !== undefined) {
+          const configRead = await services.dependencies.read_config(services.authority.config);
+          if (configRead.kind !== "valid") {
+            return fail(createProjectError("CONFIG_INVALID", { issue_code: `config-${configRead.kind}` }));
+          }
+          const prospective = {
+            ...next.value,
+            revision,
+          } as TaskStateV1;
+          ruleSettlement = await settleApprovalRules(
+            services, current.value, prospective, settlementProduce, settlementEvidence, configRead.snapshot,
+          );
+          if (ruleSettlement !== undefined) {
+            next = planStateTransition({
+              ...transitionInput,
+              rule_settlement: ruleSettlement,
+            });
+            if (!next.ok) return next;
+          }
+        }
         return Object.freeze({
           schema_version: "1",
           ok: true,

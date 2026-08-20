@@ -47,6 +47,13 @@ describe("normative foundational JSON Schemas agree with Zod mirrors", () => {
     // The retired producer role is accepted on read; only its shape stays enforced.
     const retired = { ...valid, roles: { ...valid.roles, producer: { model: "example", effort: "high" } } };
     expect(assertZodAgreement(retired, validator, configV1Schema)).toEqual(retired);
+    // The declarative approval triggers: subject list order is free (human-authored config), an
+    // empty section is the autonomous default, and the content globs are plain non-empty strings.
+    const rules = { subjects: ["design", "prd"], content: [{ paths: ["**/*.sql"] }, { paths: ["docs/**"] }] };
+    expect(assertZodAgreement({ ...valid, approval_rules: rules }, validator, configV1Schema))
+      .toEqual({ ...valid, approval_rules: rules });
+    expect(assertZodAgreement({ ...valid, approval_rules: { subjects: [], content: [] } }, validator, configV1Schema))
+      .toEqual({ ...valid, approval_rules: { subjects: [], content: [] } });
     for (const invalid of [
       { ...valid, repository: "/tmp/repo" },
       { ...valid, roles: { producer: { model: "x", effort: "high", family: "codex" } } },
@@ -55,7 +62,20 @@ describe("normative foundational JSON Schemas agree with Zod mirrors", () => {
       { ...valid, overrides: { unknown: {} } },
       { ...valid, max_attempts: 0 },
       { ...valid, max_attempts: Number.MAX_SAFE_INTEGER + 1 },
+      { ...valid, approval_rules: { subjects: ["explore"], content: [] } },
+      { ...valid, approval_rules: { subjects: ["prd", "PRD"], content: [] } },
+      { ...valid, approval_rules: { subjects: [], content: [{ paths: ["**/*.sql"], note: "x" }] } },
+      { ...valid, approval_rules: { subjects: [], content: [{ paths: ["   "] }] } },
+      { ...valid, approval_rules: { subjects: [] } },
+      { ...valid, approval_rules: { content: [], subjects: [], extra: true } },
     ]) expect(() => assertZodAgreement(invalid, validator, configV1Schema)).toThrow(/schema validation failed|additional properties/);
+    // A repeated subject is the one rule the generated document cannot see: uniqueness keywords
+    // are retired from generation, so Ajv accepts and only the Zod authority rejects.
+    const repeated = { ...valid, approval_rules: { subjects: ["prd", "design", "prd"], content: [] } };
+    const before = structuredClone(repeated);
+    expect(validator.validate(repeated)).toBe(true);
+    expect(configV1Schema.safeParse(repeated).success).toBe(false);
+    expect(repeated).toEqual(before);
   });
 
   it("agrees for rubric and constitution rule shapes", async () => {

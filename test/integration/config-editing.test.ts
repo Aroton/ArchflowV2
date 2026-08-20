@@ -117,6 +117,21 @@ function writeJourneyDocuments(workspace: TaskWorkspace): void {
   writeFileSync(join(workspace.services.authority.task_root, "prd.md"), "# Semantic journey\n\nThe client authors this document.\n");
 }
 
+/**
+ * Config bytes that keep the PRD approval gate demanded by an approval rule: document-gate opening
+ * is rule-driven, so a journey expecting the gate lists the prd subject explicitly.
+ */
+function prdApprovalConfig(): Uint8Array {
+  return new TextEncoder().encode(`schema_version: "1"
+roles:
+  counter-reviewer: { model: gpt-5.6-sol, effort: xhigh }
+  adjudicator: { model: gpt-5.6-sol, effort: xhigh }
+approval_rules:
+  subjects: [prd]
+  content: []
+`);
+}
+
 describe("config as an editable input", { timeout: 120_000 }, () => {
   it("accepts a mid-task config edit on the next apply, records the new baseline, and reports the field-level change", async () => {
     const workspace = await createTaskWorkspace({ taskId: "config-editing-notice", label: "config-editing-notice" });
@@ -152,7 +167,9 @@ describe("config as an editable input", { timeout: 120_000 }, () => {
   });
 
   it("keeps an open gate and its recorded evidence valid across a config edit; the notice persists past the settlement commit until the next config-observing commit", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "config-editing-gate", label: "config-editing-gate" });
+    const workspace = await createTaskWorkspace({
+      taskId: "config-editing-gate", label: "config-editing-gate", configBytes: prdApprovalConfig(),
+    });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[]]));
     const h = semanticJourneyHarness(workspace);
@@ -211,7 +228,9 @@ describe("config as an editable input", { timeout: 120_000 }, () => {
   });
 
   it("keeps a legacy-recorded fingerprint transacting after the cutover, preserves its composition on the same-shape path, and converges at the gate-reentry landing", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "config-editing-legacy", label: "config-editing-legacy" });
+    const workspace = await createTaskWorkspace({
+      taskId: "config-editing-legacy", label: "config-editing-legacy", configBytes: prdApprovalConfig(),
+    });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[]]));
     const h = semanticJourneyHarness(workspace);

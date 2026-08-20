@@ -39,7 +39,11 @@ import { activeProjection, type GateLifecycleDependencies } from "./gate-core.js
 import { deriveNextAction, type NextAction } from "./next-action.js";
 import { expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject, produceUpstreamBindingsForSubject } from "./produce-subject.js";
 import type { CurrentProduceSubject } from "./produce-subject.js";
-import { designArtifactCommittedAtCurrentTarget, implementationOutputCommittedAtCurrentTarget, type DesignMilestoneMiss } from "./implementation-manifest.js";
+import {
+  designArtifactCommittedAtCurrentTarget,
+  implementationOutputCommittedAtCurrentTarget,
+  type DesignMilestoneMiss,
+} from "./implementation-manifest.js";
 import { phaseStatusResources, type StatusResource } from "./phase-documents.js";
 import { inspectWorkspaceCleanup, type WorkspaceCleanupReport } from "./workspace-cleanup.js";
 import { discoverReconciliationInput } from "./reconciliation-discovery.js";

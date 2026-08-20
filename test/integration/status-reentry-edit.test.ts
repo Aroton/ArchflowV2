@@ -59,6 +59,22 @@ async function repository() {
   git(root, "commit", "-q", "-m", "root");
   const scaffolded = await scaffoldRepositoryAssets({ working_directory: root });
   if (!scaffolded.ok) throw new Error(scaffolded.error.code);
+  // The resumed PRD approval gate must still open: document-gate opening is rule-driven, so the
+  // fixture lists the prd subject explicitly in the config the task copies at creation. The whole
+  // file is written rather than appended because the shipped template already carries its own
+  // `approval_rules` block and a second one would be a duplicate YAML key.
+  writeFileSync(join(root, ".archflow", "config.yaml"), `schema_version: "1"
+roles:
+  counter-reviewer:
+    model: gpt-5.6-sol
+    effort: xhigh
+  adjudicator:
+    model: gpt-5.6-sol
+    effort: xhigh
+approval_rules:
+  subjects: [prd]
+  content: []
+`);
   // Same fixture constitution as the roundtrip suite — deliberately no active rules, so the
   // merged archflow_counter_review call runs a single dispatch, reports the constitution review
   // as not-run, and this suite stays about re-entry edit tolerance.

@@ -35,12 +35,12 @@ const DESIGN_BYTES = new TextEncoder().encode(
 );
 const CONVENTIONS_BYTES = new TextEncoder().encode("# Conventions\n\nKeep it simple.\n");
 const ASK_BYTES = new TextEncoder().encode("Please build a small widget with an off switch.\n");
-const CONFIG = `schema_version: "1"
-roles:
-  counter-reviewer:
-    model: gpt-fixture
-    effort: high
-`;
+function configBytes(options: FixtureOptions): Uint8Array {
+  const roles = options.activeRule === true
+    ? "  counter-reviewer:\n    model: gpt-fixture\n    effort: high\n  adjudicator:\n    model: gpt-fixture\n    effort: high\n"
+    : "  counter-reviewer:\n    model: gpt-fixture\n    effort: high\n";
+  return new TextEncoder().encode(`schema_version: "1"\nroles:\n${roles}`);
+}
 const scanner: SecretScanner = {
   scan: async (candidates) => ({
     schema_version: "1", outcome: "clean", detector_set_id: "pinned-context-scanner" as never,
@@ -54,23 +54,27 @@ type FixtureOptions = Readonly<{
   phase: "prd" | "design";
   declareAsk?: boolean;
   approveUpstream?: boolean;
+  /** Supplies a durable settlement but no human approval for the upstream. */
+  upstreamReceipt?: boolean;
+  /** Pins an active constitution rule so the merged call dispatches the constitution review too. */
+  activeRule?: boolean;
 }>;
 
 async function fixture(options: FixtureOptions) {
   const repository = createTempRepository({ label: "pinned-context-ask" });
   const workflow = readFileSync(new URL("../../assets/workflow.yaml", import.meta.url));
   repository.write(".archflow/workflow.yaml", workflow);
-  // Deliberately no active rules: this suite proves the pinned context of the rubric review
-  // envelope, so the merged call must report the constitution review as not-run rather than
-  // launching the second, adjudicating dispatch.
+  // Deliberately no active rules unless a test asks for them: this suite proves the pinned
+  // context of the rubric review envelope, so the merged call must report the constitution
+  // review as not-run rather than launching the second, adjudicating dispatch.
   repository.write(".archflow/constitution/00-process.md", `---
 id: process
 version: 1
-status: deprecated
+status: ${options.activeRule === true ? "active" : "deprecated"}
 ---
 Preserve explicit human review gates.
 `);
-  repository.write(`.archflow/tasks/${TASK}/config.yaml`, CONFIG);
+  repository.write(`.archflow/tasks/${TASK}/config.yaml`, Buffer.from(configBytes(options)));
   repository.write(`.archflow/tasks/${TASK}/prd.md`, Buffer.from(PRD_BYTES));
   repository.write(`.archflow/tasks/${TASK}/design.md`, Buffer.from(DESIGN_BYTES));
   repository.write(`.archflow/tasks/${TASK}/ask.md`, Buffer.from(ASK_BYTES));
@@ -99,7 +103,7 @@ Preserve explicit human review gates.
   const policyBaseCommit = parseGitOid(repository.git("rev-parse", "HEAD"));
   const constitution = await resolvePinnedConstitution(discovered.value, policyBaseCommit, context);
   if (!constitution.ok) throw new Error(constitution.error.code);
-  const configDigest = sha256Bytes(new TextEncoder().encode(CONFIG));
+  const configDigest = sha256Bytes(configBytes(options));
   const workflowDigest = sha256Bytes(workflow);
   const produceFingerprint = computeInputFingerprint({
     schema_version: "1",
@@ -190,6 +194,19 @@ Preserve explicit human review gates.
           resolved_at_revision: parseSafeInteger(6),
         }]
       : [],
+    // The settle-time receipt shape the settling transaction writes: bound to the producing
+    // step's phase instance and the retained manifest's artifact digest, at a past revision.
+    ...(options.upstreamReceipt === true ? {
+      rule_settlements: [{
+        task_id: TASK,
+        phase_instance: PRD_PHASE,
+        step: "triage" as const,
+        subject_digest: prdArtifactDigest,
+        conclusion: { wait: false, match: null } as const,
+        config_digest: configDigest,
+        settled_at_revision: parseSafeInteger(6),
+      }],
+    } : {}),
     waivers: [],
   };
   writeFileSync(authority.value.state.absolute, canonicalDocument(state).bytes);
@@ -214,13 +231,29 @@ else {
   await writeFile(${JSON.stringify(envelopePath)}, raw);
   const envelope = JSON.parse(raw);
   const subject = envelope.subject;
-  const output = {
-    schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
-    step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
-    input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
-    producer_family: subject.producer_family, findings: [], matched_rule_versions: [],
-    verdict: "pass", blocking_count: 0
-  };
+  let output;
+  if (subject.role === "counter-review") {
+    output = {
+      schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
+      step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
+      input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
+      producer_family: subject.producer_family, findings: [], matched_rule_versions: [],
+      verdict: "pass", blocking_count: 0
+    };
+  } else {
+    output = {
+      schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
+      step: "adjudicate", subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
+      pinned_constitution_digest: subject.pinned_constitution_digest,
+      approved_upstream_digests: subject.approved_upstream_digests,
+      source_evidence_set_digest: subject.source_evidence_set_digest,
+      rule_findings: envelope.rules.map((rule) => ({ rule_id: rule.id, rule_version: rule.version,
+        compliance: "pass", rationale: "The document respects this rule.", trigger: "not-matched",
+        trigger_evidence: "No review trigger matched." })),
+      drift_findings: subject.approved_upstream_digests.map((digest) => ({ upstream_digest: digest,
+        drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift." }))
+    };
+  }
   await writeFile(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');
 }
@@ -406,5 +439,29 @@ Future tasks should use this revised policy.
       error: { code: "STATE_INVALID", diagnostic: { parameters: { issue_code: "upstream-approval-missing" } } },
     });
     expect(() => readFileSync(h.envelopePath)).toThrow();
+  });
+
+  it("refuses to pin a settlement-only upstream", async () => {
+    const h = await fixture({ phase: "design", upstreamReceipt: true });
+    activateFixtureCli(h);
+
+    const result = await handleCounterReview(parseToolCall("archflow_counter_review", h.args), h.invocation("upstream-receipt"));
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "STATE_INVALID", diagnostic: { parameters: { issue_code: "upstream-approval-missing" } } },
+    });
+    expect(() => readFileSync(h.envelopePath)).toThrow();
+  });
+
+  it("does not dispatch constitution review over a settlement-only upstream", async () => {
+    const h = await fixture({ phase: "design", upstreamReceipt: true, activeRule: true });
+    activateFixtureCli(h);
+
+    const result = await handleCounterReview(parseToolCall("archflow_counter_review", h.args), h.invocation("upstream-receipt-constitution"));
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "STATE_INVALID", diagnostic: { parameters: { issue_code: "upstream-approval-missing" } } },
+    });
   });
 });

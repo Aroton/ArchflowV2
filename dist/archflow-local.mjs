@@ -25787,6 +25787,8 @@ function parseSingleYamlDocument(source, label) {
 
 // src/contracts/config.ts
 var REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"];
+var WORKFLOW_SUBJECTS = ["prd", "design", "phase-design", "phase-impl"];
+var workflowSubjectV1Schema = external_exports.enum(WORKFLOW_SUBJECTS);
 var configRouteSchema = external_exports.object({
   model: external_exports.string().min(1).regex(/\S/, "model must contain a non-whitespace character"),
   effort: external_exports.enum(REASONING_EFFORTS),
@@ -25808,11 +25810,18 @@ var configOverridesSchema = external_exports.object({
   "phase-design": configRolesSchema.optional(),
   "phase-impl": configRolesSchema.optional()
 }).strict();
+var approvalRulesSchema = external_exports.object({
+  subjects: external_exports.array(workflowSubjectV1Schema).refine((subjects) => new Set(subjects).size === subjects.length, "approval rule subjects must not repeat"),
+  content: external_exports.array(external_exports.object({
+    paths: external_exports.array(external_exports.string().min(1).regex(/\S/u, "path pattern must contain a non-whitespace character"))
+  }).strict())
+}).strict();
 var configV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
   roles: configRolesSchema,
   overrides: configOverridesSchema.optional(),
-  max_attempts: external_exports.number().int().positive().safe().optional()
+  max_attempts: external_exports.number().int().positive().safe().optional(),
+  approval_rules: approvalRulesSchema.optional()
 }).strict();
 function parseConfigV1(value) {
   assertPlainJson(value, "config");
@@ -25890,6 +25899,16 @@ var HUMAN_REVISION_GATE_KINDS = [
   "commit-authorization",
   "migration-audit"
 ];
+function compareRuleSettlements(left, right) {
+  const phase3 = left.phase_instance < right.phase_instance ? -1 : left.phase_instance > right.phase_instance ? 1 : 0;
+  if (phase3 !== 0) return phase3;
+  const digest9 = left.subject_digest < right.subject_digest ? -1 : left.subject_digest > right.subject_digest ? 1 : 0;
+  if (digest9 !== 0) return digest9;
+  return left.settled_at_revision - right.settled_at_revision;
+}
+function isSortedUniqueRuleSettlements(items) {
+  return items.every((item, index) => index === 0 || compareRuleSettlements(items[index - 1], item) < 0);
+}
 var sha256Digest5 = sha256DigestV1Schema;
 var stepStatusV1Schema = external_exports.enum(STEP_STATUSES);
 var gateKindV1Schema = external_exports.enum(GATE_KINDS);
@@ -26023,6 +26042,26 @@ var baselineAdoptionRecordV1Schema = external_exports.object({
   adopted_projections: external_exports.array(adoptedProjectionRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "adopted projections must be sorted by path with no duplicates"),
   adopted_absences: external_exports.array(repositoryPathClaimV1Schema).optional().refine((items) => isSortedUniqueBy(items), "adopted absences must be sorted with no duplicates")
 }).strict();
+var ruleSettlementMatchV1Schema = external_exports.discriminatedUnion("kind", [
+  external_exports.object({ kind: external_exports.literal("subject"), subject: workflowSubjectV1Schema }).strict(),
+  external_exports.object({
+    kind: external_exports.literal("content"),
+    paths: external_exports.array(external_exports.string()).min(1).refine((items) => isSortedUniqueBy(items), "content match paths must be sorted with no duplicates")
+  }).strict()
+]);
+var ruleSettlementConclusionV1Schema = external_exports.discriminatedUnion("wait", [
+  external_exports.object({ wait: external_exports.literal(false), match: external_exports.literal(null) }).strict(),
+  external_exports.object({ wait: external_exports.literal(true), match: ruleSettlementMatchV1Schema }).strict()
+]);
+var ruleSettlementV1Schema = external_exports.object({
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: external_exports.enum(PIPELINE_STEPS),
+  subject_digest: sha256Digest5,
+  conclusion: ruleSettlementConclusionV1Schema,
+  config_digest: sha256Digest5,
+  settled_at_revision: positiveSafeInteger
+}).strict();
 var planningRestartRecordV1Schema = external_exports.object({
   restart_id: pathSafeIdV1Schema,
   source_phase_instance: phaseInstanceIdV1Schema,
@@ -26065,12 +26104,14 @@ var taskConfigOverridesV1Schema = configOverridesSchema.clone({
     Object.entries(configOverridesSchema.shape).map(([phase3]) => [phase3, taskConfigRolesV1Schema.optional()])
   )
 });
+var taskConfigApprovalRulesV1Schema = approvalRulesSchema.clone(approvalRulesSchema.def);
 var taskConfigSnapshotV1Schema = configV1Schema.clone({
   ...configV1Schema.def,
   shape: {
     ...configV1Schema.shape,
     roles: taskConfigRolesV1Schema,
-    overrides: taskConfigOverridesV1Schema.optional()
+    overrides: taskConfigOverridesV1Schema.optional(),
+    approval_rules: taskConfigApprovalRulesV1Schema.optional()
   }
 });
 var taskStateV1Schema = external_exports.object({
@@ -26097,6 +26138,7 @@ var taskStateV1Schema = external_exports.object({
   human_revision_history: external_exports.array(humanRevisionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "human_revision_history must be sorted by gate_id with no duplicates").optional(),
   restart_history: external_exports.array(planningRestartRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("restart_id")), "restart_history must be sorted by restart_id with no duplicates").optional(),
   baseline_adoptions: external_exports.array(baselineAdoptionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "baseline_adoptions must be sorted by gate_id with no duplicates").optional(),
+  rule_settlements: external_exports.array(ruleSettlementV1Schema).refine(isSortedUniqueRuleSettlements, "rule_settlements must be sorted by (phase_instance, subject_digest, settled_at_revision) with no duplicates").optional(),
   last_seen_config: taskConfigSnapshotV1Schema.optional(),
   last_transition: lastTransitionV1Schema.optional(),
   terminal: external_exports.enum(TERMINAL_STATES).optional()
@@ -26109,6 +26151,11 @@ var taskStateV1Schema = external_exports.object({
   state.baseline_adoptions?.forEach((adoption, index) => {
     if (adoption.adopted_at_revision > state.revision) {
       context2.addIssue({ code: "custom", path: ["baseline_adoptions", index, "adopted_at_revision"], message: "baseline adoption revision cannot exceed the current state revision" });
+    }
+  });
+  state.rule_settlements?.forEach((settlement, index) => {
+    if (settlement.settled_at_revision > state.revision) {
+      context2.addIssue({ code: "custom", path: ["rule_settlements", index, "settled_at_revision"], message: "rule settlement revision cannot exceed the current state revision" });
     }
   });
   const pending = state.pending_human_revision;
@@ -32852,9 +32899,8 @@ async function designArtifactCommittedAtCurrentTarget(runner, taskId, artifact, 
   const outsideTask = changed.filter((path2) => !path2.startsWith(prefix));
   if (outsideTask.length > 0) return missed("paths-outside-task", outsideTask);
   if (!changed.includes(`${prefix}state.json`)) return missed("missing-recovery-authority");
-  if (!changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/request.json")) || !changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/decision.json"))) {
-    return missed("missing-recovery-authority");
-  }
+  const archivedDecisionPair = changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/request.json")) && changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/decision.json"));
+  if (!archivedDecisionPair) return missed("missing-recovery-authority");
   for (const path2 of approvedDocumentPaths) {
     const output = outputs.find((entry) => entry.path === path2);
     if (output === void 0 || output.operation === "delete") return missed("approved-document-mismatch", [path2]);
@@ -37557,7 +37603,14 @@ function assessCurrentEvidence(state, retained, subject) {
   const current = EVIDENCE_STEPS.filter((step) => currentFor(retained, step, subject, reviews));
   const stale = EVIDENCE_STEPS.filter((step) => retained.has(step) && !current.includes(step));
   const disposition = dispositionState(retained, reviews, triageCurrent);
-  const action3 = decideNextAction(state, retained, subject, current, disposition, triageCurrent);
+  const action3 = decideNextAction(
+    state,
+    retained,
+    subject,
+    current,
+    disposition,
+    triageCurrent
+  );
   const exhausted = action3.reentry_required && state.attempt >= maximum;
   return Object.freeze({
     current: Object.freeze([...current]),
@@ -37812,7 +37865,11 @@ function runStepDetail(state, step) {
   return `Run the ${step} pipeline step.`;
 }
 function matchingApproval(input, kind) {
-  return input.subject_digest !== void 0 && (input.authenticated_approvals ?? []).some((approval) => approval.gate_kind === kind && approval.subject_digest === input.subject_digest);
+  const subjectDigest = input.subject_digest;
+  if (subjectDigest !== void 0 && (input.authenticated_approvals ?? []).some((approval) => approval.gate_kind === kind && approval.subject_digest === subjectDigest)) {
+    return true;
+  }
+  return false;
 }
 function hasLegacyDesignApproval(input) {
   return matchingApproval(input, "artifact-approval");

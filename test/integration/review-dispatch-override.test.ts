@@ -176,9 +176,27 @@ else {
 const launchedModels = (workspace: TaskWorkspace): readonly string[] =>
   readFileSync(join(workspace.root, "crash-review-models"), "utf8").split("\n").filter(Boolean);
 
+/**
+ * Config bytes that keep the PRD approval gate demanded by an approval rule: document-gate opening
+ * is rule-driven, so a journey expecting the gate lists the prd subject explicitly. The roles stay
+ * the template defaults this suite's configured-route assertions read.
+ */
+function prdApprovalConfig(): Uint8Array {
+  return new TextEncoder().encode(`schema_version: "1"
+roles:
+  counter-reviewer: { model: ${CONFIGURED_MODEL}, effort: ${CONFIGURED_EFFORT} }
+  adjudicator: { model: ${CONFIGURED_MODEL}, effort: ${CONFIGURED_EFFORT} }
+approval_rules:
+  subjects: [prd]
+  content: []
+`);
+}
+
 describe("reviewer route substitution through the public apply path", { timeout: TIMEOUT }, () => {
   it("dispatches the substituted route from a review-dispatch submission and records the override with its human reason", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "review-dispatch-clean", label: "review-dispatch-clean" });
+    const workspace = await createTaskWorkspace({
+      taskId: "review-dispatch-clean", label: "review-dispatch-clean", configBytes: prdApprovalConfig(),
+    });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[]]));
     const h = semanticJourneyHarness(workspace);
@@ -217,7 +235,9 @@ describe("reviewer route substitution through the public apply path", { timeout:
   });
 
   it("recovers a crash between the review substeps on the configured route when the submission value is lost", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "review-dispatch-crash", label: "review-dispatch-crash" });
+    const workspace = await createTaskWorkspace({
+      taskId: "review-dispatch-crash", label: "review-dispatch-crash", configBytes: prdApprovalConfig(),
+    });
     workspaces.push(workspace);
     restorers.push(installCrashingReviewStub(workspace.root, 1));
     const h = semanticJourneyHarness(workspace);
@@ -265,7 +285,9 @@ describe("reviewer route substitution through the public apply path", { timeout:
   });
 
   it("re-requesting the substitution on the re-offered review action proceeds as a fresh request under the recovered operation", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "review-dispatch-resend", label: "review-dispatch-resend" });
+    const workspace = await createTaskWorkspace({
+      taskId: "review-dispatch-resend", label: "review-dispatch-resend", configBytes: prdApprovalConfig(),
+    });
     workspaces.push(workspace);
     restorers.push(installCrashingReviewStub(workspace.root, 1));
     const h = semanticJourneyHarness(workspace);

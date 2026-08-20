@@ -282,6 +282,8 @@ const DEF_INVENTORY: ReadonlyArray<readonly [string, readonly string[]]> = [
       "approvalRef",
       "waiverRef",
       "openGateRef",
+      "ruleSettlementConclusion",
+      "ruleSettlement",
       "lastTransition",
       "plainJson",
     ],
@@ -469,7 +471,7 @@ describe("D15 — no re-pin, amendment, upgrade, or second config digest exists"
 
 /** Verification step 18 — the exclusions. */
 describe("the phase's exclusions hold", () => {
-  it("no schema anywhere uses null as a type, const, or enum member", () => {
+  it("uses null only for PlainJson data and the explicit autonomous settlement match", () => {
     const nullNodes: string[] = [];
     const walk = (node: unknown, at: string): void => {
       if (Array.isArray(node)) {
@@ -487,10 +489,13 @@ describe("the phase's exclusions hold", () => {
       }
     };
     for (const [stem, document] of ALL_SCHEMAS) walk(document, stem);
-    // Optional durable fields still use omission. Generic PlainJson outcomes allow null as data.
+    // Optional durable fields still use omission. PlainJson permits null data, and the approved
+    // autonomous settlement arm deliberately pins `match: null` to make the conclusion complete.
     expect(nullNodes).toEqual([
       "intent-receipt/$defs/plainJson/anyOf/0/type",
       "semantic-workflow/$defs/plainJson/anyOf/0/type",
+      "task-state/$defs/ruleSettlementConclusion/oneOf/0/properties/match/type",
+      "task-state/$defs/ruleSettlementConclusion/oneOf/0/properties/match/const",
       "task-state/$defs/plainJson/anyOf/0/type",
     ]);
   });
