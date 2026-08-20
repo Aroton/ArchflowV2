@@ -1,0 +1,38 @@
+{
+  "allowed_decisions": [
+    "adopt-current-bytes",
+    "restore-recorded-bytes",
+    "adopt-committed-deletions",
+    "abort",
+    "cancel"
+  ],
+  "context": {
+    "deleted_projections": [],
+    "drifted_projections": [
+      {
+        "observed_digest": "82c3df92f9aa28dc67f52cab87aaeda4ce8ad46c11d2621667492677f9d6ebbf",
+        "path": "test/contracts/mcp-advertised-schema.test.ts",
+        "recorded_digest": "03c39f776fd6b9f89dc7cd90eb408b86f9ac0dc8e858a80a224ec794fb571a04"
+      }
+    ]
+  },
+  "context_digest": "213f1291adfe3c030c39861b48b7e31cb5026e6cebd1e0be38cbf6cee8eb8371",
+  "current_evidence": {
+    "drift_digest": "7ff29d35c9546cb856e289b358dcc9ccc1e62aa41ef53f438b682904517dde74",
+    "observation_kind": "projection-drift",
+    "observed_at_revision": 151,
+    "phase_instance": "phase-impl-3",
+    "schema_version": "1",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-407d66d4526669becba482d78357c9aa4b807980433a87d1c3de027e608d5980",
+  "intent_id": "afop-e2449fe661d334375f2339178a0dc64f271bc75560e7d45aa0b232e42780ed3b-open-gate",
+  "kind": "baseline-adoption",
+  "opened_at_revision": 152,
+  "phase_instance": "phase-impl-3",
+  "request_digest": "783a8fc1ed8e423917c6c7cab88064ab955a8c247565cdaee604f56653f56a4f",
+  "schema_version": "1",
+  "subject_digest": "7ff29d35c9546cb856e289b358dcc9ccc1e62aa41ef53f438b682904517dde74",
+  "summary": "One implementation output differs from the bytes ArchFlow recorded during the earlier interrupted run. Choose whether the current corrected and fully verified bytes should become the reviewed baseline, or whether ArchFlow should restore the previously recorded bytes before review.",
+  "task_id": "review-flexibility"
+}

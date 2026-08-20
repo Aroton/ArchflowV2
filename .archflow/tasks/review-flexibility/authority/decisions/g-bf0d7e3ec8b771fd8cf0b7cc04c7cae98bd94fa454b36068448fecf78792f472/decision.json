@@ -1,0 +1,33 @@
+{
+  "context_digest": "e3aba9339fa62c6db535d6c124b35d78b1264b4fb3a1b9dd200a92723f9a26c9",
+  "envelope": {
+    "context_digest": "e3aba9339fa62c6db535d6c124b35d78b1264b4fb3a1b9dd200a92723f9a26c9",
+    "gate_id": "g-bf0d7e3ec8b771fd8cf0b7cc04c7cae98bd94fa454b36068448fecf78792f472",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-acf8a590de1f64c3e4cfd1dda70b280f964229f76cab248153b3b46f3bd1bf8e",
+      "recorded_at": "2026-08-20T19:15:12.930Z",
+      "request_id_digest": "346639cd6a32ffadbfb9f424698c60c2088663920a3e76ea13dc03d97f0bc530",
+      "schema_version": "1"
+    },
+    "kind": "baseline-adoption",
+    "payload": {
+      "decision": "adopt-current-bytes",
+      "reason": "keep current versions"
+    },
+    "phase_instance": "phase-design-3",
+    "schema_version": "1",
+    "subject_digest": "8544780ed734e6cd12dfba27b70631c1ac400148cc1cf138055ff4036208a32a",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-bf0d7e3ec8b771fd8cf0b7cc04c7cae98bd94fa454b36068448fecf78792f472",
+  "kind": "baseline-adoption",
+  "outcome": "decided",
+  "phase_instance": "phase-design-3",
+  "schema_version": "1",
+  "subject_digest": "8544780ed734e6cd12dfba27b70631c1ac400148cc1cf138055ff4036208a32a",
+  "task_id": "review-flexibility"
+}

@@ -1,0 +1,109 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 166,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 22987450
+  },
+  "artifact_digest": "ada5063d0b24b2f4fc7d69f2790cab4674904080f2ee5c1f62286088c28a8f52",
+  "input_fingerprint": "0675934403675cb96cbd2e7fe3e20acb1cac93eb0fc01aec3665a2fac94ffc3e",
+  "outputs": [],
+  "phase_instance": "phase-impl-3",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-54227c51aca2d262da631b644fb6839f",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [],
+      "assurance": "server-attested",
+      "cli_version": "2.1.238",
+      "constitution": "pass",
+      "drift": "aligned",
+      "drift_findings": [],
+      "effort": "medium",
+      "envelope_input_digest": "b85019c9e4b80e9294255ed05e30f964997f91868591bf1b848cda8eb8665c19",
+      "input_fingerprint": "0675934403675cb96cbd2e7fe3e20acb1cac93eb0fc01aec3665a2fac94ffc3e",
+      "invocation_id": "adjudication-invocation-6f64f8cf1f040007290dba58d7cd281d",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "b6511eb6c6e30461d222ece46f841b542438a6a7ea13e796fe72ae237f02017b",
+      "phase_instance": "phase-impl-3",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-54227c51aca2d262da631b644fb6839f",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "Implemented behavior matches the phase design's pinned interfaces: helper shape and glob semantics (P3-1) in src/state/approval-rules.ts, settlement record plus numeric-aware comparator (P3-4) in src/contracts/durable-state.ts:202-241, the three enumerated settlement routes with prospective-evidence overlay (P3-5) in state.ts/transitions.ts/gates.ts, and dormant consumption (P3-6/P3-7). Material departures discovered during implementation — deferring autonomous consumption to Phase 5, excluding simple revisions, leaving planned_final_phase human-derived, bounded gate-summary truncation — were written back into both governing documents and enumerated, and files touched beyond the design's summary (maintained docs) are disclosed in the impl-notes.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "Phase 3 implementation output against an approved phase design, with parent design.md, phases/3/design.md and new impl-notes.md co-produced (deviation lists: phase design items 13-14; impl-notes 'Deviations from Plan')."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "No settlement is consumed as authority here. The only reader anywhere in src is src/state/request-composition.ts:562-567, which appends the persisted trigger match to an ordinary human gate's summary; authority consumers still require authenticated human approval (transitions.ts predicates hasAuthenticatedArtifactApproval/hasAuthenticatedCombinedDesignApproval/hasAuthenticatedMigrationAudit; next-action.ts contains no settlement reference at all; planned-final-phase.ts derives the bound only from an archived 'approve' decision over retained design bytes and refuses to establish one from fresh produce bytes at :112-116). The waiver route appends a settlement but is not treated as approval of produced bytes and additionally re-verifies human-approved upstreams (gates.ts:606-625). Settlements bind task_id, phase_instance, step, subject_digest and revision+1 (approval-rules.ts:222-237) and are selected only when digest-matched and past the latest restart cutoff (restart-authority.ts:43-64). A human-requested simple revision cannot carry a settlement (transitions.ts:261-264) and always returns to the human gate. One stale comment at state.ts:144-147 still calls a settlement 'alternative authority to an approval'; it describes no behavior in this change and grants nothing.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The change introduces machine-evaluated approval rules (src/state/approval-rules.ts) and durable rule settlements (TaskStateV1.rule_settlements, src/contracts/durable-state.ts:202-241,350) written at final triage (src/mcp/handlers/state.ts:120-185), accepted-editorial produce re-entry (src/state/transitions.ts:240-265), and authenticated policy-waiver discharge (src/state/gates.ts:590-663) — machinery whose eventual purpose is advancing without a human gate."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Each new path fails closed toward a human instead of reporting success: an unassessable fixed point mints no settlement and the ordinary gate still opens; waiver-path problems surface as explicit issues with named reasons; an accepted material finding cannot be relabelled away by a 'simple' revision. When a large content match exceeds the bounded gate-summary contract, approvalRuleGateSummary (approval-rules.ts:75-86) preserves the trigger, shows exact leading paths, and states how many were omitted and that the complete set remains durable, rather than silently dropping evidence. The impl-notes report concrete suite counts including the pre-rebuild stale-bundle failures.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "New failure/uncertainty paths: settleApprovalRules returns undefined on every failure incl. a catch (src/mcp/handlers/state.ts:128-184), the waiver route issues named STATE_INVALID reasons policy-waiver-settlement-config-unavailable/-upstream-invalid/-fixed-point-invalid (src/state/gates.ts:614-648), and triage stays the fail-closed action while accepted findings remain (src/review/fixed-point.ts:540-544)."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Settlements carry task_id, phase_instance, step and subject_digest derived mechanically from the settling state (approval-rules.ts:222-237) and live only inside that task's state.json — no new cross-task reads or external authority files. Selection requires an exact subject_digest match, the same phase instance, and survival of the latest restart cutoff, so stale or byte-identical-after-restart settlements are ineligible. Zod refinements enforce sorted-unique ordering and reject a settled_at_revision above the current revision (durable-state.ts:676-695); malformed or unreadable config/evidence yields no settlement at all.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "A new durable record class (RuleSettlementV1) is persisted in task state and later read for gate presentation (src/state/restart-authority.ts:43-64; src/state/request-composition.ts:562-567)."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "aab6ad23668a94566e24317fe9254b6cd1f5e4bd51d8641bf5c0846fe173b1ae",
+      "step": "adjudicate",
+      "subject_digest": "b51262111a3dae61879c855cfbbeb5d81599884a2accd7bbe23c9136a77cdb71",
+      "task_id": "review-flexibility",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "review-flexibility"
+}

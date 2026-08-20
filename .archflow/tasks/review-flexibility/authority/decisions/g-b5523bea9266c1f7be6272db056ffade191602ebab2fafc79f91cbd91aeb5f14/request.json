@@ -1,0 +1,48 @@
+{
+  "allowed_decisions": [
+    "adopt-current-bytes",
+    "restore-recorded-bytes",
+    "adopt-committed-deletions",
+    "abort",
+    "cancel"
+  ],
+  "context": {
+    "deleted_projections": [],
+    "drifted_projections": [
+      {
+        "observed_digest": "fd795fd3fa13a19d17438592e05ca8da629d899cc5ff06b6619117dc98fc0bcd",
+        "path": "dist/archflow-mcp.mjs",
+        "recorded_digest": "c3a4cc04bcc076bc6827f222090c76955031f2ff95a1403fbec69ddd18fed00e"
+      },
+      {
+        "observed_digest": "70049e127bc74af75fbc2e60022413bb0bdbf4f5bc8763ad3143cf2c190ad73b",
+        "path": "dist/manifest.json",
+        "recorded_digest": "ec9acf4b548c9fbe4af4340641ce0ef397a1ac4e6a6b9516432bb4def4b5f1cc"
+      },
+      {
+        "observed_digest": "5cc2e8e02a68f8125c6e1ff2f305b3fc4f5b0efdd6e2f25175e406e712c9e424",
+        "path": "dist/metafile.json",
+        "recorded_digest": "a2021be7b4fc3928c665a6b2d9f3bef8ef02ab13e78569259bee9ddb3f781243"
+      }
+    ]
+  },
+  "context_digest": "6617f46cfcda9fc7c9a3f6b8c4a68dc31815f60673717f672eb0d0cac67e5061",
+  "current_evidence": {
+    "drift_digest": "a1a73ef93ff7f4d2a0ee17014e72c7c2d5bf44e9cbc971429055547ac30fc6be",
+    "observation_kind": "projection-drift",
+    "observed_at_revision": 145,
+    "phase_instance": "phase-design-3",
+    "schema_version": "1",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-b5523bea9266c1f7be6272db056ffade191602ebab2fafc79f91cbd91aeb5f14",
+  "intent_id": "afop-8d021da6cefeb5b0f16f207bb2d86ff9476a8b097618bd62641dd56c94ba40a0-open-gate",
+  "kind": "baseline-adoption",
+  "opened_at_revision": 146,
+  "phase_instance": "phase-design-3",
+  "request_digest": "078755021e061f919a83f71cf43b9b5be440d996738460da88d997d48b47af7a",
+  "schema_version": "1",
+  "subject_digest": "a1a73ef93ff7f4d2a0ee17014e72c7c2d5bf44e9cbc971429055547ac30fc6be",
+  "summary": "Phase 3's reviewed planning baseline no longer matches the current task PRD, task design, and phase design. The current phase design includes the accepted correction clarifying that the GateContext fact shape remains unchanged while designArtifactCommittedAtCurrentTarget gains the autonomous-settlement recovery-authority acceptance arm. Choose whether the current planning bytes should become the recorded reviewed baseline, or whether all three files should be restored to their previously recorded reviewed bytes. This decision records the baseline only; it does not approve implementation.",
+  "task_id": "review-flexibility"
+}

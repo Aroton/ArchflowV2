@@ -1,0 +1,33 @@
+{
+  "context_digest": "771f159a1812df04886f693abd0e009d766eaddf66aaf5080ce62d8752548575",
+  "envelope": {
+    "context_digest": "771f159a1812df04886f693abd0e009d766eaddf66aaf5080ce62d8752548575",
+    "gate_id": "g-eb00bdbec0ccc02f41837a168143ae9786a2c31fed83d1ce0f14a6b031766caa",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-7316609fa5d14b26c80ee26e1e3e02b2fb027d343353fb10e7befc9014e8267b",
+      "recorded_at": "2026-08-20T22:51:14.661Z",
+      "request_id_digest": "cb6e1dfe582727d204ad51a977fe5a0211a5214d27687704ab67f3a39eb2712e",
+      "schema_version": "1"
+    },
+    "kind": "design-approval",
+    "payload": {
+      "decision": "approve",
+      "reason": "approved"
+    },
+    "phase_instance": "phase-design-4",
+    "schema_version": "1",
+    "subject_digest": "9b27810cef7ee9bb4d9c3f21fd47c15e048dafb137e4ce3454ccc1c752b7b046",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-eb00bdbec0ccc02f41837a168143ae9786a2c31fed83d1ce0f14a6b031766caa",
+  "kind": "design-approval",
+  "outcome": "decided",
+  "phase_instance": "phase-design-4",
+  "schema_version": "1",
+  "subject_digest": "9b27810cef7ee9bb4d9c3f21fd47c15e048dafb137e4ce3454ccc1c752b7b046",
+  "task_id": "review-flexibility"
+}

@@ -1,0 +1,33 @@
+{
+  "context_digest": "d8885328cde82c1686b83ee22aa8c725f272ab614c4d76d15d27d4446e8b1977",
+  "envelope": {
+    "context_digest": "d8885328cde82c1686b83ee22aa8c725f272ab614c4d76d15d27d4446e8b1977",
+    "gate_id": "g-4863ae630e5a251174ebd503a0318d00e47e9981bff69307a461ced41e327467",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-5fa8ba5c8dbc08b231a019a87603db007f7b2238b8e57c698a966916cdaa7d00",
+      "recorded_at": "2026-08-20T21:58:12.276Z",
+      "request_id_digest": "5a3699927371eb9bb5a6d19087f3eb1685ab1a3e33b743447e71cf49e90ef4ed",
+      "schema_version": "1"
+    },
+    "kind": "commit-authorization",
+    "payload": {
+      "decision": "authorize-commit",
+      "reason": "Authorize committing the exact reviewed and verified Phase 3 changes."
+    },
+    "phase_instance": "phase-impl-3",
+    "schema_version": "1",
+    "subject_digest": "b51262111a3dae61879c855cfbbeb5d81599884a2accd7bbe23c9136a77cdb71",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-4863ae630e5a251174ebd503a0318d00e47e9981bff69307a461ced41e327467",
+  "kind": "commit-authorization",
+  "outcome": "decided",
+  "phase_instance": "phase-impl-3",
+  "schema_version": "1",
+  "subject_digest": "b51262111a3dae61879c855cfbbeb5d81599884a2accd7bbe23c9136a77cdb71",
+  "task_id": "review-flexibility"
+}

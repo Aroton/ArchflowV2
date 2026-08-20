@@ -1,0 +1,74 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "artifact_kind": "phase-design",
+    "baseline_commit": "2c9653ebfa9016a9704daaa71dcec62c0b2be7de",
+    "commit_message": "ArchFlow: Approve review-flexibility phase 4 design",
+    "constitution": "pass",
+    "eligible_waivers": [],
+    "policy_findings": [
+      {
+        "compliance": "pass",
+        "rationale": "No implementation precedes an approved design: the document is the design entering review, and it defers all activation to Phase 5 (\"Phase 5 owns conditional gate suppression and autonomous commit authority in the same reviewed change as the constitution amendment\"), matching D8/D9 of the approved architecture. It stays truthful about the current tree; I verified its load-bearing claims in the supplied checkout: src/state/request-composition.ts:565-567 derives approvalSummary while the commit-authorization arm at :712-728 archives the raw summary (the \"direct missing seam\" it names), src/state/gate-decision-interface.ts:125 already declares optional `details`, latestEligibleRuleSettlement exists in src/state/restart-authority.ts, and the stale prose it proposes to correct exists verbatim at test/unit/state-next-action.test.ts:400-401 (\"keeps commit-authorization unconditional until Phase 4\"). The one place it goes beyond design.md's phase table is updating four maintained documentation pages inside Phase 4 rather than deferring all docs to Phase 6; it states this explicitly and scopes it to \"the affected behavior descriptions ... while leaving Phase 6 as the final cross-system documentation refresh\", which keeps governing documents truthful as work proceeds rather than departing from them. No material deviation requiring re-entry into an upstream review boundary.",
+        "rule_id": "approved-design-before-code",
+        "rule_version": 1,
+        "trigger": "not-matched",
+        "trigger_evidence": "The artifact is itself the Phase 4 phase design submitted for its review boundary (\"Status: draft for review\"); it plans work and records no implementation having begun. Its scope matches the approved architecture's Phase 4 entry in design.md (\"Files: src/state/status.ts and src/state/request-composition.ts ... src/state/gate-decision-interface.ts (per-file match presentation)\"), and its non-goals forbid amending the constitution, config, or skills ahead of Phase 5."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "Nothing here lets silence, elapsed time, agent prose, or a model verdict advance the workflow. The change is presentation-only: rich per-path details are a disposable status projection, the gate archive gains only the already-derived frozen trigger summary, and pinned interface 6 preserves the exact accepted decision vocabulary (authorize-commit, revise, abort, cancel) with requires_human_confirmation:true unchanged. Authority binding is preserved rather than loosened — details derive only from latestEligibleRuleSettlement for the exact current implementation artifact digest, and presentation never re-evaluates approval rules, so a post-settlement config edit cannot silently restate what a human is deciding about. The design also identifies the one route by which this phase could accidentally confer authority (the stale \"until Phase 4\" test prose inviting suppression of a no-match gate) and mitigates it by correcting only the phase reference while keeping the human-required assertion, which I confirmed is a genuine hazard at test/unit/state-next-action.test.ts:400-401.",
+        "rule_id": "explicit-human-authority",
+        "rule_version": 1,
+        "trigger": "not-matched",
+        "trigger_evidence": "The design repeatedly refuses to let rule results supply authority: \"This phase does not activate autonomous consumption ... both a matching SQL change (wait:true) and a non-matching TypeScript-only change (wait:false) still stop for explicit commit-authorization, and the client-created commit still requires the separate explicit human confirmation\"; non-goals include \"Do not treat wait:false as approval or commit authority\" and \"Do not suppress, rename, or otherwise change commit-authorization\"; pinned interface 7 keeps deriveNextAction opening the gate and commit facts \"requiring human confirmation\"."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "Every failure mode named is surfaced as a visible non-success state with a safe next action rather than being represented as success. The join disagreement blocks with an inspection state instead of rendering a convincing partial match; misplaced detail lines on a non-commit gate raise an internal invariant error instead of being dropped; and the risks section explicitly targets \"Plausible partial output\" and \"Exception mislabeling\", the latter keeping raw summaries on attempts-exhausted, constitution, drift, and migration gates so a safety decision is never dressed up as commit approval. Human control is preserved and strengthened: the human sees every matched path, its operation, and an exact signed byte delta (including a zero delta rendered with an explicit sign), with the bounded archived summary disclosing an explicit omitted count rather than truncating silently. Success criterion 5 pins the fail-closed behavior in tests.",
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 1,
+        "trigger": "not-matched",
+        "trigger_evidence": "Fail-closed handling is specified rather than glossed: \"A path with no matching endpoint is an invariant failure: status withholds the human decision presentation and reports an inspection/blocking state. It must never filter an unmatched path and present a plausible-looking partial list\", plus \"Do not truncate or reorder the detail array: R7 requires every matched path\" and a renderer that \"throws an internal invariant error rather than silently ignoring misplaced evidence\"."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "No cross-task or cross-subject reads are introduced. The only authority sources are task-state settlements selected under exact subject-digest and producer-phase binding (I confirmed latestEligibleRuleSettlement exists in src/state/restart-authority.ts and is already used for the same subject digest at src/state/request-composition.ts:562-564) and the retained ImplementationOutputV1 for that same artifact; the helper takes no config bytes, repository reader, or Git state, so it cannot read outside the task. Evidence that does not agree fails closed rather than authorizing a presentation: an unmatched settled path blocks, and stale evidence is excluded by the existing eligibility cutoffs rather than by new tolerant matching. No durable schema or settlement root is added, so existing isolation invariants and their contract tests remain the binding ones.",
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 1,
+        "trigger": "not-matched",
+        "trigger_evidence": "Pinned interface 1: \"details derive only from latestEligibleRuleSettlement for the exact current implementation artifact digest plus that artifact's retained ImplementationOutputV1.outputs\", and the design notes that selector \"already enforces exact subject binding, producer-phase binding, numeric latest selection, and planning-restart cutoffs\". Non-goals forbid \"filesystem inspection, Git reads, a new durable settlement root\"."
+      }
+    ],
+    "target_ref": "refs/heads/feature/review-override-flexibility"
+  },
+  "context_digest": "771f159a1812df04886f693abd0e009d766eaddf66aaf5080ce62d8752548575",
+  "current_evidence": {
+    "set_digest": "a48dea4cd23ebf638c55ed831dd198398930dc465d917be1990f27c0860c8792",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "43feba979a6060ca61a4cf827db36346eb7476dd43e2e73c59226ae8de65fe5c",
+        "producer_family": "codex",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-eb00bdbec0ccc02f41837a168143ae9786a2c31fed83d1ce0f14a6b031766caa",
+  "intent_id": "afop-40cbb9579891ee1080d6db95eeb131c135e2476bf791c53ee3dc3ee713fa6b7e-open-gate",
+  "kind": "design-approval",
+  "opened_at_revision": 192,
+  "phase_instance": "phase-design-4",
+  "request_digest": "adb8e5bd49be848586adebda09e83df5f34d2b19832d25291c2ea01ee78afd5a",
+  "schema_version": "1",
+  "subject_digest": "9b27810cef7ee9bb4d9c3f21fd47c15e048dafb137e4ce3454ccc1c752b7b046",
+  "summary": "Phase 4 is designed to enrich the still-mandatory commit-authorization gate with the frozen reason a content rule matched and a complete human-readable list of matched repository paths, operations, and exact signed byte deltas. It reuses the eligible durable rule settlement and retained implementation output, never re-evaluates mutable config, and adds no durable gate or settlement schema. Rename endpoints are independently represented; if a path legitimately has multiple operations, every endpoint is shown in deterministic order, while a path with no retained endpoint and any attempt to attach these details to a non-commit gate fail closed. SQL matches and TypeScript no-matches both continue to require explicit commit authorization and separate human confirmation under the current constitution; autonomous consumption remains Phase 5. Verification pins post-settlement config edits, rename-plus-add edge cases, exception-gate precedence, unchanged decision choices, maintained documentation, and the tracked repository bundle.",
+  "task_id": "review-flexibility"
+}

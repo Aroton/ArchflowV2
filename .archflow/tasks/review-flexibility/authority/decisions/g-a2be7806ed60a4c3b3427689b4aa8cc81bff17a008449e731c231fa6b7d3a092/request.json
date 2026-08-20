@@ -1,0 +1,98 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "constitution": "pass",
+    "eligible_waivers": [
+      {
+        "rule": {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      }
+    ],
+    "failed_rules": [],
+    "matched_trigger_rules": [
+      {
+        "rule_id": "approved-design-before-code",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "explicit-human-authority",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 1
+      }
+    ],
+    "uncertain_rules": [],
+    "uncertain_trigger_rules": []
+  },
+  "context_digest": "31615f4ed9572d097024da223f01b1b9d1b554b8399c5d0d136cc98fa25d39d6",
+  "current_evidence": {
+    "set_digest": "aab6ad23668a94566e24317fe9254b6cd1f5e4bd51d8641bf5c0846fe173b1ae",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "c600e0571ffeeb85d1c4190f7ee6d839064cf7c463a009c2b9fc97ca3b38005f",
+        "producer_family": "codex",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-a2be7806ed60a4c3b3427689b4aa8cc81bff17a008449e731c231fa6b7d3a092",
+  "intent_id": "afop-ee5e51120f2fbb2c7942720c9459c276060ebdab6a0df903856dc2edcc856c5e-open-gate",
+  "kind": "constitution-review",
+  "opened_at_revision": 170,
+  "phase_instance": "phase-impl-3",
+  "request_digest": "2a5164e6bccb6149c93d30a6ed1d2a35a06026d0d4e9ba17c1ad4461bb2b67bd",
+  "schema_version": "1",
+  "subject_digest": "b51262111a3dae61879c855cfbbeb5d81599884a2accd7bbe23c9136a77cdb71",
+  "summary": "Independent implementation review is clean and the accepted revision intents are verified. This phase adds durable approval-rule evaluation and presentation but deliberately keeps explicit human approval, upstream, phase-exit, milestone, and commit authority unchanged until a later constitution amendment. It also preserves task/evidence isolation, rejects simple revisions that could suppress accepted material findings, and performs no machine-global installation.",
+  "task_id": "review-flexibility"
+}
