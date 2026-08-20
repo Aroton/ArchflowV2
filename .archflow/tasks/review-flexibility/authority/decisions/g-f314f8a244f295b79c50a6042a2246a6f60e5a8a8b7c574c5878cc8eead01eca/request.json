@@ -1,0 +1,36 @@
+{
+  "allowed_decisions": [
+    "retry-once",
+    "revise",
+    "abort",
+    "cancel"
+  ],
+  "context": {
+    "attempts": 3,
+    "maximum_attempts": 3,
+    "step": "triage"
+  },
+  "context_digest": "4e27572aabb3a7625b98df383252374366006cd4fbbe67066f051dd6e9bd5894",
+  "current_evidence": {
+    "set_digest": "811a2b6cc6dab1374a96ea7ccfddbdc6ed975da877e304c9d29057181c9f5241",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "5fa58ddeb3978d7e06199784b0ea6e2534101e8a31dc370d5a439f4356362fb3",
+        "producer_family": "codex",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-f314f8a244f295b79c50a6042a2246a6f60e5a8a8b7c574c5878cc8eead01eca",
+  "intent_id": "afop-bb32a1d8d5aee50d2fee3521fb8059537e1aa817a7910ac5a8f036c1c5c1f159-open-gate",
+  "kind": "attempts-exhausted",
+  "opened_at_revision": 138,
+  "phase_instance": "phase-design-3",
+  "request_digest": "06041d095445c612b5c3d64adfea80717f82fce9ca0edbd48fcee541d2cff090",
+  "schema_version": "1",
+  "subject_digest": "605334d3a1ace594361d00b7089a498c9c68805c0ae70648e32ac2bfd6664f8b",
+  "summary": "The Phase 3 design has completed multiple independent review cycles and now exceeds the automatic attempt limit. The latest review found one minor but actionable wording contradiction: a pinned interface calls the design-milestone commit-proof function unchanged, while the detailed design correctly requires that function to gain an autonomous-settlement recovery-authority arm. The intended correction is narrow: state that the input fact shape remains unchanged, while the proof function itself gains that acceptance arm. The design also now covers every clean-advance settlement route with the correct state-transition versus waiver-resolution guards, and accurately states that task creation copies the repository config rather than the shipped template. Choose retry to authorize the wording correction and another review cycle, accept-current only if you deliberately accept the contradictory pinned sentence, or cancel to stop Phase 3 design.",
+  "task_id": "review-flexibility"
+}

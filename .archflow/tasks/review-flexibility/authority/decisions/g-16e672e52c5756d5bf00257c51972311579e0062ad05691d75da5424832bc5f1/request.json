@@ -1,0 +1,113 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "constitution": "uncertain",
+    "eligible_waivers": [
+      {
+        "rule": {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "adjudication-failure"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      }
+    ],
+    "failed_rules": [],
+    "matched_trigger_rules": [
+      {
+        "rule_id": "approved-design-before-code",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "explicit-human-authority",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 1
+      }
+    ],
+    "uncertain_rules": [
+      {
+        "rule_id": "explicit-human-authority",
+        "rule_version": 1
+      }
+    ],
+    "uncertain_trigger_rules": []
+  },
+  "context_digest": "1bbea7c25c8dbdd23db4fe502e7f1f9d938569f300d39f3468eb6ebac0b67e52",
+  "current_evidence": {
+    "set_digest": "9dda2cbac2e861b74960cb82145ddd5215df639f2904d23d545af9ecadab7f41",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "8645c38eeb8e0e39c6c4763d240b4023ee83087dc9bb05c4f1ce713c3804ac65",
+        "producer_family": "codex",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-16e672e52c5756d5bf00257c51972311579e0062ad05691d75da5424832bc5f1",
+  "intent_id": "afop-c7b6a9229f54d84a7a13b28236a2785fd5b1cdfd9b07c3f0724d8f55c019a5a1-open-gate",
+  "kind": "constitution-review",
+  "opened_at_revision": 115,
+  "phase_instance": "phase-impl-3",
+  "request_digest": "170ac0fe5a96e59b514dccd83308d7005a60af4b4c9b9433ec3f26bab48eb949",
+  "schema_version": "1",
+  "subject_digest": "d5fccaee15996bd6d4f59815c42e56c12190365e86f6f11c263754f5b7893270",
+  "summary": "Phase 3 implements rule-driven approval gates, durable autonomous-advance receipts, restart-safe milestone proof, receipt acceptance across downstream consumers, the default config template, and the pinned semantic journeys. The recorded verification is green: typecheck; 33 generated schemas; 1,220 unit tests; 511 contract tests; 231 integration tests after rebuilding the bundle; 35 crash tests; and 9 focused release/install tests. Independent review reported one non-blocking major concern: the task-local D9 self-application cutover is not part of the claimable phase output, so the phase commit alone temporarily leaves this task on its prior config. I rejected that as a defect in the reviewed phase subject because fresh server status blocks while the digest-pinned task config is edited and task-config paths cannot be claimed by the implementation manifest. The deviation is explicit in the implementation notes: after the authorized phase commit is observed, this same session will reapply the exact D9 approval_rules and header refresh and commit them with state.json and authority records before any successor is reported or started. The human must decide whether that documented two-commit sequence is an acceptable material deviation from the approved in-phase cutover.",
+  "task_id": "review-flexibility"
+}

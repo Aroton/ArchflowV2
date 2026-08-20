@@ -1,0 +1,2872 @@
+{
+  "accounting": {
+    "counted_entries": [
+      {
+        "path": ".archflow/tasks/review-flexibility/phases/3/impl-notes.md",
+        "storage": "raw-payload",
+        "stored_bytes": 17159
+      },
+      {
+        "path": "assets/config.template.yaml",
+        "storage": "raw-payload",
+        "stored_bytes": 2714
+      },
+      {
+        "path": "dist/archflow-local.mjs",
+        "storage": "raw-payload",
+        "stored_bytes": 1610971
+      },
+      {
+        "path": "dist/archflow-mcp.mjs",
+        "storage": "raw-payload",
+        "stored_bytes": 2883466
+      },
+      {
+        "path": "dist/manifest.json",
+        "storage": "raw-payload",
+        "stored_bytes": 192973
+      },
+      {
+        "path": "dist/metafile.json",
+        "storage": "raw-payload",
+        "stored_bytes": 331569
+      },
+      {
+        "path": "src/contracts/config.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 4094
+      },
+      {
+        "path": "src/contracts/durable-rule-receipt.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 4392
+      },
+      {
+        "path": "src/contracts/durable-state.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 31719
+      },
+      {
+        "path": "src/contracts/index.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 2256
+      },
+      {
+        "path": "src/contracts/internal/schema-generation-durable.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 6914
+      },
+      {
+        "path": "src/contracts/schemas/v1/config.schema.json",
+        "storage": "raw-payload",
+        "stored_bytes": 2884
+      },
+      {
+        "path": "src/contracts/schemas/v1/rule-advance.schema.json",
+        "storage": "raw-payload",
+        "stored_bytes": 2418
+      },
+      {
+        "path": "src/contracts/schemas/v1/task-state.schema.json",
+        "storage": "raw-payload",
+        "stored_bytes": 25072
+      },
+      {
+        "path": "src/contracts/versions.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 2073
+      },
+      {
+        "path": "src/mcp/handlers/counter-review.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 22017
+      },
+      {
+        "path": "src/mcp/handlers/state.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 41757
+      },
+      {
+        "path": "src/review/fixed-point.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 26380
+      },
+      {
+        "path": "src/review/pinned-context.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 30120
+      },
+      {
+        "path": "src/state/approval-rules.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 6872
+      },
+      {
+        "path": "src/state/implementation-manifest.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 49553
+      },
+      {
+        "path": "src/state/next-action.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 24163
+      },
+      {
+        "path": "src/state/produce-subject.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 19244
+      },
+      {
+        "path": "src/state/request-composition.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 44896
+      },
+      {
+        "path": "src/state/restart-authority.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 6475
+      },
+      {
+        "path": "src/state/status.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 70325
+      },
+      {
+        "path": "src/state/transitions.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 28936
+      },
+      {
+        "path": "test/contracts/durable-contract-surface.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 22254
+      },
+      {
+        "path": "test/contracts/durable-intent-validation.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 4860
+      },
+      {
+        "path": "test/contracts/durable-state-validation.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 7734
+      },
+      {
+        "path": "test/contracts/durable-structural-corpus.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 41504
+      },
+      {
+        "path": "test/contracts/foundational-schema-agreement.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 6984
+      },
+      {
+        "path": "test/contracts/mcp-advertised-schema.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 36078
+      },
+      {
+        "path": "test/contracts/schema-registry.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 6455
+      },
+      {
+        "path": "test/contracts/task-state-planned-final-phase.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 1508
+      },
+      {
+        "path": "test/crash/state-transaction.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 23427
+      },
+      {
+        "path": "test/helpers/semantic-journeys.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 13810
+      },
+      {
+        "path": "test/integration/config-editing.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 17625
+      },
+      {
+        "path": "test/integration/counter-review-pinned-context.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 22688
+      },
+      {
+        "path": "test/integration/planning-restart-handler.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 13418
+      },
+      {
+        "path": "test/integration/review-dispatch-override.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 17471
+      },
+      {
+        "path": "test/integration/semantic-document-journeys.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 58096
+      },
+      {
+        "path": "test/integration/status-reentry-edit.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 44527
+      },
+      {
+        "path": "test/unit/approval-rules.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 11293
+      },
+      {
+        "path": "test/unit/durable-state.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 8672
+      },
+      {
+        "path": "test/unit/implementation-output-builder.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 25795
+      },
+      {
+        "path": "test/unit/review-services.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 28595
+      },
+      {
+        "path": "test/unit/state-next-action.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 28449
+      },
+      {
+        "path": "test/unit/state-produce-subject.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 23177
+      },
+      {
+        "path": "test/unit/state-status.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 28135
+      },
+      {
+        "path": "test/unit/state-transitions.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 37859
+      }
+    ],
+    "measured_at_revision": 109,
+    "result_byte_cap": 26214400,
+    "result_bytes": 6021826,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 16512152
+  },
+  "artifact_digest": "d5fccaee15996bd6d4f59815c42e56c12190365e86f6f11c263754f5b7893270",
+  "input_fingerprint": "3f3fa04f1c6a3b35d22e093de9f389c894be5f1b053a69d89d9094fe7c8e8427",
+  "outputs": [
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "d5b15d707ce8b8a6e115a9c35ec311ffdad3f8f9",
+        "size_bytes": 17159
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": ".archflow/tasks/review-flexibility/phases/3/impl-notes.md",
+      "path_class": "document",
+      "payload_bytes": 17159,
+      "payload_digest": "22addc4918424601b1498da15879caaaf54d235ca5b3a4c24bb60745dc0286f3",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "c2d766be31f67e50ca8dcf70255fff21033c27c9",
+        "size_bytes": 2714
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "ad87a33a2b5d6eeef91ff03cf24e2add91baef10",
+        "size_bytes": 2029
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "assets/config.template.yaml",
+      "path_class": "repository-source",
+      "payload_bytes": 2714,
+      "payload_digest": "6daec99450dbdb41d4016e646c4031a4947e05945b1f0e792b7ef459eda5f92e",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "40131ce8258a8301f862072d12f355863fcc8c0b",
+        "size_bytes": 1610971
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "c785f199cb9700d68c246a276e0168922ec819f7",
+        "size_bytes": 1597893
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "dist/archflow-local.mjs",
+      "path_class": "repository-source",
+      "payload_bytes": 1610971,
+      "payload_digest": "3744e8a473f954075ba11dbd50b915e7342572092736b89ff7037018b90e9eb8",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "f8d3e873d29af3d3734acf09fd84c811afac5963",
+        "size_bytes": 2883466
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "40bfcb99f99844d87f5cc2b77920af38c74dba1c",
+        "size_bytes": 2860118
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "dist/archflow-mcp.mjs",
+      "path_class": "repository-source",
+      "payload_bytes": 2883466,
+      "payload_digest": "db1cd35600b99a8b4844c00108bc968c3233f48c5c954a1048fd8850d40d4628",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "4a7f4e321f8181c8ca03dbbed6ecf77bd4aa1a37",
+        "size_bytes": 192973
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "5794518df51a74eda95aa06ddda406400f07e203",
+        "size_bytes": 191867
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "dist/manifest.json",
+      "path_class": "repository-source",
+      "payload_bytes": 192973,
+      "payload_digest": "dfca36b7657d07c50e1669de1a27815aa20823c15d3a9ffc2680a68e04c7297b",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "41562435ee743490a902c351cf7523b69e939d1a",
+        "size_bytes": 331569
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "3820caf499b57b1153fc035efc4f83adbaf543f0",
+        "size_bytes": 327389
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "dist/metafile.json",
+      "path_class": "repository-source",
+      "payload_bytes": 331569,
+      "payload_digest": "8e2bf63397e6a252bb76ca8a8b7977cca9682a07f3ac2054280285ab750a09a5",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "549a2c12b1b751c896ede1269484e8b5f92de267",
+        "size_bytes": 4094
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "76f8ed9f160a06650d928d33cd67b01d57ad4f4e",
+        "size_bytes": 3124
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/contracts/config.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 4094,
+      "payload_digest": "e4f915714ad4d591c567d14782ba27bcebc33ec6e92fdbf3450ad738b3cdd62a",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "13842a4b57127a293cba134817b53907f45ad78c",
+        "size_bytes": 4392
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": "src/contracts/durable-rule-receipt.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 4392,
+      "payload_digest": "819cff8ea3bc97dfe730d60dba4552219e7a9bcf193b210f9c327f177c6c88c7",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "16814704d5ac2caf90c5ad603f8e3b88bd822f38",
+        "size_bytes": 31719
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "dedbe85fb1e2d2fff8b265986825662c37113c2d",
+        "size_bytes": 30296
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/contracts/durable-state.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 31719,
+      "payload_digest": "097589f3938cb7e194585d741b9dd9803ef2c26baf4930a7362846f3d3b265a5",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "a0bf7de5025186c4c537e86d438c6a8e957d26d9",
+        "size_bytes": 2256
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "02c47c6dfe15698cc0e0ce55ca53f54eb4cce8f8",
+        "size_bytes": 2213
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/contracts/index.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 2256,
+      "payload_digest": "c31179e9e4166f5cc4fa07f95008217ec9f7580285c2d758c352be0b06b25919",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "bc0dd884badbe4274e1568b1489594669051a224",
+        "size_bytes": 6914
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "4a22adb1f25c0775ab2f4ed9d104d1a3f89b2018",
+        "size_bytes": 6529
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/contracts/internal/schema-generation-durable.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 6914,
+      "payload_digest": "cd88080b7ab02fd88b646a7f71bb3b2fbfbf404ce72f842635cbc0b9f12cbbc0",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "3b08354a700252e96d5191c48933eff88eaf2608",
+        "size_bytes": 2884
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "6c3b2938b11eb8b6ef2a2a4225704f9cd5d50b07",
+        "size_bytes": 1941
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/contracts/schemas/v1/config.schema.json",
+      "path_class": "repository-source",
+      "payload_bytes": 2884,
+      "payload_digest": "38dc34fdab017b541add6308ea8ada3ab87caf3cf4c908d1080cad4aac2bc3ad",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "733afdf8c2fc685ccb9661720269edb41cc5323f",
+        "size_bytes": 2418
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": "src/contracts/schemas/v1/rule-advance.schema.json",
+      "path_class": "repository-source",
+      "payload_bytes": 2418,
+      "payload_digest": "411a653b990aaf2cc09cc62819c0bc494e0155bd75c17aac62ffbe37757325b2",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "2c7e529576f51c8b2a4cf15fff3dd72ce91ebeab",
+        "size_bytes": 25072
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "54f3c6a89e5cde7bc49b79b5d477e8c27bc33bba",
+        "size_bytes": 23905
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/contracts/schemas/v1/task-state.schema.json",
+      "path_class": "repository-source",
+      "payload_bytes": 25072,
+      "payload_digest": "83404fb31bfee98dc95d620b9cb14024ed7463e12e1cd23a73944619d7582936",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "f347bdfbaabb6d5b25484140310281fb8ce88e60",
+        "size_bytes": 2073
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "d83f32b3576b72e4e2f5ae62558857ffcf78c4c2",
+        "size_bytes": 2019
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/contracts/versions.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 2073,
+      "payload_digest": "dff28e10da9d953d50c1582bacd6b7424798dde876cf562ffe6845171707df15",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "7344dc51eeb62d93d7dea696fb5bdda8b0f430a5",
+        "size_bytes": 22017
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "2a29c79297de0eab0c76256ec32e739bbbce48a2",
+        "size_bytes": 21356
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/mcp/handlers/counter-review.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 22017,
+      "payload_digest": "99e5e3e94cf3d5dc874c290ff1f571a60b4b35088a9e08bca27668450c318160",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "9b473dc292a8fceeb074ef4b2c4f96bad8af25a8",
+        "size_bytes": 41757
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "81dab455a79b346b416e910fcfeb788041f56f97",
+        "size_bytes": 27346
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/mcp/handlers/state.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 41757,
+      "payload_digest": "0f0c4bffe6b0c652180b1944639ff150db46ff5f35f3f1a375328debbbe69bd0",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "29fc4615dd6be5b53030eb98b45bd456b51d1945",
+        "size_bytes": 26380
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "151395d5cbc1b3efb0a3f3d7015defe0fcc90f90",
+        "size_bytes": 25690
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/review/fixed-point.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 26380,
+      "payload_digest": "cbfe83e644ddd730cf02970edd1787dceae978cb5e667222d03f599f8fa46ac7",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "920117be43b42d94bd5d593d8e949b20db134c02",
+        "size_bytes": 30120
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "05fb9f2aa19bc9b6c543320b34cb4b1da0879617",
+        "size_bytes": 29214
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/review/pinned-context.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 30120,
+      "payload_digest": "63ae03eca53404f9e19d0b2760749eb744f66a865d9934eee1f6820f18039d06",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "4f5637cd52bbd428aeedaeb9c9957ea0d81cc9f1",
+        "size_bytes": 6872
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": "src/state/approval-rules.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 6872,
+      "payload_digest": "9b9adab2c9b57b8a4e30f75ad11b512dd21147fab7f1e663f7d7225a9cdd1090",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "ed9d99a0629c49d9a0ae0bc3cc64f8a6adb87e8c",
+        "size_bytes": 49553
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "5a0c39c998c35cc2481cac42b48d5d421cd755c7",
+        "size_bytes": 46918
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/implementation-manifest.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 49553,
+      "payload_digest": "7a72dcdaf6739ce12590e94e40c13b26be45d602fda44d51989ec3e41a5c562d",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "8a83df8d47f6c35f652bcd65e42da1d3eae99d09",
+        "size_bytes": 24163
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "26a15cb36aa4ab01173b0bbc78e7cca24cb3fc77",
+        "size_bytes": 21467
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/next-action.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 24163,
+      "payload_digest": "2873b5b5dcfb46abed8ff8580594d6f615627df13eff025febaae5e30f792982",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "79fefb03630a57842c3a1d0e539a7fc920c2e26c",
+        "size_bytes": 19244
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "f7eeae4f69c508d3f9d7ee1dd222a4c3cb3f2e67",
+        "size_bytes": 18228
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/produce-subject.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 19244,
+      "payload_digest": "5789eafe683f56729598d8103b0b929ef807e3d84924d48328eaf1788ba72667",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "db79ddc218ca896c187292fbd5a9afb9c7248f02",
+        "size_bytes": 44896
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "9510c840e87a533138fb92a9a7daf538344f3bd4",
+        "size_bytes": 43319
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/request-composition.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 44896,
+      "payload_digest": "677c58ae6f4a75da4530f42d059059cdbaa3526c2c838c7c5a80bbf66abe0008",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "75f38a68fb10827ab6477ab901700dc7b2cd46af",
+        "size_bytes": 6475
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "20b4f02967c6c94a53e897fb6d98d9070baa60b3",
+        "size_bytes": 5554
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/restart-authority.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 6475,
+      "payload_digest": "569596cd6efff1e4b7aa4e0a57c4614086d6626cc09b53817c0ffb0c9e75d279",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "964785a13f2bbc75db230e27c29cbacbb01a599c",
+        "size_bytes": 70325
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "6453ef68f306cedae54d39da0ddf669489906213",
+        "size_bytes": 65144
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/status.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 70325,
+      "payload_digest": "1a7db655b7b9e0f118e7c8a708249aae38245428e317eef0ea9ebc0408b61bab",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "3086a06eedc30a294d7dfec6c4278e238e716a8d",
+        "size_bytes": 28936
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "ff511c2715dbc6faf36c1a226021b0e74ba3ecd3",
+        "size_bytes": 25321
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/transitions.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 28936,
+      "payload_digest": "423ad93ba97671cfd29f7a0351ebb4294651c8ee3d009bd620e315ac228d3c24",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "1229fb848a1dbb5fb3581399696eebf28d8596d3",
+        "size_bytes": 22254
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "23c3c2fb1185c027cd22da5ecb7e7130daf8921b",
+        "size_bytes": 22102
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/contracts/durable-contract-surface.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 22254,
+      "payload_digest": "66b3317224fa93b0560c9d10d461eac5c21baf44c506f003d8c897f0983eefd8",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "05aa6f46f0c5ea16c56ff6c654a3e18da58e0cf7",
+        "size_bytes": 4860
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "83dee28ac571edcfbd79b0de839496535cabc37f",
+        "size_bytes": 4832
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/contracts/durable-intent-validation.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 4860,
+      "payload_digest": "197b9c8cf554c7a8773314d7a5f10d91becda3c4d75cfd139bbed22405fb8e53",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "74045814f862eb7c426a1ff8070927ed8f9c0450",
+        "size_bytes": 7734
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "6da049469c7097b764609191ee7937d47ae5460d",
+        "size_bytes": 4270
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/contracts/durable-state-validation.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 7734,
+      "payload_digest": "e00ab52eb8a6d316070f1841b8b9b207699a3de42b460a328927a85f3cd73523",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "ceb2c69fdd75610fd5c09e53d28f9a96029af4ac",
+        "size_bytes": 41504
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "4d07da57f019b68ad6d79149950a9389042a6cb4",
+        "size_bytes": 39742
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/contracts/durable-structural-corpus.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 41504,
+      "payload_digest": "42b4d0515652812d9ef61db021d61e65e4d215ca7640a91c2d6ff7f7e69f4649",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "fab72e66ecee4f15c534f9cd220ff3850addddb5",
+        "size_bytes": 6984
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "e94a563f4c35814847e22f5e546c1d861ad0d453",
+        "size_bytes": 5365
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/contracts/foundational-schema-agreement.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 6984,
+      "payload_digest": "2f1d0ee3939ecd2e2d345866c77ab540eb88b68df2256a55065b8f0fa2f47fd5",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "f1c2921acd2341ddb2a94ab756ae8564d8eb14f3",
+        "size_bytes": 36078
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "0852619ec60e4aedf58657cb9020b2de13301e0e",
+        "size_bytes": 36017
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/contracts/mcp-advertised-schema.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 36078,
+      "payload_digest": "03c39f776fd6b9f89dc7cd90eb408b86f9ac0dc8e858a80a224ec794fb571a04",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "4358fbfb456e821897310cbdb411c2c28f432325",
+        "size_bytes": 6455
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "0821601852fdb05be692f35fe60a2759a647cdde",
+        "size_bytes": 6424
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/contracts/schema-registry.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 6455,
+      "payload_digest": "625afd3ca62fe47297b61e6c6ae45fb8c0c7b3454044e815800a59745513d51f",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "4564700feb95b4285ae216e461bd8e8cc3968206",
+        "size_bytes": 1508
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "15d75ea8fe48970d247427ad51d148b0238064e2",
+        "size_bytes": 1361
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/contracts/task-state-planned-final-phase.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 1508,
+      "payload_digest": "fad43b6e6420b90fdec8cb3ee69627b495c9bfc4d1c63c7cd1d4ad60523dd1db",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "4c32c8b35b188eeb850cd9dc64e80b1ad5130ba7",
+        "size_bytes": 23427
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "c9b6d780d925ba2a86383b1c2aaafa8447f282f7",
+        "size_bytes": 21308
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/crash/state-transaction.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 23427,
+      "payload_digest": "1509a40696eccb23fe05228255b225f09b5e38df18980510df218bc0532bda11",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "cda140652b7bc490712fad8909954ef14b7d2ba9",
+        "size_bytes": 13810
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "18f181b3eabd6e814a9c0c3633d0a6e150d83fd5",
+        "size_bytes": 12514
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/helpers/semantic-journeys.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 13810,
+      "payload_digest": "267e9a66793e7c1129ca859e8adc91153de44ec93929f2c8b77e902b63e14bc5",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "65d385acb347ee655298f97fbb9d4723285f2a11",
+        "size_bytes": 17625
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "f297fa52497f99b1204bdf2672651803e51058c5",
+        "size_bytes": 17071
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/integration/config-editing.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 17625,
+      "payload_digest": "0f7c23844b2dcd9ae58c85121efc0188c791eead15c5eb762524baf45ec35f4d",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "8aa5ffeca28978f3a30b7e64a07c6be20c55c046",
+        "size_bytes": 22688
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "1688c3f40f227b996012abecece57fc2c2bb3c9a",
+        "size_bytes": 18749
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/integration/counter-review-pinned-context.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 22688,
+      "payload_digest": "15f4eaa12bdb7ce1b4e8eb1c33e125dfdf2143f450f476aaac27aa54d85cbe5a",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "fe2b69a347377d2deceb91ea569b41128f6ea11e",
+        "size_bytes": 13418
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "a95dbca063774920b67a0e7810e6a5eb407645c9",
+        "size_bytes": 5803
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/integration/planning-restart-handler.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 13418,
+      "payload_digest": "aeecab9774356f0af511db3c4172f81736a9ed53c336b5532fc3cf866f26897c",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "7809e72bbd69598d20126de3778f5ad0c64edee1",
+        "size_bytes": 17471
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "4759afc488d581034121f257995ca914cc87f4e6",
+        "size_bytes": 16739
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/integration/review-dispatch-override.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 17471,
+      "payload_digest": "69b44668bef7d16b4522e5dc7add943ea3c72e0c9fc7d1e31af42af1c2e11f6f",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "1b8f36fd6829ad92e22b3b993fe087aa5e37b96f",
+        "size_bytes": 58096
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "2f2360516ba5e8db648bd04c8de50151e6af2550",
+        "size_bytes": 20776
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/integration/semantic-document-journeys.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 58096,
+      "payload_digest": "008fa75929908f5b4f8135cdf4b3fe7d80c42542976f3191b643878099e6a24f",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "ab88f4b94e2d24f38e4c355300d87e7e39d38f00",
+        "size_bytes": 44527
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "4d9184e35ce6ae96464d8315da1d2ff0ba103f23",
+        "size_bytes": 43907
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/integration/status-reentry-edit.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 44527,
+      "payload_digest": "fb33b55eda8ac6d4c0d9faeacee409e4bfa906a0918b2269e76e2df740dab3cd",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "4205e9ae2450753e82853a10ea41c6e9342a267b",
+        "size_bytes": 11293
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": "test/unit/approval-rules.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 11293,
+      "payload_digest": "f0639bd0ab081f9ebaeb6364edf199ca74389caad4c19767fd63ae3cb7831e92",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "986e8dde1638cc2954cf37a843ec0dcac688ec8c",
+        "size_bytes": 8672
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "0b36c7262f95f25c927c181f7eaa29906ace1b56",
+        "size_bytes": 8638
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/durable-state.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 8672,
+      "payload_digest": "ff6898bfb0554007dff9c8f25361b89942c68e26fd7646cfdacb490d371337eb",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "4fdd6f2278d7d40fee81b681e19f1d082ce6c978",
+        "size_bytes": 25795
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "e147f11526c6e204d0b1cf61b28029e92d6f2a28",
+        "size_bytes": 19156
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/implementation-output-builder.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 25795,
+      "payload_digest": "7b1bfe789ad94c77e00fb2cf6c141313144f6ca603680917b45c6087c79adbe5",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "4f01ecb6dbe42baa92f53618c03c454b4344311e",
+        "size_bytes": 28595
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "997d625c49097032e8b4d1194f8b0fa1286996c9",
+        "size_bytes": 27412
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/review-services.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 28595,
+      "payload_digest": "98c43d5ce431a27a158617205a44477e31e17fff0fc5c8414746535b19514ff5",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "0447964b3c8ce284b49270908e5a8f44cf9928a3",
+        "size_bytes": 28449
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "687bd35af63584473b63823054c323dbf115e47d",
+        "size_bytes": 23906
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/state-next-action.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 28449,
+      "payload_digest": "b620e65c0bdc9dc5598d70d2e59b1da5adccad68be2cc9d764e02483571f4441",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "14ad3b4e0c863825de081f14bb7ff7983fe01c28",
+        "size_bytes": 23177
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "a9abe464e40e7412174b940589481e0cddb9d62d",
+        "size_bytes": 19636
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/state-produce-subject.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 23177,
+      "payload_digest": "84cbc36b1ee0f838f46eb5180631529232263f04af6e78dc4ae4ab4e20d00332",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "dff9ccd3f7ea5a3b0106cb48e10f8b97cfd49c94",
+        "size_bytes": 28135
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "6c4885ab4420caf3c8f66eff67ce4804c201dd80",
+        "size_bytes": 24800
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/state-status.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 28135,
+      "payload_digest": "407a8205105794656a2300320464949ed887939b39f7f7045486dacecb98fadb",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "68190594e49d08da5f464c22fbcf1a32edde1b23",
+        "size_bytes": 37859
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "aa35535b08a80c0e54ddbe30bb9faa81636fa860",
+        "size_bytes": 29162
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/state-transitions.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 37859,
+      "payload_digest": "e9fd43ed2459eb2096b66301cdc7a1786dbe746311a85daf06bcd6f89b938151",
+      "storage": "raw-payload"
+    }
+  ],
+  "phase_instance": "phase-impl-3",
+  "projections": [
+    {
+      "content_digest": "22addc4918424601b1498da15879caaaf54d235ca5b3a4c24bb60745dc0286f3",
+      "path": ".archflow/tasks/review-flexibility/phases/3/impl-notes.md"
+    },
+    {
+      "content_digest": "6daec99450dbdb41d4016e646c4031a4947e05945b1f0e792b7ef459eda5f92e",
+      "path": "assets/config.template.yaml"
+    },
+    {
+      "content_digest": "3744e8a473f954075ba11dbd50b915e7342572092736b89ff7037018b90e9eb8",
+      "path": "dist/archflow-local.mjs"
+    },
+    {
+      "content_digest": "db1cd35600b99a8b4844c00108bc968c3233f48c5c954a1048fd8850d40d4628",
+      "path": "dist/archflow-mcp.mjs"
+    },
+    {
+      "content_digest": "dfca36b7657d07c50e1669de1a27815aa20823c15d3a9ffc2680a68e04c7297b",
+      "path": "dist/manifest.json"
+    },
+    {
+      "content_digest": "8e2bf63397e6a252bb76ca8a8b7977cca9682a07f3ac2054280285ab750a09a5",
+      "path": "dist/metafile.json"
+    },
+    {
+      "content_digest": "e4f915714ad4d591c567d14782ba27bcebc33ec6e92fdbf3450ad738b3cdd62a",
+      "path": "src/contracts/config.ts"
+    },
+    {
+      "content_digest": "819cff8ea3bc97dfe730d60dba4552219e7a9bcf193b210f9c327f177c6c88c7",
+      "path": "src/contracts/durable-rule-receipt.ts"
+    },
+    {
+      "content_digest": "097589f3938cb7e194585d741b9dd9803ef2c26baf4930a7362846f3d3b265a5",
+      "path": "src/contracts/durable-state.ts"
+    },
+    {
+      "content_digest": "c31179e9e4166f5cc4fa07f95008217ec9f7580285c2d758c352be0b06b25919",
+      "path": "src/contracts/index.ts"
+    },
+    {
+      "content_digest": "cd88080b7ab02fd88b646a7f71bb3b2fbfbf404ce72f842635cbc0b9f12cbbc0",
+      "path": "src/contracts/internal/schema-generation-durable.ts"
+    },
+    {
+      "content_digest": "38dc34fdab017b541add6308ea8ada3ab87caf3cf4c908d1080cad4aac2bc3ad",
+      "path": "src/contracts/schemas/v1/config.schema.json"
+    },
+    {
+      "content_digest": "411a653b990aaf2cc09cc62819c0bc494e0155bd75c17aac62ffbe37757325b2",
+      "path": "src/contracts/schemas/v1/rule-advance.schema.json"
+    },
+    {
+      "content_digest": "83404fb31bfee98dc95d620b9cb14024ed7463e12e1cd23a73944619d7582936",
+      "path": "src/contracts/schemas/v1/task-state.schema.json"
+    },
+    {
+      "content_digest": "dff28e10da9d953d50c1582bacd6b7424798dde876cf562ffe6845171707df15",
+      "path": "src/contracts/versions.ts"
+    },
+    {
+      "content_digest": "99e5e3e94cf3d5dc874c290ff1f571a60b4b35088a9e08bca27668450c318160",
+      "path": "src/mcp/handlers/counter-review.ts"
+    },
+    {
+      "content_digest": "0f0c4bffe6b0c652180b1944639ff150db46ff5f35f3f1a375328debbbe69bd0",
+      "path": "src/mcp/handlers/state.ts"
+    },
+    {
+      "content_digest": "cbfe83e644ddd730cf02970edd1787dceae978cb5e667222d03f599f8fa46ac7",
+      "path": "src/review/fixed-point.ts"
+    },
+    {
+      "content_digest": "63ae03eca53404f9e19d0b2760749eb744f66a865d9934eee1f6820f18039d06",
+      "path": "src/review/pinned-context.ts"
+    },
+    {
+      "content_digest": "9b9adab2c9b57b8a4e30f75ad11b512dd21147fab7f1e663f7d7225a9cdd1090",
+      "path": "src/state/approval-rules.ts"
+    },
+    {
+      "content_digest": "7a72dcdaf6739ce12590e94e40c13b26be45d602fda44d51989ec3e41a5c562d",
+      "path": "src/state/implementation-manifest.ts"
+    },
+    {
+      "content_digest": "2873b5b5dcfb46abed8ff8580594d6f615627df13eff025febaae5e30f792982",
+      "path": "src/state/next-action.ts"
+    },
+    {
+      "content_digest": "5789eafe683f56729598d8103b0b929ef807e3d84924d48328eaf1788ba72667",
+      "path": "src/state/produce-subject.ts"
+    },
+    {
+      "content_digest": "677c58ae6f4a75da4530f42d059059cdbaa3526c2c838c7c5a80bbf66abe0008",
+      "path": "src/state/request-composition.ts"
+    },
+    {
+      "content_digest": "569596cd6efff1e4b7aa4e0a57c4614086d6626cc09b53817c0ffb0c9e75d279",
+      "path": "src/state/restart-authority.ts"
+    },
+    {
+      "content_digest": "1a7db655b7b9e0f118e7c8a708249aae38245428e317eef0ea9ebc0408b61bab",
+      "path": "src/state/status.ts"
+    },
+    {
+      "content_digest": "423ad93ba97671cfd29f7a0351ebb4294651c8ee3d009bd620e315ac228d3c24",
+      "path": "src/state/transitions.ts"
+    },
+    {
+      "content_digest": "66b3317224fa93b0560c9d10d461eac5c21baf44c506f003d8c897f0983eefd8",
+      "path": "test/contracts/durable-contract-surface.test.ts"
+    },
+    {
+      "content_digest": "197b9c8cf554c7a8773314d7a5f10d91becda3c4d75cfd139bbed22405fb8e53",
+      "path": "test/contracts/durable-intent-validation.test.ts"
+    },
+    {
+      "content_digest": "e00ab52eb8a6d316070f1841b8b9b207699a3de42b460a328927a85f3cd73523",
+      "path": "test/contracts/durable-state-validation.test.ts"
+    },
+    {
+      "content_digest": "42b4d0515652812d9ef61db021d61e65e4d215ca7640a91c2d6ff7f7e69f4649",
+      "path": "test/contracts/durable-structural-corpus.test.ts"
+    },
+    {
+      "content_digest": "2f1d0ee3939ecd2e2d345866c77ab540eb88b68df2256a55065b8f0fa2f47fd5",
+      "path": "test/contracts/foundational-schema-agreement.test.ts"
+    },
+    {
+      "content_digest": "03c39f776fd6b9f89dc7cd90eb408b86f9ac0dc8e858a80a224ec794fb571a04",
+      "path": "test/contracts/mcp-advertised-schema.test.ts"
+    },
+    {
+      "content_digest": "625afd3ca62fe47297b61e6c6ae45fb8c0c7b3454044e815800a59745513d51f",
+      "path": "test/contracts/schema-registry.test.ts"
+    },
+    {
+      "content_digest": "fad43b6e6420b90fdec8cb3ee69627b495c9bfc4d1c63c7cd1d4ad60523dd1db",
+      "path": "test/contracts/task-state-planned-final-phase.test.ts"
+    },
+    {
+      "content_digest": "1509a40696eccb23fe05228255b225f09b5e38df18980510df218bc0532bda11",
+      "path": "test/crash/state-transaction.test.ts"
+    },
+    {
+      "content_digest": "267e9a66793e7c1129ca859e8adc91153de44ec93929f2c8b77e902b63e14bc5",
+      "path": "test/helpers/semantic-journeys.ts"
+    },
+    {
+      "content_digest": "0f7c23844b2dcd9ae58c85121efc0188c791eead15c5eb762524baf45ec35f4d",
+      "path": "test/integration/config-editing.test.ts"
+    },
+    {
+      "content_digest": "15f4eaa12bdb7ce1b4e8eb1c33e125dfdf2143f450f476aaac27aa54d85cbe5a",
+      "path": "test/integration/counter-review-pinned-context.test.ts"
+    },
+    {
+      "content_digest": "aeecab9774356f0af511db3c4172f81736a9ed53c336b5532fc3cf866f26897c",
+      "path": "test/integration/planning-restart-handler.test.ts"
+    },
+    {
+      "content_digest": "69b44668bef7d16b4522e5dc7add943ea3c72e0c9fc7d1e31af42af1c2e11f6f",
+      "path": "test/integration/review-dispatch-override.test.ts"
+    },
+    {
+      "content_digest": "008fa75929908f5b4f8135cdf4b3fe7d80c42542976f3191b643878099e6a24f",
+      "path": "test/integration/semantic-document-journeys.test.ts"
+    },
+    {
+      "content_digest": "fb33b55eda8ac6d4c0d9faeacee409e4bfa906a0918b2269e76e2df740dab3cd",
+      "path": "test/integration/status-reentry-edit.test.ts"
+    },
+    {
+      "content_digest": "f0639bd0ab081f9ebaeb6364edf199ca74389caad4c19767fd63ae3cb7831e92",
+      "path": "test/unit/approval-rules.test.ts"
+    },
+    {
+      "content_digest": "ff6898bfb0554007dff9c8f25361b89942c68e26fd7646cfdacb490d371337eb",
+      "path": "test/unit/durable-state.test.ts"
+    },
+    {
+      "content_digest": "7b1bfe789ad94c77e00fb2cf6c141313144f6ca603680917b45c6087c79adbe5",
+      "path": "test/unit/implementation-output-builder.test.ts"
+    },
+    {
+      "content_digest": "98c43d5ce431a27a158617205a44477e31e17fff0fc5c8414746535b19514ff5",
+      "path": "test/unit/review-services.test.ts"
+    },
+    {
+      "content_digest": "b620e65c0bdc9dc5598d70d2e59b1da5adccad68be2cc9d764e02483571f4441",
+      "path": "test/unit/state-next-action.test.ts"
+    },
+    {
+      "content_digest": "84cbc36b1ee0f838f46eb5180631529232263f04af6e78dc4ae4ab4e20d00332",
+      "path": "test/unit/state-produce-subject.test.ts"
+    },
+    {
+      "content_digest": "407a8205105794656a2300320464949ed887939b39f7f7045486dacecb98fadb",
+      "path": "test/unit/state-status.test.ts"
+    },
+    {
+      "content_digest": "e9fd43ed2459eb2096b66301cdc7a1786dbe746311a85daf06bcd6f89b938151",
+      "path": "test/unit/state-transitions.test.ts"
+    }
+  ],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "state-result-2d687989c43b82437c59e941e25a3e68",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [
+      ".archflow/tasks/review-flexibility/phases/3/impl-notes.md",
+      "assets/config.template.yaml",
+      "dist/archflow-local.mjs",
+      "dist/archflow-mcp.mjs",
+      "dist/manifest.json",
+      "dist/metafile.json",
+      "src/contracts/config.ts",
+      "src/contracts/durable-rule-receipt.ts",
+      "src/contracts/durable-state.ts",
+      "src/contracts/index.ts",
+      "src/contracts/internal/schema-generation-durable.ts",
+      "src/contracts/schemas/v1/config.schema.json",
+      "src/contracts/schemas/v1/rule-advance.schema.json",
+      "src/contracts/schemas/v1/task-state.schema.json",
+      "src/contracts/versions.ts",
+      "src/mcp/handlers/counter-review.ts",
+      "src/mcp/handlers/state.ts",
+      "src/review/fixed-point.ts",
+      "src/review/pinned-context.ts",
+      "src/state/approval-rules.ts",
+      "src/state/implementation-manifest.ts",
+      "src/state/next-action.ts",
+      "src/state/produce-subject.ts",
+      "src/state/request-composition.ts",
+      "src/state/restart-authority.ts",
+      "src/state/status.ts",
+      "src/state/transitions.ts",
+      "test/contracts/durable-contract-surface.test.ts",
+      "test/contracts/durable-intent-validation.test.ts",
+      "test/contracts/durable-state-validation.test.ts",
+      "test/contracts/durable-structural-corpus.test.ts",
+      "test/contracts/foundational-schema-agreement.test.ts",
+      "test/contracts/mcp-advertised-schema.test.ts",
+      "test/contracts/schema-registry.test.ts",
+      "test/contracts/task-state-planned-final-phase.test.ts",
+      "test/crash/state-transaction.test.ts",
+      "test/helpers/semantic-journeys.ts",
+      "test/integration/config-editing.test.ts",
+      "test/integration/counter-review-pinned-context.test.ts",
+      "test/integration/planning-restart-handler.test.ts",
+      "test/integration/review-dispatch-override.test.ts",
+      "test/integration/semantic-document-journeys.test.ts",
+      "test/integration/status-reentry-edit.test.ts",
+      "test/unit/approval-rules.test.ts",
+      "test/unit/durable-state.test.ts",
+      "test/unit/implementation-output-builder.test.ts",
+      "test/unit/review-services.test.ts",
+      "test/unit/state-next-action.test.ts",
+      "test/unit/state-produce-subject.test.ts",
+      "test/unit/state-status.test.ts",
+      "test/unit/state-transitions.test.ts"
+    ],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "72c0dac5b0cf7977f193044e14db2e7f17bce5bfd5ed3fd66663a9bf0e245668",
+  "source_artifact": {
+    "accounting": {
+      "counted_entries": [
+        {
+          "path": ".archflow/tasks/review-flexibility/phases/3/impl-notes.md",
+          "storage": "raw-payload",
+          "stored_bytes": 17159
+        },
+        {
+          "path": "assets/config.template.yaml",
+          "storage": "raw-payload",
+          "stored_bytes": 2714
+        },
+        {
+          "path": "dist/archflow-local.mjs",
+          "storage": "raw-payload",
+          "stored_bytes": 1610971
+        },
+        {
+          "path": "dist/archflow-mcp.mjs",
+          "storage": "raw-payload",
+          "stored_bytes": 2883466
+        },
+        {
+          "path": "dist/manifest.json",
+          "storage": "raw-payload",
+          "stored_bytes": 192973
+        },
+        {
+          "path": "dist/metafile.json",
+          "storage": "raw-payload",
+          "stored_bytes": 331569
+        },
+        {
+          "path": "src/contracts/config.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 4094
+        },
+        {
+          "path": "src/contracts/durable-rule-receipt.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 4392
+        },
+        {
+          "path": "src/contracts/durable-state.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 31719
+        },
+        {
+          "path": "src/contracts/index.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 2256
+        },
+        {
+          "path": "src/contracts/internal/schema-generation-durable.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 6914
+        },
+        {
+          "path": "src/contracts/schemas/v1/config.schema.json",
+          "storage": "raw-payload",
+          "stored_bytes": 2884
+        },
+        {
+          "path": "src/contracts/schemas/v1/rule-advance.schema.json",
+          "storage": "raw-payload",
+          "stored_bytes": 2418
+        },
+        {
+          "path": "src/contracts/schemas/v1/task-state.schema.json",
+          "storage": "raw-payload",
+          "stored_bytes": 25072
+        },
+        {
+          "path": "src/contracts/versions.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 2073
+        },
+        {
+          "path": "src/mcp/handlers/counter-review.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 22017
+        },
+        {
+          "path": "src/mcp/handlers/state.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 41757
+        },
+        {
+          "path": "src/review/fixed-point.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 26380
+        },
+        {
+          "path": "src/review/pinned-context.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 30120
+        },
+        {
+          "path": "src/state/approval-rules.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 6872
+        },
+        {
+          "path": "src/state/implementation-manifest.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 49553
+        },
+        {
+          "path": "src/state/next-action.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 24163
+        },
+        {
+          "path": "src/state/produce-subject.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 19244
+        },
+        {
+          "path": "src/state/request-composition.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 44896
+        },
+        {
+          "path": "src/state/restart-authority.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 6475
+        },
+        {
+          "path": "src/state/status.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 70325
+        },
+        {
+          "path": "src/state/transitions.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 28936
+        },
+        {
+          "path": "test/contracts/durable-contract-surface.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 22254
+        },
+        {
+          "path": "test/contracts/durable-intent-validation.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 4860
+        },
+        {
+          "path": "test/contracts/durable-state-validation.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 7734
+        },
+        {
+          "path": "test/contracts/durable-structural-corpus.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 41504
+        },
+        {
+          "path": "test/contracts/foundational-schema-agreement.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 6984
+        },
+        {
+          "path": "test/contracts/mcp-advertised-schema.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 36078
+        },
+        {
+          "path": "test/contracts/schema-registry.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 6455
+        },
+        {
+          "path": "test/contracts/task-state-planned-final-phase.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 1508
+        },
+        {
+          "path": "test/crash/state-transaction.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 23427
+        },
+        {
+          "path": "test/helpers/semantic-journeys.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 13810
+        },
+        {
+          "path": "test/integration/config-editing.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 17625
+        },
+        {
+          "path": "test/integration/counter-review-pinned-context.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 22688
+        },
+        {
+          "path": "test/integration/planning-restart-handler.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 13418
+        },
+        {
+          "path": "test/integration/review-dispatch-override.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 17471
+        },
+        {
+          "path": "test/integration/semantic-document-journeys.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 58096
+        },
+        {
+          "path": "test/integration/status-reentry-edit.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 44527
+        },
+        {
+          "path": "test/unit/approval-rules.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 11293
+        },
+        {
+          "path": "test/unit/durable-state.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 8672
+        },
+        {
+          "path": "test/unit/implementation-output-builder.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 25795
+        },
+        {
+          "path": "test/unit/review-services.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 28595
+        },
+        {
+          "path": "test/unit/state-next-action.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 28449
+        },
+        {
+          "path": "test/unit/state-produce-subject.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 23177
+        },
+        {
+          "path": "test/unit/state-status.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 28135
+        },
+        {
+          "path": "test/unit/state-transitions.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 37859
+        }
+      ],
+      "measured_at_revision": 109,
+      "result_byte_cap": 26214400,
+      "result_bytes": 6021826,
+      "schema_version": "1",
+      "task_byte_cap": 262144000,
+      "task_bytes": 16512152
+    },
+    "artifact_kind": "implementation-output",
+    "base_commit": "956018be579e29aea4fe36bfc4da84a76fac1999",
+    "declared_inputs": [
+      {
+        "digest": "934c693848e4be324d59828d9f0eef59958339d570f91fcbd904682a0113c9c9",
+        "input_id": "phase-design"
+      },
+      {
+        "digest": "4a3136fe9ed0390477b7926f15444873d2cb78a0346173556d5b3f63c1767e79",
+        "input_id": "prd"
+      },
+      {
+        "digest": "72f94d225051b2270be7fc3db86a1830b09948930fe50ce7045125a649026264",
+        "input_id": "prior-implementation-notes"
+      },
+      {
+        "digest": "01c92e176a96a57b010bf5107f05086e6617609c46cb7bdfabed2e525404574c",
+        "input_id": "task-design"
+      }
+    ],
+    "diff_digest": "9efee068cf887729ad7d826ad8e3716e8f77f57ca028e4e188f390c2c98f111a",
+    "index_identity_digest": "5559a2a21b3e2aa486d76dae11106809b40b3da15470f313bf5ea1cd110246b8",
+    "input_fingerprint": "3f3fa04f1c6a3b35d22e093de9f389c894be5f1b053a69d89d9094fe7c8e8427",
+    "outputs": [
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "d5b15d707ce8b8a6e115a9c35ec311ffdad3f8f9",
+          "size_bytes": 17159
+        },
+        "file_type": "regular",
+        "operation": "add",
+        "path": ".archflow/tasks/review-flexibility/phases/3/impl-notes.md",
+        "path_class": "document",
+        "payload_bytes": 17159,
+        "payload_digest": "22addc4918424601b1498da15879caaaf54d235ca5b3a4c24bb60745dc0286f3",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "c2d766be31f67e50ca8dcf70255fff21033c27c9",
+          "size_bytes": 2714
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "ad87a33a2b5d6eeef91ff03cf24e2add91baef10",
+          "size_bytes": 2029
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "assets/config.template.yaml",
+        "path_class": "repository-source",
+        "payload_bytes": 2714,
+        "payload_digest": "6daec99450dbdb41d4016e646c4031a4947e05945b1f0e792b7ef459eda5f92e",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "40131ce8258a8301f862072d12f355863fcc8c0b",
+          "size_bytes": 1610971
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "c785f199cb9700d68c246a276e0168922ec819f7",
+          "size_bytes": 1597893
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "dist/archflow-local.mjs",
+        "path_class": "repository-source",
+        "payload_bytes": 1610971,
+        "payload_digest": "3744e8a473f954075ba11dbd50b915e7342572092736b89ff7037018b90e9eb8",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "f8d3e873d29af3d3734acf09fd84c811afac5963",
+          "size_bytes": 2883466
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "40bfcb99f99844d87f5cc2b77920af38c74dba1c",
+          "size_bytes": 2860118
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "dist/archflow-mcp.mjs",
+        "path_class": "repository-source",
+        "payload_bytes": 2883466,
+        "payload_digest": "db1cd35600b99a8b4844c00108bc968c3233f48c5c954a1048fd8850d40d4628",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "4a7f4e321f8181c8ca03dbbed6ecf77bd4aa1a37",
+          "size_bytes": 192973
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "5794518df51a74eda95aa06ddda406400f07e203",
+          "size_bytes": 191867
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "dist/manifest.json",
+        "path_class": "repository-source",
+        "payload_bytes": 192973,
+        "payload_digest": "dfca36b7657d07c50e1669de1a27815aa20823c15d3a9ffc2680a68e04c7297b",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "41562435ee743490a902c351cf7523b69e939d1a",
+          "size_bytes": 331569
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "3820caf499b57b1153fc035efc4f83adbaf543f0",
+          "size_bytes": 327389
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "dist/metafile.json",
+        "path_class": "repository-source",
+        "payload_bytes": 331569,
+        "payload_digest": "8e2bf63397e6a252bb76ca8a8b7977cca9682a07f3ac2054280285ab750a09a5",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "549a2c12b1b751c896ede1269484e8b5f92de267",
+          "size_bytes": 4094
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "76f8ed9f160a06650d928d33cd67b01d57ad4f4e",
+          "size_bytes": 3124
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/contracts/config.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 4094,
+        "payload_digest": "e4f915714ad4d591c567d14782ba27bcebc33ec6e92fdbf3450ad738b3cdd62a",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "13842a4b57127a293cba134817b53907f45ad78c",
+          "size_bytes": 4392
+        },
+        "file_type": "regular",
+        "operation": "add",
+        "path": "src/contracts/durable-rule-receipt.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 4392,
+        "payload_digest": "819cff8ea3bc97dfe730d60dba4552219e7a9bcf193b210f9c327f177c6c88c7",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "16814704d5ac2caf90c5ad603f8e3b88bd822f38",
+          "size_bytes": 31719
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "dedbe85fb1e2d2fff8b265986825662c37113c2d",
+          "size_bytes": 30296
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/contracts/durable-state.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 31719,
+        "payload_digest": "097589f3938cb7e194585d741b9dd9803ef2c26baf4930a7362846f3d3b265a5",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "a0bf7de5025186c4c537e86d438c6a8e957d26d9",
+          "size_bytes": 2256
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "02c47c6dfe15698cc0e0ce55ca53f54eb4cce8f8",
+          "size_bytes": 2213
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/contracts/index.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 2256,
+        "payload_digest": "c31179e9e4166f5cc4fa07f95008217ec9f7580285c2d758c352be0b06b25919",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "bc0dd884badbe4274e1568b1489594669051a224",
+          "size_bytes": 6914
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "4a22adb1f25c0775ab2f4ed9d104d1a3f89b2018",
+          "size_bytes": 6529
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/contracts/internal/schema-generation-durable.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 6914,
+        "payload_digest": "cd88080b7ab02fd88b646a7f71bb3b2fbfbf404ce72f842635cbc0b9f12cbbc0",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "3b08354a700252e96d5191c48933eff88eaf2608",
+          "size_bytes": 2884
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "6c3b2938b11eb8b6ef2a2a4225704f9cd5d50b07",
+          "size_bytes": 1941
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/contracts/schemas/v1/config.schema.json",
+        "path_class": "repository-source",
+        "payload_bytes": 2884,
+        "payload_digest": "38dc34fdab017b541add6308ea8ada3ab87caf3cf4c908d1080cad4aac2bc3ad",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "733afdf8c2fc685ccb9661720269edb41cc5323f",
+          "size_bytes": 2418
+        },
+        "file_type": "regular",
+        "operation": "add",
+        "path": "src/contracts/schemas/v1/rule-advance.schema.json",
+        "path_class": "repository-source",
+        "payload_bytes": 2418,
+        "payload_digest": "411a653b990aaf2cc09cc62819c0bc494e0155bd75c17aac62ffbe37757325b2",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "2c7e529576f51c8b2a4cf15fff3dd72ce91ebeab",
+          "size_bytes": 25072
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "54f3c6a89e5cde7bc49b79b5d477e8c27bc33bba",
+          "size_bytes": 23905
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/contracts/schemas/v1/task-state.schema.json",
+        "path_class": "repository-source",
+        "payload_bytes": 25072,
+        "payload_digest": "83404fb31bfee98dc95d620b9cb14024ed7463e12e1cd23a73944619d7582936",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "f347bdfbaabb6d5b25484140310281fb8ce88e60",
+          "size_bytes": 2073
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "d83f32b3576b72e4e2f5ae62558857ffcf78c4c2",
+          "size_bytes": 2019
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/contracts/versions.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 2073,
+        "payload_digest": "dff28e10da9d953d50c1582bacd6b7424798dde876cf562ffe6845171707df15",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "7344dc51eeb62d93d7dea696fb5bdda8b0f430a5",
+          "size_bytes": 22017
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "2a29c79297de0eab0c76256ec32e739bbbce48a2",
+          "size_bytes": 21356
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/mcp/handlers/counter-review.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 22017,
+        "payload_digest": "99e5e3e94cf3d5dc874c290ff1f571a60b4b35088a9e08bca27668450c318160",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "9b473dc292a8fceeb074ef4b2c4f96bad8af25a8",
+          "size_bytes": 41757
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "81dab455a79b346b416e910fcfeb788041f56f97",
+          "size_bytes": 27346
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/mcp/handlers/state.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 41757,
+        "payload_digest": "0f0c4bffe6b0c652180b1944639ff150db46ff5f35f3f1a375328debbbe69bd0",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "29fc4615dd6be5b53030eb98b45bd456b51d1945",
+          "size_bytes": 26380
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "151395d5cbc1b3efb0a3f3d7015defe0fcc90f90",
+          "size_bytes": 25690
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/review/fixed-point.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 26380,
+        "payload_digest": "cbfe83e644ddd730cf02970edd1787dceae978cb5e667222d03f599f8fa46ac7",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "920117be43b42d94bd5d593d8e949b20db134c02",
+          "size_bytes": 30120
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "05fb9f2aa19bc9b6c543320b34cb4b1da0879617",
+          "size_bytes": 29214
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/review/pinned-context.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 30120,
+        "payload_digest": "63ae03eca53404f9e19d0b2760749eb744f66a865d9934eee1f6820f18039d06",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "4f5637cd52bbd428aeedaeb9c9957ea0d81cc9f1",
+          "size_bytes": 6872
+        },
+        "file_type": "regular",
+        "operation": "add",
+        "path": "src/state/approval-rules.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 6872,
+        "payload_digest": "9b9adab2c9b57b8a4e30f75ad11b512dd21147fab7f1e663f7d7225a9cdd1090",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "ed9d99a0629c49d9a0ae0bc3cc64f8a6adb87e8c",
+          "size_bytes": 49553
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "5a0c39c998c35cc2481cac42b48d5d421cd755c7",
+          "size_bytes": 46918
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/implementation-manifest.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 49553,
+        "payload_digest": "7a72dcdaf6739ce12590e94e40c13b26be45d602fda44d51989ec3e41a5c562d",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "8a83df8d47f6c35f652bcd65e42da1d3eae99d09",
+          "size_bytes": 24163
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "26a15cb36aa4ab01173b0bbc78e7cca24cb3fc77",
+          "size_bytes": 21467
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/next-action.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 24163,
+        "payload_digest": "2873b5b5dcfb46abed8ff8580594d6f615627df13eff025febaae5e30f792982",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "79fefb03630a57842c3a1d0e539a7fc920c2e26c",
+          "size_bytes": 19244
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "f7eeae4f69c508d3f9d7ee1dd222a4c3cb3f2e67",
+          "size_bytes": 18228
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/produce-subject.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 19244,
+        "payload_digest": "5789eafe683f56729598d8103b0b929ef807e3d84924d48328eaf1788ba72667",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "db79ddc218ca896c187292fbd5a9afb9c7248f02",
+          "size_bytes": 44896
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "9510c840e87a533138fb92a9a7daf538344f3bd4",
+          "size_bytes": 43319
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/request-composition.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 44896,
+        "payload_digest": "677c58ae6f4a75da4530f42d059059cdbaa3526c2c838c7c5a80bbf66abe0008",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "75f38a68fb10827ab6477ab901700dc7b2cd46af",
+          "size_bytes": 6475
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "20b4f02967c6c94a53e897fb6d98d9070baa60b3",
+          "size_bytes": 5554
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/restart-authority.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 6475,
+        "payload_digest": "569596cd6efff1e4b7aa4e0a57c4614086d6626cc09b53817c0ffb0c9e75d279",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "964785a13f2bbc75db230e27c29cbacbb01a599c",
+          "size_bytes": 70325
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "6453ef68f306cedae54d39da0ddf669489906213",
+          "size_bytes": 65144
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/status.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 70325,
+        "payload_digest": "1a7db655b7b9e0f118e7c8a708249aae38245428e317eef0ea9ebc0408b61bab",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "3086a06eedc30a294d7dfec6c4278e238e716a8d",
+          "size_bytes": 28936
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "ff511c2715dbc6faf36c1a226021b0e74ba3ecd3",
+          "size_bytes": 25321
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/transitions.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 28936,
+        "payload_digest": "423ad93ba97671cfd29f7a0351ebb4294651c8ee3d009bd620e315ac228d3c24",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "1229fb848a1dbb5fb3581399696eebf28d8596d3",
+          "size_bytes": 22254
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "23c3c2fb1185c027cd22da5ecb7e7130daf8921b",
+          "size_bytes": 22102
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/contracts/durable-contract-surface.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 22254,
+        "payload_digest": "66b3317224fa93b0560c9d10d461eac5c21baf44c506f003d8c897f0983eefd8",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "05aa6f46f0c5ea16c56ff6c654a3e18da58e0cf7",
+          "size_bytes": 4860
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "83dee28ac571edcfbd79b0de839496535cabc37f",
+          "size_bytes": 4832
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/contracts/durable-intent-validation.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 4860,
+        "payload_digest": "197b9c8cf554c7a8773314d7a5f10d91becda3c4d75cfd139bbed22405fb8e53",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "74045814f862eb7c426a1ff8070927ed8f9c0450",
+          "size_bytes": 7734
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "6da049469c7097b764609191ee7937d47ae5460d",
+          "size_bytes": 4270
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/contracts/durable-state-validation.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 7734,
+        "payload_digest": "e00ab52eb8a6d316070f1841b8b9b207699a3de42b460a328927a85f3cd73523",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "ceb2c69fdd75610fd5c09e53d28f9a96029af4ac",
+          "size_bytes": 41504
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "4d07da57f019b68ad6d79149950a9389042a6cb4",
+          "size_bytes": 39742
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/contracts/durable-structural-corpus.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 41504,
+        "payload_digest": "42b4d0515652812d9ef61db021d61e65e4d215ca7640a91c2d6ff7f7e69f4649",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "fab72e66ecee4f15c534f9cd220ff3850addddb5",
+          "size_bytes": 6984
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "e94a563f4c35814847e22f5e546c1d861ad0d453",
+          "size_bytes": 5365
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/contracts/foundational-schema-agreement.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 6984,
+        "payload_digest": "2f1d0ee3939ecd2e2d345866c77ab540eb88b68df2256a55065b8f0fa2f47fd5",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "f1c2921acd2341ddb2a94ab756ae8564d8eb14f3",
+          "size_bytes": 36078
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "0852619ec60e4aedf58657cb9020b2de13301e0e",
+          "size_bytes": 36017
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/contracts/mcp-advertised-schema.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 36078,
+        "payload_digest": "03c39f776fd6b9f89dc7cd90eb408b86f9ac0dc8e858a80a224ec794fb571a04",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "4358fbfb456e821897310cbdb411c2c28f432325",
+          "size_bytes": 6455
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "0821601852fdb05be692f35fe60a2759a647cdde",
+          "size_bytes": 6424
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/contracts/schema-registry.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 6455,
+        "payload_digest": "625afd3ca62fe47297b61e6c6ae45fb8c0c7b3454044e815800a59745513d51f",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "4564700feb95b4285ae216e461bd8e8cc3968206",
+          "size_bytes": 1508
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "15d75ea8fe48970d247427ad51d148b0238064e2",
+          "size_bytes": 1361
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/contracts/task-state-planned-final-phase.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 1508,
+        "payload_digest": "fad43b6e6420b90fdec8cb3ee69627b495c9bfc4d1c63c7cd1d4ad60523dd1db",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "4c32c8b35b188eeb850cd9dc64e80b1ad5130ba7",
+          "size_bytes": 23427
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "c9b6d780d925ba2a86383b1c2aaafa8447f282f7",
+          "size_bytes": 21308
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/crash/state-transaction.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 23427,
+        "payload_digest": "1509a40696eccb23fe05228255b225f09b5e38df18980510df218bc0532bda11",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "cda140652b7bc490712fad8909954ef14b7d2ba9",
+          "size_bytes": 13810
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "18f181b3eabd6e814a9c0c3633d0a6e150d83fd5",
+          "size_bytes": 12514
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/helpers/semantic-journeys.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 13810,
+        "payload_digest": "267e9a66793e7c1129ca859e8adc91153de44ec93929f2c8b77e902b63e14bc5",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "65d385acb347ee655298f97fbb9d4723285f2a11",
+          "size_bytes": 17625
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "f297fa52497f99b1204bdf2672651803e51058c5",
+          "size_bytes": 17071
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/integration/config-editing.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 17625,
+        "payload_digest": "0f7c23844b2dcd9ae58c85121efc0188c791eead15c5eb762524baf45ec35f4d",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "8aa5ffeca28978f3a30b7e64a07c6be20c55c046",
+          "size_bytes": 22688
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "1688c3f40f227b996012abecece57fc2c2bb3c9a",
+          "size_bytes": 18749
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/integration/counter-review-pinned-context.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 22688,
+        "payload_digest": "15f4eaa12bdb7ce1b4e8eb1c33e125dfdf2143f450f476aaac27aa54d85cbe5a",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "fe2b69a347377d2deceb91ea569b41128f6ea11e",
+          "size_bytes": 13418
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "a95dbca063774920b67a0e7810e6a5eb407645c9",
+          "size_bytes": 5803
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/integration/planning-restart-handler.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 13418,
+        "payload_digest": "aeecab9774356f0af511db3c4172f81736a9ed53c336b5532fc3cf866f26897c",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "7809e72bbd69598d20126de3778f5ad0c64edee1",
+          "size_bytes": 17471
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "4759afc488d581034121f257995ca914cc87f4e6",
+          "size_bytes": 16739
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/integration/review-dispatch-override.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 17471,
+        "payload_digest": "69b44668bef7d16b4522e5dc7add943ea3c72e0c9fc7d1e31af42af1c2e11f6f",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "1b8f36fd6829ad92e22b3b993fe087aa5e37b96f",
+          "size_bytes": 58096
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "2f2360516ba5e8db648bd04c8de50151e6af2550",
+          "size_bytes": 20776
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/integration/semantic-document-journeys.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 58096,
+        "payload_digest": "008fa75929908f5b4f8135cdf4b3fe7d80c42542976f3191b643878099e6a24f",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "ab88f4b94e2d24f38e4c355300d87e7e39d38f00",
+          "size_bytes": 44527
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "4d9184e35ce6ae96464d8315da1d2ff0ba103f23",
+          "size_bytes": 43907
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/integration/status-reentry-edit.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 44527,
+        "payload_digest": "fb33b55eda8ac6d4c0d9faeacee409e4bfa906a0918b2269e76e2df740dab3cd",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "4205e9ae2450753e82853a10ea41c6e9342a267b",
+          "size_bytes": 11293
+        },
+        "file_type": "regular",
+        "operation": "add",
+        "path": "test/unit/approval-rules.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 11293,
+        "payload_digest": "f0639bd0ab081f9ebaeb6364edf199ca74389caad4c19767fd63ae3cb7831e92",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "986e8dde1638cc2954cf37a843ec0dcac688ec8c",
+          "size_bytes": 8672
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "0b36c7262f95f25c927c181f7eaa29906ace1b56",
+          "size_bytes": 8638
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/durable-state.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 8672,
+        "payload_digest": "ff6898bfb0554007dff9c8f25361b89942c68e26fd7646cfdacb490d371337eb",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "4fdd6f2278d7d40fee81b681e19f1d082ce6c978",
+          "size_bytes": 25795
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "e147f11526c6e204d0b1cf61b28029e92d6f2a28",
+          "size_bytes": 19156
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/implementation-output-builder.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 25795,
+        "payload_digest": "7b1bfe789ad94c77e00fb2cf6c141313144f6ca603680917b45c6087c79adbe5",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "4f01ecb6dbe42baa92f53618c03c454b4344311e",
+          "size_bytes": 28595
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "997d625c49097032e8b4d1194f8b0fa1286996c9",
+          "size_bytes": 27412
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/review-services.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 28595,
+        "payload_digest": "98c43d5ce431a27a158617205a44477e31e17fff0fc5c8414746535b19514ff5",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "0447964b3c8ce284b49270908e5a8f44cf9928a3",
+          "size_bytes": 28449
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "687bd35af63584473b63823054c323dbf115e47d",
+          "size_bytes": 23906
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/state-next-action.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 28449,
+        "payload_digest": "b620e65c0bdc9dc5598d70d2e59b1da5adccad68be2cc9d764e02483571f4441",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "14ad3b4e0c863825de081f14bb7ff7983fe01c28",
+          "size_bytes": 23177
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "a9abe464e40e7412174b940589481e0cddb9d62d",
+          "size_bytes": 19636
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/state-produce-subject.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 23177,
+        "payload_digest": "84cbc36b1ee0f838f46eb5180631529232263f04af6e78dc4ae4ab4e20d00332",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "dff9ccd3f7ea5a3b0106cb48e10f8b97cfd49c94",
+          "size_bytes": 28135
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "6c4885ab4420caf3c8f66eff67ce4804c201dd80",
+          "size_bytes": 24800
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/state-status.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 28135,
+        "payload_digest": "407a8205105794656a2300320464949ed887939b39f7f7045486dacecb98fadb",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "68190594e49d08da5f464c22fbcf1a32edde1b23",
+          "size_bytes": 37859
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "aa35535b08a80c0e54ddbe30bb9faa81636fa860",
+          "size_bytes": 29162
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/state-transitions.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 37859,
+        "payload_digest": "e9fd43ed2459eb2096b66301cdc7a1786dbe746311a85daf06bcd6f89b938151",
+        "storage": "raw-payload"
+      }
+    ],
+    "parent_documents": [
+      {
+        "content_digest": "01c92e176a96a57b010bf5107f05086e6617609c46cb7bdfabed2e525404574c",
+        "document_path": "design.md",
+        "role": "design"
+      },
+      {
+        "content_digest": "934c693848e4be324d59828d9f0eef59958339d570f91fcbd904682a0113c9c9",
+        "document_path": "phases/3/design.md",
+        "role": "phase-design"
+      },
+      {
+        "content_digest": "22addc4918424601b1498da15879caaaf54d235ca5b3a4c24bb60745dc0286f3",
+        "document_path": "phases/3/impl-notes.md",
+        "role": "impl-notes"
+      },
+      {
+        "content_digest": "4a3136fe9ed0390477b7926f15444873d2cb78a0346173556d5b3f63c1767e79",
+        "document_path": "prd.md",
+        "role": "prd"
+      }
+    ],
+    "phase_instance": "phase-impl-3",
+    "restore_targets": [
+      ".archflow/tasks/review-flexibility/phases/3/impl-notes.md",
+      "assets/config.template.yaml",
+      "dist/archflow-local.mjs",
+      "dist/archflow-mcp.mjs",
+      "dist/manifest.json",
+      "dist/metafile.json",
+      "src/contracts/config.ts",
+      "src/contracts/durable-rule-receipt.ts",
+      "src/contracts/durable-state.ts",
+      "src/contracts/index.ts",
+      "src/contracts/internal/schema-generation-durable.ts",
+      "src/contracts/schemas/v1/config.schema.json",
+      "src/contracts/schemas/v1/rule-advance.schema.json",
+      "src/contracts/schemas/v1/task-state.schema.json",
+      "src/contracts/versions.ts",
+      "src/mcp/handlers/counter-review.ts",
+      "src/mcp/handlers/state.ts",
+      "src/review/fixed-point.ts",
+      "src/review/pinned-context.ts",
+      "src/state/approval-rules.ts",
+      "src/state/implementation-manifest.ts",
+      "src/state/next-action.ts",
+      "src/state/produce-subject.ts",
+      "src/state/request-composition.ts",
+      "src/state/restart-authority.ts",
+      "src/state/status.ts",
+      "src/state/transitions.ts",
+      "test/contracts/durable-contract-surface.test.ts",
+      "test/contracts/durable-intent-validation.test.ts",
+      "test/contracts/durable-state-validation.test.ts",
+      "test/contracts/durable-structural-corpus.test.ts",
+      "test/contracts/foundational-schema-agreement.test.ts",
+      "test/contracts/mcp-advertised-schema.test.ts",
+      "test/contracts/schema-registry.test.ts",
+      "test/contracts/task-state-planned-final-phase.test.ts",
+      "test/crash/state-transaction.test.ts",
+      "test/helpers/semantic-journeys.ts",
+      "test/integration/config-editing.test.ts",
+      "test/integration/counter-review-pinned-context.test.ts",
+      "test/integration/planning-restart-handler.test.ts",
+      "test/integration/review-dispatch-override.test.ts",
+      "test/integration/semantic-document-journeys.test.ts",
+      "test/integration/status-reentry-edit.test.ts",
+      "test/unit/approval-rules.test.ts",
+      "test/unit/durable-state.test.ts",
+      "test/unit/implementation-output-builder.test.ts",
+      "test/unit/review-services.test.ts",
+      "test/unit/state-next-action.test.ts",
+      "test/unit/state-produce-subject.test.ts",
+      "test/unit/state-status.test.ts",
+      "test/unit/state-transitions.test.ts"
+    ],
+    "schema_version": "1",
+    "secret_scan": {
+      "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+      "outcome": "clean",
+      "scanned_paths": [
+        ".archflow/tasks/review-flexibility/phases/3/impl-notes.md",
+        "assets/config.template.yaml",
+        "dist/archflow-local.mjs",
+        "dist/archflow-mcp.mjs",
+        "dist/manifest.json",
+        "dist/metafile.json",
+        "src/contracts/config.ts",
+        "src/contracts/durable-rule-receipt.ts",
+        "src/contracts/durable-state.ts",
+        "src/contracts/index.ts",
+        "src/contracts/internal/schema-generation-durable.ts",
+        "src/contracts/schemas/v1/config.schema.json",
+        "src/contracts/schemas/v1/rule-advance.schema.json",
+        "src/contracts/schemas/v1/task-state.schema.json",
+        "src/contracts/versions.ts",
+        "src/mcp/handlers/counter-review.ts",
+        "src/mcp/handlers/state.ts",
+        "src/review/fixed-point.ts",
+        "src/review/pinned-context.ts",
+        "src/state/approval-rules.ts",
+        "src/state/implementation-manifest.ts",
+        "src/state/next-action.ts",
+        "src/state/produce-subject.ts",
+        "src/state/request-composition.ts",
+        "src/state/restart-authority.ts",
+        "src/state/status.ts",
+        "src/state/transitions.ts",
+        "test/contracts/durable-contract-surface.test.ts",
+        "test/contracts/durable-intent-validation.test.ts",
+        "test/contracts/durable-state-validation.test.ts",
+        "test/contracts/durable-structural-corpus.test.ts",
+        "test/contracts/foundational-schema-agreement.test.ts",
+        "test/contracts/mcp-advertised-schema.test.ts",
+        "test/contracts/schema-registry.test.ts",
+        "test/contracts/task-state-planned-final-phase.test.ts",
+        "test/crash/state-transaction.test.ts",
+        "test/helpers/semantic-journeys.ts",
+        "test/integration/config-editing.test.ts",
+        "test/integration/counter-review-pinned-context.test.ts",
+        "test/integration/planning-restart-handler.test.ts",
+        "test/integration/review-dispatch-override.test.ts",
+        "test/integration/semantic-document-journeys.test.ts",
+        "test/integration/status-reentry-edit.test.ts",
+        "test/unit/approval-rules.test.ts",
+        "test/unit/durable-state.test.ts",
+        "test/unit/implementation-output-builder.test.ts",
+        "test/unit/review-services.test.ts",
+        "test/unit/state-next-action.test.ts",
+        "test/unit/state-produce-subject.test.ts",
+        "test/unit/state-status.test.ts",
+        "test/unit/state-transitions.test.ts"
+      ],
+      "schema_version": "1"
+    },
+    "snapshot_digest": "72c0dac5b0cf7977f193044e14db2e7f17bce5bfd5ed3fd66663a9bf0e245668",
+    "step": "produce",
+    "task_id": "review-flexibility",
+    "undeclared_changes": {
+      "scanned": true,
+      "undeclared_paths": [
+        ".archflow/tasks/review-flexibility/state.json"
+      ],
+      "unrepresentable_count": 0
+    },
+    "verification_evidence": {
+      "byte_count": 27579,
+      "transcript_digest": "52d92796fa2bb904f0a8f18c31faf968df84e0268404ce747d3ddefc7dc0c529"
+    },
+    "worktree_identity_digest": "663234dcce3028587e2fd8509f6b59ed73b9df064aa506614579df5206fe6dcf"
+  },
+  "step": "produce",
+  "task_id": "review-flexibility"
+}

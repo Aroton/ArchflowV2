@@ -1,0 +1,109 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 134,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 16610194
+  },
+  "artifact_digest": "b58337a3f50b0783d2a6d17cda25d82b2b908f44ae00ed044c73ca92048817f1",
+  "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+  "outputs": [],
+  "phase_instance": "phase-design-3",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-e66474a94c8223bd134526b3d4e65584",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [],
+      "assurance": "server-attested",
+      "cli_version": "2.1.237",
+      "constitution": "pass",
+      "drift": "aligned",
+      "drift_findings": [],
+      "effort": "medium",
+      "envelope_input_digest": "bacfde37d8b3c44f2be09b9aa59ef76d28ba49d44cbb9fb0bb1a350efbfb4ea5",
+      "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+      "invocation_id": "adjudication-invocation-1f061f54a1c137fcf51450d179d06f37",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "5135c2a8479bfa7111f5e5b3d4e6cb40c518878bf2aebba304978667c4d887e1",
+      "phase_instance": "phase-design-3",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-e66474a94c8223bd134526b3d4e65584",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "No implementation of this phase exists in the reviewed baseline: a repository grep for `approval_rules`, `evaluateApprovalRules`, and `rule_settlements` across the checkout at 956018b returns no files, and `src/state/next-action.ts:167` still opens the phase-kind gate unconditionally as the artifact describes. Every material deviation is carried back into the governing document rather than left implicit — the pinned `design.md` D5 now states the enumerated authoritative evaluation boundaries and path-only helper result, D6 states the task-state-owned `RuleSettlementV1` with the waiver-discharge route and human-only policy/migration arms, D7 splits the design-approval policy arm, D9/D10 state the installed-server boundary and template-only edit — matching Deviations 1–12, so the phase design and its parent agree. The phase design also correctly defers commit-boundary conditionality (P3-3 carve-out) to Phase 4 and the constitution amendment to Phase 5, so no dependent work is planned ahead of its own reviewed design. The \"Fact basis\" line noting that uncommitted implementation bytes were excluded from verification is a disclosure that keeps the audit honest; the supplied read-only checkout contains no phase-3 implementation, so nothing here shows implementation preceding this design's approval.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The artifact is the Phase 3 phase design that governs implementation of `approval_rules`, `RuleSettlementV1`, and the settlement/acceptance surface; it enumerates chunks A–F, files touched, tests, and executable verification, i.e. it is the plan implementation would start from. Its \"Deviations from the task design (facts, not decisions)\" section (items 1–12) records material departures from the parent task design (D5/D6/D7/D9/D10)."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The design never infers human authority from machine output; it distinguishes rule-derived advancement from human approval and keeps every human-only boundary intact and explicit. Settlements are described as \"durable bookkeeping, not human approval\": they are digest-bound, restart-scoped, and a `wait:true` settlement \"can open/present a gate but never authorize advancement\" (P3-4). The constitution policy arm at `next-action.ts:401-405` stays unconditional, no settlement is written while adjudication is pending, `adjudicationGateSatisfied` is deliberately not settlement-extended, and migration-audit's `traditionallyApproved` check (verified at `src/state/gates.ts:384-391`, which requires an eligible authenticated artifact/design approval) gets no settlement arm (P3-6.2, P3-6.10). Waiver discharge is narrowly guarded to the authenticated, current policy-waiver branch and cannot be minted by any other gate kind, decision, or stale subject (P3-5). No existing exception/safety gate becomes rule-conditional, in-flight open gates keep resolving, and the phase-impl commit boundary is explicitly unchanged (P3-3). Crucially for self-application, P3-8 keeps this repository's live `.archflow/config.yaml`, this task's config, and the separately installed machine-global bundle untouched, so this task itself continues under its existing built-in gates and no gate governing this work is bypassed; the narrowing of this rule to v2 is sequenced as a separate, explicitly human-reviewed Phase 5 amendment per the approved PRD R8. The change to the default gate model is the human-approved subject of the PRD, decided by the human in config, not authority inferred by the machine.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "P3-3 makes `advanceAction`'s document-subject gate opening conditional on a durable settlement, P3-4/P3-5 let a machine-written `RuleSettlementV1` with `conclusion.wait:false` be recorded at clean-advance transactions, and P3-6 lets that autonomous settlement be accepted at nine previously approval-dependent sites, including phase-exit predicates and upstream-authority checks — i.e. advancement authority that a human previously supplied."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Non-success states stay visible with a safe next action. A failing or uncertain constitution rule still opens design-approval and writes no settlement, with the post-settle status advertising the policy arm (P3-3, P3-5); attempts-exhausted and the other exception gates are untouched and asserted green in success criteria. The gateless milestone path is closed honestly rather than papered over: without the P3-7 recovery arm the commit would fail `missing-recovery-authority` and route permanently to `inspect-state` (verified at `src/state/implementation-manifest.ts:280-284`), and the fix requires a real committed `state.json` blob containing the expected eligible autonomous settlement rather than assuming success. Malformed phase-plan grammar fails the settle closed with no `planned_final_phase` (P3-6.6), a `wait:true` settlement authorizes nothing, and the installed-server section states plainly that recovery from a prematurely written key is to remove it and retry — \"never to infer that the workflow advanced.\" The Deviations section reports corrections to the parent design as facts, the fact basis discloses what was excluded from verification, and the executable-verification list requires raw outputs transcribed to the phase verification transcript.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The design changes failure and recovery surfaces: gateless design milestones must prove recovery authority (P3-7 replaces a `missing-recovery-authority` dead end), malformed phase-plan grammar must fail the gateless settle, policy-arm failures must still stop, and an unsupported config key against the old installed server needs a stated recovery path (P3-8)."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The record identifies exactly the task and subject bytes it governs and fails closed otherwise. Eligibility is \"digest-bound AND restart-scanned\": a settlement applies only while its `subject_digest` equals the digest being checked and it passes the new `ruleSettlementIsEligibleAfterLatestRestart` cutoff, mirroring the existing `approvalIsEligibleAfterLatestRestart` filter observed at `src/state/gates.ts:387`; consumers additionally require `conclusion.wait === false`. Identity, phase instance, and `settled_at_revision = current.revision + 1` are derived mechanically from current state rather than from caller-supplied fields, and the carrier is rejected outside the two enumerated `planStateTransition` boundaries and the separately guarded waiver branch, so no other transition can mint authority for a subject it does not own. Ordering and uniqueness are specified defensively: a dedicated numeric-aware comparator over `(phase_instance, subject_digest, settled_at_revision)` instead of `tupleKey`, duplicates rejected, latest selection numeric, with tests across 9→10 and 99→100 and a revision bound modelled on the verified `baseline_adoptions` refine/superRefine pattern (`src/contracts/durable-state.ts:597-613`). Settlements live in exactly one durable representation inside the task's own `state.json`, written atomically by the kernel, so there is no second file that can drift; the milestone recovery arm reads that same task-scoped committed blob and leaves the baseline/parent/message/task-scoped-path observation semantics unchanged. Pre-restart settlements are explicitly ineligible until re-settlement, and stale or non-current subjects cannot settle.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "P3-4 defines a new durable record `RuleSettlementV1` carrying `task_id`, `phase_instance`, `step`, `subject_digest`, `config_digest`, and `settled_at_revision` on `TaskStateV1.rule_settlements?`, and P3-6 makes it an accepted authority at consumers that previously required an authenticated approval bound to a subject digest."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "811a2b6cc6dab1374a96ea7ccfddbdc6ed975da877e304c9d29057181c9f5241",
+      "step": "adjudicate",
+      "subject_digest": "605334d3a1ace594361d00b7089a498c9c68805c0ae70648e32ac2bfd6664f8b",
+      "task_id": "review-flexibility",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "review-flexibility"
+}

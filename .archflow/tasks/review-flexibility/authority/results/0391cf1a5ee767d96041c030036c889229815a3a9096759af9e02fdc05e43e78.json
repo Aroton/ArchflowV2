@@ -1,0 +1,56 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 136,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 16610194
+  },
+  "artifact_digest": "fe5c1521ff81482248599bcdbff2d0119d9a27188c71b91ec9446572f0b2583c",
+  "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+  "outputs": [],
+  "phase_instance": "phase-design-3",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "state-result-363950b951626bdfc23736ca80e2080c",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "triage",
+    "evidence": {
+      "accepted_count": 1,
+      "accepted_editorial_count": 0,
+      "current_evidence_set_digest": "811a2b6cc6dab1374a96ea7ccfddbdc6ed975da877e304c9d29057181c9f5241",
+      "dispositions": [
+        {
+          "disposition": "accepted",
+          "finding_id": "pinned-interface-contradicts-commit-proof-arm",
+          "rationale": "The pinned interface contradicts P3-7 and could direct implementation to omit the required gateless recovery-authority arm.",
+          "review_evidence_digest": "5fa58ddeb3978d7e06199784b0ea6e2534101e8a31dc370d5a439f4356362fb3",
+          "revision_intent": "Clarify that the consumed GateContext pick/fact shape remains unchanged while designArtifactCommittedAtCurrentTarget itself gains the autonomous-settlement recovery-authority acceptance arm."
+        }
+      ],
+      "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+      "phase_instance": "phase-design-3",
+      "rejected_count": 0,
+      "schema_version": "1",
+      "source_evidence_digests": [
+        "5fa58ddeb3978d7e06199784b0ea6e2534101e8a31dc370d5a439f4356362fb3"
+      ],
+      "step": "triage",
+      "subject_digest": "605334d3a1ace594361d00b7089a498c9c68805c0ae70648e32ac2bfd6664f8b",
+      "task_id": "review-flexibility"
+    },
+    "schema_version": "1"
+  },
+  "step": "triage",
+  "task_id": "review-flexibility"
+}

@@ -1,0 +1,143 @@
+{
+  "allowed_decisions": [
+    "adopt-current-bytes",
+    "restore-recorded-bytes",
+    "adopt-committed-deletions",
+    "abort",
+    "cancel"
+  ],
+  "context": {
+    "deleted_projections": [],
+    "drifted_projections": [
+      {
+        "observed_digest": "6daec99450dbdb41d4016e646c4031a4947e05945b1f0e792b7ef459eda5f92e",
+        "path": "assets/config.template.yaml",
+        "recorded_digest": "ef5b19cfc26d542b78fe7281035ca5532e39059df602cdc4e2f28352210cdf4a"
+      },
+      {
+        "observed_digest": "3744e8a473f954075ba11dbd50b915e7342572092736b89ff7037018b90e9eb8",
+        "path": "dist/archflow-local.mjs",
+        "recorded_digest": "ea2ffd065a667d91ef137c3539488d1df4b1a6952e6f18e6213fb8fc00036bb0"
+      },
+      {
+        "observed_digest": "db1cd35600b99a8b4844c00108bc968c3233f48c5c954a1048fd8850d40d4628",
+        "path": "dist/archflow-mcp.mjs",
+        "recorded_digest": "888ec2a8ec062612606798c9cc669e5373e4d1412b7275b875eb02d2c54dd9c8"
+      },
+      {
+        "observed_digest": "dfca36b7657d07c50e1669de1a27815aa20823c15d3a9ffc2680a68e04c7297b",
+        "path": "dist/manifest.json",
+        "recorded_digest": "516b5d7b3bfa59be2d37397d417b58bb9f13eefc39b91773b9e17b038802962e"
+      },
+      {
+        "observed_digest": "8e2bf63397e6a252bb76ca8a8b7977cca9682a07f3ac2054280285ab750a09a5",
+        "path": "dist/metafile.json",
+        "recorded_digest": "788ca0bcdee945c3b53ea1191839e058c68cc3104575066f8c1b6a43df036bf1"
+      },
+      {
+        "observed_digest": "e4f915714ad4d591c567d14782ba27bcebc33ec6e92fdbf3450ad738b3cdd62a",
+        "path": "src/contracts/config.ts",
+        "recorded_digest": "a3032338fafacd606bc560daa4a0a20c51d43729511867ccc991bff416c0bf30"
+      },
+      {
+        "observed_digest": "097589f3938cb7e194585d741b9dd9803ef2c26baf4930a7362846f3d3b265a5",
+        "path": "src/contracts/durable-state.ts",
+        "recorded_digest": "be6a2c3e11a08616dd4c6ca5e9c43a1a46db91092f9c9f19f416334e9a370dd2"
+      },
+      {
+        "observed_digest": "cd88080b7ab02fd88b646a7f71bb3b2fbfbf404ce72f842635cbc0b9f12cbbc0",
+        "path": "src/contracts/internal/schema-generation-durable.ts",
+        "recorded_digest": "aff1763882faf875f74931b8935955bd0b4a5fd1ac4ccea0cd8d5e7736b10051"
+      },
+      {
+        "observed_digest": "83404fb31bfee98dc95d620b9cb14024ed7463e12e1cd23a73944619d7582936",
+        "path": "src/contracts/schemas/v1/task-state.schema.json",
+        "recorded_digest": "1a8fe69259edbd709a8f533008fd37374c71df774e9f6cfd74455960e1ce40d4"
+      },
+      {
+        "observed_digest": "0f0c4bffe6b0c652180b1944639ff150db46ff5f35f3f1a375328debbbe69bd0",
+        "path": "src/mcp/handlers/state.ts",
+        "recorded_digest": "3d6b6a79818bf0f34935efad9d467b64a20a78852dad746784524bea515bb659"
+      },
+      {
+        "observed_digest": "2873b5b5dcfb46abed8ff8580594d6f615627df13eff025febaae5e30f792982",
+        "path": "src/state/next-action.ts",
+        "recorded_digest": "32916c985874668a7af29dccc17d3428ca677a28064f273378318e0199102736"
+      },
+      {
+        "observed_digest": "1a7db655b7b9e0f118e7c8a708249aae38245428e317eef0ea9ebc0408b61bab",
+        "path": "src/state/status.ts",
+        "recorded_digest": "b53249dc563f83281c4cb84f5ffa2f495298f66f842bdc53b01184a3cbec02dc"
+      },
+      {
+        "observed_digest": "66b3317224fa93b0560c9d10d461eac5c21baf44c506f003d8c897f0983eefd8",
+        "path": "test/contracts/durable-contract-surface.test.ts",
+        "recorded_digest": "b73ee86813cd38b69f7ac000304d81ddef60d49b528abdc8e8404d9f17056fb9"
+      },
+      {
+        "observed_digest": "42b4d0515652812d9ef61db021d61e65e4d215ca7640a91c2d6ff7f7e69f4649",
+        "path": "test/contracts/durable-structural-corpus.test.ts",
+        "recorded_digest": "75698b780e3574ce8a74115c7bce724c04b23194254c97dda1e4a50b35c7a730"
+      },
+      {
+        "observed_digest": "03c39f776fd6b9f89dc7cd90eb408b86f9ac0dc8e858a80a224ec794fb571a04",
+        "path": "test/contracts/mcp-advertised-schema.test.ts",
+        "recorded_digest": "82c3df92f9aa28dc67f52cab87aaeda4ce8ad46c11d2621667492677f9d6ebbf"
+      },
+      {
+        "observed_digest": "1509a40696eccb23fe05228255b225f09b5e38df18980510df218bc0532bda11",
+        "path": "test/crash/state-transaction.test.ts",
+        "recorded_digest": "6f753ca0e9cac08ce3bc3e3dfeb007403792bcf59f2fe8781a7b6da21e8e353a"
+      },
+      {
+        "observed_digest": "0f7c23844b2dcd9ae58c85121efc0188c791eead15c5eb762524baf45ec35f4d",
+        "path": "test/integration/config-editing.test.ts",
+        "recorded_digest": "2c2200a52be21f0378868cfc43e74807a07bdc1636a907efb50ed4b77ec0da66"
+      },
+      {
+        "observed_digest": "15f4eaa12bdb7ce1b4e8eb1c33e125dfdf2143f450f476aaac27aa54d85cbe5a",
+        "path": "test/integration/counter-review-pinned-context.test.ts",
+        "recorded_digest": "d22bb2b6c2076e79f72eb19e9c53a1af77b656dececd0f525f03318318ac8323"
+      },
+      {
+        "observed_digest": "69b44668bef7d16b4522e5dc7add943ea3c72e0c9fc7d1e31af42af1c2e11f6f",
+        "path": "test/integration/review-dispatch-override.test.ts",
+        "recorded_digest": "da74539ef45780767c3e5636d3a3027042a3ed24558db874d3698176f17b7e95"
+      },
+      {
+        "observed_digest": "008fa75929908f5b4f8135cdf4b3fe7d80c42542976f3191b643878099e6a24f",
+        "path": "test/integration/semantic-document-journeys.test.ts",
+        "recorded_digest": "768cc26e88730ac06978f4047bf6f2a3c988b32bcd743512b6a7b0fd79ffa144"
+      },
+      {
+        "observed_digest": "b620e65c0bdc9dc5598d70d2e59b1da5adccad68be2cc9d764e02483571f4441",
+        "path": "test/unit/state-next-action.test.ts",
+        "recorded_digest": "f42cc56e68fc55fc4fc554b988004e9d0d3d2c813d6fa1b2c3ec02e789f99225"
+      },
+      {
+        "observed_digest": "407a8205105794656a2300320464949ed887939b39f7f7045486dacecb98fadb",
+        "path": "test/unit/state-status.test.ts",
+        "recorded_digest": "16ce27a761557879adae4ef682c709539ca2d4454aecdc04c8b771ceb98d0197"
+      }
+    ]
+  },
+  "context_digest": "38d6651fd3c6987e44fe69b1b1fe2c8ce1fa042c31a3000ec6f6677c6eaa8afc",
+  "current_evidence": {
+    "drift_digest": "dfc14fb5c663ea5d2c42ffd1b60fbf419cebdda41b3f44f7cf94d9d6863b1835",
+    "observation_kind": "projection-drift",
+    "observed_at_revision": 119,
+    "phase_instance": "phase-design-3",
+    "schema_version": "1",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-af44cb996883cf7820a1b7d321e2c5c7ff49337b05c34c4e3426bd214a6ee871",
+  "intent_id": "afop-0666a4659a43b867ca6663d47d86e4c30e2b2d216419c71e516cb1f7b250fabe-open-gate",
+  "kind": "baseline-adoption",
+  "opened_at_revision": 120,
+  "phase_instance": "phase-design-3",
+  "request_digest": "ff7044ca0b5cee5c773ef22809fcf722ce21bfb00e9d4a9fbe777daaca8835c6",
+  "schema_version": "1",
+  "subject_digest": "dfc14fb5c663ea5d2c42ffd1b60fbf419cebdda41b3f44f7cf94d9d6863b1835",
+  "summary": "ArchFlow detected that 22 task-relevant files no longer match the bytes previously recorded as the reviewed Phase 3 baseline. The current worktree includes extensive uncommitted Phase 3 implementation changes as well as the newly corrected Phase 3 and parent design documents. Before review can continue, choose whether those current bytes should become the baseline that the workflow evaluates, or whether the previously recorded reviewed bytes should be restored. This baseline decision records which bytes are authoritative; it does not approve the design or implementation.",
+  "task_id": "review-flexibility"
+}

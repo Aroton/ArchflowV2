@@ -1,0 +1,66 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 134,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 16610194
+  },
+  "artifact_digest": "5fa58ddeb3978d7e06199784b0ea6e2534101e8a31dc370d5a439f4356362fb3",
+  "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+  "outputs": [],
+  "phase_instance": "phase-design-3",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "result-02742b3beeaa7372a58d641e23cc1999",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "review-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "assurance": "server-attested",
+      "blocking_count": 0,
+      "cli_version": "2.1.237",
+      "effort": "medium",
+      "envelope_input_digest": "7d57ce45cc4a4bd830400cfa10a9cfcfde4da91e3666046d9d48765b5cc5bde5",
+      "findings": [
+        {
+          "blocking": false,
+          "evidence": "Pinned interfaces item 8: \"gateless design milestones produce the same `design_commit` fact shape from autonomous settlement + retained manifest, proven by the unchanged `designArtifactCommittedAtCurrentTarget`.\" P3-7 states the opposite for the same function: \"The commit proof gains one acceptance arm ... recovery accepts either the decisions pair or a read of the committed `state.json` blob containing the expected eligible `rule_settlements` entry\", and Chunk D plus Files touched both list `src/state/implementation-manifest.ts`. The repository confirms the change is required: `src/state/implementation-manifest.ts:280-284` returns `missing-recovery-authority` unless the commit contains `state.json` **and** an `authority/decisions/**/request.json` plus `decision.json` pair, which a gateless milestone never produces, and `src/state/next-action.ts` then routes such a phase to `inspect-state`.",
+          "finding_id": "pinned-interface-contradicts-commit-proof-arm",
+          "severity": "minor",
+          "suggested_resolution": "Reword pinned interface 8 to match P3-7: the `GateContext<\"design-approval\">` Pick shape consumed by `designArtifactCommittedAtCurrentTarget` is unchanged, but the function itself gains the autonomous-settlement recovery-authority arm.",
+          "summary": "Pinned cross-chunk interface 8 says the gateless design milestone is \"proven by the unchanged `designArtifactCommittedAtCurrentTarget`\", while P3-7 and Chunk D require that exact function to gain a new recovery-authority acceptance arm. An implementer who treats the pinned interface as the contract would leave the proof unchanged, and every gateless design milestone would fail closed."
+        }
+      ],
+      "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+      "invocation_id": "invocation-f36c6c6adde56adf9a717625d10beaa4",
+      "matched_rule_versions": [],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "61c0835a6a6b51638f17cd67cbbdcbdf460f40af803d77c2af5d345aaab8521b",
+      "phase_instance": "phase-design-3",
+      "producer_family": "codex",
+      "result_id": "result-02742b3beeaa7372a58d641e23cc1999",
+      "role": "counter-review",
+      "rubric_digest": "8023a567948bc5beb9caa889ddb1525c3309de7e2556a88d8182098e4afbbd25",
+      "schema_version": "1",
+      "step": "counter_review",
+      "subject_digest": "605334d3a1ace594361d00b7089a498c9c68805c0ae70648e32ac2bfd6664f8b",
+      "task_id": "review-flexibility",
+      "verdict": "advisory"
+    },
+    "schema_version": "1"
+  },
+  "step": "counter_review",
+  "task_id": "review-flexibility"
+}

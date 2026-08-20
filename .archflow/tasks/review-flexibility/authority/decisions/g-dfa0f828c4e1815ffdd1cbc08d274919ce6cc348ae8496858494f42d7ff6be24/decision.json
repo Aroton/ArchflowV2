@@ -1,0 +1,33 @@
+{
+  "context_digest": "3d926ce1246a50c1166dfb739ba17aee241ee911a0a001cf127c1aa41389a791",
+  "envelope": {
+    "context_digest": "3d926ce1246a50c1166dfb739ba17aee241ee911a0a001cf127c1aa41389a791",
+    "gate_id": "g-dfa0f828c4e1815ffdd1cbc08d274919ce6cc348ae8496858494f42d7ff6be24",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-6073219f1d21bb3b342dceb0248a287edb81ef4baa9a1cf0f8065301b8dee703",
+      "recorded_at": "2026-08-20T18:05:46.822Z",
+      "request_id_digest": "48ee71dc8d4558aad0aadfb135b2b8e3d211de8cba88bacd6abc74e65921de82",
+      "schema_version": "1"
+    },
+    "kind": "design-approval",
+    "payload": {
+      "decision": "approve",
+      "reason": "The human explicitly approves the reviewed Phase 3 design and authorizes its recoverable milestone commit and continuation."
+    },
+    "phase_instance": "phase-design-3",
+    "schema_version": "1",
+    "subject_digest": "15a25a0739882830c30d0890cd350997c8c769e280cf977c0e7dc57956be80cc",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-dfa0f828c4e1815ffdd1cbc08d274919ce6cc348ae8496858494f42d7ff6be24",
+  "kind": "design-approval",
+  "outcome": "decided",
+  "phase_instance": "phase-design-3",
+  "schema_version": "1",
+  "subject_digest": "15a25a0739882830c30d0890cd350997c8c769e280cf977c0e7dc57956be80cc",
+  "task_id": "review-flexibility"
+}

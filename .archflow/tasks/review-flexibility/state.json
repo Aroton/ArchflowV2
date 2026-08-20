@@ -8,6 +8,13 @@
       "subject_digest": "f2e54badda2387c70cb5f0d17244137a85b075883d1fd7bbf4b8da0ab83e02e2"
     },
     {
+      "decision_digest": "a2be11cac0cf86be2bab146dfb34f8d097289a1bf72e1e031bdf5f068c944b84",
+      "gate_id": "g-16e672e52c5756d5bf00257c51972311579e0062ad05691d75da5424832bc5f1",
+      "gate_kind": "constitution-review",
+      "resolved_at_revision": 116,
+      "subject_digest": "d5fccaee15996bd6d4f59815c42e56c12190365e86f6f11c263754f5b7893270"
+    },
+    {
       "decision_digest": "46ba5509773ae83c16585f179312f6a39fb91cebbcb3ef63ff1875e0aa7ef796",
       "gate_id": "g-6a7fbf65755c769b0e523bbc5fdf773ac611959170d6ab52073fc81146b98b96",
       "gate_kind": "baseline-adoption",
@@ -29,6 +36,13 @@
       "subject_digest": "058ec7fbf3d9a8ae54f48821ad23163c87209ca6389bbe010057637bde8aba99"
     },
     {
+      "decision_digest": "c4dcebec848f9be7942783028186c1635bcbd251d2b448c44b57666b1429a8f5",
+      "gate_id": "g-795d5e18703553305ba9a9285ea2d0e511ab8007eeaf156ed6c7e257a6955485",
+      "gate_kind": "baseline-adoption",
+      "resolved_at_revision": 143,
+      "subject_digest": "cb8a4095a005a3de891fcae856777708d340a2eb91c48117b5f0411c46eeea67"
+    },
+    {
       "decision_digest": "5cf1f81db9c1ecb00e2d965d3194513df9e28b57e7acbaefaea8df6cb5cbc022",
       "gate_id": "g-9d51b991c4b380b1df7a99b70fcbaf782f045a085866faca6d008274952fa1e0",
       "gate_kind": "commit-authorization",
@@ -41,6 +55,13 @@
       "gate_kind": "design-approval",
       "resolved_at_revision": 78,
       "subject_digest": "6973b6ff7fc1842cf2463c0b55744c6511565f37d88561e9187124f1634e1fab"
+    },
+    {
+      "decision_digest": "90f55f7c0b3cf8b2ebb297105db1d020eeed4c6ad415a236b8108e5d5d0f12e9",
+      "gate_id": "g-af44cb996883cf7820a1b7d321e2c5c7ff49337b05c34c4e3426bd214a6ee871",
+      "gate_kind": "baseline-adoption",
+      "resolved_at_revision": 121,
+      "subject_digest": "dfc14fb5c663ea5d2c42ffd1b60fbf419cebdda41b3f44f7cf94d9d6863b1835"
     },
     {
       "decision_digest": "b0fe48e763ece9811fe331a2e5e3d9c13b5fea793cbdbdce5063f0d2517e9c35",
@@ -83,6 +104,13 @@
       "gate_kind": "constitution-review",
       "resolved_at_revision": 86,
       "subject_digest": "4b86c35660fe9dd33932e6d90185ae8658fa5e2b724d467d2359171904aa2839"
+    },
+    {
+      "decision_digest": "b9285fe88afacb068968f17a75feda4f5ff0a387e39044ca6d815c7ab46b7585",
+      "gate_id": "g-dfa0f828c4e1815ffdd1cbc08d274919ce6cc348ae8496858494f42d7ff6be24",
+      "gate_kind": "design-approval",
+      "resolved_at_revision": 145,
+      "subject_digest": "15a25a0739882830c30d0890cd350997c8c769e280cf977c0e7dc57956be80cc"
     }
   ],
   "attempt": 3,
@@ -174,29 +202,29 @@
     {
       "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
       "phase_instance": "phase-design-3",
-      "result_digest": "facc97fed81fc2edf7f1a6433cb9922c1bfb1da344f0cbb348b3610aa7c39bd3",
-      "result_id": "adjudication-result-d85d39648d58915138ea7363fd7d8f6b",
+      "result_digest": "a1e130727144b6892f6e58f599bd31d233b9b604c324dd706fe274ac54acdf5a",
+      "result_id": "adjudication-result-e66474a94c8223bd134526b3d4e65584",
       "step": "adjudicate"
     },
     {
       "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
       "phase_instance": "phase-design-3",
-      "result_digest": "b02707696690abbc2059330560a570d25261c8c50ec9a1ca032f35180682815b",
-      "result_id": "result-f4e5ed664e72b4101422a7464d25f720",
+      "result_digest": "29d7faa917b9a168f7e50595c7c25ad9871c92449ac5ee17f94cd062c421a355",
+      "result_id": "result-02742b3beeaa7372a58d641e23cc1999",
       "step": "counter_review"
     },
     {
-      "input_fingerprint": "c9070d869c88a6505aa4311b055502b06ac238b08545d58475ac05a97cde53cc",
+      "input_fingerprint": "bb6b554dd8637f7992f2fb95f95e40dd8ac0190796f430e7f8b318321b6b4fc4",
       "phase_instance": "phase-design-3",
-      "result_digest": "27eea301babec015ff7ec51bff04f0a810486976a370a429e5af590f35139a47",
-      "result_id": "state-result-2a1a1dcbf452360b71eed74efa132af5",
+      "result_digest": "c1d0e4da331fc653b77c70ae07ade5836c7a965156ae94a9eb55b67e14db1b90",
+      "result_id": "state-result-80eda87e4e152cc5e3307b4f9a26e852",
       "step": "produce"
     },
     {
       "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
       "phase_instance": "phase-design-3",
-      "result_digest": "cf4de995c69004226f4b71969340968254967caa4a2f3328187a34b007477190",
-      "result_id": "state-result-84d2fcf07d42f23c2f2b0dd17353b996",
+      "result_digest": "0391cf1a5ee767d96041c030036c889229815a3a9096759af9e02fdc05e43e78",
+      "result_id": "state-result-363950b951626bdfc23736ca80e2080c",
       "step": "triage"
     },
     {
@@ -296,6 +324,138 @@
       "gate_id": "g-6a7fbf65755c769b0e523bbc5fdf773ac611959170d6ab52073fc81146b98b96"
     },
     {
+      "adopted_at_revision": 143,
+      "adopted_projections": [
+        {
+          "content_digest": "a8d560144c8f97158789fc7757b8ce62457d94586ee5b720fe5d19712d58aea1",
+          "path": "assets/config.template.yaml"
+        },
+        {
+          "content_digest": "d84e44ad890a14b52f8b39bbcdfbf2ea3236d4c2ed3334ed7cba69d621e164d4",
+          "path": "dist/archflow-local.mjs"
+        },
+        {
+          "content_digest": "c3a4cc04bcc076bc6827f222090c76955031f2ff95a1403fbec69ddd18fed00e",
+          "path": "dist/archflow-mcp.mjs"
+        },
+        {
+          "content_digest": "ec9acf4b548c9fbe4af4340641ce0ef397a1ac4e6a6b9516432bb4def4b5f1cc",
+          "path": "dist/manifest.json"
+        },
+        {
+          "content_digest": "a2021be7b4fc3928c665a6b2d9f3bef8ef02ab13e78569259bee9ddb3f781243",
+          "path": "dist/metafile.json"
+        },
+        {
+          "content_digest": "5a7204bddcc6dede5aea46554cf232f76bafae4f1e12871c66b3d95aafc2bf41",
+          "path": "src/state/next-action.ts"
+        },
+        {
+          "content_digest": "707d1696184bfe0e1a36eebc958908c874b6c8aff300a53cde08116324f29b98",
+          "path": "src/state/status.ts"
+        },
+        {
+          "content_digest": "f7d8f51a4b270dfce0b10471c175b007c475e4cfd0e4138b29b031ddad7bc37c",
+          "path": "test/unit/state-next-action.test.ts"
+        }
+      ],
+      "gate_id": "g-795d5e18703553305ba9a9285ea2d0e511ab8007eeaf156ed6c7e257a6955485"
+    },
+    {
+      "adopted_at_revision": 121,
+      "adopted_projections": [
+        {
+          "content_digest": "6daec99450dbdb41d4016e646c4031a4947e05945b1f0e792b7ef459eda5f92e",
+          "path": "assets/config.template.yaml"
+        },
+        {
+          "content_digest": "3744e8a473f954075ba11dbd50b915e7342572092736b89ff7037018b90e9eb8",
+          "path": "dist/archflow-local.mjs"
+        },
+        {
+          "content_digest": "db1cd35600b99a8b4844c00108bc968c3233f48c5c954a1048fd8850d40d4628",
+          "path": "dist/archflow-mcp.mjs"
+        },
+        {
+          "content_digest": "dfca36b7657d07c50e1669de1a27815aa20823c15d3a9ffc2680a68e04c7297b",
+          "path": "dist/manifest.json"
+        },
+        {
+          "content_digest": "8e2bf63397e6a252bb76ca8a8b7977cca9682a07f3ac2054280285ab750a09a5",
+          "path": "dist/metafile.json"
+        },
+        {
+          "content_digest": "e4f915714ad4d591c567d14782ba27bcebc33ec6e92fdbf3450ad738b3cdd62a",
+          "path": "src/contracts/config.ts"
+        },
+        {
+          "content_digest": "097589f3938cb7e194585d741b9dd9803ef2c26baf4930a7362846f3d3b265a5",
+          "path": "src/contracts/durable-state.ts"
+        },
+        {
+          "content_digest": "cd88080b7ab02fd88b646a7f71bb3b2fbfbf404ce72f842635cbc0b9f12cbbc0",
+          "path": "src/contracts/internal/schema-generation-durable.ts"
+        },
+        {
+          "content_digest": "83404fb31bfee98dc95d620b9cb14024ed7463e12e1cd23a73944619d7582936",
+          "path": "src/contracts/schemas/v1/task-state.schema.json"
+        },
+        {
+          "content_digest": "0f0c4bffe6b0c652180b1944639ff150db46ff5f35f3f1a375328debbbe69bd0",
+          "path": "src/mcp/handlers/state.ts"
+        },
+        {
+          "content_digest": "2873b5b5dcfb46abed8ff8580594d6f615627df13eff025febaae5e30f792982",
+          "path": "src/state/next-action.ts"
+        },
+        {
+          "content_digest": "1a7db655b7b9e0f118e7c8a708249aae38245428e317eef0ea9ebc0408b61bab",
+          "path": "src/state/status.ts"
+        },
+        {
+          "content_digest": "66b3317224fa93b0560c9d10d461eac5c21baf44c506f003d8c897f0983eefd8",
+          "path": "test/contracts/durable-contract-surface.test.ts"
+        },
+        {
+          "content_digest": "42b4d0515652812d9ef61db021d61e65e4d215ca7640a91c2d6ff7f7e69f4649",
+          "path": "test/contracts/durable-structural-corpus.test.ts"
+        },
+        {
+          "content_digest": "03c39f776fd6b9f89dc7cd90eb408b86f9ac0dc8e858a80a224ec794fb571a04",
+          "path": "test/contracts/mcp-advertised-schema.test.ts"
+        },
+        {
+          "content_digest": "1509a40696eccb23fe05228255b225f09b5e38df18980510df218bc0532bda11",
+          "path": "test/crash/state-transaction.test.ts"
+        },
+        {
+          "content_digest": "0f7c23844b2dcd9ae58c85121efc0188c791eead15c5eb762524baf45ec35f4d",
+          "path": "test/integration/config-editing.test.ts"
+        },
+        {
+          "content_digest": "15f4eaa12bdb7ce1b4e8eb1c33e125dfdf2143f450f476aaac27aa54d85cbe5a",
+          "path": "test/integration/counter-review-pinned-context.test.ts"
+        },
+        {
+          "content_digest": "69b44668bef7d16b4522e5dc7add943ea3c72e0c9fc7d1e31af42af1c2e11f6f",
+          "path": "test/integration/review-dispatch-override.test.ts"
+        },
+        {
+          "content_digest": "008fa75929908f5b4f8135cdf4b3fe7d80c42542976f3191b643878099e6a24f",
+          "path": "test/integration/semantic-document-journeys.test.ts"
+        },
+        {
+          "content_digest": "b620e65c0bdc9dc5598d70d2e59b1da5adccad68be2cc9d764e02483571f4441",
+          "path": "test/unit/state-next-action.test.ts"
+        },
+        {
+          "content_digest": "407a8205105794656a2300320464949ed887939b39f7f7045486dacecb98fadb",
+          "path": "test/unit/state-status.test.ts"
+        }
+      ],
+      "gate_id": "g-af44cb996883cf7820a1b7d321e2c5c7ff49337b05c34c4e3426bd214a6ee871"
+    },
+    {
       "adopted_at_revision": 54,
       "adopted_projections": [
         {
@@ -308,45 +468,96 @@
   ],
   "config_digest": "493173957ba07913669e2970f822f501cace89fcbd42b68d0cf7b54185880c08",
   "constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+  "human_revision_history": [
+    {
+      "classification": "simple",
+      "evidence": [
+        {
+          "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+          "phase_instance": "phase-design-3",
+          "result_digest": "a1e130727144b6892f6e58f599bd31d233b9b604c324dd706fe274ac54acdf5a",
+          "result_id": "adjudication-result-e66474a94c8223bd134526b3d4e65584",
+          "step": "adjudicate"
+        },
+        {
+          "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+          "phase_instance": "phase-design-3",
+          "result_digest": "29d7faa917b9a168f7e50595c7c25ad9871c92449ac5ee17f94cd062c421a355",
+          "result_id": "result-02742b3beeaa7372a58d641e23cc1999",
+          "step": "counter_review"
+        },
+        {
+          "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+          "phase_instance": "phase-design-3",
+          "result_digest": "0391cf1a5ee767d96041c030036c889229815a3a9096759af9e02fdc05e43e78",
+          "result_id": "state-result-363950b951626bdfc23736ca80e2080c",
+          "step": "triage"
+        }
+      ],
+      "gate_id": "g-f314f8a244f295b79c50a6042a2246a6f60e5a8a8b7c574c5878cc8eead01eca",
+      "gate_kind": "attempts-exhausted",
+      "phase_instance": "phase-design-3",
+      "predecessor_input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+      "predecessor_subject_digest": "605334d3a1ace594361d00b7089a498c9c68805c0ae70648e32ac2bfd6664f8b",
+      "previous_attempt": 3,
+      "rationale": "The human-requested edit only removes a contradictory 'unchanged' qualifier and states the already-specified recovery-authority arm; it changes no behavior, scope, interface shape, trust boundary, or verification claim.",
+      "resulting_attempt": 3,
+      "resulting_result_digest": "c1d0e4da331fc653b77c70ae07ade5836c7a965156ae94a9eb55b67e14db1b90",
+      "resulting_subject_digest": "15a25a0739882830c30d0890cd350997c8c769e280cf977c0e7dc57956be80cc"
+    }
+  ],
   "initialization_digest": "8198c85109ea65a5c74550ee943d6a7373b771605e45cda4b8daa623c3432755",
-  "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+  "input_fingerprint": "bb6b554dd8637f7992f2fb95f95e40dd8ac0190796f430e7f8b318321b6b4fc4",
+  "last_seen_config": {
+    "roles": {
+      "adjudicator": {
+        "effort": "medium",
+        "model": "claude-opus-5"
+      },
+      "counter-reviewer": {
+        "effort": "medium",
+        "model": "claude-opus-5"
+      }
+    },
+    "schema_version": "1"
+  },
   "last_transition": {
-    "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
-    "intent_id": "afop-8e7951bffeed2a03eaca3233ff8aff5ea15446b99daa507607a8ca1862b39b28-open-gate",
+    "input_fingerprint": "bb6b554dd8637f7992f2fb95f95e40dd8ac0190796f430e7f8b318321b6b4fc4",
+    "intent_id": "afop-e751982b5cc8d409280e4f53e8012c8a44bde5361e4ff52f85fb2f8d41e59bc4-open-gate",
     "operation": "gate",
     "outcome": {
       "decision": {
-        "context_digest": "3694be69e15eb3c45b8e747fcdb70bc91a8922bd888b02a1040d1b4531592e7d",
-        "gate_id": "g-6cf968401398853a9f11e1a58a9d55e9211aac2a8bb7b1c3b5f0edcdfeb87b80",
+        "context_digest": "3d926ce1246a50c1166dfb739ba17aee241ee911a0a001cf127c1aa41389a791",
+        "gate_id": "g-dfa0f828c4e1815ffdd1cbc08d274919ce6cc348ae8496858494f42d7ff6be24",
         "human_provenance": {
           "actor_class": "human",
           "assurance": "declared-local-trace",
           "channel": "connected-host",
           "connection_id": "connection-1",
-          "decision_event_id": "afdecision-7c459e0119b2f96fb8beef4d4b667b436d3c724b13f6cd5521ff5975805838f0",
-          "recorded_at": "2026-08-20T03:48:42.445Z",
-          "request_id_digest": "9be8ba9e1c1872da38935d4d238c83e18c06934e8a639f0577452c2c86728614",
+          "decision_event_id": "afdecision-6073219f1d21bb3b342dceb0248a287edb81ef4baa9a1cf0f8065301b8dee703",
+          "recorded_at": "2026-08-20T18:05:46.822Z",
+          "request_id_digest": "48ee71dc8d4558aad0aadfb135b2b8e3d211de8cba88bacd6abc74e65921de82",
           "schema_version": "1"
         },
         "kind": "design-approval",
         "payload": {
           "decision": "approve",
-          "reason": "Approving: the design covers all ten acceptance sites with an atomic receipt, keeps constitution policy arms and exception gates unconditional, stages the commit-boundary work to Phase 4, and survived three counter-review rounds ending clean."
+          "reason": "The human explicitly approves the reviewed Phase 3 design and authorizes its recoverable milestone commit and continuation."
         },
         "phase_instance": "phase-design-3",
         "schema_version": "1",
-        "subject_digest": "7ea2dc7e609db76103676715b6d0b8a28d106d1e716089acf6bb01faefa269f4",
+        "subject_digest": "15a25a0739882830c30d0890cd350997c8c769e280cf977c0e7dc57956be80cc",
         "task_id": "review-flexibility"
       },
       "kind": "design-approval",
-      "notes": "Approving: the design covers all ten acceptance sites with an atomic receipt, keeps constitution policy arms and exception gates unconditional, stages the commit-boundary work to Phase 4, and survived three counter-review rounds ending clean.",
-      "revision": 108
+      "notes": "The human explicitly approves the reviewed Phase 3 design and authorizes its recoverable milestone commit and continuation.",
+      "revision": 145
     },
-    "outcome_digest": "61e18119d49e01dccf18cd649c47627e2fc78ff9676c08cfdd66814dbd35788a",
-    "prior_revision": 107,
-    "request_digest": "f642744ca1a1ca9a02e386b07a83eb9a5740a40d65aadc261eba9e457b0dfef5",
-    "result_id": "g-6cf968401398853a9f11e1a58a9d55e9211aac2a8bb7b1c3b5f0edcdfeb87b80",
-    "resulting_revision": 108,
+    "outcome_digest": "9a7b4a987795f496d4c38f0a45a72175381bd652ad1f26516bf909d0d88d1445",
+    "prior_revision": 144,
+    "request_digest": "21dd55bab17f81287f9c004c70c04b6c1b90faf1781d0dde1473d1f4ce1eb101",
+    "result_id": "g-dfa0f828c4e1815ffdd1cbc08d274919ce6cc348ae8496858494f42d7ff6be24",
+    "resulting_revision": 145,
     "schema_version": "1",
     "tool": "archflow_gate"
   },
@@ -354,10 +565,88 @@
   "planned_final_phase": 6,
   "policy_base_commit": "6549da8a2b872a2c72aabe7cc4632e1d3eb09b89",
   "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
-  "revision": 108,
+  "restart_history": [
+    {
+      "cleared_waivers": [],
+      "human_provenance": {
+        "actor_class": "human",
+        "assurance": "declared-local-trace",
+        "channel": "connected-host",
+        "connection_id": "connection-1",
+        "decision_event_id": "afdecision-0a7fe7c5b85b9d7dd2ba717bde196b7015327bef17709dd960e85af49bdbdf8a",
+        "recorded_at": "2026-08-20T16:17:01.696Z",
+        "request_id_digest": "b84440225fdd80d0230649d1b4a82aef4e648973cbaf483e4df861538f62cfb0",
+        "schema_version": "1"
+      },
+      "reason": "update the earlier work",
+      "restart_id": "g-96f37d14674a17def4781ecce06ae30b16893a69bb2613e3de326edaad7260ab",
+      "restarted_at_revision": 118,
+      "source_phase_instance": "phase-impl-3",
+      "superseded_results": [
+        {
+          "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+          "phase_instance": "phase-design-3",
+          "result_digest": "facc97fed81fc2edf7f1a6433cb9922c1bfb1da344f0cbb348b3610aa7c39bd3",
+          "result_id": "adjudication-result-d85d39648d58915138ea7363fd7d8f6b",
+          "step": "adjudicate"
+        },
+        {
+          "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+          "phase_instance": "phase-design-3",
+          "result_digest": "b02707696690abbc2059330560a570d25261c8c50ec9a1ca032f35180682815b",
+          "result_id": "result-f4e5ed664e72b4101422a7464d25f720",
+          "step": "counter_review"
+        },
+        {
+          "input_fingerprint": "c9070d869c88a6505aa4311b055502b06ac238b08545d58475ac05a97cde53cc",
+          "phase_instance": "phase-design-3",
+          "result_digest": "27eea301babec015ff7ec51bff04f0a810486976a370a429e5af590f35139a47",
+          "result_id": "state-result-2a1a1dcbf452360b71eed74efa132af5",
+          "step": "produce"
+        },
+        {
+          "input_fingerprint": "f40c414931837a74d7ade9ecc6c6585a5d49b8db6185703fcea81ff8b4d07172",
+          "phase_instance": "phase-design-3",
+          "result_digest": "cf4de995c69004226f4b71969340968254967caa4a2f3328187a34b007477190",
+          "result_id": "state-result-84d2fcf07d42f23c2f2b0dd17353b996",
+          "step": "triage"
+        },
+        {
+          "input_fingerprint": "dbb90487e38f52b4c6fe3f9107295f251c411e78f78b199482f911fa4baaeec4",
+          "phase_instance": "phase-impl-3",
+          "result_digest": "e81b14fa7db8b8532dbb184a4f222986928dced4ef19c1e71207aeaa95f31493",
+          "result_id": "adjudication-result-c1e797a7fb1742a92e5c3e3533c78d8f",
+          "step": "adjudicate"
+        },
+        {
+          "input_fingerprint": "dbb90487e38f52b4c6fe3f9107295f251c411e78f78b199482f911fa4baaeec4",
+          "phase_instance": "phase-impl-3",
+          "result_digest": "4f6f315761e81917d3c44c9bde4bd1818cb7f9921bd2d14836e3e58825cb6812",
+          "result_id": "result-142cf874e19846496079f0a3f9fbf99f",
+          "step": "counter_review"
+        },
+        {
+          "input_fingerprint": "3f3fa04f1c6a3b35d22e093de9f389c894be5f1b053a69d89d9094fe7c8e8427",
+          "phase_instance": "phase-impl-3",
+          "result_digest": "44045a8eee5d3cee4b537ca5c9b4c41e33a486462158da05600871f230ff0d33",
+          "result_id": "state-result-2d687989c43b82437c59e941e25a3e68",
+          "step": "produce"
+        },
+        {
+          "input_fingerprint": "dbb90487e38f52b4c6fe3f9107295f251c411e78f78b199482f911fa4baaeec4",
+          "phase_instance": "phase-impl-3",
+          "result_digest": "57107c8e61353932337ce89fe99f77171577f3bec41be43ac1ddad9c6aaeb427",
+          "result_id": "state-result-fecca49c9fa244111f41ee828654c96d",
+          "step": "triage"
+        }
+      ],
+      "target_phase_instance": "phase-design-3"
+    }
+  ],
+  "revision": 145,
   "schema_version": "1",
   "status": "succeeded",
-  "step": "triage",
+  "step": "produce",
   "task_id": "review-flexibility",
   "waivers": [],
   "workflow_digest": "3f5f7536f19219fbf4ade78aea07c93d22d03057ce2ed83d532e25a54a8aab9a"

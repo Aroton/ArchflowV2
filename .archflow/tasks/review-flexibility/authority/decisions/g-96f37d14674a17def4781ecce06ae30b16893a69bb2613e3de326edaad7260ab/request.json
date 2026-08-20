@@ -1,0 +1,43 @@
+{
+  "allowed_decisions": [
+    "amend-upstream",
+    "revise-current",
+    "reject",
+    "cancel"
+  ],
+  "context": {
+    "affected_claim_ids": [
+      "d9-self-application-cutover",
+      "p3-7-baseline-commit-from-head",
+      "p3-8-cutover-edit"
+    ],
+    "affected_upstream": {
+      "digest": "7ea2dc7e609db76103676715b6d0b8a28d106d1e716089acf6bb01faefa269f4",
+      "kind": "implementation-result"
+    },
+    "drift": "material"
+  },
+  "context_digest": "9774a421e6d6dccd5a8f79c7accc259ffdcd82885342d2bc5fe1137b15c2224a",
+  "current_evidence": {
+    "set_digest": "9dda2cbac2e861b74960cb82145ddd5215df639f2904d23d545af9ecadab7f41",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "8645c38eeb8e0e39c6c4763d240b4023ee83087dc9bb05c4f1ce713c3804ac65",
+        "producer_family": "codex",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-96f37d14674a17def4781ecce06ae30b16893a69bb2613e3de326edaad7260ab",
+  "intent_id": "afop-318b6b648efe2c97d517dde6a3a4504d2032336295bac839abea49daa4ff872d-open-gate",
+  "kind": "material-drift",
+  "opened_at_revision": 117,
+  "phase_instance": "phase-impl-3",
+  "request_digest": "6ca884f9ca0e00a784a6ed3e055814f41169488d4ed9a05d2c9b2d0eb8500a6d",
+  "schema_version": "1",
+  "subject_digest": "d5fccaee15996bd6d4f59815c42e56c12190365e86f6f11c263754f5b7893270",
+  "summary": "The approved Phase 3 design placed the task-local D9 approval_rules cutover in the phase implementation. The implementation and verification are complete, but the workflow's path-class boundary makes task config server-owned and non-claimable: leaving the cutover present blocks status before work submission, while declaring it as an output is rejected. The proposed deviation changes only the commit vehicle and timing, not the D9 bytes or behavior. The authorized Phase 3 commit will contain all 51 claimable reviewed paths. Immediately after the server observes that commit proof, this same session will reapply the exact config header refresh and approval_rules subjects [prd, design, phase-design, phase-impl], commit them with state.json and authority records, and only then report the Phase 4 successor. The residual risk is a temporary one-commit interval in which the old task config remains at HEAD; no successor workflow action will run during that interval. The implementation notes record this deviation and exact landing point.",
+  "task_id": "review-flexibility"
+}

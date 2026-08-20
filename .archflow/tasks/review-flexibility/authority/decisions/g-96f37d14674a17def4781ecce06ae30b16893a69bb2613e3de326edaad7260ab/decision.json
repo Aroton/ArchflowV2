@@ -1,0 +1,33 @@
+{
+  "context_digest": "9774a421e6d6dccd5a8f79c7accc259ffdcd82885342d2bc5fe1137b15c2224a",
+  "envelope": {
+    "context_digest": "9774a421e6d6dccd5a8f79c7accc259ffdcd82885342d2bc5fe1137b15c2224a",
+    "gate_id": "g-96f37d14674a17def4781ecce06ae30b16893a69bb2613e3de326edaad7260ab",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-0a7fe7c5b85b9d7dd2ba717bde196b7015327bef17709dd960e85af49bdbdf8a",
+      "recorded_at": "2026-08-20T16:17:01.696Z",
+      "request_id_digest": "b84440225fdd80d0230649d1b4a82aef4e648973cbaf483e4df861538f62cfb0",
+      "schema_version": "1"
+    },
+    "kind": "material-drift",
+    "payload": {
+      "decision": "amend-upstream",
+      "reason": "update the earlier work"
+    },
+    "phase_instance": "phase-impl-3",
+    "schema_version": "1",
+    "subject_digest": "d5fccaee15996bd6d4f59815c42e56c12190365e86f6f11c263754f5b7893270",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-96f37d14674a17def4781ecce06ae30b16893a69bb2613e3de326edaad7260ab",
+  "kind": "material-drift",
+  "outcome": "decided",
+  "phase_instance": "phase-impl-3",
+  "schema_version": "1",
+  "subject_digest": "d5fccaee15996bd6d4f59815c42e56c12190365e86f6f11c263754f5b7893270",
+  "task_id": "review-flexibility"
+}
