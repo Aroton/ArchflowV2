@@ -1,6 +1,6 @@
 # workflow/LIFECYCLE
 
-**Explored:** 2026-08-16 · **Commit:** `d60da73` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/state/semantic-*.ts`, `src/mcp/handlers/semantic.ts`, `skills/`
+**Explored:** 2026-08-20 · **Commit:** `3030d3d` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/state/semantic-*.ts`, `src/mcp/handlers/semantic.ts`, `skills/`
 
 How a task moves from idea to committed code, and where a human must decide.
 
@@ -20,7 +20,9 @@ flowchart LR
 
 One nuance the YAML alone doesn't show: project `approval_rules` are being introduced in stages. The fixed point now records whether a subject/content rule matched, and a waiting settlement preserves that exact reason for the human presentation. The current constitution still requires explicit approval, so unmatched PRD, design, and phase-design subjects also open their ordinary human gate; no settlement yet substitutes for approval, upstream ownership, phase exit, or commit authority. Autonomous consumption is deferred until the constitution and hard rules are explicitly amended in the same reviewed change.
 
-The optional config section has two lists. `subjects` accepts `prd`, `design`, `phase-design`, and `phase-impl`. `content` entries each carry repository-relative path globs and are considered only for a phase implementation. Matching is whole-path, case-sensitive, and `/`-segmented: `*` and `?` stay within one segment, while `**` spans zero or more complete segments (`**/*.sql` therefore matches both `a.sql` and `db/a.sql`). An absent or empty section means no ordinary document subject waits.
+The optional config section has two lists. `subjects` accepts `prd`, `design`, `phase-design`, and `phase-impl`. `content` entries each carry repository-relative path globs and are considered only for a phase implementation. Matching is whole-path, case-sensitive, and `/`-segmented: `*` and `?` stay within one segment, while `**` spans zero or more complete segments (`**/*.sql` therefore matches both `a.sql` and `db/a.sql`). An absent or empty section records `wait:false`.
+
+An implementation content match is more than a path list at presentation time. The settlement freezes the complete matched-path set; the server joins those paths to the retained implementation output to reconstruct each operation and exact signed byte delta. Rename endpoints are evaluated independently: the old path, new path, or both can match, and a rename away followed by a new add at the old name keeps both operations. This evidence is sorted deterministically and survives later `approval_rules` edits unchanged. It explains the reviewed diff to the human; it does not authorize that diff.
 
 That decision does not silently rewrite the phase. Approval commits first; the active producer then automatically composes the server-derived `advance` operation and re-runs status until the successor or terminal state is durable. This separation preserves replay and auditability without leaving a customer action gap. If a session stops between the two commits, status recommends the exact destination skill and arguments, and that invocation can complete only its authenticated immediate-predecessor hand-off.
 
@@ -35,7 +37,7 @@ The workflow file's bytes are digest-pinned into each task at creation, so chang
 | prd | `archflow-prd` | `ask.md` (verbatim request plus clarification Q&A), `prd.md` | `artifact-approval`; the persisted subject-rule match is shown when present |
 | design | `archflow-design` | `design.md` with a machine-readable `### Phase N:` plan, plus the current `prd.md` projection | `design-approval`; policy findings and any persisted subject-rule match are shown |
 | phase-design | `archflow-phase-design` | `phases/<n>/design.md`, plus the current `design.md` and `prd.md` projections | `design-approval`; policy findings and any persisted subject-rule match are shown |
-| phase-impl | `archflow-phase-impl` | code, tracked `phases/<n>/impl-notes.md`, digest-bound ignored verification transcript | one `commit-authorization` bound to the retained final diff; the authorized commit is client-created under an explicit confirmation and observed by read-only status |
+| phase-impl | `archflow-phase-impl` | code, tracked `phases/<n>/impl-notes.md`, digest-bound ignored verification transcript | one explicit `commit-authorization` for both rule outcomes, bound to the retained final diff; a waiting content match adds per-path operation and byte-delta evidence reconstructed from frozen authority, and the authorized commit is client-created under a separate explicit confirmation |
 | status | `archflow-status` | nothing — read-only | surfaces gates, resolves none |
 
 Tracked task documents and authority live under `.archflow/tasks/<task>/`; transient, cache, and diagnostic bytes live under ignored `.archflow/runtime/tasks/<task>/`. Both resolvers enforce the same containment, symlink, and task boundary. The only shared material is repository policy and the maintained `docs/` set. **Tasks never read each other's files** — this isolation is real and test-enforced.
@@ -55,7 +57,7 @@ Every gated stage runs the same evidence pipeline to a fixed point:
 
 On the semantic document path, both an explicit triage submission and review's empty-finding fast path first record `triage: running` through the authenticated `triage-enter` substep. Terminal triage therefore never appears without its normal state-machine entry boundary.
 
-The transaction that first establishes a clean fixed point also evaluates `approval_rules` and persists its complete conclusion. Subject rules apply to all four workflow subjects; content globs are evaluated only for phase implementation. An absent or empty section records `wait:false`, but the current staged rollout still opens explicit approval. Later config edits are reported without retroactively changing the recorded match, and a planning restart makes old settlements ineligible for current presentation.
+The transaction that first establishes a clean fixed point also evaluates `approval_rules` and persists its complete conclusion. Subject rules apply to all four workflow subjects; content globs are evaluated only for phase implementation. For a content match, the settlement freezes every matching path; joining that set to the retained output supplies the complete per-path operation and exact signed size change, including both independently matched rename endpoints and overlapping rename/add effects. An absent or empty section records `wait:false`, but the current staged rollout still opens explicit approval for either outcome. Later config edits may be reported alongside the gate without retroactively changing its settled match or presentation, and a planning restart makes old settlements ineligible for current presentation.
 
 Editing the artifact changes the subject digest, which normally invalidates all downstream evidence — the pipeline re-runs until everything agrees about the same bytes. Re-entry is bounded (`max_attempts`, default 3); exhaustion opens an `attempts-exhausted` gate rather than looping forever. A significant human revision begins a new cycle at attempt 1, so exhaustion counts only attempts since the latest such revision.
 
@@ -101,7 +103,7 @@ Ten gate kinds exist (`src/contracts/gates.ts`):
 |---|---|
 | `artifact-approval` | a PRD reaches its fixed point; during the staged rollout both settlement outcomes open this human gate, and a persisted waiting match is shown in its presentation; archived legacy design gates remain readable and finish under their original contract |
 | `design-approval` | task design or phase design reaches its fixed point, or constitution policy requires judgment; during the staged rollout both settlement outcomes open this human gate, with any persisted waiting match shown in its presentation; one decision includes the complete document set, policy findings, and task-local milestone commit authority |
-| `commit-authorization` | a phase implementation is ready to commit |
+| `commit-authorization` | a phase implementation is ready to commit; in staged Phase 4 both `wait:true` and `wait:false` open this explicit human decision, while a content-triggered wait also shows the operation and byte delta reconstructed for every frozen matched path |
 | `constitution-review` | the constitution review found a rule `fail`/`uncertain`, or a rule's `review_trigger` matched, or both (derived after triage; one gate discloses both axes and offers a waiver per rule *and* axis) |
 | `material-drift` | an approved upstream document drifted materially (derived after triage); `amend-upstream` durably restarts at the affected planning document |
 | `attempts-exhausted` | the produce/review loop hit its attempt cap (the gate composer's exhaustion arm derives it from the same fixed-point assessment status advertises) |
@@ -115,7 +117,7 @@ Every gate is a durable pair of canonical documents (request + decision record) 
 - **Supersession**: if the subject changes while a gate is open, the gate returns `GATE_SUPERSEDED` and approves nothing — the work re-enters the pipeline and a fresh gate opens.
 - **Re-verification**: later code never trusts a recorded approval reference alone; it re-reads and re-validates the underlying documents.
 
-The machine bindings above are audit authority, not the default human interface. The server also derives a reconstructible conversational presentation: a title, summary, direct question, relevant evidence, and labeled choices with consequences. Skills show that presentation and hide identifiers, digests, JSON, internal paths, and protocol codes unless the human asks for diagnostics.
+The machine bindings above are audit authority, not the default human interface. The server also derives a reconstructible conversational presentation: a title, summary, direct question, relevant evidence, and labeled choices with consequences. For a content-triggered implementation, the bounded archived summary carries the frozen trigger (with an omitted count if its path list is exceptionally large), while the semantic presentation keeps the complete deterministic operation and signed-byte-delta `details`. Those details are reconstructed from settlement plus retained output, never from mutable config or the live worktree. Skills show that presentation and hide identifiers, digests, JSON, internal paths, and protocol codes unless the human asks for diagnostics.
 
 ## Hard trust boundaries
 

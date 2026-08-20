@@ -264,8 +264,14 @@ function presentationBindings(active: ActiveGateV1): readonly PresentationBindin
 }
 
 /** Renders the live gate as a conversational human decision without exposing binding material. */
-export function buildHumanGatePresentation(active: ActiveGateV1): HumanGatePresentation {
+export function buildHumanGatePresentation(
+  active: ActiveGateV1,
+  contentTriggerDetails?: readonly string[],
+): HumanGatePresentation {
   const request = parseActiveGate(structuredClone(active));
+  if (contentTriggerDetails !== undefined && request.kind !== "commit-authorization") {
+    throw new TypeError("internal invariant: content-trigger details require a commit-authorization gate");
+  }
   const waiver = waiverContext(request.context);
   const copy = waiver === undefined
     ? PRESENTATION_COPY[request.kind]
@@ -301,6 +307,9 @@ export function buildHumanGatePresentation(active: ActiveGateV1): HumanGatePrese
           ...(request.context.deleted_projections!.length > 10 ? [`… and ${request.context.deleted_projections!.length - 10} more`] : []),
         ]),
       ]),
+    } : {}),
+    ...(request.kind === "commit-authorization" && contentTriggerDetails !== undefined ? {
+      details: Object.freeze([...contentTriggerDetails]),
     } : {}),
     question: `${copy.question} Choose an option and briefly explain why.`,
     options: Object.freeze(presentationBindings(request).map((binding) => binding.option)),

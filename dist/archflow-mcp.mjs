@@ -58667,8 +58667,11 @@ function presentationBindings(active) {
     return [Object.freeze({ token: option.token, decision: decision3, template, option })];
   }));
 }
-function buildHumanGatePresentation(active) {
+function buildHumanGatePresentation(active, contentTriggerDetails2) {
   const request = parseActiveGate(structuredClone(active));
+  if (contentTriggerDetails2 !== void 0 && request.kind !== "commit-authorization") {
+    throw new TypeError("internal invariant: content-trigger details require a commit-authorization gate");
+  }
   const waiver = waiverContext(request.context);
   const copy2 = waiver === void 0 ? PRESENTATION_COPY[request.kind] : Object.freeze({
     title: "Decide a policy exception",
@@ -58702,6 +58705,9 @@ function buildHumanGatePresentation(active) {
           ...request.context.deleted_projections.length > 10 ? [`\u2026 and ${request.context.deleted_projections.length - 10} more`] : []
         ]
       ])
+    } : {},
+    ...request.kind === "commit-authorization" && contentTriggerDetails2 !== void 0 ? {
+      details: Object.freeze([...contentTriggerDetails2])
     } : {},
     question: `${copy2.question} Choose an option and briefly explain why.`,
     options: Object.freeze(presentationBindings(request).map((binding) => binding.option))
@@ -65183,7 +65189,47 @@ function pendingAdjudicationGates(state, constitution, retained, authenticated) 
 function pendingAdjudicationGate(state, constitution, retained, authenticated) {
   return pendingAdjudicationGates(state, constitution, retained, authenticated)[0];
 }
-function gateStatus(active) {
+function compareCodeUnits(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+function sizeChange(before, after) {
+  const delta = after - before;
+  return `${before} \u2192 ${after} bytes (${delta >= 0 ? "+" : ""}${delta} bytes)`;
+}
+function contentTriggerDetails(settlement, output) {
+  const conclusion = settlement?.conclusion;
+  if (conclusion === void 0 || conclusion.wait === false || conclusion.match.kind !== "content") {
+    return void 0;
+  }
+  const details = [];
+  for (const matchedPath of conclusion.match.paths) {
+    const renameSources = output.outputs.filter((entry) => entry.operation === "rename" && entry.previous_path === matchedPath).sort((left, right) => compareCodeUnits(left.path, right.path));
+    const currentPaths = output.outputs.filter((entry) => entry.path === matchedPath).sort((left, right) => compareCodeUnits(left.path, right.path));
+    if (renameSources.length + currentPaths.length === 0) {
+      throw new TypeError(`content-trigger path has no retained implementation endpoint: ${matchedPath}`);
+    }
+    for (const entry of renameSources) {
+      details.push(
+        `${matchedPath}: renamed to ${entry.path} (${sizeChange(entry.before.size_bytes, entry.after.size_bytes)})`
+      );
+    }
+    for (const entry of currentPaths) {
+      if (entry.operation === "add") {
+        details.push(`${matchedPath}: added (${sizeChange(0, entry.after.size_bytes)})`);
+      } else if (entry.operation === "delete") {
+        details.push(`${matchedPath}: deleted (${sizeChange(entry.before.size_bytes, 0)})`);
+      } else if (entry.operation === "modify") {
+        details.push(`${matchedPath}: modified (${sizeChange(entry.before.size_bytes, entry.after.size_bytes)})`);
+      } else {
+        details.push(
+          `${matchedPath}: renamed from ${entry.previous_path} (${sizeChange(entry.before.size_bytes, entry.after.size_bytes)})`
+        );
+      }
+    }
+  }
+  return Object.freeze(details);
+}
+function gateStatus(active, triggerDetails) {
   return Object.freeze({
     gate_id: active.gate_id,
     kind: active.kind,
@@ -65191,7 +65237,7 @@ function gateStatus(active) {
     archive_decision_path: `.archflow/tasks/${active.task_id}/authority/decisions/${active.gate_id}/decision.json`,
     request_path: `.archflow/tasks/${active.task_id}/authority/decisions/${active.gate_id}/request.json`,
     decision_templates: buildGateDecisionTemplates(active),
-    presentation: buildHumanGatePresentation(active)
+    presentation: buildHumanGatePresentation(active, triggerDetails)
   });
 }
 async function currentTargetRef(dependencies) {
@@ -65639,7 +65685,26 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         blockers.push("active-gate-mismatch");
         gateBindingBlocker = "active-gate-mismatch";
       } else {
-        openGate = gateStatus(activeGate);
+        try {
+          let triggerDetails;
+          if (activeGate.kind === "commit-authorization") {
+            if (produceSubject?.artifact.artifact_kind !== "implementation-output" || produceSubject.artifact_digest !== activeGate.subject_digest) {
+              throw new TypeError("commit-authorization presentation requires its exact retained implementation output");
+            }
+            triggerDetails = contentTriggerDetails(
+              latestEligibleRuleSettlement(
+                state,
+                produceSubject.artifact_digest,
+                produceSubject.artifact.phase_instance
+              ),
+              produceSubject.artifact
+            );
+          }
+          openGate = gateStatus(activeGate, triggerDetails);
+        } catch {
+          blockers.push("content-trigger-presentation-invalid");
+          gateBindingBlocker = "content-trigger-presentation-invalid";
+        }
       }
     } catch {
       blockers.push("active-gate-invalid");
@@ -66884,7 +66949,7 @@ async function composeGate(services, state, intentId, snapshot) {
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
-      summary,
+      summary: approvalSummary,
       subject_digest: authorization.subject_digest,
       current_evidence: authorization.current_evidence,
       kind: "commit-authorization",

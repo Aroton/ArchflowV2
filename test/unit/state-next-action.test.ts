@@ -397,9 +397,9 @@ describe("deriveNextAction", () => {
     });
   });
 
-  it("keeps commit-authorization unconditional until Phase 4", () => {
-    // The commit boundary keeps its unconditional open until Phase 4 makes it rule-driven; this
-    // pin exists so that removal is observable — an explicit wait:false still opens the gate here.
+  it("keeps commit-authorization unconditional until Phase 5 and the constitution amendment", () => {
+    // State activation is deferred to Phase 5/the constitution amendment; this pin makes an
+    // accidental early activation observable — an explicit wait:false still opens the gate here.
     expect(deriveNextAction(input({
       state: state({ phase_instance: implementation(2) }),
       assessment: assessment("advance"),

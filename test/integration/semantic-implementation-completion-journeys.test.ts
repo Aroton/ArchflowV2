@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -197,6 +197,36 @@ function implementationSubmission(
   };
 }
 
+function writeApprovalRulesConfig(
+  workspace: TaskWorkspace,
+  contentPatterns: readonly string[],
+): void {
+  const content = contentPatterns.length === 0
+    ? "  content: []"
+    : `  content:\n${contentPatterns.map((pattern) => `    - paths: [${JSON.stringify(pattern)}]`).join("\n")}`;
+  writeFileSync(join(workspace.services.authority.task_root, "config.yaml"), `schema_version: "1"
+roles:
+  counter-reviewer: { model: gpt-5.6-sol, effort: xhigh }
+  adjudicator: { model: gpt-5.6-sol, effort: xhigh }
+approval_rules:
+  subjects: [prd, design, phase-design]
+${content}
+`);
+}
+
+function commitSeedFiles(workspace: TaskWorkspace, files: Readonly<Record<string, string>>): void {
+  for (const [path, bytes] of Object.entries(files)) {
+    const absolute = join(workspace.root, path);
+    mkdirSync(dirname(absolute), { recursive: true });
+    writeFileSync(absolute, bytes);
+  }
+  execFileSync("git", ["add", "--", ...Object.keys(files).sort()], { cwd: workspace.root });
+  execFileSync("git", [
+    "-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid",
+    "commit", "-q", "-m", "seed approval-rule operation fixtures",
+  ], { cwd: workspace.root });
+}
+
 function clientCommit(workspace: TaskWorkspace, commit: NonNullable<WorkflowViewV1["next_action"]["commit"]>): void {
   execFileSync("git", ["add", "-A", "--", ...commit.paths], { cwd: workspace.root });
   execFileSync("git", [
@@ -347,6 +377,111 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(reread.next_action.offer).toBeUndefined();
     const stale = await h.apply(invocation, observed, undefined);
     expect(stale).toMatchObject({ ok: false, error: { retryable: false } });
+  });
+
+  it("freezes a content wait through later config edits and presents every matched operation with exact byte deltas", async () => {
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-impl-content-rule",
+      label: "semantic-impl-content-rule",
+    });
+    workspaces.push(workspace);
+    excludeStubArtifacts(workspace);
+    commitSeedFiles(workspace, {
+      "db/b-deleted.sql": "123456789",
+      "db/c-modified.sql": "1234567",
+    });
+    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []]));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
+    let view = await applied(h, invocation, handoff);
+    writeApprovalRulesConfig(workspace, ["**/*.sql"]);
+    const work = writeClientImplementation(workspace, view, "content-rule-round-1");
+    writeFileSync(join(workspace.root, "db/a-added.sql"), "123456789012");
+    rmSync(join(workspace.root, "db/b-deleted.sql"));
+    writeFileSync(join(workspace.root, "db/c-modified.sql"), "7654321");
+    const outputs = [
+      ...work.outputs,
+      "db/a-added.sql",
+      "db/b-deleted.sql",
+      "db/c-modified.sql",
+    ].sort();
+
+    view = await applied(h, invocation, view, implementationSubmission(workspace, outputs));
+    view = await applied(h, invocation, view);
+    expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+
+    // The clean fixed point settled under the SQL rule. A later edit would match the TypeScript
+    // output instead if the gate re-evaluated mutable config, but it may only report that change.
+    writeApprovalRulesConfig(workspace, ["**/*.ts"]);
+    const changedConfigView = await h.status(invocation);
+    expect(changedConfigView.config_change).toBeDefined();
+    expect(changedConfigView.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    view = await applied(h, invocation, changedConfigView, {
+      kind: "gate-summary",
+      summary: "The implementation and its complete operation set are ready for authorization.",
+    });
+    expect(view.presentation?.summary).toContain(
+      "Approval rule trigger: these changed paths matched the project's content rules:",
+    );
+    expect(view.presentation?.summary).toContain("- db/c-modified.sql");
+    expect(view.presentation?.summary).not.toContain("src/journey-feature.ts");
+    expect(view.presentation?.details).toEqual([
+      "db/a-added.sql: added (0 → 12 bytes (+12 bytes))",
+      "db/b-deleted.sql: deleted (9 → 0 bytes (-9 bytes))",
+      "db/c-modified.sql: modified (7 → 7 bytes (+0 bytes))",
+    ]);
+    expect(view.presentation?.options.map((option) => option.token)).toEqual([
+      "authorize-commit", "request-changes", "stop-work", "cancel",
+    ]);
+
+    // The archived request keeps the same frozen trigger summary even though disposable operation
+    // details are reconstructed from that settlement plus the retained implementation output.
+    const pendingState = JSON.parse(readFileSync(workspace.services.authority.state.absolute, "utf8"));
+    const gateId = pendingState.open_gate?.gate_id;
+    if (typeof gateId !== "string") throw new Error("content-rule gate id unavailable");
+    const presentedSummary = view.presentation?.summary;
+    view = await applied(h, invocation, view, {
+      kind: "decision",
+      choice: "authorize-commit",
+      reason: "The reviewed SQL operations and their exact sizes are acceptable.",
+    });
+    const archivedRequest = JSON.parse(readFileSync(join(
+      workspace.services.authority.task_root,
+      "authority", "decisions", gateId, "request.json",
+    ), "utf8"));
+    expect(archivedRequest.summary).toBe(presentedSummary);
+    expect(view.next_action.commit).toMatchObject({ requires_human_confirmation: true });
+  });
+
+  it("keeps a TypeScript-only wait:false implementation behind explicit commit authorization without content details", async () => {
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-impl-no-content-rule",
+      label: "semantic-impl-no-content-rule",
+    });
+    workspaces.push(workspace);
+    excludeStubArtifacts(workspace);
+    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []]));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
+    let view = await applied(h, invocation, handoff);
+    writeApprovalRulesConfig(workspace, ["**/*.sql"]);
+    const work = writeClientImplementation(workspace, view, "typescript-only-round-1");
+    view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
+    view = await applied(h, invocation, view);
+    expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    view = await applied(h, invocation, view, {
+      kind: "gate-summary", summary: "The TypeScript-only implementation is ready for authorization.",
+    });
+    expect(view.presentation?.summary).toBe("The TypeScript-only implementation is ready for authorization.");
+    expect(view.presentation?.details).toBeUndefined();
+    expect(view.presentation?.options.map((option) => option.token)).toEqual([
+      "authorize-commit", "request-changes", "stop-work", "cancel",
+    ]);
+
+    view = await applied(h, invocation, view, {
+      kind: "decision", choice: "authorize-commit", reason: "The reviewed TypeScript-only change may be committed.",
+    });
+    expect(view.next_action.commit).toMatchObject({ requires_human_confirmation: true });
   });
 
   it("returns request-changes to a close-only checkpoint that requires the separate revise action before re-editing", async () => {

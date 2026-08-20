@@ -7172,7 +7172,7 @@
       ]
     },
     "src/state/gate-decision-interface.ts": {
-      "bytes": 21201,
+      "bytes": 21613,
       "format": "esm",
       "imports": [
         {
@@ -8115,7 +8115,7 @@
       ]
     },
     "src/state/request-composition.ts": {
-      "bytes": 43720,
+      "bytes": 43737,
       "format": "esm",
       "imports": [
         {
@@ -8573,7 +8573,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 65151,
+      "bytes": 69305,
       "format": "esm",
       "imports": [
         {
@@ -8959,7 +8959,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1601064,
+      "bytes": 1604949,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10084,7 +10084,7 @@
           "bytesInOutput": 3802
         },
         "src/state/gate-decision-interface.ts": {
-          "bytesInOutput": 12589
+          "bytesInOutput": 12969
         },
         "src/state/implementation-manifest.ts": {
           "bytesInOutput": 7186
@@ -10129,7 +10129,7 @@
           "bytesInOutput": 3984
         },
         "src/state/restart-authority.ts": {
-          "bytesInOutput": 1053
+          "bytesInOutput": 1692
         },
         "src/state/retained-result-graph.ts": {
           "bytesInOutput": 913
@@ -10141,7 +10141,7 @@
           "bytesInOutput": 22406
         },
         "src/state/status.ts": {
-          "bytesInOutput": 37684
+          "bytesInOutput": 40550
         },
         "src/state/workspace-cleanup.ts": {
           "bytesInOutput": 15564
@@ -10149,7 +10149,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2889285,
+      "bytes": 2892548,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -11454,7 +11454,7 @@
           "bytesInOutput": 7865
         },
         "src/state/gate-decision-interface.ts": {
-          "bytesInOutput": 16780
+          "bytesInOutput": 17160
         },
         "src/state/gates.ts": {
           "bytesInOutput": 100868
@@ -11508,7 +11508,7 @@
           "bytesInOutput": 6679
         },
         "src/state/request-composition.ts": {
-          "bytesInOutput": 31548
+          "bytesInOutput": 31565
         },
         "src/state/request.ts": {
           "bytesInOutput": 3984
@@ -11535,7 +11535,7 @@
           "bytesInOutput": 26332
         },
         "src/state/status.ts": {
-          "bytesInOutput": 35953
+          "bytesInOutput": 38819
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 43376

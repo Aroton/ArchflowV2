@@ -4,8 +4,9 @@ import { join } from "node:path";
 import { canonicalJsonDigest, parseCanonicalDocument, type CanonicalDocument } from "../contracts/canonical.js";
 import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
 import { parseConfigYaml, type TaskConfigSnapshot } from "../contracts/config.js";
+import type { ImplementationOutputV1 } from "../contracts/durable-implementation-output.js";
 import { exactCommitAuthorizationContext, parseActiveGate, parsePersistedGateRequest, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
-import type { ConfigChangeEntry, TaskStateV1 } from "../contracts/durable-state.js";
+import type { ConfigChangeEntry, RuleSettlementV1, TaskStateV1 } from "../contracts/durable-state.js";
 export type { ConfigChangeEntry } from "../contracts/durable-state.js";
 import type { AdjudicationEvidence } from "../contracts/adjudication.js";
 import type { ProjectError, ProjectResult } from "../contracts/errors.js";
@@ -29,7 +30,7 @@ import { assertInternalTransactionAuthority, createInternalTransactionAuthority 
 import { resolvePinnedConstitution, type ResolvedConstitution } from "./constitution.js";
 import { deriveCurrentEvidenceSet, loadRetainedEvidence, type RetainedEvidenceSet } from "./evidence-results.js";
 import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "./gate-approvals.js";
-import { authenticatedApprovalIsEligibleAfterLatestRestart } from "./restart-authority.js";
+import { authenticatedApprovalIsEligibleAfterLatestRestart, latestEligibleRuleSettlement } from "./restart-authority.js";
 import {
   buildGateDecisionTemplates,
   buildHumanGatePresentation,
@@ -604,7 +605,69 @@ export function pendingAdjudicationGate(
   return pendingAdjudicationGates(state, constitution, retained, authenticated)[0];
 }
 
-function gateStatus(active: ActiveGateV1): OpenGateStatus {
+function compareCodeUnits(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function sizeChange(before: number, after: number): string {
+  const delta = after - before;
+  return `${before} → ${after} bytes (${delta >= 0 ? "+" : ""}${delta} bytes)`;
+}
+
+/**
+ * Reconstructs the complete disposable explanation of a frozen content-rule match.
+ *
+ * The settlement and retained implementation output are the entire authority surface: callers
+ * cannot pass live config, Git state, or filesystem observations. Persisted match order is kept,
+ * while all endpoints for one path are rendered in the contract's deterministic source/current
+ * order. A missing endpoint is an authority disagreement, not a skippable presentation detail.
+ */
+export function contentTriggerDetails(
+  settlement: RuleSettlementV1 | undefined,
+  output: ImplementationOutputV1,
+): readonly string[] | undefined {
+  const conclusion = settlement?.conclusion;
+  if (conclusion === undefined || conclusion.wait === false || conclusion.match.kind !== "content") {
+    return undefined;
+  }
+
+  const details: string[] = [];
+  for (const matchedPath of conclusion.match.paths) {
+    const renameSources = output.outputs
+      .filter((entry): entry is Extract<ImplementationOutputV1["outputs"][number], { operation: "rename" }> =>
+        entry.operation === "rename" && entry.previous_path === matchedPath)
+      .sort((left, right) => compareCodeUnits(left.path, right.path));
+    const currentPaths = output.outputs
+      .filter((entry) => entry.path === matchedPath)
+      .sort((left, right) => compareCodeUnits(left.path, right.path));
+
+    if (renameSources.length + currentPaths.length === 0) {
+      throw new TypeError(`content-trigger path has no retained implementation endpoint: ${matchedPath}`);
+    }
+
+    for (const entry of renameSources) {
+      details.push(
+        `${matchedPath}: renamed to ${entry.path} (${sizeChange(entry.before.size_bytes, entry.after.size_bytes)})`,
+      );
+    }
+    for (const entry of currentPaths) {
+      if (entry.operation === "add") {
+        details.push(`${matchedPath}: added (${sizeChange(0, entry.after.size_bytes)})`);
+      } else if (entry.operation === "delete") {
+        details.push(`${matchedPath}: deleted (${sizeChange(entry.before.size_bytes, 0)})`);
+      } else if (entry.operation === "modify") {
+        details.push(`${matchedPath}: modified (${sizeChange(entry.before.size_bytes, entry.after.size_bytes)})`);
+      } else {
+        details.push(
+          `${matchedPath}: renamed from ${entry.previous_path} (${sizeChange(entry.before.size_bytes, entry.after.size_bytes)})`,
+        );
+      }
+    }
+  }
+  return Object.freeze(details);
+}
+
+function gateStatus(active: ActiveGateV1, triggerDetails?: readonly string[]): OpenGateStatus {
   return Object.freeze({
     gate_id: active.gate_id,
     kind: active.kind,
@@ -612,7 +675,7 @@ function gateStatus(active: ActiveGateV1): OpenGateStatus {
     archive_decision_path: `.archflow/tasks/${active.task_id}/authority/decisions/${active.gate_id}/decision.json`,
     request_path: `.archflow/tasks/${active.task_id}/authority/decisions/${active.gate_id}/request.json`,
     decision_templates: buildGateDecisionTemplates(active),
-    presentation: buildHumanGatePresentation(active),
+    presentation: buildHumanGatePresentation(active, triggerDetails),
   });
 }
 
@@ -1167,7 +1230,32 @@ async function computeTaskStatusDetailedInternal(
         blockers.push("active-gate-mismatch");
         gateBindingBlocker = "active-gate-mismatch";
       } else {
-        openGate = gateStatus(activeGate);
+        try {
+          let triggerDetails: readonly string[] | undefined;
+          if (activeGate.kind === "commit-authorization") {
+            if (
+              produceSubject?.artifact.artifact_kind !== "implementation-output" ||
+              produceSubject.artifact_digest !== activeGate.subject_digest
+            ) {
+              throw new TypeError("commit-authorization presentation requires its exact retained implementation output");
+            }
+            triggerDetails = contentTriggerDetails(
+              latestEligibleRuleSettlement(
+                state,
+                produceSubject.artifact_digest,
+                produceSubject.artifact.phase_instance,
+              ),
+              produceSubject.artifact,
+            );
+          }
+          openGate = gateStatus(activeGate, triggerDetails);
+        } catch {
+          // A disposable decision interface must never make an incomplete authority join look
+          // plausible. Keep the durable gate open, withhold its human choices, and route status
+          // to inspection until the retained output/settlement disagreement is resolved.
+          blockers.push("content-trigger-presentation-invalid");
+          gateBindingBlocker = "content-trigger-presentation-invalid";
+        }
       }
     } catch {
       blockers.push("active-gate-invalid");

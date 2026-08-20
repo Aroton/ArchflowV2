@@ -720,7 +720,7 @@ async function composeGate(
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
-      summary,
+      summary: approvalSummary,
       subject_digest: authorization.subject_digest,
       current_evidence: authorization.current_evidence as unknown as PlainJsonValue,
       kind: "commit-authorization",

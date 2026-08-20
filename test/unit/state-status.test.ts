@@ -5,11 +5,12 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { canonicalDocument, canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
+import { canonicalDocument, canonicalJsonDigest, parseGitOid, sha256Bytes } from "../../src/contracts/canonical.js";
 import { parseConfigYaml, type TaskConfigSnapshot } from "../../src/contracts/config.js";
 import { parseActiveGate, parseGateRequest } from "../../src/contracts/durable-gate.js";
 import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
-import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
+import type { ImplementationOutputV1 } from "../../src/contracts/durable-implementation-output.js";
+import type { RuleSettlementV1, TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parsePathSafeId, parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { computeGateContextDigest } from "../../src/contracts/fingerprints.js";
 import { parseRepositoryPathClaim, parseTaskPathClaim } from "../../src/contracts/path-claims.js";
@@ -20,6 +21,7 @@ import {
   buildCommitAuthorizationInput,
   buildDesignApprovalInput,
   computeTaskStatus,
+  contentTriggerDetails,
   currentApprovedUpstreams,
   partitionExpectedReentryEdits,
   resolveStatusEvidenceAssessment,
@@ -78,6 +80,82 @@ async function harness() {
   });
   return { root, services: created.value, state };
 }
+
+const blob = (size: number) => ({
+  oid: parseGitOid("1".repeat(40)), mode: "100644" as const, size_bytes: parseSafeInteger(size),
+});
+
+const implementationWith = (
+  outputs: ImplementationOutputV1["outputs"],
+): ImplementationOutputV1 => ({ outputs } as unknown as ImplementationOutputV1);
+
+const settlementWith = (
+  conclusion: RuleSettlementV1["conclusion"],
+): RuleSettlementV1 => ({ conclusion } as unknown as RuleSettlementV1);
+
+describe("contentTriggerDetails", () => {
+  it("formats every operation with exact endpoint sizes and an explicit signed delta", () => {
+    const output = implementationWith([
+      { operation: "add", path: parseRepositoryPathClaim("a-added.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", after: blob(12) },
+      { operation: "delete", path: parseRepositoryPathClaim("b-deleted.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", before: blob(9) },
+      { operation: "modify", path: parseRepositoryPathClaim("c-modified.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", before: blob(7), after: blob(7) },
+      { operation: "rename", path: parseRepositoryPathClaim("e-new.sql"), previous_path: parseRepositoryPathClaim("d-old.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", before: blob(4), after: blob(10) },
+    ]);
+    const settlement = settlementWith({
+      wait: true,
+      match: { kind: "content", paths: ["a-added.sql", "b-deleted.sql", "c-modified.sql", "d-old.sql", "e-new.sql"] },
+    });
+
+    expect(contentTriggerDetails(settlement, output)).toEqual([
+      "a-added.sql: added (0 → 12 bytes (+12 bytes))",
+      "b-deleted.sql: deleted (9 → 0 bytes (-9 bytes))",
+      "c-modified.sql: modified (7 → 7 bytes (+0 bytes))",
+      "d-old.sql: renamed to e-new.sql (4 → 10 bytes (+6 bytes))",
+      "e-new.sql: renamed from d-old.sql (4 → 10 bytes (+6 bytes))",
+    ]);
+  });
+
+  it("keeps settlement order and emits rename sources before every current-path endpoint", () => {
+    const output = implementationWith([
+      { operation: "rename", path: parseRepositoryPathClaim("z-new.sql"), previous_path: parseRepositoryPathClaim("old.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", before: blob(2), after: blob(3) },
+      { operation: "add", path: parseRepositoryPathClaim("old.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", after: blob(8) },
+      { operation: "rename", path: parseRepositoryPathClaim("a-new.sql"), previous_path: parseRepositoryPathClaim("old.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", before: blob(5), after: blob(4) },
+    ]);
+    const settlement = settlementWith({
+      wait: true,
+      match: { kind: "content", paths: ["old.sql", "z-new.sql"] },
+    });
+
+    expect(contentTriggerDetails(settlement, output)).toEqual([
+      "old.sql: renamed to a-new.sql (5 → 4 bytes (-1 bytes))",
+      "old.sql: renamed to z-new.sql (2 → 3 bytes (+1 bytes))",
+      "old.sql: added (0 → 8 bytes (+8 bytes))",
+      "z-new.sql: renamed from old.sql (2 → 3 bytes (+1 bytes))",
+    ]);
+  });
+
+  it("returns no details without an eligible content match", () => {
+    const output = implementationWith([
+      { operation: "add", path: parseRepositoryPathClaim("change.ts"), path_class: "repository-source", storage: "git-object", file_type: "regular", after: blob(1) },
+    ]);
+    expect(contentTriggerDetails(undefined, output)).toBeUndefined();
+    expect(contentTriggerDetails(settlementWith({ wait: false, match: null }), output)).toBeUndefined();
+    expect(contentTriggerDetails(settlementWith({ wait: true, match: { kind: "subject", subject: "phase-impl" } }), output)).toBeUndefined();
+  });
+
+  it("fails the complete join when any persisted match has no retained endpoint", () => {
+    const output = implementationWith([
+      { operation: "add", path: parseRepositoryPathClaim("matched.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", after: blob(1) },
+    ]);
+    const settlement = settlementWith({
+      wait: true,
+      match: { kind: "content", paths: ["matched.sql", "missing.sql"] },
+    });
+
+    expect(() => contentTriggerDetails(settlement, output))
+      .toThrow("content-trigger path has no retained implementation endpoint: missing.sql");
+  });
+});
 
 describe("partitionExpectedReentryEdits", () => {
   it("treats produce-projection drift as expected while a produce re-entry is recorded", () => {
