@@ -115,10 +115,11 @@ ArchFlow is written for models that keep improving. Skills must encode *intent a
 
 Hard rules — human trust boundaries, never soften:
 
-- Never commit or pass a review gate without explicit user approval.
-- Never write code before phase-design approval.
-- The server-dispatched counter-review (opposite client family by default) runs automatically before a human gate. There is no optional review at the end of a gate. A significant human revision starts a fresh automatic review cycle; a simple wording or formatting revision may reuse the prior review for one hop but still requires approval of the final bytes. (The `baseline-adoption` gate opens before any review by design: it is not approval of produced work but a human decision about which bytes are the reviewed baseline after they drifted, typically from later commits or a merge.)
+- Never choose or pass a returned human gate without explicit user approval. Never commit when returned commit facts require human confirmation without obtaining it; when they do not, execute only those authenticated facts without inventing a confirmation.
+- Never write code before the server reports durable phase-design authority, whether that authority came from a passed triggered gate or authenticated rule-based advancement after counter-review.
+- The server-dispatched counter-review (opposite client family by default) runs automatically before either a triggered human gate or autonomous advancement. There is no optional review at the end of a gate. A significant human revision starts a fresh automatic review cycle; a simple wording or formatting revision may reuse the prior review for one hop but still requires approval of the final bytes. (The `baseline-adoption` gate opens before any review by design: it is not approval of produced work but a human decision about which bytes are the reviewed baseline after they drifted, typically from later commits or a merge.)
 - All correspondence at a human gate is conversational and human-readable. Explain what needs attention, why it matters, and the available choices in plain language. Keep gate IDs, digests, JSON, internal paths, protocol codes, and other mechanical bindings out of the default response; show them only when the user explicitly asks for diagnostics or audit detail.
+- Follow only the server-returned semantic action. Submit a gate summary and stop only when offered, treat every returned presentation as human-required, and never invent a gate or infer autonomous authority from review evidence or conversation.
 - Phase state machine: no doc → DESIGNED → IN PROGRESS → COMPLETE.
 - Task isolation: tasks never read each other's files.
 - Parent docs (design.md, prd.md) are updated when implementation deviates — the plan must always reflect reality.

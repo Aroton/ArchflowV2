@@ -12,7 +12,11 @@ import { createProductionServices } from "../../src/state/production.js";
 import { readTaskState } from "../../src/state/read.js";
 import { composeRequest } from "../../src/state/request-composition.js";
 import { installSemanticReviewStub, semanticJourneyHarness } from "../helpers/semantic-journeys.js";
-import { createTaskWorkspace, type TaskWorkspace } from "../helpers/task-workspace.js";
+import {
+  createTaskWorkspace,
+  legacyHumanAuthorityConstitutionV1Bytes,
+  type TaskWorkspace,
+} from "../helpers/task-workspace.js";
 
 const workspaces: TaskWorkspace[] = [];
 afterEach(() => { for (const workspace of workspaces.splice(0)) workspace.dispose(); });
@@ -118,8 +122,8 @@ describe("planning restart state handler", () => {
   });
 
   it("re-settles a design rule evaluation across an exact planning restart at a fresh revision", async () => {
-    // A rule-less config records wait:false for every document subject while the current
-    // constitution still requires explicit approval. A planning restart back to design (the target that
+    // A rule-less config records wait:false for every document subject while an explicit legacy-v1
+    // constitution fixture still requires human approval. A planning restart back to design (the target that
     // leaves ask.md untouched, so the re-production is byte-identical down to its git input
     // identities) makes the first design settlement ineligible across the restart cutoff, and the
     // identical re-production re-settles the same (phase_instance, subject_digest) at a new
@@ -127,6 +131,7 @@ describe("planning restart state handler", () => {
     const workspace = await createTaskWorkspace({
       taskId: "restart-rule-resettle",
       label: "restart-rule-resettle",
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
       configBytes: new TextEncoder().encode(`schema_version: "1"
 roles:
   counter-reviewer: { model: gpt-5.6-sol, effort: xhigh }

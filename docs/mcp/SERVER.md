@@ -1,6 +1,6 @@
 # mcp/SERVER
 
-**Explored:** 2026-08-16 · **Commit:** `d60da73` · **Covers:** `src/main.ts`, `src/mcp/`, `src/state/semantic-*.ts`
+**Explored:** 2026-08-20 · **Commit:** `b6f0b74` · **Covers:** `src/main.ts`, `src/mcp/`, `src/state/semantic-*.ts`
 
 `archflow-mcp` is a stdio MCP server speaking newline-delimited JSON-RPC. It is the system's sole authority: the only writer of durable state and the only judge of request validity. It takes no arguments and has no other mode — `src/main.ts` is 28 lines that either print usage or start the runtime.
 
@@ -32,6 +32,10 @@ When the server rejects an input, `CONTRACT_INVALID` carries a bounded `issues` 
 The two semantic tools accept their compact status/apply objects directly; an opaque offer binds the hidden repository, state, invocation, and action authority, and the boundary re-derives every mechanical field from durable authority before a substep runs. Exact replay comes from durable `last_transition`, not a staged file or a permanent receipt.
 
 Human gates deliberately do not keep the MCP request open while waiting for another interface. A skill-authored `gate-summary` opens the nonblocking presentation — the server derives the conversational snapshot from current revision, phase, kind, subject, context, evidence, and offered choices, and commit-bearing gates bind the exact authorized Git facts: implementation adds the retained diff digest, while design and migration bind the exact task root, baseline, target, and message because their final authority archive contains server-minted time/random provenance created only after the decision. After the human answers, the offered decision action archives the selected token and reason immutably with provenance from the authenticated connected-host context (connection plus transport request identity) and settles the durable gate in a separate substep. One human answer therefore produces bounded tool calls and exactly one durable decision, and a retried call after an interruption replays the archive and settles once.
+
+The shipped v2 constitution makes those presentations targeted rather than universal. Counter-review and constitution review still run first. An exact authenticated approval-rule settlement with `wait:false`, a passing constitution result, aligned upstreams, and no safety or migration condition lets the server return the next commit or successor action directly; the settlement is evidence the server consumes, never authority the caller may interpret for itself. `wait:true` opens the matching approval presentation, and policy failure or uncertainty, review-trigger matches, migration audit, attempts exhaustion, drift/restore/baseline adoption, cancellation, and the other exception paths remain human-required.
+
+Commit facts expose that distinction without weakening Git binding. `commit.requires_human_confirmation:true` means durable human authorization already exists but the implementation client must still obtain the separate conversational confirmation before staging and committing. `false` means authenticated rule authority permits direct execution and the client must not invent a confirmation or describe a human decision. In both branches the server supplies the exact baseline, target ref, paths, and message; the client verifies and uses only those facts, then calls read-only status so the server can observe commit proof. Document milestone commits also use `false`: their authority may follow either a settled human gate or an authenticated no-wait path, and clients do not infer which from the boolean.
 
 ## How a request flows
 

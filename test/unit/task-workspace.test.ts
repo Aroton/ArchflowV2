@@ -6,6 +6,10 @@ import { describe, expect, it } from "vitest";
 
 import { sha256Bytes } from "../../src/contracts/canonical.js";
 import {
+  authenticateRuleAcceptancePolicy,
+  resolvePinnedConstitution,
+} from "../../src/state/constitution.js";
+import {
   createTaskWorkspace,
   supportedRuleAcceptanceConstitutionV2Bytes,
 } from "../helpers/task-workspace.js";
@@ -21,6 +25,33 @@ roles:
 `);
 
 describe("task-workspace config seam", () => {
+  it("authenticates the exact v2 policy from an unmodified scaffold", async () => {
+    const workspace = await createTaskWorkspace({
+      taskId: "default-v2-policy-workspace",
+      label: "default-v2-policy",
+    });
+    try {
+      const resolved = await resolvePinnedConstitution(
+        workspace.services.runner,
+        workspace.initialization.policy_base_commit,
+        workspace.services.authority.context,
+      );
+      expect(resolved.ok).toBe(true);
+      if (!resolved.ok) return;
+      expect(workspace.services.state).toBeDefined();
+      expect(authenticateRuleAcceptancePolicy(
+        workspace.services.state!.value,
+        resolved.value,
+      )).toMatchObject({
+        task_id: workspace.taskId,
+        policy_base_commit: workspace.initialization.policy_base_commit,
+        constitution_digest: workspace.initialization.constitution_digest,
+      });
+    } finally {
+      workspace.dispose();
+    }
+  });
+
   it("commits and pins the complete replacement config bytes", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "codex-producer-workspace",

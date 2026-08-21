@@ -17,7 +17,7 @@ import {
 } from "../helpers/semantic-journeys.js";
 import {
   createTaskWorkspace,
-  supportedRuleAcceptanceConstitutionV2Bytes,
+  legacyHumanAuthorityConstitutionV1Bytes,
   type TaskWorkspace,
 } from "../helpers/task-workspace.js";
 
@@ -444,6 +444,7 @@ roles:
       taskId: "semantic-prd-no-wait-rule",
       label: "semantic-prd-no-wait-rule",
       configBytes: documentSubjectsConfig([]),
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
     });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[]]));
@@ -507,12 +508,11 @@ roles:
     expect(startedDesign.value.next_action.kind).toBe("submit-work");
   });
 
-  it("advances exact-v2 no-wait documents through exact autonomous milestone commits", async () => {
+  it("advances shipped-v2 no-wait documents through exact autonomous milestone commits", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "semantic-v2-autonomous-documents",
       label: "semantic-v2-autonomous-documents",
       configBytes: documentSubjectsConfig([]),
-      constitutionBytes: supportedRuleAcceptanceConstitutionV2Bytes(),
     });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[], [], []]));
@@ -663,6 +663,7 @@ The implementation handoff is offered after exact commit proof.
       taskId: "semantic-design-no-wait-rule",
       label: "semantic-design-no-wait-rule",
       configBytes: documentSubjectsConfig(["prd"]),
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
     });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[]]));
@@ -769,9 +770,9 @@ The implementation handoff is offered after exact commit proof.
     expect(observed.next_action).toMatchObject({ kind: "start-next-skill", skill: "archflow-phase-design", skill_args: ["1"] });
   });
 
-  it("records the template phase-design settlement but keeps its milestone human-approved", async () => {
-    // Fresh-project defaults record matching rules for PRD and design, and wait:false for
-    // phase-design. All three still require human approval during the staged rollout.
+  it("keeps shipped-default PRD and design gates while phase design advances autonomously", async () => {
+    // Fresh-project defaults record matching rules for PRD and design, while the unlisted
+    // phase-design subject advances directly from its authenticated shipped-v2 settlement.
     const workspace = await createTaskWorkspace({ taskId: "semantic-template-defaults", label: "semantic-template-defaults" });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[]]));
@@ -822,8 +823,8 @@ The implementation handoff is offered after exact commit proof.
     execFileSync("git", ["add", "-A", "--", ...designCommit.paths], { cwd: workspace.root });
     execFileSync("git", ["-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid", "commit", "-q", "-m", designCommit.message], { cwd: workspace.root });
 
-    // No rule waits for phase-design, so its completed review records wait:false before the
-    // still-mandatory human gate.
+    // No rule waits for phase-design, so its completed review records wait:false and returns exact
+    // autonomous milestone commit facts without opening a human presentation.
     const phaseDesignInvocation = { skill: "archflow-phase-design", phase: 1, intent: "resume" } as const;
     let phaseDesign = await h.apply(phaseDesignInvocation, await h.status(phaseDesignInvocation));
     expect(phaseDesign.ok, JSON.stringify(phaseDesign)).toBe(true);
@@ -836,12 +837,12 @@ The implementation handoff is offered after exact commit proof.
 
 ## Goal
 
-Record the phase-design rule evaluation and retain explicit milestone approval.
+Record the phase-design rule evaluation and advance from authenticated no-wait authority.
 
 ## Requirements
 
 - The settling transaction writes durable rule-evaluation evidence.
-- A human approval authorizes the milestone.
+- Exact shipped-v2 policy authorizes the clean no-wait milestone.
 
 ## Success Criteria
 
@@ -853,14 +854,13 @@ The committed state carries the settlement and the successor hand-off is offered
     phaseDesign = await h.apply(phaseDesignInvocation, phaseDesign.value);
     expect(phaseDesign.ok, JSON.stringify(phaseDesign)).toBe(true);
     if (!phaseDesign.ok) return;
-    expect(phaseDesign.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    expect(phaseDesign.value.next_action).toMatchObject({ kind: "commit" });
     expect(phaseDesign.value.presentation).toBeUndefined();
     const settled = await readTaskState(workspace.services.authority.state);
     if (settled.kind !== "canonical") throw new Error("task state unavailable");
     expect(settled.document.value.open_gate).toBeUndefined();
 
-    // The entry binds the phase-design subject, template-copy config digest, and settled revision;
-    // it is evaluation evidence, not milestone authority.
+    // The entry binds the phase-design subject, template-copy config digest, and settled revision.
     const detailed = await computeTaskStatusDetailed(workspace.services.dependencies, workspace.services.authority);
     if (!detailed.ok) throw new Error(detailed.error.code);
     const subjectDigest = detailed.value.status.subject_digest;
@@ -879,18 +879,7 @@ The committed state carries the settlement and the successor hand-off is offered
     };
     expect(settled.document.value.rule_settlements).toEqual(expect.arrayContaining([receipt]));
 
-    phaseDesign = await h.apply(phaseDesignInvocation, phaseDesign.value, {
-      kind: "gate-summary", summary: "The rule evaluation is recorded; Phase 1 still needs approval.",
-    });
-    expect(phaseDesign.ok, JSON.stringify(phaseDesign)).toBe(true);
-    if (!phaseDesign.ok) return;
-    phaseDesign = await h.apply(phaseDesignInvocation, phaseDesign.value, {
-      kind: "decision", choice: "approve", reason: "The phase design is ready.",
-    });
-    expect(phaseDesign.ok, JSON.stringify(phaseDesign)).toBe(true);
-    if (!phaseDesign.ok) return;
-
-    // The human decision derives the milestone commit facts.
+    // The authenticated no-wait settlement directly derives the milestone commit facts.
     const atCommit = await h.status(phaseDesignInvocation);
     expect(atCommit.next_action).toMatchObject({ kind: "commit" });
     expect(atCommit.presentation).toBeUndefined();
@@ -904,8 +893,7 @@ The committed state carries the settlement and the successor hand-off is offered
       requires_human_confirmation: false,
     });
 
-    // The milestone commit carries both the settlement and the archived human decision. The
-    // decision is recovery authority; fresh status observes it and advances.
+    // The milestone commit carries the settlement; fresh status observes its exact proof.
     execFileSync("git", ["add", "-A", "--", ...commit.paths], { cwd: workspace.root });
     execFileSync("git", [
       "-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid",
@@ -928,6 +916,7 @@ The committed state carries the settlement and the successor hand-off is offered
       taskId: "semantic-all-no-wait-rules",
       label: "semantic-all-no-wait-rules",
       configBytes: documentSubjectsConfig([]),
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
     });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[]]));
@@ -1037,7 +1026,7 @@ The committed state carries the settlement and the successor hand-off is offered
     expect(observed.next_action).toMatchObject({ kind: "start-next-skill", skill: "archflow-phase-design", skill_args: ["1"] });
   });
 
-  it("persists a granted wait:false waiver settlement but still requires design approval", async () => {
+  it("keeps waiver decisions human and advances after their granted wait:false settlement", async () => {
     // No subject rule waits for the design document, but a constitution rule fails its review:
     // the fixed point never reaches the clean advance, so the settle mints no receipt (wait:false
     // alone is not enough — the policy findings veto it), and the policy arm opens design-approval
@@ -1186,10 +1175,11 @@ The committed state carries the settlement and the successor hand-off is offered
       if (!design.ok) return;
     }
 
-    // Exact discharge evaluates and persists wait:false, but Phase 3 leaves the ordinary human
-    // design approval boundary intact and offers neither phase advancement nor commit.
-    expect(design.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
-    expect(design.value.next_action.commit).toBeUndefined();
+    // Exact discharge evaluates and persists wait:false. Every waiver above required explicit
+    // human decisions; once those exception boundaries are resolved, shipped v2 can return the
+    // exact autonomous design commit without inventing another approval gate.
+    expect(design.value.next_action).toMatchObject({ kind: "commit" });
+    expect(design.value.presentation).toBeUndefined();
     const settled = await readTaskState(workspace.services.authority.state);
     if (settled.kind !== "canonical") throw new Error("task state unavailable");
     expect(settled.document.value.rule_settlements?.filter((entry) =>
@@ -1198,12 +1188,7 @@ The committed state carries the settlement and the successor hand-off is offered
       })]);
     expect(settled.document.value.planned_final_phase).toBeUndefined();
 
-    design = await h.apply(designInvocation, design.value, {
-      kind: "gate-summary", summary: "The waiver is recorded; the design still needs human approval.",
-    });
-    expect(design.ok, JSON.stringify(design)).toBe(true);
-    if (!design.ok) return;
-    expect(design.value.presentation?.options.map((option) => option.token)).toContain("approve");
+    expect(design.value.next_action.commit?.requires_human_confirmation).toBe(false);
   });
 
   it("persists and presents a granted wait:true waiver settlement behind PRD approval", async () => {
@@ -1336,6 +1321,7 @@ The committed state carries the settlement and the successor hand-off is offered
       taskId: "semantic-design-malformed",
       label: "semantic-design-malformed",
       configBytes: documentSubjectsConfig(["prd"]),
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
     });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[]]));

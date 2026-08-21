@@ -6454,7 +6454,7 @@
       ]
     },
     "src/repository/paths.ts": {
-      "bytes": 40137,
+      "bytes": 40650,
       "format": "esm",
       "imports": [
         {
@@ -7740,7 +7740,7 @@
       ]
     },
     "src/state/next-action.ts": {
-      "bytes": 23586,
+      "bytes": 23777,
       "format": "esm",
       "imports": [
         {
@@ -8516,7 +8516,7 @@
       ]
     },
     "src/state/semantic-view.ts": {
-      "bytes": 22368,
+      "bytes": 22995,
       "format": "esm",
       "imports": [
         {
@@ -8989,7 +8989,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1625078,
+      "bytes": 1625682,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10085,7 +10085,7 @@
           "bytesInOutput": 5764
         },
         "src/repository/paths.ts": {
-          "bytesInOutput": 16719
+          "bytesInOutput": 17148
         },
         "src/review/adjudication.ts": {
           "bytesInOutput": 2812
@@ -10145,7 +10145,7 @@
           "bytesInOutput": 2311
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 14718
+          "bytesInOutput": 14893
         },
         "src/state/phase-documents.ts": {
           "bytesInOutput": 2363
@@ -10189,7 +10189,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2924644,
+      "bytes": 2925855,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -11440,7 +11440,7 @@
           "bytesInOutput": 2782
         },
         "src/repository/paths.ts": {
-          "bytesInOutput": 17799
+          "bytesInOutput": 18228
         },
         "src/review/adjudication.ts": {
           "bytesInOutput": 5541
@@ -11518,7 +11518,7 @@
           "bytesInOutput": 2300
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 14722
+          "bytesInOutput": 14897
         },
         "src/state/pending-waiver.ts": {
           "bytesInOutput": 3112
@@ -11569,7 +11569,7 @@
           "bytesInOutput": 16652
         },
         "src/state/semantic-view.ts": {
-          "bytesInOutput": 19312
+          "bytesInOutput": 19919
         },
         "src/state/snapshots.ts": {
           "bytesInOutput": 26332

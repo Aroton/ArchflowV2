@@ -50413,6 +50413,11 @@ var WORKSPACE_CLASS_RULES = [
 ];
 var REPOSITORY_CLASS_RULES = [
   { path_class: "shared-workflow", pattern: anchored("\\.archflow/workflow\\.yaml") },
+  // The repository-level config is a mutable seed for future tasks, not task-local durable
+  // authority. Treat the one exact path as an ordinary implementation output so an approved
+  // activation phase can review, retain, restore, and commit it without opening the rest of the
+  // managed `.archflow/` tree to repository-source claims.
+  { path_class: "repository-source", pattern: anchored("\\.archflow/config\\.yaml") },
   {
     path_class: "shared-constitution",
     pattern: anchored(`\\.archflow/constitution/${PATH_SAFE_ID}\\.md`)
@@ -65118,9 +65123,10 @@ function advanceAction(input, state) {
     if (input.implementation_commit === void 0) {
       return action("inspect-state", "Inspect why the approved implementation commit authority is unavailable.", true, state);
     }
+    const requiresHumanConfirmation = !autonomous;
     return action(
       "commit-phase",
-      "Commit the exact phase outputs authorized by the human's commit decision.",
+      requiresHumanConfirmation ? "Commit the exact phase outputs authorized by the human's commit decision." : "Commit the exact phase outputs authorized by the authenticated approval rule.",
       false,
       state,
       {
@@ -65128,7 +65134,7 @@ function advanceAction(input, state) {
         commit_message: input.implementation_commit.message,
         commit_target_ref: input.implementation_commit.target_ref,
         commit_baseline: input.implementation_commit.baseline_commit,
-        commit_requires_human_confirmation: !autonomous
+        commit_requires_human_confirmation: requiresHumanConfirmation
       }
     );
   }
@@ -67794,24 +67800,26 @@ function mapNextAction(status, snapshot) {
         instruction: "Record the current unchanged target as the reviewed milestone baseline, then request fresh status.",
         expected_submission: "none"
       });
-    case "commit-phase":
+    case "commit-phase": {
       if (action2.commit_paths === void 0 || action2.commit_message === void 0 || action2.commit_target_ref === void 0 || action2.commit_baseline === void 0) {
         return inspect2("Inspect why the approved implementation commit authority is unavailable.");
       }
+      const requiresHumanConfirmation = action2.commit_requires_human_confirmation ?? true;
       return Object.freeze({
         condition: "awaiting-client",
         headline: "The authorized implementation commit is ready",
         detail: action2.detail,
         action_kind: "commit",
-        instruction: "Stage exactly the authorized paths, show the human the staged diff and the exact message and obtain explicit confirmation, create the commit, then request fresh read-only status so the server observes proof.",
+        instruction: requiresHumanConfirmation ? "Prior human commit authority is recorded. Separately confirm HEAD matches the authorized baseline and target ref, stage exactly the authorized paths, show the human the staged diff and exact message and obtain explicit confirmation, create the commit with those exact facts while preserving unrelated changes, then request fresh read-only status so the server observes proof." : "Authenticated rule authority permits direct client execution. Confirm HEAD matches the authorized baseline and target ref, stage and inspect exactly the authorized paths, create the commit directly with the exact returned message while preserving unrelated changes, then request fresh read-only status so the server observes proof.",
         commit: Object.freeze({
           paths: Object.freeze([...action2.commit_paths].sort()),
           message: action2.commit_message,
           target_ref: action2.commit_target_ref,
           baseline: action2.commit_baseline,
-          requires_human_confirmation: action2.commit_requires_human_confirmation ?? true
+          requires_human_confirmation: requiresHumanConfirmation
         })
       });
+    }
     case "advance-phase":
       return Object.freeze({
         condition: "ready",

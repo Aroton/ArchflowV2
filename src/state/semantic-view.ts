@@ -290,20 +290,24 @@ function mapNextAction(status: TaskStatusV1, snapshot: SemanticStatusSnapshotV1)
         instruction: "Record the current unchanged target as the reviewed milestone baseline, then request fresh status.",
         expected_submission: "none",
       });
-    case "commit-phase":
+    case "commit-phase": {
       if (action.commit_paths === undefined || action.commit_message === undefined || action.commit_target_ref === undefined || action.commit_baseline === undefined) {
         return inspect("Inspect why the approved implementation commit authority is unavailable.");
       }
+      const requiresHumanConfirmation = action.commit_requires_human_confirmation ?? true;
       return Object.freeze({
         condition: "awaiting-client", headline: "The authorized implementation commit is ready", detail: action.detail,
         action_kind: "commit",
-        instruction: "Stage exactly the authorized paths, show the human the staged diff and the exact message and obtain explicit confirmation, create the commit, then request fresh read-only status so the server observes proof.",
+        instruction: requiresHumanConfirmation
+          ? "Prior human commit authority is recorded. Separately confirm HEAD matches the authorized baseline and target ref, stage exactly the authorized paths, show the human the staged diff and exact message and obtain explicit confirmation, create the commit with those exact facts while preserving unrelated changes, then request fresh read-only status so the server observes proof."
+          : "Authenticated rule authority permits direct client execution. Confirm HEAD matches the authorized baseline and target ref, stage and inspect exactly the authorized paths, create the commit directly with the exact returned message while preserving unrelated changes, then request fresh read-only status so the server observes proof.",
         commit: Object.freeze({
           paths: Object.freeze([...action.commit_paths].sort()), message: action.commit_message,
           target_ref: action.commit_target_ref, baseline: action.commit_baseline,
-          requires_human_confirmation: action.commit_requires_human_confirmation ?? true,
+          requires_human_confirmation: requiresHumanConfirmation,
         }),
       });
+    }
     case "advance-phase":
       return Object.freeze({
         condition: "ready", headline: "The next skill is ready", detail: action.detail,

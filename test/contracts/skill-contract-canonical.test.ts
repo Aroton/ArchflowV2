@@ -232,6 +232,9 @@ describe("canonical skill contracts", () => {
     expect(source).toContain("selected presentation option token");
     expect(source).toContain("separate no-submission `open-waiver`");
     expect(source).toContain("`requires_human_confirmation: true`");
+    expect(source).toContain("`requires_human_confirmation: false`");
+    expect(source).toContain("authenticated rule authority permits direct execution");
+    expect(source).toContain("must not invent or request human confirmation");
     expect(source).toContain("`commit.paths`");
     expect(source).toContain(":(top,literal)<path>");
     expect(source).toContain("create the commit yourself");
@@ -240,6 +243,23 @@ describe("canonical skill contracts", () => {
     expect(source).toContain("`finish-task`");
     expect(source).toContain("never apply a `start-next-skill` offer");
     expect(source).toContain("never start successor work");
+  });
+
+  it("follows returned gates and autonomous actions without inventing either", () => {
+    for (const name of semanticDocumentSkills) {
+      const source = skill(name);
+      expect(source).toContain("Only when");
+      expect(source).toContain("Every returned `presentation` requires explicit human judgment");
+      expect(source).toContain("When a `presentation` is returned, stop");
+      expect(source).toContain("If no presentation is returned, do not stop for a human decision; follow the fresh server-returned action directly.");
+      expect(source).toMatch(/Never synthesize a gate/u);
+    }
+    const implementation = skill("archflow-phase-impl");
+    expect(implementation).toContain("Only when the current offer expects `gate-summary`");
+    expect(implementation).toContain("Never synthesize a commit-authorization gate");
+    expect(implementation).toContain("When a `presentation` is returned, stop");
+    expect(implementation).toContain("If no presentation is returned, do not stop for a human decision; follow the fresh server-returned action directly.");
+    expect(implementation).toContain("branch only on its authenticated `commit.requires_human_confirmation` fact");
   });
 
   it("makes document skills observe and report semantic successors without starting them", () => {
@@ -312,6 +332,8 @@ describe("canonical skill contracts", () => {
     expect(source).toContain("no invocation");
     expect(source).toContain("no mutation offer");
     expect(source).toContain("never calls `archflow_apply`");
+    expect(source).toContain("`true` means a human-authorized commit");
+    expect(source).toContain("`false` means authenticated rule authority");
     expect(source).toContain("`archflow-local manual-status --task <task>`");
   });
 
@@ -326,7 +348,7 @@ describe("canonical skill contracts", () => {
     expect(source).toContain('{"kind":"work-result","outcome":"succeeded"}');
     expect(source).toContain('{"kind":"gate-summary","summary":<summary>}');
     expect(source).toContain('{"kind":"decision","choice":<selected presentation option token>,"reason":<human reason>}');
-    expect(source).toContain("one `migration-audit` gate instead of separate PRD and design approval gates");
+    expect(source).toContain("one unconditional `migration-audit` gate instead of separate ordinary PRD and design approval gates");
     expect(source).toContain("no-submission `revise`");
     expect(source).toContain("`commit.paths`");
     expect(source).toContain("create the commit yourself");

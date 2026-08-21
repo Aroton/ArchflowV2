@@ -106,6 +106,7 @@ describe("deriveNextAction", () => {
       accepted_no_wait_settlement: receipt, implementation_commit: implementationCommit,
     }))).toMatchObject({
       code: "commit-phase", commit_requires_human_confirmation: false,
+      detail: "Commit the exact phase outputs authorized by the authenticated approval rule.",
     });
     expect(deriveNextAction(input({
       state: state({ phase_instance: phase }), assessment: assessment("attempts-exhausted"),
@@ -585,6 +586,8 @@ describe("deriveNextAction", () => {
       commit_message: "ArchFlow: Implement task-1 phase 2",
       commit_target_ref: "refs/heads/main",
       commit_baseline: "abcdef0123456789abcdef0123456789abcdef01",
+      commit_requires_human_confirmation: true,
+      detail: "Commit the exact phase outputs authorized by the human's commit decision.",
     });
     expect(deriveNextAction(input({
       state: state({ phase_instance: implementation(2), planned_final_phase: parseSafeInteger(2) }),

@@ -154,7 +154,12 @@ describe("semantic status projection", () => {
       requires_human_confirmation: true,
     });
     expect(authorized.offer).toBeUndefined();
+    expect(authorized.instruction).toContain("Prior human commit authority is recorded");
     expect(authorized.instruction).toContain("explicit confirmation");
+    expect(authorized.instruction).toContain("baseline and target ref");
+    expect(authorized.instruction).toContain("stage exactly the authorized paths");
+    expect(authorized.instruction).toContain("exact message");
+    expect(authorized.instruction).toContain("preserving unrelated changes");
 
     const autonomous = projectSemanticStatus(snapshot(fullStatus(action("commit-phase", {
       commit_paths: ["src/a.ts"], commit_message: "Implement the reviewed phase",
@@ -162,6 +167,13 @@ describe("semantic status projection", () => {
       commit_requires_human_confirmation: false,
     }))), invocation).view.next_action;
     expect(autonomous.commit?.requires_human_confirmation).toBe(false);
+    expect(autonomous.instruction).toContain("Authenticated rule authority permits direct client execution");
+    expect(autonomous.instruction).toContain("create the commit directly");
+    expect(autonomous.instruction).toContain("baseline and target ref");
+    expect(autonomous.instruction).toContain("stage and inspect exactly the authorized paths");
+    expect(autonomous.instruction).toContain("exact returned message");
+    expect(autonomous.instruction).toContain("preserving unrelated changes");
+    expect(autonomous.instruction).not.toContain("human");
 
     const missingAuthority = projectSemanticStatus(snapshot(fullStatus(action("commit-phase"))), invocation).view.next_action;
     expect(missingAuthority.kind).toBe("inspect");

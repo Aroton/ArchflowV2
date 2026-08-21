@@ -11,7 +11,11 @@ import {
   semanticJourneyHarness,
   type SemanticJourneyHarness,
 } from "../helpers/semantic-journeys.js";
-import { createTaskWorkspace, type TaskWorkspace } from "../helpers/task-workspace.js";
+import {
+  createTaskWorkspace,
+  legacyHumanAuthorityConstitutionV1Bytes,
+  type TaskWorkspace,
+} from "../helpers/task-workspace.js";
 
 const TIMEOUT = 180_000;
 const workspaces: TaskWorkspace[] = [];
@@ -121,7 +125,11 @@ async function consumeImplementationHandoff(
 
 describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
   it("takes an implementation from its consumed hand-off through client work, one declared submission, review, and the gate boundary", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-clean", label: "semantic-impl-clean" });
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-impl-clean",
+      label: "semantic-impl-clean",
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
+    });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[]]));
     const h = semanticJourneyHarness(workspace);
@@ -222,7 +230,11 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
   });
 
   it("returns an implementation finding for triage and requires the separate revise action before remediation bytes are accepted", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-remediation", label: "semantic-impl-remediation" });
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-impl-remediation",
+      label: "semantic-impl-remediation",
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
+    });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[], [], [], [FINDING], []]));
     const h = semanticJourneyHarness(workspace);

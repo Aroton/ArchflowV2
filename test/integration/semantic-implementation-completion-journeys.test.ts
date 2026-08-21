@@ -18,7 +18,7 @@ import {
 } from "../helpers/semantic-journeys.js";
 import {
   createTaskWorkspace,
-  supportedRuleAcceptanceConstitutionV2Bytes,
+  legacyHumanAuthorityConstitutionV1Bytes,
   type TaskWorkspace,
 } from "../helpers/task-workspace.js";
 
@@ -280,7 +280,11 @@ async function reachAuthorizedImplementationCommit(
 
 describe("semantic implementation completion journeys", { timeout: TIMEOUT }, () => {
   it("authorizes the implementation commit, observes the client-created proof, and reports the successor without an offer", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-succession", label: "semantic-impl-succession" });
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-impl-succession",
+      label: "semantic-impl-succession",
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
+    });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
     restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []]));
@@ -350,7 +354,11 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
   });
 
   it("finishes the task terminally at the planned final phase after the observed client commit", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-terminal", label: "semantic-impl-terminal" });
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-impl-terminal",
+      label: "semantic-impl-terminal",
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
+    });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
     restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []]));
@@ -461,6 +469,7 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     const workspace = await createTaskWorkspace({
       taskId: "semantic-impl-no-content-rule",
       label: "semantic-impl-no-content-rule",
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
     });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
@@ -488,11 +497,10 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(view.next_action.commit).toMatchObject({ requires_human_confirmation: true });
   });
 
-  it("advances an exact-v2 TypeScript-only implementation after exact autonomous commit proof", async () => {
+  it("advances a shipped-v2 TypeScript-only implementation after exact autonomous commit proof", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "semantic-v2-impl-autonomy",
       label: "semantic-v2-impl-autonomy",
-      constitutionBytes: supportedRuleAcceptanceConstitutionV2Bytes(),
     });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
@@ -526,7 +534,11 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
   });
 
   it("returns request-changes to a close-only checkpoint that requires the separate revise action before re-editing", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-request-changes", label: "semantic-impl-request-changes" });
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-impl-request-changes",
+      label: "semantic-impl-request-changes",
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
+    });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
     restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], [], []]));
@@ -585,7 +597,11 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
   });
 
   it("classifies a forged archive cross-binding at the current checkpoint as invalid, not superseded", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-forged-archive", label: "semantic-impl-forged-archive" });
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-impl-forged-archive",
+      label: "semantic-impl-forged-archive",
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
+    });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
     restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], [], []]));
@@ -720,9 +736,9 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(view.next_action).toMatchObject({ kind: "review", expected_submission: "review-dispatch" });
     expect(reviewCountAt(workspace)).toBe(reviewsBeforeRevision);
     view = await applied(h, invocation, view);
-    expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
-    expect(view.detail).toMatch(/commit-authorization/u);
-    expect(view.findings).toEqual([]);
+    expect(view.next_action).toMatchObject({ kind: "commit" });
+    expect(view.next_action.commit?.requires_human_confirmation).toBe(false);
+    expect(view.findings).toBeUndefined();
     expect(reviewCountAt(workspace)).toBe(reviewsBeforeRevision + 1);
   });
 

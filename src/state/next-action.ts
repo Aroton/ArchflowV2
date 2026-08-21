@@ -244,9 +244,12 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
     if (input.implementation_commit === undefined) {
       return action("inspect-state", "Inspect why the approved implementation commit authority is unavailable.", true, state);
     }
+    const requiresHumanConfirmation = !autonomous;
     return action(
       "commit-phase",
-      "Commit the exact phase outputs authorized by the human's commit decision.",
+      requiresHumanConfirmation
+        ? "Commit the exact phase outputs authorized by the human's commit decision."
+        : "Commit the exact phase outputs authorized by the authenticated approval rule.",
       false,
       state,
       {
@@ -254,7 +257,7 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
         commit_message: input.implementation_commit.message,
         commit_target_ref: input.implementation_commit.target_ref,
         commit_baseline: input.implementation_commit.baseline_commit,
-        commit_requires_human_confirmation: !autonomous,
+        commit_requires_human_confirmation: requiresHumanConfirmation,
       },
     );
   }
