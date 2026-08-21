@@ -3,6 +3,10 @@ import { isDeepStrictEqual } from "node:util";
 import type { ApprovalRef, RuleSettlementV1, TaskStateV1 } from "../contracts/durable-state.js";
 import { comparePhaseInstances, decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
 import type { AuthenticatedGateApproval } from "./gate-approvals.js";
+import {
+  assertAuthenticatedRuleAcceptancePolicy,
+  type AuthenticatedRuleAcceptancePolicy,
+} from "./constitution.js";
 
 export function compareWorkflowPositions(left: PhaseInstanceId, right: PhaseInstanceId): number {
   return comparePhaseInstances(left, right);
@@ -61,6 +65,26 @@ export function latestEligibleRuleSettlement(
       settlement.subject_digest === subjectDigest &&
       ruleSettlementIsEligibleAfterLatestRestart(state, settlement, authorityPhase))
     .sort((left, right) => right.settled_at_revision - left.settled_at_revision)[0];
+}
+
+/**
+ * The sole autonomous settlement selector: capability-bound, producer-phase-bound, digest-bound,
+ * restart-aware, and latest-wins before the no-wait conclusion is considered.
+ */
+export function acceptedNoWaitSettlement(
+  policy: AuthenticatedRuleAcceptancePolicy,
+  state: TaskStateV1,
+  subjectDigest: RuleSettlementV1["subject_digest"],
+  producerPhase: PhaseInstanceId,
+): RuleSettlementV1 | undefined {
+  assertAuthenticatedRuleAcceptancePolicy(policy);
+  if (
+    policy.task_id !== state.task_id ||
+    policy.policy_base_commit !== state.policy_base_commit ||
+    policy.constitution_digest !== state.constitution_digest
+  ) return undefined;
+  const settlement = latestEligibleRuleSettlement(state, subjectDigest, producerPhase);
+  return settlement?.conclusion.wait === false ? settlement : undefined;
 }
 
 /**

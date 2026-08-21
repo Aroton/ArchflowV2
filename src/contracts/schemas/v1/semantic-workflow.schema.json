@@ -309,6 +309,7 @@
             "reopen",
             "open-waiver",
             "decide",
+            "refresh-milestone-baseline",
             "commit",
             "start-next-skill",
             "finish-task",

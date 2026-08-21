@@ -588,17 +588,37 @@ export function assessCurrentEvidence(
 }
 
 /**
- * Refuses an upstream unless durable human approval binds its exact current digest. Rule
- * settlements are evaluation evidence only and cannot authorize downstream review context.
+ * Normalizes the digests of upstreams whose authority was already authenticated with their exact
+ * producer phases by the shared loader/caller. The two-argument form remains for legacy callers
+ * that have only approval references; new settlement-aware callers must not discard the producer
+ * phase and then repeat this digest-only human scan.
  */
+export function requireApprovedUpstreamDigests(
+  authenticatedUpstreams: readonly Readonly<{
+    subject_digest: Sha256Digest;
+    producer_phase: TaskStateV1["phase_instance"];
+  }>[],
+): readonly Sha256Digest[];
 export function requireApprovedUpstreamDigests(
   state: TaskStateV1,
   upstreamDigests: readonly Sha256Digest[],
+): readonly Sha256Digest[];
+export function requireApprovedUpstreamDigests(
+  stateOrDigests: TaskStateV1 | readonly Readonly<{
+    subject_digest: Sha256Digest;
+    producer_phase: TaskStateV1["phase_instance"];
+  }>[],
+  legacyDigests?: readonly Sha256Digest[],
 ): readonly Sha256Digest[] {
+  const upstreamDigests = legacyDigests ??
+    (stateOrDigests as readonly Readonly<{ subject_digest: Sha256Digest }>[])
+      .map((authority) => authority.subject_digest);
   const sorted = [...upstreamDigests].sort();
   if (new Set(sorted).size !== sorted.length) {
     throw new TypeError("approved upstream digests must be unique");
   }
+  if (legacyDigests === undefined) return Object.freeze(sorted);
+  const state = stateOrDigests as TaskStateV1;
   for (const digest of sorted) {
     const approved = state.approvals.some((approval) =>
       (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") &&

@@ -4,6 +4,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import {
   canonicalJsonDigest,
+  canonicalJsonBytes,
   gitBlobOid,
   parseGitOid,
   sha256Bytes,
@@ -166,6 +167,24 @@ export async function implementationOutputCommittedAtCurrentTarget(
     await resolveCommit(runner, context.target_ref) === headCommit;
 }
 
+/** Exact autonomous implementation proof, derived only from the reviewed output itself. */
+export async function autonomousImplementationOutputCommittedAtCurrentTarget(
+  runner: RootBoundGitRunner,
+  output: ImplementationOutputV1,
+  targetRef: string,
+  commitMessage: string,
+): Promise<boolean> {
+  return implementationOutputCommittedAtCurrentTarget(runner, output, {
+    target_ref: targetRef,
+    baseline_commit: output.base_commit,
+    commit_message: commitMessage,
+    paths: sortedUniquePaths(output),
+    diff_digest: output.diff_digest,
+    current_artifact_digests: Object.freeze([]),
+    parent_document_digests: Object.freeze(output.parent_documents.map((entry) => entry.content_digest).sort()),
+  });
+}
+
 /**
  * Why the design milestone could not be observed. Every value names one predicate the commit failed,
  * so status can say what is wrong instead of silently re-offering an action that cannot succeed.
@@ -309,6 +328,107 @@ export async function designArtifactCommittedAtCurrentTarget(
     await resolveCommit(runner, context.target_ref) === head
     ? observed
     : missed("target-moved");
+}
+
+/**
+ * Proves an autonomous design milestone from its durable settlement baseline. Unlike the human
+ * gate path, there is no decision archive: the canonical state containing the accepted settlement
+ * is the recovery authority, and the commit may change exactly that file plus the reviewed docs.
+ */
+export async function autonomousDesignArtifactCommittedAtCurrentTarget(
+  runner: RootBoundGitRunner,
+  state: TaskStateV1,
+  artifact: DocumentArtifactV1,
+  outputs: readonly OutputEntry[],
+  targetRef: string,
+  baselineCommit: string,
+  commitMessage: string,
+  context: RepositoryOperationContext,
+): Promise<DesignMilestoneObservation> {
+  if (!await approvedDesignWorktreeMatchesRetainedArtifact(runner, state.task_id, artifact, outputs, context)) {
+    return missed("approved-document-mismatch");
+  }
+  const symbolicRef = await runner.runText({
+    argv: ["symbolic-ref", "--quiet", "HEAD"],
+    operation: "git-current-autonomous-design-target" as SafeCode,
+    expectedAbsence: [{ code: 1, stderrIncludes: "" }],
+  });
+  if (targetRef === "HEAD" ? symbolicRef !== "" : symbolicRef !== targetRef) return missed("target-moved");
+  const head = await resolveCommit(runner, "HEAD");
+  if (await resolveCommit(runner, targetRef) !== head) return missed("target-moved");
+  const prefix = `.archflow/tasks/${state.task_id}/`;
+  const approvedPaths = [artifact.projection_target, ...(artifact.additional_documents ?? []).map((entry) => entry.projection_target)];
+  const approvedPathSet = new Set<string>(approvedPaths);
+  const unauthorizedDocuments = (paths: readonly string[]): readonly string[] => paths.filter((path) =>
+    path.startsWith(prefix) && isTaskDocumentPath(path.slice(prefix.length)) && !approvedPathSet.has(path));
+  if (head === baselineCommit) {
+    const pending = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
+    const unexpected = unauthorizedDocuments(pending.paths);
+    return unexpected.length === 0 ? missed("not-committed") : missed("unauthorized-task-document", unexpected);
+  }
+  if (await resolveCommit(runner, `${head}^`) !== baselineCommit) return missed("parent-not-baseline");
+  const message = await runner.runText({
+    argv: ["log", "-1", "--format=%s", head],
+    operation: "git-autonomous-design-commit-message" as SafeCode,
+  });
+  if (message !== commitMessage) return missed("message-mismatch");
+  const changed = [...new Set(await runner.runNulFields({
+    argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", baselineCommit, head, "--"],
+    operation: "git-autonomous-design-commit-paths" as SafeCode,
+  }))].sort(ordinal);
+  if (changed.length === 0 || changed.some((path) => !path.startsWith(prefix))) return missed("paths-outside-task", changed);
+  if (!changed.includes(`${prefix}state.json`)) return missed("missing-recovery-authority");
+  for (const path of approvedPaths) {
+    const output = outputs.find((entry) => entry.path === path);
+    if (output === undefined || output.operation === "delete") return missed("approved-document-mismatch", [path]);
+    const committed = await readCommitTreeBlob(runner, head, path);
+    if (committed?.mode !== output.after.mode || committed.oid !== output.after.oid) {
+      return missed("approved-document-mismatch", [path]);
+    }
+  }
+  const unauthorized = unauthorizedDocuments(changed);
+  if (unauthorized.length !== 0) return missed("unauthorized-task-document", unauthorized);
+  const committedState = await readCommitTreeBlob(runner, head, `${prefix}state.json`);
+  const expectedState = canonicalJsonBytes(state);
+  if (committedState?.oid !== gitBlobOid(expectedState)) return missed("missing-recovery-authority");
+  const dirty = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
+  if (dirty.paths.length !== 0 || dirty.unrepresentable_count !== 0) return missed("task-tree-dirty", dirty.paths);
+  return await resolveCommit(runner, "HEAD") === head && await resolveCommit(runner, targetRef) === head
+    ? observed : missed("target-moved");
+}
+
+/**
+ * Compares the live approved documents to the original retained produce identities. This is
+ * deliberately independent of reconciliation generations: adopting later bytes as a projection
+ * baseline cannot turn them into the bytes that the rule settlement reviewed.
+ */
+export async function approvedDesignWorktreeMatchesRetainedArtifact(
+  runner: RootBoundGitRunner,
+  taskId: string,
+  artifact: DocumentArtifactV1,
+  outputs: readonly OutputEntry[],
+  context: RepositoryOperationContext,
+): Promise<boolean> {
+  if (artifact.task_id !== taskId) return false;
+  const approvedPaths = [
+    artifact.projection_target,
+    ...(artifact.additional_documents ?? []).map((entry) => entry.projection_target),
+  ];
+  for (const path of approvedPaths) {
+    const output = outputs.find((entry) => entry.path === path);
+    if (output === undefined || output.operation === "delete") return false;
+    const resolved = await resolveDeclaredOutputPath({
+      runner,
+      taskId: artifact.task_id,
+      claim: output.path,
+      pathClass: output.path_class,
+      context,
+    });
+    if (!resolved.ok) return false;
+    const live = await observePath(runner, resolved.value);
+    if (!sameIdentity(live.observation, output.after)) return false;
+  }
+  return true;
 }
 
 const ordinal = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;

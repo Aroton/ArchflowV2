@@ -18,6 +18,8 @@ import { encodePhaseInstance } from "../../src/contracts/phase-instance.js";
 import { resolvePinnedConstitution } from "../../src/state/constitution.js";
 import { createProductionServices } from "../../src/state/production.js";
 import {
+  buildAutonomousDesignCommitInput,
+  buildAutonomousImplementationCommitInput,
   buildCommitAuthorizationInput,
   buildDesignApprovalInput,
   computeTaskStatus,
@@ -319,6 +321,51 @@ describe("computeTaskStatus", () => {
       target_ref_guidance: "Current symbolic branch ref observed from repository authority.",
     });
     expect(input).not.toHaveProperty("rubric_digest");
+  });
+
+  it("derives autonomous implementation commit facts only from retained output authority", () => {
+    const output = {
+      task_id: TASK,
+      phase_instance: PHASE,
+      base_commit: parseGitOid("a".repeat(40)),
+      outputs: [
+        { operation: "delete", path: parseRepositoryPathClaim("z.ts") },
+        { operation: "rename", path: parseRepositoryPathClaim("b.ts"), previous_path: parseRepositoryPathClaim("a.ts") },
+      ],
+    } as unknown as ImplementationOutputV1;
+    expect(buildAutonomousImplementationCommitInput(output, "refs/heads/feature")).toEqual({
+      paths: ["a.ts", "b.ts", "z.ts"],
+      message: "ArchFlow: Implement status-task phase 17",
+      target_ref: "refs/heads/feature",
+      baseline_commit: "a".repeat(40),
+    });
+  });
+
+  it("binds autonomous design commit facts to the settlement producer phase and baseline", async () => {
+    const h = await harness();
+    const phase = encodePhaseInstance({ kind: "phase-design", phase: 5 as never });
+    const current = h.state({ phase_instance: phase });
+    const settlement = {
+      task_id: TASK,
+      phase_instance: phase,
+      step: "triage",
+      subject_digest: D("8"),
+      conclusion: { wait: false, match: null },
+      config_digest: D("9"),
+      settled_at_revision: parseSafeInteger(4),
+      milestone_baseline_commit: parseGitOid("b".repeat(40)),
+    } as RuleSettlementV1;
+    expect(buildAutonomousDesignCommitInput(current, settlement, "refs/heads/feature")).toEqual({
+      path: `.archflow/tasks/${TASK}`,
+      message: "ArchFlow: Approve status-task phase 5 design",
+      target_ref: "refs/heads/feature",
+      baseline_commit: "b".repeat(40),
+    });
+    expect(() => buildAutonomousDesignCommitInput(
+      h.state({ phase_instance: encodePhaseInstance({ kind: "design" }) }),
+      settlement,
+      "refs/heads/feature",
+    )).toThrow(/phase-bound milestone baseline/u);
   });
 
   it("unwraps retained adjudication evidence when presenting design approval", async () => {

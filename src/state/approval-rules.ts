@@ -7,6 +7,7 @@ import type {
 import { parseSafeInteger, type Sha256Digest } from "../contracts/evidence.js";
 import type { GateKind } from "../contracts/gates.js";
 import { decodePhaseInstance } from "../contracts/phase-instance.js";
+import type { GitOid } from "../contracts/canonical.js";
 import type { CurrentProduceSubject } from "./produce-subject.js";
 
 /**
@@ -224,7 +225,13 @@ export function buildRuleSettlement(
   subjectDigest: Sha256Digest,
   configDigest: Sha256Digest,
   conclusion: RuleSettlementConclusionV1,
+  milestoneBaselineCommit?: GitOid,
 ): RuleSettlementV1 {
+  const kind = decodePhaseInstance(state.phase_instance).kind;
+  const baselineAllowed = !conclusion.wait && (kind === "design" || kind === "phase-design");
+  if ((milestoneBaselineCommit !== undefined) !== baselineAllowed) {
+    throw new TypeError("a milestone baseline is required exactly for design and phase-design wait:false settlements");
+  }
   return Object.freeze({
     task_id: state.task_id,
     phase_instance: state.phase_instance,
@@ -232,6 +239,7 @@ export function buildRuleSettlement(
     subject_digest: subjectDigest,
     conclusion: structuredClone(conclusion),
     config_digest: configDigest,
+    ...(milestoneBaselineCommit === undefined ? {} : { milestone_baseline_commit: milestoneBaselineCommit }),
     settled_at_revision: parseSafeInteger(state.revision + 1),
   });
 }

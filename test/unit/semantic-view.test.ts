@@ -156,6 +156,13 @@ describe("semantic status projection", () => {
     expect(authorized.offer).toBeUndefined();
     expect(authorized.instruction).toContain("explicit confirmation");
 
+    const autonomous = projectSemanticStatus(snapshot(fullStatus(action("commit-phase", {
+      commit_paths: ["src/a.ts"], commit_message: "Implement the reviewed phase",
+      commit_target_ref: "refs/heads/main", commit_baseline: "2".repeat(40),
+      commit_requires_human_confirmation: false,
+    }))), invocation).view.next_action;
+    expect(autonomous.commit?.requires_human_confirmation).toBe(false);
+
     const missingAuthority = projectSemanticStatus(snapshot(fullStatus(action("commit-phase"))), invocation).view.next_action;
     expect(missingAuthority.kind).toBe("inspect");
     expect(missingAuthority.commit).toBeUndefined();
@@ -174,6 +181,17 @@ describe("semantic status projection", () => {
       baseline: "1".repeat(40),
       requires_human_confirmation: false,
     });
+  });
+
+  it("projects baseline refresh as one server-owned no-submission action", () => {
+    const designInvocation: WorkflowInvocationV1 = { skill: "archflow-phase-design", phase: 1, intent: "resume" };
+    const phase = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(1) });
+    const projected = projectSemanticStatus(snapshot(fullStatus(
+      action("refresh-milestone-baseline", { phase_instance: phase }),
+      { phase_instance: phase, step: "triage", status: "succeeded" },
+    )), designInvocation).view.next_action;
+    expect(projected).toMatchObject({ kind: "refresh-milestone-baseline", expected_submission: "none" });
+    expect(projected.offer).toMatch(/^af1_/u);
   });
 
   it("maps the migration-audit gate position and import milestone commit through the shared shapes", () => {

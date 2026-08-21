@@ -1,6 +1,6 @@
 import { sha256Bytes } from "../contracts/canonical.js";
 import type { GateDecisionRecordV1 } from "../contracts/durable-gate.js";
-import type { TaskStateV1 } from "../contracts/durable-state.js";
+import type { RuleSettlementV1, TaskStateV1 } from "../contracts/durable-state.js";
 import { decodePhaseInstance } from "../contracts/phase-instance.js";
 import type { ProjectResult } from "../contracts/errors.js";
 import type { TaskSlug } from "../contracts/evidence.js";
@@ -83,6 +83,40 @@ export async function loadApprovedDesignFinalPhase(
     return ok(plannedFinalPhaseFromDesign(payload.bytes));
   } catch {
     return issue("STATE_INVALID", current, "approved-design-phase-count-invalid");
+  }
+}
+
+/** Derives the phase bound from the exact retained design subject selected by rule authority. */
+export async function loadAutonomousDesignFinalPhase(
+  dependencies: GateLifecycleDependencies,
+  current: TaskStateV1,
+  subjectDigest: RuleSettlementV1["subject_digest"],
+): Promise<ProjectResult<number | null>> {
+  if (current.phase_instance !== "design") {
+    return issue("STATE_INVALID", current, "autonomous-design-phase-count-wrong-position");
+  }
+  const reference = current.authoritative_results.find((entry) =>
+    entry.phase_instance === "design" && entry.step === "produce");
+  if (reference === undefined || dependencies.load_retained_result === undefined) {
+    return issue("STATE_INVALID", current, "autonomous-design-result-missing");
+  }
+  const retained = await dependencies.load_retained_result(reference);
+  if (!retained.ok) return retained;
+  const manifest = retained.value.prepared.manifest.value;
+  const artifact = manifest.source_artifact;
+  if (artifact.artifact_kind !== "document" || artifact.phase_instance !== "design" ||
+      artifact.step !== "produce" || artifact.document_path !== "design.md" ||
+      manifest.artifact_digest !== subjectDigest) {
+    return issue("STATE_INVALID", current, "autonomous-design-authority-mismatch");
+  }
+  const payload = retained.value.prepared.payloads.find((candidate) => candidate.path === artifact.projection_target);
+  if (payload === undefined || sha256Bytes(payload.bytes) !== artifact.content_digest) {
+    return issue("STATE_INVALID", current, "autonomous-design-authority-mismatch");
+  }
+  try {
+    return ok(plannedFinalPhaseFromDesign(payload.bytes));
+  } catch {
+    return issue("STATE_INVALID", current, "autonomous-design-phase-count-invalid");
   }
 }
 

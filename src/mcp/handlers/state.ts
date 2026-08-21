@@ -16,7 +16,10 @@ import {
   loadAuthenticatedGateApproval,
   type AuthenticatedGateApproval,
 } from "../../state/gate-approvals.js";
-import { resolvePinnedConstitution } from "../../state/constitution.js";
+import {
+  authenticateRuleAcceptancePolicy,
+  resolvePinnedConstitution,
+} from "../../state/constitution.js";
 import { findLegacyImportResumePhase, loadLegacyImportInitialization } from "../../state/legacy-import-resume.js";
 import {
   loadCurrentReviewSet,
@@ -31,6 +34,9 @@ import { runStateInitialization } from "../../state/initialization.js";
 import { identifyTransactionRequest } from "../../state/request.js";
 import { loadCurrentProduceSubject, type CurrentProduceSubject } from "../../state/produce-subject.js";
 import {
+  autonomousDesignArtifactCommittedAtCurrentTarget,
+  autonomousImplementationOutputCommittedAtCurrentTarget,
+  approvedDesignWorktreeMatchesRetainedArtifact,
   designArtifactCommittedAtCurrentTarget,
   implementationOutputCommittedAtCurrentTarget,
 } from "../../state/implementation-manifest.js";
@@ -57,18 +63,24 @@ import {
 import {
   currentApprovedUpstreams,
   currentReviewPredecessor,
+  currentTargetRef,
 } from "../../state/status.js";
 import { planStateTransition } from "../../state/transitions.js";
 import { planPlanningRestart } from "../../state/transitions.js";
 import { installPlanningRestartAskAppend, validatePlanningRestartAskAppend } from "../../state/phase-documents.js";
 import {
+  acceptedNoWaitSettlement,
   authenticatedApprovalIsEligibleAfterLatestRestart,
 } from "../../state/restart-authority.js";
 import { completedPlanningRestartMatches, planningRestartId } from "../../state/planning-restart.js";
 import {
   derivedFinalPhaseBelowCurrentPhase,
+  loadAutonomousDesignFinalPhase,
   plannedFinalPhaseFromRecordedPayloads,
 } from "../../state/planned-final-phase.js";
+import { discoverReconciliationInput } from "../../state/reconciliation-discovery.js";
+import { reconcileCurrentAuthority } from "../../state/reconciliation.js";
+import { compareRuleSettlements } from "../../contracts/durable-state.js";
 import { mapHandlerErrors } from "./errors.js";
 import { openHandlerSession } from "./session.js";
 import {
@@ -176,7 +188,13 @@ async function settleApprovalRules(
     const conclusion = evaluateApprovalRules(
       ruleContext.config, ruleContext.subject, ruleContext.changedPaths,
     );
-    return buildRuleSettlement(current, produce.artifact_digest, config.digest, conclusion);
+    const kind = decodePhaseInstance(current.phase_instance).kind;
+    const milestoneBaseline = !conclusion.wait && (kind === "design" || kind === "phase-design")
+      ? await resolveCommit(services.runner, "HEAD")
+      : undefined;
+    return buildRuleSettlement(
+      current, produce.artifact_digest, config.digest, conclusion, milestoneBaseline,
+    );
   } catch {
     // The guard mirror turns these throws into gate-fixed-point-disagreement; a settle that
     // cannot observe a clean fixed point simply mints no settlement.
@@ -193,10 +211,11 @@ export async function handleState(
     if (!session.ok) return session;
     const { services } = session.value;
     const restartInput = call.input.operation === "planning_restart" ? call.input : undefined;
-    const artifact = restartInput === undefined ? call.input.artifact : undefined;
+    const refreshInput = call.input.operation === "refresh_milestone_baseline" ? call.input : undefined;
+    const artifact = restartInput === undefined && refreshInput === undefined ? call.input.artifact : undefined;
     if (services.state === undefined) {
-      if (restartInput !== undefined) {
-        return fail(createProjectError("STATE_MISSING", { phase_instance: restartInput.phase_instance }));
+      if (restartInput !== undefined || refreshInput !== undefined) {
+        return fail(createProjectError("STATE_MISSING", { phase_instance: call.input.phase_instance }));
       }
       const initialized = await runStateInitialization(services.dependencies, {
         authority: services.authority,
@@ -272,7 +291,78 @@ export async function handleState(
     const transaction = await runStateTransaction(
       services.dependencies,
       { authority: services.authority, call },
-      async (current, identifiedCall): Promise<ProjectResult<PreparedTransaction<"archflow_state">>> => {
+      async (current, identifiedCall, liveConfig): Promise<ProjectResult<PreparedTransaction<"archflow_state">>> => {
+        if (refreshInput !== undefined) {
+          const state = current.value;
+          const decoded = decodePhaseInstance(state.phase_instance);
+          if ((decoded.kind !== "design" && decoded.kind !== "phase-design") ||
+              refreshInput.phase_instance !== state.phase_instance || state.step !== "triage" ||
+              state.status !== "succeeded" || state.open_gate !== undefined ||
+              state.pending_human_revision !== undefined || state.terminal !== undefined) {
+            return fail(createProjectError("TRANSITION_INVALID", {
+              phase_instance: refreshInput.phase_instance, from: `${state.step}-${state.status}`, to: "refresh-milestone-baseline",
+            }));
+          }
+          const constitution = await resolvePinnedConstitution(
+            services.runner, state.policy_base_commit, services.authority.context,
+          );
+          if (!constitution.ok) return constitution;
+          const policy = authenticateRuleAcceptancePolicy(state, constitution.value);
+          const produce = await loadCurrentProduceSubject(services.dependencies, state);
+          if (!produce.ok) return produce;
+          const prior = policy === undefined ? undefined : acceptedNoWaitSettlement(
+            policy, state, produce.value.artifact_digest, state.phase_instance,
+          );
+          if (prior?.milestone_baseline_commit === undefined || prior.config_digest !== liveConfig.digest) {
+            return fail(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance, issue_code: "milestone-baseline-refresh-authority-missing",
+            }));
+          }
+          if (produce.value.artifact.artifact_kind !== "document" ||
+              !await approvedDesignWorktreeMatchesRetainedArtifact(
+                services.runner, state.task_id, produce.value.artifact,
+                produce.value.retained.manifest.value.outputs, services.authority.context,
+              )) {
+            return fail(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance, issue_code: "milestone-baseline-refresh-reviewed-bytes-changed",
+            }));
+          }
+          const discovered = await discoverReconciliationInput(services.dependencies, services.authority, current);
+          if (!discovered.ok) return discovered;
+          const reconciliation = reconcileCurrentAuthority(discovered.value);
+          if (reconciliation.findings.length !== 0 || (discovered.value.blocking_reasons ?? []).length !== 0) {
+            return fail(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance, issue_code: "milestone-baseline-refresh-reconciliation-required",
+            }));
+          }
+          const head = await resolveCommit(services.runner, "HEAD");
+          if (head === prior.milestone_baseline_commit) {
+            return fail(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance, issue_code: "milestone-baseline-refresh-not-needed",
+            }));
+          }
+          const revision = parseSafeInteger(state.revision + 1);
+          const replacement: RuleSettlementV1 = Object.freeze({
+            ...prior,
+            settled_at_revision: revision,
+            milestone_baseline_commit: head,
+          });
+          const { revision: _revision, last_transition: _transition, ...preserved } = state;
+          const settlements = Object.freeze([...(state.rule_settlements ?? []), replacement].sort(compareRuleSettlements));
+          const nextState = Object.freeze({ ...preserved, rule_settlements: settlements });
+          const success = Object.freeze({
+            path: parseTaskPathClaim("state.json"), revision, status: "succeeded" as const,
+            request_digest: identified.request_digest,
+          });
+          const expectation = createInternalResultExpectation({
+            schema_version: "1", tool: "archflow_state", task_id: services.authority.task_id,
+            intent_id: refreshInput.intent_id, input_fingerprint: identified.input_fingerprint,
+            request_digest: identified.request_digest, result_id: stateResultId(refreshInput.intent_id),
+            resulting_revision: revision, success,
+          });
+          const result = validateProjectResultStructure(identifiedCall, { schema_version: "1", ok: true, value: success });
+          return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ expectation, result, next_state: nextState }) });
+        }
         if (restartInput !== undefined) {
           const revision = parseSafeInteger(current.value.revision + 1);
           const restartId = planningRestartId(identified.request_digest, restartInput.intent_id);
@@ -562,11 +652,23 @@ export async function handleState(
         const artifactPhaseExitSignal =
           !planningRestartSignal && artifact === undefined && crossesPhase && decodedCurrent.kind !== "phase-impl";
         let currentProduce: CurrentProduceSubject | undefined;
+        let authenticatedRuleAcceptance;
         if (completionSignal || artifactPhaseExitSignal) {
           const loadedProduce = await loadCurrentProduceSubject(services.dependencies, current.value);
           if (!loadedProduce.ok) return loadedProduce;
           currentProduce = loadedProduce.value;
           completionSubjectDigest = currentProduce.artifact_digest;
+          const resolved = await resolvePinnedConstitution(
+            services.runner, current.value.policy_base_commit, services.authority.context,
+          );
+          if (!resolved.ok) return resolved;
+          const policy = authenticateRuleAcceptancePolicy(current.value, resolved.value);
+          const settlement = policy === undefined ? undefined : acceptedNoWaitSettlement(
+            policy, current.value, completionSubjectDigest, current.value.phase_instance,
+          );
+          if (policy !== undefined && settlement !== undefined) {
+            authenticatedRuleAcceptance = Object.freeze({ policy, settlement });
+          }
         }
         if (artifactPhaseExitSignal) {
           const designExit = decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design";
@@ -601,6 +703,30 @@ export async function handleState(
                 break;
               }
             }
+            if (!commitObserved && authenticatedRuleAcceptance !== undefined) {
+              const baseline = authenticatedRuleAcceptance.settlement.milestone_baseline_commit;
+              if (baseline !== undefined) {
+                const target = await currentTargetRef(services.dependencies);
+                const phase = decodePhaseInstance(current.value.phase_instance);
+                if (phase.kind !== "design" && phase.kind !== "phase-design") {
+                  throw new TypeError("autonomous design commit has a non-design phase");
+                }
+                const phaseLabel = phase.kind === "design" ? "design" : `phase ${String(phase.phase)} design`;
+                commitObserved = (await autonomousDesignArtifactCommittedAtCurrentTarget(
+                  services.runner, current.value, currentProduce.artifact,
+                  currentProduce.retained.manifest.value.outputs, target.value, baseline,
+                  `ArchFlow: Approve ${current.value.task_id} ${phaseLabel}`,
+                  services.authority.context,
+                )).observed;
+              }
+              if (commitObserved && current.value.phase_instance === "design") {
+                const bound = await loadAutonomousDesignFinalPhase(
+                  services.dependencies, current.value, completionSubjectDigest!,
+                );
+                if (!bound.ok) return bound;
+                derivedPlannedFinalPhase = bound.value;
+              }
+            }
           }
         }
         if (completionSignal && currentProduce !== undefined) {
@@ -631,6 +757,14 @@ export async function handleState(
                 commitObserved = true;
                 break;
               }
+            }
+            if (!commitObserved && authenticatedRuleAcceptance !== undefined) {
+              const target = await currentTargetRef(services.dependencies);
+              const phase = decodePhaseInstance(source.phase_instance);
+              commitObserved = await autonomousImplementationOutputCommittedAtCurrentTarget(
+                services.runner, source, target.value,
+                `ArchFlow: Implement ${source.task_id} phase ${phase.kind === "phase-impl" ? String(phase.phase) : source.phase_instance}`,
+              );
             }
           }
         }
@@ -719,6 +853,9 @@ export async function handleState(
           }),
           ...(authenticatedGateApprovals.length === 0 ? {} : {
             authenticated_gate_approvals: authenticatedGateApprovals,
+          }),
+          ...(authenticatedRuleAcceptance === undefined ? {} : {
+            authenticated_rule_acceptance: authenticatedRuleAcceptance,
           }),
         } as const;
         let next = planStateTransition(transitionInput);

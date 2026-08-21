@@ -10,6 +10,7 @@ import type { ResultManifestV1 } from "../../src/contracts/durable-result-manife
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import type { Sha256Digest } from "../../src/contracts/evidence.js";
 import { computeGateContextDigest } from "../../src/contracts/fingerprints.js";
+import { encodePhaseInstance } from "../../src/contracts/phase-instance.js";
 import {
   currentEvidenceSetRef,
   parseRequiredReviewSlots,
@@ -859,5 +860,17 @@ describe("review services", () => {
       D("8"),
       { operation: "review-trigger", boundary: "subject" },
     )).toBeUndefined();
+  });
+
+  it("preserves already authenticated reviewed-upstream digests without a second human-only scan", () => {
+    expect(requireApprovedUpstreamDigests([
+      { subject_digest: D("9"), producer_phase: encodePhaseInstance({ kind: "design" }) },
+      { subject_digest: D("8"), producer_phase: encodePhaseInstance({ kind: "prd" }) },
+    ])).toEqual([D("8"), D("9")]);
+    expect(() => requireApprovedUpstreamDigests([
+      { subject_digest: D("8"), producer_phase: encodePhaseInstance({ kind: "design" }) },
+      { subject_digest: D("8"), producer_phase: encodePhaseInstance({ kind: "prd" }) },
+    ]))
+      .toThrow(/must be unique/u);
   });
 });

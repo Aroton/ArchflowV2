@@ -12,7 +12,7 @@ import type { PlainJsonValue } from "./plain-json.js";
 import type { ProjectionDigestRef } from "./durable-primitives.js";
 import { repositoryPathClaimV1Schema } from "./path-claims.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
-import { isStrictlyEarlierPlanningPhase, phaseInstanceIdV1Schema } from "./phase-instance.js";
+import { decodePhaseInstance, isStrictlyEarlierPlanningPhase, phaseInstanceIdV1Schema } from "./phase-instance.js";
 import { isSortedUniqueBy, tupleKey } from "./validators.js";
 import type { PipelineStep } from "./vocabulary.js";
 import { PIPELINE_STEPS } from "./vocabulary.js";
@@ -220,6 +220,12 @@ export type RuleSettlementV1 = {
   readonly subject_digest: Sha256Digest;
   readonly conclusion: RuleSettlementConclusionV1;
   readonly config_digest: Sha256Digest;
+  /**
+   * Git baseline captured with an autonomous planning milestone. It is intentionally absent from
+   * implementation settlements (whose output already pins `base_commit`) and from every waiting
+   * settlement.
+   */
+  readonly milestone_baseline_commit?: GitOid;
   /** `>= 1` (D8), and no later than the containing state's revision. */
   readonly settled_at_revision: SafeInteger;
 };
@@ -564,8 +570,19 @@ export const ruleSettlementV1Schema = z.object({
   subject_digest: sha256Digest,
   conclusion: ruleSettlementConclusionV1Schema,
   config_digest: sha256Digest,
+  milestone_baseline_commit: gitOidV1Schema.optional(),
   settled_at_revision: positiveSafeInteger,
-}).strict() as unknown as z.ZodType<RuleSettlementV1>;
+}).strict().superRefine((settlement, context) => {
+  if (settlement.milestone_baseline_commit === undefined) return;
+  const kind = decodePhaseInstance(settlement.phase_instance).kind;
+  if (settlement.conclusion.wait || (kind !== "design" && kind !== "phase-design")) {
+    context.addIssue({
+      code: "custom",
+      path: ["milestone_baseline_commit"],
+      message: "milestone baseline is allowed only on a design or phase-design wait:false settlement",
+    });
+  }
+}) as unknown as z.ZodType<RuleSettlementV1>;
 
 export const planningRestartRecordV1Schema = z.object({
   restart_id: pathSafeIdV1Schema,

@@ -724,6 +724,26 @@ describe("planStateTransition", () => {
     expect(designExit([], true).ok).toBe(false);
   });
 
+  it("rejects a plain-object imitation of autonomous crossing authority", () => {
+    const current = state({
+      phase_instance: parsePhaseInstanceId("prd"), status: "succeeded", step: "triage",
+      rule_settlements: [receipt(parsePhaseInstanceId("prd"), D("5"), 4)],
+    });
+    expect(() => planStateTransition({
+      current,
+      target: { phase_instance: parsePhaseInstanceId("design"), step: "produce", status: "running", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"), completion_subject_digest: D("5"),
+      authenticated_rule_acceptance: {
+        policy: {
+          task_id: current.task_id,
+          policy_base_commit: current.policy_base_commit,
+          constitution_digest: current.constitution_digest,
+        } as never,
+        settlement: current.rule_settlements![0]!,
+      },
+    })).toThrow(/authenticated rule acceptance policy/u);
+  });
+
   it("does not recover a document handoff from settlement evidence alone", () => {
     const phaseDesign = phase("phase-design", 2);
     const current = state({

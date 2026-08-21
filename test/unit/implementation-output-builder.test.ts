@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
+  chmodSync,
   renameSync,
   rmSync,
   symlinkSync,
@@ -25,6 +26,7 @@ import { discoverWorktree } from "../../src/repository/identity.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
 import type { GateLifecycleDependencies } from "../../src/state/gates.js";
 import {
+  approvedDesignWorktreeMatchesRetainedArtifact,
   buildImplementationOutput,
   designArtifactCommittedAtCurrentTarget,
   implementationOutputCommittedAtCurrentTarget,
@@ -126,6 +128,22 @@ describe("implementation-output builder", () => {
     };
     const discovered = await discoverWorktree(createGitRunner({ cwd: root }), operation);
     if (!discovered.ok) throw discovered.error;
+
+    // Projection-baseline adoption is deliberately irrelevant: refresh authority compares the
+    // live bytes and mode to this original retained output identity, not a later generation.
+    expect(await approvedDesignWorktreeMatchesRetainedArtifact(
+      discovered.value, taskId, artifact, outputs, operation,
+    )).toBe(true);
+    writeFileSync(join(taskRoot, "design.md"), "# Adopted but unreviewed design\n");
+    expect(await approvedDesignWorktreeMatchesRetainedArtifact(
+      discovered.value, taskId, artifact, outputs, operation,
+    )).toBe(false);
+    writeFileSync(join(taskRoot, "design.md"), designBytes);
+    chmodSync(join(taskRoot, "design.md"), 0o755);
+    expect(await approvedDesignWorktreeMatchesRetainedArtifact(
+      discovered.value, taskId, artifact, outputs, operation,
+    )).toBe(false);
+    chmodSync(join(taskRoot, "design.md"), 0o644);
 
     const observe = () => designArtifactCommittedAtCurrentTarget(
       discovered.value, taskId, artifact, outputs, context,

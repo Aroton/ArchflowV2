@@ -16,7 +16,11 @@ import {
   semanticJourneyHarness,
   type SemanticJourneyHarness,
 } from "../helpers/semantic-journeys.js";
-import { createTaskWorkspace, type TaskWorkspace } from "../helpers/task-workspace.js";
+import {
+  createTaskWorkspace,
+  supportedRuleAcceptanceConstitutionV2Bytes,
+  type TaskWorkspace,
+} from "../helpers/task-workspace.js";
 
 const TIMEOUT = 180_000;
 const workspaces: TaskWorkspace[] = [];
@@ -482,6 +486,43 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
       kind: "decision", choice: "authorize-commit", reason: "The reviewed TypeScript-only change may be committed.",
     });
     expect(view.next_action.commit).toMatchObject({ requires_human_confirmation: true });
+  });
+
+  it("advances an exact-v2 TypeScript-only implementation after exact autonomous commit proof", async () => {
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-v2-impl-autonomy",
+      label: "semantic-v2-impl-autonomy",
+      constitutionBytes: supportedRuleAcceptanceConstitutionV2Bytes(),
+    });
+    workspaces.push(workspace);
+    excludeStubArtifacts(workspace);
+    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []]));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
+    let view = await applied(h, invocation, handoff);
+    writeApprovalRulesConfig(workspace, ["**/*.sql"]);
+    const work = writeClientImplementation(workspace, view, "v2-typescript-autonomy");
+    view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
+    expect(view.next_action.kind).toBe("review");
+    view = await applied(h, invocation, view);
+    const commit = view.next_action.commit;
+    if (commit === undefined) throw new Error("autonomous implementation commit facts unavailable");
+    expect(view.presentation).toBeUndefined();
+    expect(commit).toMatchObject({
+      message: `ArchFlow: Implement ${workspace.taskId} phase 1`,
+      target_ref: gitAt(workspace, "symbolic-ref", "-q", "HEAD"),
+      baseline: headAt(workspace),
+      requires_human_confirmation: false,
+    });
+    expect(commit.paths).toEqual([...work.outputs]);
+    clientCommit(workspace, commit);
+    expect(gitAt(workspace, "rev-parse", "HEAD^")).toBe(commit.baseline);
+    expect(gitAt(workspace, "log", "-1", "--pretty=%B")).toBe(commit.message);
+    view = await h.status(invocation);
+    expect(view.next_action).toMatchObject({ kind: "finish-task", expected_submission: "none" });
+    view = await applied(h, invocation, view);
+    expect(view.condition).toBe("complete");
+    expect(view.next_action).toMatchObject({ kind: "none" });
   });
 
   it("returns request-changes to a close-only checkpoint that requires the separate revise action before re-editing", async () => {

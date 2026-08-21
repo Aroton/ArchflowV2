@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import type { ConfigV1, WorkflowSubject } from "../../src/contracts/config.js";
 import { parseConfigV1, WORKFLOW_SUBJECTS } from "../../src/contracts/config.js";
-import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
+import { ruleSettlementV1Schema, type TaskStateV1 } from "../../src/contracts/durable-state.js";
+import { parseGitOid } from "../../src/contracts/canonical.js";
+import { parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import type { CurrentProduceSubject } from "../../src/state/produce-subject.js";
 import {
   approvalRuleGateSummary,
   approvalRuleContext,
   approvalRuleMatchSummary,
+  buildRuleSettlement,
   evaluateApprovalRules,
   globPatternMatches,
   subjectGateKind,
@@ -238,5 +241,42 @@ describe("approvalRuleContext — the shared assembly", () => {
     );
     expect(evaluateApprovalRules(context.config, context.subject, context.changedPaths))
       .toEqual(contentMatch("db/a.sql"));
+  });
+});
+
+describe("planning milestone settlement baseline", () => {
+  const digest = parseSha256Digest("a".repeat(64));
+  const configDigest = parseSha256Digest("b".repeat(64));
+  const baseline = parseGitOid("c".repeat(40));
+  const state = (phaseInstance: string): TaskStateV1 => ({
+    task_id: parseTaskSlug("settlement-task"),
+    phase_instance: phaseInstance,
+    step: "triage",
+    revision: 4,
+  } as unknown as TaskStateV1);
+
+  it.each(["design", "phase-design-2"])("requires and retains a baseline for %s wait:false", (phase) => {
+    const settlement = buildRuleSettlement(
+      state(phase), digest, configDigest, { wait: false, match: null }, baseline,
+    );
+    expect(settlement.milestone_baseline_commit).toBe(baseline);
+    expect(ruleSettlementV1Schema.parse(settlement)).toEqual(settlement);
+    expect(() => buildRuleSettlement(
+      state(phase), digest, configDigest, { wait: false, match: null },
+    )).toThrow(/milestone baseline is required/u);
+  });
+
+  it("forbids the baseline on waiting and implementation settlements", () => {
+    const waiting = {
+      ...buildRuleSettlement(
+        state("design"), digest, configDigest,
+        { wait: true, match: { kind: "subject", subject: "design" } },
+      ),
+      milestone_baseline_commit: baseline,
+    };
+    expect(ruleSettlementV1Schema.safeParse(waiting).success).toBe(false);
+    expect(() => buildRuleSettlement(
+      state("phase-impl-2"), digest, configDigest, { wait: false, match: null }, baseline,
+    )).toThrow(/milestone baseline is required/u);
   });
 });

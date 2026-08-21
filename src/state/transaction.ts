@@ -34,7 +34,6 @@ import {
 } from "../contracts/mcp-tools.js";
 import { parseTaskPathClaim } from "../contracts/path-claims.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
-import type { TaskConfigSnapshot } from "../contracts/config.js";
 import type { ToolName } from "../contracts/tool-names.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
 import type { GitEnvironment } from "../repository/git.js";
@@ -63,6 +62,7 @@ import {
 } from "./layout.js";
 import type {
   ConfigReadResult,
+  LiveConfigSnapshot,
   ReceiptReadResult,
   StateReadResult,
 } from "./read.js";
@@ -398,7 +398,7 @@ async function liveIdentification<K extends ToolName>(
   dependencies: TransactionDependencies,
   request: TransactionRequest<K>,
   current: CanonicalDocument<TaskStateV1>,
-): Promise<ProjectResult<Identified<K> & Readonly<{ live_config: TaskConfigSnapshot }>>> {
+): Promise<ProjectResult<Identified<K> & Readonly<{ live_config: LiveConfigSnapshot }>>> {
   const config = await dependencies.read_config(request.authority.config);
   if (config.kind !== "valid") {
     return config.kind === "invalid"
@@ -419,7 +419,7 @@ async function liveIdentification<K extends ToolName>(
   if (inputFingerprint !== request.call.input.input_fingerprint) {
     return fingerprintMismatch(inputFingerprint, request.call.input.input_fingerprint);
   }
-  return ok({ ...identifyTransactionRequest(request.call, request.authority, inputFingerprint), live_config: config.snapshot.parsed });
+  return ok({ ...identifyTransactionRequest(request.call, request.authority, inputFingerprint), live_config: config.snapshot });
 }
 
 function identifyFromReceipt<K extends ToolName>(
@@ -777,7 +777,7 @@ function validateResultInstallationBinding<K extends ToolName>(
 function buildPlan<K extends ToolName>(
   request: TransactionRequest<K>,
   current: CanonicalDocument<TaskStateV1>,
-  identified: Identified<K> & Readonly<{ live_config: TaskConfigSnapshot }>,
+  identified: Identified<K> & Readonly<{ live_config: LiveConfigSnapshot }>,
   preparedValue: unknown,
   authenticatedWorktreeRoot: string,
 ): ProjectResult<PlannedCommit<K>> {
@@ -797,7 +797,7 @@ function buildPlan<K extends ToolName>(
   // un-normalized draft) and before the receipt's prepared state and digest are derived, so the
   // prepared state, its digest, the committed bytes, and any crash replay all carry the same
   // `last_seen_config`.
-  const plan = { ...materialized, next_state: withLastSeenConfig(materialized.next_state, identified.live_config) };
+  const plan = { ...materialized, next_state: withLastSeenConfig(materialized.next_state, identified.live_config.parsed) };
   const installation = validateResultInstallationBinding(
     request, current, identified, plan, authenticatedWorktreeRoot,
   );
@@ -1168,6 +1168,7 @@ async function executeLocked<K extends ToolName>(
   prepare: (
     current: CanonicalDocument<TaskStateV1>,
     call: Extract<RequestIdentifiedToolCall, { readonly name: K }>,
+    liveConfig: LiveConfigSnapshot,
   ) => Promise<ProjectResult<PreparedTransaction<K>>>,
   onPlan: (current: CanonicalDocument<TaskStateV1>, plan: PlannedCommit<K>) => void,
 ): Promise<ProjectResult<TransactionOutcome<K>>> {
@@ -1214,7 +1215,7 @@ async function executeLocked<K extends ToolName>(
   }
   const identified = await liveIdentification(dependencies, request, current);
   if (!identified.ok) return identified;
-  const prepared = await prepare(current, identified.value.call);
+  const prepared = await prepare(current, identified.value.call, identified.value.live_config);
   if (!prepared.ok) return prepared;
   const plan = buildPlan(
     request,
@@ -1234,6 +1235,7 @@ export async function runStateTransaction<K extends ToolName>(
   prepare: (
     current: CanonicalDocument<TaskStateV1>,
     call: Extract<RequestIdentifiedToolCall, { readonly name: K }>,
+    liveConfig: LiveConfigSnapshot,
   ) => Promise<ProjectResult<PreparedTransaction<K>>>,
 ): Promise<ProjectResult<TransactionOutcome<K>>> {
   assertInternalTransactionAuthority(request.authority, {

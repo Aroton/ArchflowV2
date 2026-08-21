@@ -26,6 +26,11 @@ import {
   assertAuthenticatedGateApproval,
   type AuthenticatedGateApproval,
 } from "./gate-approvals.js";
+import {
+  assertAuthenticatedRuleAcceptancePolicy,
+  type AuthenticatedRuleAcceptancePolicy,
+} from "./constitution.js";
+import { acceptedNoWaitSettlement } from "./restart-authority.js";
 import type { NextStateDraft } from "./transaction.js";
 
 export type TransitionTarget = Readonly<{
@@ -51,6 +56,10 @@ export type TransitionPlanInput = Readonly<{
   constitution_result_reference?: AuthoritativeResultRef;
   completion_subject_digest?: Sha256Digest;
   authenticated_gate_approvals?: readonly AuthenticatedGateApproval[];
+  authenticated_rule_acceptance?: Readonly<{
+    policy: AuthenticatedRuleAcceptancePolicy;
+    settlement: RuleSettlementV1;
+  }>;
   commit_observed?: boolean;
   legacy_resume_phase?: PhaseInstanceId;
   human_revision?: HumanRevisionDeclaration;
@@ -478,16 +487,34 @@ function hasAuthenticatedCommittedOutput(input: TransitionPlanInput): boolean {
       authenticated.request.subject_digest === input.completion_subject_digest
     ) return true;
   }
-  return false;
+  return hasAuthenticatedRuleAcceptance(input);
+}
+
+function hasAuthenticatedRuleAcceptance(input: TransitionPlanInput): boolean {
+  const accepted = input.authenticated_rule_acceptance;
+  const digest = input.completion_subject_digest;
+  if (accepted === undefined || digest === undefined) return false;
+  assertAuthenticatedRuleAcceptancePolicy(accepted.policy);
+  const settlement = acceptedNoWaitSettlement(
+    accepted.policy, input.current, digest, input.current.phase_instance,
+  );
+  return settlement !== undefined && isDeepStrictEqual(settlement, accepted.settlement);
 }
 
 /** Plans one fixed-workflow move. It is pure and performs no receipt or state write. */
 export function planStateTransition(value: TransitionPlanInput): ProjectResult<NextStateDraft> {
-  const { authenticated_gate_approvals: authenticatedApprovals, ...plainValue } = value;
+  const {
+    authenticated_gate_approvals: authenticatedApprovals,
+    authenticated_rule_acceptance: authenticatedRuleAcceptance,
+    ...plainValue
+  } = value;
   assertPlainJson(plainValue, "transition plan input");
   const input = {
     ...structuredClone(plainValue),
     ...(authenticatedApprovals === undefined ? {} : { authenticated_gate_approvals: authenticatedApprovals }),
+    ...(authenticatedRuleAcceptance === undefined ? {} : {
+      authenticated_rule_acceptance: authenticatedRuleAcceptance,
+    }),
   } as TransitionPlanInput;
   const from = `${input.current.step}-${input.current.status}`;
   const to = `${input.target.step}-${input.target.status}`;
@@ -502,6 +529,7 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     return invalid(input, from, to);
   }
   const committedOutput = hasAuthenticatedCommittedOutput(input);
+  const ruleAccepted = hasAuthenticatedRuleAcceptance(input);
   const decodedCurrent = decodePhaseInstance(input.current.phase_instance);
   const crossesPhase = input.target.phase_instance !== input.current.phase_instance;
   const completesFinalPhase = committedOutput &&
@@ -528,6 +556,7 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     decodedCurrent.kind !== "phase-impl" &&
     crossesPhase &&
     !hasAuthenticatedArtifactApproval(input) &&
+    !ruleAccepted &&
     // An accepted migration audit is the design phase's exit authority for a legacy import: the
     // same authenticated approval legalMovement's design-jump rule settles on.
     !(decodedCurrent.kind === "design" && hasAuthenticatedMigrationAudit(input))
@@ -535,8 +564,12 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
   if (
     (decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") &&
     crossesPhase &&
-    hasAuthenticatedCombinedDesignApproval(input) &&
+    (hasAuthenticatedCombinedDesignApproval(input) || ruleAccepted) &&
     input.commit_observed !== true
+  ) return invalid(input, from, to);
+  if (
+    decodedCurrent.kind === "design" && crossesPhase && ruleAccepted &&
+    input.derived_planned_final_phase === undefined
   ) return invalid(input, from, to);
   const legalMovementFromCurrentCursor = legalMovement(input) || (
     crossesPhase && legalSettledDocumentProduceExitMovement(input)

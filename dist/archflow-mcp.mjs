@@ -37342,6 +37342,7 @@ var SEMANTIC_ACTION_KINDS = [
   "reopen",
   "open-waiver",
   "decide",
+  "refresh-milestone-baseline",
   "commit",
   "start-next-skill",
   "finish-task",
@@ -37364,6 +37365,7 @@ var SEMANTIC_SUBSTEPS = [
   "open-waiver",
   "decision-archive",
   "decision-settle",
+  "refresh-milestone-baseline",
   "start-next-skill",
   "finish-task"
 ];
@@ -40615,7 +40617,10 @@ var mcp_tools_schema_default = {
           },
           operation: {
             type: "string",
-            const: "planning_restart"
+            enum: [
+              "planning_restart",
+              "refresh_milestone_baseline"
+            ]
           },
           target_phase_instance: {
             $ref: "#/$defs/phase"
@@ -46275,6 +46280,9 @@ var task_state_schema_default = {
         config_digest: {
           $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
         },
+        milestone_baseline_commit: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+        },
         settled_at_revision: {
           type: "integer",
           minimum: 1,
@@ -47200,6 +47208,7 @@ var semantic_workflow_schema_default = {
             "reopen",
             "open-waiver",
             "decide",
+            "refresh-milestone-baseline",
             "commit",
             "start-next-skill",
             "finish-task",
@@ -49828,8 +49837,19 @@ var ruleSettlementV1Schema = external_exports.object({
   subject_digest: sha256Digest5,
   conclusion: ruleSettlementConclusionV1Schema,
   config_digest: sha256Digest5,
+  milestone_baseline_commit: gitOidV1Schema.optional(),
   settled_at_revision: positiveSafeInteger
-}).strict();
+}).strict().superRefine((settlement, context2) => {
+  if (settlement.milestone_baseline_commit === void 0) return;
+  const kind = decodePhaseInstance(settlement.phase_instance).kind;
+  if (settlement.conclusion.wait || kind !== "design" && kind !== "phase-design") {
+    context2.addIssue({
+      code: "custom",
+      path: ["milestone_baseline_commit"],
+      message: "milestone baseline is allowed only on a design or phase-design wait:false settlement"
+    });
+  }
+});
 var planningRestartRecordV1Schema = external_exports.object({
   restart_id: pathSafeIdV1Schema,
   source_phase_instance: phaseInstanceIdV1Schema,
@@ -50080,7 +50100,7 @@ var stateInputSchema = external_exports.object({
   status: external_exports.enum(["running", "succeeded", "failed"]),
   artifact: durableArtifact.optional(),
   human_revision: humanRevisionDeclarationSchema.optional(),
-  operation: external_exports.literal("planning_restart").optional(),
+  operation: external_exports.enum(["planning_restart", "refresh_milestone_baseline"]).optional(),
   target_phase_instance: phase2.optional(),
   reason: text3.optional(),
   ask_base_digest: digest7.optional()
@@ -50092,6 +50112,13 @@ var stateInputSchema = external_exports.object({
     if (input.artifact !== void 0 || input.human_revision !== void 0) context2.addIssue({ code: "custom", path: ["artifact"], message: "planning_restart cannot carry an artifact or human revision" });
     if (input.target_phase_instance === "prd" && input.ask_base_digest === void 0) context2.addIssue({ code: "custom", path: ["ask_base_digest"], message: "PRD planning_restart requires ask_base_digest" });
     if (input.target_phase_instance !== "prd" && input.ask_base_digest !== void 0) context2.addIssue({ code: "custom", path: ["ask_base_digest"], message: "ask_base_digest is PRD-only" });
+    return;
+  }
+  if (input.operation === "refresh_milestone_baseline") {
+    if (input.step !== "triage" || input.status !== "succeeded") context2.addIssue({ code: "custom", path: ["step"], message: "refresh_milestone_baseline requires triage/succeeded" });
+    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0) {
+      context2.addIssue({ code: "custom", path: ["operation"], message: "refresh_milestone_baseline carries no artifact, revision, restart target, reason, or ask digest" });
+    }
     return;
   }
   if (input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "restart fields require planning_restart" });
@@ -57195,6 +57222,17 @@ async function implementationOutputCommittedAtCurrentTarget(runner, output, cont
   }
   return await resolveCommit(runner, "HEAD") === headCommit && await resolveCommit(runner, context2.target_ref) === headCommit;
 }
+async function autonomousImplementationOutputCommittedAtCurrentTarget(runner, output, targetRef, commitMessage) {
+  return implementationOutputCommittedAtCurrentTarget(runner, output, {
+    target_ref: targetRef,
+    baseline_commit: output.base_commit,
+    commit_message: commitMessage,
+    paths: sortedUniquePaths(output),
+    diff_digest: output.diff_digest,
+    current_artifact_digests: Object.freeze([]),
+    parent_document_digests: Object.freeze(output.parent_documents.map((entry) => entry.content_digest).sort())
+  });
+}
 var observed = Object.freeze({ observed: true });
 function missed(reason2, paths) {
   return Object.freeze({
@@ -57268,6 +57306,78 @@ async function designArtifactCommittedAtCurrentTarget(runner, taskId, artifact, 
     return missed("task-tree-dirty", dirty.paths);
   }
   return await resolveCommit(runner, "HEAD") === head && await resolveCommit(runner, context2.target_ref) === head ? observed : missed("target-moved");
+}
+async function autonomousDesignArtifactCommittedAtCurrentTarget(runner, state, artifact, outputs, targetRef, baselineCommit, commitMessage, context2) {
+  if (!await approvedDesignWorktreeMatchesRetainedArtifact(runner, state.task_id, artifact, outputs, context2)) {
+    return missed("approved-document-mismatch");
+  }
+  const symbolicRef = await runner.runText({
+    argv: ["symbolic-ref", "--quiet", "HEAD"],
+    operation: "git-current-autonomous-design-target",
+    expectedAbsence: [{ code: 1, stderrIncludes: "" }]
+  });
+  if (targetRef === "HEAD" ? symbolicRef !== "" : symbolicRef !== targetRef) return missed("target-moved");
+  const head = await resolveCommit(runner, "HEAD");
+  if (await resolveCommit(runner, targetRef) !== head) return missed("target-moved");
+  const prefix = `.archflow/tasks/${state.task_id}/`;
+  const approvedPaths = [artifact.projection_target, ...(artifact.additional_documents ?? []).map((entry) => entry.projection_target)];
+  const approvedPathSet = new Set(approvedPaths);
+  const unauthorizedDocuments = (paths) => paths.filter((path2) => path2.startsWith(prefix) && isTaskDocumentPath(path2.slice(prefix.length)) && !approvedPathSet.has(path2));
+  if (head === baselineCommit) {
+    const pending = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
+    const unexpected = unauthorizedDocuments(pending.paths);
+    return unexpected.length === 0 ? missed("not-committed") : missed("unauthorized-task-document", unexpected);
+  }
+  if (await resolveCommit(runner, `${head}^`) !== baselineCommit) return missed("parent-not-baseline");
+  const message = await runner.runText({
+    argv: ["log", "-1", "--format=%s", head],
+    operation: "git-autonomous-design-commit-message"
+  });
+  if (message !== commitMessage) return missed("message-mismatch");
+  const changed = [...new Set(await runner.runNulFields({
+    argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", baselineCommit, head, "--"],
+    operation: "git-autonomous-design-commit-paths"
+  }))].sort(ordinal5);
+  if (changed.length === 0 || changed.some((path2) => !path2.startsWith(prefix))) return missed("paths-outside-task", changed);
+  if (!changed.includes(`${prefix}state.json`)) return missed("missing-recovery-authority");
+  for (const path2 of approvedPaths) {
+    const output = outputs.find((entry) => entry.path === path2);
+    if (output === void 0 || output.operation === "delete") return missed("approved-document-mismatch", [path2]);
+    const committed2 = await readCommitTreeBlob(runner, head, path2);
+    if (committed2?.mode !== output.after.mode || committed2.oid !== output.after.oid) {
+      return missed("approved-document-mismatch", [path2]);
+    }
+  }
+  const unauthorized = unauthorizedDocuments(changed);
+  if (unauthorized.length !== 0) return missed("unauthorized-task-document", unauthorized);
+  const committedState2 = await readCommitTreeBlob(runner, head, `${prefix}state.json`);
+  const expectedState = canonicalJsonBytes(state);
+  if (committedState2?.oid !== gitBlobOid(expectedState)) return missed("missing-recovery-authority");
+  const dirty = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
+  if (dirty.paths.length !== 0 || dirty.unrepresentable_count !== 0) return missed("task-tree-dirty", dirty.paths);
+  return await resolveCommit(runner, "HEAD") === head && await resolveCommit(runner, targetRef) === head ? observed : missed("target-moved");
+}
+async function approvedDesignWorktreeMatchesRetainedArtifact(runner, taskId, artifact, outputs, context2) {
+  if (artifact.task_id !== taskId) return false;
+  const approvedPaths = [
+    artifact.projection_target,
+    ...(artifact.additional_documents ?? []).map((entry) => entry.projection_target)
+  ];
+  for (const path2 of approvedPaths) {
+    const output = outputs.find((entry) => entry.path === path2);
+    if (output === void 0 || output.operation === "delete") return false;
+    const resolved = await resolveDeclaredOutputPath({
+      runner,
+      taskId: artifact.task_id,
+      claim: output.path,
+      pathClass: output.path_class,
+      context: context2
+    });
+    if (!resolved.ok) return false;
+    const live = await observePath(runner, resolved.value);
+    if (!sameIdentity(live.observation, output.after)) return false;
+  }
+  return true;
 }
 var ordinal5 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 function ownEnumerableData(value, key) {
@@ -59133,6 +59243,31 @@ async function loadApprovedDesignFinalPhase(dependencies, current, record3) {
     return issue2("STATE_INVALID", current, "approved-design-phase-count-invalid");
   }
 }
+async function loadAutonomousDesignFinalPhase(dependencies, current, subjectDigest) {
+  if (current.phase_instance !== "design") {
+    return issue2("STATE_INVALID", current, "autonomous-design-phase-count-wrong-position");
+  }
+  const reference = current.authoritative_results.find((entry) => entry.phase_instance === "design" && entry.step === "produce");
+  if (reference === void 0 || dependencies.load_retained_result === void 0) {
+    return issue2("STATE_INVALID", current, "autonomous-design-result-missing");
+  }
+  const retained = await dependencies.load_retained_result(reference);
+  if (!retained.ok) return retained;
+  const manifest = retained.value.prepared.manifest.value;
+  const artifact = manifest.source_artifact;
+  if (artifact.artifact_kind !== "document" || artifact.phase_instance !== "design" || artifact.step !== "produce" || artifact.document_path !== "design.md" || manifest.artifact_digest !== subjectDigest) {
+    return issue2("STATE_INVALID", current, "autonomous-design-authority-mismatch");
+  }
+  const payload = retained.value.prepared.payloads.find((candidate) => candidate.path === artifact.projection_target);
+  if (payload === void 0 || sha256Bytes(payload.bytes) !== artifact.content_digest) {
+    return issue2("STATE_INVALID", current, "autonomous-design-authority-mismatch");
+  }
+  try {
+    return ok6(plannedFinalPhaseFromDesign(payload.bytes));
+  } catch {
+    return issue2("STATE_INVALID", current, "autonomous-design-phase-count-invalid");
+  }
+}
 function plannedFinalPhaseFromRecordedPayloads(taskId, payloads, storedPlannedFinalPhase) {
   const designPath = `.archflow/tasks/${taskId}/design.md`;
   const recorded = payloads.find((payload) => payload.path === designPath);
@@ -59145,7 +59280,7 @@ function derivedFinalPhaseBelowCurrentPhase(derived, phaseInstance4) {
 }
 
 // src/state/transitions.ts
-import { isDeepStrictEqual as isDeepStrictEqual10 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual11 } from "node:util";
 
 // src/contracts/workflow.ts
 var phaseSchema2 = external_exports.object({
@@ -59253,8 +59388,270 @@ async function loadAuthenticatedGateApproval(dependencies, authority, approval) 
   return ok6(authenticated);
 }
 
-// src/state/transitions.ts
+// src/contracts/constitution.ts
+var frontmatterSchema = external_exports.object({
+  id: external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
+  version: external_exports.number().int().positive().safe(),
+  status: external_exports.enum(["active", "deprecated"]),
+  review_trigger: external_exports.string().min(1).regex(/\S/, "review_trigger must contain a non-whitespace character").optional(),
+  enforced_by: external_exports.array(external_exports.string().min(1).regex(/\S/, "enforced_by entries must contain a non-whitespace character")).min(1).optional()
+}).strict();
+var constitutionRuleV1Schema = frontmatterSchema.extend({ text: external_exports.string().min(1).regex(/\S/, "text must contain a non-whitespace character") }).strict();
+function parseConstitutionRuleV1(value) {
+  assertPlainJson(value, "constitution rule");
+  const parsed = constitutionRuleV1Schema.parse(value);
+  return {
+    id: parsed.id,
+    version: parsed.version,
+    status: parsed.status,
+    text: parsed.text,
+    ...parsed.review_trigger === void 0 ? {} : { review_trigger: parsed.review_trigger },
+    ...parsed.enforced_by === void 0 ? {} : { enforced_by: parsed.enforced_by }
+  };
+}
+function parseConstitutionRuleMarkdown(source, label) {
+  const normalized = source.replaceAll("\r\n", "\n");
+  if (!normalized.startsWith("---\n")) throw new Error(`${label}: expected opening YAML frontmatter delimiter`);
+  const close = normalized.indexOf("\n---\n", 4);
+  if (close < 0) throw new Error(`${label}: expected closing YAML frontmatter delimiter`);
+  const frontmatter = parseSingleYamlDocument(normalized.slice(4, close), `${label} frontmatter`);
+  const text4 = normalized.slice(close + 5).trim();
+  return parseConstitutionRuleV1({ ...frontmatter, text: text4 });
+}
+function registryFromRules(rules2) {
+  const registry2 = /* @__PURE__ */ new Map();
+  for (const candidate of rules2) {
+    const rule4 = parseConstitutionRuleV1(candidate);
+    if (registry2.has(rule4.id)) throw new Error(`Duplicate constitution rule id: ${rule4.id}`);
+    registry2.set(rule4.id, Object.freeze(rule4));
+  }
+  return registry2;
+}
+function parseConstitutionRuleFiles(files) {
+  return registryFromRules(Object.keys(files).sort().map((path2) => parseConstitutionRuleMarkdown(files[path2], path2)));
+}
+
+// src/state/constitution.ts
+var CONSTITUTION_DIRECTORY = ".archflow/constitution";
+var RULE_FILE = /^\.archflow\/constitution\/[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
+var decoder2 = new TextDecoder("utf-8", { fatal: true });
+var SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2 = Object.freeze([
+  Object.freeze({
+    id: "approved-design-before-code",
+    version: 2,
+    status: "active",
+    text: "Implementation starts only from a phase design that either passed its triggered human gate or advanced by rule after counter-review completed. The PRD, architecture, and phase design remain truthful as work proceeds; material deviations update the governing documents and re-enter the applicable review boundary before dependent work advances.",
+    review_trigger: "Implementation begins before the applicable phase design passed its triggered human gate or advanced by rule after counter-review completed, or implementation materially departs from approved architecture without updating and re-reviewing its governing plan.",
+    enforced_by: Object.freeze([])
+  }),
+  Object.freeze({
+    id: "explicit-human-authority",
+    version: 2,
+    status: "active",
+    text: "Required human decisions are explicit and bound to the exact artifact or code subject at gates opened by an approval rule or safety condition. Silence, elapsed time, agent prose, or a model verdict never supplies approval, waives a gate, or advances the workflow. Commits are not human-gated by default.",
+    review_trigger: "Authority over a gate opened by an approval rule or safety condition is inferred rather than explicitly recorded by a human for the exact subject.",
+    enforced_by: Object.freeze([])
+  })
+]);
+var authenticResolvedConstitutions = /* @__PURE__ */ new WeakSet();
+var authenticRuleAcceptancePolicies = /* @__PURE__ */ new WeakSet();
+function assertResolvedConstitution(value) {
+  if (value === null || typeof value !== "object" || !authenticResolvedConstitutions.has(value)) {
+    throw new TypeError("an authentic resolved constitution is required");
+  }
+}
+function normalizedSelectedRule(rule4) {
+  return Object.freeze({
+    id: rule4.id,
+    version: rule4.version,
+    status: "active",
+    text: rule4.text,
+    review_trigger: rule4.review_trigger ?? "",
+    enforced_by: Object.freeze([...new Set(rule4.enforced_by ?? [])].sort())
+  });
+}
+function authenticateRuleAcceptancePolicy(state, constitution) {
+  assertResolvedConstitution(constitution);
+  if (constitution.policy_base_commit !== state.policy_base_commit || constitution.digest !== state.constitution_digest) return void 0;
+  const selected = SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2.map(({ id: id6 }) => constitution.rules.get(id6));
+  if (selected.some((rule4) => rule4 === void 0 || rule4.status !== "active")) return void 0;
+  const normalized = selected.map((rule4) => normalizedSelectedRule(rule4)).sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+  if (canonicalJsonDigest(normalized) !== canonicalJsonDigest(SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2)) {
+    return void 0;
+  }
+  const policy = Object.freeze({
+    task_id: state.task_id,
+    policy_base_commit: state.policy_base_commit,
+    constitution_digest: state.constitution_digest
+  });
+  authenticRuleAcceptancePolicies.add(policy);
+  return policy;
+}
+function assertAuthenticatedRuleAcceptancePolicy(value) {
+  if (value === null || typeof value !== "object" || !authenticRuleAcceptancePolicies.has(value)) {
+    throw new TypeError("an authenticated rule acceptance policy is required");
+  }
+}
+function immutableRegistry(rules2) {
+  const entries = [...rules2].map(([id6, rule4]) => {
+    const frozenRule = Object.freeze({
+      ...rule4,
+      ...rule4.enforced_by === void 0 ? {} : { enforced_by: Object.freeze([...rule4.enforced_by]) }
+    });
+    return Object.freeze([id6, frozenRule]);
+  });
+  const backing = new Map(entries);
+  let registry2;
+  registry2 = Object.freeze({
+    get size() {
+      return backing.size;
+    },
+    has: (key) => backing.has(key),
+    get: (key) => backing.get(key),
+    entries: () => backing.entries(),
+    keys: () => backing.keys(),
+    values: () => backing.values(),
+    [Symbol.iterator]: () => backing[Symbol.iterator](),
+    forEach: (callback, thisArg) => backing.forEach((value, key) => callback.call(thisArg, value, key, registry2))
+  });
+  return registry2;
+}
 var ok7 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail9 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+async function readConstitutionTreeFiles(runner, commit) {
+  const listed = await readCommitTreeEntries(runner, commit, CONSTITUTION_DIRECTORY);
+  return Object.freeze(listed.filter((entry) => RULE_FILE.test(entry.path)).map((entry) => Object.freeze({
+    path: parseRepositoryPathClaim(entry.path),
+    oid: parseGitOid(entry.oid)
+  })).sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
+}
+function invalidPolicyBase(policyBaseCommit, observed2) {
+  const expected = canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "policy-base-commit",
+    commit: policyBaseCommit
+  });
+  return createProjectError("POLICY_BASE_INVALID", {
+    expected_digest: expected,
+    ...observed2 === void 0 ? {} : { observed_digest: observed2 }
+  });
+}
+async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
+  try {
+    const selected = await readConstitutionTreeFiles(runner, policyBaseCommit);
+    if (selected.length === 0) return fail9(invalidPolicyBase(policyBaseCommit));
+    const sources = {};
+    for (const file2 of selected) {
+      sources[file2.path] = decoder2.decode(await readGitBlobBytes(runner, file2.oid));
+    }
+    let rules2;
+    try {
+      rules2 = parseConstitutionRuleFiles(sources);
+    } catch {
+      return fail9(invalidPolicyBase(policyBaseCommit));
+    }
+    if (rules2.size === 0) return fail9(invalidPolicyBase(policyBaseCommit));
+    const resolved = Object.freeze({
+      policy_base_commit: policyBaseCommit,
+      digest: computePinnedConstitutionDigest(selected),
+      rules: immutableRegistry(rules2),
+      files: Object.freeze(selected.map((file2) => Object.freeze({ ...file2 })))
+    });
+    authenticResolvedConstitutions.add(resolved);
+    return ok7(resolved);
+  } catch (error51) {
+    if (error51 instanceof GitInvocationError) {
+      return fail9(projectErrorForGitFailure(error51, runner, context2));
+    }
+    if (error51 instanceof TypeError || error51 instanceof RangeError) {
+      return fail9(invalidPolicyBase(policyBaseCommit));
+    }
+    throw error51;
+  }
+}
+var PINNED_WORKFLOW_PATH = parseRepositoryPathClaim(".archflow/workflow.yaml");
+
+// src/state/restart-authority.ts
+import { isDeepStrictEqual as isDeepStrictEqual10 } from "node:util";
+function compareWorkflowPositions(left, right) {
+  return comparePhaseInstances(left, right);
+}
+function latestRestartRevisionAffectingPhase(state, authorityPhase) {
+  let latest;
+  for (const restart of state.restart_history ?? []) {
+    if (compareWorkflowPositions(restart.target_phase_instance, authorityPhase) > 0) continue;
+    if (latest === void 0 || restart.restarted_at_revision > latest) {
+      latest = restart.restarted_at_revision;
+    }
+  }
+  return latest;
+}
+function approvalIsEligibleAfterLatestRestart(state, approval, authorityPhase) {
+  const cutoff = latestRestartRevisionAffectingPhase(state, authorityPhase);
+  return cutoff === void 0 || approval.resolved_at_revision > cutoff;
+}
+function ruleSettlementIsEligibleAfterLatestRestart(state, settlement, authorityPhase) {
+  const cutoff = latestRestartRevisionAffectingPhase(state, authorityPhase);
+  return cutoff === void 0 || settlement.settled_at_revision > cutoff;
+}
+function latestEligibleRuleSettlement(state, subjectDigest, authorityPhase) {
+  return [...state.rule_settlements ?? []].filter((settlement) => settlement.phase_instance === authorityPhase && settlement.subject_digest === subjectDigest && ruleSettlementIsEligibleAfterLatestRestart(state, settlement, authorityPhase)).sort((left, right) => right.settled_at_revision - left.settled_at_revision)[0];
+}
+function acceptedNoWaitSettlement(policy, state, subjectDigest, producerPhase) {
+  assertAuthenticatedRuleAcceptancePolicy(policy);
+  if (policy.task_id !== state.task_id || policy.policy_base_commit !== state.policy_base_commit || policy.constitution_digest !== state.constitution_digest) return void 0;
+  const settlement = latestEligibleRuleSettlement(state, subjectDigest, producerPhase);
+  return settlement?.conclusion.wait === false ? settlement : void 0;
+}
+function approvalRequestAuthorityPhase(authenticated) {
+  return authenticated.request.phase_instance;
+}
+function authenticatedApprovalIsEligibleAfterLatestRestart(state, authenticated, authorityPhase = approvalRequestAuthorityPhase(authenticated)) {
+  return approvalIsEligibleAfterLatestRestart(state, authenticated.approval, authorityPhase);
+}
+function isExactPlanningRestartDraft(current, next) {
+  if (current.terminal !== void 0 || current.open_gate !== void 0 || next.open_gate !== void 0) return false;
+  const previous = current.restart_history ?? [];
+  const following = next.restart_history ?? [];
+  if (following.length !== previous.length + 1) return false;
+  const previousById = new Map(previous.map((record3) => [record3.restart_id, record3]));
+  const additions = following.filter((record3) => !previousById.has(record3.restart_id));
+  if (additions.length !== 1 || previous.some((record3) => !isDeepStrictEqual10(record3, following.find((candidate) => candidate.restart_id === record3.restart_id)))) return false;
+  const restart = additions[0];
+  if (restart.source_phase_instance !== current.phase_instance || restart.target_phase_instance !== next.phase_instance || restart.restarted_at_revision !== current.revision + 1 || restart.reason.trim() === "" || comparePhaseInstances(restart.target_phase_instance, current.phase_instance) >= 0 || decodePhaseInstance(restart.target_phase_instance).kind === "phase-impl" || next.step !== "produce" || next.status !== "running" || next.attempt !== 1 || !isDeepStrictEqual10(restart.cleared_waivers, current.waivers) || next.waivers.length !== 0 || !isDeepStrictEqual10(restart.cleared_pending_human_revision, current.pending_human_revision) || next.pending_human_revision !== void 0 || !isDeepStrictEqual10(next.approvals, current.approvals)) return false;
+  const retained = current.authoritative_results.filter((reference) => comparePhaseInstances(reference.phase_instance, restart.target_phase_instance) < 0);
+  const superseded = current.authoritative_results.filter((reference) => comparePhaseInstances(reference.phase_instance, restart.target_phase_instance) >= 0);
+  if (!isDeepStrictEqual10(next.authoritative_results, retained) || !isDeepStrictEqual10(restart.superseded_results, superseded)) return false;
+  const targetKind = decodePhaseInstance(restart.target_phase_instance).kind;
+  if (targetKind === "prd" || targetKind === "design" ? next.planned_final_phase !== void 0 : next.planned_final_phase !== current.planned_final_phase) return false;
+  const {
+    revision: _revision,
+    last_transition: _lastTransition,
+    pending_human_revision: _pendingHumanRevision,
+    planned_final_phase: plannedFinalPhase,
+    ...preserved
+  } = current;
+  const expectedHistory = Object.freeze(
+    [...previous, restart].sort((left, right) => left.restart_id.localeCompare(right.restart_id))
+  );
+  if (!isDeepStrictEqual10(following, expectedHistory)) return false;
+  const expected = {
+    ...preserved,
+    phase_instance: restart.target_phase_instance,
+    step: "produce",
+    status: "running",
+    attempt: 1,
+    input_fingerprint: next.input_fingerprint,
+    authoritative_results: retained,
+    waivers: [],
+    restart_history: expectedHistory,
+    ...targetKind === "prd" || targetKind === "design" || plannedFinalPhase === void 0 ? {} : { planned_final_phase: plannedFinalPhase }
+  };
+  return isDeepStrictEqual10(next, expected);
+}
+
+// src/state/transitions.ts
+var ok8 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function restartInvalid(input, issue4) {
   void issue4;
   return Object.freeze({
@@ -59300,7 +59697,7 @@ function planPlanningRestart(value) {
     planned_final_phase: plannedFinalPhase,
     ...preserved
   } = current;
-  return ok7(Object.freeze({
+  return ok8(Object.freeze({
     ...preserved,
     phase_instance: input.target_phase_instance,
     step: "produce",
@@ -59467,7 +59864,7 @@ function pendingHumanRevisionMatches(input) {
   if (input.current.attempt !== pending.attempt) return false;
   if (input.target.status !== "succeeded") return declaration === void 0;
   if (declaration === void 0 || input.result_reference === void 0 || input.resulting_subject_digest === void 0 || input.resulting_subject_digest === pending.predecessor_subject_digest) return false;
-  return pending.evidence.every((expected) => input.current.authoritative_results.some((observed2) => isDeepStrictEqual10(expected, observed2)));
+  return pending.evidence.every((expected) => input.current.authoritative_results.some((observed2) => isDeepStrictEqual11(expected, observed2)));
 }
 function withResultReference(current, reference) {
   if (reference === void 0) return current;
@@ -59487,14 +59884,34 @@ function hasAuthenticatedCommittedOutput(input) {
     assertAuthenticatedGateApproval(authenticated);
     if (authenticated.approval.gate_kind === "commit-authorization" && authenticated.approval.subject_digest === input.completion_subject_digest && authenticated.request.kind === "commit-authorization" && authenticated.request.phase_instance === input.current.phase_instance && authenticated.request.subject_digest === input.completion_subject_digest) return true;
   }
-  return false;
+  return hasAuthenticatedRuleAcceptance(input);
+}
+function hasAuthenticatedRuleAcceptance(input) {
+  const accepted = input.authenticated_rule_acceptance;
+  const digest9 = input.completion_subject_digest;
+  if (accepted === void 0 || digest9 === void 0) return false;
+  assertAuthenticatedRuleAcceptancePolicy(accepted.policy);
+  const settlement = acceptedNoWaitSettlement(
+    accepted.policy,
+    input.current,
+    digest9,
+    input.current.phase_instance
+  );
+  return settlement !== void 0 && isDeepStrictEqual11(settlement, accepted.settlement);
 }
 function planStateTransition(value) {
-  const { authenticated_gate_approvals: authenticatedApprovals, ...plainValue } = value;
+  const {
+    authenticated_gate_approvals: authenticatedApprovals,
+    authenticated_rule_acceptance: authenticatedRuleAcceptance,
+    ...plainValue
+  } = value;
   assertPlainJson(plainValue, "transition plan input");
   const input = {
     ...structuredClone(plainValue),
-    ...authenticatedApprovals === void 0 ? {} : { authenticated_gate_approvals: authenticatedApprovals }
+    ...authenticatedApprovals === void 0 ? {} : { authenticated_gate_approvals: authenticatedApprovals },
+    ...authenticatedRuleAcceptance === void 0 ? {} : {
+      authenticated_rule_acceptance: authenticatedRuleAcceptance
+    }
   };
   const from = `${input.current.step}-${input.current.status}`;
   const to = `${input.target.step}-${input.target.status}`;
@@ -59506,18 +59923,20 @@ function planStateTransition(value) {
     return invalid(input, from, to);
   }
   const committedOutput = hasAuthenticatedCommittedOutput(input);
+  const ruleAccepted = hasAuthenticatedRuleAcceptance(input);
   const decodedCurrent = decodePhaseInstance(input.current.phase_instance);
   const crossesPhase = input.target.phase_instance !== input.current.phase_instance;
   const completesFinalPhase = committedOutput && decodedCurrent.kind === "phase-impl" && input.current.planned_final_phase !== void 0 && Number(decodedCurrent.phase) === Number(input.current.planned_final_phase) && input.target.phase_instance === input.current.phase_instance && input.target.step === input.current.step && input.target.status === input.current.status && input.target.attempt === input.current.attempt && input.target.input_fingerprint === input.current.input_fingerprint;
   if (completesFinalPhase) {
     const { revision: _revision2, last_transition: _transition2, ...preserved2 } = input.current;
-    return ok7(Object.freeze({ ...preserved2, terminal: "complete" }));
+    return ok8(Object.freeze({ ...preserved2, terminal: "complete" }));
   }
   if (decodedCurrent.kind === "phase-impl" && input.current.step === "triage" && input.current.status === "succeeded" && input.target.phase_instance !== input.current.phase_instance && !committedOutput) return invalid(input, from, to);
-  if (decodedCurrent.kind !== "phase-impl" && crossesPhase && !hasAuthenticatedArtifactApproval(input) && // An accepted migration audit is the design phase's exit authority for a legacy import: the
+  if (decodedCurrent.kind !== "phase-impl" && crossesPhase && !hasAuthenticatedArtifactApproval(input) && !ruleAccepted && // An accepted migration audit is the design phase's exit authority for a legacy import: the
   // same authenticated approval legalMovement's design-jump rule settles on.
   !(decodedCurrent.kind === "design" && hasAuthenticatedMigrationAudit(input))) return invalid(input, from, to);
-  if ((decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") && crossesPhase && hasAuthenticatedCombinedDesignApproval(input) && input.commit_observed !== true) return invalid(input, from, to);
+  if ((decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") && crossesPhase && (hasAuthenticatedCombinedDesignApproval(input) || ruleAccepted) && input.commit_observed !== true) return invalid(input, from, to);
+  if (decodedCurrent.kind === "design" && crossesPhase && ruleAccepted && input.derived_planned_final_phase === void 0) return invalid(input, from, to);
   const legalMovementFromCurrentCursor = legalMovement(input) || crossesPhase && legalSettledDocumentProduceExitMovement(input);
   if (!legalMovementFromCurrentCursor || !artifactMatches(input) || !resultReferenceMatches(input) || !constitutionReferenceMatches(input) || !pendingHumanRevisionMatches(input)) {
     return invalid(input, from, to);
@@ -59573,89 +59992,14 @@ function planStateTransition(value) {
     ...plannedFinalPhase === void 0 || plannedFinalPhase === null ? {} : { planned_final_phase: parseSafeInteger(plannedFinalPhase) },
     ...ruleSettlements === void 0 ? {} : { rule_settlements: ruleSettlements }
   });
-  if (input.result_reference === void 0 && input.constitution_result_reference === void 0 && !isDeepStrictEqual10(draft.authoritative_results, input.current.authoritative_results)) {
+  if (input.result_reference === void 0 && input.constitution_result_reference === void 0 && !isDeepStrictEqual11(draft.authoritative_results, input.current.authoritative_results)) {
     throw new TypeError("transition planning changed authoritative results");
   }
-  return ok7(draft);
+  return ok8(draft);
 }
 
 // src/state/produce-subject.ts
 import { readFile as readFile2 } from "node:fs/promises";
-
-// src/state/restart-authority.ts
-import { isDeepStrictEqual as isDeepStrictEqual11 } from "node:util";
-function compareWorkflowPositions(left, right) {
-  return comparePhaseInstances(left, right);
-}
-function latestRestartRevisionAffectingPhase(state, authorityPhase) {
-  let latest;
-  for (const restart of state.restart_history ?? []) {
-    if (compareWorkflowPositions(restart.target_phase_instance, authorityPhase) > 0) continue;
-    if (latest === void 0 || restart.restarted_at_revision > latest) {
-      latest = restart.restarted_at_revision;
-    }
-  }
-  return latest;
-}
-function approvalIsEligibleAfterLatestRestart(state, approval, authorityPhase) {
-  const cutoff = latestRestartRevisionAffectingPhase(state, authorityPhase);
-  return cutoff === void 0 || approval.resolved_at_revision > cutoff;
-}
-function ruleSettlementIsEligibleAfterLatestRestart(state, settlement, authorityPhase) {
-  const cutoff = latestRestartRevisionAffectingPhase(state, authorityPhase);
-  return cutoff === void 0 || settlement.settled_at_revision > cutoff;
-}
-function latestEligibleRuleSettlement(state, subjectDigest, authorityPhase) {
-  return [...state.rule_settlements ?? []].filter((settlement) => settlement.phase_instance === authorityPhase && settlement.subject_digest === subjectDigest && ruleSettlementIsEligibleAfterLatestRestart(state, settlement, authorityPhase)).sort((left, right) => right.settled_at_revision - left.settled_at_revision)[0];
-}
-function approvalRequestAuthorityPhase(authenticated) {
-  return authenticated.request.phase_instance;
-}
-function authenticatedApprovalIsEligibleAfterLatestRestart(state, authenticated, authorityPhase = approvalRequestAuthorityPhase(authenticated)) {
-  return approvalIsEligibleAfterLatestRestart(state, authenticated.approval, authorityPhase);
-}
-function isExactPlanningRestartDraft(current, next) {
-  if (current.terminal !== void 0 || current.open_gate !== void 0 || next.open_gate !== void 0) return false;
-  const previous = current.restart_history ?? [];
-  const following = next.restart_history ?? [];
-  if (following.length !== previous.length + 1) return false;
-  const previousById = new Map(previous.map((record3) => [record3.restart_id, record3]));
-  const additions = following.filter((record3) => !previousById.has(record3.restart_id));
-  if (additions.length !== 1 || previous.some((record3) => !isDeepStrictEqual11(record3, following.find((candidate) => candidate.restart_id === record3.restart_id)))) return false;
-  const restart = additions[0];
-  if (restart.source_phase_instance !== current.phase_instance || restart.target_phase_instance !== next.phase_instance || restart.restarted_at_revision !== current.revision + 1 || restart.reason.trim() === "" || comparePhaseInstances(restart.target_phase_instance, current.phase_instance) >= 0 || decodePhaseInstance(restart.target_phase_instance).kind === "phase-impl" || next.step !== "produce" || next.status !== "running" || next.attempt !== 1 || !isDeepStrictEqual11(restart.cleared_waivers, current.waivers) || next.waivers.length !== 0 || !isDeepStrictEqual11(restart.cleared_pending_human_revision, current.pending_human_revision) || next.pending_human_revision !== void 0 || !isDeepStrictEqual11(next.approvals, current.approvals)) return false;
-  const retained = current.authoritative_results.filter((reference) => comparePhaseInstances(reference.phase_instance, restart.target_phase_instance) < 0);
-  const superseded = current.authoritative_results.filter((reference) => comparePhaseInstances(reference.phase_instance, restart.target_phase_instance) >= 0);
-  if (!isDeepStrictEqual11(next.authoritative_results, retained) || !isDeepStrictEqual11(restart.superseded_results, superseded)) return false;
-  const targetKind = decodePhaseInstance(restart.target_phase_instance).kind;
-  if (targetKind === "prd" || targetKind === "design" ? next.planned_final_phase !== void 0 : next.planned_final_phase !== current.planned_final_phase) return false;
-  const {
-    revision: _revision,
-    last_transition: _lastTransition,
-    pending_human_revision: _pendingHumanRevision,
-    planned_final_phase: plannedFinalPhase,
-    ...preserved
-  } = current;
-  const expectedHistory = Object.freeze(
-    [...previous, restart].sort((left, right) => left.restart_id.localeCompare(right.restart_id))
-  );
-  if (!isDeepStrictEqual11(following, expectedHistory)) return false;
-  const expected = {
-    ...preserved,
-    phase_instance: restart.target_phase_instance,
-    step: "produce",
-    status: "running",
-    attempt: 1,
-    input_fingerprint: next.input_fingerprint,
-    authoritative_results: retained,
-    waivers: [],
-    restart_history: expectedHistory,
-    ...targetKind === "prd" || targetKind === "design" || plannedFinalPhase === void 0 ? {} : { planned_final_phase: plannedFinalPhase }
-  };
-  return isDeepStrictEqual11(next, expected);
-}
-
-// src/state/produce-subject.ts
 var fatalUtf8 = new TextDecoder("utf-8", { fatal: true });
 function expectedProduceUpstreamBindings(state) {
   const phase3 = decodePhaseInstance(state.phase_instance);
@@ -59677,7 +60021,7 @@ function expectedProduceUpstreamBindings(state) {
   ]);
 }
 async function loadProduceUpstreamSubject(dependencies, authority, state, binding) {
-  const approvedOwners = [];
+  const candidateOwners = [];
   let retainedOwnerExists = false;
   const loadManifest = dependencies.load_retained_manifest;
   if (loadManifest !== void 0) {
@@ -59689,16 +60033,32 @@ async function loadProduceUpstreamSubject(dependencies, authority, state, bindin
       const artifact2 = manifest.source_artifact;
       const ownsPath = artifact2.artifact_kind === "document" && documentProjectionDescriptors(artifact2).some((entry) => entry.document_path === binding.path);
       if (ownsPath) retainedOwnerExists = true;
-      if (artifact2.artifact_kind !== "document" || canonicalJsonDigest(artifact2) !== manifest.artifact_digest || !ownsPath || !state.approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === manifest.artifact_digest && approvalIsEligibleAfterLatestRestart(state, approval, artifact2.phase_instance))) continue;
-      approvedOwners.push(Object.freeze({
+      if (artifact2.artifact_kind !== "document" || canonicalJsonDigest(artifact2) !== manifest.artifact_digest || !ownsPath) continue;
+      candidateOwners.push(Object.freeze({
         reference,
         artifact: artifact2,
         artifact_digest: manifest.artifact_digest,
         measured_at_revision: manifest.accounting.measured_at_revision,
-        retained: retained.value
+        retained: retained.value,
+        human_approved: state.approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === manifest.artifact_digest && approvalIsEligibleAfterLatestRestart(state, approval, artifact2.phase_instance))
       }));
     }
   }
+  let settlementPolicy;
+  if (candidateOwners.some((candidate) => !candidate.human_approved) && state.policy_base_commit !== void 0 && state.constitution_digest !== void 0) {
+    const constitution = await resolvePinnedConstitution(
+      dependencies.runner,
+      state.policy_base_commit,
+      authority.context
+    );
+    settlementPolicy = constitution.ok ? authenticateRuleAcceptancePolicy(state, constitution.value) : void 0;
+  }
+  const approvedOwners = candidateOwners.filter((candidate) => candidate.human_approved || settlementPolicy !== void 0 && acceptedNoWaitSettlement(
+    settlementPolicy,
+    state,
+    candidate.artifact_digest,
+    candidate.artifact.phase_instance
+  ) !== void 0);
   approvedOwners.sort((left, right) => right.measured_at_revision - left.measured_at_revision);
   const owner = approvedOwners[0];
   if (owner !== void 0) {
@@ -59713,28 +60073,28 @@ async function loadProduceUpstreamSubject(dependencies, authority, state, bindin
       })
     });
   }
-  if (retainedOwnerExists) return fail9(state.phase_instance, "upstream-approval-missing");
+  if (retainedOwnerExists) return fail10(state.phase_instance, "upstream-approval-missing");
   const initialization = await loadLegacyImportInitialization(
     dependencies,
     authority,
     state
   );
   if (!initialization.ok || initialization.value === void 0) {
-    return fail9(state.phase_instance, "current-upstream-produce-result-missing");
+    return fail10(state.phase_instance, "current-upstream-produce-result-missing");
   }
   const destination = `.archflow/tasks/${state.task_id}/${binding.path}`;
   const mapping = initialization.value.mapping.find((entry) => entry.destination_path === destination);
   const staged = mapping === void 0 ? void 0 : initialization.value.staged_payload_refs.find((entry) => entry.legacy_path === mapping.legacy_path);
-  if (mapping === void 0 || staged === void 0) return fail9(state.phase_instance, "current-upstream-import-missing");
+  if (mapping === void 0 || staged === void 0) return fail10(state.phase_instance, "current-upstream-import-missing");
   const target2 = await resolveTaskPath({ runner: dependencies.runner, taskId: authority.task_id, claim: binding.path, context: authority.context });
   if (!target2.ok) return target2;
   let bytes;
   try {
     bytes = new Uint8Array(await readFile2(target2.value.absolute));
   } catch {
-    return fail9(state.phase_instance, "current-upstream-import-unavailable");
+    return fail10(state.phase_instance, "current-upstream-import-unavailable");
   }
-  if (sha256Bytes(bytes) !== staged.digest) return fail9(state.phase_instance, "current-upstream-import-changed");
+  if (sha256Bytes(bytes) !== staged.digest) return fail10(state.phase_instance, "current-upstream-import-changed");
   const artifact = Object.freeze({
     schema_version: "1",
     artifact_kind: "document",
@@ -59760,7 +60120,7 @@ async function loadProduceUpstreamSubject(dependencies, authority, state, bindin
     })
   });
 }
-var fail9 = (phase3, issue_code) => Object.freeze({
+var fail10 = (phase3, issue_code) => Object.freeze({
   schema_version: "1",
   ok: false,
   error: createProjectError("STATE_INVALID", { phase_instance: phase3, issue_code })
@@ -59768,17 +60128,17 @@ var fail9 = (phase3, issue_code) => Object.freeze({
 async function loadCurrentProduceSubject(dependencies, state) {
   const reference = [...state.authoritative_results].reverse().find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "produce");
   if (reference === void 0 || dependencies.load_retained_manifest === void 0) {
-    return fail9(state.phase_instance, "current-produce-result-missing");
+    return fail10(state.phase_instance, "current-produce-result-missing");
   }
   const retained = await dependencies.load_retained_manifest(reference);
   if (!retained.ok) return retained;
   const manifest = retained.value.manifest.value;
   const artifact = manifest.source_artifact;
   if (artifact.artifact_kind !== "document" && artifact.artifact_kind !== "implementation-output") {
-    return fail9(state.phase_instance, "current-produce-artifact-invalid");
+    return fail10(state.phase_instance, "current-produce-artifact-invalid");
   }
   if (canonicalJsonDigest(artifact) !== manifest.artifact_digest) {
-    return fail9(state.phase_instance, "current-produce-artifact-digest-mismatch");
+    return fail10(state.phase_instance, "current-produce-artifact-digest-mismatch");
   }
   return Object.freeze({
     schema_version: "1",
@@ -59817,16 +60177,16 @@ async function readProduceProjection(runner, authority, subject, artifactPath) {
   });
   if (!target2.ok) return target2;
   const retainedDigest = "imported_projection" in subject ? subject.imported_projection.path === artifactPath ? subject.imported_projection.content_digest : void 0 : subject.artifact.artifact_kind === "implementation-output" ? subject.artifact.parent_documents.find((candidate) => candidate.document_path === artifactPath)?.content_digest : documentProjectionDescriptors(subject.artifact).find((candidate) => candidate.document_path === artifactPath)?.content_digest;
-  if (retainedDigest === void 0) return fail9(authority.context.phase_instance, "produce-projection-not-retained");
+  if (retainedDigest === void 0) return fail10(authority.context.phase_instance, "produce-projection-not-retained");
   let bytes;
   try {
     bytes = new Uint8Array(await readFile2(target2.value.absolute));
   } catch {
-    return fail9(authority.context.phase_instance, "produce-projection-unavailable");
+    return fail10(authority.context.phase_instance, "produce-projection-unavailable");
   }
   const digest9 = sha256Bytes(bytes);
   if (digest9 !== retainedDigest) {
-    return fail9(authority.context.phase_instance, "produce-projection-not-current");
+    return fail10(authority.context.phase_instance, "produce-projection-not-current");
   }
   return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ path: artifactPath, bytes, digest: digest9 }) });
 }
@@ -60011,7 +60371,7 @@ function reconcileCurrentAuthority(value) {
 import { constants as fsConstants4 } from "node:fs";
 import { lstat as lstat6, readdir as readdir2, readlink as readlink3 } from "node:fs/promises";
 import { join as join4 } from "node:path";
-var ok8 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok9 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var stateInvalid2 = (authority, issueCode) => Object.freeze({
   schema_version: "1",
   ok: false,
@@ -60144,7 +60504,7 @@ async function discoverNewestProjections(dependencies, authority, state) {
         }
       }
     }
-    return ok8(newest);
+    return ok9(newest);
   } catch {
     return ioFailure(authority, "discover-reconciliation-projections");
   }
@@ -60168,7 +60528,7 @@ async function discoverProjections(dependencies, authority, state) {
         committedAbsent.push(observation.projection.path);
       }
     }
-    return ok8(Object.freeze({
+    return ok9(Object.freeze({
       recorded: Object.freeze(recorded),
       current: Object.freeze(current),
       unrestorable: Object.freeze(unrestorable),
@@ -60188,7 +60548,7 @@ async function committedAtHead(dependencies, authority, path2) {
 }
 async function discoverGateHead(dependencies, authority, state) {
   const open6 = state.value.open_gate;
-  if (open6 === void 0) return ok8(Object.freeze({}));
+  if (open6 === void 0) return ok9(Object.freeze({}));
   const requestPath = await resolveTaskPath({
     runner: dependencies.runner,
     taskId: authority.task_id,
@@ -60198,19 +60558,19 @@ async function discoverGateHead(dependencies, authority, state) {
   });
   if (!requestPath.ok) return requestPath;
   const request = await readCanonical2(requestPath.value, "gate request", parsePersistedGateRequest);
-  if (request === "missing") return ok8(Object.freeze({ blocker: "active-gate-request-missing" }));
-  if (request === "invalid") return ok8(Object.freeze({ blocker: "active-gate-request-invalid" }));
+  if (request === "missing") return ok9(Object.freeze({ blocker: "active-gate-request-missing" }));
+  if (request === "invalid") return ok9(Object.freeze({ blocker: "active-gate-request-invalid" }));
   try {
     if (request.value.gate_id !== open6.gate_id || request.value.subject_digest !== open6.subject_digest || request.value.context_digest !== open6.context_digest) {
-      return ok8(Object.freeze({ blocker: "active-gate-request-mismatch" }));
+      return ok9(Object.freeze({ blocker: "active-gate-request-mismatch" }));
     }
-    return ok8(Object.freeze({ head: Object.freeze({
+    return ok9(Object.freeze({ head: Object.freeze({
       gate_id: request.value.gate_id,
       subject_digest: request.value.subject_digest,
       context_digest: request.value.context_digest
     }) }));
   } catch {
-    return ok8(Object.freeze({ blocker: "active-gate-request-mismatch" }));
+    return ok9(Object.freeze({ blocker: "active-gate-request-mismatch" }));
   }
 }
 async function discoverIntent(dependencies, authority, state) {
@@ -60218,7 +60578,7 @@ async function discoverIntent(dependencies, authority, state) {
   try {
     names = await readdir2(join4(authority.workspace_root, "transient", "intents"));
   } catch (error51) {
-    if (error51.code === "ENOENT") return ok8(Object.freeze({}));
+    if (error51.code === "ENOENT") return ok9(Object.freeze({}));
     return ioFailure(authority, "discover-reconciliation-intents");
   }
   const candidates = [];
@@ -60240,10 +60600,10 @@ async function discoverIntent(dependencies, authority, state) {
     candidates.push(receipt2);
   }
   if (candidates.length > 1) {
-    return ok8(Object.freeze({ blocker: "retained-receipt-ambiguity" }));
+    return ok9(Object.freeze({ blocker: "retained-receipt-ambiguity" }));
   }
   const receipt = candidates[0];
-  return receipt === void 0 ? ok8(Object.freeze({})) : ok8(Object.freeze({ intent: Object.freeze({ request_digest: receipt.value.request_digest, receipt }) }));
+  return receipt === void 0 ? ok9(Object.freeze({})) : ok9(Object.freeze({ intent: Object.freeze({ request_digest: receipt.value.request_digest, receipt }) }));
 }
 async function discoverReconciliationInput(dependencies, authority, state) {
   assertInternalTransactionAuthority(authority, dependencies);
@@ -60254,7 +60614,7 @@ async function discoverReconciliationInput(dependencies, authority, state) {
   const intent = await discoverIntent(dependencies, authority, state);
   if (!intent.ok) return intent;
   const blockers = [gate.value.blocker, intent.value.blocker].filter((value) => value !== void 0);
-  return ok8(Object.freeze({
+  return ok9(Object.freeze({
     state,
     recorded_projections: projections.value.recorded,
     current_projections: projections.value.current,
@@ -60293,7 +60653,7 @@ function retainedResultDigests(state) {
 }
 
 // src/state/workspace-cleanup.ts
-var ok9 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok10 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function io2(authority, operation) {
   return Object.freeze({
     schema_version: "1",
@@ -60570,7 +60930,7 @@ async function inspectWorkspaceCleanup(dependencies, authority, state) {
         removableBytes += entry.byte_count;
       }
     }
-    return ok9(Object.freeze({
+    return ok10(Object.freeze({
       removed_files: parseSafeInteger(0),
       removed_bytes: parseSafeInteger(0),
       retained_files: parseSafeInteger(retainedFiles),
@@ -60616,7 +60976,7 @@ async function cleanTaskWorkspace(dependencies, authority, state) {
     ]));
     await removeEmptyDirectories(join5(authority.task_root, "authority", "results"));
     await removeEmptyDirectories(join5(authority.task_root, "authority", "decisions"));
-    return ok9(Object.freeze({
+    return ok10(Object.freeze({
       removed_files: parseSafeInteger(removedFiles),
       removed_bytes: parseSafeInteger(removedBytes),
       retained_files: parseSafeInteger(retainedFiles),
@@ -60666,7 +61026,7 @@ async function cleanTerminalTaskWorkspace(dependencies, authority) {
   try {
     const files = await filesBelow(target2.value.absolute);
     await rm(target2.value.absolute, { recursive: true, force: true });
-    return ok9(Object.freeze({
+    return ok10(Object.freeze({
       removed_files: parseSafeInteger(files.length),
       removed_bytes: parseSafeInteger(files.reduce((sum, entry) => sum + entry.byte_count, 0)),
       retained_files: parseSafeInteger(0),
@@ -60818,7 +61178,7 @@ function renderAdjudicationEvidence(value) {
 }
 
 // src/state/evidence-results.ts
-var ok10 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok11 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function qualifyAndRender(value) {
   if (value.kind === "review") {
     const verified = createVerifiedEvidenceReference(value.evidence);
@@ -60961,7 +61321,7 @@ async function prepareEvidenceResult(input) {
     result_id: input.result_id,
     input_fingerprint: qualified.input_fingerprint
   });
-  return ok10(Object.freeze({
+  return ok11(Object.freeze({
     reference,
     prepared: prepared.value,
     manifest_target: manifestTarget.value,
@@ -61015,7 +61375,7 @@ async function loadRetainedEvidence(dependencies, state, phase_instance) {
       manifest
     }));
   }
-  return ok10(retained);
+  return ok11(retained);
 }
 function deriveCurrentEvidenceSet(retained) {
   const counterEntry = retained.get("counter_review");
@@ -61089,7 +61449,7 @@ async function derivePendingEditorialPredecessor(dependencies, state) {
 }
 async function validateEditorialPredecessorDeclaration(dependencies, state, artifact) {
   const declared = artifact.editorial_predecessor;
-  if (declared === void 0) return ok10(void 0);
+  if (declared === void 0) return ok11(void 0);
   const invalid2 = (issue4) => Object.freeze({
     schema_version: "1",
     ok: false,
@@ -61117,7 +61477,7 @@ async function validateEditorialPredecessorDeclaration(dependencies, state, arti
   if (companionSet(artifact) !== companionSet(produced.value.artifact)) {
     return invalid2("editorial-revision-companion-changed");
   }
-  return ok10(void 0);
+  return ok11(void 0);
 }
 async function loadCurrentReviewSet(dependencies, authority, phase_instance) {
   assertInternalTransactionAuthority(authority);
@@ -61158,139 +61518,8 @@ async function loadCurrentReviewSet(dependencies, authority, phase_instance) {
     ...derived
   });
   registerCurrentReviewSet(current);
-  return ok10(current);
+  return ok11(current);
 }
-
-// src/contracts/constitution.ts
-var frontmatterSchema = external_exports.object({
-  id: external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
-  version: external_exports.number().int().positive().safe(),
-  status: external_exports.enum(["active", "deprecated"]),
-  review_trigger: external_exports.string().min(1).regex(/\S/, "review_trigger must contain a non-whitespace character").optional(),
-  enforced_by: external_exports.array(external_exports.string().min(1).regex(/\S/, "enforced_by entries must contain a non-whitespace character")).min(1).optional()
-}).strict();
-var constitutionRuleV1Schema = frontmatterSchema.extend({ text: external_exports.string().min(1).regex(/\S/, "text must contain a non-whitespace character") }).strict();
-function parseConstitutionRuleV1(value) {
-  assertPlainJson(value, "constitution rule");
-  const parsed = constitutionRuleV1Schema.parse(value);
-  return {
-    id: parsed.id,
-    version: parsed.version,
-    status: parsed.status,
-    text: parsed.text,
-    ...parsed.review_trigger === void 0 ? {} : { review_trigger: parsed.review_trigger },
-    ...parsed.enforced_by === void 0 ? {} : { enforced_by: parsed.enforced_by }
-  };
-}
-function parseConstitutionRuleMarkdown(source, label) {
-  const normalized = source.replaceAll("\r\n", "\n");
-  if (!normalized.startsWith("---\n")) throw new Error(`${label}: expected opening YAML frontmatter delimiter`);
-  const close = normalized.indexOf("\n---\n", 4);
-  if (close < 0) throw new Error(`${label}: expected closing YAML frontmatter delimiter`);
-  const frontmatter = parseSingleYamlDocument(normalized.slice(4, close), `${label} frontmatter`);
-  const text4 = normalized.slice(close + 5).trim();
-  return parseConstitutionRuleV1({ ...frontmatter, text: text4 });
-}
-function registryFromRules(rules2) {
-  const registry2 = /* @__PURE__ */ new Map();
-  for (const candidate of rules2) {
-    const rule4 = parseConstitutionRuleV1(candidate);
-    if (registry2.has(rule4.id)) throw new Error(`Duplicate constitution rule id: ${rule4.id}`);
-    registry2.set(rule4.id, Object.freeze(rule4));
-  }
-  return registry2;
-}
-function parseConstitutionRuleFiles(files) {
-  return registryFromRules(Object.keys(files).sort().map((path2) => parseConstitutionRuleMarkdown(files[path2], path2)));
-}
-
-// src/state/constitution.ts
-var CONSTITUTION_DIRECTORY = ".archflow/constitution";
-var RULE_FILE = /^\.archflow\/constitution\/[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
-var decoder2 = new TextDecoder("utf-8", { fatal: true });
-var authenticResolvedConstitutions = /* @__PURE__ */ new WeakSet();
-function assertResolvedConstitution(value) {
-  if (value === null || typeof value !== "object" || !authenticResolvedConstitutions.has(value)) {
-    throw new TypeError("an authentic resolved constitution is required");
-  }
-}
-function immutableRegistry(rules2) {
-  const entries = [...rules2].map(([id6, rule4]) => {
-    const frozenRule = Object.freeze({
-      ...rule4,
-      ...rule4.enforced_by === void 0 ? {} : { enforced_by: Object.freeze([...rule4.enforced_by]) }
-    });
-    return Object.freeze([id6, frozenRule]);
-  });
-  const backing = new Map(entries);
-  let registry2;
-  registry2 = Object.freeze({
-    get size() {
-      return backing.size;
-    },
-    has: (key) => backing.has(key),
-    get: (key) => backing.get(key),
-    entries: () => backing.entries(),
-    keys: () => backing.keys(),
-    values: () => backing.values(),
-    [Symbol.iterator]: () => backing[Symbol.iterator](),
-    forEach: (callback, thisArg) => backing.forEach((value, key) => callback.call(thisArg, value, key, registry2))
-  });
-  return registry2;
-}
-var ok11 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail10 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-async function readConstitutionTreeFiles(runner, commit) {
-  const listed = await readCommitTreeEntries(runner, commit, CONSTITUTION_DIRECTORY);
-  return Object.freeze(listed.filter((entry) => RULE_FILE.test(entry.path)).map((entry) => Object.freeze({
-    path: parseRepositoryPathClaim(entry.path),
-    oid: parseGitOid(entry.oid)
-  })).sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
-}
-function invalidPolicyBase(policyBaseCommit, observed2) {
-  const expected = canonicalJsonDigest({
-    schema_version: "1",
-    digest_kind: "policy-base-commit",
-    commit: policyBaseCommit
-  });
-  return createProjectError("POLICY_BASE_INVALID", {
-    expected_digest: expected,
-    ...observed2 === void 0 ? {} : { observed_digest: observed2 }
-  });
-}
-async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
-  try {
-    const selected = await readConstitutionTreeFiles(runner, policyBaseCommit);
-    if (selected.length === 0) return fail10(invalidPolicyBase(policyBaseCommit));
-    const sources = {};
-    for (const file2 of selected) {
-      sources[file2.path] = decoder2.decode(await readGitBlobBytes(runner, file2.oid));
-    }
-    let rules2;
-    try {
-      rules2 = parseConstitutionRuleFiles(sources);
-    } catch {
-      return fail10(invalidPolicyBase(policyBaseCommit));
-    }
-    if (rules2.size === 0) return fail10(invalidPolicyBase(policyBaseCommit));
-    const resolved = Object.freeze({
-      digest: computePinnedConstitutionDigest(selected),
-      rules: immutableRegistry(rules2),
-      files: Object.freeze(selected.map((file2) => Object.freeze({ ...file2 })))
-    });
-    authenticResolvedConstitutions.add(resolved);
-    return ok11(resolved);
-  } catch (error51) {
-    if (error51 instanceof GitInvocationError) {
-      return fail10(projectErrorForGitFailure(error51, runner, context2));
-    }
-    if (error51 instanceof TypeError || error51 instanceof RangeError) {
-      return fail10(invalidPolicyBase(policyBaseCommit));
-    }
-    throw error51;
-  }
-}
-var PINNED_WORKFLOW_PATH = parseRepositoryPathClaim(".archflow/workflow.yaml");
 
 // src/review/adjudication.ts
 var AdjudicationServiceError = class extends Error {
@@ -61676,11 +61905,14 @@ function assessCurrentEvidence(state, retained, subject) {
     next: exhausted ? "attempts-exhausted" : action2.next
   });
 }
-function requireApprovedUpstreamDigests(state, upstreamDigests) {
+function requireApprovedUpstreamDigests(stateOrDigests, legacyDigests) {
+  const upstreamDigests = legacyDigests ?? stateOrDigests.map((authority) => authority.subject_digest);
   const sorted = [...upstreamDigests].sort();
   if (new Set(sorted).size !== sorted.length) {
     throw new TypeError("approved upstream digests must be unique");
   }
+  if (legacyDigests === void 0) return Object.freeze(sorted);
+  const state = stateOrDigests;
   for (const digest9 of sorted) {
     const approved = state.approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === digest9);
     if (!approved) {
@@ -61801,7 +62033,12 @@ function approvalRuleContext(state, produceSubject, config2) {
     config: config2
   });
 }
-function buildRuleSettlement(state, subjectDigest, configDigest, conclusion) {
+function buildRuleSettlement(state, subjectDigest, configDigest, conclusion, milestoneBaselineCommit) {
+  const kind = decodePhaseInstance(state.phase_instance).kind;
+  const baselineAllowed = !conclusion.wait && (kind === "design" || kind === "phase-design");
+  if (milestoneBaselineCommit !== void 0 !== baselineAllowed) {
+    throw new TypeError("a milestone baseline is required exactly for design and phase-design wait:false settlements");
+  }
   return Object.freeze({
     task_id: state.task_id,
     phase_instance: state.phase_instance,
@@ -61809,6 +62046,7 @@ function buildRuleSettlement(state, subjectDigest, configDigest, conclusion) {
     subject_digest: subjectDigest,
     conclusion: structuredClone(conclusion),
     config_digest: configDigest,
+    ...milestoneBaselineCommit === void 0 ? {} : { milestone_baseline_commit: milestoneBaselineCommit },
     settled_at_revision: parseSafeInteger(state.revision + 1)
   });
 }
@@ -62193,12 +62431,15 @@ async function stateAfterPolicyWaiverSettlement(dependencies, authority, current
     ruleContext.subject,
     ruleContext.changedPaths
   );
+  const kind = decodePhaseInstance(current.value.phase_instance).kind;
+  const milestoneBaseline = !conclusion.wait && (kind === "design" || kind === "phase-design") ? await resolveCommit(dependencies.runner, "HEAD") : void 0;
   const settled = nextStateForRecord(current.value, record3, digest9);
   const settlement = buildRuleSettlement(
     current.value,
     produce.value.artifact_digest,
     config2.snapshot.digest,
-    conclusion
+    conclusion,
+    milestoneBaseline
   );
   const ruleSettlements = Object.freeze([
     ...settled.value.rule_settlements ?? [],
@@ -64806,25 +65047,56 @@ function matchingApproval(input, kind) {
 function hasLegacyDesignApproval(input) {
   return matchingApproval(input, "artifact-approval");
 }
+function hasAcceptedNoWait(input, state) {
+  const settlement = input.accepted_no_wait_settlement;
+  return settlement !== void 0 && input.subject_digest !== void 0 && settlement.task_id === state.task_id && settlement.phase_instance === state.phase_instance && settlement.subject_digest === input.subject_digest && settlement.conclusion.wait === false;
+}
 function advanceAction(input, state) {
   const phase3 = decodePhaseInstance(state.phase_instance);
   const designPhase = phase3.kind === "design" || phase3.kind === "phase-design";
   const requiredKind = designPhase ? "design-approval" : phase3.kind === "prd" ? "artifact-approval" : phase3.kind === "phase-impl" ? "commit-authorization" : void 0;
   const legacyDesignApproval = designPhase && hasLegacyDesignApproval(input);
   const migrationApproval = designPhase && matchingApproval(input, "migration-audit");
+  const autonomous = hasAcceptedNoWait(input, state);
   if (designPhase && input.migration_audit_required === true) {
     return action("open-gate", "Open the reviewed migration audit for the exact imported documents and resume point.", true, state, {
       gate_kind: "migration-audit"
     });
   }
-  if (requiredKind !== void 0 && !matchingApproval(input, requiredKind) && !legacyDesignApproval && !migrationApproval) {
+  if (requiredKind !== void 0 && !matchingApproval(input, requiredKind) && !legacyDesignApproval && !migrationApproval && !autonomous) {
     return action("open-gate", `Open the required ${requiredKind} gate.`, true, state, {
       gate_kind: requiredKind
     });
   }
   if (designPhase && !legacyDesignApproval && input.commit_observed !== true) {
+    if (autonomous && input.commit_blocked_reason === "approved-document-mismatch") {
+      return action(
+        "run-step",
+        "The reviewed design bytes changed after rule settlement. Reopen produce so the current bytes receive fresh review authority.",
+        false,
+        state,
+        { step: "produce" }
+      );
+    }
     if (input.design_commit === void 0) {
       return action("inspect-state", "Inspect why the approved design commit authority is unavailable.", true, state);
+    }
+    if (input.commit_blocked_reason === "target-moved" && autonomous) {
+      if (input.milestone_refresh_config_matches !== true) {
+        return action(
+          "run-step",
+          "The approval-rule configuration changed after this design settled. Reopen produce so the current subject is reviewed under the live configuration before any Git baseline refresh.",
+          false,
+          state,
+          { step: "produce" }
+        );
+      }
+      return action(
+        "refresh-milestone-baseline",
+        "Refresh the unchanged reviewed design milestone baseline to the current target.",
+        false,
+        state
+      );
     }
     if (input.commit_blocked_reason !== void 0) {
       return action(
@@ -64838,7 +65110,8 @@ function advanceAction(input, state) {
       commit_path: input.design_commit.path,
       commit_message: input.design_commit.message,
       commit_target_ref: input.design_commit.target_ref,
-      commit_baseline: input.design_commit.baseline_commit
+      commit_baseline: input.design_commit.baseline_commit,
+      commit_requires_human_confirmation: false
     });
   }
   if (phase3.kind === "phase-impl" && input.commit_observed !== true) {
@@ -64854,7 +65127,8 @@ function advanceAction(input, state) {
         commit_paths: input.implementation_commit.paths,
         commit_message: input.implementation_commit.message,
         commit_target_ref: input.implementation_commit.target_ref,
-        commit_baseline: input.implementation_commit.baseline_commit
+        commit_baseline: input.implementation_commit.baseline_commit,
+        commit_requires_human_confirmation: !autonomous
       }
     );
   }
@@ -65124,6 +65398,8 @@ function currentReviewPredecessor(state, produceSubject) {
   });
 }
 async function currentApprovedUpstreams(dependencies, authority, state, authenticated, subject) {
+  let settlementPolicy;
+  let settlementPolicyLoaded = false;
   const bindings = subject === void 0 ? expectedProduceUpstreamBindings(state) : produceUpstreamBindingsForSubject(state, subject.artifact);
   const digests = /* @__PURE__ */ new Set();
   for (const binding of bindings) {
@@ -65146,7 +65422,26 @@ async function currentApprovedUpstreams(dependencies, authority, state, authenti
       )) return false;
       return item.approval.gate_kind === "design-approval" && item.request.kind === "design-approval" && item.request.context.artifact_kind === ownerKind || item.approval.gate_kind === "artifact-approval" && item.request.kind === "artifact-approval" && item.request.context.artifact_kind === ownerKind;
     }).sort((left, right) => right.approval.resolved_at_revision - left.approval.resolved_at_revision)[0];
-    if (approval === void 0) throw new TypeError("current upstream produced authority lacks approval");
+    if (!settlementPolicyLoaded && approval === void 0) {
+      settlementPolicyLoaded = true;
+      if (state.policy_base_commit !== void 0 && state.constitution_digest !== void 0) {
+        const resolvedConstitution = await resolvePinnedConstitution(
+          dependencies.runner,
+          state.policy_base_commit,
+          authority.context
+        );
+        settlementPolicy = resolvedConstitution.ok ? authenticateRuleAcceptancePolicy(state, resolvedConstitution.value) : void 0;
+      }
+    }
+    const settled = settlementPolicy === void 0 ? void 0 : acceptedNoWaitSettlement(
+      settlementPolicy,
+      state,
+      loaded.value.artifact_digest,
+      loaded.value.artifact.phase_instance
+    );
+    if (approval === void 0 && settled === void 0) {
+      throw new TypeError("current upstream produced authority lacks approval or accepted settlement");
+    }
     digests.add(loaded.value.artifact_digest);
   }
   return Object.freeze([...digests].sort());
@@ -65288,6 +65583,33 @@ function buildCommitAuthorizationInput(subject, currentEvidence, target2, baseli
     target_ref_guidance: target2.guidance
   });
 }
+function buildAutonomousImplementationCommitInput(output, targetRef) {
+  const paths = /* @__PURE__ */ new Set();
+  for (const entry of output.outputs) {
+    paths.add(entry.path);
+    if (entry.operation === "rename") paths.add(entry.previous_path);
+  }
+  const phase3 = decodePhaseInstance(output.phase_instance);
+  return Object.freeze({
+    paths: Object.freeze([...paths].sort()),
+    message: `ArchFlow: Implement ${output.task_id} phase ${phase3.kind === "phase-impl" ? String(phase3.phase) : output.phase_instance}`,
+    target_ref: targetRef,
+    baseline_commit: output.base_commit
+  });
+}
+function buildAutonomousDesignCommitInput(state, settlement, targetRef) {
+  const phase3 = decodePhaseInstance(state.phase_instance);
+  if (phase3.kind !== "design" && phase3.kind !== "phase-design" || settlement.phase_instance !== state.phase_instance || settlement.milestone_baseline_commit === void 0) {
+    throw new TypeError("autonomous design commit requires a phase-bound milestone baseline");
+  }
+  const phaseLabel = phase3.kind === "design" ? "design" : `phase ${String(phase3.phase)} design`;
+  return Object.freeze({
+    path: `.archflow/tasks/${state.task_id}`,
+    message: `ArchFlow: Approve ${state.task_id} ${phaseLabel}`,
+    target_ref: targetRef,
+    baseline_commit: settlement.milestone_baseline_commit
+  });
+}
 async function buildDesignApprovalInput(dependencies, state, retained, target2) {
   const phase3 = decodePhaseInstance(state.phase_instance);
   if (phase3.kind !== "design" && phase3.kind !== "phase-design") {
@@ -65349,6 +65671,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   const state = stateDocument.value;
   let config2;
   let parsedConfig;
+  let liveConfigDigest;
   try {
     const read = await dependencies.read_config(authority.config);
     if (read.kind !== "valid") {
@@ -65356,7 +65679,8 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       blockers.push(`config-${read.kind}`);
     } else {
       config2 = Object.freeze({ verified: true });
-      parsedConfig = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(read.snapshot.bytes), "task config");
+      liveConfigDigest = read.snapshot.digest;
+      parsedConfig = read.snapshot.parsed;
     }
   } catch {
     config2 = unavailableConfig("config-unresolvable");
@@ -65476,14 +65800,23 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       }));
     }
   }
+  const settlementPolicy = constitution === void 0 ? void 0 : authenticateRuleAcceptancePolicy(state, constitution);
+  const acceptedSettlement = settlementPolicy === void 0 || produceSubject === void 0 ? void 0 : acceptedNoWaitSettlement(
+    settlementPolicy,
+    state,
+    produceSubject.artifact_digest,
+    produceSubject.artifact.phase_instance
+  );
   let commitObserved = false;
   let commitBlockedReason;
   let implementationCommit;
+  let humanImplementationCommitAuthority = false;
   if (produceSubject?.artifact.artifact_kind === "implementation-output") {
     for (const authenticated of authenticatedApprovals) {
       if (authenticated.request.kind !== "commit-authorization" || authenticated.request.phase_instance !== state.phase_instance || authenticated.request.subject_digest !== produceSubject.artifact_digest || authenticated.decision.envelope.payload.decision !== "authorize-commit") continue;
       const exact = exactCommitAuthorizationContext(authenticated.request.context);
       if (exact === void 0) continue;
+      humanImplementationCommitAuthority = true;
       implementationCommit = Object.freeze({
         paths: exact.paths,
         message: exact.commit_message,
@@ -65498,6 +65831,39 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         )) {
           commitObserved = true;
           break;
+        }
+      } catch {
+        blockers.push("commit-observation-unavailable");
+      }
+    }
+    if (!commitObserved && implementationCommit !== void 0) {
+      try {
+        if (await resolveCommit(dependencies.runner, implementationCommit.target_ref) !== implementationCommit.baseline_commit) {
+          implementationCommit = void 0;
+          blockers.push("implementation-commit-target-moved");
+        }
+      } catch {
+        implementationCommit = void 0;
+        blockers.push("commit-observation-unavailable");
+      }
+    }
+    if (!commitObserved && !humanImplementationCommitAuthority && implementationCommit === void 0 && acceptedSettlement !== void 0) {
+      const target2 = await currentTargetRef(dependencies);
+      const autonomousCommit = buildAutonomousImplementationCommitInput(
+        produceSubject.artifact,
+        target2.value
+      );
+      try {
+        commitObserved = await autonomousImplementationOutputCommittedAtCurrentTarget(
+          dependencies.runner,
+          produceSubject.artifact,
+          target2.value,
+          autonomousCommit.message
+        );
+        if (!commitObserved && await resolveCommit(dependencies.runner, target2.value) === produceSubject.artifact.base_commit) {
+          implementationCommit = autonomousCommit;
+        } else if (!commitObserved) {
+          blockers.push("implementation-commit-target-moved");
         }
       } catch {
         blockers.push("commit-observation-unavailable");
@@ -65558,6 +65924,30 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         if (!observation.observed && observation.blocking) {
           commitBlockedReason = observation.reason;
           blockers.push(`design-milestone-${observation.reason}`);
+        }
+      } catch {
+        blockers.push("commit-observation-unavailable");
+      }
+    }
+    if (!commitObserved && designCommit === void 0 && acceptedSettlement?.milestone_baseline_commit !== void 0) {
+      const target2 = await currentTargetRef(dependencies);
+      designCommit = buildAutonomousDesignCommitInput(state, acceptedSettlement, target2.value);
+      try {
+        const observation = await autonomousDesignArtifactCommittedAtCurrentTarget(
+          dependencies.runner,
+          state,
+          produceSubject.artifact,
+          produceSubject.retained.manifest.value.outputs,
+          target2.value,
+          acceptedSettlement.milestone_baseline_commit,
+          designCommit.message,
+          authority.context
+        );
+        commitObserved = observation.observed;
+        if (!observation.observed && observation.blocking) {
+          const targetHead = await resolveCommit(dependencies.runner, target2.value);
+          commitBlockedReason = observation.reason === "approved-document-mismatch" ? observation.reason : targetHead === acceptedSettlement.milestone_baseline_commit ? observation.reason : "target-moved";
+          blockers.push(`design-milestone-${commitBlockedReason}`);
         }
       } catch {
         blockers.push("commit-observation-unavailable");
@@ -65733,6 +66123,10 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     evidence_available: evidence.available,
     ...subjectDigest === void 0 ? {} : { subject_digest: subjectDigest },
     authenticated_approvals: approvalFacts,
+    ...acceptedSettlement === void 0 ? {} : { accepted_no_wait_settlement: acceptedSettlement },
+    ...acceptedSettlement?.milestone_baseline_commit === void 0 ? {} : {
+      milestone_refresh_config_matches: liveConfigDigest === acceptedSettlement.config_digest
+    },
     commit_observed: commitObserved,
     ...commitBlockedReason === void 0 ? {} : { commit_blocked_reason: commitBlockedReason },
     ...designCommit === void 0 ? {} : { design_commit: designCommit },
@@ -66446,7 +66840,8 @@ var BUILD_REQUEST_KINDS = Object.freeze([
   "gate",
   "advance",
   "planning-restart",
-  "waiver"
+  "waiver",
+  "refresh-milestone-baseline"
 ]);
 var PAYLOAD_SHAPE = `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},"step"?:<pipeline step for kind running>,"document"?:{...},"implementation"?:{...},"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],"summary"?:<gate summary text>,"route_override"?:{"reason":<why the pinned reviewer was substituted>,"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"adjudicator"?:{...}},"origin"?:<waiver origin>,"rationale"?:<waiver rationale>}`;
 function record2(value, name) {
@@ -66895,6 +67290,13 @@ async function composeGate(services, state, intentId, snapshot) {
     }) : void 0;
     if (migrationAuditContext === void 0) return transitionInvalid(state, "migration-audit-gate");
   }
+  const settlementPolicy = constitution.ok ? authenticateRuleAcceptancePolicy(state, constitution.value) : void 0;
+  const acceptedSettlement = settlementPolicy === void 0 ? void 0 : acceptedNoWaitSettlement(
+    settlementPolicy,
+    state,
+    subject.value.artifact_digest,
+    subject.value.artifact.phase_instance
+  );
   let input;
   if (exhaustion !== void 0) {
     input = {
@@ -66906,6 +67308,16 @@ async function composeGate(services, state, intentId, snapshot) {
       kind: "attempts-exhausted",
       context: { ...exhaustion, step: state.step }
     };
+  } else if (pendingGate !== void 0) {
+    input = {
+      ...mechanicalInput(services, state, intentId),
+      phase_instance: state.phase_instance,
+      summary,
+      subject_digest: pendingGate.subject_digest,
+      current_evidence: derived.current_evidence_set,
+      kind: pendingGate.kind,
+      context: pendingGate.context
+    };
   } else if (migrationAuditRequired) {
     input = {
       ...mechanicalInput(services, state, intentId),
@@ -66916,6 +67328,8 @@ async function composeGate(services, state, intentId, snapshot) {
       kind: "migration-audit",
       context: migrationAuditContext
     };
+  } else if (acceptedSettlement !== void 0) {
+    return transitionInvalid(state, `${gateKind2}-gate-not-required`);
   } else if (gateKind2 === "design-approval") {
     const target2 = await currentTargetRef(services.dependencies);
     const approval = await buildDesignApprovalInput(services.dependencies, state, loaded.value, target2);
@@ -66927,16 +67341,6 @@ async function composeGate(services, state, intentId, snapshot) {
       current_evidence: derived.current_evidence_set,
       kind: "design-approval",
       context: approval.context
-    };
-  } else if (pendingGate !== void 0) {
-    input = {
-      ...mechanicalInput(services, state, intentId),
-      phase_instance: state.phase_instance,
-      summary,
-      subject_digest: pendingGate.subject_digest,
-      current_evidence: derived.current_evidence_set,
-      kind: pendingGate.kind,
-      context: pendingGate.context
     };
   } else if (gateKind2 === "commit-authorization") {
     const target2 = await currentTargetRef(services.dependencies);
@@ -66983,6 +67387,23 @@ async function composeAdvance(services, state, intentId) {
       phase_instance: next.target_phase_instance,
       step: completing ? state.step : "produce",
       status: completing ? state.status : "running"
+    }
+  });
+}
+async function composeRefreshMilestoneBaseline(services, state, intentId) {
+  const computed = await computeTaskStatus(services.dependencies, services.authority);
+  if (!computed.ok) return computed;
+  if (computed.value.next_action.code !== "refresh-milestone-baseline" || computed.value.revision !== state.revision) {
+    return transitionInvalid(state, "refresh-milestone-baseline");
+  }
+  return computeCallEnvelope(services, {
+    tool: "archflow_state",
+    input: {
+      ...mechanicalInput(services, state, intentId),
+      phase_instance: state.phase_instance,
+      step: state.step,
+      status: state.status,
+      operation: "refresh_milestone_baseline"
     }
   });
 }
@@ -67093,6 +67514,10 @@ async function composeRequest(services, value) {
     }
     case "waiver": {
       const composed = await composePendingWaiverRequest(services, state, intentId, snapshot);
+      return composed.ok ? ok19(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+    }
+    case "refresh-milestone-baseline": {
+      const composed = await composeRefreshMilestoneBaseline(services, state, intentId);
       return composed.ok ? ok19(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
     }
     default:
@@ -67357,8 +67782,17 @@ function mapNextAction(status, snapshot) {
           message: action2.commit_message,
           target_ref: action2.commit_target_ref,
           baseline: action2.commit_baseline,
-          requires_human_confirmation: false
+          requires_human_confirmation: action2.commit_requires_human_confirmation ?? false
         })
+      });
+    case "refresh-milestone-baseline":
+      return Object.freeze({
+        condition: "ready",
+        headline: "The milestone baseline is ready to refresh",
+        detail: action2.detail,
+        action_kind: "refresh-milestone-baseline",
+        instruction: "Record the current unchanged target as the reviewed milestone baseline, then request fresh status.",
+        expected_submission: "none"
       });
     case "commit-phase":
       if (action2.commit_paths === void 0 || action2.commit_message === void 0 || action2.commit_target_ref === void 0 || action2.commit_baseline === void 0) {
@@ -67375,7 +67809,7 @@ function mapNextAction(status, snapshot) {
           message: action2.commit_message,
           target_ref: action2.commit_target_ref,
           baseline: action2.commit_baseline,
-          requires_human_confirmation: true
+          requires_human_confirmation: action2.commit_requires_human_confirmation ?? true
         })
       });
     case "advance-phase":
@@ -68518,6 +68952,8 @@ function fixedSubsteps(action2, snapshot, expectedSubmission) {
       return Object.freeze(["reopen"]);
     case "open-waiver":
       return Object.freeze(["open-waiver"]);
+    case "refresh-milestone-baseline":
+      return Object.freeze(["refresh-milestone-baseline"]);
     case "decide":
       return expectedSubmission === "gate-summary" ? Object.freeze(["open-gate"]) : expectedSubmission === "decision" ? Object.freeze(["decision-archive", "decision-settle"]) : Object.freeze(["decision-settle"]);
     case "start-next-skill":
@@ -68580,6 +69016,8 @@ function requestFacts(action2, substep, intentId, submission) {
       return { execution: "compose-request", facts: { kind: "gate", intent_id: intentId, summary: submission.summary } };
     case "open-waiver":
       return { execution: "compose-request", facts: { kind: "waiver", intent_id: intentId } };
+    case "refresh-milestone-baseline":
+      return { execution: "compose-request", facts: { kind: "refresh-milestone-baseline", intent_id: intentId } };
     case "start-next-skill":
     case "finish-task":
       return { execution: "compose-request", facts: { kind: "advance", intent_id: intentId } };
@@ -69978,7 +70416,7 @@ async function liveIdentification(dependencies, request, current) {
   if (inputFingerprint !== request.call.input.input_fingerprint) {
     return fingerprintMismatch(inputFingerprint, request.call.input.input_fingerprint);
   }
-  return ok21({ ...identifyTransactionRequest(request.call, request.authority, inputFingerprint), live_config: config2.snapshot.parsed });
+  return ok21({ ...identifyTransactionRequest(request.call, request.authority, inputFingerprint), live_config: config2.snapshot });
 }
 function identifyFromReceipt(request, receipt) {
   if (receipt.input_fingerprint !== request.call.input.input_fingerprint) {
@@ -70243,7 +70681,7 @@ function buildPlan(request, current, identified, preparedValue, authenticatedWor
     return fingerprintMismatch(identified.input_fingerprint, materialized.next_state.input_fingerprint);
   }
   assertPreserved(current.value, materialized.next_state);
-  const plan = { ...materialized, next_state: withLastSeenConfig(materialized.next_state, identified.live_config) };
+  const plan = { ...materialized, next_state: withLastSeenConfig(materialized.next_state, identified.live_config.parsed) };
   const installation = validateResultInstallationBinding(
     request,
     current,
@@ -70575,7 +71013,7 @@ async function executeLocked2(dependencies, request, intentPath, prepare, onPlan
   }
   const identified = await liveIdentification(dependencies, request, current);
   if (!identified.ok) return identified;
-  const prepared = await prepare(current, identified.value.call);
+  const prepared = await prepare(current, identified.value.call, identified.value.live_config);
   if (!prepared.ok) return prepared;
   const plan = buildPlan(
     request,
@@ -71133,8 +71571,10 @@ async function assembleUpstreamContext(input) {
   for (const binding of produceUpstreamBindingsForSubject(input.state, input.subject.artifact)) {
     const upstream = await loadProduceUpstreamSubject(input.dependencies, input.authority, input.state, binding);
     if (!upstream.ok) return upstream;
-    const approved = "imported_projection" in upstream.value ? input.state.phase_instance === "design" || input.state.approvals.some((approval) => approval.gate_kind === "migration-audit") : input.state.approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === upstream.value.artifact_digest);
-    if (!approved) return fail23(input.state.phase_instance, "upstream-approval-missing");
+    if ("imported_projection" in upstream.value) {
+      const approved = input.state.phase_instance === "design" || input.state.approvals.some((approval) => approval.gate_kind === "migration-audit");
+      if (!approved) return fail23(input.state.phase_instance, "upstream-approval-missing");
+    }
     const projection = await readProduceProjection(
       input.runner,
       input.authority,
@@ -71806,7 +72246,15 @@ async function resolveRepositoryViewCommit(runner, artifact) {
   return artifact.artifact_kind === "implementation-output" ? artifact.base_commit : readHeadCommit(runner);
 }
 async function deriveApprovedUpstreams(services, toolName, durable, subject) {
+  const resolvedConstitution = await resolvePinnedConstitution(
+    services.runner,
+    durable.policy_base_commit,
+    services.authority.context
+  );
+  if (!resolvedConstitution.ok) return resolvedConstitution;
+  const settlementPolicy = authenticateRuleAcceptancePolicy(durable, resolvedConstitution.value);
   const derived = [];
+  const authorities = [];
   const seenOwners = /* @__PURE__ */ new Set();
   const coProducedPaths = produceOwnedTaskDocumentPaths(subject.artifact);
   for (const binding of produceUpstreamBindingsForSubject(durable, subject.artifact)) {
@@ -71868,6 +72316,14 @@ async function deriveApprovedUpstreams(services, toolName, durable, subject) {
         break;
       }
     }
+    if (!approved && settlementPolicy !== void 0 && "reference" in upstream.value) {
+      approved = acceptedNoWaitSettlement(
+        settlementPolicy,
+        durable,
+        upstreamDigest,
+        upstream.value.artifact.phase_instance
+      ) !== void 0;
+    }
     if (!approved) {
       return fail25(createProjectError("STATE_INVALID", {
         phase_instance: durable.phase_instance,
@@ -71876,9 +72332,17 @@ async function deriveApprovedUpstreams(services, toolName, durable, subject) {
     }
     seenOwners.add(upstreamDigest);
     derived.push(Object.freeze({ upstream_digest: upstreamDigest, artifact: text4 }));
+    authorities.push(Object.freeze({
+      subject_digest: upstreamDigest,
+      producer_phase: upstream.value.artifact.phase_instance
+    }));
   }
   derived.sort((left, right) => left.upstream_digest.localeCompare(right.upstream_digest));
-  return ok23(Object.freeze(derived));
+  authorities.sort((left, right) => left.subject_digest.localeCompare(right.subject_digest));
+  return ok23(Object.freeze({
+    inputs: Object.freeze(derived),
+    authorities: Object.freeze(authorities)
+  }));
 }
 async function prepareDispatchEvidence(services, retainedBytes, resultId, value, measuredAtRevision) {
   return prepareEvidenceResult({
@@ -71997,8 +72461,7 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
       const upstreams = await deriveApprovedUpstreams(services, call.name, state.value, produce.value);
       if (!upstreams.ok) return upstreams;
       const approvedUpstreamDigests = requireApprovedUpstreamDigests(
-        state.value,
-        upstreams.value.map((item) => item.upstream_digest)
+        upstreams.value.authorities
       );
       const constitutionResultId = stableId("adjudication-result", call.input.intent_id);
       const constitutionCoordinator = createDispatchCoordinator({
@@ -72015,7 +72478,7 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
         registry: constitution.value.rules,
         pinned_constitution_digest: constitution.value.digest,
         rules: rulesForEnvelope(constitution.value.rules),
-        approved_upstreams: upstreams.value,
+        approved_upstreams: upstreams.value.inputs,
         approved_upstream_digests: approvedUpstreamDigests,
         invocation_id: stableId("adjudication-invocation", context2.invocation_id),
         result_id: constitutionResultId,
@@ -72469,7 +72932,15 @@ async function settleApprovalRules(services, current, prospective, produce, reta
       ruleContext.subject,
       ruleContext.changedPaths
     );
-    return buildRuleSettlement(current, produce.artifact_digest, config2.digest, conclusion);
+    const kind = decodePhaseInstance(current.phase_instance).kind;
+    const milestoneBaseline = !conclusion.wait && (kind === "design" || kind === "phase-design") ? await resolveCommit(services.runner, "HEAD") : void 0;
+    return buildRuleSettlement(
+      current,
+      produce.artifact_digest,
+      config2.digest,
+      conclusion,
+      milestoneBaseline
+    );
   } catch {
     return void 0;
   }
@@ -72480,10 +72951,11 @@ async function handleState(call, context2) {
     if (!session.ok) return session;
     const { services } = session.value;
     const restartInput = call.input.operation === "planning_restart" ? call.input : void 0;
-    const artifact = restartInput === void 0 ? call.input.artifact : void 0;
+    const refreshInput = call.input.operation === "refresh_milestone_baseline" ? call.input : void 0;
+    const artifact = restartInput === void 0 && refreshInput === void 0 ? call.input.artifact : void 0;
     if (services.state === void 0) {
-      if (restartInput !== void 0) {
-        return fail26(createProjectError("STATE_MISSING", { phase_instance: restartInput.phase_instance }));
+      if (restartInput !== void 0 || refreshInput !== void 0) {
+        return fail26(createProjectError("STATE_MISSING", { phase_instance: call.input.phase_instance }));
       }
       const initialized = await runStateInitialization(services.dependencies, {
         authority: services.authority,
@@ -72555,7 +73027,95 @@ async function handleState(call, context2) {
     const transaction = await runStateTransaction(
       services.dependencies,
       { authority: services.authority, call },
-      async (current, identifiedCall) => {
+      async (current, identifiedCall, liveConfig) => {
+        if (refreshInput !== void 0) {
+          const state = current.value;
+          const decoded = decodePhaseInstance(state.phase_instance);
+          if (decoded.kind !== "design" && decoded.kind !== "phase-design" || refreshInput.phase_instance !== state.phase_instance || state.step !== "triage" || state.status !== "succeeded" || state.open_gate !== void 0 || state.pending_human_revision !== void 0 || state.terminal !== void 0) {
+            return fail26(createProjectError("TRANSITION_INVALID", {
+              phase_instance: refreshInput.phase_instance,
+              from: `${state.step}-${state.status}`,
+              to: "refresh-milestone-baseline"
+            }));
+          }
+          const constitution = await resolvePinnedConstitution(
+            services.runner,
+            state.policy_base_commit,
+            services.authority.context
+          );
+          if (!constitution.ok) return constitution;
+          const policy = authenticateRuleAcceptancePolicy(state, constitution.value);
+          const produce = await loadCurrentProduceSubject(services.dependencies, state);
+          if (!produce.ok) return produce;
+          const prior = policy === void 0 ? void 0 : acceptedNoWaitSettlement(
+            policy,
+            state,
+            produce.value.artifact_digest,
+            state.phase_instance
+          );
+          if (prior?.milestone_baseline_commit === void 0 || prior.config_digest !== liveConfig.digest) {
+            return fail26(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance,
+              issue_code: "milestone-baseline-refresh-authority-missing"
+            }));
+          }
+          if (produce.value.artifact.artifact_kind !== "document" || !await approvedDesignWorktreeMatchesRetainedArtifact(
+            services.runner,
+            state.task_id,
+            produce.value.artifact,
+            produce.value.retained.manifest.value.outputs,
+            services.authority.context
+          )) {
+            return fail26(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance,
+              issue_code: "milestone-baseline-refresh-reviewed-bytes-changed"
+            }));
+          }
+          const discovered = await discoverReconciliationInput(services.dependencies, services.authority, current);
+          if (!discovered.ok) return discovered;
+          const reconciliation = reconcileCurrentAuthority(discovered.value);
+          if (reconciliation.findings.length !== 0 || (discovered.value.blocking_reasons ?? []).length !== 0) {
+            return fail26(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance,
+              issue_code: "milestone-baseline-refresh-reconciliation-required"
+            }));
+          }
+          const head = await resolveCommit(services.runner, "HEAD");
+          if (head === prior.milestone_baseline_commit) {
+            return fail26(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance,
+              issue_code: "milestone-baseline-refresh-not-needed"
+            }));
+          }
+          const revision2 = parseSafeInteger(state.revision + 1);
+          const replacement = Object.freeze({
+            ...prior,
+            settled_at_revision: revision2,
+            milestone_baseline_commit: head
+          });
+          const { revision: _revision, last_transition: _transition, ...preserved } = state;
+          const settlements = Object.freeze([...state.rule_settlements ?? [], replacement].sort(compareRuleSettlements));
+          const nextState = Object.freeze({ ...preserved, rule_settlements: settlements });
+          const success4 = Object.freeze({
+            path: parseTaskPathClaim("state.json"),
+            revision: revision2,
+            status: "succeeded",
+            request_digest: identified.request_digest
+          });
+          const expectation2 = createInternalResultExpectation({
+            schema_version: "1",
+            tool: "archflow_state",
+            task_id: services.authority.task_id,
+            intent_id: refreshInput.intent_id,
+            input_fingerprint: identified.input_fingerprint,
+            request_digest: identified.request_digest,
+            result_id: stateResultId(refreshInput.intent_id),
+            resulting_revision: revision2,
+            success: success4
+          });
+          const result2 = validateProjectResultStructure(identifiedCall, { schema_version: "1", ok: true, value: success4 });
+          return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ expectation: expectation2, result: result2, next_state: nextState }) });
+        }
         if (restartInput !== void 0) {
           const revision2 = parseSafeInteger(current.value.revision + 1);
           const restartId = planningRestartId(identified.request_digest, restartInput.intent_id);
@@ -72586,16 +73146,16 @@ async function handleState(call, context2) {
               restart_id: restartId,
               request: restartInput.reason
             });
-            const liveConfig = await services.dependencies.read_config(services.authority.config);
-            if (liveConfig.kind !== "valid") {
-              return fail26(createProjectError("CONFIG_INVALID", { issue_code: `config-${liveConfig.kind}` }));
+            const liveConfig2 = await services.dependencies.read_config(services.authority.config);
+            if (liveConfig2.kind !== "valid") {
+              return fail26(createProjectError("CONFIG_INVALID", { issue_code: `config-${liveConfig2.kind}` }));
             }
             const landingSubject = await services.dependencies.resolve_input_fingerprint({
               runner: services.runner,
               authority: services.authority,
               state: current,
               call,
-              live_config: liveConfig.snapshot,
+              live_config: liveConfig2.snapshot,
               // The landing is committed through the kernel, whose equality pin binds the next
               // state's fingerprint to the request's claim — so this recompute is a comparing
               // site: supply the claim as the expected digest and record the accepted
@@ -72818,11 +73378,28 @@ async function handleState(call, context2) {
         const completionSignal = !planningRestartSignal && artifact === void 0 && decodedCurrent.kind === "phase-impl" && current.value.step === "triage" && current.value.status === "succeeded";
         const artifactPhaseExitSignal = !planningRestartSignal && artifact === void 0 && crossesPhase && decodedCurrent.kind !== "phase-impl";
         let currentProduce;
+        let authenticatedRuleAcceptance;
         if (completionSignal || artifactPhaseExitSignal) {
           const loadedProduce = await loadCurrentProduceSubject(services.dependencies, current.value);
           if (!loadedProduce.ok) return loadedProduce;
           currentProduce = loadedProduce.value;
           completionSubjectDigest = currentProduce.artifact_digest;
+          const resolved = await resolvePinnedConstitution(
+            services.runner,
+            current.value.policy_base_commit,
+            services.authority.context
+          );
+          if (!resolved.ok) return resolved;
+          const policy = authenticateRuleAcceptancePolicy(current.value, resolved.value);
+          const settlement = policy === void 0 ? void 0 : acceptedNoWaitSettlement(
+            policy,
+            current.value,
+            completionSubjectDigest,
+            current.value.phase_instance
+          );
+          if (policy !== void 0 && settlement !== void 0) {
+            authenticatedRuleAcceptance = Object.freeze({ policy, settlement });
+          }
         }
         if (artifactPhaseExitSignal) {
           const designExit = decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design";
@@ -72849,6 +73426,36 @@ async function handleState(call, context2) {
               )).observed) {
                 commitObserved = true;
                 break;
+              }
+            }
+            if (!commitObserved && authenticatedRuleAcceptance !== void 0) {
+              const baseline = authenticatedRuleAcceptance.settlement.milestone_baseline_commit;
+              if (baseline !== void 0) {
+                const target2 = await currentTargetRef(services.dependencies);
+                const phase3 = decodePhaseInstance(current.value.phase_instance);
+                if (phase3.kind !== "design" && phase3.kind !== "phase-design") {
+                  throw new TypeError("autonomous design commit has a non-design phase");
+                }
+                const phaseLabel = phase3.kind === "design" ? "design" : `phase ${String(phase3.phase)} design`;
+                commitObserved = (await autonomousDesignArtifactCommittedAtCurrentTarget(
+                  services.runner,
+                  current.value,
+                  currentProduce.artifact,
+                  currentProduce.retained.manifest.value.outputs,
+                  target2.value,
+                  baseline,
+                  `ArchFlow: Approve ${current.value.task_id} ${phaseLabel}`,
+                  services.authority.context
+                )).observed;
+              }
+              if (commitObserved && current.value.phase_instance === "design") {
+                const bound = await loadAutonomousDesignFinalPhase(
+                  services.dependencies,
+                  current.value,
+                  completionSubjectDigest
+                );
+                if (!bound.ok) return bound;
+                derivedPlannedFinalPhase = bound.value;
               }
             }
           }
@@ -72879,6 +73486,16 @@ async function handleState(call, context2) {
                 commitObserved = true;
                 break;
               }
+            }
+            if (!commitObserved && authenticatedRuleAcceptance !== void 0) {
+              const target2 = await currentTargetRef(services.dependencies);
+              const phase3 = decodePhaseInstance(source.phase_instance);
+              commitObserved = await autonomousImplementationOutputCommittedAtCurrentTarget(
+                services.runner,
+                source,
+                target2.value,
+                `ArchFlow: Implement ${source.task_id} phase ${phase3.kind === "phase-impl" ? String(phase3.phase) : source.phase_instance}`
+              );
             }
           }
         }
@@ -72946,6 +73563,9 @@ async function handleState(call, context2) {
           },
           ...authenticatedGateApprovals2.length === 0 ? {} : {
             authenticated_gate_approvals: authenticatedGateApprovals2
+          },
+          ...authenticatedRuleAcceptance === void 0 ? {} : {
+            authenticated_rule_acceptance: authenticatedRuleAcceptance
           }
         };
         let next = planStateTransition(transitionInput);

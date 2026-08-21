@@ -15,7 +15,11 @@ import {
   installSemanticReviewStub,
   semanticJourneyHarness,
 } from "../helpers/semantic-journeys.js";
-import { createTaskWorkspace, type TaskWorkspace } from "../helpers/task-workspace.js";
+import {
+  createTaskWorkspace,
+  supportedRuleAcceptanceConstitutionV2Bytes,
+  type TaskWorkspace,
+} from "../helpers/task-workspace.js";
 
 const TIMEOUT = 60_000;
 const workspaces: TaskWorkspace[] = [];
@@ -503,6 +507,155 @@ roles:
     expect(startedDesign.value.next_action.kind).toBe("submit-work");
   });
 
+  it("advances exact-v2 no-wait documents through exact autonomous milestone commits", async () => {
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-v2-autonomous-documents",
+      label: "semantic-v2-autonomous-documents",
+      configBytes: documentSubjectsConfig([]),
+      constitutionBytes: supportedRuleAcceptanceConstitutionV2Bytes(),
+    });
+    workspaces.push(workspace);
+    restorers.push(installSemanticReviewStub(workspace.root, [[], [], []]));
+    const h = semanticJourneyHarness(workspace);
+    const creationConfigBytes = new Uint8Array(readFileSync(workspace.services.authority.config.absolute));
+    const settlementConfigBytes = new TextEncoder().encode(
+      `${new TextDecoder().decode(creationConfigBytes)}# config active when no-wait settlements are created\n`,
+    );
+    writeFileSync(workspace.services.authority.config.absolute, settlementConfigBytes);
+    const prdInvocation = { skill: "archflow-prd", intent: "resume" } as const;
+    writeFileSync(join(workspace.services.authority.task_root, "ask.md"), "Describe autonomous documents.\n");
+    writeFileSync(join(workspace.services.authority.task_root, "prd.md"), "# Autonomous documents\n\nAdvance after review.\n");
+
+    let view = await h.status(prdInvocation);
+    let result = await h.apply(prdInvocation, view, { kind: "work-result", outcome: "succeeded" });
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    result = await h.apply(prdInvocation, result.value);
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    expect(result.value.next_action).toMatchObject({ kind: "start-next-skill", skill: "archflow-design" });
+    expect(result.value.presentation).toBeUndefined();
+
+    const designInvocation = { skill: "archflow-design", intent: "resume" } as const;
+    view = await h.status(designInvocation);
+    result = await h.apply(designInvocation, view);
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    const designResource = result.value.resources.find((resource) => resource.role === "current-artifact");
+    if (designResource === undefined) throw new Error("design resource unavailable");
+    writeFileSync(join(workspace.root, designResource.path), "# Design\n\n### Phase 1: Implement autonomy\n");
+    result = await h.apply(designInvocation, result.value, { kind: "work-result", outcome: "succeeded" });
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    result = await h.apply(designInvocation, result.value);
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    expect(result.value.next_action).toMatchObject({ kind: "commit" });
+    expect(result.value.next_action.commit?.requires_human_confirmation).toBe(false);
+
+    const settledState = await readTaskState(workspace.services.authority.state);
+    if (settledState.kind !== "canonical") throw new Error("settled design state unavailable");
+    const designSettlement = [...(settledState.document.value.rule_settlements ?? [])]
+      .filter((entry) => entry.phase_instance === "design")
+      .sort((left, right) => right.settled_at_revision - left.settled_at_revision)[0];
+    if (designSettlement === undefined) throw new Error("design settlement unavailable");
+    expect(designSettlement.config_digest).toBe(sha256Bytes(settlementConfigBytes));
+    expect(designSettlement.config_digest).not.toBe(settledState.document.value.config_digest);
+
+    // Move HEAD without changing any task-local byte. Status must offer the bounded refresh before
+    // returning new exact commit facts rooted at the unchanged reviewed subject and evidence.
+    writeFileSync(join(workspace.root, "unrelated.txt"), "unrelated repository work\n");
+    execFileSync("git", ["add", "--", "unrelated.txt"], { cwd: workspace.root });
+    execFileSync("git", [
+      "-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid",
+      "commit", "-q", "-m", "unrelated repository work",
+    ], { cwd: workspace.root });
+    const movedHead = execFileSync("git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" }).trim();
+    const postSettlementConfigBytes = new TextEncoder().encode(
+      `${new TextDecoder().decode(settlementConfigBytes)}# changed after the frozen settlement\n`,
+    );
+    writeFileSync(workspace.services.authority.config.absolute, postSettlementConfigBytes);
+    view = await h.status(designInvocation);
+    expect(view.next_action.kind).not.toBe("refresh-milestone-baseline");
+    expect(view.next_action).toMatchObject({ kind: "revise", expected_submission: "none" });
+
+    // Restoring the exact live config under which the settlement was created makes the bounded
+    // refresh eligible even though the task's immutable creation digest is intentionally older.
+    writeFileSync(workspace.services.authority.config.absolute, settlementConfigBytes);
+    view = await h.status(designInvocation);
+    expect(view.next_action).toMatchObject({ kind: "refresh-milestone-baseline", expected_submission: "none" });
+    result = await h.apply(designInvocation, view);
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    const designCommit = result.value.next_action.commit;
+    if (designCommit === undefined) throw new Error("refreshed design commit unavailable");
+    expect(designCommit).toMatchObject({ baseline: movedHead, requires_human_confirmation: false });
+    execFileSync("git", ["add", "-A", "--", ...designCommit.paths], { cwd: workspace.root });
+    execFileSync("git", [
+      "-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid",
+      "commit", "-q", "-m", designCommit.message, "--", ...designCommit.paths,
+    ], { cwd: workspace.root });
+
+    view = await h.status(designInvocation);
+    expect(view.next_action).toMatchObject({
+      kind: "start-next-skill", skill: "archflow-phase-design", skill_args: ["1"],
+    });
+    const phaseInvocation = { skill: "archflow-phase-design", phase: 1, intent: "resume" } as const;
+    view = await h.status(phaseInvocation);
+    result = await h.apply(phaseInvocation, view);
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    const phaseResource = result.value.resources.find((resource) => resource.role === "current-artifact");
+    if (phaseResource === undefined) throw new Error("phase-design resource unavailable");
+    mkdirSync(dirname(join(workspace.root, phaseResource.path)), { recursive: true });
+    writeFileSync(join(workspace.root, phaseResource.path), `# Phase 1: Implement autonomy
+
+## Goal
+
+Prove exact autonomous phase-design advancement.
+
+## Requirements
+
+- Preserve exact reviewed bytes.
+
+## Context
+
+The task design contains one phase.
+
+## Files
+
+- \`src/state/next-action.ts\`: preserve autonomous routing.
+
+## Work Chunks
+
+### Autonomous routing
+
+Verify the exact reviewed milestone commit.
+
+## Pinned Cross-Chunk Interfaces
+
+The reviewed settlement is phase-bound.
+
+## Success Criteria
+
+The implementation handoff is offered after exact commit proof.
+
+## Executable Verification
+
+- \`npm run typecheck\`
+`);
+    result = await h.apply(phaseInvocation, result.value, { kind: "work-result", outcome: "succeeded" });
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    result = await h.apply(phaseInvocation, result.value);
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    const phaseCommit = result.value.next_action.commit;
+    if (phaseCommit === undefined) throw new Error("autonomous phase-design commit unavailable");
+    expect(phaseCommit.requires_human_confirmation).toBe(false);
+    execFileSync("git", ["add", "-A", "--", ...phaseCommit.paths], { cwd: workspace.root });
+    execFileSync("git", [
+      "-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid",
+      "commit", "-q", "-m", phaseCommit.message, "--", ...phaseCommit.paths,
+    ], { cwd: workspace.root });
+    view = await h.status(phaseInvocation);
+    expect(view.next_action).toMatchObject({
+      kind: "start-next-skill", skill: "archflow-phase-impl", skill_args: ["1"],
+    });
+    expect(readFileSync(join(workspace.root, "semantic-review-count"), "utf8")).toBe("3");
+  });
+
   it("records a wait:false design settlement but requires human milestone approval", async () => {
     // The PRD records a matching rule and the design records wait:false. Both still require human
     // approval; the settlement never supplies milestone or recovery authority.
@@ -573,6 +726,9 @@ roles:
       subject_digest: subjectDigest,
       conclusion: { wait: false, match: null },
       config_digest: sha256Bytes(readFileSync(workspace.services.authority.config.absolute)),
+      milestone_baseline_commit: execFileSync(
+        "git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" },
+      ).trim(),
       settled_at_revision: settled.document.value.revision,
     }, expect.objectContaining({
       phase_instance: "prd",
@@ -716,6 +872,9 @@ The committed state carries the settlement and the successor hand-off is offered
       subject_digest: subjectDigest,
       conclusion: { wait: false, match: null },
       config_digest: sha256Bytes(readFileSync(workspace.services.authority.config.absolute)),
+      milestone_baseline_commit: execFileSync(
+        "git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" },
+      ).trim(),
       settled_at_revision: settled.document.value.revision,
     };
     expect(settled.document.value.rule_settlements).toEqual(expect.arrayContaining([receipt]));
@@ -840,6 +999,9 @@ The committed state carries the settlement and the successor hand-off is offered
       subject_digest: subjectDigest,
       conclusion: { wait: false, match: null },
       config_digest: sha256Bytes(readFileSync(workspace.services.authority.config.absolute)),
+      milestone_baseline_commit: execFileSync(
+        "git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" },
+      ).trim(),
       settled_at_revision: settled.document.value.revision,
     });
 

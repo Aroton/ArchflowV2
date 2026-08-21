@@ -228,7 +228,10 @@
           },
           "operation": {
             "type": "string",
-            "const": "planning_restart"
+            "enum": [
+              "planning_restart",
+              "refresh_milestone_baseline"
+            ]
           },
           "target_phase_instance": {
             "$ref": "#/$defs/phase"

@@ -652,9 +652,13 @@ async function stateAfterPolicyWaiverSettlement(
   const conclusion = evaluateApprovalRules(
     ruleContext.config, ruleContext.subject, ruleContext.changedPaths,
   );
+  const kind = decodePhaseInstance(current.value.phase_instance).kind;
+  const milestoneBaseline = !conclusion.wait && (kind === "design" || kind === "phase-design")
+    ? await resolveCommit(dependencies.runner, "HEAD")
+    : undefined;
   const settled = nextStateForRecord(current.value, record, digest);
   const settlement = buildRuleSettlement(
-    current.value, produce.value.artifact_digest, config.snapshot.digest, conclusion,
+    current.value, produce.value.artifact_digest, config.snapshot.digest, conclusion, milestoneBaseline,
   );
   const ruleSettlements = Object.freeze([
     ...(settled.value.rule_settlements ?? []),

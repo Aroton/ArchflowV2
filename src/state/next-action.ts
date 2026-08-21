@@ -1,4 +1,4 @@
-import type { TaskStateV1 } from "../contracts/durable-state.js";
+import type { RuleSettlementV1, TaskStateV1 } from "../contracts/durable-state.js";
 import type { GateKind } from "../contracts/gates.js";
 import type { PathSafeId, Sha256Digest } from "../contracts/evidence.js";
 import { decodePhaseInstance, nextPhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
@@ -19,6 +19,7 @@ export type NextActionCode =
   | "run-step"
   | "commit-artifacts"
   | "commit-phase"
+  | "refresh-milestone-baseline"
   | "advance-phase"
   | "complete-task"
   | "task-complete"
@@ -44,6 +45,8 @@ export type NextAction = Readonly<{
   commit_message?: string;
   commit_target_ref?: string;
   commit_baseline?: string;
+  /** Autonomous rule authority needs no second human confirmation; gate authority always does. */
+  commit_requires_human_confirmation?: boolean;
   /**
    * Every constitution gate this review still demands, in the order they will open, including the
    * one named by `gate_kind`. Present only when more than one remains, so a human can be told the
@@ -72,6 +75,10 @@ export type NextActionInput = Readonly<{
   evidence_available?: boolean;
   subject_digest?: Sha256Digest;
   authenticated_approvals?: readonly AuthenticatedApprovalFact[];
+  /** Already authenticated status guidance; mutation independently re-authenticates this fact. */
+  accepted_no_wait_settlement?: RuleSettlementV1;
+  /** Fresh status comparison for the exceptional settlement-baseline refresh only. */
+  milestone_refresh_config_matches?: boolean;
   commit_observed?: boolean;
   /**
    * Set when running the authorized milestone commit could not produce a recognizable milestone:
@@ -149,6 +156,13 @@ function hasLegacyDesignApproval(input: NextActionInput): boolean {
   return matchingApproval(input, "artifact-approval");
 }
 
+function hasAcceptedNoWait(input: NextActionInput, state: TaskStateV1): boolean {
+  const settlement = input.accepted_no_wait_settlement;
+  return settlement !== undefined && input.subject_digest !== undefined &&
+    settlement.task_id === state.task_id && settlement.phase_instance === state.phase_instance &&
+    settlement.subject_digest === input.subject_digest && settlement.conclusion.wait === false;
+}
+
 function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
   const phase = decodePhaseInstance(state.phase_instance);
   const designPhase = phase.kind === "design" || phase.kind === "phase-design";
@@ -161,6 +175,7 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
       : undefined;
   const legacyDesignApproval = designPhase && hasLegacyDesignApproval(input);
   const migrationApproval = designPhase && matchingApproval(input, "migration-audit");
+  const autonomous = hasAcceptedNoWait(input, state);
   // The imported design exits through its one migration audit, never a design-approval gate —
   // the same rule the adjudication branch applies when constitution gates are pending.
   if (designPhase && input.migration_audit_required === true) {
@@ -168,10 +183,7 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
       gate_kind: "migration-audit",
     });
   }
-  // Phase 3 records the rule conclusion but does not yet let it replace human document authority.
-  // Every document still returns to its ordinary approval gate; the constitution changes that
-  // boundary only in Phase 5. Commit authorization likewise remains unconditional.
-  if (requiredKind !== undefined && !matchingApproval(input, requiredKind) && !legacyDesignApproval && !migrationApproval) {
+  if (requiredKind !== undefined && !matchingApproval(input, requiredKind) && !legacyDesignApproval && !migrationApproval && !autonomous) {
     return action("open-gate", `Open the required ${requiredKind} gate.`, true, state, {
       gate_kind: requiredKind,
     });
@@ -180,12 +192,38 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
   // its original contract. It did not authorize a commit, so only the new combined gate enters
   // the automatic commit step.
   if (designPhase && !legacyDesignApproval && input.commit_observed !== true) {
+    if (autonomous && input.commit_blocked_reason === "approved-document-mismatch") {
+      return action(
+        "run-step",
+        "The reviewed design bytes changed after rule settlement. Reopen produce so the current bytes receive fresh review authority.",
+        false,
+        state,
+        { step: "produce" },
+      );
+    }
     if (input.design_commit === undefined) {
       return action("inspect-state", "Inspect why the approved design commit authority is unavailable.", true, state);
     }
     // The commit action can only run while the target is still the approved baseline, so a commit
     // that cannot be proven can never be retried. Offering it again — or offering one that would be
     // unprovable the moment it is made — only loops. The blocking reason says what to look at.
+    if (input.commit_blocked_reason === "target-moved" && autonomous) {
+      if (input.milestone_refresh_config_matches !== true) {
+        return action(
+          "run-step",
+          "The approval-rule configuration changed after this design settled. Reopen produce so the current subject is reviewed under the live configuration before any Git baseline refresh.",
+          false,
+          state,
+          { step: "produce" },
+        );
+      }
+      return action(
+        "refresh-milestone-baseline",
+        "Refresh the unchanged reviewed design milestone baseline to the current target.",
+        false,
+        state,
+      );
+    }
     if (input.commit_blocked_reason !== undefined) {
       return action(
         "inspect-state",
@@ -199,6 +237,7 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
       commit_message: input.design_commit.message,
       commit_target_ref: input.design_commit.target_ref,
       commit_baseline: input.design_commit.baseline_commit,
+      commit_requires_human_confirmation: false,
     });
   }
   if (phase.kind === "phase-impl" && input.commit_observed !== true) {
@@ -215,6 +254,7 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
         commit_message: input.implementation_commit.message,
         commit_target_ref: input.implementation_commit.target_ref,
         commit_baseline: input.implementation_commit.baseline_commit,
+        commit_requires_human_confirmation: !autonomous,
       },
     );
   }

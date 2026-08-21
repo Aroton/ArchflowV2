@@ -8315,7 +8315,7 @@ var require_src = __commonJS({
 });
 
 // src/local/main.ts
-import { readFile as readFile12 } from "node:fs/promises";
+import { readFile as readFile13 } from "node:fs/promises";
 import process3 from "node:process";
 import { parseArgs } from "node:util";
 
@@ -22949,6 +22949,10 @@ function sha256Bytes(bytes) {
 function canonicalJsonDigest(value) {
   return sha256Bytes(canonicalJsonBytes(value));
 }
+function gitBlobOid(content) {
+  const header = Buffer.from(`blob ${String(content.byteLength)}\0`, "ascii");
+  return createHash("sha1").update(header).update(content).digest("hex");
+}
 function repositoryCandidateDigest(absoluteCwd) {
   return sha256Bytes(encoder.encode(`archflow:repository-candidate:v1:${absoluteCwd}`));
 }
@@ -25180,6 +25184,14 @@ async function hashGitBlob(runner, bytes, path2) {
   if (!GIT_OID.test(oid)) throw new TypeError("git hash-object returned an invalid SHA-1 object id");
   return oid;
 }
+async function hashGitBlobIdentity(runner, bytes, path2) {
+  const argv = ["hash-object", "-w"];
+  if (path2 !== void 0) argv.push(`--path=${path2}`);
+  argv.push("--stdin");
+  const oid = await runner.runText({ argv, operation: HASH_OBJECT_OPERATION, stdin: bytes });
+  if (!GIT_OID.test(oid)) throw new TypeError("git hash-object returned an invalid SHA-1 object id");
+  return Object.freeze({ oid, size_bytes: await readGitBlobSize(runner, oid) });
+}
 async function readChangedGitPaths(runner, pathspecs = []) {
   const result = await runner.run({
     argv: [
@@ -25740,7 +25752,7 @@ async function ensureWorkspaceProjectionParent(authority, target) {
 }
 
 // src/state/production.ts
-import { lstat as lstat6, readFile as readFile2, readlink as readlink2 } from "node:fs/promises";
+import { lstat as lstat7, readFile as readFile3, readlink as readlink3 } from "node:fs/promises";
 
 // src/contracts/mcp-tools.ts
 import { isDeepStrictEqual as isDeepStrictEqual3 } from "node:util";
@@ -26060,8 +26072,19 @@ var ruleSettlementV1Schema = external_exports.object({
   subject_digest: sha256Digest5,
   conclusion: ruleSettlementConclusionV1Schema,
   config_digest: sha256Digest5,
+  milestone_baseline_commit: gitOidV1Schema.optional(),
   settled_at_revision: positiveSafeInteger
-}).strict();
+}).strict().superRefine((settlement, context2) => {
+  if (settlement.milestone_baseline_commit === void 0) return;
+  const kind = decodePhaseInstance(settlement.phase_instance).kind;
+  if (settlement.conclusion.wait || kind !== "design" && kind !== "phase-design") {
+    context2.addIssue({
+      code: "custom",
+      path: ["milestone_baseline_commit"],
+      message: "milestone baseline is allowed only on a design or phase-design wait:false settlement"
+    });
+  }
+});
 var planningRestartRecordV1Schema = external_exports.object({
   restart_id: pathSafeIdV1Schema,
   source_phase_instance: phaseInstanceIdV1Schema,
@@ -26236,7 +26259,7 @@ var stateInputSchema = external_exports.object({
   status: external_exports.enum(["running", "succeeded", "failed"]),
   artifact: durableArtifact.optional(),
   human_revision: humanRevisionDeclarationSchema.optional(),
-  operation: external_exports.literal("planning_restart").optional(),
+  operation: external_exports.enum(["planning_restart", "refresh_milestone_baseline"]).optional(),
   target_phase_instance: phase2.optional(),
   reason: text2.optional(),
   ask_base_digest: digest7.optional()
@@ -26248,6 +26271,13 @@ var stateInputSchema = external_exports.object({
     if (input.artifact !== void 0 || input.human_revision !== void 0) context2.addIssue({ code: "custom", path: ["artifact"], message: "planning_restart cannot carry an artifact or human revision" });
     if (input.target_phase_instance === "prd" && input.ask_base_digest === void 0) context2.addIssue({ code: "custom", path: ["ask_base_digest"], message: "PRD planning_restart requires ask_base_digest" });
     if (input.target_phase_instance !== "prd" && input.ask_base_digest !== void 0) context2.addIssue({ code: "custom", path: ["ask_base_digest"], message: "ask_base_digest is PRD-only" });
+    return;
+  }
+  if (input.operation === "refresh_milestone_baseline") {
+    if (input.step !== "triage" || input.status !== "succeeded") context2.addIssue({ code: "custom", path: ["step"], message: "refresh_milestone_baseline requires triage/succeeded" });
+    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0) {
+      context2.addIssue({ code: "custom", path: ["operation"], message: "refresh_milestone_baseline carries no artifact, revision, restart target, reason, or ask digest" });
+    }
     return;
   }
   if (input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "restart fields require planning_restart" });
@@ -27026,10 +27056,61 @@ function parseConstitutionRuleFiles(files) {
 var CONSTITUTION_DIRECTORY = ".archflow/constitution";
 var RULE_FILE = /^\.archflow\/constitution\/[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
 var decoder2 = new TextDecoder("utf-8", { fatal: true });
+var SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2 = Object.freeze([
+  Object.freeze({
+    id: "approved-design-before-code",
+    version: 2,
+    status: "active",
+    text: "Implementation starts only from a phase design that either passed its triggered human gate or advanced by rule after counter-review completed. The PRD, architecture, and phase design remain truthful as work proceeds; material deviations update the governing documents and re-enter the applicable review boundary before dependent work advances.",
+    review_trigger: "Implementation begins before the applicable phase design passed its triggered human gate or advanced by rule after counter-review completed, or implementation materially departs from approved architecture without updating and re-reviewing its governing plan.",
+    enforced_by: Object.freeze([])
+  }),
+  Object.freeze({
+    id: "explicit-human-authority",
+    version: 2,
+    status: "active",
+    text: "Required human decisions are explicit and bound to the exact artifact or code subject at gates opened by an approval rule or safety condition. Silence, elapsed time, agent prose, or a model verdict never supplies approval, waives a gate, or advances the workflow. Commits are not human-gated by default.",
+    review_trigger: "Authority over a gate opened by an approval rule or safety condition is inferred rather than explicitly recorded by a human for the exact subject.",
+    enforced_by: Object.freeze([])
+  })
+]);
 var authenticResolvedConstitutions = /* @__PURE__ */ new WeakSet();
+var authenticRuleAcceptancePolicies = /* @__PURE__ */ new WeakSet();
 function assertResolvedConstitution(value) {
   if (value === null || typeof value !== "object" || !authenticResolvedConstitutions.has(value)) {
     throw new TypeError("an authentic resolved constitution is required");
+  }
+}
+function normalizedSelectedRule(rule4) {
+  return Object.freeze({
+    id: rule4.id,
+    version: rule4.version,
+    status: "active",
+    text: rule4.text,
+    review_trigger: rule4.review_trigger ?? "",
+    enforced_by: Object.freeze([...new Set(rule4.enforced_by ?? [])].sort())
+  });
+}
+function authenticateRuleAcceptancePolicy(state, constitution) {
+  assertResolvedConstitution(constitution);
+  if (constitution.policy_base_commit !== state.policy_base_commit || constitution.digest !== state.constitution_digest) return void 0;
+  const selected = SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2.map(({ id: id5 }) => constitution.rules.get(id5));
+  if (selected.some((rule4) => rule4 === void 0 || rule4.status !== "active")) return void 0;
+  const normalized = selected.map((rule4) => normalizedSelectedRule(rule4)).sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+  if (canonicalJsonDigest(normalized) !== canonicalJsonDigest(SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2)) {
+    return void 0;
+  }
+  const policy = Object.freeze({
+    task_id: state.task_id,
+    policy_base_commit: state.policy_base_commit,
+    constitution_digest: state.constitution_digest
+  });
+  authenticRuleAcceptancePolicies.add(policy);
+  return policy;
+}
+function assertAuthenticatedRuleAcceptancePolicy(value) {
+  if (value === null || typeof value !== "object" || !authenticRuleAcceptancePolicies.has(value)) {
+    throw new TypeError("an authenticated rule acceptance policy is required");
   }
 }
 function immutableRegistry(rules2) {
@@ -27092,6 +27173,7 @@ async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
     }
     if (rules2.size === 0) return fail5(invalidPolicyBase(policyBaseCommit));
     const resolved = Object.freeze({
+      policy_base_commit: policyBaseCommit,
       digest: computePinnedConstitutionDigest(selected),
       rules: immutableRegistry(rules2),
       files: Object.freeze(selected.map((file2) => Object.freeze({ ...file2 })))
@@ -32212,8 +32294,8 @@ function createSecretlintScanner() {
 }
 
 // src/state/snapshots.ts
-import { chmod, lstat as lstat5, readlink } from "node:fs/promises";
-import { resolve as resolvePath4 } from "node:path";
+import { chmod, lstat as lstat6, readlink as readlink2 } from "node:fs/promises";
+import { resolve as resolvePath5 } from "node:path";
 import { isDeepStrictEqual as isDeepStrictEqual5 } from "node:util";
 
 // src/contracts/durable.ts
@@ -32811,6 +32893,8 @@ function validateDurableSemantics(subject) {
 }
 
 // src/state/implementation-manifest.ts
+import { lstat as lstat5, readFile as readFile2, readlink } from "node:fs/promises";
+import { resolve as resolvePath4 } from "node:path";
 async function implementationOutputCommittedAtCurrentTarget(runner, output, context2) {
   const symbolicRef = await runner.runText({
     argv: ["symbolic-ref", "--quiet", "HEAD"],
@@ -32845,6 +32929,17 @@ async function implementationOutputCommittedAtCurrentTarget(runner, output, cont
     if (entry.operation === "rename" && await readCommitTreeBlob(runner, headCommit, entry.previous_path) !== void 0) return false;
   }
   return await resolveCommit(runner, "HEAD") === headCommit && await resolveCommit(runner, context2.target_ref) === headCommit;
+}
+async function autonomousImplementationOutputCommittedAtCurrentTarget(runner, output, targetRef, commitMessage) {
+  return implementationOutputCommittedAtCurrentTarget(runner, output, {
+    target_ref: targetRef,
+    baseline_commit: output.base_commit,
+    commit_message: commitMessage,
+    paths: sortedUniquePaths(output),
+    diff_digest: output.diff_digest,
+    current_artifact_digests: Object.freeze([]),
+    parent_document_digests: Object.freeze(output.parent_documents.map((entry) => entry.content_digest).sort())
+  });
 }
 var observed = Object.freeze({ observed: true });
 function missed(reason2, paths) {
@@ -32920,6 +33015,78 @@ async function designArtifactCommittedAtCurrentTarget(runner, taskId, artifact, 
   }
   return await resolveCommit(runner, "HEAD") === head && await resolveCommit(runner, context2.target_ref) === head ? observed : missed("target-moved");
 }
+async function autonomousDesignArtifactCommittedAtCurrentTarget(runner, state, artifact, outputs, targetRef, baselineCommit, commitMessage, context2) {
+  if (!await approvedDesignWorktreeMatchesRetainedArtifact(runner, state.task_id, artifact, outputs, context2)) {
+    return missed("approved-document-mismatch");
+  }
+  const symbolicRef = await runner.runText({
+    argv: ["symbolic-ref", "--quiet", "HEAD"],
+    operation: "git-current-autonomous-design-target",
+    expectedAbsence: [{ code: 1, stderrIncludes: "" }]
+  });
+  if (targetRef === "HEAD" ? symbolicRef !== "" : symbolicRef !== targetRef) return missed("target-moved");
+  const head = await resolveCommit(runner, "HEAD");
+  if (await resolveCommit(runner, targetRef) !== head) return missed("target-moved");
+  const prefix = `.archflow/tasks/${state.task_id}/`;
+  const approvedPaths = [artifact.projection_target, ...(artifact.additional_documents ?? []).map((entry) => entry.projection_target)];
+  const approvedPathSet = new Set(approvedPaths);
+  const unauthorizedDocuments = (paths) => paths.filter((path2) => path2.startsWith(prefix) && isTaskDocumentPath(path2.slice(prefix.length)) && !approvedPathSet.has(path2));
+  if (head === baselineCommit) {
+    const pending = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
+    const unexpected = unauthorizedDocuments(pending.paths);
+    return unexpected.length === 0 ? missed("not-committed") : missed("unauthorized-task-document", unexpected);
+  }
+  if (await resolveCommit(runner, `${head}^`) !== baselineCommit) return missed("parent-not-baseline");
+  const message = await runner.runText({
+    argv: ["log", "-1", "--format=%s", head],
+    operation: "git-autonomous-design-commit-message"
+  });
+  if (message !== commitMessage) return missed("message-mismatch");
+  const changed = [...new Set(await runner.runNulFields({
+    argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", baselineCommit, head, "--"],
+    operation: "git-autonomous-design-commit-paths"
+  }))].sort(ordinal5);
+  if (changed.length === 0 || changed.some((path2) => !path2.startsWith(prefix))) return missed("paths-outside-task", changed);
+  if (!changed.includes(`${prefix}state.json`)) return missed("missing-recovery-authority");
+  for (const path2 of approvedPaths) {
+    const output = outputs.find((entry) => entry.path === path2);
+    if (output === void 0 || output.operation === "delete") return missed("approved-document-mismatch", [path2]);
+    const committed2 = await readCommitTreeBlob(runner, head, path2);
+    if (committed2?.mode !== output.after.mode || committed2.oid !== output.after.oid) {
+      return missed("approved-document-mismatch", [path2]);
+    }
+  }
+  const unauthorized = unauthorizedDocuments(changed);
+  if (unauthorized.length !== 0) return missed("unauthorized-task-document", unauthorized);
+  const committedState = await readCommitTreeBlob(runner, head, `${prefix}state.json`);
+  const expectedState = canonicalJsonBytes(state);
+  if (committedState?.oid !== gitBlobOid(expectedState)) return missed("missing-recovery-authority");
+  const dirty = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
+  if (dirty.paths.length !== 0 || dirty.unrepresentable_count !== 0) return missed("task-tree-dirty", dirty.paths);
+  return await resolveCommit(runner, "HEAD") === head && await resolveCommit(runner, targetRef) === head ? observed : missed("target-moved");
+}
+async function approvedDesignWorktreeMatchesRetainedArtifact(runner, taskId, artifact, outputs, context2) {
+  if (artifact.task_id !== taskId) return false;
+  const approvedPaths = [
+    artifact.projection_target,
+    ...(artifact.additional_documents ?? []).map((entry) => entry.projection_target)
+  ];
+  for (const path2 of approvedPaths) {
+    const output = outputs.find((entry) => entry.path === path2);
+    if (output === void 0 || output.operation === "delete") return false;
+    const resolved = await resolveDeclaredOutputPath({
+      runner,
+      taskId: artifact.task_id,
+      claim: output.path,
+      pathClass: output.path_class,
+      context: context2
+    });
+    if (!resolved.ok) return false;
+    const live = await observePath(runner, resolved.value);
+    if (!sameIdentity(live.observation, output.after)) return false;
+  }
+  return true;
+}
 var ordinal5 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 function sortedUniquePaths(output) {
   const paths = /* @__PURE__ */ new Set();
@@ -32941,6 +33108,70 @@ function deriveSnapshotDigest(entries) {
     digest_kind: "declared-output-snapshot",
     entries: [...entries].sort((left, right) => ordinal5(left.path, right.path))
   });
+}
+function sameIdentity(observed2, expected) {
+  return observed2.state === "present" && observed2.oid === expected.oid && observed2.mode === expected.mode && observed2.size_bytes === expected.size_bytes;
+}
+async function observePath(runner, resolved) {
+  const lexicalPath = resolvePath4(runner.location.worktreeRoot, resolved.repositoryRelative);
+  let stat5;
+  try {
+    stat5 = await lstat5(lexicalPath);
+  } catch (error51) {
+    if (error51.code === "ENOENT") {
+      return { observation: Object.freeze({ path: resolved.repositoryRelative, path_class: resolved.path_class, state: "absent" }) };
+    }
+    throw error51;
+  }
+  let bytes;
+  let fileType;
+  let mode;
+  let oid;
+  if (stat5.isSymbolicLink()) {
+    bytes = new Uint8Array(await readlink(lexicalPath, { encoding: "buffer" }));
+    fileType = "symlink";
+    mode = "120000";
+    oid = gitBlobOid(bytes);
+  } else if (stat5.isFile()) {
+    const handle = await openResolved(lexicalPath, 0);
+    try {
+      bytes = new Uint8Array(await handle.readFile());
+    } finally {
+      await handle.close();
+    }
+    fileType = "regular";
+    mode = (stat5.mode & 73) === 0 ? "100644" : "100755";
+    const identity = await hashGitBlobIdentity(runner, bytes, resolved.repositoryRelative);
+    oid = parseGitOid(identity.oid);
+    return {
+      observation: Object.freeze({
+        path: resolved.repositoryRelative,
+        path_class: resolved.path_class,
+        state: "present",
+        file_type: fileType,
+        mode,
+        size_bytes: parseSafeInteger(identity.size_bytes),
+        oid,
+        content_digest: sha256Bytes(bytes)
+      }),
+      bytes
+    };
+  } else {
+    throw new TypeError("declared output is not a regular file or symlink");
+  }
+  return {
+    observation: Object.freeze({
+      path: resolved.repositoryRelative,
+      path_class: resolved.path_class,
+      state: "present",
+      file_type: fileType,
+      mode,
+      size_bytes: parseSafeInteger(bytes.byteLength),
+      oid,
+      content_digest: sha256Bytes(bytes)
+    }),
+    bytes
+  };
 }
 
 // src/state/snapshots.ts
@@ -32992,7 +33223,7 @@ function cloneBytes(value, label) {
   return new Uint8Array(value);
 }
 function atLexicalLeaf(path2, worktreeRoot) {
-  const absolute = resolvePath4(worktreeRoot, path2.repositoryRelative);
+  const absolute = resolvePath5(worktreeRoot, path2.repositoryRelative);
   return "workspaceRelative" in path2 ? Object.freeze({ ...path2, absolute }) : Object.freeze({ ...path2, absolute });
 }
 function prepareSnapshot(input) {
@@ -33191,9 +33422,9 @@ async function readSnapshotPayload(input) {
 }
 async function captureProjectionTarget(path2) {
   try {
-    const stat5 = await lstat5(path2.absolute);
+    const stat5 = await lstat6(path2.absolute);
     if (stat5.isSymbolicLink()) {
-      const bytes2 = Buffer.from(await readlink(path2.absolute), "utf8");
+      const bytes2 = Buffer.from(await readlink2(path2.absolute), "utf8");
       return Object.freeze({
         observation: Object.freeze({ state: "present", file_type: "symlink", mode: "120000", size_bytes: bytes2.byteLength, content_digest: sha256Bytes(bytes2) }),
         rollback: Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes: bytes2 })
@@ -33245,7 +33476,7 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
     if (suppliedTarget.repositoryRelative !== path2) throw new TypeError(`projection source ${index} target path disagrees`);
     const target = Object.freeze({
       ...suppliedTarget,
-      absolute: resolvePath4(worktreeRoot, suppliedTarget.repositoryRelative)
+      absolute: resolvePath5(worktreeRoot, suppliedTarget.repositoryRelative)
     });
     const desiredState = ownEnumerableData(desiredValue, "state");
     let desired;
@@ -33375,7 +33606,7 @@ function context(input, phase3, attempt) {
 function stateFailure(phase3, issue3) {
   return fail9(createProjectError("STATE_INVALID", { phase_instance: phase3, issue_code: issue3 }));
 }
-async function resolvePath5(runner, authority, claim, expectedClass) {
+async function resolvePath6(runner, authority, claim, expectedClass) {
   return resolveTaskPath({
     runner,
     taskId: authority.task_id,
@@ -33385,7 +33616,7 @@ async function resolvePath5(runner, authority, claim, expectedClass) {
   });
 }
 async function readRetainedManifest(runner, authority, reference) {
-  const manifestTarget = await resolvePath5(
+  const manifestTarget = await resolvePath6(
     runner,
     authority,
     resultAuthorityClaim(reference.result_digest),
@@ -33441,8 +33672,8 @@ async function readRetainedResult(runner, authority, reference) {
         let restored;
         if (projection.ok) {
           try {
-            const metadata2 = await lstat6(projection.value.absolute);
-            restored = metadata2.isSymbolicLink() ? Buffer.from(await readlink2(projection.value.absolute), "utf8") : metadata2.isFile() ? new Uint8Array(await readFile2(projection.value.absolute)) : void 0;
+            const metadata2 = await lstat7(projection.value.absolute);
+            restored = metadata2.isSymbolicLink() ? Buffer.from(await readlink3(projection.value.absolute), "utf8") : metadata2.isFile() ? new Uint8Array(await readFile3(projection.value.absolute)) : void 0;
             if (restored !== void 0 && (restored.byteLength !== output.payload_bytes || sha256Bytes(restored) !== output.payload_digest)) {
               restored = void 0;
             }
@@ -33776,7 +34007,7 @@ function reconcileCurrentAuthority(value) {
 
 // src/init/assets.ts
 import { constants } from "node:fs";
-import { access, mkdir as mkdir3, open as open4, readFile as readFile3 } from "node:fs/promises";
+import { access, mkdir as mkdir3, open as open4, readFile as readFile4 } from "node:fs/promises";
 import { dirname as dirname4, join as join5 } from "node:path";
 import { fileURLToPath } from "node:url";
 var ARCHFLOW_GITATTRIBUTES_LINE = ".archflow/** -text merge=binary";
@@ -33820,7 +34051,7 @@ async function appendGitAttributes(workingDirectory) {
   const path2 = join5(workingDirectory, ".gitattributes");
   let current;
   try {
-    current = new Uint8Array(await readFile3(path2));
+    current = new Uint8Array(await readFile4(path2));
   } catch (error51) {
     if (!errno(error51, "ENOENT")) throw error51;
     const handle2 = await open4(path2, "wx");
@@ -33847,13 +34078,13 @@ async function appendGitAttributes(workingDirectory) {
 async function scaffoldRepositoryAssets(input) {
   try {
     const sourceRoot = await assetRoot();
-    const sources = await Promise.all(ASSETS.map(async ([source, destination]) => Object.freeze({ source: new Uint8Array(await readFile3(join5(sourceRoot, source))), destination })));
+    const sources = await Promise.all(ASSETS.map(async ([source, destination]) => Object.freeze({ source: new Uint8Array(await readFile4(join5(sourceRoot, source))), destination })));
     const created = [];
     const unchanged = [];
     for (const asset of sources) {
       const destination = join5(input.working_directory, asset.destination);
       try {
-        const existing = new Uint8Array(await readFile3(destination));
+        const existing = new Uint8Array(await readFile4(destination));
         if (!Buffer.from(existing).equals(Buffer.from(asset.source))) {
           process.stderr.write(
             `ArchFlow scaffold differs at ${asset.destination}. Review or delete that file, then re-run archflow-local init.
@@ -33892,7 +34123,7 @@ async function scaffoldRepositoryAssets(input) {
 }
 
 // src/init/diagnostics.ts
-import { readFile as readFile5, stat as stat3 } from "node:fs/promises";
+import { readFile as readFile6, stat as stat3 } from "node:fs/promises";
 import { join as join9 } from "node:path";
 
 // src/dispatch/cli.ts
@@ -34638,7 +34869,7 @@ function preflightAdapter(adapterId, workspace) {
 }
 
 // src/dispatch/workspace.ts
-import { chmod as chmod2, lstat as lstat7, mkdir as mkdir4, mkdtemp, realpath as realpath4, rm, symlink as symlink2, writeFile as writeFile2 } from "node:fs/promises";
+import { chmod as chmod2, lstat as lstat8, mkdir as mkdir4, mkdtemp, realpath as realpath4, rm, symlink as symlink2, writeFile as writeFile2 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute as isAbsolute3, join as join7, relative as relative3, resolve } from "node:path";
 var FORWARDED_ENVIRONMENT = Object.freeze([
@@ -34689,7 +34920,7 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
 // src/init/registration.ts
 import { spawn as spawn2 } from "node:child_process";
 import { randomUUID as randomUUID2 } from "node:crypto";
-import { mkdir as mkdir5, open as open6, readFile as readFile4, rename as rename3, unlink as unlink2 } from "node:fs/promises";
+import { mkdir as mkdir5, open as open6, readFile as readFile5, rename as rename3, unlink as unlink2 } from "node:fs/promises";
 import { basename as basename3, dirname as dirname5, join as join8 } from "node:path";
 var CLAUDE_MCP_TIMEOUT_MS = 36e5;
 var CODEX_TOOL_TIMEOUT_SEC = 3600;
@@ -34760,7 +34991,7 @@ function runCommand(command, argv, cwd, environment) {
 }
 async function readOptional(path2) {
   try {
-    return await readFile4(path2, "utf8");
+    return await readFile5(path2, "utf8");
   } catch (error51) {
     if (error51.code === "ENOENT") return void 0;
     throw error51;
@@ -35089,7 +35320,7 @@ function codexTimeoutFinding(source) {
 }
 async function readHostConfig(path2) {
   try {
-    return await readFile5(path2, "utf8");
+    return await readFile6(path2, "utf8");
   } catch {
     return void 0;
   }
@@ -35199,7 +35430,7 @@ async function runInit(input) {
 }
 
 // src/init/legacy-upgrade.ts
-import { lstat as lstat9, readdir as readdir3, readFile as readFile8, realpath as realpath5, rm as rm4, rmdir as rmdir3 } from "node:fs/promises";
+import { lstat as lstat10, readdir as readdir3, readFile as readFile9, realpath as realpath5, rm as rm4, rmdir as rmdir3 } from "node:fs/promises";
 import { isAbsolute as isAbsolute5, join as join13, relative as relative6, sep as sep4 } from "node:path";
 
 // src/state/initialization.ts
@@ -35346,7 +35577,7 @@ function identifyTransactionRequest(call, authority, recomputedInputFingerprint)
 }
 
 // src/state/workspace-cleanup.ts
-import { lstat as lstat8, readFile as readFile6, readdir as readdir2, rm as rm2, rmdir as rmdir2, stat as stat4, unlink as unlink3 } from "node:fs/promises";
+import { lstat as lstat9, readFile as readFile7, readdir as readdir2, rm as rm2, rmdir as rmdir2, stat as stat4, unlink as unlink3 } from "node:fs/promises";
 import { basename as basename4, dirname as dirname6, join as join10, relative as relative4, sep as sep3 } from "node:path";
 var ok10 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function io(authority, operation) {
@@ -35367,7 +35598,7 @@ async function filesBelow(root) {
       const absolute = join10(directory, entry.name);
       if (!inside(root, absolute)) throw new TypeError("workspace inventory escaped its root");
       if (entry.isSymbolicLink()) {
-        const metadata2 = await lstat8(absolute);
+        const metadata2 = await lstat9(absolute);
         output.push({ absolute, relative: relative4(root, absolute).split(sep3).join("/"), byte_count: metadata2.size, symlink: true });
       } else if (entry.isDirectory()) {
         await walk(absolute);
@@ -35380,7 +35611,7 @@ async function filesBelow(root) {
     }
   };
   try {
-    const rootMetadata = await lstat8(root);
+    const rootMetadata = await lstat9(root);
     if (rootMetadata.isSymbolicLink()) {
       return Object.freeze([{ absolute: root, relative: "", byte_count: rootMetadata.size, symlink: true }]);
     }
@@ -35398,7 +35629,7 @@ function phaseNumber(phaseInstance4) {
 async function receiptIsRecoveryBuffer(entry, state) {
   if (!/^transient\/intents\/.+\.json$/u.test(entry.relative) || entry.relative.endsWith(".request.json")) return false;
   try {
-    const document2 = parseCanonicalDocument(await readFile6(entry.absolute), "intent receipt");
+    const document2 = parseCanonicalDocument(await readFile7(entry.absolute), "intent receipt");
     const receipt = parseIntentReceipt(document2.value);
     return receipt.prior_revision === state.revision && receipt.resulting_revision === state.revision + 1;
   } catch {
@@ -35413,7 +35644,7 @@ async function shouldRetainWorkspaceEntry(entry, state, decisionProtectedResults
     if (state.last_transition?.intent_id === intentId) return false;
     const receipt = entry.relative.replace(/\.request\.json$/u, ".json");
     try {
-      await lstat8(join10(entry.absolute, "..", basename4(receipt)));
+      await lstat9(join10(entry.absolute, "..", basename4(receipt)));
       return false;
     } catch (error51) {
       return error51.code === "ENOENT";
@@ -35443,7 +35674,7 @@ async function referencedDecisionDigests(authority) {
   const pattern = /\b[0-9a-f]{64}\b/gu;
   for (const file2 of files) {
     if (file2.symlink) return /* @__PURE__ */ new Set(["*"]);
-    const text3 = await readFile6(file2.absolute, "utf8").catch(() => "");
+    const text3 = await readFile7(file2.absolute, "utf8").catch(() => "");
     for (const match of text3.matchAll(pattern)) digests.add(match[0]);
   }
   return digests;
@@ -35464,7 +35695,7 @@ async function decisionProtectedAuthorityResults(authority) {
     if (digest9 === void 0) continue;
     try {
       const document2 = parseCanonicalDocument(
-        await readFile6(file2.absolute),
+        await readFile7(file2.absolute),
         "result manifest"
       );
       const manifest = parseResultManifest(document2.value);
@@ -35539,7 +35770,7 @@ async function unreferencedAuthorityDecisions(authority, state) {
       }
       for (const entry of entries) {
         if (entry.symlink) return Object.freeze([]);
-        const text3 = await readFile6(entry.absolute, "utf8").catch(() => "");
+        const text3 = await readFile7(entry.absolute, "utf8").catch(() => "");
         for (const candidate of known) {
           if (!live.has(candidate) && text3.includes(`"${candidate}"`)) {
             live.add(candidate);
@@ -35701,14 +35932,14 @@ async function cleanTerminalTaskWorkspace(dependencies, authority) {
 }
 
 // src/state/legacy-stage.ts
-import { readFile as readFile7 } from "node:fs/promises";
+import { readFile as readFile8 } from "node:fs/promises";
 import { join as join11 } from "node:path";
 function importRoot(authority, initialization) {
   return join11(authority.workspace_root, "cache", "imports", initialization.import_digest);
 }
 async function readStagedLegacyConfig(authority, initialization) {
   try {
-    const bytes = new Uint8Array(await readFile7(join11(importRoot(authority, initialization), "config.yaml")));
+    const bytes = new Uint8Array(await readFile8(join11(importRoot(authority, initialization), "config.yaml")));
     const parsed = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(bytes), "staged task config");
     const digest9 = sha256Bytes(bytes);
     if (digest9 !== initialization.config_digest) return void 0;
@@ -35719,7 +35950,7 @@ async function readStagedLegacyConfig(authority, initialization) {
 }
 async function readStagedLegacyPayload(authority, initialization, reference) {
   try {
-    const bytes = new Uint8Array(await readFile7(join11(importRoot(authority, initialization), "payload", reference.legacy_path)));
+    const bytes = new Uint8Array(await readFile8(join11(importRoot(authority, initialization), "payload", reference.legacy_path)));
     if (bytes.byteLength !== reference.byte_count || sha256Bytes(bytes) !== reference.digest) return void 0;
     return bytes;
   } catch {
@@ -36319,7 +36550,7 @@ function isInside2(root, candidate) {
 }
 async function exists(path2) {
   try {
-    await lstat9(path2);
+    await lstat10(path2);
     return true;
   } catch (error51) {
     if (error51.code === "ENOENT") return false;
@@ -36399,7 +36630,7 @@ async function enumerateSource(sourceRoot, excluded, context2) {
       }
       let metadata2;
       try {
-        metadata2 = await lstat9(absolute);
+        metadata2 = await lstat10(absolute);
       } catch {
         return fail17(ioError3(context2));
       }
@@ -36410,7 +36641,7 @@ async function enumerateSource(sourceRoot, excluded, context2) {
       const resolved = await resolveLegacySourcePath({ sourceRoot, claim, context: context2 });
       if (!resolved.ok) return resolved;
       try {
-        files.push(Object.freeze({ legacy_path: claim, bytes: new Uint8Array(await readFile8(resolved.value.absolute)) }));
+        files.push(Object.freeze({ legacy_path: claim, bytes: new Uint8Array(await readFile9(resolved.value.absolute)) }));
       } catch {
         return fail17(ioError3(context2));
       }
@@ -36452,7 +36683,7 @@ async function stageLegacyUpgrade(input) {
     }
     let configBytes;
     try {
-      configBytes = new Uint8Array(await readFile8(join13(runner.location.worktreeRoot, ".archflow", "config.yaml")));
+      configBytes = new Uint8Array(await readFile9(join13(runner.location.worktreeRoot, ".archflow", "config.yaml")));
     } catch {
       return fail17(createProjectError("CONFIG_INVALID", { issue_code: "archflow-initialization-required" }));
     }
@@ -36678,8 +36909,8 @@ async function discardLegacyUpgrade(input) {
     }
     if (entries.includes("config.yaml")) {
       const [actual, template] = await Promise.all([
-        readFile8(join13(destination, "config.yaml")),
-        readFile8(join13(root, ".archflow", "config.yaml"))
+        readFile9(join13(destination, "config.yaml")),
+        readFile9(join13(root, ".archflow", "config.yaml"))
       ]);
       if (!actual.equals(template)) {
         return fail17(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-destination-config-modified" }));
@@ -36702,7 +36933,7 @@ async function stagedImportDescriptor(importsRoot, taskId) {
   for (const digest9 of digests) {
     let parsed;
     try {
-      parsed = JSON.parse(await readFile8(join13(importsRoot, digest9, "stage.json"), "utf8"));
+      parsed = JSON.parse(await readFile9(join13(importsRoot, digest9, "stage.json"), "utf8"));
     } catch {
       continue;
     }
@@ -36743,7 +36974,7 @@ async function adoptLegacyUpgrade(input) {
   try {
     const descriptor = await stagedImportDescriptor(join13(services2.authority.workspace_root, "cache", "imports"), taskId);
     if (!descriptor.ok) return descriptor;
-    const manifestBytes = new Uint8Array(await readFile8(
+    const manifestBytes = new Uint8Array(await readFile9(
       join13(services2.authority.workspace_root, "cache", "imports", descriptor.value.import_digest, "manifest.json")
     ));
     const manifest = parseCanonicalDocument(manifestBytes, "staged legacy import manifest");
@@ -36790,11 +37021,11 @@ async function adoptLegacyUpgrade(input) {
 }
 
 // src/local/status-classification.ts
-import { readdir as readdir5, readFile as readFile11 } from "node:fs/promises";
+import { readdir as readdir5, readFile as readFile12 } from "node:fs/promises";
 import { join as join15 } from "node:path";
 
 // src/state/status.ts
-import { readFile as readFile10 } from "node:fs/promises";
+import { readFile as readFile11 } from "node:fs/promises";
 
 // src/dispatch/routing.ts
 var DispatchRoutingError = class extends Error {
@@ -36921,7 +37152,7 @@ init_trust_brands();
 init_renderers();
 
 // src/state/produce-subject.ts
-import { readFile as readFile9 } from "node:fs/promises";
+import { readFile as readFile10 } from "node:fs/promises";
 
 // src/state/gate-core.ts
 import { constants as fsConstants4 } from "node:fs";
@@ -36948,7 +37179,7 @@ var ok15 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail19 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 var issue2 = (code2, state, issueCode) => fail19(code2 === "STATE_INVALID" ? createProjectError(code2, { phase_instance: state.phase_instance, issue_code: issueCode }) : createProjectError(code2, { issue_code: issueCode }));
 var io3 = (authority, operation) => fail19(createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt }));
-async function resolvePath6(dependencies, authority, claim, expectedClass) {
+async function resolvePath7(dependencies, authority, claim, expectedClass) {
   if (expectedClass === "workspace-gate-interface") {
     return resolveTaskWorkspacePath({
       runner: dependencies.runner,
@@ -37052,6 +37283,12 @@ function ruleSettlementIsEligibleAfterLatestRestart(state, settlement, authority
 function latestEligibleRuleSettlement(state, subjectDigest, authorityPhase) {
   return [...state.rule_settlements ?? []].filter((settlement) => settlement.phase_instance === authorityPhase && settlement.subject_digest === subjectDigest && ruleSettlementIsEligibleAfterLatestRestart(state, settlement, authorityPhase)).sort((left, right) => right.settled_at_revision - left.settled_at_revision)[0];
 }
+function acceptedNoWaitSettlement(policy, state, subjectDigest, producerPhase) {
+  assertAuthenticatedRuleAcceptancePolicy(policy);
+  if (policy.task_id !== state.task_id || policy.policy_base_commit !== state.policy_base_commit || policy.constitution_digest !== state.constitution_digest) return void 0;
+  const settlement = latestEligibleRuleSettlement(state, subjectDigest, producerPhase);
+  return settlement?.conclusion.wait === false ? settlement : void 0;
+}
 function approvalRequestAuthorityPhase(authenticated) {
   return authenticated.request.phase_instance;
 }
@@ -37081,7 +37318,7 @@ function expectedProduceUpstreamBindings(state) {
   ]);
 }
 async function loadProduceUpstreamSubject(dependencies, authority, state, binding) {
-  const approvedOwners = [];
+  const candidateOwners = [];
   let retainedOwnerExists = false;
   const loadManifest = dependencies.load_retained_manifest;
   if (loadManifest !== void 0) {
@@ -37093,16 +37330,32 @@ async function loadProduceUpstreamSubject(dependencies, authority, state, bindin
       const artifact2 = manifest.source_artifact;
       const ownsPath = artifact2.artifact_kind === "document" && documentProjectionDescriptors(artifact2).some((entry) => entry.document_path === binding.path);
       if (ownsPath) retainedOwnerExists = true;
-      if (artifact2.artifact_kind !== "document" || canonicalJsonDigest(artifact2) !== manifest.artifact_digest || !ownsPath || !state.approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === manifest.artifact_digest && approvalIsEligibleAfterLatestRestart(state, approval, artifact2.phase_instance))) continue;
-      approvedOwners.push(Object.freeze({
+      if (artifact2.artifact_kind !== "document" || canonicalJsonDigest(artifact2) !== manifest.artifact_digest || !ownsPath) continue;
+      candidateOwners.push(Object.freeze({
         reference,
         artifact: artifact2,
         artifact_digest: manifest.artifact_digest,
         measured_at_revision: manifest.accounting.measured_at_revision,
-        retained: retained.value
+        retained: retained.value,
+        human_approved: state.approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === manifest.artifact_digest && approvalIsEligibleAfterLatestRestart(state, approval, artifact2.phase_instance))
       }));
     }
   }
+  let settlementPolicy;
+  if (candidateOwners.some((candidate) => !candidate.human_approved) && state.policy_base_commit !== void 0 && state.constitution_digest !== void 0) {
+    const constitution = await resolvePinnedConstitution(
+      dependencies.runner,
+      state.policy_base_commit,
+      authority.context
+    );
+    settlementPolicy = constitution.ok ? authenticateRuleAcceptancePolicy(state, constitution.value) : void 0;
+  }
+  const approvedOwners = candidateOwners.filter((candidate) => candidate.human_approved || settlementPolicy !== void 0 && acceptedNoWaitSettlement(
+    settlementPolicy,
+    state,
+    candidate.artifact_digest,
+    candidate.artifact.phase_instance
+  ) !== void 0);
   approvedOwners.sort((left, right) => right.measured_at_revision - left.measured_at_revision);
   const owner = approvedOwners[0];
   if (owner !== void 0) {
@@ -37134,7 +37387,7 @@ async function loadProduceUpstreamSubject(dependencies, authority, state, bindin
   if (!target.ok) return target;
   let bytes;
   try {
-    bytes = new Uint8Array(await readFile9(target.value.absolute));
+    bytes = new Uint8Array(await readFile10(target.value.absolute));
   } catch {
     return fail20(state.phase_instance, "current-upstream-import-unavailable");
   }
@@ -37327,13 +37580,13 @@ async function loadAuthenticatedGateApproval(dependencies, authority, approval) 
   if (durable === void 0 || !isDeepStrictEqual6(durable, claimed)) {
     return issue2("STATE_INVALID", current.value.value, "gate-approval-not-current");
   }
-  const requestPath = await resolvePath6(
+  const requestPath = await resolvePath7(
     dependencies,
     authority,
     gateRequestClaim(claimed.gate_id),
     "authority-decision"
   );
-  const decisionPath = await resolvePath6(
+  const decisionPath = await resolvePath7(
     dependencies,
     authority,
     gateDecisionClaim(claimed.gate_id),
@@ -37887,25 +38140,56 @@ function matchingApproval(input, kind) {
 function hasLegacyDesignApproval(input) {
   return matchingApproval(input, "artifact-approval");
 }
+function hasAcceptedNoWait(input, state) {
+  const settlement = input.accepted_no_wait_settlement;
+  return settlement !== void 0 && input.subject_digest !== void 0 && settlement.task_id === state.task_id && settlement.phase_instance === state.phase_instance && settlement.subject_digest === input.subject_digest && settlement.conclusion.wait === false;
+}
 function advanceAction(input, state) {
   const phase3 = decodePhaseInstance(state.phase_instance);
   const designPhase = phase3.kind === "design" || phase3.kind === "phase-design";
   const requiredKind = designPhase ? "design-approval" : phase3.kind === "prd" ? "artifact-approval" : phase3.kind === "phase-impl" ? "commit-authorization" : void 0;
   const legacyDesignApproval = designPhase && hasLegacyDesignApproval(input);
   const migrationApproval = designPhase && matchingApproval(input, "migration-audit");
+  const autonomous = hasAcceptedNoWait(input, state);
   if (designPhase && input.migration_audit_required === true) {
     return action("open-gate", "Open the reviewed migration audit for the exact imported documents and resume point.", true, state, {
       gate_kind: "migration-audit"
     });
   }
-  if (requiredKind !== void 0 && !matchingApproval(input, requiredKind) && !legacyDesignApproval && !migrationApproval) {
+  if (requiredKind !== void 0 && !matchingApproval(input, requiredKind) && !legacyDesignApproval && !migrationApproval && !autonomous) {
     return action("open-gate", `Open the required ${requiredKind} gate.`, true, state, {
       gate_kind: requiredKind
     });
   }
   if (designPhase && !legacyDesignApproval && input.commit_observed !== true) {
+    if (autonomous && input.commit_blocked_reason === "approved-document-mismatch") {
+      return action(
+        "run-step",
+        "The reviewed design bytes changed after rule settlement. Reopen produce so the current bytes receive fresh review authority.",
+        false,
+        state,
+        { step: "produce" }
+      );
+    }
     if (input.design_commit === void 0) {
       return action("inspect-state", "Inspect why the approved design commit authority is unavailable.", true, state);
+    }
+    if (input.commit_blocked_reason === "target-moved" && autonomous) {
+      if (input.milestone_refresh_config_matches !== true) {
+        return action(
+          "run-step",
+          "The approval-rule configuration changed after this design settled. Reopen produce so the current subject is reviewed under the live configuration before any Git baseline refresh.",
+          false,
+          state,
+          { step: "produce" }
+        );
+      }
+      return action(
+        "refresh-milestone-baseline",
+        "Refresh the unchanged reviewed design milestone baseline to the current target.",
+        false,
+        state
+      );
     }
     if (input.commit_blocked_reason !== void 0) {
       return action(
@@ -37919,7 +38203,8 @@ function advanceAction(input, state) {
       commit_path: input.design_commit.path,
       commit_message: input.design_commit.message,
       commit_target_ref: input.design_commit.target_ref,
-      commit_baseline: input.design_commit.baseline_commit
+      commit_baseline: input.design_commit.baseline_commit,
+      commit_requires_human_confirmation: false
     });
   }
   if (phase3.kind === "phase-impl" && input.commit_observed !== true) {
@@ -37935,7 +38220,8 @@ function advanceAction(input, state) {
         commit_paths: input.implementation_commit.paths,
         commit_message: input.implementation_commit.message,
         commit_target_ref: input.implementation_commit.target_ref,
-        commit_baseline: input.implementation_commit.baseline_commit
+        commit_baseline: input.implementation_commit.baseline_commit,
+        commit_requires_human_confirmation: !autonomous
       }
     );
   }
@@ -38171,7 +38457,7 @@ function phaseStatusResources(taskId, phaseInstance4) {
 
 // src/state/reconciliation-discovery.ts
 import { constants as fsConstants5 } from "node:fs";
-import { lstat as lstat10, readdir as readdir4, readlink as readlink3 } from "node:fs/promises";
+import { lstat as lstat11, readdir as readdir4, readlink as readlink4 } from "node:fs/promises";
 import { join as join14 } from "node:path";
 var ok17 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var stateInvalid2 = (authority, issueCode) => Object.freeze({
@@ -38202,8 +38488,8 @@ async function readCanonical2(path2, label, parse3) {
 }
 async function currentProjectionDigest(path2) {
   try {
-    const metadata2 = await lstat10(path2.absolute);
-    if (metadata2.isSymbolicLink()) return sha256Bytes(Buffer.from(await readlink3(path2.absolute), "utf8"));
+    const metadata2 = await lstat11(path2.absolute);
+    if (metadata2.isSymbolicLink()) return sha256Bytes(Buffer.from(await readlink4(path2.absolute), "utf8"));
     if (!metadata2.isFile()) throw new TypeError("projection is not a regular file or symlink");
     const handle = await openResolved(path2.absolute, fsConstants5.O_RDONLY);
     try {
@@ -38495,7 +38781,7 @@ async function readActiveGateProjection(dependencies, authority) {
       context: authority.context
     });
     if (!target.ok) return void 0;
-    const bytes = new Uint8Array(await readFile10(target.value.absolute));
+    const bytes = new Uint8Array(await readFile11(target.value.absolute));
     return parseActiveGate(parseCanonicalDocument(bytes, "active gate").value);
   } catch {
     return void 0;
@@ -38511,7 +38797,7 @@ async function readArchivedGateRequest(dependencies, authority, gateId) {
       context: authority.context
     });
     if (!target.ok) return void 0;
-    const bytes = new Uint8Array(await readFile10(target.value.absolute));
+    const bytes = new Uint8Array(await readFile11(target.value.absolute));
     return parsePersistedGateRequest(parseCanonicalDocument(bytes, "gate request").value);
   } catch (error51) {
     if (error51.code === "ENOENT") return void 0;
@@ -38532,6 +38818,8 @@ function currentReviewPredecessor(state, produceSubject) {
   });
 }
 async function currentApprovedUpstreams(dependencies, authority, state, authenticated, subject) {
+  let settlementPolicy;
+  let settlementPolicyLoaded = false;
   const bindings = subject === void 0 ? expectedProduceUpstreamBindings(state) : produceUpstreamBindingsForSubject(state, subject.artifact);
   const digests = /* @__PURE__ */ new Set();
   for (const binding of bindings) {
@@ -38554,7 +38842,26 @@ async function currentApprovedUpstreams(dependencies, authority, state, authenti
       )) return false;
       return item.approval.gate_kind === "design-approval" && item.request.kind === "design-approval" && item.request.context.artifact_kind === ownerKind || item.approval.gate_kind === "artifact-approval" && item.request.kind === "artifact-approval" && item.request.context.artifact_kind === ownerKind;
     }).sort((left, right) => right.approval.resolved_at_revision - left.approval.resolved_at_revision)[0];
-    if (approval === void 0) throw new TypeError("current upstream produced authority lacks approval");
+    if (!settlementPolicyLoaded && approval === void 0) {
+      settlementPolicyLoaded = true;
+      if (state.policy_base_commit !== void 0 && state.constitution_digest !== void 0) {
+        const resolvedConstitution = await resolvePinnedConstitution(
+          dependencies.runner,
+          state.policy_base_commit,
+          authority.context
+        );
+        settlementPolicy = resolvedConstitution.ok ? authenticateRuleAcceptancePolicy(state, resolvedConstitution.value) : void 0;
+      }
+    }
+    const settled = settlementPolicy === void 0 ? void 0 : acceptedNoWaitSettlement(
+      settlementPolicy,
+      state,
+      loaded.value.artifact_digest,
+      loaded.value.artifact.phase_instance
+    );
+    if (approval === void 0 && settled === void 0) {
+      throw new TypeError("current upstream produced authority lacks approval or accepted settlement");
+    }
     digests.add(loaded.value.artifact_digest);
   }
   return Object.freeze([...digests].sort());
@@ -38693,6 +39000,33 @@ function buildCommitAuthorizationInput(subject, currentEvidence, target, baselin
     target_ref_guidance: target.guidance
   });
 }
+function buildAutonomousImplementationCommitInput(output, targetRef) {
+  const paths = /* @__PURE__ */ new Set();
+  for (const entry of output.outputs) {
+    paths.add(entry.path);
+    if (entry.operation === "rename") paths.add(entry.previous_path);
+  }
+  const phase3 = decodePhaseInstance(output.phase_instance);
+  return Object.freeze({
+    paths: Object.freeze([...paths].sort()),
+    message: `ArchFlow: Implement ${output.task_id} phase ${phase3.kind === "phase-impl" ? String(phase3.phase) : output.phase_instance}`,
+    target_ref: targetRef,
+    baseline_commit: output.base_commit
+  });
+}
+function buildAutonomousDesignCommitInput(state, settlement, targetRef) {
+  const phase3 = decodePhaseInstance(state.phase_instance);
+  if (phase3.kind !== "design" && phase3.kind !== "phase-design" || settlement.phase_instance !== state.phase_instance || settlement.milestone_baseline_commit === void 0) {
+    throw new TypeError("autonomous design commit requires a phase-bound milestone baseline");
+  }
+  const phaseLabel = phase3.kind === "design" ? "design" : `phase ${String(phase3.phase)} design`;
+  return Object.freeze({
+    path: `.archflow/tasks/${state.task_id}`,
+    message: `ArchFlow: Approve ${state.task_id} ${phaseLabel}`,
+    target_ref: targetRef,
+    baseline_commit: settlement.milestone_baseline_commit
+  });
+}
 async function computeTaskStatusDetailedInternal(dependencies, authority) {
   const blockers = [];
   let stateRead;
@@ -38726,6 +39060,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   const state = stateDocument.value;
   let config2;
   let parsedConfig;
+  let liveConfigDigest;
   try {
     const read = await dependencies.read_config(authority.config);
     if (read.kind !== "valid") {
@@ -38733,7 +39068,8 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       blockers.push(`config-${read.kind}`);
     } else {
       config2 = Object.freeze({ verified: true });
-      parsedConfig = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(read.snapshot.bytes), "task config");
+      liveConfigDigest = read.snapshot.digest;
+      parsedConfig = read.snapshot.parsed;
     }
   } catch {
     config2 = unavailableConfig("config-unresolvable");
@@ -38853,14 +39189,23 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       }));
     }
   }
+  const settlementPolicy = constitution === void 0 ? void 0 : authenticateRuleAcceptancePolicy(state, constitution);
+  const acceptedSettlement = settlementPolicy === void 0 || produceSubject === void 0 ? void 0 : acceptedNoWaitSettlement(
+    settlementPolicy,
+    state,
+    produceSubject.artifact_digest,
+    produceSubject.artifact.phase_instance
+  );
   let commitObserved = false;
   let commitBlockedReason;
   let implementationCommit;
+  let humanImplementationCommitAuthority = false;
   if (produceSubject?.artifact.artifact_kind === "implementation-output") {
     for (const authenticated of authenticatedApprovals) {
       if (authenticated.request.kind !== "commit-authorization" || authenticated.request.phase_instance !== state.phase_instance || authenticated.request.subject_digest !== produceSubject.artifact_digest || authenticated.decision.envelope.payload.decision !== "authorize-commit") continue;
       const exact = exactCommitAuthorizationContext(authenticated.request.context);
       if (exact === void 0) continue;
+      humanImplementationCommitAuthority = true;
       implementationCommit = Object.freeze({
         paths: exact.paths,
         message: exact.commit_message,
@@ -38875,6 +39220,39 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         )) {
           commitObserved = true;
           break;
+        }
+      } catch {
+        blockers.push("commit-observation-unavailable");
+      }
+    }
+    if (!commitObserved && implementationCommit !== void 0) {
+      try {
+        if (await resolveCommit(dependencies.runner, implementationCommit.target_ref) !== implementationCommit.baseline_commit) {
+          implementationCommit = void 0;
+          blockers.push("implementation-commit-target-moved");
+        }
+      } catch {
+        implementationCommit = void 0;
+        blockers.push("commit-observation-unavailable");
+      }
+    }
+    if (!commitObserved && !humanImplementationCommitAuthority && implementationCommit === void 0 && acceptedSettlement !== void 0) {
+      const target = await currentTargetRef(dependencies);
+      const autonomousCommit = buildAutonomousImplementationCommitInput(
+        produceSubject.artifact,
+        target.value
+      );
+      try {
+        commitObserved = await autonomousImplementationOutputCommittedAtCurrentTarget(
+          dependencies.runner,
+          produceSubject.artifact,
+          target.value,
+          autonomousCommit.message
+        );
+        if (!commitObserved && await resolveCommit(dependencies.runner, target.value) === produceSubject.artifact.base_commit) {
+          implementationCommit = autonomousCommit;
+        } else if (!commitObserved) {
+          blockers.push("implementation-commit-target-moved");
         }
       } catch {
         blockers.push("commit-observation-unavailable");
@@ -38935,6 +39313,30 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         if (!observation.observed && observation.blocking) {
           commitBlockedReason = observation.reason;
           blockers.push(`design-milestone-${observation.reason}`);
+        }
+      } catch {
+        blockers.push("commit-observation-unavailable");
+      }
+    }
+    if (!commitObserved && designCommit === void 0 && acceptedSettlement?.milestone_baseline_commit !== void 0) {
+      const target = await currentTargetRef(dependencies);
+      designCommit = buildAutonomousDesignCommitInput(state, acceptedSettlement, target.value);
+      try {
+        const observation = await autonomousDesignArtifactCommittedAtCurrentTarget(
+          dependencies.runner,
+          state,
+          produceSubject.artifact,
+          produceSubject.retained.manifest.value.outputs,
+          target.value,
+          acceptedSettlement.milestone_baseline_commit,
+          designCommit.message,
+          authority.context
+        );
+        commitObserved = observation.observed;
+        if (!observation.observed && observation.blocking) {
+          const targetHead = await resolveCommit(dependencies.runner, target.value);
+          commitBlockedReason = observation.reason === "approved-document-mismatch" ? observation.reason : targetHead === acceptedSettlement.milestone_baseline_commit ? observation.reason : "target-moved";
+          blockers.push(`design-milestone-${commitBlockedReason}`);
         }
       } catch {
         blockers.push("commit-observation-unavailable");
@@ -39110,6 +39512,10 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     evidence_available: evidence.available,
     ...subjectDigest === void 0 ? {} : { subject_digest: subjectDigest },
     authenticated_approvals: approvalFacts,
+    ...acceptedSettlement === void 0 ? {} : { accepted_no_wait_settlement: acceptedSettlement },
+    ...acceptedSettlement?.milestone_baseline_commit === void 0 ? {} : {
+      milestone_refresh_config_matches: liveConfigDigest === acceptedSettlement.config_digest
+    },
     commit_observed: commitObserved,
     ...commitBlockedReason === void 0 ? {} : { commit_blocked_reason: commitBlockedReason },
     ...designCommit === void 0 ? {} : { design_commit: designCommit },
@@ -39188,7 +39594,7 @@ async function computeTaskStatus(dependencies, authority) {
 }
 async function recoverStatePosition(statePath) {
   try {
-    const raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(await readFile10(statePath))));
+    const raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(await readFile11(statePath))));
     if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return void 0;
     const candidate = raw;
     const position2 = Object.freeze({
@@ -39275,7 +39681,7 @@ async function stagedUpgradeStatus(input) {
   const stages = [];
   for (const digest9 of digests) {
     try {
-      const parsed = JSON.parse(await readFile11(join15(imports, digest9, "stage.json"), "utf8"));
+      const parsed = JSON.parse(await readFile12(join15(imports, digest9, "stage.json"), "utf8"));
       if (parsed !== null && !Array.isArray(parsed) && typeof parsed === "object") stages.push(parsed);
     } catch {
     }
@@ -39598,7 +40004,7 @@ async function readInput(command, path2) {
     process3.stdin.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
     process3.stdin.once("end", () => resolve2(Buffer.concat(chunks)));
     process3.stdin.once("error", reject);
-  }) : await readFile12(path2);
+  }) : await readFile13(path2);
   if (bytes.byteLength === 0) throw missingPayload();
   try {
     return JSON.parse(bytes.toString("utf8"));

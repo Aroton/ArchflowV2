@@ -94,6 +94,59 @@ const reconciliationCases: readonly [ReconciliationFinding, string][] = [
 ];
 
 describe("deriveNextAction", () => {
+  it("uses an authenticated no-wait status fact only at the ordinary approval arm", () => {
+    const phase = implementation(2);
+    const receipt = {
+      task_id: parseTaskSlug("task-1"), phase_instance: phase, step: "triage" as const,
+      subject_digest: D("a"), conclusion: { wait: false as const, match: null },
+      config_digest: D("4"), settled_at_revision: parseSafeInteger(4),
+    };
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: phase }), assessment: assessment("advance"),
+      accepted_no_wait_settlement: receipt, implementation_commit: implementationCommit,
+    }))).toMatchObject({
+      code: "commit-phase", commit_requires_human_confirmation: false,
+    });
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: phase }), assessment: assessment("attempts-exhausted"),
+      accepted_no_wait_settlement: receipt, implementation_commit: implementationCommit,
+    }))).toMatchObject({ code: "open-gate", gate_kind: "attempts-exhausted" });
+  });
+
+  it("refreshes only a moved autonomous design baseline", () => {
+    const phase = phaseDesign(2);
+    const receipt = {
+      task_id: parseTaskSlug("task-1"), phase_instance: phase, step: "triage" as const,
+      subject_digest: D("a"), conclusion: { wait: false as const, match: null },
+      config_digest: D("4"), settled_at_revision: parseSafeInteger(4),
+      milestone_baseline_commit: "abcdef0123456789abcdef0123456789abcdef01" as TaskStateV1["policy_base_commit"],
+    };
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: phase }), assessment: assessment("advance"),
+      accepted_no_wait_settlement: receipt, design_commit: designCommit,
+      commit_blocked_reason: "target-moved", milestone_refresh_config_matches: true,
+    }))).toMatchObject({ code: "refresh-milestone-baseline", human_required: false });
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: phase }), assessment: assessment("advance"),
+      authenticated_approvals: [{ gate_kind: "design-approval", subject_digest: D("a") }],
+      design_commit: designCommit, commit_blocked_reason: "target-moved",
+    })).code).toBe("inspect-state");
+
+    // A resolved baseline adoption can leave reconciliation clean even though the document no
+    // longer equals the retained reviewed bytes. That byte mismatch must start fresh production,
+    // never refresh Git authority around the adopted bytes.
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: phase }), assessment: assessment("advance"),
+      reconciliation_findings: [], accepted_no_wait_settlement: receipt,
+      design_commit: designCommit, commit_blocked_reason: "approved-document-mismatch",
+    }))).toMatchObject({ code: "run-step", step: "produce", human_required: false });
+
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: phase }), assessment: assessment("advance"),
+      accepted_no_wait_settlement: receipt, design_commit: designCommit,
+      commit_blocked_reason: "target-moved", milestone_refresh_config_matches: false,
+    }))).toMatchObject({ code: "run-step", step: "produce", human_required: false });
+  });
   it("reopens the produce window when a missing projection has no retained bytes to restore", () => {
     const unrestorable: ReconciliationFinding = {
       kind: "projection-mismatch", path: parseRepositoryPathClaim("src/gone.ts"),

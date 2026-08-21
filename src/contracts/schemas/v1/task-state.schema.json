@@ -650,6 +650,9 @@
         "config_digest": {
           "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
         },
+        "milestone_baseline_commit": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+        },
         "settled_at_revision": {
           "type": "integer",
           "minimum": 1,

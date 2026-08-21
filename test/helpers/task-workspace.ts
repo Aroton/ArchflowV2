@@ -18,6 +18,7 @@ import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
 import { stageTaskInitialization } from "../../src/init/task-initialization.js";
 import { composeRequest } from "../../src/state/request-composition.js";
+import { SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2 } from "../../src/state/constitution.js";
 import { runStateInitialization } from "../../src/state/initialization.js";
 import { createProductionServices, type ProductionServices } from "../../src/state/production.js";
 
@@ -28,12 +29,43 @@ export type TaskWorkspaceOptions = Readonly<{
   /** Complete replacement bytes for the scaffolded `.archflow/config.yaml`. */
   configBytes?: Uint8Array;
   /**
+   * Pre-initialization replacement bytes keyed by constitution filename. The helper writes these
+   * before the policy-base commit, so initialization pins their real Git blobs and digest.
+   */
+  constitutionBytes?: Readonly<Record<string, Uint8Array>>;
+  /**
    * Replacement bytes for the root-commit README. Distinct bytes give the workspace a genuinely
    * distinct repository identity (the identity digest covers the root commits); config bytes no
    * longer do, because task config is not part of the input fingerprint.
    */
   rootBytes?: Uint8Array;
 }>;
+
+function supportedRuleSource(id: string): Uint8Array {
+  const profile = SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2.find((candidate) => candidate.id === id);
+  if (profile === undefined) throw new Error(`unsupported rule acceptance profile entry: ${id}`);
+  return new TextEncoder().encode([
+    "---",
+    `id: ${profile.id}`,
+    `version: ${profile.version}`,
+    `status: ${profile.status}`,
+    `review_trigger: ${JSON.stringify(profile.review_trigger)}`,
+    ...(profile.enforced_by.length === 0
+      ? []
+      : ["enforced_by:", ...profile.enforced_by.map((entry) => `  - ${JSON.stringify(entry)}`)]),
+    "---",
+    profile.text,
+    "",
+  ].join("\n"));
+}
+
+/** Authentic planned-v2 constitution files derived from the runtime's exact accepted profile. */
+export function supportedRuleAcceptanceConstitutionV2Bytes(): Readonly<Record<string, Uint8Array>> {
+  return Object.freeze({
+    "00-process.md": supportedRuleSource("explicit-human-authority"),
+    "10-architecture.md": supportedRuleSource("approved-design-before-code"),
+  });
+}
 
 export type TaskWorkspace = Readonly<{
   root: string;
@@ -79,6 +111,12 @@ export async function createTaskWorkspace(options: TaskWorkspaceOptions): Promis
     if (!scaffolded.ok) throw new Error(scaffolded.error.code);
     if (options.configBytes !== undefined) {
       writeFileSync(join(root, ".archflow", "config.yaml"), options.configBytes);
+    }
+    for (const [filename, bytes] of Object.entries(options.constitutionBytes ?? {})) {
+      if (!/^[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u.test(filename)) {
+        throw new TypeError(`invalid constitution fixture filename: ${filename}`);
+      }
+      writeFileSync(join(root, ".archflow", "constitution", filename), bytes);
     }
     git(root, "add", "--", ".gitattributes", ".archflow/workflow.yaml", ".archflow/constitution", ".archflow/config.yaml");
     git(root, "commit", "-q", "-m", "approve policy");

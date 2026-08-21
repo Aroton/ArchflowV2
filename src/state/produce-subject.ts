@@ -15,7 +15,12 @@ import type { TransactionDependencies, RetainedManifest } from "./transaction.js
 import { loadLegacyImportInitialization } from "./legacy-import-resume.js";
 import {
   approvalIsEligibleAfterLatestRestart,
+  acceptedNoWaitSettlement,
 } from "./restart-authority.js";
+import {
+  authenticateRuleAcceptancePolicy,
+  resolvePinnedConstitution,
+} from "./constitution.js";
 
 /** Throwing decoder for document projections, which must be UTF-8 text — no base64 fallback. */
 const fatalUtf8 = new TextDecoder("utf-8", { fatal: true });
@@ -82,8 +87,9 @@ export function resolveProduceUpstreamBinding(
 
 /**
  * Loads and authenticates the retained document artifact that currently owns an upstream path.
- * Ownership authority is an eligible artifact/design approval. Rule settlements record the
- * conditional-gate evaluation, but do not replace the human approval boundary in this phase.
+ * Ownership authority is either an eligible artifact/design approval or an exact authenticated
+ * no-wait settlement bound to the owning artifact's producer phase. Imported projections keep
+ * their separate migration-audit authority and are handled below.
  */
 export async function loadProduceUpstreamSubject(
   dependencies: Pick<TransactionDependencies, "load_retained_manifest" | "runner">,
@@ -94,12 +100,13 @@ export async function loadProduceUpstreamSubject(
   // Ownership is decided entirely from manifests, and no caller reads an upstream subject's
   // retained installation — upstream pinning re-hashes the projected file on disk against the
   // manifest's content digest instead. So the winner is never loaded in full either.
-  const approvedOwners: Array<Readonly<{
+  const candidateOwners: Array<Readonly<{
     reference: TaskStateV1["authoritative_results"][number];
     artifact: DocumentArtifactV1;
     artifact_digest: Sha256Digest;
     measured_at_revision: number;
     retained: RetainedManifest;
+    human_approved: boolean;
   }>> = [];
   let retainedOwnerExists = false;
   const loadManifest = dependencies.load_retained_manifest;
@@ -116,21 +123,36 @@ export async function loadProduceUpstreamSubject(
       if (
         artifact.artifact_kind !== "document" ||
         canonicalJsonDigest(artifact) !== manifest.artifact_digest ||
-        !ownsPath ||
-        !state.approvals.some((approval) =>
-          (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") &&
-          approval.subject_digest === manifest.artifact_digest &&
-          approvalIsEligibleAfterLatestRestart(state, approval, artifact.phase_instance))
+        !ownsPath
       ) continue;
-      approvedOwners.push(Object.freeze({
+      candidateOwners.push(Object.freeze({
         reference,
         artifact,
         artifact_digest: manifest.artifact_digest,
         measured_at_revision: manifest.accounting.measured_at_revision,
         retained: retained.value,
+        human_approved: state.approvals.some((approval) =>
+          (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") &&
+          approval.subject_digest === manifest.artifact_digest &&
+          approvalIsEligibleAfterLatestRestart(state, approval, artifact.phase_instance)),
       }));
     }
   }
+  let settlementPolicy: ReturnType<typeof authenticateRuleAcceptancePolicy>;
+  if (candidateOwners.some((candidate) => !candidate.human_approved) &&
+      state.policy_base_commit !== undefined && state.constitution_digest !== undefined) {
+    const constitution = await resolvePinnedConstitution(
+      dependencies.runner, state.policy_base_commit, authority.context,
+    );
+    settlementPolicy = constitution.ok
+      ? authenticateRuleAcceptancePolicy(state, constitution.value)
+      : undefined;
+  }
+  const approvedOwners = candidateOwners.filter((candidate) =>
+    candidate.human_approved ||
+    (settlementPolicy !== undefined && acceptedNoWaitSettlement(
+      settlementPolicy, state, candidate.artifact_digest, candidate.artifact.phase_instance,
+    ) !== undefined));
   approvedOwners.sort((left, right) => right.measured_at_revision - left.measured_at_revision);
   const owner = approvedOwners[0];
   if (owner !== undefined) {

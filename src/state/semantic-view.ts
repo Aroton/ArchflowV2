@@ -279,8 +279,16 @@ function mapNextAction(status: TaskStatusV1, snapshot: SemanticStatusSnapshotV1)
         action_kind: "commit", instruction: "Perform the exact client-side Git commit, then request fresh status.",
         commit: Object.freeze({
           paths: Object.freeze([action.commit_path]), message: action.commit_message, target_ref: action.commit_target_ref,
-          baseline: action.commit_baseline, requires_human_confirmation: false,
+          baseline: action.commit_baseline,
+          requires_human_confirmation: action.commit_requires_human_confirmation ?? false,
         }),
+      });
+    case "refresh-milestone-baseline":
+      return Object.freeze({
+        condition: "ready", headline: "The milestone baseline is ready to refresh", detail: action.detail,
+        action_kind: "refresh-milestone-baseline",
+        instruction: "Record the current unchanged target as the reviewed milestone baseline, then request fresh status.",
+        expected_submission: "none",
       });
     case "commit-phase":
       if (action.commit_paths === undefined || action.commit_message === undefined || action.commit_target_ref === undefined || action.commit_baseline === undefined) {
@@ -293,7 +301,7 @@ function mapNextAction(status: TaskStatusV1, snapshot: SemanticStatusSnapshotV1)
         commit: Object.freeze({
           paths: Object.freeze([...action.commit_paths].sort()), message: action.commit_message,
           target_ref: action.commit_target_ref, baseline: action.commit_baseline,
-          requires_human_confirmation: true,
+          requires_human_confirmation: action.commit_requires_human_confirmation ?? true,
         }),
       });
     case "advance-phase":

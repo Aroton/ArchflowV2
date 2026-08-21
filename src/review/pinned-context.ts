@@ -167,9 +167,10 @@ const fail = <T>(phase: PhaseInstanceId, issue_code: string): ProjectResult<T> =
  *
  * Every later phase pins its exact canonical upstream documents — the same
  * `expectedProduceUpstreamBindings` set adjudication authenticates — each one required to hold a
- * durable `artifact-approval` for its exact current artifact digest and its worktree bytes
+ * durable reviewed-upstream authority for its exact current artifact digest and producer phase,
+ * and its worktree bytes
  * re-hashed against the retained projection
- * digest. Any missing result, absent approval, or byte drift fails closed: upstream pinning
+ * digest. Any missing result, absent authority, or byte drift fails closed: upstream pinning
  * restates durable authority, never observes around it.
  *
  * Every phase kind additionally pins the previous round's triage record when one is retained
@@ -259,12 +260,13 @@ async function assembleUpstreamContext(input: {
   for (const binding of produceUpstreamBindingsForSubject(input.state, input.subject.artifact)) {
     const upstream = await loadProduceUpstreamSubject(input.dependencies, input.authority, input.state, binding);
     if (!upstream.ok) return upstream;
-    const approved = "imported_projection" in upstream.value
-      ? input.state.phase_instance === "design" || input.state.approvals.some((approval) => approval.gate_kind === "migration-audit")
-      : input.state.approvals.some((approval) =>
-      (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") &&
-      approval.subject_digest === upstream.value.artifact_digest);
-    if (!approved) return fail(input.state.phase_instance, "upstream-approval-missing");
+    // Retained owners were authority-checked by the shared loader, including the exact producer
+    // phase on settlement authority. Imports remain human-only and retain their migration audit.
+    if ("imported_projection" in upstream.value) {
+      const approved = input.state.phase_instance === "design" ||
+        input.state.approvals.some((approval) => approval.gate_kind === "migration-audit");
+      if (!approved) return fail(input.state.phase_instance, "upstream-approval-missing");
+    }
     const projection = await readProduceProjection(
       input.runner, input.authority, upstream.value, binding.path,
     );
