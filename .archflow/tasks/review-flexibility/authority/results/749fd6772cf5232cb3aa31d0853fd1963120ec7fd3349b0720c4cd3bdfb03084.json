@@ -1,0 +1,48 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 242,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 34912293
+  },
+  "artifact_digest": "9327133697cc6556dd972cbc8b81fac81a2db9ebf2d1ee6b8f938dbd7098ded0",
+  "input_fingerprint": "73c25c849e44fbf80c90b936bcecee61d554b3d2c21ee30f1da987b1d0c2fb2c",
+  "outputs": [],
+  "phase_instance": "phase-design-6",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "state-result-f531264936d6ff70274205a17dda3291",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "triage",
+    "evidence": {
+      "accepted_count": 0,
+      "accepted_editorial_count": 0,
+      "current_evidence_set_digest": "83a814f84022f775c656f46bc18ada00bb28648e708747cc06699a0b488ccad1",
+      "dispositions": [],
+      "input_fingerprint": "73c25c849e44fbf80c90b936bcecee61d554b3d2c21ee30f1da987b1d0c2fb2c",
+      "phase_instance": "phase-design-6",
+      "rejected_count": 0,
+      "schema_version": "1",
+      "source_evidence_digests": [
+        "2156f91973b09f2d1de8414813c76a0af290ca62301d4b589476106f7fc23725"
+      ],
+      "step": "triage",
+      "subject_digest": "536bc21ae70896f53a4e39bed3eef93f9d5e032b456065ecfe81216354751bd5",
+      "task_id": "review-flexibility"
+    },
+    "schema_version": "1"
+  },
+  "step": "triage",
+  "task_id": "review-flexibility"
+}

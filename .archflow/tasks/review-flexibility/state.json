@@ -36,6 +36,13 @@
       "subject_digest": "b51262111a3dae61879c855cfbbeb5d81599884a2accd7bbe23c9136a77cdb71"
     },
     {
+      "decision_digest": "57c7836f3d2f4407da47fca47bfdf2afcf6f93af5c996df90256c027872bca13",
+      "gate_id": "g-4dcfc3117117300400f921edaeef689a5832798c2b753814566f4a04e4028822",
+      "gate_kind": "constitution-review",
+      "resolved_at_revision": 245,
+      "subject_digest": "536bc21ae70896f53a4e39bed3eef93f9d5e032b456065ecfe81216354751bd5"
+    },
+    {
       "decision_digest": "c4fd0f9d9f0b1cbe9fa4afb4d60b5682a66632a2df4c36d18ccf3d1d5dd65a89",
       "gate_id": "g-674134e19de8b4efa9ee9f63d816b3ae48ec54ff7c719d3c9cd7b3c407195104",
       "gate_kind": "design-approval",
@@ -69,6 +76,13 @@
       "gate_kind": "baseline-adoption",
       "resolved_at_revision": 143,
       "subject_digest": "cb8a4095a005a3de891fcae856777708d340a2eb91c48117b5f0411c46eeea67"
+    },
+    {
+      "decision_digest": "d356063c828b2aecef3e29172aba5998707131ff19700e84a219f7c845a2b74a",
+      "gate_id": "g-85d14a17e7781a33df77135ce2811970846df5a07b327da1460da4b2f6162a40",
+      "gate_kind": "commit-authorization",
+      "resolved_at_revision": 231,
+      "subject_digest": "0c188480e2a0d6bd7cb681f4de16e379d375d9f0de381b9fc3c68d787709830f"
     },
     {
       "decision_digest": "5cf1f81db9c1ecb00e2d965d3194513df9e28b57e7acbaefaea8df6cb5cbc022",
@@ -127,6 +141,13 @@
       "subject_digest": "60e329bfd8890aebb9db796d9a53aab54daeb81fc67201ca91e29f47b3d1a084"
     },
     {
+      "decision_digest": "77f331f49a5c08b4ae8dd900bd4890d34f769e8d76787f77bef882c2827f6e72",
+      "gate_id": "g-b6056e347a8ffa3c5b04cbea911e642e4b0e803ad49ede03530c4f3769e2334e",
+      "gate_kind": "constitution-review",
+      "resolved_at_revision": 229,
+      "subject_digest": "0c188480e2a0d6bd7cb681f4de16e379d375d9f0de381b9fc3c68d787709830f"
+    },
+    {
       "decision_digest": "2dbe9c70033087f63bdee4c46a812bb4d49e75ed77b7e1322617dc5742de01bf",
       "gate_id": "g-bf0d7e3ec8b771fd8cf0b7cc04c7cae98bd94fa454b36068448fecf78792f472",
       "gate_kind": "baseline-adoption",
@@ -146,6 +167,13 @@
       "gate_kind": "baseline-adoption",
       "resolved_at_revision": 54,
       "subject_digest": "ae6ad67cc32cc329530812e325fc8de9870bea6d5e4c862a59c68488e38472af"
+    },
+    {
+      "decision_digest": "1f4e5884a817f7acccf432c898dee3844b76839411244b24513e35259ed2097e",
+      "gate_id": "g-cd3802a1c7ea279dc297dd8004de94eb6e89edc8c1a78dda23522f1b1e43c284",
+      "gate_kind": "design-approval",
+      "resolved_at_revision": 247,
+      "subject_digest": "536bc21ae70896f53a4e39bed3eef93f9d5e032b456065ecfe81216354751bd5"
     },
     {
       "decision_digest": "9d6a61387f849d7c1903638154bcfe474d6db166b017a26b728684090d585c1f",
@@ -340,6 +368,34 @@
       "step": "triage"
     },
     {
+      "input_fingerprint": "73c25c849e44fbf80c90b936bcecee61d554b3d2c21ee30f1da987b1d0c2fb2c",
+      "phase_instance": "phase-design-6",
+      "result_digest": "d378cbe6766659fe7a1339dc4186a51b4bd122c684d286f6bfae92208a9e0220",
+      "result_id": "adjudication-result-256487d8dac72e9d17c52774f82d4941",
+      "step": "adjudicate"
+    },
+    {
+      "input_fingerprint": "73c25c849e44fbf80c90b936bcecee61d554b3d2c21ee30f1da987b1d0c2fb2c",
+      "phase_instance": "phase-design-6",
+      "result_digest": "350249740cb9235f3cde5119f540af0081811c8a226c9ce6d36916fe045ce47a",
+      "result_id": "result-fa85c26484b71aba31a37a2ac076170c",
+      "step": "counter_review"
+    },
+    {
+      "input_fingerprint": "53f42ea390ff6669b4a86213b76b8a848fa7e4aa9369f2c81507d1174b700c2f",
+      "phase_instance": "phase-design-6",
+      "result_digest": "02b2502ae385ca3741677de55e597bfef62a98a8fa3ee37ba87b7a500731d1da",
+      "result_id": "state-result-e0cbecf66b00e2bf044ee240ab783a69",
+      "step": "produce"
+    },
+    {
+      "input_fingerprint": "73c25c849e44fbf80c90b936bcecee61d554b3d2c21ee30f1da987b1d0c2fb2c",
+      "phase_instance": "phase-design-6",
+      "result_digest": "749fd6772cf5232cb3aa31d0853fd1963120ec7fd3349b0720c4cd3bdfb03084",
+      "result_id": "state-result-f531264936d6ff70274205a17dda3291",
+      "step": "triage"
+    },
+    {
       "input_fingerprint": "469bdda474c3e3bb3096096592481d3cc8e5dc12dcfb7c052202ce1fbd8db465",
       "phase_instance": "phase-impl-1",
       "result_digest": "971005f2d5028d163111d3bfeeb2136230a962b5e9d87f0fc241e7f0ea34a08c",
@@ -449,6 +505,34 @@
       "phase_instance": "phase-impl-4",
       "result_digest": "dd3cdfc7b72e82e7de2151a0be5b9424135f6e28dfd5e2c3ac54c3369a929d77",
       "result_id": "state-result-e161fe652f11074738fb8664ba8a08eb",
+      "step": "triage"
+    },
+    {
+      "input_fingerprint": "05ae25fd3672417cc92180f30a33b5c5fbe0ca7233bd864703c5414301815e10",
+      "phase_instance": "phase-impl-5",
+      "result_digest": "757a7a8ba0aacfbb4db041f8bbfc8295397693ac4fe4f5a55ccd57875c0bbcab",
+      "result_id": "adjudication-result-947399a04fc8558e08932817517e8f95",
+      "step": "adjudicate"
+    },
+    {
+      "input_fingerprint": "05ae25fd3672417cc92180f30a33b5c5fbe0ca7233bd864703c5414301815e10",
+      "phase_instance": "phase-impl-5",
+      "result_digest": "1bc38ba8e69fcd1761532974b2ee085bbf0bf3ef17f9b998473690f6ec5f96f2",
+      "result_id": "result-21df7d9ff5936ffdd77c1141767ea328",
+      "step": "counter_review"
+    },
+    {
+      "input_fingerprint": "09079fd1897c83cafaee3d60cf766f4f14d7a6648dd736391c44fd202231d1b9",
+      "phase_instance": "phase-impl-5",
+      "result_digest": "faa2d4046f0510ea1bbbe50bb8b459f3b30643161a6f5e2c2a45f1cdb0841850",
+      "result_id": "state-result-730809f20bf2fbe86046771dd27fc181",
+      "step": "produce"
+    },
+    {
+      "input_fingerprint": "05ae25fd3672417cc92180f30a33b5c5fbe0ca7233bd864703c5414301815e10",
+      "phase_instance": "phase-impl-5",
+      "result_digest": "17df26e86e9e3744cb9f44b02e5f4b4f963bf9d43a05bf381f0bf53d9083b375",
+      "result_id": "state-result-b7947768de44305193c7c026ac709df5",
       "step": "triage"
     },
     {
@@ -733,7 +817,7 @@
     }
   ],
   "initialization_digest": "8198c85109ea65a5c74550ee943d6a7373b771605e45cda4b8daa623c3432755",
-  "input_fingerprint": "679098d017ce4d6965ee5aa3999fc74317c674135c3d989065894d4e0e2ad379",
+  "input_fingerprint": "73c25c849e44fbf80c90b936bcecee61d554b3d2c21ee30f1da987b1d0c2fb2c",
   "last_seen_config": {
     "roles": {
       "adjudicator": {
@@ -748,46 +832,46 @@
     "schema_version": "1"
   },
   "last_transition": {
-    "input_fingerprint": "679098d017ce4d6965ee5aa3999fc74317c674135c3d989065894d4e0e2ad379",
-    "intent_id": "afop-474d679dc6d5eaae08167f9d4817de433ec40423d9d43ad5061f9b164b901d8b-open-gate",
+    "input_fingerprint": "73c25c849e44fbf80c90b936bcecee61d554b3d2c21ee30f1da987b1d0c2fb2c",
+    "intent_id": "afop-31dc6eb6f53bc8032811409826f54943fe6796757d75f14faf51af1db5281c80-open-gate",
     "operation": "gate",
     "outcome": {
       "decision": {
-        "context_digest": "72cd1e5ba155353317abb0aeecfb9257df660e0a68e3f628b490327ad2fc74d4",
-        "gate_id": "g-674134e19de8b4efa9ee9f63d816b3ae48ec54ff7c719d3c9cd7b3c407195104",
+        "context_digest": "41752d0ac97201361d19097572572362aae06b171bff56707ff6b8c6f1383cfd",
+        "gate_id": "g-cd3802a1c7ea279dc297dd8004de94eb6e89edc8c1a78dda23522f1b1e43c284",
         "human_provenance": {
           "actor_class": "human",
           "assurance": "declared-local-trace",
           "channel": "connected-host",
           "connection_id": "connection-1",
-          "decision_event_id": "afdecision-60ef3ea0d223f5d839d7f69fdecae1ffd7966d1389e70c6a16c2d597041eb657",
-          "recorded_at": "2026-08-21T00:17:29.308Z",
+          "decision_event_id": "afdecision-b9b88ba872fbd4a14574ac542cf14ce1f452b6cff9fae34f119d93e2963f9db8",
+          "recorded_at": "2026-08-21T04:31:22.632Z",
           "request_id_digest": "e74118e685125f821e4de05e9896d7173bf77315fa0b6db406f58a7d8f5634ed",
           "schema_version": "1"
         },
         "kind": "design-approval",
         "payload": {
           "decision": "approve",
-          "reason": "approved"
+          "reason": "approve"
         },
-        "phase_instance": "phase-design-5",
+        "phase_instance": "phase-design-6",
         "schema_version": "1",
-        "subject_digest": "05a5f7efe99a2843c2325c91e969d719b0ed325732b70f066beda8a0eabf0c65",
+        "subject_digest": "536bc21ae70896f53a4e39bed3eef93f9d5e032b456065ecfe81216354751bd5",
         "task_id": "review-flexibility"
       },
       "kind": "design-approval",
-      "notes": "approved",
-      "revision": 215
+      "notes": "approve",
+      "revision": 247
     },
-    "outcome_digest": "bdea6236d47b263681f61173f3e82dc91f0cfd98cc7a50de0dafbcef467746f6",
-    "prior_revision": 214,
-    "request_digest": "434054bdc630690f7f12e01f45c2fbf812831681a9d8b937ead8f17ef1c1cc73",
-    "result_id": "g-674134e19de8b4efa9ee9f63d816b3ae48ec54ff7c719d3c9cd7b3c407195104",
-    "resulting_revision": 215,
+    "outcome_digest": "8ef2644e74a2687018816876d659a1dc60d4a4676075999b86369fee0dcdd620",
+    "prior_revision": 246,
+    "request_digest": "03153bc1803f0d53ac35cf85dbb0ddb2f534ea3525c53dcd3d934f72dde61168",
+    "result_id": "g-cd3802a1c7ea279dc297dd8004de94eb6e89edc8c1a78dda23522f1b1e43c284",
+    "resulting_revision": 247,
     "schema_version": "1",
     "tool": "archflow_gate"
   },
-  "phase_instance": "phase-design-5",
+  "phase_instance": "phase-design-6",
   "planned_final_phase": 7,
   "policy_base_commit": "6549da8a2b872a2c72aabe7cc4632e1d3eb09b89",
   "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
@@ -869,7 +953,7 @@
       "target_phase_instance": "phase-design-3"
     }
   ],
-  "revision": 215,
+  "revision": 247,
   "rule_settlements": [
     {
       "conclusion": {

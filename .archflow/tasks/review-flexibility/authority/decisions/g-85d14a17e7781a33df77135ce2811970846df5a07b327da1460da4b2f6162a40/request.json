@@ -1,0 +1,90 @@
+{
+  "allowed_decisions": [
+    "authorize-commit",
+    "revise",
+    "abort",
+    "cancel"
+  ],
+  "context": {
+    "baseline_commit": "fc1ab710ca1f2e13af9c3e6d08006fbe697a129a",
+    "commit_message": "ArchFlow: Implement review-flexibility phase 5",
+    "current_artifact_digests": [
+      "0c188480e2a0d6bd7cb681f4de16e379d375d9f0de381b9fc3c68d787709830f"
+    ],
+    "diff_digest": "c0c2c95e4064a2506f2f48852c2c33ca4c508ee993475f169b347561b0a9cf58",
+    "parent_document_digests": [
+      "218dbfe8a4d5ad1401191ac0227046551889ed1191d36a51cb3c05a2c7ba6506",
+      "2be2d4f9782caae95bf6779be2678fff9f37f449fb6c97bdf286c57b3aadb647",
+      "838c3daf33bd6959c1d0c404db8c8c356f98139cc74977d03e07acc09e6cd50d",
+      "cdca0324e595b2cee39dc648488e85c53dd4a612dadeccd010634c7a1cfe645f"
+    ],
+    "paths": [
+      ".archflow/tasks/review-flexibility/phases/5/impl-notes.md",
+      "dist/archflow-local.mjs",
+      "dist/archflow-mcp.mjs",
+      "dist/manifest.json",
+      "dist/metafile.json",
+      "src/contracts/durable-state.ts",
+      "src/contracts/mcp-tools.ts",
+      "src/contracts/schemas/v1/mcp-tools.schema.json",
+      "src/contracts/schemas/v1/semantic-workflow.schema.json",
+      "src/contracts/schemas/v1/task-state.schema.json",
+      "src/contracts/semantic-workflow.ts",
+      "src/mcp/handlers/counter-review.ts",
+      "src/mcp/handlers/state.ts",
+      "src/review/fixed-point.ts",
+      "src/review/pinned-context.ts",
+      "src/state/approval-rules.ts",
+      "src/state/constitution.ts",
+      "src/state/gates.ts",
+      "src/state/implementation-manifest.ts",
+      "src/state/next-action.ts",
+      "src/state/planned-final-phase.ts",
+      "src/state/produce-subject.ts",
+      "src/state/request-composition.ts",
+      "src/state/restart-authority.ts",
+      "src/state/semantic-actions.ts",
+      "src/state/semantic-view.ts",
+      "src/state/status.ts",
+      "src/state/transaction.ts",
+      "src/state/transitions.ts",
+      "test/helpers/task-workspace.ts",
+      "test/integration/semantic-document-journeys.test.ts",
+      "test/integration/semantic-implementation-completion-journeys.test.ts",
+      "test/unit/approval-rules.test.ts",
+      "test/unit/implementation-output-builder.test.ts",
+      "test/unit/mcp-tools.test.ts",
+      "test/unit/review-services.test.ts",
+      "test/unit/semantic-view.test.ts",
+      "test/unit/state-constitution.test.ts",
+      "test/unit/state-next-action.test.ts",
+      "test/unit/state-status.test.ts",
+      "test/unit/state-transitions.test.ts",
+      "test/unit/task-workspace.test.ts"
+    ],
+    "target_ref": "refs/heads/feature/review-override-flexibility"
+  },
+  "context_digest": "c13fe79717cd1ea700b4d17e37c986f2c8390e729691e684ab3f9b64f1ad7eeb",
+  "current_evidence": {
+    "set_digest": "2e6159a879887201df95ce3090ea038103bc33ddc099f402bf73d48a1fe5040d",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "52852b9808b0a8b8e3e696ce3941674ca2a45a3ed02dc69fc370360459639de0",
+        "producer_family": "codex",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-85d14a17e7781a33df77135ce2811970846df5a07b327da1460da4b2f6162a40",
+  "intent_id": "afop-374ac925ec4bb5a92a2b23cabbac17ad80634276bde27ca3f25dcb48e4483f02-open-gate",
+  "kind": "commit-authorization",
+  "opened_at_revision": 230,
+  "phase_instance": "phase-impl-5",
+  "request_digest": "f933445a3a63a80321d0bcf748349975061d663d1e082f24a4a1c8d21dff47c8",
+  "schema_version": "1",
+  "subject_digest": "0c188480e2a0d6bd7cb681f4de16e379d375d9f0de381b9fc3c68d787709830f",
+  "summary": "Phase 5 is ready for commit authorization. It adds the exact version-2 no-wait rule-acceptance capability, phase-bound reviewed-upstream authority, durable settlement baselines, exact autonomous Git proof, and a bounded milestone-baseline refresh. The material review finding was resolved by binding refresh eligibility to one settlement-time live configuration snapshot and independently rechecking retained document bytes and Git mode. The fresh independent review found no material defects, and the policy review was explicitly approved. Local focused, semantic, type, schema, unit, contract, integration, crash, release-reproducibility, and diff verification passed. As previously directed, authenticated real-host selection evidence was not rerun because it requires external Claude/Codex calls; that omission remains visible and is not claimed as a pass. The unrelated local Codex configuration change will not be included.",
+  "task_id": "review-flexibility"
+}

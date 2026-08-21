@@ -1,0 +1,121 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 224,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 34840586
+  },
+  "artifact_digest": "dcb2a89a9723f09643b1efdb883f6c5311a39de8de1d5386e437b3ea586ab92c",
+  "input_fingerprint": "05ae25fd3672417cc92180f30a33b5c5fbe0ca7233bd864703c5414301815e10",
+  "outputs": [],
+  "phase_instance": "phase-impl-5",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-947399a04fc8558e08932817517e8f95",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [
+        "05a5f7efe99a2843c2325c91e969d719b0ed325732b70f066beda8a0eabf0c65"
+      ],
+      "assurance": "server-attested",
+      "cli_version": "2.1.238",
+      "constitution": "pass",
+      "drift": "incidental",
+      "drift_findings": [
+        {
+          "affected_claim_ids": [
+            "bounded-milestone-baseline-refresh-action",
+            "executable-verification-full-check"
+          ],
+          "drift": "incidental",
+          "rationale": "Two disclosed departures from the approved upstream do not undermine its claims. First, the design describes the baseline refresh as one server-owned no-submission semantic action listed against semantic-workflow contracts; the implementation additionally introduces an input-free archflow_state operation (src/contracts/mcp-tools.ts:65,173,187-190) to carry it, which preserves the approved property that the server independently proves every authority fact and that the client submits nothing. Second, the design's executable verification requires npm run check to pass; it remains incomplete because the always-on host-selection digest contract still binds the prior dist/manifest.json, and refreshing it needs authenticated external model turns the user explicitly declined. Both are recorded in impl-notes with their reasons rather than glossed, and neither changes the approved authority model, gate precedence, dormancy boundary, or Git proof requirements.",
+          "upstream_digest": "05a5f7efe99a2843c2325c91e969d719b0ed325732b70f066beda8a0eabf0c65"
+        }
+      ],
+      "effort": "medium",
+      "envelope_input_digest": "68c12560e1ab0d61c1b87bec50871911a3e3c394f92c4d101c4fbbf1c76d8541",
+      "input_fingerprint": "05ae25fd3672417cc92180f30a33b5c5fbe0ca7233bd864703c5414301815e10",
+      "invocation_id": "adjudication-invocation-6f64f8cf1f040007290dba58d7cd281d",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "133c91ede47f284213237e6d9a3418f878feb149a8ef72854156adb33af078e7",
+      "phase_instance": "phase-impl-5",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-947399a04fc8558e08932817517e8f95",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "The implemented shape matches the approved design's decisions P5-1 through P5-6: exact canonical profile comparison, one restart-aware selector, phase-bound upstream authority, preserved gate precedence, independent mutation re-authentication (src/mcp/handlers/state.ts:306-329, src/state/transitions.ts:498), and the bounded milestone-baseline refresh with exact live-vs-retained byte proof (src/state/implementation-manifest.ts:405-432). Declared out-of-scope surfaces — .archflow/constitution, assets/constitution, CLAUDE.md, AGENTS.md, skills, live config, and any installation — are absent from the outputs. The deviations are disclosed in impl-notes, remain inside the approved architecture (the refresh operation is the mechanism for the design's own server-owned no-submission refresh action, and the config-digest fix strengthens the approved invariant), and the notes state they triggered a fresh review cycle, so no material departure advanced without re-entering this review boundary.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "This is implementation produced under the approved phase-5 design (upstream 05a5f7ef...), and impl-notes records three deviations from the plan, including a new internal archflow_state operation and a config-digest remediation."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Authority is never inferred from silence, elapsed time, agent prose, or a model verdict. Consumption requires a WeakSet-branded capability minted only when the authentic constitution resolved from the task's immutable policy_base_commit matches state.constitution_digest and both selected rules equal the exact v2 profile (src/state/constitution.ts:115-148), and the settlement itself must match task, producer phase, subject digest, and the latest restart cutoff. The shipped .archflow/constitution/00-process.md:3 and 10-architecture.md:3 remain version 1 and no constitution, seed, CLAUDE.md, AGENTS.md, or skill byte is in the declared outputs, so no normally initialized repository (including this task) can activate the path; every v1-pinned task keeps its mandatory human gate. Exception arms retain precedence and design-phase adjudication still demands a recorded human design-approval (src/state/next-action.ts:441-453). The one place a human decision was consumed outside the workflow — proceeding with the incomplete npm run check — is recorded as an explicit user direction in impl-notes rather than assumed.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The change adds runtime paths where a durable rule settlement, rather than a recorded human decision, can supply upstream, phase-exit, and commit authority (src/state/restart-authority.ts:74-88; src/state/next-action.ts:178-259; src/state/transitions.ts:498)."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The failure is reported plainly with its cause (docs/validation/host-selection.json still binds the prior tracked manifest), the declined external authenticated calls are attributed to the user's explicit decision, and no evidence was rebound offline to manufacture a pass. In code, every unavailable or ambiguous authority state is a visible non-success with a safe next action: the refresh transaction fails closed with distinct issue codes (milestone-baseline-refresh-authority-missing / -reviewed-bytes-changed / -reconciliation-required / -not-needed, src/mcp/handlers/state.ts:316-343), and status routes unprovable commits to inspect-state or a fresh produce rather than silently advancing (src/state/next-action.ts:195-234). Human control is preserved because the whole mechanism stays dormant under shipped v1 policy.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "Verification was incomplete: impl-notes reports npm run check failing on the host-selection digest contract, and the runtime adds new refusal paths for unavailable or uncertain authority."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Settlement selection requires equal task_id, producer phase_instance, and subject_digest plus survival of the latest applicable restart cutoff, and the capability rechecks task_id, policy_base_commit, and constitution_digest before any settlement is consulted. Git proof is confined to the .archflow/tasks/<task_id>/ prefix, rejects paths outside it, requires the committed canonical state.json to equal current state, and refuses a dirty task tree. The refresh path verifies artifact.task_id equality and resolves every declared path through the task-scoped resolver before comparing live mode/oid/size with the original retained outputs, so adopted or regenerated projections cannot let review evidence authorize different bytes. Undeclared changes are enumerated and confined to this task's own state/authority files plus the user-owned .codex/config.toml.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "New durable settlements and Git proofs read and mutate task-scoped files and bind decisions to subject bytes (src/state/restart-authority.ts:57-88; src/state/implementation-manifest.ts:348-432)."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "2e6159a879887201df95ce3090ea038103bc33ddc099f402bf73d48a1fe5040d",
+      "step": "adjudicate",
+      "subject_digest": "0c188480e2a0d6bd7cb681f4de16e379d375d9f0de381b9fc3c68d787709830f",
+      "task_id": "review-flexibility",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "review-flexibility"
+}

@@ -1,0 +1,57 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 240,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 34912293
+  },
+  "artifact_digest": "2156f91973b09f2d1de8414813c76a0af290ca62301d4b589476106f7fc23725",
+  "input_fingerprint": "73c25c849e44fbf80c90b936bcecee61d554b3d2c21ee30f1da987b1d0c2fb2c",
+  "outputs": [],
+  "phase_instance": "phase-design-6",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "result-fa85c26484b71aba31a37a2ac076170c",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "review-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "assurance": "server-attested",
+      "blocking_count": 0,
+      "cli_version": "2.1.238",
+      "effort": "medium",
+      "envelope_input_digest": "757477d9998f54c64f128bc1af2770469ad9f248f3059940a6a5e2d59c14a0f1",
+      "findings": [],
+      "input_fingerprint": "73c25c849e44fbf80c90b936bcecee61d554b3d2c21ee30f1da987b1d0c2fb2c",
+      "invocation_id": "invocation-39f9a4e8e526e09e293f6d193b828226",
+      "matched_rule_versions": [],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "76f88d6c1c9180d90d9c657dca6ce669f8027a40847b40180c634ed8654717e1",
+      "phase_instance": "phase-design-6",
+      "producer_family": "codex",
+      "result_id": "result-fa85c26484b71aba31a37a2ac076170c",
+      "role": "counter-review",
+      "rubric_digest": "8023a567948bc5beb9caa889ddb1525c3309de7e2556a88d8182098e4afbbd25",
+      "schema_version": "1",
+      "step": "counter_review",
+      "subject_digest": "536bc21ae70896f53a4e39bed3eef93f9d5e032b456065ecfe81216354751bd5",
+      "task_id": "review-flexibility",
+      "verdict": "pass"
+    },
+    "schema_version": "1"
+  },
+  "step": "counter_review",
+  "task_id": "review-flexibility"
+}

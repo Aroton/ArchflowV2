@@ -1,0 +1,33 @@
+{
+  "context_digest": "c13fe79717cd1ea700b4d17e37c986f2c8390e729691e684ab3f9b64f1ad7eeb",
+  "envelope": {
+    "context_digest": "c13fe79717cd1ea700b4d17e37c986f2c8390e729691e684ab3f9b64f1ad7eeb",
+    "gate_id": "g-85d14a17e7781a33df77135ce2811970846df5a07b327da1460da4b2f6162a40",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-92b3a49f438a07ab49069002e894455112e294addf274fe0864a3f8b671c9ad0",
+      "recorded_at": "2026-08-21T03:08:48.486Z",
+      "request_id_digest": "5a3699927371eb9bb5a6d19087f3eb1685ab1a3e33b743447e71cf49e90ef4ed",
+      "schema_version": "1"
+    },
+    "kind": "commit-authorization",
+    "payload": {
+      "decision": "authorize-commit",
+      "reason": "The user explicitly authorized committing the exact reviewed Phase 5 changes while excluding the unrelated local Codex configuration change."
+    },
+    "phase_instance": "phase-impl-5",
+    "schema_version": "1",
+    "subject_digest": "0c188480e2a0d6bd7cb681f4de16e379d375d9f0de381b9fc3c68d787709830f",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-85d14a17e7781a33df77135ce2811970846df5a07b327da1460da4b2f6162a40",
+  "kind": "commit-authorization",
+  "outcome": "decided",
+  "phase_instance": "phase-impl-5",
+  "schema_version": "1",
+  "subject_digest": "0c188480e2a0d6bd7cb681f4de16e379d375d9f0de381b9fc3c68d787709830f",
+  "task_id": "review-flexibility"
+}
