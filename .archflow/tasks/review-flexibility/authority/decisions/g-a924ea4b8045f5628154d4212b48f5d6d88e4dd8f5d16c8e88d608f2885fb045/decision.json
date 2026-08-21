@@ -1,0 +1,33 @@
+{
+  "context_digest": "e94248d579f90ca8af858c6066bfc59d8f049e08bf71e293423351ac06f90ca0",
+  "envelope": {
+    "context_digest": "e94248d579f90ca8af858c6066bfc59d8f049e08bf71e293423351ac06f90ca0",
+    "gate_id": "g-a924ea4b8045f5628154d4212b48f5d6d88e4dd8f5d16c8e88d608f2885fb045",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-dfa4eca0c6c8a6f96e6bcfe6e86ea42bfb11bef69fa5c6274385bfc83dc8f719",
+      "recorded_at": "2026-08-21T16:30:05.927Z",
+      "request_id_digest": "b84440225fdd80d0230649d1b4a82aef4e648973cbaf483e4df861538f62cfb0",
+      "schema_version": "1"
+    },
+    "kind": "commit-authorization",
+    "payload": {
+      "decision": "authorize-commit",
+      "reason": "The user explicitly directed ArchFlow to commit the reviewed Phase 6 changes."
+    },
+    "phase_instance": "phase-impl-6",
+    "schema_version": "1",
+    "subject_digest": "a00b8431a6340955adbf34fb57044971e4e584f5c4242845615c0760eefc35b8",
+    "task_id": "review-flexibility"
+  },
+  "gate_id": "g-a924ea4b8045f5628154d4212b48f5d6d88e4dd8f5d16c8e88d608f2885fb045",
+  "kind": "commit-authorization",
+  "outcome": "decided",
+  "phase_instance": "phase-impl-6",
+  "schema_version": "1",
+  "subject_digest": "a00b8431a6340955adbf34fb57044971e4e584f5c4242845615c0760eefc35b8",
+  "task_id": "review-flexibility"
+}

@@ -1,0 +1,2511 @@
+{
+  "accounting": {
+    "counted_entries": [
+      {
+        "path": ".archflow/config.yaml",
+        "storage": "raw-payload",
+        "stored_bytes": 1716
+      },
+      {
+        "path": ".archflow/constitution/00-process.md",
+        "storage": "raw-payload",
+        "stored_bytes": 530
+      },
+      {
+        "path": ".archflow/constitution/10-architecture.md",
+        "storage": "raw-payload",
+        "stored_bytes": 685
+      },
+      {
+        "path": ".archflow/tasks/review-flexibility/phases/6/impl-notes.md",
+        "storage": "raw-payload",
+        "stored_bytes": 10705
+      },
+      {
+        "path": "AGENTS.md",
+        "storage": "raw-payload",
+        "stored_bytes": 15948
+      },
+      {
+        "path": "CLAUDE.md",
+        "storage": "raw-payload",
+        "stored_bytes": 15948
+      },
+      {
+        "path": "assets/config.template.yaml",
+        "storage": "raw-payload",
+        "stored_bytes": 2604
+      },
+      {
+        "path": "assets/constitution/00-process.md",
+        "storage": "raw-payload",
+        "stored_bytes": 530
+      },
+      {
+        "path": "assets/constitution/10-architecture.md",
+        "storage": "raw-payload",
+        "stored_bytes": 685
+      },
+      {
+        "path": "dist/archflow-local.mjs",
+        "storage": "raw-payload",
+        "stored_bytes": 1625682
+      },
+      {
+        "path": "dist/archflow-mcp.mjs",
+        "storage": "raw-payload",
+        "stored_bytes": 2925855
+      },
+      {
+        "path": "dist/manifest.json",
+        "storage": "raw-payload",
+        "stored_bytes": 192239
+      },
+      {
+        "path": "dist/metafile.json",
+        "storage": "raw-payload",
+        "stored_bytes": 330971
+      },
+      {
+        "path": "docs/LIMITATIONS.md",
+        "storage": "raw-payload",
+        "stored_bytes": 16607
+      },
+      {
+        "path": "docs/OVERVIEW.md",
+        "storage": "raw-payload",
+        "stored_bytes": 13781
+      },
+      {
+        "path": "docs/TESTING.md",
+        "storage": "raw-payload",
+        "stored_bytes": 26150
+      },
+      {
+        "path": "docs/contracts/CONTRACTS.md",
+        "storage": "raw-payload",
+        "stored_bytes": 17430
+      },
+      {
+        "path": "docs/mcp/SERVER.md",
+        "storage": "raw-payload",
+        "stored_bytes": 14845
+      },
+      {
+        "path": "docs/review/COUNTER-REVIEW.md",
+        "storage": "raw-payload",
+        "stored_bytes": 30872
+      },
+      {
+        "path": "docs/state/DURABLE-STATE.md",
+        "storage": "raw-payload",
+        "stored_bytes": 29545
+      },
+      {
+        "path": "docs/workflow/LIFECYCLE.md",
+        "storage": "raw-payload",
+        "stored_bytes": 27875
+      },
+      {
+        "path": "docs/workflow/SKILLS.md",
+        "storage": "raw-payload",
+        "stored_bytes": 17028
+      },
+      {
+        "path": "skills/archflow-design/SKILL.md",
+        "storage": "raw-payload",
+        "stored_bytes": 10450
+      },
+      {
+        "path": "skills/archflow-phase-design/SKILL.md",
+        "storage": "raw-payload",
+        "stored_bytes": 10379
+      },
+      {
+        "path": "skills/archflow-phase-impl/SKILL.md",
+        "storage": "raw-payload",
+        "stored_bytes": 13286
+      },
+      {
+        "path": "skills/archflow-prd/SKILL.md",
+        "storage": "raw-payload",
+        "stored_bytes": 9958
+      },
+      {
+        "path": "skills/archflow-status/SKILL.md",
+        "storage": "raw-payload",
+        "stored_bytes": 7269
+      },
+      {
+        "path": "skills/archflow-upgrade/SKILL.md",
+        "storage": "raw-payload",
+        "stored_bytes": 8729
+      },
+      {
+        "path": "src/repository/paths.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 40650
+      },
+      {
+        "path": "src/state/next-action.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 23777
+      },
+      {
+        "path": "src/state/semantic-view.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 22995
+      },
+      {
+        "path": "test/contracts/skill-contract-canonical.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 19131
+      },
+      {
+        "path": "test/contracts/skill-contract-upgrade.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 8747
+      },
+      {
+        "path": "test/helpers/task-workspace.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 8095
+      },
+      {
+        "path": "test/integration/planning-restart-handler.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 14099
+      },
+      {
+        "path": "test/integration/semantic-document-journeys.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 81130
+      },
+      {
+        "path": "test/integration/semantic-implementation-completion-journeys.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 54213
+      },
+      {
+        "path": "test/integration/semantic-implementation-journeys.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 22330
+      },
+      {
+        "path": "test/unit/constitution.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 5629
+      },
+      {
+        "path": "test/unit/init-assets.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 5765
+      },
+      {
+        "path": "test/unit/repository-paths.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 31125
+      },
+      {
+        "path": "test/unit/semantic-view.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 18870
+      },
+      {
+        "path": "test/unit/state-next-action.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 30924
+      },
+      {
+        "path": "test/unit/task-workspace.test.ts",
+        "storage": "raw-payload",
+        "stored_bytes": 3874
+      }
+    ],
+    "measured_at_revision": 248,
+    "result_byte_cap": 26214400,
+    "result_bytes": 5769656,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 40681949
+  },
+  "artifact_digest": "a00b8431a6340955adbf34fb57044971e4e584f5c4242845615c0760eefc35b8",
+  "input_fingerprint": "a975ab7ae1d7aebdf26f7da27e32f5fc4a5540f5fccf88940ba7fd4ba958b506",
+  "outputs": [
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "02bb600cd80a5c11663ebff3a5cc8d38d3f0555b",
+        "size_bytes": 1716
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "7c0d74d0a0605b130f8c04aa26d0d46e9d4ac070",
+        "size_bytes": 1017
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": ".archflow/config.yaml",
+      "path_class": "repository-source",
+      "payload_bytes": 1716,
+      "payload_digest": "25f16804028d9862b26cd5dee67162e65b460dbb342a64e29aa25bcc2d04bb71",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "598ead0591d7f2e50c15fa1c404ae9730cd21355",
+        "size_bytes": 530
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "8267135136a5542e032acc812180e2ac42697d32",
+        "size_bytes": 463
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": ".archflow/constitution/00-process.md",
+      "path_class": "task-branch-constitution",
+      "payload_bytes": 530,
+      "payload_digest": "0fc180e482597cb7f5320c2985abc69078e6a477061c73bb24652d21d0576240",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "b904828b7c5d9365981a102a40850bc600ece5ce",
+        "size_bytes": 685
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "f495c32a59f743dbe137a2bdaf5ba8e2ec00465e",
+        "size_bytes": 529
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": ".archflow/constitution/10-architecture.md",
+      "path_class": "task-branch-constitution",
+      "payload_bytes": 685,
+      "payload_digest": "da59cebb76efbaeaa579e19b18dc09aeefdb0b7d7d17ff9c7110ee4422c657e6",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "1562c8837c1929217675233494b99ebdc0e3eac4",
+        "size_bytes": 10705
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": ".archflow/tasks/review-flexibility/phases/6/impl-notes.md",
+      "path_class": "document",
+      "payload_bytes": 10705,
+      "payload_digest": "7516be48ec285586ca1e8b43cee3e17f421a743274d81036ea165508465e2a5b",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "2a16e6588cd91d45e80d3fec3a5d7e8e19ece0f0",
+        "size_bytes": 15948
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "5522e604740eebcf10907f224864dbcf3853bf1a",
+        "size_bytes": 15324
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "AGENTS.md",
+      "path_class": "repository-source",
+      "payload_bytes": 15948,
+      "payload_digest": "f4830a63bcad2d5cc0f95bc0ff40a2ab8d73886f96060e49869e13b7ba604b88",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "2a16e6588cd91d45e80d3fec3a5d7e8e19ece0f0",
+        "size_bytes": 15948
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "5522e604740eebcf10907f224864dbcf3853bf1a",
+        "size_bytes": 15324
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "CLAUDE.md",
+      "path_class": "repository-source",
+      "payload_bytes": 15948,
+      "payload_digest": "f4830a63bcad2d5cc0f95bc0ff40a2ab8d73886f96060e49869e13b7ba604b88",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "5a6aa98af97ed45cc018295bd8bd55370fcb15a6",
+        "size_bytes": 2604
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "b3d19e8232755d6826ae635d8939764db13f7b9a",
+        "size_bytes": 2648
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "assets/config.template.yaml",
+      "path_class": "repository-source",
+      "payload_bytes": 2604,
+      "payload_digest": "575c53c75e0542d758f9233c77717491864d69a454702682e3dae6ee63670baa",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "598ead0591d7f2e50c15fa1c404ae9730cd21355",
+        "size_bytes": 530
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "8267135136a5542e032acc812180e2ac42697d32",
+        "size_bytes": 463
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "assets/constitution/00-process.md",
+      "path_class": "repository-source",
+      "payload_bytes": 530,
+      "payload_digest": "0fc180e482597cb7f5320c2985abc69078e6a477061c73bb24652d21d0576240",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "b904828b7c5d9365981a102a40850bc600ece5ce",
+        "size_bytes": 685
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "f495c32a59f743dbe137a2bdaf5ba8e2ec00465e",
+        "size_bytes": 529
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "assets/constitution/10-architecture.md",
+      "path_class": "repository-source",
+      "payload_bytes": 685,
+      "payload_digest": "da59cebb76efbaeaa579e19b18dc09aeefdb0b7d7d17ff9c7110ee4422c657e6",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "e757b8fc6d5487728d770873fcc9d0e918c0712e",
+        "size_bytes": 1625682
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "f7241298170bc570db1edd670a87e93bbd0df8c7",
+        "size_bytes": 1625078
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "dist/archflow-local.mjs",
+      "path_class": "repository-source",
+      "payload_bytes": 1625682,
+      "payload_digest": "0a02500fc2ffef780856908efc5ae7632e6d6d625b59f629870330e5bd746e48",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "093a1205ca3adff3073eb9fb029e4e165e870d93",
+        "size_bytes": 2925855
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "0ebca9e8761f917e76be5c41266b2d435fe8a6d4",
+        "size_bytes": 2924644
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "dist/archflow-mcp.mjs",
+      "path_class": "repository-source",
+      "payload_bytes": 2925855,
+      "payload_digest": "57f1d0eea80329d1c70b38ffeccaa716350c5f7f81e0f6e6d32c20ac371d94dd",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "f2d9fad49a31d05c4ef3428706deaea58801d3bf",
+        "size_bytes": 192239
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "ffd65416c7ec2bd98de2a225e6d37d03da95b9b8",
+        "size_bytes": 192239
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "dist/manifest.json",
+      "path_class": "repository-source",
+      "payload_bytes": 192239,
+      "payload_digest": "f25a3541925e12e84ad5cb3a3fd5d09e550af38cddb6d3dbdaec2e0293482108",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "ae598628a4a08ca07ad8f877c1c77a418dab424d",
+        "size_bytes": 330971
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "d62d772945f03c51932de66c2b283734518b735f",
+        "size_bytes": 330971
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "dist/metafile.json",
+      "path_class": "repository-source",
+      "payload_bytes": 330971,
+      "payload_digest": "06ac31212352c2ba383834c988417ec696f275f34161ebf5e0078db984f43902",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "9d7bad074bbc9a159ae1e293e0295d7517ca4c20",
+        "size_bytes": 16607
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "3d21a5a2a4bd5fd94f9069a6915b2ed91861afbb",
+        "size_bytes": 16652
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "docs/LIMITATIONS.md",
+      "path_class": "repository-source",
+      "payload_bytes": 16607,
+      "payload_digest": "b3790950c279a70397fa20989261c550c81bd89378af7ba3a1e9754cc4dd8cf9",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "11baf4156c427cf2f06a02bbf5bc7d4d56cf344f",
+        "size_bytes": 13781
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "9264afee1fdd20c60c6607d1ea3f4cfa8b49c9d2",
+        "size_bytes": 13654
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "docs/OVERVIEW.md",
+      "path_class": "repository-source",
+      "payload_bytes": 13781,
+      "payload_digest": "ebb7592e1ce4c6e06551bc528c1774c706e9a1870eedbc530d9508fc5254f624",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "6ef455cc0b561b22e6777d165714a631753ab006",
+        "size_bytes": 26150
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "3b9e03e71fc6eb3b926346368687badc300ae333",
+        "size_bytes": 26072
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "docs/TESTING.md",
+      "path_class": "repository-source",
+      "payload_bytes": 26150,
+      "payload_digest": "b46054bdd3e4c605c0124bea4e175e53dcb3e9c631ac1ce486562db22c2cd461",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "500a488c24e47de92d05f58cb27ca803d97fe1b2",
+        "size_bytes": 17430
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "c46824fca5ab09e7d5c03461478070434ed188cc",
+        "size_bytes": 16653
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "docs/contracts/CONTRACTS.md",
+      "path_class": "repository-source",
+      "payload_bytes": 17430,
+      "payload_digest": "d3110f388a6f47d8e3291faac1c735ed7156c62403c917a978ac0ef07918a9a2",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "c4b78c224b33f7a2f7ee99d0a2168259d7dad863",
+        "size_bytes": 14845
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "dda9373c0e8c0c5f0e70fb3ba1e437d13bee6d5b",
+        "size_bytes": 13316
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "docs/mcp/SERVER.md",
+      "path_class": "repository-source",
+      "payload_bytes": 14845,
+      "payload_digest": "58b0cb8c6ed131f180e4b75a461b609187bf460e1adee808422d0b7bd4ac10d1",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "ad70f3113466d1e00e41845853dc2f0cf7301d7f",
+        "size_bytes": 30872
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "1e3922cf80c9651c10b98338d51202fb8cc6e831",
+        "size_bytes": 30547
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "docs/review/COUNTER-REVIEW.md",
+      "path_class": "repository-source",
+      "payload_bytes": 30872,
+      "payload_digest": "5c507da5bdc2f85dda8ceeef3b11c20c95b9751764e23f46fb26a21a07416351",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "702afb1e4cca8f2f5f59c53d73301b65457214ed",
+        "size_bytes": 29545
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "ed68d89204b422b6e107378044a82fdbff3b1445",
+        "size_bytes": 28621
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "docs/state/DURABLE-STATE.md",
+      "path_class": "repository-source",
+      "payload_bytes": 29545,
+      "payload_digest": "66c9ee04a69fa3cf43f920917e2195ef2a9cc538424d10bd11b10ad7caeaecb4",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "cccacd19d9270e1954e063f012767d1b49caf467",
+        "size_bytes": 27875
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "422a71204fbf7644bb179fdb1b1a6aad17a33004",
+        "size_bytes": 28345
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "docs/workflow/LIFECYCLE.md",
+      "path_class": "repository-source",
+      "payload_bytes": 27875,
+      "payload_digest": "693f4c7d4f7c65f9eba554e9b837f7f3b86803a2d247616cca3d73d49f7c1785",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "d2a053b8e9fccaba19a96090a8e40f777cd113f4",
+        "size_bytes": 17028
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "96c439eadd727ab8f6d196ebe3874a26c381f53b",
+        "size_bytes": 17492
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "docs/workflow/SKILLS.md",
+      "path_class": "repository-source",
+      "payload_bytes": 17028,
+      "payload_digest": "3914c90105160cd5be580f6cc47716685cce157f3824cd66baa0fe99102c5f21",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "592515e4b666b9e93685a72af746b18eaab1f6ab",
+        "size_bytes": 10450
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "ce542a9a39985d2e04920e84f6333d0dc19e8a3b",
+        "size_bytes": 10036
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "skills/archflow-design/SKILL.md",
+      "path_class": "repository-source",
+      "payload_bytes": 10450,
+      "payload_digest": "22471bfd4eea8b89eb6e617c26156706a7faa0f911e0b39bbfaf2971584430a3",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "30da5125e87cd7bf2ef33d30a974c1605f5eff16",
+        "size_bytes": 10379
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "328aa1fa155c7b831cb6df53e9392256345cb641",
+        "size_bytes": 9923
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "skills/archflow-phase-design/SKILL.md",
+      "path_class": "repository-source",
+      "payload_bytes": 10379,
+      "payload_digest": "d5c462e4a64961bbdaaf771f318c26a5ea7560061b2386318fb47be53deafed7",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "f8d2dcac3870d3a130af0e8e893fd248e84642bf",
+        "size_bytes": 13286
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "d27348acef5ed39adf9f48403b43257b4ad3e128",
+        "size_bytes": 12900
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "skills/archflow-phase-impl/SKILL.md",
+      "path_class": "repository-source",
+      "payload_bytes": 13286,
+      "payload_digest": "b137ca097fe6bf4a6f2d571419095286ccf4b8f6f8cb85b71a253aeb7b549801",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "c9917ca9f619e3106a60a6ead0a89248603431d3",
+        "size_bytes": 9958
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "b38e36a7b546401fb6a458211a3f6177c33280f3",
+        "size_bytes": 9536
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "skills/archflow-prd/SKILL.md",
+      "path_class": "repository-source",
+      "payload_bytes": 9958,
+      "payload_digest": "e1d9ca21c7ae5c74275663d46b90969adbcefee7c1029a116db2fc69c3dbdf33",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "8b2fdeaad9391c931e2ecf597f5e0e86ba18d236",
+        "size_bytes": 7269
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "351a9913170c34d7d6deec8996e1ba30aa017fd3",
+        "size_bytes": 7168
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "skills/archflow-status/SKILL.md",
+      "path_class": "repository-source",
+      "payload_bytes": 7269,
+      "payload_digest": "f6849588f2ce01edb1a81edcd4e4d72408f1263bca3c8882e50115447ed7f929",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "a60f6258ffb5a9bde4b8182e8856ee79178be444",
+        "size_bytes": 8729
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "0bc86dfa0aac9d635169ad4b412eaefa49f9935a",
+        "size_bytes": 8576
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "skills/archflow-upgrade/SKILL.md",
+      "path_class": "repository-source",
+      "payload_bytes": 8729,
+      "payload_digest": "ac775a72b808a39352148ac0e6b86b95cfc8dbda12c30e8efdc3c727c452536e",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "11bfaa818fc15e176964112b5d2483eca8dcda84",
+        "size_bytes": 40650
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "5179bf61b94830593a3db2df8c8f89e282cf4893",
+        "size_bytes": 40137
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/repository/paths.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 40650,
+      "payload_digest": "dce91f3ace325346aa4c4b09b4795e2589478f5d18b7abbc01f3b5530918e3aa",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "a58b4e2a75135bd9061e775a9d0858bda4b69544",
+        "size_bytes": 23777
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "1a0039729f7b39e82d3df68183e24e0855e5c85f",
+        "size_bytes": 23586
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/next-action.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 23777,
+      "payload_digest": "5053b1ea5db3f343e40d677f3bd6f6c6f6f8fda0ecb3459d283ca9664cf0edd4",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "a392b4dc25a7ab6def72b6282e45ab12de07b3d4",
+        "size_bytes": 22995
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "b6249558ed5ab7569f66c791b708d54d3f7af78b",
+        "size_bytes": 22368
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "src/state/semantic-view.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 22995,
+      "payload_digest": "50b2ffeb31b755ee5c982a8f81b166acfd482b75132d297ac172c05105ce42c6",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "d7e9f87e670c9530d68571e12a74d1b6bbba9c63",
+        "size_bytes": 19131
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "90d5c4b0d990c52c3f241446721116bf9b13fe41",
+        "size_bytes": 17525
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/contracts/skill-contract-canonical.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 19131,
+      "payload_digest": "5323c09fa90c207f9b3d51acdb2aa19dfd513f1d46ae1c99f12919648524d285",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "7cf315acb4819a545016511de7be5bf1f0858e1e",
+        "size_bytes": 8747
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "fb39f136a083925db9d3b88449d4047904f950b3",
+        "size_bytes": 8663
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/contracts/skill-contract-upgrade.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 8747,
+      "payload_digest": "7b1d966df76f5b09d6b740e5a11a3d5349b0c7ba0aecf3c849df28b425ba9a0e",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "ccf33c50824c43c8b5b400a9ab40759acd0c9dda",
+        "size_bytes": 8095
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "86df0592990769bbc19bea5c53c2808485434f8a",
+        "size_bytes": 6747
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/helpers/task-workspace.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 8095,
+      "payload_digest": "d855715e142c89310eea79e2b0929178d9b4156cfc923a2b7d66874f59470938",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "a072109c3b5ffc5693a2bb71fe3a6d6e0ad4b0c1",
+        "size_bytes": 14099
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "6feed0e5156b73551cac963dfc5c1641bad0b0e3",
+        "size_bytes": 13968
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/integration/planning-restart-handler.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 14099,
+      "payload_digest": "44482acfc594d6eee662402beaf63f4c450824ee3e39280af38f456d20be7e52",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "4a0e554f59e33651e77366003b149796fd5e66c0",
+        "size_bytes": 81130
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "971d7387e3eae997a0f41345578070f0a8c036a5",
+        "size_bytes": 81774
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/integration/semantic-document-journeys.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 81130,
+      "payload_digest": "8ca43936dc4117ddadb032397ee2b242fb6e8a12bd517215f62bb89e58533c5e",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "59d58a03550ffd1dbd96e8b0f1a5339ad5b08ea9",
+        "size_bytes": 54213
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "8b938f8d978e7683ae617059672e50fd9bf402a6",
+        "size_bytes": 53891
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/integration/semantic-implementation-completion-journeys.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 54213,
+      "payload_digest": "270389ba3e5351d837404adf2983eb8664407e460d4c2e02042baf4fd4213195",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "c7b4bb56ce494c93105615deaa03b678ccddf197",
+        "size_bytes": 22330
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "902e9e0795b3478a715b8183d0eb41ae87605158",
+        "size_bytes": 22112
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/integration/semantic-implementation-journeys.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 22330,
+      "payload_digest": "2887a456fc2a8bbdc5610bec6a40b4073e907475f01b4893932412b82e8223fc",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "928a328f9bd33bf949cb7faf3542d5cc8a9903a8",
+        "size_bytes": 5629
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "a733fc7b1b18254bc1aa28ca73de8653b3a941e6",
+        "size_bytes": 4381
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/constitution.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 5629,
+      "payload_digest": "868bb7a4264b9e8d1d2a80f6f7e7572f99630635a4f0b73058ece243edf4303f",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "96213665dd2739ff7603079937a9fac16775b001",
+        "size_bytes": 5765
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "64dd35eb5b9490c2de6dbb3fa11a2c117da88e48",
+        "size_bytes": 4807
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/init-assets.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 5765,
+      "payload_digest": "6fe16bc2a405b07a737dafee4a494f6a706a43e644fc7f46cd48c207ee4c7a05",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "143199d290167fb4cf49bb0d1b079f2b36bad549",
+        "size_bytes": 31125
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "55a7ebfeb9c258db97b9ae83b5b9344f6c4fa4c4",
+        "size_bytes": 31100
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/repository-paths.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 31125,
+      "payload_digest": "955b6bacd20fdfba2bbda9bd23c7f5cf68c2120677670d3c20ed3df8b662989b",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "a9fdda61022e97feb1167c48a5ba862d13457790",
+        "size_bytes": 18870
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "29bc232d7ec9c40dfa4b45b0fa8b7c6565e8a5ff",
+        "size_bytes": 17918
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/semantic-view.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 18870,
+      "payload_digest": "448b3ca9b38e3583b86b4f9c05ff0d3bc2091f72d48a69bf475e4d9a15819d6a",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "9a34c9fc1c2588be748f248588e7755074da4adf",
+        "size_bytes": 30924
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "d69a6a6a0c301b10407054942fcdefabe181f7fb",
+        "size_bytes": 30690
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/state-next-action.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 30924,
+      "payload_digest": "113ee9384d07f6cec6bfe05f47bdf267a4661b66d5e8dcfda013c1a7bd8d3812",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "82d48f0a0d8aca31eb421ab0bb34c62a503fb263",
+        "size_bytes": 3874
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "77f8646b3d5b729a99471a539d811799f14892e2",
+        "size_bytes": 2818
+      },
+      "file_type": "regular",
+      "operation": "modify",
+      "path": "test/unit/task-workspace.test.ts",
+      "path_class": "repository-source",
+      "payload_bytes": 3874,
+      "payload_digest": "fc29dbae6928268f7eebf44efd71f3d67a3c57083b85fa80e4857cc044d62f1f",
+      "storage": "raw-payload"
+    }
+  ],
+  "phase_instance": "phase-impl-6",
+  "projections": [
+    {
+      "content_digest": "25f16804028d9862b26cd5dee67162e65b460dbb342a64e29aa25bcc2d04bb71",
+      "path": ".archflow/config.yaml"
+    },
+    {
+      "content_digest": "0fc180e482597cb7f5320c2985abc69078e6a477061c73bb24652d21d0576240",
+      "path": ".archflow/constitution/00-process.md"
+    },
+    {
+      "content_digest": "da59cebb76efbaeaa579e19b18dc09aeefdb0b7d7d17ff9c7110ee4422c657e6",
+      "path": ".archflow/constitution/10-architecture.md"
+    },
+    {
+      "content_digest": "7516be48ec285586ca1e8b43cee3e17f421a743274d81036ea165508465e2a5b",
+      "path": ".archflow/tasks/review-flexibility/phases/6/impl-notes.md"
+    },
+    {
+      "content_digest": "f4830a63bcad2d5cc0f95bc0ff40a2ab8d73886f96060e49869e13b7ba604b88",
+      "path": "AGENTS.md"
+    },
+    {
+      "content_digest": "f4830a63bcad2d5cc0f95bc0ff40a2ab8d73886f96060e49869e13b7ba604b88",
+      "path": "CLAUDE.md"
+    },
+    {
+      "content_digest": "575c53c75e0542d758f9233c77717491864d69a454702682e3dae6ee63670baa",
+      "path": "assets/config.template.yaml"
+    },
+    {
+      "content_digest": "0fc180e482597cb7f5320c2985abc69078e6a477061c73bb24652d21d0576240",
+      "path": "assets/constitution/00-process.md"
+    },
+    {
+      "content_digest": "da59cebb76efbaeaa579e19b18dc09aeefdb0b7d7d17ff9c7110ee4422c657e6",
+      "path": "assets/constitution/10-architecture.md"
+    },
+    {
+      "content_digest": "0a02500fc2ffef780856908efc5ae7632e6d6d625b59f629870330e5bd746e48",
+      "path": "dist/archflow-local.mjs"
+    },
+    {
+      "content_digest": "57f1d0eea80329d1c70b38ffeccaa716350c5f7f81e0f6e6d32c20ac371d94dd",
+      "path": "dist/archflow-mcp.mjs"
+    },
+    {
+      "content_digest": "f25a3541925e12e84ad5cb3a3fd5d09e550af38cddb6d3dbdaec2e0293482108",
+      "path": "dist/manifest.json"
+    },
+    {
+      "content_digest": "06ac31212352c2ba383834c988417ec696f275f34161ebf5e0078db984f43902",
+      "path": "dist/metafile.json"
+    },
+    {
+      "content_digest": "b3790950c279a70397fa20989261c550c81bd89378af7ba3a1e9754cc4dd8cf9",
+      "path": "docs/LIMITATIONS.md"
+    },
+    {
+      "content_digest": "ebb7592e1ce4c6e06551bc528c1774c706e9a1870eedbc530d9508fc5254f624",
+      "path": "docs/OVERVIEW.md"
+    },
+    {
+      "content_digest": "b46054bdd3e4c605c0124bea4e175e53dcb3e9c631ac1ce486562db22c2cd461",
+      "path": "docs/TESTING.md"
+    },
+    {
+      "content_digest": "d3110f388a6f47d8e3291faac1c735ed7156c62403c917a978ac0ef07918a9a2",
+      "path": "docs/contracts/CONTRACTS.md"
+    },
+    {
+      "content_digest": "58b0cb8c6ed131f180e4b75a461b609187bf460e1adee808422d0b7bd4ac10d1",
+      "path": "docs/mcp/SERVER.md"
+    },
+    {
+      "content_digest": "5c507da5bdc2f85dda8ceeef3b11c20c95b9751764e23f46fb26a21a07416351",
+      "path": "docs/review/COUNTER-REVIEW.md"
+    },
+    {
+      "content_digest": "66c9ee04a69fa3cf43f920917e2195ef2a9cc538424d10bd11b10ad7caeaecb4",
+      "path": "docs/state/DURABLE-STATE.md"
+    },
+    {
+      "content_digest": "693f4c7d4f7c65f9eba554e9b837f7f3b86803a2d247616cca3d73d49f7c1785",
+      "path": "docs/workflow/LIFECYCLE.md"
+    },
+    {
+      "content_digest": "3914c90105160cd5be580f6cc47716685cce157f3824cd66baa0fe99102c5f21",
+      "path": "docs/workflow/SKILLS.md"
+    },
+    {
+      "content_digest": "22471bfd4eea8b89eb6e617c26156706a7faa0f911e0b39bbfaf2971584430a3",
+      "path": "skills/archflow-design/SKILL.md"
+    },
+    {
+      "content_digest": "d5c462e4a64961bbdaaf771f318c26a5ea7560061b2386318fb47be53deafed7",
+      "path": "skills/archflow-phase-design/SKILL.md"
+    },
+    {
+      "content_digest": "b137ca097fe6bf4a6f2d571419095286ccf4b8f6f8cb85b71a253aeb7b549801",
+      "path": "skills/archflow-phase-impl/SKILL.md"
+    },
+    {
+      "content_digest": "e1d9ca21c7ae5c74275663d46b90969adbcefee7c1029a116db2fc69c3dbdf33",
+      "path": "skills/archflow-prd/SKILL.md"
+    },
+    {
+      "content_digest": "f6849588f2ce01edb1a81edcd4e4d72408f1263bca3c8882e50115447ed7f929",
+      "path": "skills/archflow-status/SKILL.md"
+    },
+    {
+      "content_digest": "ac775a72b808a39352148ac0e6b86b95cfc8dbda12c30e8efdc3c727c452536e",
+      "path": "skills/archflow-upgrade/SKILL.md"
+    },
+    {
+      "content_digest": "dce91f3ace325346aa4c4b09b4795e2589478f5d18b7abbc01f3b5530918e3aa",
+      "path": "src/repository/paths.ts"
+    },
+    {
+      "content_digest": "5053b1ea5db3f343e40d677f3bd6f6c6f6f8fda0ecb3459d283ca9664cf0edd4",
+      "path": "src/state/next-action.ts"
+    },
+    {
+      "content_digest": "50b2ffeb31b755ee5c982a8f81b166acfd482b75132d297ac172c05105ce42c6",
+      "path": "src/state/semantic-view.ts"
+    },
+    {
+      "content_digest": "5323c09fa90c207f9b3d51acdb2aa19dfd513f1d46ae1c99f12919648524d285",
+      "path": "test/contracts/skill-contract-canonical.test.ts"
+    },
+    {
+      "content_digest": "7b1d966df76f5b09d6b740e5a11a3d5349b0c7ba0aecf3c849df28b425ba9a0e",
+      "path": "test/contracts/skill-contract-upgrade.test.ts"
+    },
+    {
+      "content_digest": "d855715e142c89310eea79e2b0929178d9b4156cfc923a2b7d66874f59470938",
+      "path": "test/helpers/task-workspace.ts"
+    },
+    {
+      "content_digest": "44482acfc594d6eee662402beaf63f4c450824ee3e39280af38f456d20be7e52",
+      "path": "test/integration/planning-restart-handler.test.ts"
+    },
+    {
+      "content_digest": "8ca43936dc4117ddadb032397ee2b242fb6e8a12bd517215f62bb89e58533c5e",
+      "path": "test/integration/semantic-document-journeys.test.ts"
+    },
+    {
+      "content_digest": "270389ba3e5351d837404adf2983eb8664407e460d4c2e02042baf4fd4213195",
+      "path": "test/integration/semantic-implementation-completion-journeys.test.ts"
+    },
+    {
+      "content_digest": "2887a456fc2a8bbdc5610bec6a40b4073e907475f01b4893932412b82e8223fc",
+      "path": "test/integration/semantic-implementation-journeys.test.ts"
+    },
+    {
+      "content_digest": "868bb7a4264b9e8d1d2a80f6f7e7572f99630635a4f0b73058ece243edf4303f",
+      "path": "test/unit/constitution.test.ts"
+    },
+    {
+      "content_digest": "6fe16bc2a405b07a737dafee4a494f6a706a43e644fc7f46cd48c207ee4c7a05",
+      "path": "test/unit/init-assets.test.ts"
+    },
+    {
+      "content_digest": "955b6bacd20fdfba2bbda9bd23c7f5cf68c2120677670d3c20ed3df8b662989b",
+      "path": "test/unit/repository-paths.test.ts"
+    },
+    {
+      "content_digest": "448b3ca9b38e3583b86b4f9c05ff0d3bc2091f72d48a69bf475e4d9a15819d6a",
+      "path": "test/unit/semantic-view.test.ts"
+    },
+    {
+      "content_digest": "113ee9384d07f6cec6bfe05f47bdf267a4661b66d5e8dcfda013c1a7bd8d3812",
+      "path": "test/unit/state-next-action.test.ts"
+    },
+    {
+      "content_digest": "fc29dbae6928268f7eebf44efd71f3d67a3c57083b85fa80e4857cc044d62f1f",
+      "path": "test/unit/task-workspace.test.ts"
+    }
+  ],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "state-result-2a3993d99661378bd846b7d5c523c9a4",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [
+      ".archflow/config.yaml",
+      ".archflow/constitution/00-process.md",
+      ".archflow/constitution/10-architecture.md",
+      ".archflow/tasks/review-flexibility/phases/6/impl-notes.md",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "assets/config.template.yaml",
+      "assets/constitution/00-process.md",
+      "assets/constitution/10-architecture.md",
+      "dist/archflow-local.mjs",
+      "dist/archflow-mcp.mjs",
+      "dist/manifest.json",
+      "dist/metafile.json",
+      "docs/LIMITATIONS.md",
+      "docs/OVERVIEW.md",
+      "docs/TESTING.md",
+      "docs/contracts/CONTRACTS.md",
+      "docs/mcp/SERVER.md",
+      "docs/review/COUNTER-REVIEW.md",
+      "docs/state/DURABLE-STATE.md",
+      "docs/workflow/LIFECYCLE.md",
+      "docs/workflow/SKILLS.md",
+      "skills/archflow-design/SKILL.md",
+      "skills/archflow-phase-design/SKILL.md",
+      "skills/archflow-phase-impl/SKILL.md",
+      "skills/archflow-prd/SKILL.md",
+      "skills/archflow-status/SKILL.md",
+      "skills/archflow-upgrade/SKILL.md",
+      "src/repository/paths.ts",
+      "src/state/next-action.ts",
+      "src/state/semantic-view.ts",
+      "test/contracts/skill-contract-canonical.test.ts",
+      "test/contracts/skill-contract-upgrade.test.ts",
+      "test/helpers/task-workspace.ts",
+      "test/integration/planning-restart-handler.test.ts",
+      "test/integration/semantic-document-journeys.test.ts",
+      "test/integration/semantic-implementation-completion-journeys.test.ts",
+      "test/integration/semantic-implementation-journeys.test.ts",
+      "test/unit/constitution.test.ts",
+      "test/unit/init-assets.test.ts",
+      "test/unit/repository-paths.test.ts",
+      "test/unit/semantic-view.test.ts",
+      "test/unit/state-next-action.test.ts",
+      "test/unit/task-workspace.test.ts"
+    ],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "06e82252e4428c0cee58fcaf0dd88f943ad9335837b3b6705802623c7c37bbe9",
+  "source_artifact": {
+    "accounting": {
+      "counted_entries": [
+        {
+          "path": ".archflow/config.yaml",
+          "storage": "raw-payload",
+          "stored_bytes": 1716
+        },
+        {
+          "path": ".archflow/constitution/00-process.md",
+          "storage": "raw-payload",
+          "stored_bytes": 530
+        },
+        {
+          "path": ".archflow/constitution/10-architecture.md",
+          "storage": "raw-payload",
+          "stored_bytes": 685
+        },
+        {
+          "path": ".archflow/tasks/review-flexibility/phases/6/impl-notes.md",
+          "storage": "raw-payload",
+          "stored_bytes": 10705
+        },
+        {
+          "path": "AGENTS.md",
+          "storage": "raw-payload",
+          "stored_bytes": 15948
+        },
+        {
+          "path": "CLAUDE.md",
+          "storage": "raw-payload",
+          "stored_bytes": 15948
+        },
+        {
+          "path": "assets/config.template.yaml",
+          "storage": "raw-payload",
+          "stored_bytes": 2604
+        },
+        {
+          "path": "assets/constitution/00-process.md",
+          "storage": "raw-payload",
+          "stored_bytes": 530
+        },
+        {
+          "path": "assets/constitution/10-architecture.md",
+          "storage": "raw-payload",
+          "stored_bytes": 685
+        },
+        {
+          "path": "dist/archflow-local.mjs",
+          "storage": "raw-payload",
+          "stored_bytes": 1625682
+        },
+        {
+          "path": "dist/archflow-mcp.mjs",
+          "storage": "raw-payload",
+          "stored_bytes": 2925855
+        },
+        {
+          "path": "dist/manifest.json",
+          "storage": "raw-payload",
+          "stored_bytes": 192239
+        },
+        {
+          "path": "dist/metafile.json",
+          "storage": "raw-payload",
+          "stored_bytes": 330971
+        },
+        {
+          "path": "docs/LIMITATIONS.md",
+          "storage": "raw-payload",
+          "stored_bytes": 16607
+        },
+        {
+          "path": "docs/OVERVIEW.md",
+          "storage": "raw-payload",
+          "stored_bytes": 13781
+        },
+        {
+          "path": "docs/TESTING.md",
+          "storage": "raw-payload",
+          "stored_bytes": 26150
+        },
+        {
+          "path": "docs/contracts/CONTRACTS.md",
+          "storage": "raw-payload",
+          "stored_bytes": 17430
+        },
+        {
+          "path": "docs/mcp/SERVER.md",
+          "storage": "raw-payload",
+          "stored_bytes": 14845
+        },
+        {
+          "path": "docs/review/COUNTER-REVIEW.md",
+          "storage": "raw-payload",
+          "stored_bytes": 30872
+        },
+        {
+          "path": "docs/state/DURABLE-STATE.md",
+          "storage": "raw-payload",
+          "stored_bytes": 29545
+        },
+        {
+          "path": "docs/workflow/LIFECYCLE.md",
+          "storage": "raw-payload",
+          "stored_bytes": 27875
+        },
+        {
+          "path": "docs/workflow/SKILLS.md",
+          "storage": "raw-payload",
+          "stored_bytes": 17028
+        },
+        {
+          "path": "skills/archflow-design/SKILL.md",
+          "storage": "raw-payload",
+          "stored_bytes": 10450
+        },
+        {
+          "path": "skills/archflow-phase-design/SKILL.md",
+          "storage": "raw-payload",
+          "stored_bytes": 10379
+        },
+        {
+          "path": "skills/archflow-phase-impl/SKILL.md",
+          "storage": "raw-payload",
+          "stored_bytes": 13286
+        },
+        {
+          "path": "skills/archflow-prd/SKILL.md",
+          "storage": "raw-payload",
+          "stored_bytes": 9958
+        },
+        {
+          "path": "skills/archflow-status/SKILL.md",
+          "storage": "raw-payload",
+          "stored_bytes": 7269
+        },
+        {
+          "path": "skills/archflow-upgrade/SKILL.md",
+          "storage": "raw-payload",
+          "stored_bytes": 8729
+        },
+        {
+          "path": "src/repository/paths.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 40650
+        },
+        {
+          "path": "src/state/next-action.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 23777
+        },
+        {
+          "path": "src/state/semantic-view.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 22995
+        },
+        {
+          "path": "test/contracts/skill-contract-canonical.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 19131
+        },
+        {
+          "path": "test/contracts/skill-contract-upgrade.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 8747
+        },
+        {
+          "path": "test/helpers/task-workspace.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 8095
+        },
+        {
+          "path": "test/integration/planning-restart-handler.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 14099
+        },
+        {
+          "path": "test/integration/semantic-document-journeys.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 81130
+        },
+        {
+          "path": "test/integration/semantic-implementation-completion-journeys.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 54213
+        },
+        {
+          "path": "test/integration/semantic-implementation-journeys.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 22330
+        },
+        {
+          "path": "test/unit/constitution.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 5629
+        },
+        {
+          "path": "test/unit/init-assets.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 5765
+        },
+        {
+          "path": "test/unit/repository-paths.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 31125
+        },
+        {
+          "path": "test/unit/semantic-view.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 18870
+        },
+        {
+          "path": "test/unit/state-next-action.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 30924
+        },
+        {
+          "path": "test/unit/task-workspace.test.ts",
+          "storage": "raw-payload",
+          "stored_bytes": 3874
+        }
+      ],
+      "measured_at_revision": 248,
+      "result_byte_cap": 26214400,
+      "result_bytes": 5769656,
+      "schema_version": "1",
+      "task_byte_cap": 262144000,
+      "task_bytes": 40681949
+    },
+    "artifact_kind": "implementation-output",
+    "base_commit": "b6f0b748887cc2b60cdffab7fbb520f132e64755",
+    "declared_inputs": [],
+    "diff_digest": "f804984f9f8975bb23704b81e5ab6524fd781d77edb4040a4cbfb389d86aacf3",
+    "index_identity_digest": "ad0bb727bb1fc68164c00a5819006bb73636fa965e5848e256689a0c3dd9c4eb",
+    "input_fingerprint": "a975ab7ae1d7aebdf26f7da27e32f5fc4a5540f5fccf88940ba7fd4ba958b506",
+    "outputs": [
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "02bb600cd80a5c11663ebff3a5cc8d38d3f0555b",
+          "size_bytes": 1716
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "7c0d74d0a0605b130f8c04aa26d0d46e9d4ac070",
+          "size_bytes": 1017
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": ".archflow/config.yaml",
+        "path_class": "repository-source",
+        "payload_bytes": 1716,
+        "payload_digest": "25f16804028d9862b26cd5dee67162e65b460dbb342a64e29aa25bcc2d04bb71",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "598ead0591d7f2e50c15fa1c404ae9730cd21355",
+          "size_bytes": 530
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "8267135136a5542e032acc812180e2ac42697d32",
+          "size_bytes": 463
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": ".archflow/constitution/00-process.md",
+        "path_class": "task-branch-constitution",
+        "payload_bytes": 530,
+        "payload_digest": "0fc180e482597cb7f5320c2985abc69078e6a477061c73bb24652d21d0576240",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "b904828b7c5d9365981a102a40850bc600ece5ce",
+          "size_bytes": 685
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "f495c32a59f743dbe137a2bdaf5ba8e2ec00465e",
+          "size_bytes": 529
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": ".archflow/constitution/10-architecture.md",
+        "path_class": "task-branch-constitution",
+        "payload_bytes": 685,
+        "payload_digest": "da59cebb76efbaeaa579e19b18dc09aeefdb0b7d7d17ff9c7110ee4422c657e6",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "1562c8837c1929217675233494b99ebdc0e3eac4",
+          "size_bytes": 10705
+        },
+        "file_type": "regular",
+        "operation": "add",
+        "path": ".archflow/tasks/review-flexibility/phases/6/impl-notes.md",
+        "path_class": "document",
+        "payload_bytes": 10705,
+        "payload_digest": "7516be48ec285586ca1e8b43cee3e17f421a743274d81036ea165508465e2a5b",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "2a16e6588cd91d45e80d3fec3a5d7e8e19ece0f0",
+          "size_bytes": 15948
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "5522e604740eebcf10907f224864dbcf3853bf1a",
+          "size_bytes": 15324
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "AGENTS.md",
+        "path_class": "repository-source",
+        "payload_bytes": 15948,
+        "payload_digest": "f4830a63bcad2d5cc0f95bc0ff40a2ab8d73886f96060e49869e13b7ba604b88",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "2a16e6588cd91d45e80d3fec3a5d7e8e19ece0f0",
+          "size_bytes": 15948
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "5522e604740eebcf10907f224864dbcf3853bf1a",
+          "size_bytes": 15324
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "CLAUDE.md",
+        "path_class": "repository-source",
+        "payload_bytes": 15948,
+        "payload_digest": "f4830a63bcad2d5cc0f95bc0ff40a2ab8d73886f96060e49869e13b7ba604b88",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "5a6aa98af97ed45cc018295bd8bd55370fcb15a6",
+          "size_bytes": 2604
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "b3d19e8232755d6826ae635d8939764db13f7b9a",
+          "size_bytes": 2648
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "assets/config.template.yaml",
+        "path_class": "repository-source",
+        "payload_bytes": 2604,
+        "payload_digest": "575c53c75e0542d758f9233c77717491864d69a454702682e3dae6ee63670baa",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "598ead0591d7f2e50c15fa1c404ae9730cd21355",
+          "size_bytes": 530
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "8267135136a5542e032acc812180e2ac42697d32",
+          "size_bytes": 463
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "assets/constitution/00-process.md",
+        "path_class": "repository-source",
+        "payload_bytes": 530,
+        "payload_digest": "0fc180e482597cb7f5320c2985abc69078e6a477061c73bb24652d21d0576240",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "b904828b7c5d9365981a102a40850bc600ece5ce",
+          "size_bytes": 685
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "f495c32a59f743dbe137a2bdaf5ba8e2ec00465e",
+          "size_bytes": 529
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "assets/constitution/10-architecture.md",
+        "path_class": "repository-source",
+        "payload_bytes": 685,
+        "payload_digest": "da59cebb76efbaeaa579e19b18dc09aeefdb0b7d7d17ff9c7110ee4422c657e6",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "e757b8fc6d5487728d770873fcc9d0e918c0712e",
+          "size_bytes": 1625682
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "f7241298170bc570db1edd670a87e93bbd0df8c7",
+          "size_bytes": 1625078
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "dist/archflow-local.mjs",
+        "path_class": "repository-source",
+        "payload_bytes": 1625682,
+        "payload_digest": "0a02500fc2ffef780856908efc5ae7632e6d6d625b59f629870330e5bd746e48",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "093a1205ca3adff3073eb9fb029e4e165e870d93",
+          "size_bytes": 2925855
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "0ebca9e8761f917e76be5c41266b2d435fe8a6d4",
+          "size_bytes": 2924644
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "dist/archflow-mcp.mjs",
+        "path_class": "repository-source",
+        "payload_bytes": 2925855,
+        "payload_digest": "57f1d0eea80329d1c70b38ffeccaa716350c5f7f81e0f6e6d32c20ac371d94dd",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "f2d9fad49a31d05c4ef3428706deaea58801d3bf",
+          "size_bytes": 192239
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "ffd65416c7ec2bd98de2a225e6d37d03da95b9b8",
+          "size_bytes": 192239
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "dist/manifest.json",
+        "path_class": "repository-source",
+        "payload_bytes": 192239,
+        "payload_digest": "f25a3541925e12e84ad5cb3a3fd5d09e550af38cddb6d3dbdaec2e0293482108",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "ae598628a4a08ca07ad8f877c1c77a418dab424d",
+          "size_bytes": 330971
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "d62d772945f03c51932de66c2b283734518b735f",
+          "size_bytes": 330971
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "dist/metafile.json",
+        "path_class": "repository-source",
+        "payload_bytes": 330971,
+        "payload_digest": "06ac31212352c2ba383834c988417ec696f275f34161ebf5e0078db984f43902",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "9d7bad074bbc9a159ae1e293e0295d7517ca4c20",
+          "size_bytes": 16607
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "3d21a5a2a4bd5fd94f9069a6915b2ed91861afbb",
+          "size_bytes": 16652
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "docs/LIMITATIONS.md",
+        "path_class": "repository-source",
+        "payload_bytes": 16607,
+        "payload_digest": "b3790950c279a70397fa20989261c550c81bd89378af7ba3a1e9754cc4dd8cf9",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "11baf4156c427cf2f06a02bbf5bc7d4d56cf344f",
+          "size_bytes": 13781
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "9264afee1fdd20c60c6607d1ea3f4cfa8b49c9d2",
+          "size_bytes": 13654
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "docs/OVERVIEW.md",
+        "path_class": "repository-source",
+        "payload_bytes": 13781,
+        "payload_digest": "ebb7592e1ce4c6e06551bc528c1774c706e9a1870eedbc530d9508fc5254f624",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "6ef455cc0b561b22e6777d165714a631753ab006",
+          "size_bytes": 26150
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "3b9e03e71fc6eb3b926346368687badc300ae333",
+          "size_bytes": 26072
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "docs/TESTING.md",
+        "path_class": "repository-source",
+        "payload_bytes": 26150,
+        "payload_digest": "b46054bdd3e4c605c0124bea4e175e53dcb3e9c631ac1ce486562db22c2cd461",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "500a488c24e47de92d05f58cb27ca803d97fe1b2",
+          "size_bytes": 17430
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "c46824fca5ab09e7d5c03461478070434ed188cc",
+          "size_bytes": 16653
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "docs/contracts/CONTRACTS.md",
+        "path_class": "repository-source",
+        "payload_bytes": 17430,
+        "payload_digest": "d3110f388a6f47d8e3291faac1c735ed7156c62403c917a978ac0ef07918a9a2",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "c4b78c224b33f7a2f7ee99d0a2168259d7dad863",
+          "size_bytes": 14845
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "dda9373c0e8c0c5f0e70fb3ba1e437d13bee6d5b",
+          "size_bytes": 13316
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "docs/mcp/SERVER.md",
+        "path_class": "repository-source",
+        "payload_bytes": 14845,
+        "payload_digest": "58b0cb8c6ed131f180e4b75a461b609187bf460e1adee808422d0b7bd4ac10d1",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "ad70f3113466d1e00e41845853dc2f0cf7301d7f",
+          "size_bytes": 30872
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "1e3922cf80c9651c10b98338d51202fb8cc6e831",
+          "size_bytes": 30547
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "docs/review/COUNTER-REVIEW.md",
+        "path_class": "repository-source",
+        "payload_bytes": 30872,
+        "payload_digest": "5c507da5bdc2f85dda8ceeef3b11c20c95b9751764e23f46fb26a21a07416351",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "702afb1e4cca8f2f5f59c53d73301b65457214ed",
+          "size_bytes": 29545
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "ed68d89204b422b6e107378044a82fdbff3b1445",
+          "size_bytes": 28621
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "docs/state/DURABLE-STATE.md",
+        "path_class": "repository-source",
+        "payload_bytes": 29545,
+        "payload_digest": "66c9ee04a69fa3cf43f920917e2195ef2a9cc538424d10bd11b10ad7caeaecb4",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "cccacd19d9270e1954e063f012767d1b49caf467",
+          "size_bytes": 27875
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "422a71204fbf7644bb179fdb1b1a6aad17a33004",
+          "size_bytes": 28345
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "docs/workflow/LIFECYCLE.md",
+        "path_class": "repository-source",
+        "payload_bytes": 27875,
+        "payload_digest": "693f4c7d4f7c65f9eba554e9b837f7f3b86803a2d247616cca3d73d49f7c1785",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "d2a053b8e9fccaba19a96090a8e40f777cd113f4",
+          "size_bytes": 17028
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "96c439eadd727ab8f6d196ebe3874a26c381f53b",
+          "size_bytes": 17492
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "docs/workflow/SKILLS.md",
+        "path_class": "repository-source",
+        "payload_bytes": 17028,
+        "payload_digest": "3914c90105160cd5be580f6cc47716685cce157f3824cd66baa0fe99102c5f21",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "592515e4b666b9e93685a72af746b18eaab1f6ab",
+          "size_bytes": 10450
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "ce542a9a39985d2e04920e84f6333d0dc19e8a3b",
+          "size_bytes": 10036
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "skills/archflow-design/SKILL.md",
+        "path_class": "repository-source",
+        "payload_bytes": 10450,
+        "payload_digest": "22471bfd4eea8b89eb6e617c26156706a7faa0f911e0b39bbfaf2971584430a3",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "30da5125e87cd7bf2ef33d30a974c1605f5eff16",
+          "size_bytes": 10379
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "328aa1fa155c7b831cb6df53e9392256345cb641",
+          "size_bytes": 9923
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "skills/archflow-phase-design/SKILL.md",
+        "path_class": "repository-source",
+        "payload_bytes": 10379,
+        "payload_digest": "d5c462e4a64961bbdaaf771f318c26a5ea7560061b2386318fb47be53deafed7",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "f8d2dcac3870d3a130af0e8e893fd248e84642bf",
+          "size_bytes": 13286
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "d27348acef5ed39adf9f48403b43257b4ad3e128",
+          "size_bytes": 12900
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "skills/archflow-phase-impl/SKILL.md",
+        "path_class": "repository-source",
+        "payload_bytes": 13286,
+        "payload_digest": "b137ca097fe6bf4a6f2d571419095286ccf4b8f6f8cb85b71a253aeb7b549801",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "c9917ca9f619e3106a60a6ead0a89248603431d3",
+          "size_bytes": 9958
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "b38e36a7b546401fb6a458211a3f6177c33280f3",
+          "size_bytes": 9536
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "skills/archflow-prd/SKILL.md",
+        "path_class": "repository-source",
+        "payload_bytes": 9958,
+        "payload_digest": "e1d9ca21c7ae5c74275663d46b90969adbcefee7c1029a116db2fc69c3dbdf33",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "8b2fdeaad9391c931e2ecf597f5e0e86ba18d236",
+          "size_bytes": 7269
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "351a9913170c34d7d6deec8996e1ba30aa017fd3",
+          "size_bytes": 7168
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "skills/archflow-status/SKILL.md",
+        "path_class": "repository-source",
+        "payload_bytes": 7269,
+        "payload_digest": "f6849588f2ce01edb1a81edcd4e4d72408f1263bca3c8882e50115447ed7f929",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "a60f6258ffb5a9bde4b8182e8856ee79178be444",
+          "size_bytes": 8729
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "0bc86dfa0aac9d635169ad4b412eaefa49f9935a",
+          "size_bytes": 8576
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "skills/archflow-upgrade/SKILL.md",
+        "path_class": "repository-source",
+        "payload_bytes": 8729,
+        "payload_digest": "ac775a72b808a39352148ac0e6b86b95cfc8dbda12c30e8efdc3c727c452536e",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "11bfaa818fc15e176964112b5d2483eca8dcda84",
+          "size_bytes": 40650
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "5179bf61b94830593a3db2df8c8f89e282cf4893",
+          "size_bytes": 40137
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/repository/paths.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 40650,
+        "payload_digest": "dce91f3ace325346aa4c4b09b4795e2589478f5d18b7abbc01f3b5530918e3aa",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "a58b4e2a75135bd9061e775a9d0858bda4b69544",
+          "size_bytes": 23777
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "1a0039729f7b39e82d3df68183e24e0855e5c85f",
+          "size_bytes": 23586
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/next-action.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 23777,
+        "payload_digest": "5053b1ea5db3f343e40d677f3bd6f6c6f6f8fda0ecb3459d283ca9664cf0edd4",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "a392b4dc25a7ab6def72b6282e45ab12de07b3d4",
+          "size_bytes": 22995
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "b6249558ed5ab7569f66c791b708d54d3f7af78b",
+          "size_bytes": 22368
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "src/state/semantic-view.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 22995,
+        "payload_digest": "50b2ffeb31b755ee5c982a8f81b166acfd482b75132d297ac172c05105ce42c6",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "d7e9f87e670c9530d68571e12a74d1b6bbba9c63",
+          "size_bytes": 19131
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "90d5c4b0d990c52c3f241446721116bf9b13fe41",
+          "size_bytes": 17525
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/contracts/skill-contract-canonical.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 19131,
+        "payload_digest": "5323c09fa90c207f9b3d51acdb2aa19dfd513f1d46ae1c99f12919648524d285",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "7cf315acb4819a545016511de7be5bf1f0858e1e",
+          "size_bytes": 8747
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "fb39f136a083925db9d3b88449d4047904f950b3",
+          "size_bytes": 8663
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/contracts/skill-contract-upgrade.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 8747,
+        "payload_digest": "7b1d966df76f5b09d6b740e5a11a3d5349b0c7ba0aecf3c849df28b425ba9a0e",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "ccf33c50824c43c8b5b400a9ab40759acd0c9dda",
+          "size_bytes": 8095
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "86df0592990769bbc19bea5c53c2808485434f8a",
+          "size_bytes": 6747
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/helpers/task-workspace.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 8095,
+        "payload_digest": "d855715e142c89310eea79e2b0929178d9b4156cfc923a2b7d66874f59470938",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "a072109c3b5ffc5693a2bb71fe3a6d6e0ad4b0c1",
+          "size_bytes": 14099
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "6feed0e5156b73551cac963dfc5c1641bad0b0e3",
+          "size_bytes": 13968
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/integration/planning-restart-handler.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 14099,
+        "payload_digest": "44482acfc594d6eee662402beaf63f4c450824ee3e39280af38f456d20be7e52",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "4a0e554f59e33651e77366003b149796fd5e66c0",
+          "size_bytes": 81130
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "971d7387e3eae997a0f41345578070f0a8c036a5",
+          "size_bytes": 81774
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/integration/semantic-document-journeys.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 81130,
+        "payload_digest": "8ca43936dc4117ddadb032397ee2b242fb6e8a12bd517215f62bb89e58533c5e",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "59d58a03550ffd1dbd96e8b0f1a5339ad5b08ea9",
+          "size_bytes": 54213
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "8b938f8d978e7683ae617059672e50fd9bf402a6",
+          "size_bytes": 53891
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/integration/semantic-implementation-completion-journeys.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 54213,
+        "payload_digest": "270389ba3e5351d837404adf2983eb8664407e460d4c2e02042baf4fd4213195",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "c7b4bb56ce494c93105615deaa03b678ccddf197",
+          "size_bytes": 22330
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "902e9e0795b3478a715b8183d0eb41ae87605158",
+          "size_bytes": 22112
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/integration/semantic-implementation-journeys.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 22330,
+        "payload_digest": "2887a456fc2a8bbdc5610bec6a40b4073e907475f01b4893932412b82e8223fc",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "928a328f9bd33bf949cb7faf3542d5cc8a9903a8",
+          "size_bytes": 5629
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "a733fc7b1b18254bc1aa28ca73de8653b3a941e6",
+          "size_bytes": 4381
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/constitution.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 5629,
+        "payload_digest": "868bb7a4264b9e8d1d2a80f6f7e7572f99630635a4f0b73058ece243edf4303f",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "96213665dd2739ff7603079937a9fac16775b001",
+          "size_bytes": 5765
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "64dd35eb5b9490c2de6dbb3fa11a2c117da88e48",
+          "size_bytes": 4807
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/init-assets.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 5765,
+        "payload_digest": "6fe16bc2a405b07a737dafee4a494f6a706a43e644fc7f46cd48c207ee4c7a05",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "143199d290167fb4cf49bb0d1b079f2b36bad549",
+          "size_bytes": 31125
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "55a7ebfeb9c258db97b9ae83b5b9344f6c4fa4c4",
+          "size_bytes": 31100
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/repository-paths.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 31125,
+        "payload_digest": "955b6bacd20fdfba2bbda9bd23c7f5cf68c2120677670d3c20ed3df8b662989b",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "a9fdda61022e97feb1167c48a5ba862d13457790",
+          "size_bytes": 18870
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "29bc232d7ec9c40dfa4b45b0fa8b7c6565e8a5ff",
+          "size_bytes": 17918
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/semantic-view.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 18870,
+        "payload_digest": "448b3ca9b38e3583b86b4f9c05ff0d3bc2091f72d48a69bf475e4d9a15819d6a",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "9a34c9fc1c2588be748f248588e7755074da4adf",
+          "size_bytes": 30924
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "d69a6a6a0c301b10407054942fcdefabe181f7fb",
+          "size_bytes": 30690
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/state-next-action.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 30924,
+        "payload_digest": "113ee9384d07f6cec6bfe05f47bdf267a4661b66d5e8dcfda013c1a7bd8d3812",
+        "storage": "raw-payload"
+      },
+      {
+        "after": {
+          "mode": "100644",
+          "oid": "82d48f0a0d8aca31eb421ab0bb34c62a503fb263",
+          "size_bytes": 3874
+        },
+        "before": {
+          "mode": "100644",
+          "oid": "77f8646b3d5b729a99471a539d811799f14892e2",
+          "size_bytes": 2818
+        },
+        "file_type": "regular",
+        "operation": "modify",
+        "path": "test/unit/task-workspace.test.ts",
+        "path_class": "repository-source",
+        "payload_bytes": 3874,
+        "payload_digest": "fc29dbae6928268f7eebf44efd71f3d67a3c57083b85fa80e4857cc044d62f1f",
+        "storage": "raw-payload"
+      }
+    ],
+    "parent_documents": [
+      {
+        "content_digest": "83372aa7df0585af47c03feb131117c7d98437ec7ecbc02d92a3a547548fefac",
+        "document_path": "design.md",
+        "role": "design"
+      },
+      {
+        "content_digest": "0821fd002b55fabba8146e25d6ce3b9db8122c2192aa672303b91cce5a7b9891",
+        "document_path": "phases/6/design.md",
+        "role": "phase-design"
+      },
+      {
+        "content_digest": "7516be48ec285586ca1e8b43cee3e17f421a743274d81036ea165508465e2a5b",
+        "document_path": "phases/6/impl-notes.md",
+        "role": "impl-notes"
+      },
+      {
+        "content_digest": "838c3daf33bd6959c1d0c404db8c8c356f98139cc74977d03e07acc09e6cd50d",
+        "document_path": "prd.md",
+        "role": "prd"
+      }
+    ],
+    "phase_instance": "phase-impl-6",
+    "restore_targets": [
+      ".archflow/config.yaml",
+      ".archflow/constitution/00-process.md",
+      ".archflow/constitution/10-architecture.md",
+      ".archflow/tasks/review-flexibility/phases/6/impl-notes.md",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "assets/config.template.yaml",
+      "assets/constitution/00-process.md",
+      "assets/constitution/10-architecture.md",
+      "dist/archflow-local.mjs",
+      "dist/archflow-mcp.mjs",
+      "dist/manifest.json",
+      "dist/metafile.json",
+      "docs/LIMITATIONS.md",
+      "docs/OVERVIEW.md",
+      "docs/TESTING.md",
+      "docs/contracts/CONTRACTS.md",
+      "docs/mcp/SERVER.md",
+      "docs/review/COUNTER-REVIEW.md",
+      "docs/state/DURABLE-STATE.md",
+      "docs/workflow/LIFECYCLE.md",
+      "docs/workflow/SKILLS.md",
+      "skills/archflow-design/SKILL.md",
+      "skills/archflow-phase-design/SKILL.md",
+      "skills/archflow-phase-impl/SKILL.md",
+      "skills/archflow-prd/SKILL.md",
+      "skills/archflow-status/SKILL.md",
+      "skills/archflow-upgrade/SKILL.md",
+      "src/repository/paths.ts",
+      "src/state/next-action.ts",
+      "src/state/semantic-view.ts",
+      "test/contracts/skill-contract-canonical.test.ts",
+      "test/contracts/skill-contract-upgrade.test.ts",
+      "test/helpers/task-workspace.ts",
+      "test/integration/planning-restart-handler.test.ts",
+      "test/integration/semantic-document-journeys.test.ts",
+      "test/integration/semantic-implementation-completion-journeys.test.ts",
+      "test/integration/semantic-implementation-journeys.test.ts",
+      "test/unit/constitution.test.ts",
+      "test/unit/init-assets.test.ts",
+      "test/unit/repository-paths.test.ts",
+      "test/unit/semantic-view.test.ts",
+      "test/unit/state-next-action.test.ts",
+      "test/unit/task-workspace.test.ts"
+    ],
+    "schema_version": "1",
+    "secret_scan": {
+      "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+      "outcome": "clean",
+      "scanned_paths": [
+        ".archflow/config.yaml",
+        ".archflow/constitution/00-process.md",
+        ".archflow/constitution/10-architecture.md",
+        ".archflow/tasks/review-flexibility/phases/6/impl-notes.md",
+        "AGENTS.md",
+        "CLAUDE.md",
+        "assets/config.template.yaml",
+        "assets/constitution/00-process.md",
+        "assets/constitution/10-architecture.md",
+        "dist/archflow-local.mjs",
+        "dist/archflow-mcp.mjs",
+        "dist/manifest.json",
+        "dist/metafile.json",
+        "docs/LIMITATIONS.md",
+        "docs/OVERVIEW.md",
+        "docs/TESTING.md",
+        "docs/contracts/CONTRACTS.md",
+        "docs/mcp/SERVER.md",
+        "docs/review/COUNTER-REVIEW.md",
+        "docs/state/DURABLE-STATE.md",
+        "docs/workflow/LIFECYCLE.md",
+        "docs/workflow/SKILLS.md",
+        "skills/archflow-design/SKILL.md",
+        "skills/archflow-phase-design/SKILL.md",
+        "skills/archflow-phase-impl/SKILL.md",
+        "skills/archflow-prd/SKILL.md",
+        "skills/archflow-status/SKILL.md",
+        "skills/archflow-upgrade/SKILL.md",
+        "src/repository/paths.ts",
+        "src/state/next-action.ts",
+        "src/state/semantic-view.ts",
+        "test/contracts/skill-contract-canonical.test.ts",
+        "test/contracts/skill-contract-upgrade.test.ts",
+        "test/helpers/task-workspace.ts",
+        "test/integration/planning-restart-handler.test.ts",
+        "test/integration/semantic-document-journeys.test.ts",
+        "test/integration/semantic-implementation-completion-journeys.test.ts",
+        "test/integration/semantic-implementation-journeys.test.ts",
+        "test/unit/constitution.test.ts",
+        "test/unit/init-assets.test.ts",
+        "test/unit/repository-paths.test.ts",
+        "test/unit/semantic-view.test.ts",
+        "test/unit/state-next-action.test.ts",
+        "test/unit/task-workspace.test.ts"
+      ],
+      "schema_version": "1"
+    },
+    "snapshot_digest": "06e82252e4428c0cee58fcaf0dd88f943ad9335837b3b6705802623c7c37bbe9",
+    "step": "produce",
+    "task_id": "review-flexibility",
+    "undeclared_changes": {
+      "scanned": true,
+      "undeclared_paths": [
+        ".archflow/tasks/review-flexibility/state.json",
+        ".codex/config.toml"
+      ],
+      "unrepresentable_count": 0
+    },
+    "verification_evidence": {
+      "byte_count": 37089,
+      "transcript_digest": "964b2e2e8d21d37e238560c654b377920cb7794f22f119a3b61bfb0fff142fb7"
+    },
+    "worktree_identity_digest": "90633d88cc2bf7323e5d74a4ddc0d6f28bae4071bf559f8101fdd1651c8ba7b5"
+  },
+  "step": "produce",
+  "task_id": "review-flexibility"
+}

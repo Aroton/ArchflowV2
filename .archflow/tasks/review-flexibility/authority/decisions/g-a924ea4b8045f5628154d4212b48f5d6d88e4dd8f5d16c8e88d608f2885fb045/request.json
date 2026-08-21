@@ -1,0 +1,92 @@
+{
+  "allowed_decisions": [
+    "authorize-commit",
+    "revise",
+    "abort",
+    "cancel"
+  ],
+  "context": {
+    "baseline_commit": "b6f0b748887cc2b60cdffab7fbb520f132e64755",
+    "commit_message": "ArchFlow: Implement review-flexibility phase 6",
+    "current_artifact_digests": [
+      "a00b8431a6340955adbf34fb57044971e4e584f5c4242845615c0760eefc35b8"
+    ],
+    "diff_digest": "f804984f9f8975bb23704b81e5ab6524fd781d77edb4040a4cbfb389d86aacf3",
+    "parent_document_digests": [
+      "0821fd002b55fabba8146e25d6ce3b9db8122c2192aa672303b91cce5a7b9891",
+      "7516be48ec285586ca1e8b43cee3e17f421a743274d81036ea165508465e2a5b",
+      "83372aa7df0585af47c03feb131117c7d98437ec7ecbc02d92a3a547548fefac",
+      "838c3daf33bd6959c1d0c404db8c8c356f98139cc74977d03e07acc09e6cd50d"
+    ],
+    "paths": [
+      ".archflow/config.yaml",
+      ".archflow/constitution/00-process.md",
+      ".archflow/constitution/10-architecture.md",
+      ".archflow/tasks/review-flexibility/phases/6/impl-notes.md",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "assets/config.template.yaml",
+      "assets/constitution/00-process.md",
+      "assets/constitution/10-architecture.md",
+      "dist/archflow-local.mjs",
+      "dist/archflow-mcp.mjs",
+      "dist/manifest.json",
+      "dist/metafile.json",
+      "docs/LIMITATIONS.md",
+      "docs/OVERVIEW.md",
+      "docs/TESTING.md",
+      "docs/contracts/CONTRACTS.md",
+      "docs/mcp/SERVER.md",
+      "docs/review/COUNTER-REVIEW.md",
+      "docs/state/DURABLE-STATE.md",
+      "docs/workflow/LIFECYCLE.md",
+      "docs/workflow/SKILLS.md",
+      "skills/archflow-design/SKILL.md",
+      "skills/archflow-phase-design/SKILL.md",
+      "skills/archflow-phase-impl/SKILL.md",
+      "skills/archflow-prd/SKILL.md",
+      "skills/archflow-status/SKILL.md",
+      "skills/archflow-upgrade/SKILL.md",
+      "src/repository/paths.ts",
+      "src/state/next-action.ts",
+      "src/state/semantic-view.ts",
+      "test/contracts/skill-contract-canonical.test.ts",
+      "test/contracts/skill-contract-upgrade.test.ts",
+      "test/helpers/task-workspace.ts",
+      "test/integration/planning-restart-handler.test.ts",
+      "test/integration/semantic-document-journeys.test.ts",
+      "test/integration/semantic-implementation-completion-journeys.test.ts",
+      "test/integration/semantic-implementation-journeys.test.ts",
+      "test/unit/constitution.test.ts",
+      "test/unit/init-assets.test.ts",
+      "test/unit/repository-paths.test.ts",
+      "test/unit/semantic-view.test.ts",
+      "test/unit/state-next-action.test.ts",
+      "test/unit/task-workspace.test.ts"
+    ],
+    "target_ref": "refs/heads/feature/review-override-flexibility"
+  },
+  "context_digest": "e94248d579f90ca8af858c6066bfc59d8f049e08bf71e293423351ac06f90ca0",
+  "current_evidence": {
+    "set_digest": "fd51953018e3d867dbf8a8c479d794fa9ecd583feabd3dff00c4c341fd3c6d11",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "2845dd83b39a3cc2db7a84a9278ba002d3a701cb658815b40f006f78ad2a47d2",
+        "producer_family": "codex",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-a924ea4b8045f5628154d4212b48f5d6d88e4dd8f5d16c8e88d608f2885fb045",
+  "intent_id": "afop-a70e034451b508dbba0e34525790a775e3f7b852380dc85c2e8408b732d78abe-open-gate",
+  "kind": "commit-authorization",
+  "opened_at_revision": 256,
+  "phase_instance": "phase-impl-6",
+  "request_digest": "0440f7b63b61cb16c4259fa88b018505c81290fea63695db1206b6bf22a6b42d",
+  "schema_version": "1",
+  "subject_digest": "a00b8431a6340955adbf34fb57044971e4e584f5c4242845615c0760eefc35b8",
+  "summary": "Phase 6 is ready to commit. It activates the exact supported v2 constitution and default targeted approval rules, makes client and server commit guidance truthfully conditional on authenticated commit facts, preserves every returned human and safety boundary, updates default-v2 and explicit-v1 coverage, refreshes activation-facing documentation, and reproduces the tracked release payload without any machine-global installation. The independent implementation review returned no findings, and the constitution review was explicitly approved. Required focused, unit, contract, integration, crash, type, schema, release reproducibility, and diff-hygiene checks passed. The aggregate check passed 2,037 tests and failed only the documented archived host-selection digest assertion because that authenticated real-host evidence still names the previous release manifest; it was not rewritten without rerunning the opt-in host suite. The user-owned Codex configuration and server-owned task state are excluded from the implementation commit.",
+  "task_id": "review-flexibility"
+}
