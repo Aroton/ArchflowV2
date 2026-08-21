@@ -1,0 +1,103 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 196,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 28455061
+  },
+  "artifact_digest": "c9edfbba22543b5bf476f5ff8d3b4e5ea60ff8f088c31af1c0b6a74302af8bd7",
+  "input_fingerprint": "2e1981e5c9e1a2e9cf3cd907c4d81e8fe3e65b03fda97df91b4876eb013cd90c",
+  "outputs": [],
+  "phase_instance": "phase-impl-4",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-33b338dd2c10021e2772ea22f99e27eb",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [
+        "9b27810cef7ee9bb4d9c3f21fd47c15e048dafb137e4ce3454ccc1c752b7b046"
+      ],
+      "assurance": "server-attested",
+      "cli_version": "2.1.238",
+      "constitution": "pass",
+      "drift": "incidental",
+      "drift_findings": [
+        {
+          "affected_claim_ids": [
+            "rename-coverage-in-semantic-journey"
+          ],
+          "drift": "incidental",
+          "rationale": "The implementation matches the approved PRD, task design, and phase-4 design on every substantive claim: authority source limited to latestEligibleRuleSettlement plus the retained ImplementationOutputV1, no re-evaluation of mutable config, complete settlement-ordered join with rename-source-before-current-path endpoint ordering, exact signed byte arithmetic with add/delete using zero, durable/disposable split with no new schema field, unchanged commit decision vocabulary and commit facts, exception-gate precedence preserved, and the pre-activation boundary keeping both settlement conclusions behind explicit commit authorization. The one departure is presentational-test placement: phase-design chunk 3 item 4 located the rename matrix (old-only, new-only, both-endpoint, rename-away-plus-add-at-old-path) in test/integration/semantic-implementation-completion-journeys.test.ts, but the synthetic multi-rename projection pair was rejected by the existing implementation-output builder, so that matrix is pinned instead in test/unit/state-status.test.ts:96-155 directly against the production join. Success criterion 4 remains proven and deterministically ordered; only where it is proven moved, and impl-notes.md discloses the change and its cause. No approved requirement, interface, or boundary claim is weakened.",
+          "upstream_digest": "9b27810cef7ee9bb4d9c3f21fd47c15e048dafb137e4ce3454ccc1c752b7b046"
+        }
+      ],
+      "effort": "medium",
+      "envelope_input_digest": "e8e26a341d09e7f681d62bcb895b76bf158422274001655589333f3a7127e734",
+      "input_fingerprint": "2e1981e5c9e1a2e9cf3cd907c4d81e8fe3e65b03fda97df91b4876eb013cd90c",
+      "invocation_id": "adjudication-invocation-14c748f21f7d9afeccf6932b14807811",
+      "matched_rule_versions": [],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "bde266d1dbcb1de9dca8180fe3d36921284d626ab99a52cbf00cd48f0a88f7e9",
+      "phase_instance": "phase-impl-4",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-33b338dd2c10021e2772ea22f99e27eb",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "Implementation follows the approved phase design chunk for chunk: chunk 1's pure join exists at src/state/status.ts:625 with the pinned settlement-order/rename-endpoint/exact-size semantics, chunk 2's approvalSummary archiving is applied only in the ordinary commit-authorization arm of composeGate (src/state/request-composition.ts:723) while attempts-exhausted, migration-audit, and pending-adjudication arms keep the raw summary, and chunk 3's coverage plus the four documentation pages landed in the same change. The single deviation — the multi-rename semantic fixture removed in favor of pinning the full old-only/new-only/both-endpoint/rename-away-plus-add matrix directly against the production join in test/unit/state-status.test.ts:96-155 — changes test placement only; the design's required behavior (success criterion 4) remains pinned, and impl-notes.md discloses the removal and its reason. No PRD, task-design, or phase-design claim needed revision, so no governing document became untruthful.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "not-matched",
+          "trigger_evidence": "Every changed source path (src/state/status.ts, src/state/request-composition.ts, src/state/gate-decision-interface.ts), the four maintained docs, and the four test files are exactly the files enumerated in the approved phase-4 design's \"Files in scope\"; the tracked dist/ payload is the design-authorized generated rebuild. No file outside the approved scope was touched, and no constitution, skill, config, or schema source changed."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Nothing in this phase lets a settlement, agent prose, or elapsed time supply approval. A frozen rule settlement only enriches presentation: contentTriggerDetails returns detail lines, never a decision, and is consumed solely by buildHumanGatePresentation for an already-open gate. The commit decision vocabulary (authorize-commit, revise/request-changes, abort/stop-work, cancel) and requires_human_confirmation:true are unchanged, and status refuses to render the commit presentation unless the authenticated open gate's subject_digest equals the retained implementation artifact digest (src/state/status.ts:1236-1241), keeping the human decision bound to the exact reviewed bytes. Content-trigger evidence is attached only to the ordinary commit gate; supplying it for any other gate kind throws an internal-invariant TypeError (src/state/gate-decision-interface.ts:272), so a safety or policy decision cannot be dressed up as commit approval.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "not-matched",
+          "trigger_evidence": "src/state/next-action.ts is not among the changed paths, so deriveNextAction still opens commit-authorization unconditionally; test/unit/state-next-action.test.ts:400 pins \"keeps commit-authorization unconditional until Phase 5 and the constitution amendment\", and the semantic journeys assert requires_human_confirmation:true for both the wait:true content match (line 453) and the wait:false TypeScript-only settlement (line 484)."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Missing or disagreeing evidence fails closed and stays visible with a safe next action: the durable gate remains open, the human choices are withheld, and the reported next action is inspection. No matched path is silently filtered, so a partial list can never be presented as complete — satisfying the design's fail-closed criterion and R7's completeness requirement. The detail array is not truncated or reordered (bounded truncation remains only in the archived summary), and impl-notes.md reports verification honestly, including the sandbox EPERM rerun and the initial full-integration sweep that failed on stale-bundle inputs before the authorized rebuild.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "not-matched",
+          "trigger_evidence": "An incomplete settlement/output join throws (src/state/status.ts:645); status catches it, leaves openGate undefined, pushes the \"content-trigger-presentation-invalid\" blocker and sets gateBindingBlocker (src/state/status.ts:1252-1258), which deriveNextAction surfaces as a blocking inspect-state action (src/state/next-action.ts:353-358) rather than any success state."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The presentation is bound to the exact subject bytes three ways: exact retained artifact digest, that artifact's producer phase instance, and equality with the authenticated open gate's subject_digest. A settlement from a different subject, a superseded pre-restart settlement, or a subject/wait:false conclusion yields no details rather than borrowed evidence, and any path that cannot be joined to a retained endpoint fails closed instead of authorizing advancement. The two reported undeclared paths (.archflow/tasks/review-flexibility/state.json and .codex/config.toml) are this task's own state and repository-local tooling config, not another task's files, and both are disclosed in the artifact's undeclared_changes scan.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "not-matched",
+          "trigger_evidence": "contentTriggerDetails is driven by latestEligibleRuleSettlement(state, produceSubject.artifact_digest, produceSubject.artifact.phase_instance) after status asserts produceSubject.artifact_digest === activeGate.subject_digest (src/state/status.ts:1235-1249); gate paths are derived from active.task_id (src/state/status.ts:674-676), and no changed file reads or writes another task's directory."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "a4c9cf5d438991cb7885c0a20398d97c8590b2a07d791ffb982a66dff93c36f2",
+      "step": "adjudicate",
+      "subject_digest": "7ddba916533b2dd0f24760f705446d872beca8800735abf81d6c7b6ad63e6a2f",
+      "task_id": "review-flexibility",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "review-flexibility"
+}

@@ -120,14 +120,20 @@ The gate kinds artifact-approval, design-approval, and commit-authorization surv
 
 Phase-impl settlements and content-trigger summaries land while commit-authorization remains mandatory. A `wait:true` settlement supplies its persisted path match to the D7 presentation; `wait:false` remains evidence only. Conditional commit opening and any autonomous document consumption move to the same post-amendment activation boundary as D9.
 
-### D9 — Constitution amendment for this repository
+### D9 — Constitution amendment for this repository and policy-pinned activation
 
-Per the amendment procedure (`skills/archflow-constitution`, `validateConstitutionEvolution` `src/contracts/constitution.ts:64-75`: keep IDs, bump versions), in `.archflow/constitution/00-process.md`:
+Per the amendment procedure (`skills/archflow-constitution`, `validateConstitutionEvolution` `src/contracts/constitution.ts:64-75`: keep IDs, bump versions), amend the two files that actually own the rules:
 
-- `explicit-human-authority` → v2: required human decisions are explicit and bound to the exact subject *at gates that a rule or safety condition opened*; silence/elapsed time/agent prose/model verdict never supplies approval; commits are not human-gated by default. Trigger narrowed from "advancement, approval, review-gate, waiver, or commit authority is inferred" to inferred authority *over a gate that opened*.
-- `approved-design-before-code` → v2: implementation starts from a phase design that either passed its triggered human gate or advanced by rule with counter-review complete; truthfulness requirements unchanged.
+- `.archflow/constitution/00-process.md`: `explicit-human-authority` → v2. Required human decisions are explicit and bound to the exact subject *at gates that a rule or safety condition opened*; silence/elapsed time/agent prose/model verdict never supplies approval; commits are not human-gated by default. The trigger narrows from inferred advancement/commit authority generally to inferred authority *over a gate that opened*.
+- `.archflow/constitution/10-architecture.md`: `approved-design-before-code` → v2. Implementation starts from a phase design that either passed its triggered human gate or advanced by rule with counter-review complete; truthfulness requirements remain unchanged.
 
-The `assets/constitution/` seed (`00-process.md`) changes in lockstep; `test/unit/constitution.test.ts` pins the four-ID registry (IDs unchanged, so text edits pass). CLAUDE.md hard-rules section and AGENTS.md (byte-identical, enforced by `test/contracts/skill-contract-canonical.test.ts:367-370`) update in the same change: the "never commit without explicit user approval" hard rule becomes "never skip a gate a rule or safety condition opened; never bypass a triggered human decision". The amendment and autonomous-consumption code land together in Phase 5's reviewed output. Until that output receives the existing explicit human approval and is committed, the Phase-3/4 machinery remains dormant, so the narrowed text never authorizes earlier bytes retroactively.
+The matching `assets/constitution/00-process.md` and `assets/constitution/10-architecture.md` seeds change byte-for-byte in lockstep. `test/unit/constitution.test.ts` pins the stable four-ID registry and the two v2 rules. CLAUDE.md's hard-rules section and AGENTS.md (byte-identical, enforced by `test/contracts/skill-contract-canonical.test.ts:367-370`) update in the same change: the "never commit without explicit user approval" hard rule becomes "never skip a gate a rule or safety condition opened; never bypass a triggered human decision".
+
+Autonomous settlement consumption is not a global code-version switch. The server derives an unforgeable internal capability only from the task's immutable `policy_base_commit` when the resolved constitution digest equals `state.constitution_digest` and the complete canonical objects for the two selected active rules — IDs, exact version-2 text, review triggers, status, and enforcement metadata — equal ArchFlow's supported v2 acceptance profile. ID/version equality alone is insufficient because constitution rules are repository-owned. Only that capability may turn the latest exact, restart-eligible `wait:false` settlement into advancement authority. A task pinned to v1, a divergent or unknown future rule version, a digest disagreement, a missing settlement, a `wait:true` settlement, or stale/wrong-subject evidence keeps the current mandatory human gate. This preserves the policy each in-flight task actually pinned; the current task therefore completes this cutover under its v1 gates, while tasks initialized against the exact amended v2 policy may advance autonomously.
+
+Design and phase-design milestones still create exact task-local commits after an autonomous decision. Because `DocumentArtifactV1` has no Git baseline and no human gate archive exists on this path, a no-wait design settlement records the observed HEAD as its `milestone_baseline_commit`. Fresh status derives the target and deterministic message, requires HEAD to remain at that baseline before offering the commit, and later proves the commit is its direct child with the exact task state (including the accepted settlement), document bytes, message, path scope, and clean task tree. If HEAD moves while the subject, fixed-point evidence, frozen rule conclusion/config digest, task projections, and all safety conditions remain exact, one server-owned no-submission action appends a replacement settlement carrying only the refreshed baseline; it never re-evaluates rules or crosses changed bytes. Reconciliation and every exception gate outrank this refresh. Implementation outputs continue using their already-durable `base_commit`. Triggered implementation commits retain their existing separate confirmation; autonomous implementation commits return `requires_human_confirmation:false`.
+
+The cutover lands across two independently reviewed boundaries. Phase 5 adds the authenticated profile, consumers, and exact Git proof while the shipped live/seed constitution remains v1, so the machinery is dormant outside explicit exact-v2 test fixtures. Phase 6 then amends the live/seed rules and client instructions and proves the shipped activation end to end. Until Phase 6 receives the existing explicit human approval and is committed, the Phase-3/4 machinery remains dormant for normally initialized repositories, so narrowed text never authorizes earlier bytes retroactively.
 
 **Installed-server boundary:** this checkout does not automatically become the active MCP server when repository code or `dist/` changes. The server is a separately installed machine-global bundle, and repository policy forbids installing it without the user's explicit request. Phase 3 edits only `assets/config.template.yaml`; it does not add `approval_rules` to repository `.archflow/config.yaml` or this task's live config and does not install the rebuilt bundle. Task creation copies `.archflow/config.yaml`, so the old installed server continues using that compatible seed and enforcing its existing default gates for this in-flight task. Re-running scaffold in this initialized repository reports `scaffold-diverged` rather than rewriting the live repository config. A future separately authorized bundle adoption or new initialization adopts parser and template together; if an unsupported key is written against an old server, recovery is to remove it and retry.
 
@@ -173,19 +179,19 @@ Config edits enter at any point: next transaction/dispatch reads live config; st
 | R1 free config editing | D1, D2 | 1 |
 | R2 change reporting | D3 | 1 |
 | R3 route override via semantic API | D4, D10 | 2 |
-| R4 targeted approval gates | D5–D8 | 3, 4 |
+| R4 targeted approval gates | D5–D9 | 3, 4, 5, 6 |
 | R5 rule kinds and location | D5 | 3 |
-| R6 default ruleset | D10 | 3 (template), 5 (constitution) |
+| R6 default ruleset | D10 | 3 (template), 6 (constitution activation) |
 | R7 content-trigger presentation | D7 | 4 |
-| R8 constitution amendment | D9 | 5 |
-| R9 documentation | all pages per research inventory | 6 |
+| R8 constitution amendment | D9 | 6 |
+| R9 documentation | all pages per research inventory | 7 |
 
 PRD clarification added in the same production result (Assumptions): the task's own `config.yaml` remains the evaluated surface for that task (copied from repo config at creation); repo-level edits seed new tasks, and mid-task changes are made on the task copy where R1/R2 apply.
 
 ## Risks and mitigations
 
 - **Fingerprint composition break strands in-flight tasks** (D2): bounded legacy-composition fallback in the single internal resolver; convergence as tasks transact; documented limitation for other checkouts.
-- **Activation before the constitution amendment would violate current human authority** (D6/D9): Phase 3 writes settlements only at final triage, accepted-editorial re-entry, and authenticated current waiver discharge, and Phase 4 presents their matches while all approval consumers remain human-only. Phase 5 activates eligible `wait:false` consumption only in the same reviewed output that amends the governing rule. Tests pin both sides of that boundary.
+- **Activation before the constitution amendment would violate current human authority** (D6/D9): Phase 3 writes settlements only at final triage, accepted-editorial re-entry, and authenticated current waiver discharge, and Phase 4 presents their matches while all approval consumers remain human-only. Phase 5 lands exact-profile consumers while shipped v1 policy keeps them dormant; Phase 6 separately amends the governing rules and proves shipped activation. Tests pin v1, divergent-v2, exact-v2, and post-amendment boundaries.
 - **Three agreement sites drift** (D5): one pure helper, one evaluation context, guard extended — same pattern the codebase already uses.
 - **Rule semantics misread by projects** (over/under-matching): D7 presentation shows exactly what matched; LIMITATIONS documents that content rules apply to phase-impl changed paths only and SQL-in-non-SQL-files is out of scope (PRD assumption).
 - **Self-application and installed-server skew**: repository bytes do not replace the active machine-global server. Editing repository `.archflow/config.yaml` or this task's config with a key the installed parser does not know would wedge the workflow. Phase 3 leaves both live configs and the installation untouched; task creation continues copying the compatible repository config, re-scaffold returns `scaffold-diverged`, and parser/template adoption requires a separate explicit user request or new initialization.
@@ -196,11 +202,11 @@ PRD clarification added in the same production result (Assumptions): the task's 
 Per-phase unit/integration tests (listed per phase). End-to-end observable criteria from the PRD, each mapped to a test:
 
 1. Mid-phase config edit → no error; next dispatch uses new routing; status reports field-level change (phase-1 integration test on a real task fixture).
-2a. TS-only phase completes with no approval gate and commits (phase-4 integration); exception gates still stop when applicable (existing attempts-exhausted tests stay green).
+2a. Phase 5 proves the dormant runtime with authentic exact-v2 fixtures while the shipped v1 seed stays human-gated; Phase 6 proves a normally initialized task pinned to the shipped amended v2 constitution completes a TS-only phase with no approval gate and commits. Exception gates still stop when applicable.
 2b. `.sql`-touching phase stops; presentation lists paths + summaries (phase-4 test asserting the rendered interface).
 3. Fresh-project first PRD and architecture stop for review with defaults only (phase-3 test over the shipped template).
 4. Override requested via `review-dispatch` during an outage scenario runs under the substitute and appears on evidence with reason (phase-2 dispatch test).
-5. Docs grep for pinning finds the change-reporting model (phase-6 check).
+5. Docs grep for pinning finds the change-reporting model (phase-7 check).
 6. Config edit with open gate + existing evidence invalidates neither (phase-1 test).
 
 Cross-cutting: durable-contract corpus tests, crash/replay suites, and advertised-schema tests must stay green each phase (they pin fingerprints, submissions, and skill prose — each phase updates only the pins it deliberately changes).
@@ -223,12 +229,16 @@ Files: `src/contracts/config.ts` (`approval_rules`), `src/contracts/durable-stat
 
 Files: `src/state/status.ts` and `src/state/request-composition.ts` (join persisted path matches to `ImplementationOutputV1.outputs` for operation/size summaries), `src/state/gate-decision-interface.ts` (per-file match presentation), and existing commit-authorization composition. Tests: SQL-match and TypeScript-no-match settlements; config edits after settlement still present the original complete paths; both remain behind explicit commit authorization; exception gates still stop.
 
-### Phase 5: Constitution amendment, autonomous activation, hard rules, and skill prose
+### Phase 5: Dormant exact-policy settlement authority and Git proof
 
-Files: `.archflow/constitution/00-process.md` (two rules → v2 per D9), `assets/constitution/00-process.md` seed, `CLAUDE.md` + `AGENTS.md` (hard-rules section, byte-identical), approval-dependent upstream/routing/transition/status/milestone consumers (activate eligible `wait:false` only after the amendment), and skills `archflow-prd`/`archflow-design`/`archflow-phase-design`/`archflow-phase-impl`/`archflow-status`/`archflow-upgrade` (gate prose → ruleset-derived; phase-impl commit section becomes trigger-conditional). Tests prove the pre-amendment Phase-3/4 behavior was human-only and the amended behavior consumes exact restart-aware settlements; full skill-contract suite stays green.
+Add the exact supported-v2 canonical policy profile, branded acceptance capability, rule-settlement autonomous design baseline plus bounded unchanged-evidence baseline refresh, and all approval-dependent upstream/routing/transition/status/milestone consumers. The shipped `.archflow/constitution/`, `assets/constitution/`, `CLAUDE.md`, `AGENTS.md`, and skills remain v1/unconditional, so normally initialized repositories cannot activate the new paths. Authentic test fixtures prove v1 fail-closed behavior, exact-v2 restart-aware upstream/phase-exit authority, exact autonomous design/implementation commit proof and HEAD-movement recovery, unchanged `wait:true` presentations, and exception-gate precedence. Regenerate tracked `dist/`; do not install or edit live config.
 
-### Phase 6: Documentation refresh
+### Phase 6: Constitution amendment, shipped activation, hard rules, and skill prose
+
+Amend `.archflow/constitution/00-process.md` + `10-architecture.md` and their exact `assets/constitution/` seeds to the supported v2 profile. Update byte-identical `CLAUDE.md`/`AGENTS.md` and skills `archflow-prd`/`archflow-design`/`archflow-phase-design`/`archflow-phase-impl`/`archflow-status`/`archflow-upgrade`; phase-impl distinguishes triggered confirmation from autonomous commit facts. Tests prove scaffolded v2 activation, live/seed and client-byte identity, conditional gate prose, unchanged migration/exception behavior, and full skill contracts. Regenerate the repository payload without installing it.
+
+### Phase 7: Documentation refresh
 
 Update every affected caps-named page in the same change, per the research inventory: LIFECYCLE (gate tables, stage "Human approval" column, pin paragraphs, hard-boundaries), COUNTER-REVIEW (override reachability, pinning → change reporting, verdict-opens section), DURABLE-STATE (config lifecycle, approval/receipt model, commit paragraph), SERVER, DISPATCH, OVERVIEW (pipeline narrative, glossary gate count), SKILLS, LIMITATIONS (remove the override-not-proof and config-schema-evolution entries; add content-trigger scope + in-flight fingerprint-composition limitation), TESTING, CONTRACTS, PATTERNS, COMPLEXITY, DEPENDENCIES stamps. Verification: PRD criterion 5 (grep for pinning/mismatch finds the reporting model); stamp lines updated.
 
-Each phase ends with its own reviewed phase design (`/archflow-phase-design review-flexibility N`) before implementation. No phase exceeds ~15 hand-written files including tests.
+Each phase ends with its own reviewed phase design (`/archflow-phase-design review-flexibility N`) before implementation. Phase boundaries keep dormant runtime mechanics, the human policy amendment, and the descriptive documentation audit independently reviewable; phases target roughly 10–15 hand-written files when the cross-cutting trust seam permits it.
