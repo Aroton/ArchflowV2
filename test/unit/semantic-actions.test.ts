@@ -285,6 +285,54 @@ describe("semantic one-action planning", () => {
     expect(resent.intent_id).toBe(plain.intent_id);
   });
 
+  it("recovers the remaining review substeps when an intervening gate overwrote the entry transition", () => {
+    // A human gate decision (for example baseline-adoption) may legally land at any position and
+    // overwrites the single last_transition slot. That is not forgery: the review keeps going.
+    const interloper = (durable: TaskStateV1): TaskStateV1 => ({ ...durable, last_transition: {
+      schema_version: "1", tool: "archflow_gate", operation: "gate",
+      intent_id: semanticSubstepIntentId(digest("a"), "open-gate"), request_digest: digest("b"),
+      input_fingerprint: digest("2"), result_id: "gate-1", outcome: { ok: true }, outcome_digest: digest("c"),
+      prior_revision: 6, resulting_revision: 7,
+    } } as unknown as TaskStateV1);
+    const recordReview: TaskStatusV1["next_action"] = {
+      code: "run-step", detail: "Record review.", human_required: false, phase_instance: "phase-impl-1" as TaskStateV1["phase_instance"], step: "counter_review",
+    };
+    const recordTriage: TaskStatusV1["next_action"] = {
+      code: "run-step", detail: "Record empty triage.", human_required: false, phase_instance: "phase-impl-1" as TaskStateV1["phase_instance"], step: "triage",
+    };
+
+    // The wedge: counter_review/running still dispatches a real review, under a fresh operation.
+    const wedged = apply(snapshot(interloper(state("counter_review", "running")), recordReview), invocation);
+    expect(wedged).toMatchObject({ substeps: ["review-run"], next_substep: "review-run", execution: "counter-review-handler", request_facts: { kind: "counter-review" } });
+    expect(parseSemanticSubstepIntentId(wedged.intent_id).operation_digest).toBe(wedged.operation_digest);
+    expect(wedged.operation_digest).not.toBe(digest("a"));
+
+    for (const durable of [interloper(state("counter_review", "succeeded")), interloper(state("triage", "running"))]) {
+      expect(apply(snapshot(durable, recordTriage), invocation)).toMatchObject({
+        substeps: ["review-empty-triage"], execution: "compose-request", request_facts: { kind: "triage", dispositions: [] },
+      });
+    }
+
+    // Pre-facade transitions keep their existing continuation.
+    const preFacade = { ...state("counter_review", "running"), last_transition: {
+      schema_version: "1", tool: "archflow_state", operation: "record-state-boundary",
+      intent_id: "review-20260819T001901-43d5", request_digest: digest("b"),
+      input_fingerprint: digest("2"), result_id: "result-1", outcome: { ok: true }, outcome_digest: digest("c"),
+      prior_revision: 6, resulting_revision: 7,
+    } } as unknown as TaskStateV1;
+    expect(apply(snapshot(preFacade, recordReview), invocation)).toMatchObject({ substeps: ["review-run"], execution: "counter-review-handler" });
+
+    // A transition that claims the continued substep but fails authentication is still a forgery.
+    const forgedTriageEntry = { ...state("triage", "running"), last_transition: {
+      schema_version: "1", tool: "archflow_state", operation: "wrong-operation",
+      intent_id: semanticSubstepIntentId(digest("a"), "triage-enter"), request_digest: digest("b"),
+      input_fingerprint: digest("2"), result_id: "result-1", outcome: { ok: true }, outcome_digest: digest("c"),
+      prior_revision: 6, resulting_revision: 7,
+    } } as unknown as TaskStateV1;
+    expect(() => apply(snapshot(forgedTriageEntry, recordTriage), invocation))
+      .toThrowError(expect.objectContaining({ code: "SEMANTIC_REPLAY_MISMATCH" }));
+  });
+
   it("plans triage, revision entry, gate opening, and handoff as bounded single actions", () => {
     const finding = { finding_id: "finding-1", severity: "major" as const, blocking: false, summary: "Issue", evidence: "Evidence", suggested_resolution: "Fix" };
     const triage = snapshot(state("triage", "running"), {

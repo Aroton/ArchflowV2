@@ -37472,11 +37472,21 @@ var parseArchFlowApplyInputV1 = (value) => parseMaterialized(archFlowApplyInputV
 var parseSemanticResultV1 = (value) => parseMaterialized(semanticResultV1Schema, value, "semantic result");
 
 // src/mcp/diagnostics.ts
+import { appendFileSync, existsSync, mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+var INTERNAL_ERROR_LOG = join(".archflow", "runtime", "diagnostics", "internal-errors.log");
 function reportInternalError(correlationId, error51) {
   const detail = error51 instanceof Error ? error51.stack ?? error51.message : String(error51);
-  process.stderr.write(`archflow INTERNAL_ERROR correlation_id=${correlationId}
+  const record3 = `archflow INTERNAL_ERROR correlation_id=${correlationId}
 ${detail}
-`);
+`;
+  process.stderr.write(record3);
+  try {
+    if (!existsSync(".archflow")) return;
+    mkdirSync(dirname(INTERNAL_ERROR_LOG), { recursive: true });
+    appendFileSync(INTERNAL_ERROR_LOG, `${(/* @__PURE__ */ new Date()).toISOString()} ${record3}`, "utf8");
+  } catch {
+  }
 }
 
 // src/mcp/server.ts
@@ -50299,9 +50309,9 @@ import { constants as fsConstants } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
 import {
   basename,
-  dirname,
+  dirname as dirname2,
   isAbsolute,
-  join,
+  join as join2,
   relative,
   resolve as resolvePath,
   sep,
@@ -50495,11 +50505,11 @@ async function realpathWithMissingTail(candidate) {
   for (; ; ) {
     try {
       const real = await realpath(current);
-      return tail.length === 0 ? real : join(real, ...tail);
+      return tail.length === 0 ? real : join2(real, ...tail);
     } catch (error51) {
       if (errnoOf(error51) !== "ENOENT") throw error51;
     }
-    const parent = dirname(current);
+    const parent = dirname2(current);
     if (parent === current) throw Object.assign(new Error("no existing ancestor"), { code: "ENOENT" });
     tail.unshift(basename(current));
     current = parent;
@@ -50557,7 +50567,7 @@ async function resolveTaskPath(options) {
 }
 async function resolveTaskRoot(options) {
   const { runner, taskId, context: context2 } = options;
-  const repositoryRelative = join(ARCHFLOW_TREE, "tasks", taskId);
+  const repositoryRelative = join2(ARCHFLOW_TREE, "tasks", taskId);
   const withinWorktree = await containedUnder(runner.location.worktreeRoot, repositoryRelative);
   if (withinWorktree.kind === "io") return fail2(ioError(context2));
   if (withinWorktree.kind === "escape") return fail2(pathEscape(taskId, "task-state"));
@@ -50666,7 +50676,7 @@ async function resolveTaskWorkspaceCleanupTarget(options) {
   const worktreeRoot = runner.location.worktreeRoot;
   const workspaceRoot = resolvePath(worktreeRoot, ARCHFLOW_TREE, "runtime", "tasks", taskId);
   const target2 = resolvePath(worktreeRoot, repositoryRelative);
-  const parent = dirname(target2);
+  const parent = dirname2(target2);
   const parentRepositoryRelative = relative(worktreeRoot, parent);
   const withinWorktree = await containedUnder(worktreeRoot, parentRepositoryRelative);
   if (withinWorktree.kind === "io") return fail2(ioError(context2));
@@ -57606,13 +57616,27 @@ function identityOf(observation) {
     size_bytes: parseSafeInteger(observation.size_bytes)
   });
 }
+async function resolveBaseCommit(runner, revision) {
+  try {
+    return Object.freeze({ schema_version: "1", ok: true, value: await resolveCommit(runner, revision) });
+  } catch {
+    return Object.freeze({
+      schema_version: "1",
+      ok: false,
+      error: createProjectError("CONTRACT_INVALID", { issue_code: "base-commit-unresolvable" })
+    });
+  }
+}
 async function buildImplementationOutput(dependencies, authority, state, suppliedInput) {
   assertInternalTransactionAuthority(authority, {
     runner: dependencies.runner,
     environment: dependencies.environment
   });
   assertPlainJson(suppliedInput, "implementation output builder input");
-  const input = structuredClone(suppliedInput);
+  const supplied = structuredClone(suppliedInput);
+  const baseCommit = await resolveBaseCommit(dependencies.runner, supplied.base_commit);
+  if (!baseCommit.ok) return baseCommit;
+  const input = { ...supplied, base_commit: baseCommit.value };
   if (state.value.task_id !== authority.task_id) throw new TypeError("state task does not match transaction authority");
   if (dependencies.read_retained_task_bytes === void 0) {
     throw new TypeError("retained byte accounting is unavailable");
@@ -58917,7 +58941,7 @@ function selectGateDecisionTemplate(active, value) {
 // src/state/layout.ts
 import { constants as fsConstants3 } from "node:fs";
 import { lstat as lstat4, mkdir } from "node:fs/promises";
-import { isAbsolute as isAbsolute2, join as join2, relative as relative2, sep as sep2 } from "node:path";
+import { isAbsolute as isAbsolute2, join as join3, relative as relative2, sep as sep2 } from "node:path";
 var IntentLayoutError = class extends Error {
   constructor(stage) {
     super(`intent layout ${stage} failed`);
@@ -58948,10 +58972,10 @@ function errnoOf2(error51) {
   return error51 !== null && typeof error51 === "object" && "code" in error51 ? String(error51.code) : void 0;
 }
 async function ensureWorkspaceRoot(authority) {
-  const archflowRoot = join2(authority.task_root, "..", "..");
+  const archflowRoot = join3(authority.task_root, "..", "..");
   const fixed = [
-    join2(archflowRoot, "runtime"),
-    join2(archflowRoot, "runtime", "tasks"),
+    join3(archflowRoot, "runtime"),
+    join3(archflowRoot, "runtime", "tasks"),
     authority.workspace_root
   ];
   for (const directory of fixed) await ensureRealDirectory(directory);
@@ -58960,9 +58984,9 @@ async function ensureIntentDirectory(authority) {
   assertInternalTransactionAuthority(authority);
   try {
     await ensureWorkspaceRoot(authority);
-    await ensureRealDirectory(join2(authority.workspace_root, "transient"));
+    await ensureRealDirectory(join3(authority.workspace_root, "transient"));
     await ensureRealDirectory(
-      join2(authority.workspace_root, "transient", "intents")
+      join3(authority.workspace_root, "transient", "intents")
     );
   } catch (error51) {
     throw new IntentLayoutError(
@@ -58993,9 +59017,9 @@ async function ensureDecisionChild(path2) {
 async function ensureDecisionDirectory(authority, gateId) {
   assertInternalTransactionAuthority(authority);
   const validatedGateId = parsePathSafeId(gateId);
-  const authorityRoot = join2(authority.task_root, "authority");
-  const decisions2 = join2(authorityRoot, "decisions");
-  const gate = join2(decisions2, validatedGateId);
+  const authorityRoot = join3(authority.task_root, "authority");
+  const decisions2 = join3(authorityRoot, "decisions");
+  const gate = join3(decisions2, validatedGateId);
   await ensureDecisionChild(authorityRoot);
   await ensureDecisionChild(decisions2);
   await ensureDecisionChild(gate);
@@ -59004,12 +59028,12 @@ async function ensureAttemptDirectory(authority, phaseInstance4) {
   assertInternalTransactionAuthority(authority);
   const validated = parsePhaseInstanceId(phaseInstance4);
   await ensureWorkspaceRoot(authority);
-  await ensureRealDirectory(join2(authority.workspace_root, "diagnostics"));
+  await ensureRealDirectory(join3(authority.workspace_root, "diagnostics"));
   await ensureRealDirectory(
-    join2(authority.workspace_root, "diagnostics", "attempts")
+    join3(authority.workspace_root, "diagnostics", "attempts")
   );
   await ensureRealDirectory(
-    join2(authority.workspace_root, "diagnostics", "attempts", validated)
+    join3(authority.workspace_root, "diagnostics", "attempts", validated)
   );
 }
 async function ensureRealDirectory(path2) {
@@ -59034,37 +59058,37 @@ async function ensureRealDirectory(path2) {
 }
 async function ensureAuthorityDirectory(authority) {
   assertInternalTransactionAuthority(authority);
-  await ensureRealDirectory(join2(authority.task_root, "authority"));
+  await ensureRealDirectory(join3(authority.task_root, "authority"));
 }
 async function ensureResultDirectory(authority, digest9) {
   assertInternalTransactionAuthority(authority);
   if (!/^[0-9a-f]{64}$/u.test(digest9)) throw new TypeError("result digest must be lowercase SHA-256");
   await ensureAuthorityDirectory(authority);
-  await ensureRealDirectory(join2(authority.task_root, "authority", "results"));
+  await ensureRealDirectory(join3(authority.task_root, "authority", "results"));
   await ensureWorkspaceRoot(authority);
   const parts = ["cache", "results", digest9, "payload"];
   let current = authority.workspace_root;
   for (const part of parts) {
-    current = join2(current, part);
+    current = join3(current, part);
     await ensureRealDirectory(current);
   }
 }
 async function ensurePayloadParent(authority, digest9, target2) {
   assertInternalTransactionAuthority(authority);
   if (!/^[0-9a-f]{64}$/u.test(digest9)) throw new TypeError("result digest must be lowercase SHA-256");
-  const root = join2(authority.workspace_root, "cache", "results", digest9, "payload");
-  const parent = join2(target2, "..");
+  const root = join3(authority.workspace_root, "cache", "results", digest9, "payload");
+  const parent = join3(target2, "..");
   const rel = relative2(root, parent);
   if (rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute2(rel)) throw new TypeError("payload parent escaped result directory");
   let current = root;
   for (const part of rel.split(sep2).filter((candidate) => candidate !== "" && candidate !== ".")) {
-    current = join2(current, part);
+    current = join3(current, part);
     await ensureRealDirectory(current);
   }
 }
 async function ensureWorkspaceProjectionParent(authority, target2) {
   assertInternalTransactionAuthority(authority);
-  const parent = join2(target2, "..");
+  const parent = join3(target2, "..");
   const rel = relative2(authority.workspace_root, parent);
   if (rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute2(rel)) {
     throw new TypeError("workspace projection parent escaped task workspace");
@@ -59072,18 +59096,18 @@ async function ensureWorkspaceProjectionParent(authority, target2) {
   await ensureWorkspaceRoot(authority);
   let current = authority.workspace_root;
   for (const part of rel.split(sep2).filter((candidate) => candidate !== "" && candidate !== ".")) {
-    current = join2(current, part);
+    current = join3(current, part);
     await ensureRealDirectory(current);
   }
 }
 async function ensureTaskProjectionParent(authority, target2) {
   assertInternalTransactionAuthority(authority);
-  const parent = join2(target2, "..");
+  const parent = join3(target2, "..");
   const rel = relative2(authority.task_root, parent);
   if (rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute2(rel)) return;
   let current = authority.task_root;
   for (const part of rel.split(sep2).filter((candidate) => candidate !== "" && candidate !== ".")) {
-    current = join2(current, part);
+    current = join3(current, part);
     await ensureRealDirectory(current);
   }
 }
@@ -59138,7 +59162,7 @@ async function loadLegacyImportResumePhase(dependencies, authority, state) {
 // src/state/lock.ts
 import { AsyncLocalStorage } from "node:async_hooks";
 import { lstat as lstat5, mkdir as mkdir2, open as open2, readdir, realpath as realpath3, rename, rmdir } from "node:fs/promises";
-import { dirname as dirname2, join as join3 } from "node:path";
+import { dirname as dirname3, join as join4 } from "node:path";
 import { performance } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 var TaskLockError = class extends Error {
@@ -59150,7 +59174,7 @@ var TaskLockError = class extends Error {
   stage;
 };
 var TASK_LOCK_POLICY = Object.freeze({
-  relativePath: join3("transient", ".transaction-lock"),
+  relativePath: join4("transient", ".transaction-lock"),
   pollIntervalMs: 10,
   deadlineMs: 250
 });
@@ -59176,7 +59200,7 @@ function createTaskLock() {
   async function runExclusive(taskRoot, work) {
     const inheritedRoots = heldRoots.getStore() ?? /* @__PURE__ */ new Set();
     if (inheritedRoots.has(taskRoot)) throw new TaskLockError("acquire");
-    const lockPath = join3(taskRoot, TASK_LOCK_POLICY.relativePath);
+    const lockPath = join4(taskRoot, TASK_LOCK_POLICY.relativePath);
     await acquire(lockPath);
     const scopedRoots = /* @__PURE__ */ new Set([...inheritedRoots, taskRoot]);
     let workResult;
@@ -59784,8 +59808,8 @@ function legalRunStepStatus(current, step) {
     if (current.status === "failed") return "running";
     return step === "produce" && current.status === "succeeded" ? "running" : void 0;
   }
-  if (current.status !== "succeeded") return void 0;
   if (step === "produce") return "running";
+  if (current.status !== "succeeded") return void 0;
   const steps = pipeline(current.phase_instance);
   const index = steps.indexOf(current.step);
   return index >= 0 && steps[index + 1] === step ? "running" : void 0;
@@ -59809,10 +59833,10 @@ function legalMovement(input) {
       return target2.status === "running" && target2.attempt === current.attempt + 1;
     }
   }
-  if (current.status !== "succeeded" || target2.status !== "running") return false;
-  if (target2.phase_instance === current.phase_instance && target2.step === "produce") {
+  if (target2.phase_instance === current.phase_instance && target2.step === "produce" && target2.status === "running") {
     return input.human_revision_reentry === true ? target2.attempt === current.attempt : target2.attempt === current.attempt + 1;
   }
+  if (current.status !== "succeeded" || target2.status !== "running") return false;
   const steps = pipeline(current.phase_instance);
   const index = steps.indexOf(current.step);
   if (index < 0) return false;
@@ -60168,6 +60192,16 @@ function produceOwnedTaskDocumentPaths(artifact) {
   const prefix = `.archflow/tasks/${artifact.task_id}/`;
   return Object.freeze([...new Set(artifact.outputs.map((entry) => String(entry.path)).filter((path2) => path2.startsWith(prefix)).map((path2) => parseTaskPathClaim(path2.slice(prefix.length))))].sort((left, right) => left.localeCompare(right)));
 }
+function produceProjectionPins(artifact) {
+  if (artifact.artifact_kind === "document") {
+    return Object.freeze(documentProjectionDescriptors(artifact).map((entry) => Object.freeze({ path: entry.document_path, content_digest: entry.content_digest })));
+  }
+  const owned = new Set(produceOwnedTaskDocumentPaths(artifact));
+  return Object.freeze(artifact.parent_documents.filter((parent) => owned.has(parent.document_path)).map((parent) => Object.freeze({
+    path: parent.document_path,
+    content_digest: parent.content_digest
+  })));
+}
 function produceUpstreamBindingsForSubject(state, artifact) {
   const bindings = expectedProduceUpstreamBindings(state);
   const owned = new Set(produceOwnedTaskDocumentPaths(artifact));
@@ -60200,11 +60234,9 @@ async function readProduceProjectionSet(runner, authority, subject, selectedPath
   if ("imported_projection" in subject) {
     paths = [selectedPath];
   } else if (subject.artifact.artifact_kind === "implementation-output") {
-    const prefix = `.archflow/tasks/${subject.artifact.task_id}/`;
-    const outputPaths = new Set(subject.artifact.outputs.map((entry) => String(entry.path)));
     paths = Object.freeze([.../* @__PURE__ */ new Set([
       selectedPath,
-      ...subject.artifact.parent_documents.filter((parent) => outputPaths.has(`${prefix}${parent.document_path}`)).map((parent) => parent.document_path)
+      ...produceProjectionPins(subject.artifact).map((pin) => pin.path)
     ])]);
   } else {
     const excluded = new Set(excludedPaths);
@@ -60375,7 +60407,7 @@ function reconcileCurrentAuthority(value) {
 // src/state/reconciliation-discovery.ts
 import { constants as fsConstants4 } from "node:fs";
 import { lstat as lstat6, readdir as readdir2, readlink as readlink3 } from "node:fs/promises";
-import { join as join4 } from "node:path";
+import { join as join5 } from "node:path";
 var ok9 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var stateInvalid2 = (authority, issueCode) => Object.freeze({
   schema_version: "1",
@@ -60581,7 +60613,7 @@ async function discoverGateHead(dependencies, authority, state) {
 async function discoverIntent(dependencies, authority, state) {
   let names;
   try {
-    names = await readdir2(join4(authority.workspace_root, "transient", "intents"));
+    names = await readdir2(join5(authority.workspace_root, "transient", "intents"));
   } catch (error51) {
     if (error51.code === "ENOENT") return ok9(Object.freeze({}));
     return ioFailure(authority, "discover-reconciliation-intents");
@@ -60635,7 +60667,7 @@ async function discoverReconciliationInput(dependencies, authority, state) {
 
 // src/state/workspace-cleanup.ts
 import { lstat as lstat7, readFile as readFile3, readdir as readdir3, rm, rmdir as rmdir2, stat, unlink } from "node:fs/promises";
-import { basename as basename2, dirname as dirname3, join as join5, relative as relative3, sep as sep3 } from "node:path";
+import { basename as basename2, dirname as dirname4, join as join6, relative as relative3, sep as sep3 } from "node:path";
 
 // src/state/retained-result-graph.ts
 function retainedResultReferences(state) {
@@ -60674,7 +60706,7 @@ async function filesBelow(root) {
   const output = [];
   const walk = async (directory) => {
     for (const entry of await readdir3(directory, { withFileTypes: true })) {
-      const absolute = join5(directory, entry.name);
+      const absolute = join6(directory, entry.name);
       if (!inside(root, absolute)) throw new TypeError("workspace inventory escaped its root");
       if (entry.isSymbolicLink()) {
         const metadata2 = await lstat7(absolute);
@@ -60723,7 +60755,7 @@ async function shouldRetainWorkspaceEntry(entry, state, decisionProtectedResults
     if (state.last_transition?.intent_id === intentId) return false;
     const receipt = entry.relative.replace(/\.request\.json$/u, ".json");
     try {
-      await lstat7(join5(entry.absolute, "..", basename2(receipt)));
+      await lstat7(join6(entry.absolute, "..", basename2(receipt)));
       return false;
     } catch (error51) {
       return error51.code === "ENOENT";
@@ -60742,7 +60774,7 @@ async function shouldRetainWorkspaceEntry(entry, state, decisionProtectedResults
   return false;
 }
 async function referencedDecisionDigests(authority) {
-  const root = join5(authority.task_root, "authority", "decisions");
+  const root = join6(authority.task_root, "authority", "decisions");
   const digests = /* @__PURE__ */ new Set();
   let files;
   try {
@@ -60759,7 +60791,7 @@ async function referencedDecisionDigests(authority) {
   return digests;
 }
 async function decisionProtectedAuthorityResults(authority) {
-  const root = join5(authority.task_root, "authority", "results");
+  const root = join6(authority.task_root, "authority", "results");
   const decisionDigests = await referencedDecisionDigests(authority);
   let files;
   try {
@@ -60793,7 +60825,7 @@ async function decisionProtectedAuthorityResults(authority) {
   return protectedResults;
 }
 async function unreferencedAuthorityResults(authority, state, decisionProtectedResults) {
-  const root = join5(authority.task_root, "authority", "results");
+  const root = join6(authority.task_root, "authority", "results");
   const live = retainedResultDigests(state);
   if (decisionProtectedResults.has("*")) return Object.freeze([]);
   let files;
@@ -60808,7 +60840,7 @@ async function unreferencedAuthorityResults(authority, state, decisionProtectedR
   }));
 }
 async function unreferencedAuthorityDecisions(authority, state) {
-  const root = join5(authority.task_root, "authority", "decisions");
+  const root = join6(authority.task_root, "authority", "decisions");
   let groups;
   try {
     groups = await readdir3(root, { withFileTypes: true });
@@ -60843,7 +60875,7 @@ async function unreferencedAuthorityDecisions(authority, state) {
     for (const gateId of [...live]) {
       let entries;
       try {
-        entries = await filesBelow(join5(root, gateId));
+        entries = await filesBelow(join6(root, gateId));
       } catch {
         return Object.freeze([]);
       }
@@ -60863,7 +60895,7 @@ async function unreferencedAuthorityDecisions(authority, state) {
   for (const gateId of known) {
     if (live.has(gateId)) continue;
     try {
-      stale.push(...await filesBelow(join5(root, gateId)));
+      stale.push(...await filesBelow(join6(root, gateId)));
     } catch {
       return Object.freeze([]);
     }
@@ -60883,7 +60915,7 @@ async function removeEmptyDirectories(root, preserve = /* @__PURE__ */ new Set()
       if (error51.code === "ENOENT") return;
       throw error51;
     }
-    for (const child of children) if (child.isDirectory() && !child.isSymbolicLink()) await walk(join5(directory, child.name));
+    for (const child of children) if (child.isDirectory() && !child.isSymbolicLink()) await walk(join6(directory, child.name));
     if (!preserve.has(directory)) directories.push(directory);
   };
   await walk(root);
@@ -60898,7 +60930,7 @@ async function removeEmptyParents(start, boundary) {
     } catch {
       return;
     }
-    current = dirname3(current);
+    current = dirname4(current);
   }
 }
 async function cleanupTarget(dependencies, authority) {
@@ -60914,7 +60946,7 @@ async function inspectWorkspaceCleanup(dependencies, authority, state) {
   if (!target2.ok) return target2;
   try {
     const workspaceFiles = await filesBelow(target2.value.absolute);
-    const authorityFiles = await filesBelow(join5(authority.task_root, "authority"));
+    const authorityFiles = await filesBelow(join6(authority.task_root, "authority"));
     const decisionProtectedResults = await decisionProtectedAuthorityResults(authority);
     const authorityCandidates = [
       ...await unreferencedAuthorityResults(authority, state, decisionProtectedResults),
@@ -60952,7 +60984,7 @@ async function cleanTaskWorkspace(dependencies, authority, state) {
   if (!target2.ok) return target2;
   try {
     const workspaceFiles = await filesBelow(target2.value.absolute);
-    const authorityFiles = await filesBelow(join5(authority.task_root, "authority"));
+    const authorityFiles = await filesBelow(join6(authority.task_root, "authority"));
     const decisionProtectedResults = await decisionProtectedAuthorityResults(authority);
     const authorityCandidates = [
       ...await unreferencedAuthorityResults(authority, state, decisionProtectedResults),
@@ -60965,22 +60997,22 @@ async function cleanTaskWorkspace(dependencies, authority, state) {
     let retainedFiles = retainedAuthority.length;
     let retainedBytes = retainedAuthority.reduce((sum, entry) => sum + entry.byte_count, 0);
     for (const entry of [...workspaceFiles, ...authorityCandidates]) {
-      const authorityFile = entry.absolute.startsWith(join5(authority.task_root, "authority") + sep3);
+      const authorityFile = entry.absolute.startsWith(join6(authority.task_root, "authority") + sep3);
       if (!authorityFile && await shouldRetainWorkspaceEntry(entry, state, decisionProtectedResults)) {
         retainedFiles += 1;
         retainedBytes += entry.byte_count;
         continue;
       }
       await removeFile(entry);
-      await removeEmptyParents(dirname3(entry.absolute), authorityFile ? join5(authority.task_root, "authority") : target2.value.absolute);
+      await removeEmptyParents(dirname4(entry.absolute), authorityFile ? join6(authority.task_root, "authority") : target2.value.absolute);
       removedFiles += 1;
       removedBytes += entry.byte_count;
     }
     await removeEmptyDirectories(target2.value.absolute, /* @__PURE__ */ new Set([
-      join5(target2.value.absolute, "transient", ".transaction-lock")
+      join6(target2.value.absolute, "transient", ".transaction-lock")
     ]));
-    await removeEmptyDirectories(join5(authority.task_root, "authority", "results"));
-    await removeEmptyDirectories(join5(authority.task_root, "authority", "decisions"));
+    await removeEmptyDirectories(join6(authority.task_root, "authority", "results"));
+    await removeEmptyDirectories(join6(authority.task_root, "authority", "decisions"));
     return ok10(Object.freeze({
       removed_files: parseSafeInteger(removedFiles),
       removed_bytes: parseSafeInteger(removedBytes),
@@ -61017,10 +61049,10 @@ async function removeSupersededPhaseDocuments(dependencies, authority, targetPha
     const phase3 = Number(document2[1]);
     const superseded = document2[2] === "impl-notes" ? phase3 >= target2 : phase3 > target2;
     if (!superseded) continue;
-    const absolute = join5(authority.task_root, ...relative7.split("/"));
+    const absolute = join6(authority.task_root, ...relative7.split("/"));
     if (!inside(authority.task_root, absolute)) throw new TypeError("superseded document escaped its task root");
     await unlink(absolute).catch(() => void 0);
-    await removeEmptyParents(dirname3(absolute), join5(authority.task_root, "phases"));
+    await removeEmptyParents(dirname4(absolute), join6(authority.task_root, "phases"));
     removed.push(relative7);
   }
   return Object.freeze(removed.sort());
@@ -63521,7 +63553,7 @@ import { lstat as lstat9, readFile as readFile5, readlink as readlink4 } from "n
 // src/state/atomic.ts
 import { randomUUID } from "node:crypto";
 import { link, open as open3, rename as rename2, symlink, unlink as unlink2 } from "node:fs/promises";
-import { basename as basename3, dirname as dirname4, join as join6 } from "node:path";
+import { basename as basename3, dirname as dirname5, join as join7 } from "node:path";
 async function replaceTaskAsk(writer, path2, bytes) {
   if (path2.path_class !== "task-ask") throw new TypeError("task ask replacement requires task-ask authority");
   await writer.replaceTaskAsk(path2, bytes);
@@ -63556,8 +63588,8 @@ async function createExclusive(path2, bytes) {
     throw new TypeError("createExclusive requires an immutable resolved path");
   }
   const target2 = path2.absolute;
-  const temporary = join6(
-    dirname4(target2),
+  const temporary = join7(
+    dirname5(target2),
     `.${basename3(target2)}.${process.pid}.${randomUUID()}.tmp`
   );
   let handle;
@@ -63637,7 +63669,7 @@ function requireProjectable(path2) {
   if (!PROJECTABLE.has(path2.path_class)) throw new TypeError("projection requires a declared output path");
 }
 async function replaceRegularBytes(target2, bytes, mode) {
-  const temporary = join6(dirname4(target2), `.${basename3(target2)}.${process.pid}.${randomUUID()}.tmp`);
+  const temporary = join7(dirname5(target2), `.${basename3(target2)}.${process.pid}.${randomUUID()}.tmp`);
   let handle;
   let renameAttempted = false;
   try {
@@ -63666,7 +63698,7 @@ async function replaceRegular(path2, bytes, executable) {
 }
 async function replaceSymlink(path2, target2) {
   requireProjectable(path2);
-  const temporary = join6(dirname4(path2.absolute), `.${basename3(path2.absolute)}.${process.pid}.${randomUUID()}.tmp`);
+  const temporary = join7(dirname5(path2.absolute), `.${basename3(path2.absolute)}.${process.pid}.${randomUUID()}.tmp`);
   let created = false;
   try {
     await symlink(target2, temporary);
@@ -64453,7 +64485,7 @@ import { readFile as readFile11 } from "node:fs/promises";
 
 // src/init/task-initialization.ts
 import { mkdir as mkdir3, open as open4, readFile as readFile6 } from "node:fs/promises";
-import { dirname as dirname5, join as join7 } from "node:path";
+import { dirname as dirname6, join as join8 } from "node:path";
 var decoder4 = new TextDecoder("utf-8", { fatal: true });
 var ok14 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail13 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
@@ -64469,14 +64501,14 @@ function policyBaseInvalid(commit) {
   });
 }
 async function createTaskConfig(root, taskId) {
-  const taskConfig = join7(root, ".archflow", "tasks", taskId, "config.yaml");
+  const taskConfig = join8(root, ".archflow", "tasks", taskId, "config.yaml");
   try {
     return new Uint8Array(await readFile6(taskConfig));
   } catch (error51) {
     if (!errno(error51, "ENOENT")) throw error51;
   }
-  const template = new Uint8Array(await readFile6(join7(root, ".archflow", "config.yaml")));
-  await mkdir3(dirname5(taskConfig), { recursive: true });
+  const template = new Uint8Array(await readFile6(join8(root, ".archflow", "config.yaml")));
+  await mkdir3(dirname6(taskConfig), { recursive: true });
   try {
     const handle = await open4(taskConfig, "wx");
     try {
@@ -64496,9 +64528,9 @@ async function stageTaskAsk(input) {
   const taskId = parseTaskSlug(snapshot.task_id);
   if (typeof snapshot.text !== "string") throw new TypeError("task ask text must be a string");
   const bytes = new TextEncoder().encode(snapshot.text);
-  const askPath = join7(snapshot.working_directory, ".archflow", "tasks", taskId, "ask.md");
+  const askPath = join8(snapshot.working_directory, ".archflow", "tasks", taskId, "ask.md");
   try {
-    await mkdir3(dirname5(askPath), { recursive: true });
+    await mkdir3(dirname6(askPath), { recursive: true });
     const handle = await open4(askPath, "wx");
     try {
       await handle.writeFile(bytes);
@@ -65042,6 +65074,26 @@ function runStepDetail(state, step) {
   if (state.step === step && state.status === "failed") return `Retry the ${step} pipeline step.`;
   return `Run the ${step} pipeline step.`;
 }
+function produceSubjectDriftAction(state, paths) {
+  const shown = paths.slice(0, 5);
+  const listed = shown.join(", ");
+  const rest = paths.length - shown.length;
+  return action(
+    "run-step",
+    `${paths.length === 1 ? "A file" : `${paths.length} files`} this phase's recorded work result covers changed afterwards (${listed}${rest > 0 ? `, and ${rest} more` : ""}). The independent review re-reads them and will not review bytes the result never recorded, and no baseline decision can re-bind a recorded result to different bytes. Re-open the work window and submit a fresh result over the current bytes; the review then covers what is actually there.`,
+    false,
+    state,
+    { step: "produce" }
+  );
+}
+function upstreamDocumentDriftAction(state, paths) {
+  return action(
+    "inspect-state",
+    `${paths.length === 1 ? "An approved planning document" : `${paths.length} approved planning documents`} the independent review reads this phase through changed after approval (${paths.slice(0, 5).join(", ")}). Nothing in this phase can re-record another phase's document, so put the recorded bytes back before continuing; keeping the new ones means reopening the phase that owns them.`,
+    true,
+    state
+  );
+}
 function matchingApproval(input, kind) {
   const subjectDigest = input.subject_digest;
   if (subjectDigest !== void 0 && (input.authenticated_approvals ?? []).some((approval) => approval.gate_kind === kind && approval.subject_digest === subjectDigest)) {
@@ -65187,6 +65239,12 @@ function deriveNextAction(input) {
           gate_kind: state.open_gate.gate_kind
         });
       }
+      if ((input.produce_subject_drift ?? []).length > 0) {
+        return produceSubjectDriftAction(state, input.produce_subject_drift);
+      }
+      if ((input.upstream_document_drift ?? []).length > 0) {
+        return upstreamDocumentDriftAction(state, input.upstream_document_drift);
+      }
       const missing = (input.reconciliation_findings ?? []).filter(
         (candidate) => candidate.kind === "projection-mismatch" && candidate.observed_digest === void 0
       );
@@ -65255,6 +65313,12 @@ function deriveNextAction(input) {
   }
   if (state.step === "produce" && state.status !== "succeeded") {
     return action("run-step", runStepDetail(state, "produce"), false, state, { step: "produce" });
+  }
+  if ((input.produce_subject_drift ?? []).length > 0) {
+    return produceSubjectDriftAction(state, input.produce_subject_drift);
+  }
+  if ((input.upstream_document_drift ?? []).length > 0) {
+    return upstreamDocumentDriftAction(state, input.upstream_document_drift);
   }
   const next = input.assessment?.next;
   if (next !== void 0) {
@@ -65992,6 +66056,37 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       dispositions: Object.freeze(dispositions)
     });
   }
+  const produceSubjectDrift = [];
+  const upstreamDocumentDrift = [];
+  if (!midProduce && produceSubject !== void 0 && assessment?.next === "counter_review") {
+    const repositoryPath = (claim) => `.archflow/tasks/${state.task_id}/${claim}`;
+    try {
+      for (const pin of produceProjectionPins(produceSubject.artifact)) {
+        const projection = await readProduceProjection(
+          dependencies.runner,
+          authority,
+          produceSubject,
+          pin.path
+        );
+        if (!projection.ok) produceSubjectDrift.push(repositoryPath(pin.path));
+      }
+      const coProduced = produceOwnedTaskDocumentPaths(produceSubject.artifact);
+      for (const binding of produceUpstreamBindingsForSubject(state, produceSubject.artifact)) {
+        const upstream = await loadProduceUpstreamSubject(dependencies, authority, state, binding);
+        if (!upstream.ok) continue;
+        const projections = await readProduceProjectionSet(
+          dependencies.runner,
+          authority,
+          upstream.value,
+          binding.path,
+          coProduced
+        );
+        if (!projections.ok) upstreamDocumentDrift.push(repositoryPath(binding.path));
+      }
+    } catch {
+      blockers.push("review-projection-unavailable");
+    }
+  }
   let statusReconciliation;
   if (reconciliation !== void 0) {
     const partitioned = partitionExpectedReentryEdits(
@@ -66126,6 +66221,8 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       ...gateBindingBlocker === void 0 ? [] : [gateBindingBlocker]
     ]),
     ...assessment === void 0 ? {} : { assessment },
+    ...produceSubjectDrift.length === 0 ? {} : { produce_subject_drift: Object.freeze([...produceSubjectDrift]) },
+    ...upstreamDocumentDrift.length === 0 ? {} : { upstream_document_drift: Object.freeze([...upstreamDocumentDrift]) },
     evidence_available: evidence.available,
     ...subjectDigest === void 0 ? {} : { subject_digest: subjectDigest },
     authenticated_approvals: approvalFacts,
@@ -66215,17 +66312,17 @@ async function computeTaskStatus(dependencies, authority) {
 
 // src/state/initialization.ts
 import { mkdir as mkdir4, mkdtemp, rename as rename3, rm as rm2, writeFile } from "node:fs/promises";
-import { dirname as dirname6, isAbsolute as isAbsolute3, join as join9, relative as relative4 } from "node:path";
+import { dirname as dirname7, isAbsolute as isAbsolute3, join as join10, relative as relative4 } from "node:path";
 
 // src/state/legacy-stage.ts
 import { readFile as readFile9 } from "node:fs/promises";
-import { join as join8 } from "node:path";
+import { join as join9 } from "node:path";
 function importRoot(authority, initialization) {
-  return join8(authority.workspace_root, "cache", "imports", initialization.import_digest);
+  return join9(authority.workspace_root, "cache", "imports", initialization.import_digest);
 }
 async function readStagedLegacyConfig(authority, initialization) {
   try {
-    const bytes = new Uint8Array(await readFile9(join8(importRoot(authority, initialization), "config.yaml")));
+    const bytes = new Uint8Array(await readFile9(join9(importRoot(authority, initialization), "config.yaml")));
     const parsed = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(bytes), "staged task config");
     const digest9 = sha256Bytes(bytes);
     if (digest9 !== initialization.config_digest) return void 0;
@@ -66236,7 +66333,7 @@ async function readStagedLegacyConfig(authority, initialization) {
 }
 async function readStagedLegacyPayload(authority, initialization, reference) {
   try {
-    const bytes = new Uint8Array(await readFile9(join8(importRoot(authority, initialization), "payload", reference.legacy_path)));
+    const bytes = new Uint8Array(await readFile9(join9(importRoot(authority, initialization), "payload", reference.legacy_path)));
     if (bytes.byteLength !== reference.byte_count || sha256Bytes(bytes) !== reference.digest) return void 0;
     return bytes;
   } catch {
@@ -66420,9 +66517,9 @@ async function installLegacyDestination(request, initialization, initializationB
   const references = new Map(initialization.staged_payload_refs.map((entry) => [entry.legacy_path, entry]));
   let temporary;
   try {
-    temporary = await mkdtemp(join9(request.authority.workspace_root, ".adopt-"));
-    await mkdir4(join9(temporary, "authority"), { recursive: true });
-    await writeFile(join9(temporary, "config.yaml"), config2.bytes, { flag: "wx", mode: 420 });
+    temporary = await mkdtemp(join10(request.authority.workspace_root, ".adopt-"));
+    await mkdir4(join10(temporary, "authority"), { recursive: true });
+    await writeFile(join10(temporary, "config.yaml"), config2.bytes, { flag: "wx", mode: 420 });
     for (const entry of initialization.mapping) {
       const reference = references.get(entry.legacy_path);
       if (reference === void 0) return contract("legacy-mapping-payload-missing");
@@ -66430,12 +66527,12 @@ async function installLegacyDestination(request, initialization, initializationB
       if (bytes === void 0) return contract("legacy-staged-payload-invalid");
       const prefix = `.archflow/tasks/${initialization.task_id}/`;
       const relativeDestination = entry.destination_path.slice(prefix.length);
-      const target2 = join9(temporary, relativeDestination);
-      await mkdir4(dirname6(target2), { recursive: true });
+      const target2 = join10(temporary, relativeDestination);
+      await mkdir4(dirname7(target2), { recursive: true });
       await writeFile(target2, bytes, { flag: "wx", mode: 420 });
     }
-    await writeFile(join9(temporary, "authority", "initialization.json"), initializationBytes, { flag: "wx", mode: 420 });
-    await writeFile(join9(temporary, "state.json"), stateBytes, { flag: "wx", mode: 420 });
+    await writeFile(join10(temporary, "authority", "initialization.json"), initializationBytes, { flag: "wx", mode: 420 });
+    await writeFile(join10(temporary, "state.json"), stateBytes, { flag: "wx", mode: 420 });
     await rename3(temporary, request.authority.task_root);
     temporary = void 0;
     return ok17(void 0);
@@ -67946,7 +68043,7 @@ function projectSemanticStatus(snapshot, invocation) {
 
 // src/dispatch/cli.ts
 import { stat as stat3, writeFile as writeFile2 } from "node:fs/promises";
-import { join as join10 } from "node:path";
+import { join as join11 } from "node:path";
 
 // src/dispatch/process.ts
 import { spawn } from "node:child_process";
@@ -68184,7 +68281,7 @@ var CODEX_DISABLED_FEATURES = Object.freeze([
 function withLocalBinOnPath(workspace) {
   const home = workspace.env.HOME;
   if (home === void 0 || home === "") return workspace.env;
-  const localBin = join10(home, ".local", "bin");
+  const localBin = join11(home, ".local", "bin");
   const path2 = workspace.env.PATH;
   if (path2 === void 0) return Object.freeze({ ...workspace.env, PATH: localBin });
   if (path2.split(":").includes(localBin)) return workspace.env;
@@ -68538,7 +68635,7 @@ var claudeAdapter = Object.freeze({
     if (route.effort === "ultra") {
       return fail21(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
     }
-    const mcpConfigPath = join10(workspace.root, "empty-mcp.json");
+    const mcpConfigPath = join11(workspace.root, "empty-mcp.json");
     await writeFile2(mcpConfigPath, '{"mcpServers":{}}\n', { encoding: "utf8", mode: 384 });
     const argv = Object.freeze([
       "-p",
@@ -68633,8 +68730,8 @@ var codexAdapter = Object.freeze({
       return fail21(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
     }
     const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "codex-cli", envelopeSubject(envelope));
-    const schemaPath = join10(workspace.root, `${envelope.result_kind}.schema.json`);
-    const outputPath = join10(workspace.root, "final-output.json");
+    const schemaPath = join11(workspace.root, `${envelope.result_kind}.schema.json`);
+    const outputPath = join11(workspace.root, "final-output.json");
     await writeFile2(schemaPath, `${JSON.stringify(schema, null, 2)}
 `, { encoding: "utf8", mode: 384 });
     const disabled = CODEX_DISABLED_FEATURES.flatMap((feature) => ["--disable", feature]);
@@ -68851,6 +68948,7 @@ function authenticatedSemanticReviewContinuation(state, expectedSubstep) {
   } catch {
     throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "semantic-looking review transition has an invalid intent identity");
   }
+  if (identity.substep !== expectedSubstep) return void 0;
   const expected = expectedSubstep === "review-enter" ? { tool: "archflow_state", operation: "record-state-boundary" } : { tool: "archflow_counter_review", operation: "counter-review" };
   if (!authenticateSemanticLastTransition(state, identity.operation_digest, expectedSubstep, {
     ...expected,
@@ -68870,7 +68968,8 @@ function authenticatedSemanticTriageContinuation(state) {
   } catch {
     throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "semantic triage entry has an invalid intent identity");
   }
-  if (identity.substep !== "triage-enter" || !authenticateSemanticLastTransition(
+  if (identity.substep !== "triage-enter") return void 0;
+  if (!authenticateSemanticLastTransition(
     state,
     identity.operation_digest,
     identity.substep,
@@ -69642,7 +69741,7 @@ import { randomUUID as randomUUID3 } from "node:crypto";
 import { spawn as spawn2 } from "node:child_process";
 import { chmod as chmod2, lstat as lstat10, mkdir as mkdir5, mkdtemp as mkdtemp2, realpath as realpath4, rm as rm3, symlink as symlink2, writeFile as writeFile3 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { isAbsolute as isAbsolute4, join as join11, relative as relative5, resolve } from "node:path";
+import { isAbsolute as isAbsolute4, join as join12, relative as relative5, resolve } from "node:path";
 var FORWARDED_ENVIRONMENT = Object.freeze([
   "PATH",
   "LANG",
@@ -69664,13 +69763,13 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
   if (isInside(realRepositoryRoot, realTemporaryRoot)) {
     throw new Error("dispatch temporary directory must be outside the repository");
   }
-  const root = await mkdtemp2(join11(realTemporaryRoot, "archflow-dispatch-"));
+  const root = await mkdtemp2(join12(realTemporaryRoot, "archflow-dispatch-"));
   try {
     const sourceHome = resolve(process.env.HOME ?? homedir());
     const env = {
       HOME: sourceHome,
       TMPDIR: root,
-      ...adapter2 === "codex-cli" ? { CODEX_HOME: resolve(process.env.CODEX_HOME ?? join11(sourceHome, ".codex")) } : process.env.CLAUDE_CONFIG_DIR === void 0 ? {} : { CLAUDE_CONFIG_DIR: resolve(process.env.CLAUDE_CONFIG_DIR) }
+      ...adapter2 === "codex-cli" ? { CODEX_HOME: resolve(process.env.CODEX_HOME ?? join12(sourceHome, ".codex")) } : process.env.CLAUDE_CONFIG_DIR === void 0 ? {} : { CLAUDE_CONFIG_DIR: resolve(process.env.CLAUDE_CONFIG_DIR) }
     };
     for (const name of FORWARDED_ENVIRONMENT) {
       const value = process.env[name];
@@ -69692,7 +69791,7 @@ async function materializeRepositoryView(workspace, repositoryRoot, commit, proj
   if (!GIT_OID2.test(commit)) {
     throw new TypeError("repository view commit must be a full lowercase git object id");
   }
-  const view = join11(workspace.root, "repo");
+  const view = join12(workspace.root, "repo");
   await mkdir5(view, { recursive: true });
   await new Promise((resolvePipeline, reject) => {
     const archive = spawn2("git", ["-C", repositoryRoot, "archive", "--format=tar", commit], {
@@ -69733,7 +69832,7 @@ async function materializeRepositoryView(workspace, repositoryRoot, commit, proj
       finish();
     });
   });
-  await rm3(join11(view, ".archflow", "tasks"), { recursive: true, force: true });
+  await rm3(join12(view, ".archflow", "tasks"), { recursive: true, force: true });
   if (projectionPlan !== void 0) await applyProducedProjection(view, projectionPlan);
   return Object.freeze({ ...workspace, repository_view_root: view });
 }
@@ -69748,7 +69847,7 @@ async function ensureContainedParent(view, repositoryPath) {
   const segments = repositoryPath.split("/");
   let parent = view;
   for (const segment of segments.slice(0, -1)) {
-    parent = join11(parent, segment);
+    parent = join12(parent, segment);
     try {
       const status = await lstat10(parent);
       if (!status.isDirectory() || status.isSymbolicLink()) {
@@ -71418,7 +71517,7 @@ function buildAdjudicationEnvelope(value) {
 
 // src/review/pinned-context.ts
 import { readFile as readFile12 } from "node:fs/promises";
-import { join as join12, posix } from "node:path";
+import { join as join13, posix } from "node:path";
 
 // src/contracts/utf8.ts
 import { Buffer as Buffer3 } from "node:buffer";
@@ -71865,7 +71964,7 @@ async function priorTriageEvidence(dependencies, state) {
 async function conventionsEvidence(runner) {
   let bytes;
   try {
-    bytes = new Uint8Array(await readFile12(join12(runner.location.worktreeRoot, "CLAUDE.md")));
+    bytes = new Uint8Array(await readFile12(join13(runner.location.worktreeRoot, "CLAUDE.md")));
   } catch {
     return Object.freeze([]);
   }
@@ -73553,7 +73652,11 @@ async function handleState(call, context2) {
             phase_instance: call.input.phase_instance,
             step: call.input.step,
             status: call.input.status,
-            attempt: call.input.phase_instance !== current.value.phase_instance ? parseSafeInteger(1) : current.value.status === "failed" && call.input.step === current.value.step || current.value.status === "succeeded" && call.input.step === "produce" ? parseSafeInteger(current.value.attempt + 1) : current.value.attempt,
+            // Mirrors `legalMovement`: a retry of a failed step and any re-opening of the
+            // produce window from elsewhere in the phase both spend an attempt. The produce
+            // door counts whatever the position it leaves — succeeded, failed, or a step
+            // still running whose terminal result cannot be recorded.
+            attempt: call.input.phase_instance !== current.value.phase_instance ? parseSafeInteger(1) : current.value.status === "failed" && call.input.step === current.value.step || call.input.step === "produce" && (current.value.step !== "produce" || current.value.status === "succeeded") ? parseSafeInteger(current.value.attempt + 1) : current.value.attempt,
             input_fingerprint: call.input.input_fingerprint
           },
           recomputed_input_fingerprint: call.input.input_fingerprint,

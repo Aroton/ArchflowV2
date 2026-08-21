@@ -9,7 +9,7 @@
 - `test/types/mcp-sdk-public-surface.ts` is therefore compile-time coverage exercised by `npm run typecheck`, not by Vitest.
 - The package supports Node `^24.15.0`. Validation is run explicitly by maintainers with the package scripts; the repository does not configure hosted CI.
 
-The live semantic document-journey and handler suites pass for this change. The broad suite still treats real-host groups as explicit opt-ins; expected failure-path tests may write `INTERNAL_ERROR` diagnostics to stderr while still passing.
+The live semantic document-journey and handler suites pass for this change. The broad suite still treats real-host groups as explicit opt-ins; expected failure-path tests may write `INTERNAL_ERROR` diagnostics to stderr while still passing. Those tests also append to ignored `.archflow/runtime/diagnostics/internal-errors.log` in the repository they run from — that file is Git-ignored working data, never a test fixture, and can be deleted at any time.
 
 ## Suite inventory by behavior
 

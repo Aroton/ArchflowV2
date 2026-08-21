@@ -278,6 +278,31 @@ export function produceOwnedTaskDocumentPaths(
     .sort((left, right) => left.localeCompare(right)));
 }
 
+/**
+ * Every task document a review dispatch re-reads from the worktree, with the digest the retained
+ * produce result says it must still hash to.
+ *
+ * These are exactly the pins `readProduceProjection` enforces, and they are deliberately narrower
+ * than the manifest's projection set: a declared repository output reaches the reviewer from the
+ * retained payload, so only the human-readable documents the subject carries are re-read from
+ * disk and can therefore drift out from under a dispatch.
+ */
+export function produceProjectionPins(
+  artifact: ProduceArtifact,
+): readonly Readonly<{ path: TaskPathClaim; content_digest: Sha256Digest }>[] {
+  if (artifact.artifact_kind === "document") {
+    return Object.freeze(documentProjectionDescriptors(artifact).map((entry) =>
+      Object.freeze({ path: entry.document_path, content_digest: entry.content_digest })));
+  }
+  const owned = new Set<string>(produceOwnedTaskDocumentPaths(artifact));
+  return Object.freeze(artifact.parent_documents
+    .filter((parent) => owned.has(parent.document_path))
+    .map((parent) => Object.freeze({
+      path: parent.document_path,
+      content_digest: parent.content_digest,
+    })));
+}
+
 /** Canonical upstream bindings exclude parent documents co-produced by the current subject. */
 export function produceUpstreamBindingsForSubject(
   state: TaskStateV1,
@@ -347,13 +372,9 @@ export async function readProduceProjectionSet(
   if ("imported_projection" in subject) {
     paths = [selectedPath];
   } else if (subject.artifact.artifact_kind === "implementation-output") {
-    const prefix = `.archflow/tasks/${subject.artifact.task_id}/`;
-    const outputPaths = new Set(subject.artifact.outputs.map((entry) => String(entry.path)));
     paths = Object.freeze([...new Set([
       selectedPath,
-      ...subject.artifact.parent_documents
-        .filter((parent) => outputPaths.has(`${prefix}${parent.document_path}`))
-        .map((parent) => parent.document_path),
+      ...produceProjectionPins(subject.artifact).map((pin) => pin.path),
     ])]);
   } else {
     const excluded = new Set(excludedPaths);

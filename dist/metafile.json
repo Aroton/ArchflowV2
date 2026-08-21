@@ -5573,9 +5573,20 @@
       ]
     },
     "src/mcp/diagnostics.ts": {
-      "bytes": 486,
+      "bytes": 1872,
       "format": "esm",
-      "imports": []
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        }
+      ]
     },
     "src/mcp/framing.ts": {
       "bytes": 3378,
@@ -5950,7 +5961,7 @@
       ]
     },
     "src/mcp/handlers/state.ts": {
-      "bytes": 44933,
+      "bytes": 45358,
       "format": "esm",
       "imports": [
         {
@@ -7419,7 +7430,7 @@
       ]
     },
     "src/state/implementation-manifest.ts": {
-      "bytes": 53016,
+      "bytes": 54309,
       "format": "esm",
       "imports": [
         {
@@ -7441,6 +7452,11 @@
           "kind": "import-statement",
           "original": "../contracts/canonical.js",
           "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/errors.js",
+          "path": "src/contracts/errors.ts"
         },
         {
           "kind": "import-statement",
@@ -7740,7 +7756,7 @@
       ]
     },
     "src/state/next-action.ts": {
-      "bytes": 23777,
+      "bytes": 27568,
       "format": "esm",
       "imports": [
         {
@@ -7865,7 +7881,7 @@
       ]
     },
     "src/state/produce-subject.ts": {
-      "bytes": 19450,
+      "bytes": 20376,
       "format": "esm",
       "imports": [
         {
@@ -8404,7 +8420,7 @@
       ]
     },
     "src/state/semantic-actions.ts": {
-      "bytes": 44185,
+      "bytes": 44599,
       "format": "esm",
       "imports": [
         {
@@ -8598,7 +8614,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 75635,
+      "bytes": 78177,
       "format": "esm",
       "imports": [
         {
@@ -8870,7 +8886,7 @@
       ]
     },
     "src/state/transitions.ts": {
-      "bytes": 30858,
+      "bytes": 31646,
       "format": "esm",
       "imports": [
         {
@@ -8989,7 +9005,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1625682,
+      "bytes": 1631823,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10145,13 +10161,13 @@
           "bytesInOutput": 2311
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 14893
+          "bytesInOutput": 16690
         },
         "src/state/phase-documents.ts": {
           "bytesInOutput": 2363
         },
         "src/state/produce-subject.ts": {
-          "bytesInOutput": 8494
+          "bytesInOutput": 11341
         },
         "src/state/production.ts": {
           "bytesInOutput": 13309
@@ -10181,7 +10197,7 @@
           "bytesInOutput": 22420
         },
         "src/state/status.ts": {
-          "bytesInOutput": 46042
+          "bytesInOutput": 47539
         },
         "src/state/workspace-cleanup.ts": {
           "bytesInOutput": 15564
@@ -10189,7 +10205,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2925855,
+      "bytes": 2931002,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -10257,6 +10273,16 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:crypto"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
         },
         {
           "external": true,
@@ -11383,7 +11409,7 @@
           "bytesInOutput": 805
         },
         "src/mcp/diagnostics.ts": {
-          "bytesInOutput": 247
+          "bytesInOutput": 714
         },
         "src/mcp/framing.ts": {
           "bytesInOutput": 2638
@@ -11410,7 +11436,7 @@
           "bytesInOutput": 12296
         },
         "src/mcp/handlers/state.ts": {
-          "bytesInOutput": 36857
+          "bytesInOutput": 37242
         },
         "src/mcp/process-runner.ts": {
           "bytesInOutput": 3941
@@ -11440,7 +11466,7 @@
           "bytesInOutput": 2782
         },
         "src/repository/paths.ts": {
-          "bytesInOutput": 18228
+          "bytesInOutput": 18253
         },
         "src/review/adjudication.ts": {
           "bytesInOutput": 5541
@@ -11500,10 +11526,10 @@
           "bytesInOutput": 101118
         },
         "src/state/implementation-manifest.ts": {
-          "bytesInOutput": 41436
+          "bytesInOutput": 41994
         },
         "src/state/initialization.ts": {
-          "bytesInOutput": 21546
+          "bytesInOutput": 21553
         },
         "src/state/layout.ts": {
           "bytesInOutput": 6960
@@ -11518,7 +11544,7 @@
           "bytesInOutput": 2300
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 14897
+          "bytesInOutput": 16694
         },
         "src/state/pending-waiver.ts": {
           "bytesInOutput": 3112
@@ -11533,7 +11559,7 @@
           "bytesInOutput": 1605
         },
         "src/state/produce-subject.ts": {
-          "bytesInOutput": 12462
+          "bytesInOutput": 12763
         },
         "src/state/production.ts": {
           "bytesInOutput": 13329
@@ -11563,7 +11589,7 @@
           "bytesInOutput": 4909
         },
         "src/state/semantic-actions.ts": {
-          "bytesInOutput": 34023
+          "bytesInOutput": 34101
         },
         "src/state/semantic-status.ts": {
           "bytesInOutput": 16652
@@ -11575,13 +11601,13 @@
           "bytesInOutput": 26332
         },
         "src/state/status.ts": {
-          "bytesInOutput": 44319
+          "bytesInOutput": 45816
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 43406
         },
         "src/state/transitions.ts": {
-          "bytesInOutput": 21934
+          "bytesInOutput": 21966
         },
         "src/state/workspace-cleanup.ts": {
           "bytesInOutput": 17071

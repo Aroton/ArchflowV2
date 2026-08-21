@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -31,6 +31,23 @@ const gitHead = (workspace: TaskWorkspace): string =>
 
 const reviewCount = (workspace: TaskWorkspace): string =>
   readFileSync(join(workspace.root, "semantic-review-count"), "utf8");
+
+const readTaskState = (workspace: TaskWorkspace): Record<string, unknown> =>
+  JSON.parse(readFileSync(join(workspace.services.authority.task_root, "state.json"), "utf8")) as Record<string, unknown>;
+
+/** Makes the stubbed reviewer fail its dispatch while keeping its preflight answers intact. */
+function breakSemanticReviewDispatch(root: string): () => void {
+  const stub = join(root, "semantic-stub-bin", "codex");
+  const original = readFileSync(stub, "utf8");
+  writeFileSync(stub, `#!/usr/bin/env node
+const argv = process.argv.slice(2);
+if (argv.length === 1 && argv[0] === "--version") process.stdout.write("codex-cli 0.146.0\\n");
+else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logged in using ChatGPT\\n");
+else { process.stderr.write("the reviewer could not complete this dispatch\\n"); process.exit(1); }
+`);
+  chmodSync(stub, 0o755);
+  return () => { writeFileSync(stub, original); chmodSync(stub, 0o755); };
+}
 
 const SOURCE_PATH = "src/example-behavior.ts";
 const SOURCE_BYTES = `export function exampleBehavior(value: number): number {
@@ -372,6 +389,63 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     const triageBoundaryB = await h.status(invocation);
     expect(triageBoundaryB).toEqual(triageBoundaryA);
     expect(triageBoundaryB).toEqual(reviewed.value);
+  });
+
+  it("resumes a mid-review position after a human gate decision overwrote the review entry transition", async () => {
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-impl-gate-interloper",
+      label: "semantic-impl-gate-interloper",
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
+    });
+    workspaces.push(workspace);
+    restorers.push(installSemanticReviewStub(workspace.root, [[]]));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, view } = await consumeImplementationHandoff(workspace, h);
+    const work = writeClientImplementationWork(workspace, view, {
+      source: SOURCE_BYTES, notes: IMPLEMENTATION_NOTES, transcript: TRANSCRIPT_BYTES,
+    });
+
+    const submitted = await h.apply(invocation, view, implementationSubmission(workspace, work.outputs));
+    expect(submitted.ok, JSON.stringify(submitted)).toBe(true);
+    if (!submitted.ok) return;
+    expect(submitted.value.next_action.kind).toBe("review");
+
+    // The review entry boundary commits, then the dispatch fails: the durable position stays at
+    // counter_review/running with review-enter as its last transition.
+    const failingReviewer = breakSemanticReviewDispatch(workspace.root);
+    const failed = await h.apply(invocation, submitted.value);
+    expect(failed.ok).toBe(false);
+    failingReviewer();
+    expect(readTaskState(workspace)).toMatchObject({ step: "counter_review", status: "running" });
+
+    // A human decision may legally land at that position — here the baseline adoption opened by
+    // post-produce drift — and it overwrites the single last_transition slot with its own gate
+    // transition. That must not strand the review.
+    writeFileSync(work.sourceAbsolute, SOURCE_BYTES_REVISED);
+    const drifted = await h.status(invocation);
+    expect(drifted.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    const opened = await h.apply(invocation, drifted, { kind: "gate-summary", summary: "The drifted source should stay as the new baseline." });
+    expect(opened.ok, JSON.stringify(opened)).toBe(true);
+    if (!opened.ok) return;
+    const adopted = await h.apply(invocation, opened.value, {
+      kind: "decision", choice: "keep-current-versions", reason: "The current bytes are the reviewed ones.",
+    });
+    expect(adopted.ok, JSON.stringify(adopted)).toBe(true);
+    if (!adopted.ok) return;
+    expect(readTaskState(workspace)).toMatchObject({
+      step: "counter_review", status: "running", last_transition: { tool: "archflow_gate", operation: "gate" },
+    });
+
+    // The review resumes and dispatches a real counter-review rather than failing forever.
+    const resumed = await h.status(invocation);
+    expect(resumed.next_action.kind).toBe("review");
+    const dispatchesBefore = Number(reviewCount(workspace));
+    const reviewed = await h.apply(invocation, resumed);
+    expect(reviewed.ok, JSON.stringify(reviewed)).toBe(true);
+    if (!reviewed.ok) return;
+    expect(reviewed.value.findings).toEqual([]);
+    expect(reviewed.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    expect(Number(reviewCount(workspace))).toBe(dispatchesBefore + 1);
   });
 
   it("recovers an unrestorable missing projection by re-declaring the deletion in a fresh produce", async () => {

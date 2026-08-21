@@ -25,7 +25,7 @@ import type {
   SnapshotAccountingEntry,
 } from "../contracts/durable-primitives.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
-import type { ProjectResult } from "../contracts/errors.js";
+import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import type { DeclaredInputRef } from "../contracts/fingerprints.js";
 import { parseSafeInteger, type PathSafeId, type SafeCode, type SafeId, type Sha256Digest } from "../contracts/evidence.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
@@ -710,6 +710,31 @@ function identityOf(observation: Extract<SnapshotObservation, { state: "present"
 }
 
 /**
+ * Resolves the commit the caller says it started from to its canonical object id.
+ *
+ * Callers name that commit in whatever form they hold it, and an abbreviated hash is the common
+ * one. Git accepts abbreviations, so an unresolved prefix satisfies every observation here and
+ * only fails much later, when the durable artifact is parsed against the full-length `GitOid`
+ * shape — by then the failure is an opaque internal error with nothing to correct. Resolving up
+ * front makes the artifact name one unambiguous commit and turns an unusable reference into a
+ * contract failure the caller can act on.
+ */
+async function resolveBaseCommit(
+  runner: RootBoundGitRunner,
+  revision: string,
+): Promise<ProjectResult<GitOid>> {
+  try {
+    return Object.freeze({ schema_version: "1", ok: true, value: await resolveCommit(runner, revision) });
+  } catch {
+    return Object.freeze({
+      schema_version: "1",
+      ok: false,
+      error: createProjectError("CONTRACT_INVALID", { issue_code: "base-commit-unresolvable" }),
+    });
+  }
+}
+
+/**
  * Builds the exact caller-supplied implementation artifact from live repository observations.
  * Every identity and digest checked by the server is derived here rather than accepted as input.
  */
@@ -724,7 +749,10 @@ export async function buildImplementationOutput(
     environment: dependencies.environment,
   });
   assertPlainJson(suppliedInput, "implementation output builder input");
-  const input = structuredClone(suppliedInput);
+  const supplied = structuredClone(suppliedInput);
+  const baseCommit = await resolveBaseCommit(dependencies.runner, supplied.base_commit);
+  if (!baseCommit.ok) return baseCommit;
+  const input: ImplementationOutputInput = { ...supplied, base_commit: baseCommit.value };
   if (state.value.task_id !== authority.task_id) throw new TypeError("state task does not match transaction authority");
   if (dependencies.read_retained_task_bytes === undefined) {
     throw new TypeError("retained byte accounting is unavailable");

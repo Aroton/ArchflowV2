@@ -221,6 +221,72 @@ describe("deriveNextAction", () => {
     expect(result.gate_kind).toBe("baseline-adoption");
   });
 
+  it("re-records the work result instead of offering a baseline decision it cannot fix", () => {
+    // The drifted file is one the live work result recorded, so adopting it as the new baseline
+    // for its path would leave the review pinned to bytes that are no longer there.
+    const drifted: ReconciliationFinding = {
+      kind: "projection-mismatch",
+      path: parseRepositoryPathClaim(".archflow/tasks/task-1/phases/1/impl-notes.md"),
+      recorded_digest: D("b"), observed_digest: D("c"), next_action: "open-baseline-adoption-gate",
+    };
+    const result = deriveNextAction(input({
+      state: state({ step: "counter_review", status: "running" }),
+      reconciliation_findings: [drifted],
+      produce_subject_drift: ["phases/1/impl-notes.md"],
+    }));
+    expect(result.code).toBe("run-step");
+    expect(result.step).toBe("produce");
+    expect(result.detail).toContain("phases/1/impl-notes.md");
+  });
+
+  it("re-records the work result after a baseline adoption already silenced the drift", () => {
+    // Reconciliation is consistent — the human adopted the changed bytes for the path — but the
+    // recorded work result still is not those bytes, so the review would keep being unrunnable.
+    const result = deriveNextAction(input({
+      state: state({ step: "counter_review", status: "running" }),
+      reconciliation_findings: [],
+      assessment: assessment("counter_review"),
+      produce_subject_drift: ["phases/1/impl-notes.md"],
+    }));
+    expect(result.code).toBe("run-step");
+    expect(result.step).toBe("produce");
+  });
+
+  it("names the approved planning document this phase cannot re-record", () => {
+    const result = deriveNextAction(input({
+      state: state({ step: "counter_review", status: "running" }),
+      upstream_document_drift: [".archflow/tasks/task-1/design.md"],
+    }));
+    expect(result.code).toBe("inspect-state");
+    expect(result.human_required).toBe(true);
+    expect(result.detail).toContain(".archflow/tasks/task-1/design.md");
+  });
+
+  it("clears the phase's own drift before the upstream document it cannot fix", () => {
+    const result = deriveNextAction(input({
+      state: state({ step: "counter_review", status: "running" }),
+      produce_subject_drift: ["phases/1/impl-notes.md"],
+      upstream_document_drift: [".archflow/tasks/task-1/design.md"],
+    }));
+    expect(result.code).toBe("run-step");
+    expect(result.step).toBe("produce");
+  });
+
+  it("leaves an open human gate ahead of the work-result drift route", () => {
+    const result = deriveNextAction(input({
+      state: state({
+        step: "counter_review", status: "running",
+        open_gate: {
+          gate_id: parsePathSafeId("gate-1"), gate_kind: "baseline-adoption" as const,
+          subject_digest: D("a"), context_digest: D("b"), frozen_state_digest: D("c"),
+          opened_at_revision: parseSafeInteger(4),
+        },
+      }),
+      produce_subject_drift: ["phases/1/impl-notes.md"],
+    }));
+    expect(result.code).toBe("resolve-open-gate");
+  });
+
   it("keeps the restore route for a missing projection with retained bytes", () => {
     const restorable: ReconciliationFinding = {
       kind: "projection-mismatch", path: parseRepositoryPathClaim("src/gone.ts"), recorded_digest: D("a"), next_action: "open-baseline-adoption-gate",

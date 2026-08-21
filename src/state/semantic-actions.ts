@@ -212,6 +212,10 @@ function authenticatedSemanticReviewContinuation(state: TaskStateV1, expectedSub
   } catch {
     throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "semantic-looking review transition has an invalid intent identity");
   }
+  // A human gate can legally land at any position and overwrite the single last_transition slot.
+  // A transition naming a different substep is no evidence about this one, so the review falls
+  // through and runs its remaining substeps under a fresh operation.
+  if (identity.substep !== expectedSubstep) return undefined;
   const expected = expectedSubstep === "review-enter"
     ? { tool: "archflow_state" as const, operation: "record-state-boundary" }
     : { tool: "archflow_counter_review" as const, operation: "counter-review" };
@@ -231,7 +235,8 @@ function authenticatedSemanticTriageContinuation(state: TaskStateV1): Sha256Dige
   let identity: ReturnType<typeof parseSemanticSubstepIntentId>;
   try { identity = parseSemanticSubstepIntentId(transition.intent_id); }
   catch { throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "semantic triage entry has an invalid intent identity"); }
-  if (identity.substep !== "triage-enter" || !authenticateSemanticLastTransition(
+  if (identity.substep !== "triage-enter") return undefined; // an interloping gate transition is not this boundary's evidence
+  if (!authenticateSemanticLastTransition(
     state, identity.operation_digest, identity.substep,
     { tool: "archflow_state", operation: "record-state-boundary", input_fingerprint: state.input_fingerprint },
   )) throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "triage continuation does not authenticate its entry boundary");

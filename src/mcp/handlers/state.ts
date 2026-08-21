@@ -830,10 +830,16 @@ export async function handleState(
             phase_instance: call.input.phase_instance,
             step: call.input.step,
             status: call.input.status,
+            // Mirrors `legalMovement`: a retry of a failed step and any re-opening of the
+            // produce window from elsewhere in the phase both spend an attempt. The produce
+            // door counts whatever the position it leaves — succeeded, failed, or a step
+            // still running whose terminal result cannot be recorded.
             attempt: call.input.phase_instance !== current.value.phase_instance
               ? parseSafeInteger(1)
               : (current.value.status === "failed" && call.input.step === current.value.step) ||
-                  (current.value.status === "succeeded" && call.input.step === "produce")
+                  (call.input.step === "produce" && (
+                    current.value.step !== "produce" || current.value.status === "succeeded"
+                  ))
                 ? parseSafeInteger(current.value.attempt + 1)
                 : current.value.attempt,
             input_fingerprint: call.input.input_fingerprint,

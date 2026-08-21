@@ -37465,10 +37465,63 @@ function produceOwnedTaskDocumentPaths(artifact) {
   const prefix = `.archflow/tasks/${artifact.task_id}/`;
   return Object.freeze([...new Set(artifact.outputs.map((entry) => String(entry.path)).filter((path2) => path2.startsWith(prefix)).map((path2) => parseTaskPathClaim(path2.slice(prefix.length))))].sort((left, right) => left.localeCompare(right)));
 }
+function produceProjectionPins(artifact) {
+  if (artifact.artifact_kind === "document") {
+    return Object.freeze(documentProjectionDescriptors(artifact).map((entry) => Object.freeze({ path: entry.document_path, content_digest: entry.content_digest })));
+  }
+  const owned = new Set(produceOwnedTaskDocumentPaths(artifact));
+  return Object.freeze(artifact.parent_documents.filter((parent) => owned.has(parent.document_path)).map((parent) => Object.freeze({
+    path: parent.document_path,
+    content_digest: parent.content_digest
+  })));
+}
 function produceUpstreamBindingsForSubject(state, artifact) {
   const bindings = expectedProduceUpstreamBindings(state);
   const owned = new Set(produceOwnedTaskDocumentPaths(artifact));
   return Object.freeze(bindings.filter((binding) => !owned.has(binding.path)));
+}
+async function readProduceProjection(runner, authority, subject, artifactPath) {
+  const target = await resolveTaskPath({
+    runner,
+    taskId: authority.task_id,
+    claim: artifactPath,
+    context: authority.context
+  });
+  if (!target.ok) return target;
+  const retainedDigest = "imported_projection" in subject ? subject.imported_projection.path === artifactPath ? subject.imported_projection.content_digest : void 0 : subject.artifact.artifact_kind === "implementation-output" ? subject.artifact.parent_documents.find((candidate) => candidate.document_path === artifactPath)?.content_digest : documentProjectionDescriptors(subject.artifact).find((candidate) => candidate.document_path === artifactPath)?.content_digest;
+  if (retainedDigest === void 0) return fail20(authority.context.phase_instance, "produce-projection-not-retained");
+  let bytes;
+  try {
+    bytes = new Uint8Array(await readFile10(target.value.absolute));
+  } catch {
+    return fail20(authority.context.phase_instance, "produce-projection-unavailable");
+  }
+  const digest9 = sha256Bytes(bytes);
+  if (digest9 !== retainedDigest) {
+    return fail20(authority.context.phase_instance, "produce-projection-not-current");
+  }
+  return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ path: artifactPath, bytes, digest: digest9 }) });
+}
+async function readProduceProjectionSet(runner, authority, subject, selectedPath, excludedPaths = []) {
+  let paths;
+  if ("imported_projection" in subject) {
+    paths = [selectedPath];
+  } else if (subject.artifact.artifact_kind === "implementation-output") {
+    paths = Object.freeze([.../* @__PURE__ */ new Set([
+      selectedPath,
+      ...produceProjectionPins(subject.artifact).map((pin) => pin.path)
+    ])]);
+  } else {
+    const excluded = new Set(excludedPaths);
+    paths = documentProjectionDescriptors(subject.artifact).map((entry) => entry.document_path).filter((path2) => path2 === selectedPath || !excluded.has(path2));
+  }
+  const projections = [];
+  for (const path2 of paths) {
+    const projection = await readProduceProjection(runner, authority, subject, path2);
+    if (!projection.ok) return projection;
+    projections.push(projection.value);
+  }
+  return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze(projections) });
 }
 
 // src/state/evidence-results.ts
@@ -38135,6 +38188,26 @@ function runStepDetail(state, step) {
   if (state.step === step && state.status === "failed") return `Retry the ${step} pipeline step.`;
   return `Run the ${step} pipeline step.`;
 }
+function produceSubjectDriftAction(state, paths) {
+  const shown = paths.slice(0, 5);
+  const listed = shown.join(", ");
+  const rest = paths.length - shown.length;
+  return action(
+    "run-step",
+    `${paths.length === 1 ? "A file" : `${paths.length} files`} this phase's recorded work result covers changed afterwards (${listed}${rest > 0 ? `, and ${rest} more` : ""}). The independent review re-reads them and will not review bytes the result never recorded, and no baseline decision can re-bind a recorded result to different bytes. Re-open the work window and submit a fresh result over the current bytes; the review then covers what is actually there.`,
+    false,
+    state,
+    { step: "produce" }
+  );
+}
+function upstreamDocumentDriftAction(state, paths) {
+  return action(
+    "inspect-state",
+    `${paths.length === 1 ? "An approved planning document" : `${paths.length} approved planning documents`} the independent review reads this phase through changed after approval (${paths.slice(0, 5).join(", ")}). Nothing in this phase can re-record another phase's document, so put the recorded bytes back before continuing; keeping the new ones means reopening the phase that owns them.`,
+    true,
+    state
+  );
+}
 function matchingApproval(input, kind) {
   const subjectDigest = input.subject_digest;
   if (subjectDigest !== void 0 && (input.authenticated_approvals ?? []).some((approval) => approval.gate_kind === kind && approval.subject_digest === subjectDigest)) {
@@ -38280,6 +38353,12 @@ function deriveNextAction(input) {
           gate_kind: state.open_gate.gate_kind
         });
       }
+      if ((input.produce_subject_drift ?? []).length > 0) {
+        return produceSubjectDriftAction(state, input.produce_subject_drift);
+      }
+      if ((input.upstream_document_drift ?? []).length > 0) {
+        return upstreamDocumentDriftAction(state, input.upstream_document_drift);
+      }
       const missing = (input.reconciliation_findings ?? []).filter(
         (candidate) => candidate.kind === "projection-mismatch" && candidate.observed_digest === void 0
       );
@@ -38348,6 +38427,12 @@ function deriveNextAction(input) {
   }
   if (state.step === "produce" && state.status !== "succeeded") {
     return action("run-step", runStepDetail(state, "produce"), false, state, { step: "produce" });
+  }
+  if ((input.produce_subject_drift ?? []).length > 0) {
+    return produceSubjectDriftAction(state, input.produce_subject_drift);
+  }
+  if ((input.upstream_document_drift ?? []).length > 0) {
+    return upstreamDocumentDriftAction(state, input.upstream_document_drift);
   }
   const next = input.assessment?.next;
   if (next !== void 0) {
@@ -39381,6 +39466,37 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       dispositions: Object.freeze(dispositions)
     });
   }
+  const produceSubjectDrift = [];
+  const upstreamDocumentDrift = [];
+  if (!midProduce && produceSubject !== void 0 && assessment?.next === "counter_review") {
+    const repositoryPath = (claim) => `.archflow/tasks/${state.task_id}/${claim}`;
+    try {
+      for (const pin of produceProjectionPins(produceSubject.artifact)) {
+        const projection = await readProduceProjection(
+          dependencies.runner,
+          authority,
+          produceSubject,
+          pin.path
+        );
+        if (!projection.ok) produceSubjectDrift.push(repositoryPath(pin.path));
+      }
+      const coProduced = produceOwnedTaskDocumentPaths(produceSubject.artifact);
+      for (const binding of produceUpstreamBindingsForSubject(state, produceSubject.artifact)) {
+        const upstream = await loadProduceUpstreamSubject(dependencies, authority, state, binding);
+        if (!upstream.ok) continue;
+        const projections = await readProduceProjectionSet(
+          dependencies.runner,
+          authority,
+          upstream.value,
+          binding.path,
+          coProduced
+        );
+        if (!projections.ok) upstreamDocumentDrift.push(repositoryPath(binding.path));
+      }
+    } catch {
+      blockers.push("review-projection-unavailable");
+    }
+  }
   let statusReconciliation;
   if (reconciliation !== void 0) {
     const partitioned = partitionExpectedReentryEdits(
@@ -39515,6 +39631,8 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       ...gateBindingBlocker === void 0 ? [] : [gateBindingBlocker]
     ]),
     ...assessment === void 0 ? {} : { assessment },
+    ...produceSubjectDrift.length === 0 ? {} : { produce_subject_drift: Object.freeze([...produceSubjectDrift]) },
+    ...upstreamDocumentDrift.length === 0 ? {} : { upstream_document_drift: Object.freeze([...upstreamDocumentDrift]) },
     evidence_available: evidence.available,
     ...subjectDigest === void 0 ? {} : { subject_digest: subjectDigest },
     authenticated_approvals: approvalFacts,
