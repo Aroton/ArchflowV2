@@ -1,8 +1,10 @@
 import { z } from "zod";
 
-import type { TaskStateV1 } from "./durable-state.js";
+import { configRouteSchema, type ModelRouteV1 } from "./config.js";
+import type { ConfigChangeEntry, TaskStateV1 } from "./durable-state.js";
 import type { Sha256Digest, TaskSlug } from "./evidence.js";
 import { sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
+import type { RouteOverrideDeclaration } from "./mcp-tools.js";
 import type { PlainJsonValue } from "./plain-json.js";
 import { assertPlainJson } from "./plain-json.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
@@ -93,10 +95,10 @@ export type WorkflowReopenImpactV1 = {
 
 export const SEMANTIC_ACTION_KINDS = [
   "initialize-task", "begin-work", "submit-work", "review", "triage", "revise", "reopen",
-  "open-waiver", "decide", "commit", "start-next-skill", "finish-task", "inspect", "none",
+  "open-waiver", "decide", "refresh-milestone-baseline", "commit", "start-next-skill", "finish-task", "inspect", "none",
 ] as const;
 export type SemanticActionKindV1 = (typeof SEMANTIC_ACTION_KINDS)[number];
-export const APPLY_SUBMISSION_KINDS = ["none", "task-ask", "work-result", "triage", "gate-summary", "reopening-request", "decision"] as const;
+export const APPLY_SUBMISSION_KINDS = ["none", "task-ask", "work-result", "triage", "gate-summary", "reopening-request", "decision", "review-dispatch"] as const;
 export type ApplySubmissionKindV1 = (typeof APPLY_SUBMISSION_KINDS)[number];
 
 export type SemanticNextActionV1 = {
@@ -128,6 +130,11 @@ export type WorkflowViewV1 = {
   readonly findings?: readonly PublicFindingV1[];
   readonly review_context?: PublicReviewContextV1;
   readonly presentation?: HumanPresentationV1;
+  /**
+   * Informational field-level config changes since the last config-observing commit, projected
+   * verbatim from the status notice. Never changes the condition or the next action.
+   */
+  readonly config_change?: readonly ConfigChangeEntry[];
 };
 
 export type HumanRevisionDeclarationV1 = {
@@ -153,7 +160,8 @@ export type ApplySubmissionV1 =
   | { readonly kind: "work-result"; readonly outcome: "failed"; readonly reason: string }
   | { readonly kind: "triage"; readonly dispositions: readonly PublicTriageDispositionV1[] }
   | { readonly kind: "gate-summary"; readonly summary: string }
-  | { readonly kind: "decision"; readonly choice: string; readonly reason: string; readonly option_rationale?: string };
+  | { readonly kind: "decision"; readonly choice: string; readonly reason: string; readonly option_rationale?: string }
+  | { readonly kind: "review-dispatch"; readonly route_override: RouteOverrideDeclaration };
 
 export type ArchFlowStatusInputV1 = {
   readonly schema_version: "1";
@@ -204,7 +212,7 @@ export type SemanticActionOfferV1 = {
 export const SEMANTIC_SUBSTEPS = [
   "initialize-task", "begin-work", "submit-work", "review-enter", "review-run", "review-empty-triage",
   "triage-enter", "triage", "revise-enter", "reopen", "open-gate", "open-waiver", "decision-archive",
-  "decision-settle", "start-next-skill", "finish-task",
+  "decision-settle", "refresh-milestone-baseline", "start-next-skill", "finish-task",
 ] as const;
 export type SemanticSubstepV1 = (typeof SEMANTIC_SUBSTEPS)[number];
 
@@ -282,7 +290,21 @@ const commitInstructionV1Schema = z.object({ paths: z.array(nonBlank).min(1), me
   }
 });
 export const semanticNextActionV1Schema = z.object({ kind: z.enum(SEMANTIC_ACTION_KINDS), instruction: nonBlank, offer: z.string().regex(/^af1_[0-9a-f]{64}$/u).optional(), expected_submission: z.enum(APPLY_SUBMISSION_KINDS).optional(), skill: nonBlank.optional(), skill_args: z.array(z.string()).optional(), commit: commitInstructionV1Schema.optional(), reopen: reopenImpactV1Schema.optional() }).strict();
-export const workflowViewV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, condition: z.enum(WORKFLOW_CONDITIONS), headline: nonBlank, detail: nonBlank, position: workflowPositionV1Schema.optional(), resources: z.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: z.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), presentation: humanPresentationV1Schema.optional() }).strict() as unknown as z.ZodType<WorkflowViewV1>;
+/**
+ * This document's own plain-json value instance, shared by both sides of a config-change entry —
+ * the same self-containment rule as `task-state`'s and `intent-receipt`'s `plainJson` defs: one
+ * instance, registered once, so every appearance `$ref`s it instead of minting shared defs.
+ */
+export const configChangeValueV1Schema = z.json();
+
+/** Mirrors `ConfigChangeEntry` (durable-state) for the view's informational `config_change` field. */
+export const configChangeEntryV1Schema = z.object({
+  path: z.string(),
+  before: configChangeValueV1Schema.optional(),
+  after: configChangeValueV1Schema.optional(),
+}).strict() as unknown as z.ZodType<ConfigChangeEntry>;
+
+export const workflowViewV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, condition: z.enum(WORKFLOW_CONDITIONS), headline: nonBlank, detail: nonBlank, position: workflowPositionV1Schema.optional(), resources: z.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: z.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), presentation: humanPresentationV1Schema.optional(), config_change: z.array(configChangeEntryV1Schema).optional() }).strict() as unknown as z.ZodType<WorkflowViewV1>;
 
 export const semanticErrorSummaryV1Schema = z.object({
   code: nonBlank.max(128),
@@ -298,6 +320,20 @@ const humanRevisionDeclarationV1Schema = z.object({ classification: z.enum(["sim
   if (revision.user_override?.agent_classification === revision.classification) context.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
 });
 const implementationFactsV1Schema = z.object({ base_commit: nonBlank, outputs: z.array(nonBlank), restore_targets: z.array(nonBlank), declared_inputs: z.array(z.object({ input_id: nonBlank, path: nonBlank }).strict()) }).strict();
+// A parentless clone, for the same reason as mcp-tools' `overrideRoute`: the shared instance is
+// registered as `config#/$defs/route`, and the advertised catalogue carries no config document, so
+// a cross-document reference to it would be unresolvable there. The clone inlines inside this
+// document's `applySubmission` def instead.
+const overrideRoute = configRouteSchema.clone(configRouteSchema.def) as z.ZodType<ModelRouteV1>;
+const routeOverrideDeclarationV1Schema = z.object({
+  reason: boundedText,
+  "counter-reviewer": overrideRoute.optional(),
+  adjudicator: overrideRoute.optional(),
+}).strict().superRefine((override, context) => {
+  if (override["counter-reviewer"] === undefined && override.adjudicator === undefined) {
+    context.addIssue({ code: "custom", message: "route_override must name counter-reviewer, adjudicator, or both" });
+  }
+});
 export const applySubmissionV1Schema = z.union([
   z.object({ kind: z.literal("task-ask"), text: boundedText }).strict(),
   z.object({ kind: z.literal("reopening-request"), request: boundedText }).strict(),
@@ -306,6 +342,7 @@ export const applySubmissionV1Schema = z.union([
   z.object({ kind: z.literal("triage"), dispositions: z.array(triageDispositionV1Schema) }).strict(),
   z.object({ kind: z.literal("gate-summary"), summary: boundedText }).strict(),
   z.object({ kind: z.literal("decision"), choice: nonBlank, reason: boundedText, option_rationale: boundedText.optional() }).strict(),
+  z.object({ kind: z.literal("review-dispatch"), route_override: routeOverrideDeclarationV1Schema }).strict(),
 ]) as unknown as z.ZodType<ApplySubmissionV1>;
 
 /** Plain object root; all variants are nested below `invocation` and `action.submission`. */

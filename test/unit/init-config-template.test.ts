@@ -32,7 +32,13 @@ function expectOrientation(config: ConfigV1, hostFamily: "claude" | "codex"): vo
 
 describe("config template", () => {
   it("parses and resolves every active claude-host route", async () => {
-    expectOrientation(parseConfigYaml(await template(), "config.template.yaml"), "claude");
+    const config = parseConfigYaml(await template(), "config.template.yaml");
+    expectOrientation(config, "claude");
+    expect(config.approval_rules).toEqual({
+      subjects: ["prd", "design"],
+      content: [{ paths: ["**/*.sql"] }],
+    });
+    expect(config.approval_rules?.subjects).not.toContain("phase-design");
   });
 
   it("documents a parseable codex-host orientation with the families swapped", async () => {

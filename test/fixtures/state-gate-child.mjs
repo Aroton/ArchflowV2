@@ -54,7 +54,7 @@ try {
   if (state.kind !== "canonical") throw new Error("gate child state unavailable");
   const subject = {
     schema_version: "1", workflow_digest: state.document.value.workflow_digest,
-    config_digest: state.document.value.config_digest, constitution_digest: state.document.value.constitution_digest,
+    constitution_digest: state.document.value.constitution_digest,
     artifact_identities: [], upstream_identities: [], rubric_digest: "7".repeat(64),
     phase_instance: phaseInstance, declared_inputs: [],
   };
@@ -137,7 +137,7 @@ try {
   };
   const dependencies = {
     runner: discovered.value, environment: environment.value, atomic: wrappedAtomic, lock: lockModule.createTaskLock(),
-    resolve_input_fingerprint: async () => ({ schema_version: "1", ok: true, value: subject }),
+    resolve_input_fingerprint: async () => ({ schema_version: "1", ok: true, value: { subject, fingerprint: inputFingerprint } }),
     resolve_gate_reentry_fingerprint: async () => ({
       schema_version: "1",
       ok: true,

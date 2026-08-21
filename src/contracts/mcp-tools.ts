@@ -61,7 +61,18 @@ export type PlanningRestartInput = CommonToolInput & {
   readonly artifact?: never;
   readonly human_revision?: never;
 };
-export type StateInput = StateBoundaryInput | PlanningRestartInput;
+export type RefreshMilestoneBaselineInput = CommonToolInput & {
+  readonly operation: "refresh_milestone_baseline";
+  readonly phase_instance: PhaseInstanceId;
+  readonly step: "triage";
+  readonly status: "succeeded";
+  readonly artifact?: never;
+  readonly human_revision?: never;
+  readonly target_phase_instance?: never;
+  readonly reason?: never;
+  readonly ask_base_digest?: never;
+};
+export type StateInput = StateBoundaryInput | PlanningRestartInput | RefreshMilestoneBaselineInput;
 // Every success value optionally echoes the request_digest the server recorded for the call, so
 // a client can compare one string against its envelope output to prove the arguments arrived
 // untranscribed. Optional in the contract because receipts recorded before the echo existed must
@@ -159,7 +170,7 @@ export const stateInputSchema = z.object({
   status: z.enum(["running", "succeeded", "failed"]),
   artifact: durableArtifact.optional(),
   human_revision: humanRevisionDeclarationSchema.optional(),
-  operation: z.literal("planning_restart").optional(),
+  operation: z.enum(["planning_restart", "refresh_milestone_baseline"]).optional(),
   target_phase_instance: phase.optional(),
   reason: text.optional(),
   ask_base_digest: digest.optional(),
@@ -171,6 +182,13 @@ export const stateInputSchema = z.object({
     if (input.artifact !== undefined || input.human_revision !== undefined) context.addIssue({ code: "custom", path: ["artifact"], message: "planning_restart cannot carry an artifact or human revision" });
     if (input.target_phase_instance === "prd" && input.ask_base_digest === undefined) context.addIssue({ code: "custom", path: ["ask_base_digest"], message: "PRD planning_restart requires ask_base_digest" });
     if (input.target_phase_instance !== "prd" && input.ask_base_digest !== undefined) context.addIssue({ code: "custom", path: ["ask_base_digest"], message: "ask_base_digest is PRD-only" });
+    return;
+  }
+  if (input.operation === "refresh_milestone_baseline") {
+    if (input.step !== "triage" || input.status !== "succeeded") context.addIssue({ code: "custom", path: ["step"], message: "refresh_milestone_baseline requires triage/succeeded" });
+    if (input.artifact !== undefined || input.human_revision !== undefined || input.target_phase_instance !== undefined || input.reason !== undefined || input.ask_base_digest !== undefined) {
+      context.addIssue({ code: "custom", path: ["operation"], message: "refresh_milestone_baseline carries no artifact, revision, restart target, reason, or ask digest" });
+    }
     return;
   }
   if (input.target_phase_instance !== undefined || input.reason !== undefined || input.ask_base_digest !== undefined) context.addIssue({ code: "custom", path: ["operation"], message: "restart fields require planning_restart" });

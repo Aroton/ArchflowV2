@@ -457,19 +457,49 @@ describe.skipIf(!enabled)("installed terminal journeys", () => {
     expect(adopted).toMatchObject({ ok: true, value: { revision: 1 } });
 
     const statePath = join(root, ".archflow", "tasks", "normal-task", "state.json");
-    const revision = JSON.parse(readFileSync(statePath, "utf8")).revision;
+    const before = JSON.parse(readFileSync(statePath, "utf8"));
     const taskConfig = join(root, ".archflow", "tasks", "normal-task", "config.yaml");
-    writeFileSync(taskConfig, `${readFileSync(taskConfig, "utf8")}# byte-level pin mismatch\n`);
-    const mismatch = await mcpState(root, {
-      schema_version: "1", task_id: "normal-task", intent_id: "installed-config-mismatch",
-      expected_revision: revision, input_fingerprint: "0".repeat(64), phase_instance: "prd",
+    // A mid-task config edit is an ordinary input change now: the next transaction accepts it,
+    // records the edited parsed config as `last_seen_config`, and status reports the field-level
+    // change until that transaction lands.
+    writeFileSync(taskConfig, `${readFileSync(taskConfig, "utf8")}max_attempts: 9\n`);
+    const noticed = local(root, "normal-task", "status");
+    expect(noticed.value).toMatchObject({
+      ok: true,
+      value: { config: { verified: true }, config_change: [{ path: "max_attempts", after: 9 }] },
+    });
+    const accepted = await mcpState(root, {
+      schema_version: "1", task_id: "normal-task", intent_id: "installed-config-edit",
+      expected_revision: before.revision, input_fingerprint: before.input_fingerprint, phase_instance: "prd",
       step: "produce", status: "running",
-    }, "installed-config-mismatch");
-    expect(mismatch).toMatchObject({ ok: false, error: { code: "PINNED_CONFIG_MISMATCH" } });
+    }, "installed-config-edit");
+    expect(accepted).toMatchObject({ ok: true, value: { revision: before.revision + 1 } });
+    const after = JSON.parse(readFileSync(statePath, "utf8"));
+    expect(after.last_seen_config).toMatchObject({ max_attempts: 9 });
+    const settled = local(root, "normal-task", "status");
+    expect(settled.value).toMatchObject({ ok: true, value: { config: { verified: true } } });
+    expect(settled.value.value).not.toHaveProperty("config_change");
+  }, TIMEOUT);
+
+  it("records a transmitted task-initialization config digest as creation-time provenance at the installed MCP boundary", async () => {
+    const root = makeRepository("initialization-artifact");
+    expect(local(root, undefined, "init").value).toMatchObject({ ok: true });
+    commitPolicy(root);
+    const task = "mismatch-artifact";
+    const staged = stagedInitialization(root, task);
+    // The creation-time config digest is provenance, never compared against live bytes (the
+    // byte-pin comparison retired with config-as-editable-input): a task-initialization whose
+    // config digest differs from the live bytes is adopted, and the transmitted value becomes
+    // the recorded provenance. Post-adoption drift between state and initialization artifact
+    // remains pinned by the durable semantics agreement checks.
+    const mutated = { ...staged, config_digest: "0".repeat(64) };
+    const adopted = await adopt(root, task, staged, "installed-artifact-mismatch", mutated);
+    expect(adopted).toMatchObject({ ok: true, value: { revision: 1 } });
+    expect(JSON.parse(readFileSync(join(root, ".archflow", "tasks", task, "state.json"), "utf8")))
+      .toMatchObject({ config_digest: "0".repeat(64) });
   }, TIMEOUT);
 
   it.each([
-    ["artifact", (artifact: any) => ({ ...artifact, config_digest: "0".repeat(64) }), "PINNED_CONFIG_MISMATCH"],
     ["commit", (artifact: any) => ({ ...artifact, code_baseline_commit: "f".repeat(40) }), "CONTRACT_INVALID"],
   ] as const)("rejects a mismatched task-initialization %s at the installed MCP boundary", async (_kind, mutate, expectedCode) => {
     const root = makeRepository(`initialization-${_kind}`);

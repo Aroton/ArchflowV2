@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { canonicalDocument, canonicalJsonDigest, gitBlobOid, parseCanonicalDocument, sha256Bytes, type CanonicalDocument } from "../../src/contracts/canonical.js";
+import { parseConfigYaml, type TaskConfigSnapshot } from "../../src/contracts/config.js";
 import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
 import type { ResultManifestV1, TriageArtifactV1 } from "../../src/contracts/durable-result-manifest.js";
 import type { IntentReceiptV1 } from "../../src/contracts/durable-intent.js";
@@ -78,7 +79,6 @@ const D = (character: string) => parseSha256Digest(character.repeat(64));
 const SUBJECT = {
   schema_version: "1",
   workflow_digest: D("5"),
-  config_digest: D("4"),
   constitution_digest: D("6"),
   artifact_identities: [],
   upstream_identities: [],
@@ -87,6 +87,12 @@ const SUBJECT = {
   declared_inputs: [],
 } as unknown as InputFingerprintSubject;
 const FINGERPRINT = computeInputFingerprint(SUBJECT);
+const LIVE_CONFIG_BYTES = new TextEncoder().encode('schema_version: "1"\nroles: {}\n');
+const LIVE_CONFIG = {
+  bytes: LIVE_CONFIG_BYTES,
+  digest: sha256Bytes(LIVE_CONFIG_BYTES),
+  parsed: parseConfigYaml(new TextDecoder().decode(LIVE_CONFIG_BYTES), "task config") as TaskConfigSnapshot,
+} as const;
 
 type StateCall = Extract<ParsedToolCall, { readonly name: "archflow_state" }>;
 
@@ -202,13 +208,13 @@ async function harness(): Promise<Harness> {
     resolve_input_fingerprint: async () => {
       counts.fingerprint += 1;
       events.push("fingerprint");
-      return { schema_version: "1", ok: true, value: structuredClone(SUBJECT) };
+      return { schema_version: "1", ok: true, value: { subject: structuredClone(SUBJECT), fingerprint: FINGERPRINT } };
     },
     read_state: async () => ({ kind: "canonical", document: value.state }),
     read_config: async () => {
       counts.config += 1;
       events.push("config");
-      return { kind: "valid", snapshot: { bytes: new Uint8Array(), digest: D("4") } };
+      return { kind: "valid", snapshot: LIVE_CONFIG };
     },
     read_receipt: async () => {
       counts.receipt += 1;
@@ -1257,7 +1263,7 @@ describe("mature state transaction kernel", () => {
     },
   );
 
-  it("pins state/config/fingerprint precedence and never prepares rejected requests", async () => {
+  it("pins state/fingerprint precedence, never prepares rejected requests, and accepts an edited config", async () => {
     const h = await harness();
     const parsed = call(6);
     h.dependencies = { ...h.dependencies, read_receipt: async () => ({ kind: "unreadable" }) };
@@ -1266,13 +1272,22 @@ describe("mature state transaction kernel", () => {
     expect(h.counts.config).toBe(0);
     expect(h.counts.prepare).toBe(0);
 
+    // A config whose bytes differ from the recorded creation-time digest is an ordinary editable
+    // input: the transaction still prepares and commits, and the committed state records the
+    // edited config as the new `last_seen_config` baseline for the change notice.
+    const editedBytes = new TextEncoder().encode('schema_version: "1"\nroles: {}\nmax_attempts: 4\n');
+    const editedConfig = {
+      bytes: editedBytes,
+      digest: sha256Bytes(editedBytes),
+      parsed: parseConfigYaml(new TextDecoder().decode(editedBytes), "task config") as TaskConfigSnapshot,
+    } as const;
     const h2 = await harness();
-    h2.dependencies = { ...h2.dependencies, read_config: async () => ({ kind: "valid", snapshot: { bytes: new Uint8Array(), digest: D("9") } }) };
+    h2.dependencies = { ...h2.dependencies, read_config: async () => ({ kind: "valid", snapshot: editedConfig }) };
     const current = call(7);
     const drift = await runStateTransaction(h2.dependencies, request(h2.authority, current), preparer(h2, current));
-    expect(drift.ok ? undefined : drift.error.code).toBe("PINNED_CONFIG_MISMATCH");
-    expect(h2.counts.fingerprint).toBe(0);
-    expect(h2.counts.prepare).toBe(0);
+    expect(drift.ok, drift.ok ? undefined : JSON.stringify(drift.error)).toBe(true);
+    expect(h2.counts.prepare).toBe(1);
+    expect(h2.state.value.last_seen_config).toEqual(editedConfig.parsed);
   });
 
   it("rejects malformed plans and preserved-pin changes before either write", async () => {

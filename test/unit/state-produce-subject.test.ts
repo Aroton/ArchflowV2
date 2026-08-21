@@ -214,6 +214,76 @@ describe("retained produce review material", () => {
     expect(loaded).toMatchObject({ ok: true, value: { artifact_digest: newDigest, artifact: { phase_instance: "phase-design-2" } } });
   });
 
+  it("refuses settlement-only retained manifest ownership before and after a restart", async () => {
+    const taskId = parseTaskSlug("demo");
+    const designBytes = new TextEncoder().encode("# Architecture\n");
+    const design: DocumentArtifactV1 = {
+      schema_version: "1", artifact_kind: "document", task_id: taskId, phase_instance: encodePhaseInstance({ kind: "design" }),
+      step: "produce", document_path: parseTaskPathClaim("design.md"), path_class: "document",
+      byte_count: parseSafeInteger(designBytes.byteLength), content_digest: sha256Bytes(designBytes),
+      declared_inputs: [], input_fingerprint: parseSha256Digest("1".repeat(64)),
+      snapshot_digest: parseSha256Digest("2".repeat(64)), projection_target: ".archflow/tasks/demo/design.md" as never,
+    };
+    const digest = canonicalJsonDigest(design);
+    const reference = { phase_instance: "design", step: "produce", result_id: "design-result", result_digest: "4".repeat(64), input_fingerprint: "1".repeat(64) } as TaskStateV1["authoritative_results"][number];
+    const retainedManifest = {
+      manifest: { value: {
+        source_artifact: design, artifact_digest: digest,
+        accounting: { measured_at_revision: parseSafeInteger(4) }, projections: [], outputs: [],
+      } },
+    };
+    const dependencies = {
+      runner: {} as never,
+      load_retained_manifest: async () => ({ schema_version: "1" as const, ok: true as const, value: retainedManifest as never }),
+    };
+    const binding = {
+      phase_instance: encodePhaseInstance({ kind: "design" }), path: parseTaskPathClaim("design.md"), artifact_kind: "design" as const,
+    };
+    const receipt = {
+      task_id: taskId, phase_instance: encodePhaseInstance({ kind: "design" }), step: "triage" as const,
+      subject_digest: digest, conclusion: { wait: false, match: null } as const,
+      config_digest: parseSha256Digest("7".repeat(64)), settled_at_revision: parseSafeInteger(4),
+    };
+
+    // A wait:false settlement is evaluation evidence only and cannot own an upstream path.
+    const owned = await loadProduceUpstreamSubject(
+      dependencies, {} as TransactionAuthority,
+      { task_id: taskId, phase_instance: "phase-impl-2", authoritative_results: [reference], approvals: [], rule_settlements: [receipt] } as unknown as TaskStateV1,
+      binding,
+    );
+    expect(owned).toMatchObject({ ok: false, error: { diagnostic: { parameters: { issue_code: "upstream-approval-missing" } } } });
+
+    const waiting = await loadProduceUpstreamSubject(
+      dependencies, {} as TransactionAuthority,
+      {
+        task_id: taskId, phase_instance: "phase-impl-2", authoritative_results: [reference], approvals: [],
+        rule_settlements: [{
+          ...receipt,
+          conclusion: { wait: true, match: { kind: "subject", subject: "design" } },
+        }],
+      } as unknown as TaskStateV1,
+      binding,
+    );
+    expect(waiting).toMatchObject({ ok: false, error: { diagnostic: { parameters: { issue_code: "upstream-approval-missing" } } } });
+
+    // A restart does not change that trust boundary.
+    const superseded = await loadProduceUpstreamSubject(
+      dependencies, {} as TransactionAuthority,
+      {
+        task_id: taskId, phase_instance: "phase-impl-2", authoritative_results: [reference], approvals: [],
+        rule_settlements: [receipt],
+        restart_history: [{
+          restart_id: "restart-1", source_phase_instance: "phase-impl-2",
+          target_phase_instance: encodePhaseInstance({ kind: "design" }), reason: "reconsider",
+          restarted_at_revision: parseSafeInteger(6), superseded_results: [], cleared_waivers: [],
+          human_provenance: {} as never,
+        } as never],
+      } as unknown as TaskStateV1,
+      binding,
+    );
+    expect(superseded).toMatchObject({ ok: false, error: { diagnostic: { parameters: { issue_code: "upstream-approval-missing" } } } });
+  });
+
   it("does not reintroduce a co-produced phase design through a sibling binding's compound owner", async () => {
     const repository = createTempRepository({ label: "co-produced-upstream-owner" });
     const taskId = parseTaskSlug("demo");

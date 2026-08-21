@@ -39,7 +39,7 @@ import { reconcileCurrentAuthority } from "./reconciliation.js";
 import { discoverReconciliationInput } from "./reconciliation-discovery.js";
 import { canonicalDocument } from "../contracts/canonical.js";
 import type { ProductionServices } from "./production.js";
-import { resolvePinnedConstitution } from "./constitution.js";
+import { authenticateRuleAcceptancePolicy, resolvePinnedConstitution } from "./constitution.js";
 import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "./gate-approvals.js";
 import { loadLegacyImportInitialization } from "./legacy-import-resume.js";
 /** The artifact-kind each planning phase's artifact-approval gate approves. */
@@ -52,12 +52,17 @@ export const APPROVAL_ARTIFACT_KINDS = {
 import { baselineAdoptionInputFromFindings, buildCommitAuthorizationInput, buildDesignApprovalInput, computeTaskStatus, currentApprovedUpstreams, currentReviewPredecessor, currentTargetRef, pendingAdjudicationGate } from "./status.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { legalRunStepStatus } from "./transitions.js";
-import { authenticatedApprovalIsEligibleAfterLatestRestart } from "./restart-authority.js";
+import {
+  acceptedNoWaitSettlement,
+  authenticatedApprovalIsEligibleAfterLatestRestart,
+  latestEligibleRuleSettlement,
+} from "./restart-authority.js";
 import { assessCurrentEvidence, DEFAULT_MAX_ATTEMPTS } from "../review/fixed-point.js";
 import { computeCallEnvelope, type CallEnvelope } from "../local/call-envelope.js";
 import { planningRestartTarget, semanticPlanningRestartId } from "./planning-restart.js";
 import { resolveTaskPath } from "../repository/paths.js";
 import { derivePendingWaiverRequest } from "./pending-waiver.js";
+import { approvalRuleGateSummary } from "./approval-rules.js";
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 const fail = <T = never>(error: ProjectError): ProjectResult<T> =>
@@ -66,6 +71,7 @@ const fail = <T = never>(error: ProjectError): ProjectResult<T> =>
 export const BUILD_REQUEST_KINDS = Object.freeze([
   "initialize", "produce", "failed", "running", "triage",
   "counter-review", "gate", "advance", "planning-restart", "waiver",
+  "refresh-milestone-baseline",
 ] as const);
 export type BuildRequestKind = typeof BUILD_REQUEST_KINDS[number];
 
@@ -555,6 +561,12 @@ async function composeGate(
   }
   const subject = await loadCurrentProduceSubject(services.dependencies, state);
   if (!subject.ok) return subject;
+  const settledRule = latestEligibleRuleSettlement(
+    state, subject.value.artifact_digest, state.phase_instance,
+  );
+  const approvalSummary = settledRule?.conclusion.wait === true
+    ? approvalRuleGateSummary(summary, settledRule.conclusion.match)
+    : summary;
   const loadRetainedManifest = services.dependencies.load_retained_manifest;
   if (loadRetainedManifest === undefined) throw new TypeError("retained evidence loading is unavailable");
   const loaded = await loadRetainedEvidence(
@@ -655,6 +667,17 @@ async function composeGate(
       : undefined;
     if (migrationAuditContext === undefined) return transitionInvalid(state, "migration-audit-gate");
   }
+  const settlementPolicy = constitution.ok
+    ? authenticateRuleAcceptancePolicy(state, constitution.value)
+    : undefined;
+  const acceptedSettlement = settlementPolicy === undefined
+    ? undefined
+    : acceptedNoWaitSettlement(
+      settlementPolicy,
+      state,
+      subject.value.artifact_digest,
+      subject.value.artifact.phase_instance,
+    );
 
   let input: Record<string, PlainJsonValue>;
   if (exhaustion !== undefined) {
@@ -667,6 +690,16 @@ async function composeGate(
       kind: "attempts-exhausted",
       context: { ...exhaustion, step: state.step },
     };
+  } else if (pendingGate !== undefined) {
+    input = {
+      ...mechanicalInput(services, state, intentId),
+      phase_instance: state.phase_instance,
+      summary,
+      subject_digest: pendingGate.subject_digest,
+      current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
+      kind: pendingGate.kind,
+      context: pendingGate.context as unknown as PlainJsonValue,
+    };
   } else if (migrationAuditRequired) {
     input = {
       ...mechanicalInput(services, state, intentId),
@@ -677,27 +710,21 @@ async function composeGate(
       kind: "migration-audit",
       context: migrationAuditContext as unknown as PlainJsonValue,
     };
+  } else if (acceptedSettlement !== undefined) {
+    // Every exception gate above remains human-only. Only the now-unnecessary ordinary phase gate
+    // is refused when the exact reviewed no-wait settlement already supplies advancement authority.
+    return transitionInvalid(state, `${gateKind}-gate-not-required`);
   } else if (gateKind === "design-approval") {
     const target = await currentTargetRef(services.dependencies);
     const approval = await buildDesignApprovalInput(services.dependencies, state, loaded.value, target);
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
-      summary,
+      summary: approvalSummary,
       subject_digest: subject.value.artifact_digest,
       current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
       kind: "design-approval",
       context: approval.context as unknown as PlainJsonValue,
-    };
-  } else if (pendingGate !== undefined) {
-    input = {
-      ...mechanicalInput(services, state, intentId),
-      phase_instance: state.phase_instance,
-      summary,
-      subject_digest: pendingGate.subject_digest,
-      current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
-      kind: pendingGate.kind,
-      context: pendingGate.context as unknown as PlainJsonValue,
     };
   } else if (gateKind === "commit-authorization") {
     const target = await currentTargetRef(services.dependencies);
@@ -710,7 +737,7 @@ async function composeGate(
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
-      summary,
+      summary: approvalSummary,
       subject_digest: authorization.subject_digest,
       current_evidence: authorization.current_evidence as unknown as PlainJsonValue,
       kind: "commit-authorization",
@@ -720,7 +747,7 @@ async function composeGate(
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
-      summary,
+      summary: approvalSummary,
       subject_digest: subject.value.artifact_digest,
       current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
       kind: "artifact-approval",
@@ -757,6 +784,30 @@ async function composeAdvance(
       phase_instance: next.target_phase_instance,
       step: completing ? state.step : "produce",
       status: completing ? state.status : "running",
+    },
+  });
+}
+
+/** Composes the input-free, server-proven refresh of an unchanged design settlement baseline. */
+async function composeRefreshMilestoneBaseline(
+  services: ProductionServices,
+  state: TaskStateV1,
+  intentId: string,
+): Promise<ProjectResult<CallEnvelope>> {
+  const computed = await computeTaskStatus(services.dependencies, services.authority);
+  if (!computed.ok) return computed;
+  if (computed.value.next_action.code !== "refresh-milestone-baseline" ||
+      computed.value.revision !== state.revision) {
+    return transitionInvalid(state, "refresh-milestone-baseline");
+  }
+  return computeCallEnvelope(services, {
+    tool: "archflow_state",
+    input: {
+      ...mechanicalInput(services, state, intentId),
+      phase_instance: state.phase_instance,
+      step: state.step,
+      status: state.status,
+      operation: "refresh_milestone_baseline",
     },
   });
 }
@@ -916,6 +967,10 @@ export async function composeRequest(
     }
     case "waiver": {
       const composed = await composePendingWaiverRequest(services, state, intentId, snapshot);
+      return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+    }
+    case "refresh-milestone-baseline": {
+      const composed = await composeRefreshMilestoneBaseline(services, state, intentId);
       return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
     }
     default:

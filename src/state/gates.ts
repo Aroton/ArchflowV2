@@ -2,7 +2,6 @@ import { isDeepStrictEqual } from "node:util";
 
 import { canonicalDocument, canonicalJsonDigest, sha256Bytes, type CanonicalDocument } from "../contracts/canonical.js";
 import { assertAuthenticInvocationContext, type InvocationContext } from "../contracts/contexts.js";
-import { computeInputFingerprint } from "../contracts/fingerprints.js";
 import {
   parseActiveGate,
   parseArchivedGateDecisionRecord,
@@ -15,6 +14,7 @@ import {
   type WaiverGateContext,
 } from "../contracts/durable-gate.js";
 import {
+  compareRuleSettlements,
   planningRestartHumanProvenanceV1Schema,
   type ApprovalRef,
   type AuthoritativeResultRef,
@@ -33,6 +33,7 @@ import { baselineAdoptionDriftDigest, computeGateContextDigest, computeGateId } 
 import { gateDecisionEffect, type BaselineObservationRef } from "../contracts/gates.js";
 import type { HumanDecisionProvenance } from "../contracts/gates.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
+import type { TaskConfigSnapshot } from "../contracts/config.js";
 import {
   gateDecisionClaim,
   gateRequestClaim,
@@ -44,6 +45,7 @@ import {
 import { verifyRepositoryIdentity } from "../repository/identity.js";
 import { resolveCommit } from "../repository/git.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
+import { withLastSeenConfig } from "./config-change.js";
 import {
   DECISIONS,
   activeProjection,
@@ -69,12 +71,35 @@ import { loadLegacyImportInitialization, loadLegacyImportResumePhase } from "./l
 import { TaskLockError } from "./lock.js";
 import { loadApprovedDesignFinalPhase } from "./planned-final-phase.js";
 import { planPlanningRestart, planStateTransition } from "./transitions.js";
-import { expectedProduceUpstreamBindings, loadProduceUpstreamSubject, type ProduceUpstreamSubject } from "./produce-subject.js";
-import { approvalIsEligibleAfterLatestRestart } from "./restart-authority.js";
+import {
+  expectedProduceUpstreamBindings,
+  loadCurrentProduceSubject,
+  loadProduceUpstreamSubject,
+  produceUpstreamBindingsForSubject,
+  type CurrentProduceSubject,
+  type ProduceUpstreamSubject,
+} from "./produce-subject.js";
 import { reconcileCurrentAuthority, type ReconciliationFinding } from "./reconciliation.js";
 import { currentProjectionDigest, discoverNewestProjections, discoverReconciliationInput } from "./reconciliation-discovery.js";
 import { applyProjectionPlan, captureProjectionTarget, prepareProjectionPlan, projectionGenerationDigest, type ProjectionSource } from "./snapshots.js";
 import { cleanTaskWorkspace } from "./workspace-cleanup.js";
+import { assessCurrentEvidence } from "../review/fixed-point.js";
+import { resolvePinnedConstitution } from "./constitution.js";
+import { loadRetainedEvidence } from "./evidence-results.js";
+import {
+  buildRuleSettlement,
+  evaluateApprovalRules,
+  approvalRuleContext,
+} from "./approval-rules.js";
+import {
+  approvalIsEligibleAfterLatestRestart,
+  authenticatedApprovalIsEligibleAfterLatestRestart,
+} from "./restart-authority.js";
+import {
+  assertAuthenticatedGateApproval,
+  loadAuthenticatedGateApproval,
+  type AuthenticatedGateApproval,
+} from "./gate-approvals.js";
 
 export { loadAuthenticatedGateApproval } from "./gate-approvals.js";
 export {
@@ -128,15 +153,16 @@ async function validateLiveGateState(
   authority: TransactionAuthority,
   current: CanonicalDocument<TaskStateV1>,
   inputFingerprint: Sha256Digest,
-): Promise<ProjectResult<void>> {
+): Promise<ProjectResult<TaskConfigSnapshot>> {
   const identity = verifyRepositoryIdentity(current.value.repository_identity_digest, authority.repository_identity);
   if (!identity.ok) return identity;
   if (!validateDurableSemantics({ state: current }).ok) return issue("STATE_INVALID", current.value, "gate-state-semantics-invalid");
   const config = await dependencies.read_config(authority.config);
   if (config.kind !== "valid") return config.kind === "invalid" ? issue("CONTRACT_INVALID", undefined, "task-config-invalid") : io(authority, "gate-config-read");
-  if (config.snapshot.digest !== current.value.config_digest) return fail(createProjectError("PINNED_CONFIG_MISMATCH", { expected_digest: current.value.config_digest, observed_digest: config.snapshot.digest }));
   if (inputFingerprint !== current.value.input_fingerprint) return fail(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest: current.value.input_fingerprint, observed_digest: inputFingerprint }));
-  return ok(undefined);
+  // The parsed live config rides back to the one caller that commits state in the same operation
+  // (gate open); the settlement callers validated with it and deliberately change nothing.
+  return ok(config.snapshot.parsed);
 }
 
 async function authenticateWaiverOrigin(
@@ -425,7 +451,7 @@ export async function openDurableGate(
       const contextDigest = waiver === undefined
         ? computeGateContextDigest(input.kind, input.context as never)
         : computeGateContextDigest("waiver", waiver);
-      const openState = stateWithOpen(current.value, { gate_id: gateId, kind: input.kind, subject_digest: input.subject_digest, context_digest: contextDigest, context: input.context } as Pick<GateRequestV1, "gate_id" | "kind" | "subject_digest" | "context_digest" | "context">);
+      const openState = stateWithOpen(withLastSeenConfig(current.value, live.value), { gate_id: gateId, kind: input.kind, subject_digest: input.subject_digest, context_digest: contextDigest, context: input.context } as Pick<GateRequestV1, "gate_id" | "kind" | "subject_digest" | "context_digest" | "context">);
       let request = parseGateRequest({
         schema_version: "1", gate_id: gateId, intent_id: input.intent_id, request_digest: input.request_digest,
         task_id: input.authority.task_id, phase_instance: input.phase_instance, summary: input.summary,
@@ -487,6 +513,158 @@ function nextStateForRecord(
     ? { ...withoutPlannedFinalPhase, ...(existingPlannedFinalPhase === undefined ? {} : { planned_final_phase: existingPlannedFinalPhase }) }
     : { ...withoutPlannedFinalPhase, ...(plannedFinalPhase === null ? {} : { planned_final_phase: parseSafeInteger(plannedFinalPhase) }) };
   return canonicalDocument({ ...preserved, revision, approvals, waivers } as TaskStateV1);
+}
+
+/** Review predecessor reconstruction for the post-waiver fixed-point assessment. */
+function waiverReviewPredecessor(
+  state: TaskStateV1,
+  produce: CurrentProduceSubject,
+): Readonly<{ subject_digest: Sha256Digest; input_fingerprint: Sha256Digest }> | undefined {
+  const declared = produce.artifact.artifact_kind === "document"
+    ? produce.artifact.editorial_predecessor
+    : undefined;
+  if (declared !== undefined) return Object.freeze({
+    subject_digest: declared.subject_digest,
+    input_fingerprint: declared.input_fingerprint,
+  });
+  const reference = state.authoritative_results.find((candidate) =>
+    candidate.phase_instance === state.phase_instance && candidate.step === "produce");
+  const simple = reference === undefined ? undefined : [...(state.human_revision_history ?? [])]
+    .reverse().find((revision) =>
+      revision.phase_instance === state.phase_instance &&
+      revision.classification === "simple" &&
+      revision.resulting_result_digest === reference.result_digest);
+  return simple === undefined ? undefined : Object.freeze({
+    subject_digest: simple.predecessor_subject_digest,
+    input_fingerprint: simple.predecessor_input_fingerprint,
+  });
+}
+
+/**
+ * Authenticates the one gate-resolution settlement seam: a granted waiver for the current policy
+ * subject. It assesses the state after the waiver is installed and appends a settlement only when
+ * that prospective state is otherwise a clean final-review fixed point. Other gate decisions never
+ * reach this function.
+ */
+async function stateAfterPolicyWaiverSettlement(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  current: CanonicalDocument<TaskStateV1>,
+  request: GateRequestV1,
+  record: Extract<GateDecisionRecordV1, { outcome: "waiver-decided" }>,
+  digest: Sha256Digest,
+): Promise<ProjectResult<CanonicalDocument<TaskStateV1>>> {
+  const waiver = waiverContext(request.context);
+  if (
+    !record.granted || waiver === undefined ||
+    record.origin.origin_gate_id !== waiver.origin.origin_gate_id ||
+    record.origin.subject_digest !== request.subject_digest ||
+    request.subject_digest !== current.value.open_gate?.subject_digest ||
+    request.phase_instance !== current.value.phase_instance || current.value.status !== "succeeded"
+  ) return issue("STATE_INVALID", current.value, "policy-waiver-settlement-boundary-invalid");
+  const originAuthenticated = await authenticateWaiverOrigin(dependencies, authority, waiver);
+  if (!originAuthenticated.ok) return originAuthenticated;
+
+  const produce = await loadCurrentProduceSubject(dependencies, current.value);
+  if (!produce.ok) return produce;
+  if (produce.value.artifact_digest !== request.subject_digest) {
+    return issue("STATE_INVALID", current.value, "policy-waiver-settlement-subject-stale");
+  }
+  const finalTriage = current.value.step === "triage";
+  const editorialReentry = current.value.step === "produce" &&
+    produce.value.artifact.artifact_kind === "document" &&
+    produce.value.artifact.editorial_predecessor !== undefined &&
+    current.value.pending_human_revision === undefined;
+  if (!finalTriage && !editorialReentry) {
+    // The waiver itself remains a valid human decision, but this cursor is not one of the two
+    // authenticated settlement boundaries. In particular, a simple human revision never gains
+    // a settlement from waiver resolution and still returns for approval of its final bytes.
+    return ok(nextStateForRecord(current.value, record, digest));
+  }
+  if (dependencies.load_retained_manifest === undefined) {
+    return issue("STATE_INVALID", current.value, "policy-waiver-settlement-evidence-unavailable");
+  }
+  const retained = await loadRetainedEvidence(
+    { load_retained_manifest: dependencies.load_retained_manifest },
+    current.value,
+    current.value.phase_instance,
+  );
+  if (!retained.ok) return retained;
+  const constitution = await resolvePinnedConstitution(
+    dependencies.runner, current.value.policy_base_commit, authority.context,
+  );
+  if (!constitution.ok) return constitution;
+
+  const authenticated: AuthenticatedGateApproval[] = [];
+  for (const approval of current.value.approvals) {
+    const loaded = await loadAuthenticatedGateApproval(dependencies, authority, approval);
+    if (!loaded.ok) return loaded;
+    if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
+    assertAuthenticatedGateApproval(loaded.value);
+    authenticated.push(loaded.value);
+  }
+  const upstreamDigests = new Set<Sha256Digest>();
+  for (const binding of produceUpstreamBindingsForSubject(current.value, produce.value.artifact)) {
+    const upstream = await loadProduceUpstreamSubject(dependencies, authority, current.value, binding);
+    if (!upstream.ok) return upstream;
+    if ("imported_projection" in upstream.value) {
+      if (current.value.phase_instance !== "design" && !authenticated.some((approval) =>
+        approval.request.kind === "migration-audit" &&
+        approval.decision.envelope.payload.decision === "accept-import-audit")) {
+        return issue("STATE_INVALID", current.value, "policy-waiver-settlement-upstream-invalid");
+      }
+    } else {
+      const humanApproved = authenticated.some((approval) =>
+        approval.approval.subject_digest === upstream.value.artifact_digest &&
+        (approval.request.kind === "artifact-approval" || approval.request.kind === "design-approval"));
+      if (!humanApproved) {
+        return issue("STATE_INVALID", current.value, "policy-waiver-settlement-upstream-invalid");
+      }
+    }
+    upstreamDigests.add(upstream.value.artifact_digest);
+  }
+
+  const prospective = nextStateForRecord(current.value, record, digest);
+  const config = await dependencies.read_config(authority.config);
+  if (config.kind !== "valid") {
+    return issue("STATE_INVALID", current.value, "policy-waiver-settlement-config-unavailable");
+  }
+  const predecessor = waiverReviewPredecessor(prospective.value, produce.value);
+  let assessment;
+  try {
+    assessment = assessCurrentEvidence(prospective.value, retained.value, {
+      subject_digest: produce.value.artifact_digest,
+      input_fingerprint: prospective.value.input_fingerprint,
+      constitution: constitution.value,
+      approved_upstream_digests: Object.freeze([...upstreamDigests].sort()),
+      authenticated_gate_approvals: authenticated,
+      ...(predecessor === undefined ? {} : { review_predecessor: predecessor }),
+      ...(config.snapshot.parsed.max_attempts === undefined
+        ? {}
+        : { max_attempts: config.snapshot.parsed.max_attempts }),
+    });
+  } catch {
+    return issue("STATE_INVALID", current.value, "policy-waiver-settlement-fixed-point-invalid");
+  }
+  if (assessment.next !== "advance") return ok(prospective);
+
+  const ruleContext = approvalRuleContext(current.value, produce.value, config.snapshot.parsed);
+  const conclusion = evaluateApprovalRules(
+    ruleContext.config, ruleContext.subject, ruleContext.changedPaths,
+  );
+  const kind = decodePhaseInstance(current.value.phase_instance).kind;
+  const milestoneBaseline = !conclusion.wait && (kind === "design" || kind === "phase-design")
+    ? await resolveCommit(dependencies.runner, "HEAD")
+    : undefined;
+  const settled = nextStateForRecord(current.value, record, digest);
+  const settlement = buildRuleSettlement(
+    current.value, produce.value.artifact_digest, config.snapshot.digest, conclusion, milestoneBaseline,
+  );
+  const ruleSettlements = Object.freeze([
+    ...(settled.value.rule_settlements ?? []),
+    settlement,
+  ].sort(compareRuleSettlements));
+  return ok(canonicalDocument({ ...settled.value, rule_settlements: ruleSettlements } as TaskStateV1));
 }
 
 function enactsReentry(record: GateDecisionRecordV1): boolean {
@@ -689,7 +867,7 @@ async function closedStateForRecord(
       context: authority.context,
     });
     if (!fingerprintSubject.ok) return fingerprintSubject;
-    const fingerprint = computeInputFingerprint(fingerprintSubject.value);
+    const fingerprint = fingerprintSubject.value.fingerprint;
     const planned = planPlanningRestart({
       current: restartPredecessor,
       restart_id: record.gate_id,
@@ -699,11 +877,27 @@ async function closedStateForRecord(
       human_provenance: humanProvenance.data,
     });
     return planned.ok
-      ? ok(canonicalDocument({ ...planned.value, revision: parseSafeInteger(current.value.revision + 1) } as TaskStateV1))
+      ? ok(canonicalDocument(withLastSeenConfig(
+          { ...planned.value, revision: parseSafeInteger(current.value.revision + 1) } as TaskStateV1,
+          liveConfig.snapshot.parsed,
+        )))
       : planned;
   }
   if (enactsReentry(record)) {
     return planGateAuthorizedReentry(dependencies, authority, current, request, record);
+  }
+  if (
+    record.outcome === "waiver-decided" && record.granted &&
+    waiverContext(request.context) !== undefined &&
+    (current.value.step === "triage" || current.value.step === "produce") &&
+    current.value.status === "succeeded" &&
+    request.phase_instance === current.value.phase_instance &&
+    request.subject_digest === current.value.open_gate?.subject_digest &&
+    record.origin.subject_digest === request.subject_digest
+  ) {
+    return stateAfterPolicyWaiverSettlement(
+      dependencies, authority, current, request, record, digest,
+    );
   }
   if (
     record.outcome === "decided" &&
@@ -861,6 +1055,7 @@ async function validateCompletedReentry(
     authority,
     request,
     current,
+    expected_input_fingerprint: current.value.input_fingerprint,
   });
   if (!fingerprint.ok) return fingerprint;
   return current.value.input_fingerprint === fingerprint.value
@@ -897,6 +1092,7 @@ async function validateCompletedPlanningRestart(
     request,
     current,
     target_phase_instance: restart.target_phase_instance,
+    expected_input_fingerprint: current.value.input_fingerprint,
   });
   if (!fingerprint.ok) return fingerprint;
   return current.value.input_fingerprint === fingerprint.value

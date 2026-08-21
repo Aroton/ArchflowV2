@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { parseCanonicalDocument, sha256Bytes, type CanonicalDocument } from "../../src/contracts/canonical.js";
+import { parseConfigYaml, type TaskConfigSnapshot } from "../../src/contracts/config.js";
 import type { IntentReceiptV1 } from "../../src/contracts/durable-intent.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import type { TaskInitializationV1 } from "../../src/contracts/durable-task-initialization.js";
@@ -60,10 +61,10 @@ describe("revision-0 state initialization", () => {
     if (!authorityResult.ok) throw new Error("authority failed");
     const authority = authorityResult.value;
     const configBytes = new TextEncoder().encode('schema_version: "1"\nroles: {}\n');
+    const configDigest = sha256Bytes(configBytes);
     const subject: InputFingerprintSubject = {
       schema_version: "1",
       workflow_digest: "5".repeat(64) as never,
-      config_digest: sha256Bytes(configBytes),
       constitution_digest: "6".repeat(64) as never,
       artifact_identities: [], upstream_identities: [], rubric_digest: "7".repeat(64) as never,
       phase_instance: context.phase_instance, declared_inputs: [],
@@ -86,7 +87,7 @@ describe("revision-0 state initialization", () => {
         workflow: ".archflow/workflow.yaml" as never,
         constitution_root: ".archflow/constitution" as never,
       },
-      config_digest: subject.config_digest,
+      config_digest: configDigest,
       workflow_digest: subject.workflow_digest,
       constitution_digest: subject.constitution_digest,
     };
@@ -123,9 +124,12 @@ describe("revision-0 state initialization", () => {
       environment: preflight.value,
       atomic,
       lock: { runExclusive: async <T>(_root: ResolvedTaskWorkspacePath, work: () => Promise<T>) => work() },
-      resolve_input_fingerprint: async () => ({ schema_version: "1", ok: true, value: subject }),
+      resolve_input_fingerprint: async () => ({ schema_version: "1", ok: true, value: { subject, fingerprint } }),
       read_state: async () => state === undefined ? { kind: "missing" } : { kind: "canonical", document: state },
-      read_config: async () => ({ kind: "valid", snapshot: { bytes: configBytes, digest: subject.config_digest } }),
+      read_config: async () => ({
+        kind: "valid",
+        snapshot: { bytes: configBytes, digest: configDigest, parsed: parseConfigYaml(new TextDecoder().decode(configBytes), "task config") as TaskConfigSnapshot },
+      }),
       read_receipt: async () => receipt === undefined ? { kind: "missing" } : { kind: "canonical", document: receipt },
     };
 

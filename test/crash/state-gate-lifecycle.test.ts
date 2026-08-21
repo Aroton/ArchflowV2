@@ -55,13 +55,13 @@ async function fixture(taskIdText = "gate-crash"): Promise<Fixture> {
   if (!authority.ok) throw new Error("fixture authority failed");
   const config = new TextEncoder().encode('schema_version: "1"\nroles: {}\n');
   const subject: InputFingerprintSubject = {
-    schema_version: "1", workflow_digest: D("5"), config_digest: sha256Bytes(config), constitution_digest: D("6"),
+    schema_version: "1", workflow_digest: D("5"), constitution_digest: D("6"),
     artifact_identities: [], upstream_identities: [], rubric_digest: D("7"), phase_instance: PHASE, declared_inputs: [],
   };
   const state: TaskStateV1 = {
     schema_version: "1", task_id: taskId, repository_identity_digest: authority.value.repository_identity_digest,
     revision: parseSafeInteger(7), phase_instance: PHASE, step: "produce", status: "running", attempt: parseSafeInteger(1),
-    input_fingerprint: computeInputFingerprint(subject), initialization_digest: D("3"), config_digest: subject.config_digest,
+    input_fingerprint: computeInputFingerprint(subject), initialization_digest: D("3"), config_digest: sha256Bytes(config),
     workflow_digest: subject.workflow_digest, constitution_digest: subject.constitution_digest,
     policy_base_commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repository, env: gitEnvironment, encoding: "utf8" }).trim() as TaskStateV1["policy_base_commit"],
     authoritative_results: [], approvals: [], waivers: [],

@@ -94,6 +94,60 @@ const reconciliationCases: readonly [ReconciliationFinding, string][] = [
 ];
 
 describe("deriveNextAction", () => {
+  it("uses an authenticated no-wait status fact only at the ordinary approval arm", () => {
+    const phase = implementation(2);
+    const receipt = {
+      task_id: parseTaskSlug("task-1"), phase_instance: phase, step: "triage" as const,
+      subject_digest: D("a"), conclusion: { wait: false as const, match: null },
+      config_digest: D("4"), settled_at_revision: parseSafeInteger(4),
+    };
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: phase }), assessment: assessment("advance"),
+      accepted_no_wait_settlement: receipt, implementation_commit: implementationCommit,
+    }))).toMatchObject({
+      code: "commit-phase", commit_requires_human_confirmation: false,
+      detail: "Commit the exact phase outputs authorized by the authenticated approval rule.",
+    });
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: phase }), assessment: assessment("attempts-exhausted"),
+      accepted_no_wait_settlement: receipt, implementation_commit: implementationCommit,
+    }))).toMatchObject({ code: "open-gate", gate_kind: "attempts-exhausted" });
+  });
+
+  it("refreshes only a moved autonomous design baseline", () => {
+    const phase = phaseDesign(2);
+    const receipt = {
+      task_id: parseTaskSlug("task-1"), phase_instance: phase, step: "triage" as const,
+      subject_digest: D("a"), conclusion: { wait: false as const, match: null },
+      config_digest: D("4"), settled_at_revision: parseSafeInteger(4),
+      milestone_baseline_commit: "abcdef0123456789abcdef0123456789abcdef01" as TaskStateV1["policy_base_commit"],
+    };
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: phase }), assessment: assessment("advance"),
+      accepted_no_wait_settlement: receipt, design_commit: designCommit,
+      commit_blocked_reason: "target-moved", milestone_refresh_config_matches: true,
+    }))).toMatchObject({ code: "refresh-milestone-baseline", human_required: false });
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: phase }), assessment: assessment("advance"),
+      authenticated_approvals: [{ gate_kind: "design-approval", subject_digest: D("a") }],
+      design_commit: designCommit, commit_blocked_reason: "target-moved",
+    })).code).toBe("inspect-state");
+
+    // A resolved baseline adoption can leave reconciliation clean even though the document no
+    // longer equals the retained reviewed bytes. That byte mismatch must start fresh production,
+    // never refresh Git authority around the adopted bytes.
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: phase }), assessment: assessment("advance"),
+      reconciliation_findings: [], accepted_no_wait_settlement: receipt,
+      design_commit: designCommit, commit_blocked_reason: "approved-document-mismatch",
+    }))).toMatchObject({ code: "run-step", step: "produce", human_required: false });
+
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: phase }), assessment: assessment("advance"),
+      accepted_no_wait_settlement: receipt, design_commit: designCommit,
+      commit_blocked_reason: "target-moved", milestone_refresh_config_matches: false,
+    }))).toMatchObject({ code: "run-step", step: "produce", human_required: false });
+  });
   it("reopens the produce window when a missing projection has no retained bytes to restore", () => {
     const unrestorable: ReconciliationFinding = {
       kind: "projection-mismatch", path: parseRepositoryPathClaim("src/gone.ts"),
@@ -263,8 +317,7 @@ describe("deriveNextAction", () => {
       ["initialize-repository", { repository_initialized: false }],
       ["create-task", { repository_initialized: true }],
       ...reconciliationCases.map(([finding, code]) => [code, input({ reconciliation_findings: [finding] })] as const),
-      ["restore-pinned-config", input({ config_verified: false })],
-      ["upgrade-tooling", input({ config_verified: false, config_schema_unsupported: true })],
+      ["inspect-state", input({ config_verified: false })],
       ["resolve-open-gate", input({ state: state({ open_gate: gate }) })],
       ["run-step", input({ assessment: assessment("triage") })],
       ["open-gate", input({ assessment: assessment("advance") })],
@@ -344,24 +397,35 @@ describe("deriveNextAction", () => {
       opened_at_revision: parseSafeInteger(4),
     };
     expect(deriveNextAction(input({ config_verified: false, state: state({ open_gate: openGate }) })).code)
-      .toBe("restore-pinned-config");
+      .toBe("inspect-state");
     expect(deriveNextAction(input({ reconciliation_findings: [reconciliationCases[0]![0]], assessment: assessment("advance") })).code)
       .toBe("resume-exact-intent");
     expect(deriveNextAction(input({ state: state({ terminal: "complete", open_gate: openGate }) })).code)
       .toBe("task-complete");
   });
 
-  it("directs intentional pinned-config changes to a new task or explicit upgrade", () => {
+  it("directs a config that no longer parses to state inspection with repair advice", () => {
     const next = deriveNextAction(input({ config_verified: false }));
-    expect(next).toMatchObject({ code: "restore-pinned-config", human_required: true });
-    expect(next.detail).toContain("new task or the explicit upgrade flow");
+    expect(next).toMatchObject({ code: "inspect-state", human_required: true });
+    expect(next.detail).toContain("config.yaml is invalid");
+    expect(next.detail).toContain("fix the YAML");
   });
 
-  it("names the tooling, not the file, when pinned bytes no longer parse", () => {
-    const next = deriveNextAction(input({ config_verified: false, config_schema_unsupported: true }));
-    expect(next).toMatchObject({ code: "upgrade-tooling", human_required: true });
-    expect(next.detail).not.toMatch(/Restore/u);
-    expect(next.detail).not.toContain("new task or the explicit upgrade flow");
+  it("names the actual read issue behind a failed config verification", () => {
+    expect(deriveNextAction(input({ config_verified: false, config_issue: "config-missing" })).detail)
+      .toContain("config.yaml is missing");
+    expect(deriveNextAction(input({ config_verified: false, config_issue: "config-unreadable" })).detail)
+      .toContain("config.yaml is unreadable");
+    expect(deriveNextAction(input({ config_verified: false, config_issue: "config-unresolvable" })).detail)
+      .toContain("config.yaml is unreadable");
+  });
+
+  it("keeps the ordinary action for a verified config edit", () => {
+    // An edited config is still a verified config: the field-level notice lives in the status
+    // value, and the derived action is exactly the one the unedited task would get.
+    const baseline = deriveNextAction(input());
+    expect(baseline.code).toBe("run-step");
+    expect(deriveNextAction(input({ config_verified: true })).code).toBe("run-step");
   });
 
   it("does not guess between ambiguous retained successor receipts", () => {
@@ -425,22 +489,16 @@ describe("deriveNextAction", () => {
     }
   });
 
-  it("requires the phase-specific approval before advancing", () => {
-    for (const phaseInstance of [
-      encodePhaseInstance({ kind: "prd" }),
-      encodePhaseInstance({ kind: "design" }),
-      phaseDesign(2),
-      implementation(2),
-    ]) {
-      const action = deriveNextAction(input({ state: state({ phase_instance: phaseInstance }), assessment: assessment("advance") }));
-      expect(action).toMatchObject({
-        code: "open-gate",
-        gate_kind: phaseInstance === "prd"
-          ? "artifact-approval"
-          : phaseInstance === "design" || phaseInstance === phaseDesign(2)
-            ? "design-approval"
-            : "commit-authorization",
-      });
+  it("opens a document gate until durable human approval exists", () => {
+    for (const [phaseInstance, gateKind] of [
+      [encodePhaseInstance({ kind: "prd" }), "artifact-approval"],
+      [encodePhaseInstance({ kind: "design" }), "design-approval"],
+      [phaseDesign(2), "design-approval"],
+    ] as const) {
+      expect(deriveNextAction(input({
+        state: state({ phase_instance: phaseInstance }),
+        assessment: assessment("advance"),
+      }))).toMatchObject({ code: "open-gate", gate_kind: gateKind, human_required: true });
     }
 
     // A gate already recorded under the former document-only contract may finish without
@@ -457,6 +515,76 @@ describe("deriveNextAction", () => {
       skill: "archflow-phase-impl",
       skill_args: ["2"],
     });
+  });
+
+  it("keeps commit-authorization unconditional until Phase 5 and the constitution amendment", () => {
+    // State activation is deferred to Phase 5/the constitution amendment; this pin makes an
+    // accidental early activation observable — an explicit wait:false still opens the gate here.
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: implementation(2) }),
+      assessment: assessment("advance"),
+    }))).toMatchObject({ code: "open-gate", gate_kind: "commit-authorization", human_required: true });
+  });
+
+  it("keeps both rule-settlement conclusions behind human document approval", () => {
+    const receipt = {
+      task_id: parseTaskSlug("task-1"),
+      phase_instance: encodePhaseInstance({ kind: "prd" }),
+      step: "adjudicate",
+      subject_digest: D("a"),
+      conclusion: { wait: false, match: null },
+      config_digest: D("4"),
+      settled_at_revision: parseSafeInteger(3),
+    } as const;
+    // A wait:false conclusion records that no configured rule matched, but does not replace the
+    // repository's mandatory human document approval boundary in this phase.
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: encodePhaseInstance({ kind: "prd" }), rule_settlements: [receipt] }),
+      assessment: assessment("advance"),
+    }))).toMatchObject({ code: "open-gate", gate_kind: "artifact-approval", human_required: true });
+    // A stale conclusion is equally incapable of authorizing the document.
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: encodePhaseInstance({ kind: "prd" }), rule_settlements: [{ ...receipt, subject_digest: D("b") }] }),
+      assessment: assessment("advance"),
+    }))).toMatchObject({ code: "open-gate", gate_kind: "artifact-approval", human_required: true });
+    // A persisted wait conclusion preserves trigger evidence and also opens the ordinary gate.
+    expect(deriveNextAction(input({
+      state: state({
+        phase_instance: encodePhaseInstance({ kind: "prd" }),
+        rule_settlements: [{
+          ...receipt,
+          conclusion: { wait: true, match: { kind: "subject", subject: "prd" } },
+        }],
+      }),
+      assessment: assessment("advance"),
+    }))).toMatchObject({ code: "open-gate", gate_kind: "artifact-approval", human_required: true });
+    expect(deriveNextAction(input({
+      state: state({
+        phase_instance: encodePhaseInstance({ kind: "prd" }),
+        rule_settlements: [receipt, {
+          ...receipt,
+          conclusion: { wait: true, match: { kind: "subject", subject: "prd" } },
+          settled_at_revision: parseSafeInteger(4),
+        }],
+      }),
+      assessment: assessment("advance"),
+    }))).toMatchObject({ code: "open-gate", gate_kind: "artifact-approval", human_required: true });
+  });
+
+  it("keeps the constitution policy arm opening design approval regardless of the subject rules", () => {
+    // Unsatisfied constitution findings always open the combined design approval.
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: encodePhaseInstance({ kind: "design" }) }),
+      assessment: assessment("adjudication-gate"),
+      adjudication_gate_kind: "constitution-review",
+    }))).toMatchObject({ code: "open-gate", gate_kind: "design-approval", human_required: true });
+    // Clean adjudication still fails closed to the ordinary design gate; live config and persisted
+    // settlements are not human authority.
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: encodePhaseInstance({ kind: "design" }) }),
+      assessment: assessment("advance"),
+      design_commit: designCommit,
+    }))).toMatchObject({ code: "open-gate", gate_kind: "design-approval", human_required: true });
   });
 
   it("routes every phase handoff to the destination skill and arguments", () => {
@@ -524,6 +652,8 @@ describe("deriveNextAction", () => {
       commit_message: "ArchFlow: Implement task-1 phase 2",
       commit_target_ref: "refs/heads/main",
       commit_baseline: "abcdef0123456789abcdef0123456789abcdef01",
+      commit_requires_human_confirmation: true,
+      detail: "Commit the exact phase outputs authorized by the human's commit decision.",
     });
     expect(deriveNextAction(input({
       state: state({ phase_instance: implementation(2), planned_final_phase: parseSafeInteger(2) }),

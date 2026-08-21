@@ -53,12 +53,6 @@ export async function openHandlerSession(
   if (configRead.kind !== "valid") {
     return fail(createProjectError("CONFIG_INVALID", { issue_code: `config-${configRead.kind}` }));
   }
-  if (state !== undefined && state.config_digest !== configRead.snapshot.digest) {
-    return fail(createProjectError("PINNED_CONFIG_MISMATCH", {
-      expected_digest: state.config_digest,
-      observed_digest: configRead.snapshot.digest,
-    }));
-  }
   const host = context.connection.initialization_candidates.host;
   if (host === "unknown") return fail(createProjectError("UNSUPPORTED_HOST", { host }));
   const phaseInstance = state?.phase_instance ?? suppliedPhase;

@@ -1,4 +1,4 @@
-import type { TaskStateV1 } from "../contracts/durable-state.js";
+import type { RuleSettlementV1, TaskStateV1 } from "../contracts/durable-state.js";
 import type { GateKind } from "../contracts/gates.js";
 import type { PathSafeId, Sha256Digest } from "../contracts/evidence.js";
 import { decodePhaseInstance, nextPhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
@@ -14,13 +14,12 @@ export type NextActionCode =
   | "inspect-retained-receipt"
   | "create-fresh-intent"
   | "resolve-current-authority"
-  | "restore-pinned-config"
-  | "upgrade-tooling"
   | "open-gate"
   | "resolve-open-gate"
   | "run-step"
   | "commit-artifacts"
   | "commit-phase"
+  | "refresh-milestone-baseline"
   | "advance-phase"
   | "complete-task"
   | "task-complete"
@@ -46,6 +45,8 @@ export type NextAction = Readonly<{
   commit_message?: string;
   commit_target_ref?: string;
   commit_baseline?: string;
+  /** Autonomous rule authority needs no second human confirmation; gate authority always does. */
+  commit_requires_human_confirmation?: boolean;
   /**
    * Every constitution gate this review still demands, in the order they will open, including the
    * one named by `gate_kind`. Present only when more than one remains, so a human can be told the
@@ -66,8 +67,8 @@ export type NextActionInput = Readonly<{
   repository_initialized: boolean;
   state?: TaskStateV1;
   config_verified?: boolean;
-  /** Set when the config bytes match the pinned digest but this tooling cannot parse their schema. */
-  config_schema_unsupported?: boolean;
+  /** Why the config failed to read (`config-invalid`/`config-missing`/`config-unreadable`/`config-unresolvable`). */
+  config_issue?: string;
   reconciliation_findings?: readonly ReconciliationFinding[];
   reconciliation_blocking_reasons?: readonly string[];
   /**
@@ -88,6 +89,10 @@ export type NextActionInput = Readonly<{
   evidence_available?: boolean;
   subject_digest?: Sha256Digest;
   authenticated_approvals?: readonly AuthenticatedApprovalFact[];
+  /** Already authenticated status guidance; mutation independently re-authenticates this fact. */
+  accepted_no_wait_settlement?: RuleSettlementV1;
+  /** Fresh status comparison for the exceptional settlement-baseline refresh only. */
+  milestone_refresh_config_matches?: boolean;
   commit_observed?: boolean;
   /**
    * Set when running the authorized milestone commit could not produce a recognizable milestone:
@@ -182,13 +187,24 @@ function upstreamDocumentDriftAction(state: TaskStateV1, paths: readonly string[
 }
 
 function matchingApproval(input: NextActionInput, kind: GateKind): boolean {
-  return input.subject_digest !== undefined &&
+  const subjectDigest = input.subject_digest;
+  if (subjectDigest !== undefined &&
     (input.authenticated_approvals ?? []).some((approval) =>
-      approval.gate_kind === kind && approval.subject_digest === input.subject_digest);
+      approval.gate_kind === kind && approval.subject_digest === subjectDigest)) {
+    return true;
+  }
+  return false;
 }
 
 function hasLegacyDesignApproval(input: NextActionInput): boolean {
   return matchingApproval(input, "artifact-approval");
+}
+
+function hasAcceptedNoWait(input: NextActionInput, state: TaskStateV1): boolean {
+  const settlement = input.accepted_no_wait_settlement;
+  return settlement !== undefined && input.subject_digest !== undefined &&
+    settlement.task_id === state.task_id && settlement.phase_instance === state.phase_instance &&
+    settlement.subject_digest === input.subject_digest && settlement.conclusion.wait === false;
 }
 
 function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
@@ -203,6 +219,7 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
       : undefined;
   const legacyDesignApproval = designPhase && hasLegacyDesignApproval(input);
   const migrationApproval = designPhase && matchingApproval(input, "migration-audit");
+  const autonomous = hasAcceptedNoWait(input, state);
   // The imported design exits through its one migration audit, never a design-approval gate —
   // the same rule the adjudication branch applies when constitution gates are pending.
   if (designPhase && input.migration_audit_required === true) {
@@ -210,7 +227,7 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
       gate_kind: "migration-audit",
     });
   }
-  if (requiredKind !== undefined && !matchingApproval(input, requiredKind) && !legacyDesignApproval && !migrationApproval) {
+  if (requiredKind !== undefined && !matchingApproval(input, requiredKind) && !legacyDesignApproval && !migrationApproval && !autonomous) {
     return action("open-gate", `Open the required ${requiredKind} gate.`, true, state, {
       gate_kind: requiredKind,
     });
@@ -219,12 +236,38 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
   // its original contract. It did not authorize a commit, so only the new combined gate enters
   // the automatic commit step.
   if (designPhase && !legacyDesignApproval && input.commit_observed !== true) {
+    if (autonomous && input.commit_blocked_reason === "approved-document-mismatch") {
+      return action(
+        "run-step",
+        "The reviewed design bytes changed after rule settlement. Reopen produce so the current bytes receive fresh review authority.",
+        false,
+        state,
+        { step: "produce" },
+      );
+    }
     if (input.design_commit === undefined) {
       return action("inspect-state", "Inspect why the approved design commit authority is unavailable.", true, state);
     }
     // The commit action can only run while the target is still the approved baseline, so a commit
     // that cannot be proven can never be retried. Offering it again — or offering one that would be
     // unprovable the moment it is made — only loops. The blocking reason says what to look at.
+    if (input.commit_blocked_reason === "target-moved" && autonomous) {
+      if (input.milestone_refresh_config_matches !== true) {
+        return action(
+          "run-step",
+          "The approval-rule configuration changed after this design settled. Reopen produce so the current subject is reviewed under the live configuration before any Git baseline refresh.",
+          false,
+          state,
+          { step: "produce" },
+        );
+      }
+      return action(
+        "refresh-milestone-baseline",
+        "Refresh the unchanged reviewed design milestone baseline to the current target.",
+        false,
+        state,
+      );
+    }
     if (input.commit_blocked_reason !== undefined) {
       return action(
         "inspect-state",
@@ -238,15 +281,19 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
       commit_message: input.design_commit.message,
       commit_target_ref: input.design_commit.target_ref,
       commit_baseline: input.design_commit.baseline_commit,
+      commit_requires_human_confirmation: false,
     });
   }
   if (phase.kind === "phase-impl" && input.commit_observed !== true) {
     if (input.implementation_commit === undefined) {
       return action("inspect-state", "Inspect why the approved implementation commit authority is unavailable.", true, state);
     }
+    const requiresHumanConfirmation = !autonomous;
     return action(
       "commit-phase",
-      "Commit the exact phase outputs authorized by the human's commit decision.",
+      requiresHumanConfirmation
+        ? "Commit the exact phase outputs authorized by the human's commit decision."
+        : "Commit the exact phase outputs authorized by the authenticated approval rule.",
       false,
       state,
       {
@@ -254,6 +301,7 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
         commit_message: input.implementation_commit.message,
         commit_target_ref: input.implementation_commit.target_ref,
         commit_baseline: input.implementation_commit.baseline_commit,
+        commit_requires_human_confirmation: requiresHumanConfirmation,
       },
     );
   }
@@ -303,17 +351,14 @@ export function deriveNextAction(input: NextActionInput): NextAction {
       : action("initialize-repository", "Initialize ArchFlow in this repository.", false);
   }
   if (input.config_verified !== true) {
-    if (input.config_schema_unsupported === true) {
-      return action(
-        "upgrade-tooling",
-        "The task's pinned configuration bytes are exactly the recorded ones, but this installed ArchFlow version cannot parse their schema; restoring or editing the file cannot fix this. Resume the task with tooling that accepts the pinned configuration, or restart it as a new task under the current schema.",
-        true,
-        state,
-      );
-    }
+    const readIssue = input.config_issue === "config-missing"
+      ? "missing"
+      : input.config_issue === "config-unreadable" || input.config_issue === "config-unresolvable"
+        ? "unreadable"
+        : "invalid";
     return action(
-      "restore-pinned-config",
-      "Restore the task's digest-pinned configuration before continuing; an intentional configuration change requires a new task or the explicit upgrade flow.",
+      "inspect-state",
+      `The task's config.yaml is ${readIssue}: fix the YAML so the configuration parses, then retry.`,
       true,
       state,
     );

@@ -15,6 +15,7 @@ import {
 } from "../contracts/errors.js";
 import type { Sha256Digest } from "../contracts/evidence.js";
 import type { GateContext } from "../contracts/gates.js";
+import type { TaskStateV1 } from "../contracts/durable-state.js";
 import {
   parseRepositoryPathClaim,
   rawGitPath,
@@ -39,12 +40,53 @@ const RULE_FILE = /^\.archflow\/constitution\/[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
 export type ResolvedConstitution = Readonly<{
+  policy_base_commit: GitOid;
   digest: Sha256Digest;
   rules: ConstitutionRegistry;
   files: readonly Readonly<{ path: string; oid: GitOid }>[];
 }>;
 
+type SupportedRuleAcceptanceEntry = Readonly<{
+  id: string;
+  version: number;
+  status: "active";
+  text: string;
+  review_trigger: string;
+  enforced_by: readonly string[];
+}>;
+
+/**
+ * Exact policy bytes supported by the dormant settlement-authority runtime. Phase 6 makes the
+ * repository and seed rules match this profile; until then ordinary initialized tasks remain v1
+ * and cannot mint the capability below.
+ */
+export const SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2: readonly SupportedRuleAcceptanceEntry[] = Object.freeze([
+  Object.freeze({
+    id: "approved-design-before-code",
+    version: 2,
+    status: "active",
+    text: "Implementation starts only from a phase design that either passed its triggered human gate or advanced by rule after counter-review completed. The PRD, architecture, and phase design remain truthful as work proceeds; material deviations update the governing documents and re-enter the applicable review boundary before dependent work advances.",
+    review_trigger: "Implementation begins before the applicable phase design passed its triggered human gate or advanced by rule after counter-review completed, or implementation materially departs from approved architecture without updating and re-reviewing its governing plan.",
+    enforced_by: Object.freeze([]),
+  }),
+  Object.freeze({
+    id: "explicit-human-authority",
+    version: 2,
+    status: "active",
+    text: "Required human decisions are explicit and bound to the exact artifact or code subject at gates opened by an approval rule or safety condition. Silence, elapsed time, agent prose, or a model verdict never supplies approval, waives a gate, or advances the workflow. Commits are not human-gated by default.",
+    review_trigger: "Authority over a gate opened by an approval rule or safety condition is inferred rather than explicitly recorded by a human for the exact subject.",
+    enforced_by: Object.freeze([]),
+  }),
+]);
+
+export type AuthenticatedRuleAcceptancePolicy = Readonly<{
+  task_id: TaskStateV1["task_id"];
+  policy_base_commit: TaskStateV1["policy_base_commit"];
+  constitution_digest: TaskStateV1["constitution_digest"];
+}>;
+
 const authenticResolvedConstitutions = new WeakSet<object>();
+const authenticRuleAcceptancePolicies = new WeakSet<object>();
 
 /** Refuses constitution values that were not resolved from an immutable commit tree here. */
 export function assertResolvedConstitution(
@@ -56,6 +98,52 @@ export function assertResolvedConstitution(
     !authenticResolvedConstitutions.has(value)
   ) {
     throw new TypeError("an authentic resolved constitution is required");
+  }
+}
+
+function normalizedSelectedRule(rule: ConstitutionRuleV1): SupportedRuleAcceptanceEntry {
+  return Object.freeze({
+    id: rule.id,
+    version: rule.version,
+    status: "active",
+    text: rule.text,
+    review_trigger: rule.review_trigger ?? "",
+    enforced_by: Object.freeze([...new Set(rule.enforced_by ?? [])].sort()),
+  });
+}
+
+/** Mints settlement authority only for the authentic, task-pinned, exact supported v2 policy. */
+export function authenticateRuleAcceptancePolicy(
+  state: TaskStateV1,
+  constitution: ResolvedConstitution,
+): AuthenticatedRuleAcceptancePolicy | undefined {
+  assertResolvedConstitution(constitution);
+  if (
+    constitution.policy_base_commit !== state.policy_base_commit ||
+    constitution.digest !== state.constitution_digest
+  ) return undefined;
+  const selected = SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2.map(({ id }) => constitution.rules.get(id));
+  if (selected.some((rule) => rule === undefined || rule.status !== "active")) return undefined;
+  const normalized = selected.map((rule) => normalizedSelectedRule(rule!))
+    .sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+  if (canonicalJsonDigest(normalized) !== canonicalJsonDigest(SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2)) {
+    return undefined;
+  }
+  const policy = Object.freeze({
+    task_id: state.task_id,
+    policy_base_commit: state.policy_base_commit,
+    constitution_digest: state.constitution_digest,
+  });
+  authenticRuleAcceptancePolicies.add(policy);
+  return policy;
+}
+
+/** Refuses plain-object imitations of an authenticated rule-acceptance capability. */
+export function assertAuthenticatedRuleAcceptancePolicy(
+  value: AuthenticatedRuleAcceptancePolicy,
+): asserts value is AuthenticatedRuleAcceptancePolicy {
+  if (value === null || typeof value !== "object" || !authenticRuleAcceptancePolicies.has(value)) {
+    throw new TypeError("an authenticated rule acceptance policy is required");
   }
 }
 
@@ -141,6 +229,7 @@ export async function resolvePinnedConstitution(
     if (rules.size === 0) return fail(invalidPolicyBase(policyBaseCommit));
 
     const resolved = Object.freeze({
+      policy_base_commit: policyBaseCommit,
       digest: computePinnedConstitutionDigest(selected),
       rules: immutableRegistry(rules),
       files: Object.freeze(selected.map((file) => Object.freeze({ ...file }))),

@@ -22,7 +22,6 @@ import type { AuthoritativeResultRef, LastTransition, TaskStateV1 } from "../con
 import { parseResultManifest, type ResultManifestV1 } from "../contracts/durable-result-manifest.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parseSafeInteger, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
-import { computeInputFingerprint, type InputFingerprintSubject } from "../contracts/fingerprints.js";
 import {
   assertAuthenticParsedToolCall,
   correlateProjectResult,
@@ -49,6 +48,7 @@ import {
 } from "../repository/paths.js";
 import { AtomicReplaceError, type AtomicWriter, type ProjectionWriter } from "./atomic.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
+import { withLastSeenConfig } from "./config-change.js";
 import type { InputFingerprintResolver } from "./fingerprint.js";
 import { identifyTransactionRequest } from "./request.js";
 import {
@@ -62,6 +62,7 @@ import {
 } from "./layout.js";
 import type {
   ConfigReadResult,
+  LiveConfigSnapshot,
   ReceiptReadResult,
   StateReadResult,
 } from "./read.js";
@@ -307,11 +308,6 @@ function ownDataField(value: unknown, field: string, label: string): unknown {
   return descriptor.value;
 }
 
-function materializeFingerprint(value: InputFingerprintSubject): InputFingerprintSubject {
-  assertPlainJson(value, "input fingerprint subject");
-  return structuredClone(value);
-}
-
 function materializeDraft(value: unknown): NextStateDraft {
   assertPlainJson(value, "next state draft");
   if (Object.hasOwn(value as object, "revision") || Object.hasOwn(value as object, "last_transition")) {
@@ -402,18 +398,12 @@ async function liveIdentification<K extends ToolName>(
   dependencies: TransactionDependencies,
   request: TransactionRequest<K>,
   current: CanonicalDocument<TaskStateV1>,
-): Promise<ProjectResult<Identified<K>>> {
+): Promise<ProjectResult<Identified<K> & Readonly<{ live_config: LiveConfigSnapshot }>>> {
   const config = await dependencies.read_config(request.authority.config);
   if (config.kind !== "valid") {
     return config.kind === "invalid"
       ? issue("CONFIG_INVALID", "task-config-invalid")
       : io(request.authority, "task-config-read");
-  }
-  if (config.snapshot.digest !== current.value.config_digest) {
-    return fail(createProjectError("PINNED_CONFIG_MISMATCH", {
-      expected_digest: current.value.config_digest,
-      observed_digest: config.snapshot.digest,
-    }));
   }
   const resolved = await dependencies.resolve_input_fingerprint({
     runner: dependencies.runner,
@@ -421,15 +411,15 @@ async function liveIdentification<K extends ToolName>(
     state: current,
     call: request.call,
     live_config: config.snapshot,
+    expected_input_fingerprint: request.call.input.input_fingerprint,
     context: request.authority.context,
   });
   if (!resolved.ok) return resolved;
-  const subject = materializeFingerprint(resolved.value);
-  const inputFingerprint = computeInputFingerprint(subject);
+  const inputFingerprint = resolved.value.fingerprint;
   if (inputFingerprint !== request.call.input.input_fingerprint) {
     return fingerprintMismatch(inputFingerprint, request.call.input.input_fingerprint);
   }
-  return ok(identifyTransactionRequest(request.call, request.authority, inputFingerprint));
+  return ok({ ...identifyTransactionRequest(request.call, request.authority, inputFingerprint), live_config: config.snapshot });
 }
 
 function identifyFromReceipt<K extends ToolName>(
@@ -787,21 +777,27 @@ function validateResultInstallationBinding<K extends ToolName>(
 function buildPlan<K extends ToolName>(
   request: TransactionRequest<K>,
   current: CanonicalDocument<TaskStateV1>,
-  identified: Identified<K>,
+  identified: Identified<K> & Readonly<{ live_config: LiveConfigSnapshot }>,
   preparedValue: unknown,
   authenticatedWorktreeRoot: string,
 ): ProjectResult<PlannedCommit<K>> {
   const resultingRevision = parseSafeInteger(current.value.revision + 1);
-  const plan = materializePlan<K>(preparedValue);
-  const correlated = correlateProjectResult(identified.call, plan.expectation, plan.result);
+  const materialized = materializePlan<K>(preparedValue);
+  const correlated = correlateProjectResult(identified.call, materialized.expectation, materialized.result);
   if (!correlated.ok) return correlated;
-  if (plan.expectation.resulting_revision !== resultingRevision || correlated.value.revision !== resultingRevision) {
+  if (materialized.expectation.resulting_revision !== resultingRevision || correlated.value.revision !== resultingRevision) {
     throw new TypeError("prepared transaction revision is not the immediate successor");
   }
-  if (plan.next_state.input_fingerprint !== identified.input_fingerprint) {
-    return fingerprintMismatch(identified.input_fingerprint, plan.next_state.input_fingerprint);
+  if (materialized.next_state.input_fingerprint !== identified.input_fingerprint) {
+    return fingerprintMismatch(identified.input_fingerprint, materialized.next_state.input_fingerprint);
   }
-  assertPreserved(current.value, plan.next_state);
+  assertPreserved(current.value, materialized.next_state);
+  // Commit-time config normalization (pinned interface 4): applied after the transaction substrate is
+  // pinned (assertPreserved rebuilds its expected draft from the current state and must compare the
+  // un-normalized draft) and before the receipt's prepared state and digest are derived, so the
+  // prepared state, its digest, the committed bytes, and any crash replay all carry the same
+  // `last_seen_config`.
+  const plan = { ...materialized, next_state: withLastSeenConfig(materialized.next_state, identified.live_config.parsed) };
   const installation = validateResultInstallationBinding(
     request, current, identified, plan, authenticatedWorktreeRoot,
   );
@@ -1172,6 +1168,7 @@ async function executeLocked<K extends ToolName>(
   prepare: (
     current: CanonicalDocument<TaskStateV1>,
     call: Extract<RequestIdentifiedToolCall, { readonly name: K }>,
+    liveConfig: LiveConfigSnapshot,
   ) => Promise<ProjectResult<PreparedTransaction<K>>>,
   onPlan: (current: CanonicalDocument<TaskStateV1>, plan: PlannedCommit<K>) => void,
 ): Promise<ProjectResult<TransactionOutcome<K>>> {
@@ -1218,7 +1215,7 @@ async function executeLocked<K extends ToolName>(
   }
   const identified = await liveIdentification(dependencies, request, current);
   if (!identified.ok) return identified;
-  const prepared = await prepare(current, identified.value.call);
+  const prepared = await prepare(current, identified.value.call, identified.value.live_config);
   if (!prepared.ok) return prepared;
   const plan = buildPlan(
     request,
@@ -1238,6 +1235,7 @@ export async function runStateTransaction<K extends ToolName>(
   prepare: (
     current: CanonicalDocument<TaskStateV1>,
     call: Extract<RequestIdentifiedToolCall, { readonly name: K }>,
+    liveConfig: LiveConfigSnapshot,
   ) => Promise<ProjectResult<PreparedTransaction<K>>>,
 ): Promise<ProjectResult<TransactionOutcome<K>>> {
   assertInternalTransactionAuthority(request.authority, {

@@ -36,7 +36,14 @@ import {
   pendingHumanRevisionV1Schema,
   planningRestartHumanProvenanceV1Schema,
   planningRestartRecordV1Schema,
+  ruleSettlementConclusionV1Schema,
+  ruleSettlementV1Schema,
   stepStatusV1Schema,
+  taskConfigApprovalRulesV1Schema,
+  taskConfigOverridesV1Schema,
+  taskConfigRolesV1Schema,
+  taskConfigRouteV1Schema,
+  taskConfigSnapshotV1Schema,
   taskStateV1Schema,
   waiverRefV1Schema,
 } from "../durable-state.js";
@@ -48,8 +55,9 @@ import type { SchemaGenerationGroup } from "./schema-generation.js";
  * `z.json()`'s own emission self-references the document root (`"$ref": "#"`), which is wrong once
  * the value lives in a `$def`, so the committed recursive fragment is emitted verbatim. Its
  * `null`-first arm order is pinned by the null-usage sweep in `durable-agreement.test.ts`.
+ * Shared by every document that owns a `plainJson` def.
  */
-const PLAIN_JSON_FRAGMENT = {
+export const PLAIN_JSON_FRAGMENT = {
   anyOf: [
     { type: "null" },
     { type: "boolean" },
@@ -102,8 +110,17 @@ export const durableSchemaGroup: SchemaGenerationGroup = {
         humanRevisionRecord: humanRevisionRecordV1Schema,
         planningRestartHumanProvenance: planningRestartHumanProvenanceV1Schema,
         planningRestartRecord: planningRestartRecordV1Schema,
+        ruleSettlementConclusion: ruleSettlementConclusionV1Schema,
+        ruleSettlement: ruleSettlementV1Schema,
         lastTransition: lastTransitionV1Schema,
         plainJson: lastTransitionOutcomeV1Schema,
+        // Parentless clones of the config document's shapes (see durable-state.ts): task-state
+        // does not carry the config document, so these register here and stay locally referenced.
+        configRoute: taskConfigRouteV1Schema,
+        configRoles: taskConfigRolesV1Schema,
+        configOverrides: taskConfigOverridesV1Schema,
+        configApprovalRules: taskConfigApprovalRulesV1Schema,
+        configSnapshot: taskConfigSnapshotV1Schema,
       },
       overrides: { plainJson: PLAIN_JSON_FRAGMENT },
       migrated: true,

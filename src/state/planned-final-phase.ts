@@ -1,6 +1,6 @@
 import { sha256Bytes } from "../contracts/canonical.js";
 import type { GateDecisionRecordV1 } from "../contracts/durable-gate.js";
-import type { TaskStateV1 } from "../contracts/durable-state.js";
+import type { RuleSettlementV1, TaskStateV1 } from "../contracts/durable-state.js";
 import { decodePhaseInstance } from "../contracts/phase-instance.js";
 import type { ProjectResult } from "../contracts/errors.js";
 import type { TaskSlug } from "../contracts/evidence.js";
@@ -86,6 +86,40 @@ export async function loadApprovedDesignFinalPhase(
   }
 }
 
+/** Derives the phase bound from the exact retained design subject selected by rule authority. */
+export async function loadAutonomousDesignFinalPhase(
+  dependencies: GateLifecycleDependencies,
+  current: TaskStateV1,
+  subjectDigest: RuleSettlementV1["subject_digest"],
+): Promise<ProjectResult<number | null>> {
+  if (current.phase_instance !== "design") {
+    return issue("STATE_INVALID", current, "autonomous-design-phase-count-wrong-position");
+  }
+  const reference = current.authoritative_results.find((entry) =>
+    entry.phase_instance === "design" && entry.step === "produce");
+  if (reference === undefined || dependencies.load_retained_result === undefined) {
+    return issue("STATE_INVALID", current, "autonomous-design-result-missing");
+  }
+  const retained = await dependencies.load_retained_result(reference);
+  if (!retained.ok) return retained;
+  const manifest = retained.value.prepared.manifest.value;
+  const artifact = manifest.source_artifact;
+  if (artifact.artifact_kind !== "document" || artifact.phase_instance !== "design" ||
+      artifact.step !== "produce" || artifact.document_path !== "design.md" ||
+      manifest.artifact_digest !== subjectDigest) {
+    return issue("STATE_INVALID", current, "autonomous-design-authority-mismatch");
+  }
+  const payload = retained.value.prepared.payloads.find((candidate) => candidate.path === artifact.projection_target);
+  if (payload === undefined || sha256Bytes(payload.bytes) !== artifact.content_digest) {
+    return issue("STATE_INVALID", current, "autonomous-design-authority-mismatch");
+  }
+  try {
+    return ok(plannedFinalPhaseFromDesign(payload.bytes));
+  } catch {
+    return issue("STATE_INVALID", current, "autonomous-design-phase-count-invalid");
+  }
+}
+
 /**
  * Re-derives the planned final phase from a prepared produce result's retained payloads,
  * but only when this produce actually recorded the task design document. Phase-boundary
@@ -109,13 +143,11 @@ export function plannedFinalPhaseFromRecordedPayloads(
 ): number | null | undefined {
   const designPath = `.archflow/tasks/${taskId}/design.md`;
   const recorded = payloads.find((payload) => payload.path === designPath);
-  if (recorded === undefined) return undefined;
-  try {
-    return plannedFinalPhaseFromDesign(recorded.bytes);
-  } catch (error) {
-    if (storedPlannedFinalPhase !== undefined) throw error;
-    return undefined;
-  }
+  // Fresh design bytes are not approved authority. Only an already human-approved bound may be
+  // refreshed by a later governing-document produce; the design-approval decision is the writer
+  // that establishes the first bound.
+  if (recorded === undefined || storedPlannedFinalPhase === undefined) return undefined;
+  return plannedFinalPhaseFromDesign(recorded.bytes);
 }
 
 /**

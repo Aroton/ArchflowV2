@@ -28,14 +28,17 @@ import {
 } from "../../review/envelopes.js";
 import { requireApprovedUpstreamDigests } from "../../review/fixed-point.js";
 import { assembleReviewContext } from "../../review/pinned-context.js";
-import { resolvePinnedConstitution } from "../../state/constitution.js";
+import { authenticateRuleAcceptancePolicy, resolvePinnedConstitution } from "../../state/constitution.js";
 import {
   prepareEvidenceResult,
   type EvidenceResultValue,
   type PreparedEvidenceResult,
 } from "../../state/evidence-results.js";
 import { loadAuthenticatedGateApproval } from "../../state/gates.js";
-import { authenticatedApprovalIsEligibleAfterLatestRestart } from "../../state/restart-authority.js";
+import {
+  acceptedNoWaitSettlement,
+  authenticatedApprovalIsEligibleAfterLatestRestart,
+} from "../../state/restart-authority.js";
 import {
   loadCurrentProduceSubject,
   loadProduceUpstreamSubject,
@@ -124,8 +127,23 @@ async function deriveApprovedUpstreams(
   toolName: "archflow_counter_review",
   durable: TaskStateV1,
   subject: CurrentProduceSubject,
-): Promise<ProjectResult<readonly AdjudicationUpstreamInput[]>> {
+): Promise<ProjectResult<Readonly<{
+  inputs: readonly AdjudicationUpstreamInput[];
+  authorities: readonly Readonly<{
+    subject_digest: AdjudicationUpstreamInput["upstream_digest"];
+    producer_phase: TaskStateV1["phase_instance"];
+  }>[];
+}>>> {
+  const resolvedConstitution = await resolvePinnedConstitution(
+    services.runner, durable.policy_base_commit, services.authority.context,
+  );
+  if (!resolvedConstitution.ok) return resolvedConstitution;
+  const settlementPolicy = authenticateRuleAcceptancePolicy(durable, resolvedConstitution.value);
   const derived: AdjudicationUpstreamInput[] = [];
+  const authorities: Array<Readonly<{
+    subject_digest: AdjudicationUpstreamInput["upstream_digest"];
+    producer_phase: TaskStateV1["phase_instance"];
+  }>> = [];
   const seenOwners = new Set<string>();
   const coProducedPaths = produceOwnedTaskDocumentPaths(subject.artifact);
   for (const binding of produceUpstreamBindingsForSubject(durable, subject.artifact)) {
@@ -190,6 +208,14 @@ async function deriveApprovedUpstreams(
         break;
       }
     }
+    if (!approved && settlementPolicy !== undefined && "reference" in upstream.value) {
+      approved = acceptedNoWaitSettlement(
+        settlementPolicy,
+        durable,
+        upstreamDigest,
+        upstream.value.artifact.phase_instance,
+      ) !== undefined;
+    }
     if (!approved) {
       return fail(createProjectError("STATE_INVALID", {
         phase_instance: durable.phase_instance, issue_code: "upstream-approval-missing",
@@ -197,9 +223,17 @@ async function deriveApprovedUpstreams(
     }
     seenOwners.add(upstreamDigest);
     derived.push(Object.freeze({ upstream_digest: upstreamDigest, artifact: text }));
+    authorities.push(Object.freeze({
+      subject_digest: upstreamDigest,
+      producer_phase: upstream.value.artifact.phase_instance,
+    }));
   }
   derived.sort((left, right) => left.upstream_digest.localeCompare(right.upstream_digest));
-  return ok(Object.freeze(derived));
+  authorities.sort((left, right) => left.subject_digest.localeCompare(right.subject_digest));
+  return ok(Object.freeze({
+    inputs: Object.freeze(derived),
+    authorities: Object.freeze(authorities),
+  }));
 }
 
 /**
@@ -346,9 +380,10 @@ export async function handleCounterReview(
     if (activeRules) {
       const upstreams = await deriveApprovedUpstreams(services, call.name, state.value, produce.value);
       if (!upstreams.ok) return upstreams;
+      // `deriveApprovedUpstreams` has already authenticated every human/import/settlement arm with
+      // its exact producer phase. Do not collapse that proof and re-scan digest-only approvals.
       const approvedUpstreamDigests = requireApprovedUpstreamDigests(
-        state.value.approvals,
-        upstreams.value.map((item) => item.upstream_digest),
+        upstreams.value.authorities,
       );
       const constitutionResultId = stableId("adjudication-result", call.input.intent_id);
       const constitutionCoordinator = createDispatchCoordinator({
@@ -361,7 +396,7 @@ export async function handleCounterReview(
         registry: constitution.value.rules,
         pinned_constitution_digest: constitution.value.digest,
         rules: rulesForEnvelope(constitution.value.rules),
-        approved_upstreams: upstreams.value,
+        approved_upstreams: upstreams.value.inputs,
         approved_upstream_digests: approvedUpstreamDigests,
         invocation_id: stableId("adjudication-invocation", context.invocation_id),
         result_id: constitutionResultId,

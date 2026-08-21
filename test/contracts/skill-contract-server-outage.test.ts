@@ -12,6 +12,11 @@ import { LOCAL_COMMANDS } from "../../src/local/commands.js";
  * workflow (manual-next, manual-handoff, checkpoint files) must not resurface in any skill, and
  * archflow-status must drive read-only archflow_status as its primary path, keep manual-status as
  * its only fallback helper, and document the classification modes with wait guidance.
+ *
+ * The one route-only exception: when the server is reachable and only the configured reviewer
+ * route is unavailable, the reviewing skills ask the human for a substitute route and reason and
+ * carry them as a review-dispatch submission that parameterizes — never skips — the automatic
+ * counter-review for that dispatch.
  */
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -36,6 +41,32 @@ describe("server-outage skill contracts", () => {
       expect(skill, `${name} mentions manual-handoff`).not.toContain("manual-handoff");
       expect(skill, `${name} names checkpoint as a command`).not.toMatch(/archflow-local checkpoint\b/u);
       expect(skill, `${name} mentions checkpoints`).not.toMatch(/\bcheckpoint/iu);
+    }
+  });
+
+  it("substitutes a reviewer route only through a human-authorized review-dispatch submission", () => {
+    const reviewingSkills = [
+      "archflow-prd",
+      "archflow-design",
+      "archflow-phase-design",
+      "archflow-phase-impl",
+    ];
+    for (const name of reviewingSkills) {
+      const skill = source(name);
+      expect(skill, `${name} carries the review-dispatch submission shape`)
+        .toContain('`{"kind":"review-dispatch","route_override"');
+      expect(skill, `${name} scopes the failure to a reachable server and a route-only outage`)
+        .toContain("both workflow tools answer but a counter-review dispatch fails because the configured reviewer route itself is unavailable");
+      expect(skill, `${name} asks for the substitute route fields and the human reason`)
+        .toContain("(`model`, `effort`, optionally `provider`)");
+      expect(skill, `${name} requires the human reason and records it on the evidence`)
+        .toContain("The reason is required, carries the human's words, and is recorded on the review evidence");
+      expect(skill, `${name} never skips or replaces the automatic counter-review`)
+        .toContain("never skips or replaces it");
+      expect(skill, `${name} keeps the substitution the single routing exception`)
+        .toContain("the single human-authorized exception to never supplying routing");
+      expect(skill, `${name} keeps the degraded stop path distinct from a route outage`)
+        .toContain("it is not degraded operation");
     }
   });
 

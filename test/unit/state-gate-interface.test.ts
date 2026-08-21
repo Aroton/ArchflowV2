@@ -133,6 +133,26 @@ describe("gate decision presentation", () => {
     });
   });
 
+  it("presents internally derived content-trigger details only for commit authorization", () => {
+    const commit = activeGate(CASES[6], "content-trigger-details");
+    const details = [
+      "db/schema.sql: modified; 120 → 148 bytes (+28 bytes).",
+      "db/archive.sql: deleted; 42 → 0 bytes (-42 bytes).",
+    ];
+    const presentation = buildHumanGatePresentation(commit, details);
+
+    expect(presentation.details).toEqual(details);
+    expect(presentation.title).toBe("Authorize the commit");
+    expect(presentation.options.map((option) => option.token)).toEqual([
+      "authorize-commit", "request-changes", "stop-work", "cancel",
+    ]);
+
+    expect(() => buildHumanGatePresentation(
+      activeGate(CASES[4], "misplaced-content-trigger-details"),
+      details,
+    )).toThrow("internal invariant: content-trigger details require a commit-authorization gate");
+  });
+
   it("binds judgment-only choices to server-owned gate state", () => {
     const active = activeGate(CASES[0], "choice");
     expect(selectGateDecisionTemplate(active, { choice: "reject", reason: "The acceptance evidence is incomplete." })).toEqual({

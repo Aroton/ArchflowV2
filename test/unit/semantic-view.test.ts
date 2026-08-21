@@ -53,7 +53,7 @@ function fullStatus(nextAction: NextAction, extra: Partial<TaskStatusV1> = {}): 
       digest: digestA,
       active_rules: [{ id: "trust", version: 1, text: "Require explicit approval." }],
     },
-    config: { verified: true, expected_digest: digestA, observed_digest: digestA },
+    config: { verified: true },
     next_action: nextAction,
     ...extra,
   } as TaskStatusV1;
@@ -83,8 +83,7 @@ describe("semantic status projection", () => {
   it("maps every current NextActionCode without exposing a protocol action", () => {
     const codes = [
       "initialize-repository", "create-task", "resume-exact-intent",
-      "inspect-retained-receipt", "create-fresh-intent", "resolve-current-authority", "restore-pinned-config",
-      "upgrade-tooling",
+      "inspect-retained-receipt", "create-fresh-intent", "resolve-current-authority",
       "open-gate", "resolve-open-gate", "run-step", "commit-artifacts", "commit-phase", "advance-phase",
       "complete-task", "task-complete", "inspect-state",
     ] as const satisfies readonly NextActionCode[];
@@ -104,6 +103,22 @@ describe("semantic status projection", () => {
       expect(result.view.next_action.kind).toBeTruthy();
       expect(JSON.stringify(result.view)).not.toContain("request_digest");
     }
+  });
+
+  it("projects a config change notice without changing the action kind", () => {
+    const entries = [
+      { path: "roles.counter-reviewer.effort", before: "xhigh", after: "high" },
+      { path: "max_attempts", after: 4 },
+    ] as const;
+    const status = fullStatus(action("run-step", { step: "produce" }), {
+      config_change: entries,
+    } as Partial<TaskStatusV1>);
+    const projected = projectSemanticStatus(snapshot(status), invocation);
+    // Informational only: the entries ride along verbatim and the prose gains one line, but
+    // the condition and the action are exactly what an unedited config would produce.
+    expect(projected.view.next_action.kind).toBe("begin-work");
+    expect(projected.view.config_change).toEqual([...entries]);
+    expect(projected.view.detail).toContain("2 fields");
   });
 
   it("projects work, review, empty triage, triage, and honest implementation commit states", () => {
@@ -139,7 +154,26 @@ describe("semantic status projection", () => {
       requires_human_confirmation: true,
     });
     expect(authorized.offer).toBeUndefined();
+    expect(authorized.instruction).toContain("Prior human commit authority is recorded");
     expect(authorized.instruction).toContain("explicit confirmation");
+    expect(authorized.instruction).toContain("baseline and target ref");
+    expect(authorized.instruction).toContain("stage exactly the authorized paths");
+    expect(authorized.instruction).toContain("exact message");
+    expect(authorized.instruction).toContain("preserving unrelated changes");
+
+    const autonomous = projectSemanticStatus(snapshot(fullStatus(action("commit-phase", {
+      commit_paths: ["src/a.ts"], commit_message: "Implement the reviewed phase",
+      commit_target_ref: "refs/heads/main", commit_baseline: "2".repeat(40),
+      commit_requires_human_confirmation: false,
+    }))), invocation).view.next_action;
+    expect(autonomous.commit?.requires_human_confirmation).toBe(false);
+    expect(autonomous.instruction).toContain("Authenticated rule authority permits direct client execution");
+    expect(autonomous.instruction).toContain("create the commit directly");
+    expect(autonomous.instruction).toContain("baseline and target ref");
+    expect(autonomous.instruction).toContain("stage and inspect exactly the authorized paths");
+    expect(autonomous.instruction).toContain("exact returned message");
+    expect(autonomous.instruction).toContain("preserving unrelated changes");
+    expect(autonomous.instruction).not.toContain("human");
 
     const missingAuthority = projectSemanticStatus(snapshot(fullStatus(action("commit-phase"))), invocation).view.next_action;
     expect(missingAuthority.kind).toBe("inspect");
@@ -159,6 +193,17 @@ describe("semantic status projection", () => {
       baseline: "1".repeat(40),
       requires_human_confirmation: false,
     });
+  });
+
+  it("projects baseline refresh as one server-owned no-submission action", () => {
+    const designInvocation: WorkflowInvocationV1 = { skill: "archflow-phase-design", phase: 1, intent: "resume" };
+    const phase = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(1) });
+    const projected = projectSemanticStatus(snapshot(fullStatus(
+      action("refresh-milestone-baseline", { phase_instance: phase }),
+      { phase_instance: phase, step: "triage", status: "succeeded" },
+    )), designInvocation).view.next_action;
+    expect(projected).toMatchObject({ kind: "refresh-milestone-baseline", expected_submission: "none" });
+    expect(projected.offer).toMatch(/^af1_/u);
   });
 
   it("maps the migration-audit gate position and import milestone commit through the shared shapes", () => {

@@ -340,6 +340,50 @@ describe("advertised MCP tool catalogue", () => {
     expect(action.properties.submission).toEqual({ $ref: "#/$defs/applySubmission" });
   });
 
+  it("advertises the review-dispatch submission arm self-contained inside applySubmission", async () => {
+    const apply = ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === "archflow_apply")!;
+    const armByConst = (node: unknown): Record<string, unknown> | undefined =>
+      (node as { anyOf?: readonly Record<string, unknown>[] }).anyOf
+        ?.find((candidate) => (candidate.properties as { kind?: { const?: string } } | undefined)?.kind?.const === "review-dispatch");
+
+    const arm = armByConst((apply.inputSchema as { $defs: Record<string, unknown> }).$defs.applySubmission);
+    expect(arm).toBeDefined();
+    expect(arm!.required).toEqual(["kind", "route_override"]);
+    const routeOverride = (arm!.properties as Record<string, { required?: string[]; properties?: Record<string, unknown> }>).route_override!;
+    expect(routeOverride.required).toEqual(["reason"]);
+    expect(Object.keys(routeOverride.properties!)).toEqual(["reason", "counter-reviewer", "adjudicator"]);
+    // The route schema is a semantic-workflow-local clone: the arm resolves without any $ref, so
+    // the advertised catalogue never reaches into a config document it does not carry.
+    expect(JSON.stringify(arm)).not.toContain("$ref");
+
+    // The generated document carries the same arm inside its own applySubmission def.
+    const generated = JSON.parse(await readFile(
+      new URL("../../src/contracts/schemas/v1/semantic-workflow.schema.json", import.meta.url),
+      "utf8",
+    )) as object;
+    expect(armByConst((generated as { $defs: Record<string, unknown> }).$defs.applySubmission)).toEqual(arm);
+
+    // The advertised interface accepts a well-formed substitution request and refuses the
+    // meaningless override-less arm shape.
+    const validate = freshAjv().compile(apply.inputSchema);
+    const substitutionInput = {
+      schema_version: "1", task_id: "task-1",
+      invocation: { skill: "archflow-phase-impl", phase: 1, intent: "resume" },
+      action: {
+        offer: `af1_${"a".repeat(64)}`,
+        submission: {
+          kind: "review-dispatch",
+          route_override: { reason: "codex CLI auth outage", "counter-reviewer": { model: "gpt-5.6-outage-fallback", effort: "high" } },
+        },
+      },
+    };
+    expect(validate(substitutionInput), JSON.stringify(validate.errors)).toBe(true);
+    expect(validate({
+      ...substitutionInput,
+      action: { ...substitutionInput.action, submission: { kind: "review-dispatch" } },
+    })).toBe(false);
+  });
+
   it("advertises exactly the reference-reachable definitions within the context-budget fence", () => {
     const unescape = (token: string): string => token.replaceAll("~1", "/").replaceAll("~0", "~");
     const assertExactReachableClosure = (schema: Readonly<Record<string, unknown>>, label: string): void => {

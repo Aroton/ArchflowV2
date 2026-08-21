@@ -1,0 +1,137 @@
+import { describe, expect, it } from "vitest";
+
+import { parseConfigYaml, type TaskConfigSnapshot } from "../../src/contracts/config.js";
+import { computeConfigChange, normalizeForChangeDetection, withLastSeenConfig } from "../../src/state/config-change.js";
+
+/** parseConfigYaml's zod output carries `| undefined` optionals; the snapshot type strips them. */
+const parseSnapshot = (source: string, label: string): TaskConfigSnapshot => parseConfigYaml(source, label) as TaskConfigSnapshot;
+
+describe("computeConfigChange", () => {
+  it("reports nested object leaves with dot-separated paths", () => {
+    const before = parseSnapshot([
+      "schema_version: \"1\"",
+      "roles:",
+      "  counter-reviewer: { model: gpt-example, effort: high }",
+      "  adjudicator: { model: claude-example, effort: high }",
+    ].join("\n"), "before");
+    const after = parseSnapshot([
+      "schema_version: \"1\"",
+      "roles:",
+      "  counter-reviewer: { model: gpt-replacement, effort: high }",
+      "  adjudicator: { model: claude-example, effort: max }",
+    ].join("\n"), "after");
+
+    expect(computeConfigChange(before, after)).toEqual([
+      { path: "roles.adjudicator.effort", before: "high", after: "max" },
+      { path: "roles.counter-reviewer.model", before: "gpt-example", after: "gpt-replacement" },
+    ]);
+  });
+
+  it("reports added and removed leaves on the absent side only", () => {
+    const before = parseSnapshot([
+      "schema_version: \"1\"",
+      "roles: {}",
+      "max_attempts: 3",
+    ].join("\n"), "before");
+    const after = parseSnapshot([
+      "schema_version: \"1\"",
+      "roles:",
+      "  counter-reviewer: { model: gpt-example, effort: high }",
+    ].join("\n"), "after");
+
+    expect(computeConfigChange(before, after)).toEqual([
+      { path: "max_attempts", before: 3 },
+      { path: "roles.counter-reviewer", after: { model: "gpt-example", effort: "high" } },
+    ]);
+  });
+
+  it("addresses array items by index, including inside nested objects", () => {
+    // The config schema itself has no arrays, but the diff must stay correct for any plain-JSON
+    // leaf structure it is handed; these fixtures exercise the generic array walk directly.
+    const before = { schema_version: "1", roles: {}, content: [{ paths: ["a", "b"] }, { paths: ["c"] }] } as unknown as TaskConfigSnapshot;
+    const after = { schema_version: "1", roles: {}, content: [{ paths: ["a", "changed"] }, { paths: [] }, { paths: ["new"] }] } as unknown as TaskConfigSnapshot;
+
+    expect(computeConfigChange(before, after)).toEqual([
+      { path: "content.0.paths.1", before: "b", after: "changed" },
+      { path: "content.1.paths.0", before: "c" },
+      { path: "content.2", after: { paths: ["new"] } },
+    ]);
+  });
+
+  it("produces no entries for comment-only and reorder-equivalent YAML bytes", () => {
+    const plain = [
+      "schema_version: \"1\"",
+      "roles:",
+      "  counter-reviewer: { model: gpt-example, effort: high }",
+      "  adjudicator: { model: claude-example, effort: high }",
+      "max_attempts: 3",
+    ].join("\n");
+    // Same structure: reordered keys, flow style collapsed differently, comments added.
+    const commented = [
+      "# A comment the parser ignores.",
+      "max_attempts: 3",
+      "schema_version: \"1\"",
+      "roles:",
+      "  adjudicator:",
+      "    effort: high  # trailing comment",
+      "    model: claude-example",
+      "  counter-reviewer: { effort: high, model: gpt-example }",
+    ].join("\n");
+    expect(commented).not.toBe(plain);
+
+    const before = parseSnapshot(plain, "plain");
+    const after = parseSnapshot(commented, "commented");
+    expect(computeConfigChange(before, after)).toEqual([]);
+  });
+
+  it("drops the retired producer role before diffing so a cosmetic retire reports nothing", () => {
+    const withProducer = parseSnapshot([
+      "schema_version: \"1\"",
+      "roles:",
+      "  producer: { model: gpt-example, effort: high }",
+      "  counter-reviewer: { model: gpt-example, effort: high }",
+    ].join("\n"), "with producer");
+    const retired = parseSnapshot([
+      "schema_version: \"1\"",
+      "roles:",
+      "  counter-reviewer: { model: gpt-example, effort: high }",
+    ].join("\n"), "retired");
+
+    expect(computeConfigChange(withProducer, retired)).toEqual([]);
+    expect(normalizeForChangeDetection(withProducer)).toEqual(retired);
+    // The normalization never mutates its input.
+    expect(withProducer.roles.producer).toMatchObject({ model: "gpt-example" });
+    // A real change alongside the retire still reports.
+    const alsoChanged = parseSnapshot([
+      "schema_version: \"1\"",
+      "roles:",
+      "  counter-reviewer: { model: gpt-replacement, effort: high }",
+    ].join("\n"), "also changed");
+    expect(computeConfigChange(withProducer, alsoChanged)).toEqual([
+      { path: "roles.counter-reviewer.model", before: "gpt-example", after: "gpt-replacement" },
+    ]);
+  });
+});
+
+describe("withLastSeenConfig", () => {
+  type Draft = { readonly schema_version: "1"; readonly last_seen_config?: TaskConfigSnapshot };
+  const baseline = parseSnapshot("schema_version: \"1\"\nroles: {}\n", "baseline");
+
+  it("returns the same draft when the recorded baseline is unchanged", () => {
+    const draft: Draft = { schema_version: "1", last_seen_config: baseline };
+    expect(withLastSeenConfig(draft, baseline)).toBe(draft);
+  });
+
+  it("records the normalized edited config only when it differs from the baseline", () => {
+    const edited = parseSnapshot("schema_version: \"1\"\nroles: {}\nmax_attempts: 4\n", "edited");
+    const draft: Draft = { schema_version: "1", last_seen_config: baseline };
+    const updated = withLastSeenConfig(draft, edited);
+    expect(updated).not.toBe(draft);
+    expect(updated.last_seen_config).toEqual(edited);
+  });
+
+  it("seeds the baseline on a draft that has none", () => {
+    const draft: Draft = { schema_version: "1" };
+    expect(withLastSeenConfig(draft, baseline)).toEqual({ ...draft, last_seen_config: baseline });
+  });
+});

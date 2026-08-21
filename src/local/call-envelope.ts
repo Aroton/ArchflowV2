@@ -1,7 +1,7 @@
 import { canonicalJsonDigest } from "../contracts/canonical.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
 import { type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
-import { computeGateId, computeInputFingerprint } from "../contracts/fingerprints.js";
+import { computeGateId } from "../contracts/fingerprints.js";
 import { parseToolCall, type ParsedToolCall } from "../contracts/mcp-tools.js";
 import { parseRepositoryPathClaim, type RepositoryPathClaim, type TaskPathClaim } from "../contracts/path-claims.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
@@ -85,23 +85,17 @@ async function fingerprintFor(
   if (config.kind !== "valid") {
     return fail(createProjectError("CONFIG_INVALID", { issue_code: `config-${config.kind}` }));
   }
-  if (config.snapshot.digest !== services.state.value.config_digest) {
-    return fail(createProjectError("PINNED_CONFIG_MISMATCH", {
-      expected_digest: services.state.value.config_digest,
-      observed_digest: config.snapshot.digest,
-    }));
-  }
   const resolved = await services.dependencies.resolve_input_fingerprint({
     runner: services.runner,
     authority: services.authority,
     state: services.state,
     call,
     live_config: config.snapshot,
+    expected_input_fingerprint: services.state.value.input_fingerprint,
     context: services.authority.context,
   });
   if (!resolved.ok) return resolved;
-  assertPlainJson(resolved.value, "envelope fingerprint subject");
-  return ok(computeInputFingerprint(structuredClone(resolved.value)));
+  return ok(resolved.value.fingerprint);
 }
 
 /** Computes the server-checked fingerprint, request digest, and caller-known gate bindings. */

@@ -80,12 +80,16 @@ function expectOk(result: SemanticResultV1): void {
 
 /**
  * Installs a scripted `codex` child that returns one findings list per review dispatch (the last
- * list repeats) and passes every constitution rule. Returns a restorer for the caller's cleanup.
+ * list repeats) and answers every constitution rule with the given compliance (passing stubs keep
+ * every rule not-matched, so no adjudication gate appears). Returns a restorer for the caller's
+ * cleanup.
  */
 export function installSemanticReviewStub(
   root: string,
   findingsByReview: readonly (readonly Record<string, unknown>[])[],
+  options: Readonly<{ adjudicationCompliance?: "pass" | "fail" }> = {},
 ): () => void {
+  const adjudicationCompliance = options.adjudicationCompliance ?? "pass";
   const bin = join(root, "semantic-stub-bin");
   const stubHome = join(root, "semantic-stub-home");
   const countPath = join(root, "semantic-review-count");
@@ -118,8 +122,10 @@ else {
       approved_upstream_digests: subject.approved_upstream_digests,
       source_evidence_set_digest: subject.source_evidence_set_digest,
       rule_findings: envelope.rules.map((rule) => ({ rule_id: rule.id, rule_version: rule.version,
-        compliance: "pass", rationale: "The document respects this rule.", trigger: "not-matched",
-        trigger_evidence: "No review trigger matched." })),
+        compliance: ${JSON.stringify(adjudicationCompliance)},
+        rationale: ${JSON.stringify(adjudicationCompliance === "pass" ? "The document respects this rule." : "The document violates this rule.")},
+        trigger: ${JSON.stringify(adjudicationCompliance === "pass" ? "not-matched" : "matched")},
+        trigger_evidence: ${JSON.stringify(adjudicationCompliance === "pass" ? "No review trigger matched." : "The review trigger matched this document.")} })),
       drift_findings: subject.approved_upstream_digests.map((digest) => ({ upstream_digest: digest,
         drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift." })) };
   }
@@ -217,6 +223,16 @@ export async function reachImplementationHandoff(
   options: Readonly<{ phaseCount: number; phase?: number }>,
 ): Promise<ImplementationHandoff> {
   const phase = options.phase ?? 1;
+  // The walked prd/design/phase-design tiers all retain their approval gates during the staged
+  // rollout. The explicit subjects list also exercises persisted match presentation at each tier.
+  writeFileSync(join(workspace.services.authority.task_root, "config.yaml"), `schema_version: "1"
+roles:
+  counter-reviewer: { model: gpt-5.6-sol, effort: xhigh }
+  adjudicator: { model: gpt-5.6-sol, effort: xhigh }
+approval_rules:
+  subjects: [prd, design, phase-design]
+  content: []
+`);
   writeFileSync(join(workspace.services.authority.task_root, "ask.md"), "Describe a small semantic journey.\n");
   writeFileSync(join(workspace.services.authority.task_root, "prd.md"), "# Semantic journey\n\nThe client authors this document.\n");
 

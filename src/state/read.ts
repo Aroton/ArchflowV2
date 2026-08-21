@@ -5,7 +5,7 @@ import {
   sha256Bytes,
   type CanonicalDocument,
 } from "../contracts/canonical.js";
-import { parseConfigYaml } from "../contracts/config.js";
+import { parseConfigYaml, type TaskConfigSnapshot } from "../contracts/config.js";
 import { parseIntentReceipt, type IntentReceiptV1 } from "../contracts/durable-intent.js";
 import { taskStateV1Schema, type TaskStateV1 } from "../contracts/durable-state.js";
 import type { Sha256Digest } from "../contracts/evidence.js";
@@ -27,6 +27,8 @@ export type ReceiptReadResult =
 export type LiveConfigSnapshot = Readonly<{
   bytes: Uint8Array;
   digest: Sha256Digest;
+  /** The parsed value of `bytes` — the read already validated it, so the recording paths need not re-parse. */
+  parsed: TaskConfigSnapshot;
 }>;
 
 export type FingerprintReadContext<K extends ToolName> = Readonly<{
@@ -35,6 +37,8 @@ export type FingerprintReadContext<K extends ToolName> = Readonly<{
   state: CanonicalDocument<TaskStateV1>;
   call: Extract<ParsedToolCall, { readonly name: K }>;
   live_config: LiveConfigSnapshot;
+  /** The recorded/claimed fingerprint a comparing call site expects; absent at recording sites. */
+  expected_input_fingerprint?: Sha256Digest;
   context: RepositoryOperationContext;
 }>;
 
@@ -108,10 +112,14 @@ export async function readTaskConfig(path: ResolvedPath): Promise<ConfigReadResu
   const read = await readBytes(path);
   if (read.kind !== "bytes") return read;
   try {
-    parseConfigYaml(decoder.decode(read.bytes), "task config");
+    const parsed = parseConfigYaml(decoder.decode(read.bytes), "task config");
     return Object.freeze({
       kind: "valid",
-      snapshot: Object.freeze({ bytes: read.bytes, digest: sha256Bytes(read.bytes) }),
+      snapshot: Object.freeze({
+        bytes: read.bytes,
+        digest: sha256Bytes(read.bytes),
+        parsed: parsed as TaskConfigSnapshot,
+      }),
     });
   } catch {
     // The bytes are in hand even when they will not parse, so the digest travels with the

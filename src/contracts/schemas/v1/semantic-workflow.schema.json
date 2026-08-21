@@ -309,6 +309,7 @@
             "reopen",
             "open-waiver",
             "decide",
+            "refresh-milestone-baseline",
             "commit",
             "start-next-skill",
             "finish-task",
@@ -334,7 +335,8 @@
             "triage",
             "gate-summary",
             "reopening-request",
-            "decision"
+            "decision",
+            "review-dispatch"
           ]
         },
         "skill": {
@@ -667,6 +669,12 @@
             "options"
           ],
           "additionalProperties": false
+        },
+        "config_change": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/configChangeEntry"
+          }
         }
       },
       "required": [
@@ -679,6 +687,52 @@
         "next_action"
       ],
       "additionalProperties": false
+    },
+    "configChangeEntry": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "before": {
+          "$ref": "#/$defs/plainJson"
+        },
+        "after": {
+          "$ref": "#/$defs/plainJson"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "plainJson": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/plainJson"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/plainJson"
+          }
+        }
+      ]
     },
     "applySubmission": {
       "anyOf": [
@@ -1006,6 +1060,97 @@
             "kind",
             "choice",
             "reason"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "review-dispatch"
+            },
+            "route_override": {
+              "type": "object",
+              "properties": {
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096,
+                  "pattern": "\\S"
+                },
+                "counter-reviewer": {
+                  "type": "object",
+                  "properties": {
+                    "model": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "effort": {
+                      "type": "string",
+                      "enum": [
+                        "low",
+                        "medium",
+                        "high",
+                        "xhigh",
+                        "max",
+                        "ultra"
+                      ]
+                    },
+                    "provider": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "effort"
+                  ],
+                  "additionalProperties": false
+                },
+                "adjudicator": {
+                  "type": "object",
+                  "properties": {
+                    "model": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "effort": {
+                      "type": "string",
+                      "enum": [
+                        "low",
+                        "medium",
+                        "high",
+                        "xhigh",
+                        "max",
+                        "ultra"
+                      ]
+                    },
+                    "provider": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "effort"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "kind",
+            "route_override"
           ],
           "additionalProperties": false
         }
@@ -1370,6 +1515,12 @@
         "options"
       ],
       "additionalProperties": false
+    },
+    "config_change": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/configChangeEntry"
+      }
     }
   },
   "required": [

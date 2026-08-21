@@ -218,7 +218,7 @@ const REPOSITORY_SAMPLES: readonly RepositorySample[] = [
   },
   {
     path_class: "repository-source",
-    claims: ["src/index.ts", "docs/readme.md"],
+    claims: ["src/index.ts", "docs/readme.md", ".archflow/config.yaml"],
     classifiesAs: "repository-source",
   },
 ];

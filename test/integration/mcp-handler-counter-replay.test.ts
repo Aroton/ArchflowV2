@@ -93,7 +93,6 @@ Preserve explicit human review gates.
   const produceFingerprint = computeInputFingerprint({
     schema_version: "1",
     workflow_digest: workflowDigest,
-    config_digest: configDigest,
     constitution_digest: constitution.value.digest,
     artifact_identities: [],
     upstream_identities: [],
@@ -104,7 +103,6 @@ Preserve explicit human review gates.
   const reviewFingerprint = computeInputFingerprint({
     schema_version: "1",
     workflow_digest: workflowDigest,
-    config_digest: configDigest,
     constitution_digest: constitution.value.digest,
     artifact_identities: [],
     upstream_identities: [],

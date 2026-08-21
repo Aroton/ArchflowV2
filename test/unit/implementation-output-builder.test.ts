@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
+  chmodSync,
   renameSync,
   rmSync,
   symlinkSync,
@@ -12,7 +13,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { canonicalDocument, gitBlobOid, parseGitOid, sha256Bytes } from "../../src/contracts/canonical.js";
+import { canonicalDocument, canonicalJsonDigest, gitBlobOid, parseGitOid, sha256Bytes } from "../../src/contracts/canonical.js";
 import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
 import { parseImplementationOutput } from "../../src/contracts/durable-implementation-output.js";
 import type { OutputEntry } from "../../src/contracts/durable-primitives.js";
@@ -26,6 +27,7 @@ import { discoverWorktree } from "../../src/repository/identity.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
 import type { GateLifecycleDependencies } from "../../src/state/gates.js";
 import {
+  approvedDesignWorktreeMatchesRetainedArtifact,
   buildImplementationOutput,
   designArtifactCommittedAtCurrentTarget,
   implementationOutputCommittedAtCurrentTarget,
@@ -128,6 +130,22 @@ describe("implementation-output builder", () => {
     const discovered = await discoverWorktree(createGitRunner({ cwd: root }), operation);
     if (!discovered.ok) throw discovered.error;
 
+    // Projection-baseline adoption is deliberately irrelevant: refresh authority compares the
+    // live bytes and mode to this original retained output identity, not a later generation.
+    expect(await approvedDesignWorktreeMatchesRetainedArtifact(
+      discovered.value, taskId, artifact, outputs, operation,
+    )).toBe(true);
+    writeFileSync(join(taskRoot, "design.md"), "# Adopted but unreviewed design\n");
+    expect(await approvedDesignWorktreeMatchesRetainedArtifact(
+      discovered.value, taskId, artifact, outputs, operation,
+    )).toBe(false);
+    writeFileSync(join(taskRoot, "design.md"), designBytes);
+    chmodSync(join(taskRoot, "design.md"), 0o755);
+    expect(await approvedDesignWorktreeMatchesRetainedArtifact(
+      discovered.value, taskId, artifact, outputs, operation,
+    )).toBe(false);
+    chmodSync(join(taskRoot, "design.md"), 0o644);
+
     const observe = () => designArtifactCommittedAtCurrentTarget(
       discovered.value, taskId, artifact, outputs, context,
     );
@@ -172,6 +190,116 @@ describe("implementation-output builder", () => {
 
     execFileSync("git", ["commit", "--amend", "-qm", "Not the approved message"], { cwd: root, env: gitEnv });
     expect(await observe()).toEqual({ observed: false, reason: "message-mismatch", blocking: true });
+  });
+
+  it("does not accept a rule settlement as design-milestone recovery authority", async () => {
+    const root = mkdtempSync(join(tmpdir(), "archflow-settlement-only-design-commit-"));
+    roots.push(root);
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root, env: gitEnv });
+    const taskId = parseTaskSlug("settlement-only-design-task");
+    const taskPath = `.archflow/tasks/${taskId}`;
+    const taskRoot = join(root, taskPath);
+    mkdirSync(taskRoot, { recursive: true });
+    writeFileSync(join(root, "tracked.txt"), "base\n");
+    execFileSync("git", ["add", "tracked.txt", taskPath], { cwd: root, env: gitEnv });
+    execFileSync("git", ["commit", "-qm", "base"], { cwd: root, env: gitEnv });
+    const baseline = parseGitOid(execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: root, env: gitEnv, encoding: "utf8",
+    }).trim());
+
+    const designBytes = new TextEncoder().encode("# Approved design\n");
+    const projectionTarget = parseRepositoryPathClaim(`${taskPath}/design.md`);
+    const artifact: DocumentArtifactV1 = {
+      schema_version: "1",
+      artifact_kind: "document",
+      task_id: taskId,
+      phase_instance: encodePhaseInstance({ kind: "design" }),
+      step: "produce",
+      document_path: parseTaskPathClaim("design.md"),
+      path_class: "document",
+      byte_count: parseSafeInteger(designBytes.byteLength),
+      content_digest: sha256Bytes(designBytes),
+      declared_inputs: [],
+      input_fingerprint: parseSha256Digest("1".repeat(64)),
+      snapshot_digest: parseSha256Digest("2".repeat(64)),
+      projection_target: projectionTarget,
+    };
+    const outputs: readonly OutputEntry[] = [{
+      path: projectionTarget,
+      path_class: "document",
+      operation: "add",
+      storage: "git-object",
+      file_type: "regular",
+      after: { oid: gitBlobOid(designBytes), mode: "100644", size_bytes: parseSafeInteger(designBytes.byteLength) },
+    }];
+    const designPhase = encodePhaseInstance({ kind: "design" });
+    const subjectDigest = canonicalJsonDigest(artifact);
+    const receipt = {
+      task_id: taskId,
+      phase_instance: designPhase,
+      step: "adjudicate" as const,
+      subject_digest: subjectDigest,
+      conclusion: { wait: false, match: null } as const,
+      config_digest: parseSha256Digest("7".repeat(64)),
+      settled_at_revision: parseSafeInteger(3),
+    };
+    const stateWithRuleSettlements = (ruleSettlements: readonly [typeof receipt]) =>
+      canonicalDocument<TaskStateV1>({
+        schema_version: "1",
+        task_id: taskId,
+        repository_identity_digest: parseSha256Digest("8".repeat(64)),
+        revision: parseSafeInteger(3),
+        phase_instance: designPhase,
+        step: "adjudicate",
+        status: "succeeded",
+        attempt: parseSafeInteger(1),
+        input_fingerprint: parseSha256Digest("1".repeat(64)),
+        initialization_digest: parseSha256Digest("2".repeat(64)),
+        config_digest: parseSha256Digest("3".repeat(64)),
+        workflow_digest: parseSha256Digest("4".repeat(64)),
+        constitution_digest: parseSha256Digest("5".repeat(64)),
+        policy_base_commit: baseline,
+        authoritative_results: [],
+        approvals: [],
+        waivers: [],
+        rule_settlements: ruleSettlements,
+      }).bytes;
+    const commitMessage = `ArchFlow: Approve ${taskId} design`;
+    const context = () => ({
+      target_ref: "refs/heads/main",
+      baseline_commit: baseline,
+      commit_message: commitMessage,
+    });
+    const operation: RepositoryOperationContext = {
+      task_id: taskId,
+      phase_instance: designPhase,
+      operation: "reject-settlement-only-design-commit" as never,
+      attempt: parseSafeInteger(1),
+    };
+    const discovered = await discoverWorktree(createGitRunner({ cwd: root }), operation);
+    if (!discovered.ok) throw discovered.error;
+    const observe = (proofContext: ReturnType<typeof context>) =>
+      designArtifactCommittedAtCurrentTarget(discovered.value, taskId, artifact, outputs, proofContext);
+
+    // Settlements are durable evaluation evidence, not human approval or recovery authority.
+    writeFileSync(join(taskRoot, "design.md"), designBytes);
+    writeFileSync(join(taskRoot, "state.json"), stateWithRuleSettlements([receipt]));
+    execFileSync("git", ["add", taskPath], { cwd: root, env: gitEnv });
+    execFileSync("git", ["commit", "-qm", commitMessage, "--", taskPath], { cwd: root, env: gitEnv });
+    await expect(observe(context())).resolves.toEqual({
+      observed: false,
+      reason: "missing-recovery-authority",
+      blocking: true,
+    });
+
+    // Only the archived human decision pair proves recovery authority.
+    const decisionRoot = join(taskRoot, "authority", "decisions", "gate-1");
+    mkdirSync(decisionRoot, { recursive: true });
+    writeFileSync(join(decisionRoot, "request.json"), "{}\n");
+    writeFileSync(join(decisionRoot, "decision.json"), "{}\n");
+    execFileSync("git", ["add", taskPath], { cwd: root, env: gitEnv });
+    execFileSync("git", ["commit", "--amend", "--no-edit", "-q"], { cwd: root, env: gitEnv });
+    await expect(observe(context())).resolves.toEqual({ observed: true });
   });
 
   it("derives operations, identities, undeclared changes, secret scan, and successive accounting", async () => {

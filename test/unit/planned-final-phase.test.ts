@@ -52,6 +52,12 @@ describe("plannedFinalPhaseFromRecordedPayloads", () => {
       { path: designPath, bytes: nonconforming },
     ], undefined)).toBeUndefined();
   });
+
+  it("does not derive the initial bound from valid but unapproved design bytes", () => {
+    expect(plannedFinalPhaseFromRecordedPayloads(TASK, [
+      { path: designPath, bytes: fourPhaseDesign },
+    ], undefined)).toBeUndefined();
+  });
 });
 
 describe("derivedFinalPhaseBelowCurrentPhase", () => {

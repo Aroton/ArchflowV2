@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
+import { parseConfigYaml } from "../../src/contracts/config.js";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -35,6 +36,11 @@ describe("repository asset scaffolding", () => {
     expect(readFileSync(join(root, ".archflow", "config.yaml"))).toEqual(
       readFileSync(new URL("../../assets/config.template.yaml", import.meta.url)),
     );
+    for (const path of ["00-process.md", "10-architecture.md"] as const) {
+      expect(readFileSync(join(root, ".archflow", "constitution", path))).toEqual(
+        readFileSync(new URL(`../../assets/constitution/${path}`, import.meta.url)),
+      );
+    }
     expect(readFileSync(join(root, ".archflow", ".gitignore"), "utf8")).toBe("/runtime/\n");
     expect(readFileSync(join(root, ".gitattributes"), "utf8")).toBe(
       "* text=auto\n.archflow/** -text merge=binary\n",
@@ -48,6 +54,23 @@ describe("repository asset scaffolding", () => {
     expect(second.value.runtime_gitignore).toBe("already-present");
     expect(second.value.gitattributes_updated).toBe(false);
     expect(readFileSync(join(root, ".gitattributes"), "utf8").match(/\.archflow\/\*\* -text merge=binary/gu)).toHaveLength(1);
+  });
+
+  it("keeps repository and scaffold approval defaults equivalent", () => {
+    const template = parseConfigYaml(
+      readFileSync(new URL("../../assets/config.template.yaml", import.meta.url), "utf8"),
+      "config.template.yaml",
+    );
+    const repositoryConfig = parseConfigYaml(
+      readFileSync(new URL("../../.archflow/config.yaml", import.meta.url), "utf8"),
+      ".archflow/config.yaml",
+    );
+
+    expect(repositoryConfig.approval_rules).toEqual(template.approval_rules);
+    expect(repositoryConfig.approval_rules).toEqual({
+      subjects: ["prd", "design"],
+      content: [{ paths: ["**/*.sql"] }],
+    });
   });
 
   it("never reads or edits the repository root gitignore", async () => {
@@ -79,5 +102,27 @@ describe("repository asset scaffolding", () => {
     );
     expect(readFileSync(workflow, "utf8")).toBe("human edit\n");
     expect(() => readFileSync(join(root, ".archflow", "config.yaml"))).toThrow();
+  });
+
+  it("refuses a pre-existing live config instead of adopting new template defaults", async () => {
+    const root = repository();
+    const liveConfig = join(root, ".archflow", "config.yaml");
+    const existing = "schema_version: \"1\"\nroles: {}\n";
+    const { mkdirSync } = await import("node:fs");
+    mkdirSync(join(root, ".archflow"), { recursive: true });
+    writeFileSync(liveConfig, existing);
+
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const result = await scaffoldRepositoryAssets({ working_directory: root });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("CONFIG_INVALID");
+    expect(result.error.diagnostic.parameters).toEqual({ issue_code: "scaffold-diverged" });
+    expect(stderr).toHaveBeenCalledWith(
+      "ArchFlow scaffold differs at .archflow/config.yaml. Review or delete that file, then re-run archflow-local init.\n",
+    );
+    expect(readFileSync(liveConfig, "utf8")).toBe(existing);
+    expect(() => readFileSync(join(root, ".archflow", "workflow.yaml"))).toThrow();
   });
 });

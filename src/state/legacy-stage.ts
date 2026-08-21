@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { sha256Bytes } from "../contracts/canonical.js";
-import { parseConfigYaml } from "../contracts/config.js";
+import { parseConfigYaml, type TaskConfigSnapshot } from "../contracts/config.js";
 import type { LegacyImportInitializationV1, StagedPayloadRef } from "../contracts/durable-legacy-import.js";
 import type { LiveConfigSnapshot } from "./read.js";
 import type { TransactionAuthority } from "./authority.js";
@@ -17,10 +17,10 @@ export async function readStagedLegacyConfig(
 ): Promise<LiveConfigSnapshot | undefined> {
   try {
     const bytes = new Uint8Array(await readFile(join(importRoot(authority, initialization), "config.yaml")));
-    parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(bytes), "staged task config");
+    const parsed = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(bytes), "staged task config");
     const digest = sha256Bytes(bytes);
     if (digest !== initialization.config_digest) return undefined;
-    return Object.freeze({ bytes, digest });
+    return Object.freeze({ bytes, digest, parsed: parsed as TaskConfigSnapshot });
   } catch {
     return undefined;
   }

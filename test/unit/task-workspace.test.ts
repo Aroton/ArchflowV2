@@ -5,7 +5,14 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { sha256Bytes } from "../../src/contracts/canonical.js";
-import { createTaskWorkspace } from "../helpers/task-workspace.js";
+import {
+  authenticateRuleAcceptancePolicy,
+  resolvePinnedConstitution,
+} from "../../src/state/constitution.js";
+import {
+  createTaskWorkspace,
+  supportedRuleAcceptanceConstitutionV2Bytes,
+} from "../helpers/task-workspace.js";
 
 const CODEX_PRODUCER_CONFIG = new TextEncoder().encode(`schema_version: "1"
 roles:
@@ -18,6 +25,33 @@ roles:
 `);
 
 describe("task-workspace config seam", () => {
+  it("authenticates the exact v2 policy from an unmodified scaffold", async () => {
+    const workspace = await createTaskWorkspace({
+      taskId: "default-v2-policy-workspace",
+      label: "default-v2-policy",
+    });
+    try {
+      const resolved = await resolvePinnedConstitution(
+        workspace.services.runner,
+        workspace.initialization.policy_base_commit,
+        workspace.services.authority.context,
+      );
+      expect(resolved.ok).toBe(true);
+      if (!resolved.ok) return;
+      expect(workspace.services.state).toBeDefined();
+      expect(authenticateRuleAcceptancePolicy(
+        workspace.services.state!.value,
+        resolved.value,
+      )).toMatchObject({
+        task_id: workspace.taskId,
+        policy_base_commit: workspace.initialization.policy_base_commit,
+        constitution_digest: workspace.initialization.constitution_digest,
+      });
+    } finally {
+      workspace.dispose();
+    }
+  });
+
   it("commits and pins the complete replacement config bytes", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "codex-producer-workspace",
@@ -39,6 +73,37 @@ describe("task-workspace config seam", () => {
       expect(taskConfig).toEqual(Buffer.from(CODEX_PRODUCER_CONFIG));
       expect(committedConfig).toEqual(Buffer.from(CODEX_PRODUCER_CONFIG));
       expect(workspace.initialization.config_digest).toBe(sha256Bytes(CODEX_PRODUCER_CONFIG));
+    } finally {
+      workspace.dispose();
+    }
+  });
+
+  it("commits constitution overrides before initialization pins the policy base", async () => {
+    const constitutionBytes = supportedRuleAcceptanceConstitutionV2Bytes();
+    const workspace = await createTaskWorkspace({
+      taskId: "v2-policy-workspace",
+      label: "v2-policy",
+      constitutionBytes,
+    });
+    try {
+      for (const [filename, bytes] of Object.entries(constitutionBytes)) {
+        const relative = `.archflow/constitution/${filename}`;
+        expect(readFileSync(join(workspace.root, relative))).toEqual(Buffer.from(bytes));
+        expect(execFileSync(
+          "git",
+          ["show", `${workspace.initialization.policy_base_commit}:${relative}`],
+          { cwd: workspace.root },
+        )).toEqual(Buffer.from(bytes));
+      }
+      expect(execFileSync(
+        "git",
+        ["rev-parse", `${workspace.initialization.policy_base_commit}^`],
+        { cwd: workspace.root, encoding: "utf8" },
+      ).trim()).toBe(execFileSync(
+        "git",
+        ["rev-list", "--max-parents=0", "HEAD"],
+        { cwd: workspace.root, encoding: "utf8" },
+      ).trim());
     } finally {
       workspace.dispose();
     }

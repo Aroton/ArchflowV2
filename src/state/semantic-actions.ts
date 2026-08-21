@@ -1,6 +1,7 @@
 import { canonicalJsonDigest } from "../contracts/canonical.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { parsePathSafeId, type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
+import type { RouteOverrideDeclaration } from "../contracts/mcp-tools.js";
 import { decodePhaseInstance } from "../contracts/phase-instance.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
 import {
@@ -62,6 +63,8 @@ export type SemanticActionPlanV1 = Readonly<{
   task_ask?: string;
   reopening_request?: string;
   decision_submission?: Extract<ApplySubmissionV1, { readonly kind: "decision" }>;
+  /** Set at plan time from a validated `review-dispatch` submission; the continuation substep plan reads it because continuations forward no submission. */
+  route_override?: RouteOverrideDeclaration;
   revision_checkpoint?: true;
 }>;
 
@@ -81,7 +84,15 @@ function expectedSubmissionMessage(expected: ApplySubmissionKindV1, actual: Appl
 
 function assertSubmissionMatches(expected: ApplySubmissionKindV1, submission: ApplySubmissionV1 | undefined): void {
   const actual = submissionKind(submission);
-  if (expected === "none" ? submission !== undefined : actual !== expected) {
+  // "none" forbids any submission; "review-dispatch" is the one optional kind — the dispatching
+  // review offer names it, an override-less apply carries no submission, and a present one must
+  // match exactly; every other kind stays exact-required.
+  const matches = expected === "none"
+    ? submission === undefined
+    : submission === undefined
+      ? expected === "review-dispatch"
+      : actual === expected;
+  if (!matches) {
     throw new SemanticActionPlanError("SEMANTIC_SUBMISSION_MISMATCH", expectedSubmissionMessage(expected, actual));
   }
 }
@@ -309,6 +320,7 @@ function fixedSubsteps(
     case "revise": return Object.freeze(["revise-enter"]);
     case "reopen": return Object.freeze(["reopen"]);
     case "open-waiver": return Object.freeze(["open-waiver"]);
+    case "refresh-milestone-baseline": return Object.freeze(["refresh-milestone-baseline"]);
     case "decide": return expectedSubmission === "gate-summary"
       ? Object.freeze(["open-gate"])
       : expectedSubmission === "decision"
@@ -351,7 +363,17 @@ function requestFacts(
     }
     case "review":
       if (substep === "review-enter") return { execution: "compose-request", facts: { kind: "running", step: "counter_review", intent_id: intentId } };
-      if (substep === "review-run") return { execution: "counter-review-handler", facts: { kind: "counter-review", intent_id: intentId } };
+      if (substep === "review-run") return {
+        execution: "counter-review-handler",
+        facts: {
+          kind: "counter-review",
+          intent_id: intentId,
+          // The declaration is plain-json-asserted at parse time; the cast only sheds zod's
+          // inferred optional `undefined` (not a PlainJsonValue) — the composer applies the same
+          // idiom to this value in composeCounterReview.
+          ...(submission?.kind === "review-dispatch" ? { route_override: submission.route_override as unknown as PlainJsonValue } : {}),
+        },
+      };
       return { execution: "compose-request", facts: { kind: "triage", intent_id: intentId, dispositions: [] } };
     case "triage":
       if (submission?.kind !== "triage") throw new TypeError("validated triage is unavailable");
@@ -368,6 +390,8 @@ function requestFacts(
       return { execution: "compose-request", facts: { kind: "gate", intent_id: intentId, summary: submission.summary } };
     case "open-waiver":
       return { execution: "compose-request", facts: { kind: "waiver", intent_id: intentId } };
+    case "refresh-milestone-baseline":
+      return { execution: "compose-request", facts: { kind: "refresh-milestone-baseline", intent_id: intentId } };
     case "start-next-skill":
     case "finish-task":
       return { execution: "compose-request", facts: { kind: "advance", intent_id: intentId } };
@@ -496,6 +520,7 @@ export function planSemanticAction(
     ...(input.action.submission?.kind !== "task-ask" ? {} : { task_ask: input.action.submission.text }),
     ...(input.action.submission?.kind !== "reopening-request" ? {} : { reopening_request: input.action.submission.request }),
     ...(input.action.submission?.kind !== "decision" ? {} : { decision_submission: input.action.submission }),
+    ...(input.action.submission?.kind !== "review-dispatch" ? {} : { route_override: input.action.submission.route_override }),
   });
 }
 
@@ -603,7 +628,12 @@ function markerStatus(value: PlainJsonValue | undefined): string | undefined {
 
 function substepPlan(original: SemanticActionPlanV1, substep: SemanticSubstepV1): SemanticActionPlanV1 {
   const intentId = semanticSubstepIntentId(original.operation_digest, substep);
-  const request = requestFacts(original.action_kind, substep, intentId, undefined);
+  // The continuation forwards no request submission; the plan's override field is the carrier that
+  // keeps a review-dispatch substitution alive in the review-run facts.
+  const submission = original.route_override === undefined
+    ? undefined
+    : ({ kind: "review-dispatch", route_override: original.route_override } as const);
+  const request = requestFacts(original.action_kind, substep, intentId, submission);
   return Object.freeze({
     action_kind: original.action_kind,
     operation_digest: original.operation_digest,

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -16,7 +16,11 @@ import {
   semanticJourneyHarness,
   type SemanticJourneyHarness,
 } from "../helpers/semantic-journeys.js";
-import { createTaskWorkspace, type TaskWorkspace } from "../helpers/task-workspace.js";
+import {
+  createTaskWorkspace,
+  legacyHumanAuthorityConstitutionV1Bytes,
+  type TaskWorkspace,
+} from "../helpers/task-workspace.js";
 
 const TIMEOUT = 180_000;
 const workspaces: TaskWorkspace[] = [];
@@ -197,6 +201,36 @@ function implementationSubmission(
   };
 }
 
+function writeApprovalRulesConfig(
+  workspace: TaskWorkspace,
+  contentPatterns: readonly string[],
+): void {
+  const content = contentPatterns.length === 0
+    ? "  content: []"
+    : `  content:\n${contentPatterns.map((pattern) => `    - paths: [${JSON.stringify(pattern)}]`).join("\n")}`;
+  writeFileSync(join(workspace.services.authority.task_root, "config.yaml"), `schema_version: "1"
+roles:
+  counter-reviewer: { model: gpt-5.6-sol, effort: xhigh }
+  adjudicator: { model: gpt-5.6-sol, effort: xhigh }
+approval_rules:
+  subjects: [prd, design, phase-design]
+${content}
+`);
+}
+
+function commitSeedFiles(workspace: TaskWorkspace, files: Readonly<Record<string, string>>): void {
+  for (const [path, bytes] of Object.entries(files)) {
+    const absolute = join(workspace.root, path);
+    mkdirSync(dirname(absolute), { recursive: true });
+    writeFileSync(absolute, bytes);
+  }
+  execFileSync("git", ["add", "--", ...Object.keys(files).sort()], { cwd: workspace.root });
+  execFileSync("git", [
+    "-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid",
+    "commit", "-q", "-m", "seed approval-rule operation fixtures",
+  ], { cwd: workspace.root });
+}
+
 function clientCommit(workspace: TaskWorkspace, commit: NonNullable<WorkflowViewV1["next_action"]["commit"]>): void {
   execFileSync("git", ["add", "-A", "--", ...commit.paths], { cwd: workspace.root });
   execFileSync("git", [
@@ -246,7 +280,11 @@ async function reachAuthorizedImplementationCommit(
 
 describe("semantic implementation completion journeys", { timeout: TIMEOUT }, () => {
   it("authorizes the implementation commit, observes the client-created proof, and reports the successor without an offer", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-succession", label: "semantic-impl-succession" });
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-impl-succession",
+      label: "semantic-impl-succession",
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
+    });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
     restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []]));
@@ -316,7 +354,11 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
   });
 
   it("finishes the task terminally at the planned final phase after the observed client commit", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-terminal", label: "semantic-impl-terminal" });
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-impl-terminal",
+      label: "semantic-impl-terminal",
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
+    });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
     restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []]));
@@ -349,8 +391,154 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(stale).toMatchObject({ ok: false, error: { retryable: false } });
   });
 
+  it("freezes a content wait through later config edits and presents every matched operation with exact byte deltas", async () => {
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-impl-content-rule",
+      label: "semantic-impl-content-rule",
+    });
+    workspaces.push(workspace);
+    excludeStubArtifacts(workspace);
+    commitSeedFiles(workspace, {
+      "db/b-deleted.sql": "123456789",
+      "db/c-modified.sql": "1234567",
+    });
+    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []]));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
+    let view = await applied(h, invocation, handoff);
+    writeApprovalRulesConfig(workspace, ["**/*.sql"]);
+    const work = writeClientImplementation(workspace, view, "content-rule-round-1");
+    writeFileSync(join(workspace.root, "db/a-added.sql"), "123456789012");
+    rmSync(join(workspace.root, "db/b-deleted.sql"));
+    writeFileSync(join(workspace.root, "db/c-modified.sql"), "7654321");
+    const outputs = [
+      ...work.outputs,
+      "db/a-added.sql",
+      "db/b-deleted.sql",
+      "db/c-modified.sql",
+    ].sort();
+
+    view = await applied(h, invocation, view, implementationSubmission(workspace, outputs));
+    view = await applied(h, invocation, view);
+    expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+
+    // The clean fixed point settled under the SQL rule. A later edit would match the TypeScript
+    // output instead if the gate re-evaluated mutable config, but it may only report that change.
+    writeApprovalRulesConfig(workspace, ["**/*.ts"]);
+    const changedConfigView = await h.status(invocation);
+    expect(changedConfigView.config_change).toBeDefined();
+    expect(changedConfigView.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    view = await applied(h, invocation, changedConfigView, {
+      kind: "gate-summary",
+      summary: "The implementation and its complete operation set are ready for authorization.",
+    });
+    expect(view.presentation?.summary).toContain(
+      "Approval rule trigger: these changed paths matched the project's content rules:",
+    );
+    expect(view.presentation?.summary).toContain("- db/c-modified.sql");
+    expect(view.presentation?.summary).not.toContain("src/journey-feature.ts");
+    expect(view.presentation?.details).toEqual([
+      "db/a-added.sql: added (0 → 12 bytes (+12 bytes))",
+      "db/b-deleted.sql: deleted (9 → 0 bytes (-9 bytes))",
+      "db/c-modified.sql: modified (7 → 7 bytes (+0 bytes))",
+    ]);
+    expect(view.presentation?.options.map((option) => option.token)).toEqual([
+      "authorize-commit", "request-changes", "stop-work", "cancel",
+    ]);
+
+    // The archived request keeps the same frozen trigger summary even though disposable operation
+    // details are reconstructed from that settlement plus the retained implementation output.
+    const pendingState = JSON.parse(readFileSync(workspace.services.authority.state.absolute, "utf8"));
+    const gateId = pendingState.open_gate?.gate_id;
+    if (typeof gateId !== "string") throw new Error("content-rule gate id unavailable");
+    const presentedSummary = view.presentation?.summary;
+    view = await applied(h, invocation, view, {
+      kind: "decision",
+      choice: "authorize-commit",
+      reason: "The reviewed SQL operations and their exact sizes are acceptable.",
+    });
+    const archivedRequest = JSON.parse(readFileSync(join(
+      workspace.services.authority.task_root,
+      "authority", "decisions", gateId, "request.json",
+    ), "utf8"));
+    expect(archivedRequest.summary).toBe(presentedSummary);
+    expect(view.next_action.commit).toMatchObject({ requires_human_confirmation: true });
+  });
+
+  it("keeps a TypeScript-only wait:false implementation behind explicit commit authorization without content details", async () => {
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-impl-no-content-rule",
+      label: "semantic-impl-no-content-rule",
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
+    });
+    workspaces.push(workspace);
+    excludeStubArtifacts(workspace);
+    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []]));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
+    let view = await applied(h, invocation, handoff);
+    writeApprovalRulesConfig(workspace, ["**/*.sql"]);
+    const work = writeClientImplementation(workspace, view, "typescript-only-round-1");
+    view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
+    view = await applied(h, invocation, view);
+    expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    view = await applied(h, invocation, view, {
+      kind: "gate-summary", summary: "The TypeScript-only implementation is ready for authorization.",
+    });
+    expect(view.presentation?.summary).toBe("The TypeScript-only implementation is ready for authorization.");
+    expect(view.presentation?.details).toBeUndefined();
+    expect(view.presentation?.options.map((option) => option.token)).toEqual([
+      "authorize-commit", "request-changes", "stop-work", "cancel",
+    ]);
+
+    view = await applied(h, invocation, view, {
+      kind: "decision", choice: "authorize-commit", reason: "The reviewed TypeScript-only change may be committed.",
+    });
+    expect(view.next_action.commit).toMatchObject({ requires_human_confirmation: true });
+  });
+
+  it("advances a shipped-v2 TypeScript-only implementation after exact autonomous commit proof", async () => {
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-v2-impl-autonomy",
+      label: "semantic-v2-impl-autonomy",
+    });
+    workspaces.push(workspace);
+    excludeStubArtifacts(workspace);
+    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []]));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
+    let view = await applied(h, invocation, handoff);
+    writeApprovalRulesConfig(workspace, ["**/*.sql"]);
+    const work = writeClientImplementation(workspace, view, "v2-typescript-autonomy");
+    view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
+    expect(view.next_action.kind).toBe("review");
+    view = await applied(h, invocation, view);
+    const commit = view.next_action.commit;
+    if (commit === undefined) throw new Error("autonomous implementation commit facts unavailable");
+    expect(view.presentation).toBeUndefined();
+    expect(commit).toMatchObject({
+      message: `ArchFlow: Implement ${workspace.taskId} phase 1`,
+      target_ref: gitAt(workspace, "symbolic-ref", "-q", "HEAD"),
+      baseline: headAt(workspace),
+      requires_human_confirmation: false,
+    });
+    expect(commit.paths).toEqual([...work.outputs]);
+    clientCommit(workspace, commit);
+    expect(gitAt(workspace, "rev-parse", "HEAD^")).toBe(commit.baseline);
+    expect(gitAt(workspace, "log", "-1", "--pretty=%B")).toBe(commit.message);
+    view = await h.status(invocation);
+    expect(view.next_action).toMatchObject({ kind: "finish-task", expected_submission: "none" });
+    view = await applied(h, invocation, view);
+    expect(view.condition).toBe("complete");
+    expect(view.next_action).toMatchObject({ kind: "none" });
+  });
+
   it("returns request-changes to a close-only checkpoint that requires the separate revise action before re-editing", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-request-changes", label: "semantic-impl-request-changes" });
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-impl-request-changes",
+      label: "semantic-impl-request-changes",
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
+    });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
     restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], [], []]));
@@ -409,7 +597,11 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
   });
 
   it("classifies a forged archive cross-binding at the current checkpoint as invalid, not superseded", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-forged-archive", label: "semantic-impl-forged-archive" });
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-impl-forged-archive",
+      label: "semantic-impl-forged-archive",
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
+    });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
     restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], [], []]));
@@ -452,7 +644,7 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     const workspace = await createTaskWorkspace({ taskId: "semantic-impl-exhausted", label: "semantic-impl-exhausted" });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
-    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], blocker, blocker, blocker]));
+    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], blocker, blocker, blocker, []]));
     const h = semanticJourneyHarness(workspace);
     const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
 
@@ -518,29 +710,36 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(view.resources.length).toBeGreaterThan(0);
     expect(reviewCountAt(workspace)).toBe(reviewsAtGate);
 
-    // One-hop simple-classified revision: the client fixes the work, captures a fresh transcript,
-    // and resubmits declaring the simple human revision. The retained review is reused for the
-    // one hop — no child is re-dispatched — and the boundary returns to the retained triage.
-    const revisionWork = writeClientImplementation(workspace, view, "exhausted-simple-revision");
+    // Exporting new observable behavior is significant, even when the diff is small. A `simple`
+    // declaration cannot preserve the old review and reopen triage, where the accepted material
+    // finding could otherwise be relabelled rejected without a fresh reviewer.
+    const revisionWork = writeClientImplementation(workspace, view, "exhausted-significant-revision");
     const reviewsBeforeRevision = reviewCountAt(workspace);
-    const simpleSubmission = implementationSubmission(workspace, revisionWork.outputs);
-    view = await applied(h, invocation, view, {
-      ...simpleSubmission,
-      human_revision: { classification: "simple", rationale: "The requested change is a scoped fix to the observable export." },
+    const revisionSubmission = implementationSubmission(workspace, revisionWork.outputs);
+    const refusedSimple = await h.apply(invocation, view, {
+      ...revisionSubmission,
+      human_revision: { classification: "simple", rationale: "Only a small source edit was required." },
     });
-    expect(view.next_action).toMatchObject({ kind: "triage", expected_submission: "triage" });
-    expect(view.findings?.map((finding) => finding.finding_id)).toEqual(["impl-blocking-gap"]);
+    expect(refusedSimple.ok).toBe(false);
+    if (refusedSimple.ok) return;
+    expect(refusedSimple.error.message).toContain(
+      "simple-human-revision-cannot-resolve-accepted-finding",
+    );
     expect(reviewCountAt(workspace)).toBe(reviewsBeforeRevision);
 
-    // SOURCE DEFECT (reported, not pinned): the retained accepted finding makes the fixed point
-    // demand a re-triage while durable state sits at produce-succeeded, but the fixed pipeline
-    // [produce, counter_review, triage] has no produce-succeeded -> triage edge, and the fixed
-    // workflow's status projection offers exactly that unreachable `triage` action. Applying it
-    // fails with TRANSITION_INVALID {"phase_instance":"phase-impl-1","from":"produce-succeeded",
-    // "to":"triage-succeeded"} (the semantic triage executor's running-entry plan only fires from
-    // counter_review-succeeded, and a running/triage composition from produce-succeeded is
-    // equally illegal). The journey therefore cannot reach the next gate-summary to prove the
-    // composer still opens attempts-exhausted after the one-hop simple revision; it stops here.
+    // The honest significant classification archives the predecessor evidence and requires the
+    // server-dispatched counter-review to assess the revised bytes from scratch.
+    view = await applied(h, invocation, view, {
+      ...revisionSubmission,
+      human_revision: { classification: "significant", rationale: "The requested change adds observable exported behavior." },
+    });
+    expect(view.next_action).toMatchObject({ kind: "review", expected_submission: "review-dispatch" });
+    expect(reviewCountAt(workspace)).toBe(reviewsBeforeRevision);
+    view = await applied(h, invocation, view);
+    expect(view.next_action).toMatchObject({ kind: "commit" });
+    expect(view.next_action.commit?.requires_human_confirmation).toBe(false);
+    expect(view.findings).toBeUndefined();
+    expect(reviewCountAt(workspace)).toBe(reviewsBeforeRevision + 1);
   });
 
   it("resolves material upstream drift by moving the task to the earlier planning boundary", async () => {

@@ -6,7 +6,9 @@ import type {
   HumanRevisionRecord,
   PlanningRestartRecord,
   TaskStateV1,
+  RuleSettlementV1,
 } from "../contracts/durable-state.js";
+import { compareRuleSettlements } from "../contracts/durable-state.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parseSafeInteger, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
 import {
@@ -24,6 +26,11 @@ import {
   assertAuthenticatedGateApproval,
   type AuthenticatedGateApproval,
 } from "./gate-approvals.js";
+import {
+  assertAuthenticatedRuleAcceptancePolicy,
+  type AuthenticatedRuleAcceptancePolicy,
+} from "./constitution.js";
+import { acceptedNoWaitSettlement } from "./restart-authority.js";
 import type { NextStateDraft } from "./transaction.js";
 
 export type TransitionTarget = Readonly<{
@@ -49,6 +56,10 @@ export type TransitionPlanInput = Readonly<{
   constitution_result_reference?: AuthoritativeResultRef;
   completion_subject_digest?: Sha256Digest;
   authenticated_gate_approvals?: readonly AuthenticatedGateApproval[];
+  authenticated_rule_acceptance?: Readonly<{
+    policy: AuthenticatedRuleAcceptancePolicy;
+    settlement: RuleSettlementV1;
+  }>;
   commit_observed?: boolean;
   legacy_resume_phase?: PhaseInstanceId;
   human_revision?: HumanRevisionDeclaration;
@@ -61,6 +72,16 @@ export type TransitionPlanInput = Readonly<{
    * truthful when phase-boundary revisions change the plan after the design approval.
    */
   derived_planned_final_phase?: number | null;
+  /**
+   * The approval-rule settlement the settle-path determination minted (P3-5): the handler's own
+   * single config read produced the complete wait/no-wait conclusion and the same evidence
+   * assembly the composeGate guard mirror performs reached a clean fixed point.
+   * The planner only appends the frozen entry into the sorted `rule_settlements` set — the
+   * kernel's own state commit is the one atomic write, and plan replay reproduces the same
+   * bytes. The entry must bind this transaction exactly: this task, this phase instance, and
+   * the revision this plan produces.
+   */
+  rule_settlement?: RuleSettlementV1;
 }>;
 
 export type PlanningRestartPlanInput = Readonly<{
@@ -224,6 +245,34 @@ function hasAuthenticatedCombinedDesignApproval(input: TransitionPlanInput): boo
     authenticated.decision.envelope.payload.decision === "approve");
 }
 
+/** Only final triage and exact editorial produce re-entry may carry a settlement into the planner. */
+function validRuleSettlementBoundary(input: TransitionPlanInput, settlement: RuleSettlementV1): boolean {
+  if (
+    settlement.task_id !== input.current.task_id ||
+    settlement.phase_instance !== input.current.phase_instance ||
+    settlement.step !== input.target.step ||
+    settlement.settled_at_revision !== input.current.revision + 1 ||
+    input.target.phase_instance !== input.current.phase_instance ||
+    input.target.status !== "succeeded"
+  ) return false;
+  if (input.target.step === "triage") {
+    return input.current.step === "triage" &&
+      input.current.status === "running" &&
+      input.artifact?.artifact_kind === "triage" &&
+      input.artifact.evidence.subject_digest === settlement.subject_digest;
+  }
+  if (input.target.step !== "produce" || input.current.step !== "produce" ||
+      input.current.status !== "running" || input.resulting_subject_digest !== settlement.subject_digest) {
+    return false;
+  }
+  const editorial = input.artifact?.artifact_kind === "document" &&
+    input.artifact.editorial_predecessor !== undefined;
+  // A human-requested revision always returns to a human gate, including the one-hop `simple`
+  // classification. Only triage-authorized editorial wording can re-use review and settle here.
+  return editorial && input.current.pending_human_revision === undefined &&
+    input.human_revision === undefined;
+}
+
 /**
  * The status a same-phase run-step request may legally target for `step` from `current`, derived
  * from the same movement rules `legalMovement` enforces: mid-step work records its terminal
@@ -314,6 +363,26 @@ function legalMovement(input: TransitionPlanInput): boolean {
     target.phase_instance !== nextPhaseInstance(current.phase_instance) &&
     hasAuthenticatedMigrationAudit(input)
   ) return true;
+  const following = nextPhaseInstance(current.phase_instance);
+  return following !== undefined &&
+    target.phase_instance === following &&
+    target.step === pipeline(following)[0] &&
+    target.attempt === 1;
+}
+
+/**
+ * Gate recovery can leave a document cursor at `produce: succeeded`. Once the exact current
+ * subject has authenticated human approval, admit only the ordinary document-phase successor
+ * edge. Implementation exits keep their distinct commit-authorization boundary.
+ */
+function legalSettledDocumentProduceExitMovement(input: TransitionPlanInput): boolean {
+  const { current, target } = input;
+  if (
+    phaseKind(current.phase_instance) === "phase-impl" ||
+    current.step !== "produce" ||
+    current.status !== "succeeded" ||
+    target.status !== "running"
+  ) return false;
   const following = nextPhaseInstance(current.phase_instance);
   return following !== undefined &&
     target.phase_instance === following &&
@@ -430,23 +499,49 @@ function hasAuthenticatedCommittedOutput(input: TransitionPlanInput): boolean {
       authenticated.request.subject_digest === input.completion_subject_digest
     ) return true;
   }
-  return false;
+  return hasAuthenticatedRuleAcceptance(input);
+}
+
+function hasAuthenticatedRuleAcceptance(input: TransitionPlanInput): boolean {
+  const accepted = input.authenticated_rule_acceptance;
+  const digest = input.completion_subject_digest;
+  if (accepted === undefined || digest === undefined) return false;
+  assertAuthenticatedRuleAcceptancePolicy(accepted.policy);
+  const settlement = acceptedNoWaitSettlement(
+    accepted.policy, input.current, digest, input.current.phase_instance,
+  );
+  return settlement !== undefined && isDeepStrictEqual(settlement, accepted.settlement);
 }
 
 /** Plans one fixed-workflow move. It is pure and performs no receipt or state write. */
 export function planStateTransition(value: TransitionPlanInput): ProjectResult<NextStateDraft> {
-  const { authenticated_gate_approvals: authenticatedApprovals, ...plainValue } = value;
+  const {
+    authenticated_gate_approvals: authenticatedApprovals,
+    authenticated_rule_acceptance: authenticatedRuleAcceptance,
+    ...plainValue
+  } = value;
   assertPlainJson(plainValue, "transition plan input");
   const input = {
     ...structuredClone(plainValue),
     ...(authenticatedApprovals === undefined ? {} : { authenticated_gate_approvals: authenticatedApprovals }),
+    ...(authenticatedRuleAcceptance === undefined ? {} : {
+      authenticated_rule_acceptance: authenticatedRuleAcceptance,
+    }),
   } as TransitionPlanInput;
   const from = `${input.current.step}-${input.current.status}`;
   const to = `${input.target.step}-${input.target.status}`;
   if (input.target.input_fingerprint !== input.recomputed_input_fingerprint) {
     return fingerprintFailure(input.recomputed_input_fingerprint, input.target.input_fingerprint);
   }
+  const ruleSettlement = input.rule_settlement;
+  if (ruleSettlement !== undefined && !validRuleSettlementBoundary(input, ruleSettlement)) {
+    // A settlement may only be appended by the transaction that settles its subject: the entry must
+    // name this task, this producing phase instance, and exactly the revision this plan produces,
+    // so no caller can back-date or re-home durable rule evidence through the planner.
+    return invalid(input, from, to);
+  }
   const committedOutput = hasAuthenticatedCommittedOutput(input);
+  const ruleAccepted = hasAuthenticatedRuleAcceptance(input);
   const decodedCurrent = decodePhaseInstance(input.current.phase_instance);
   const crossesPhase = input.target.phase_instance !== input.current.phase_instance;
   const completesFinalPhase = committedOutput &&
@@ -473,6 +568,7 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     decodedCurrent.kind !== "phase-impl" &&
     crossesPhase &&
     !hasAuthenticatedArtifactApproval(input) &&
+    !ruleAccepted &&
     // An accepted migration audit is the design phase's exit authority for a legacy import: the
     // same authenticated approval legalMovement's design-jump rule settles on.
     !(decodedCurrent.kind === "design" && hasAuthenticatedMigrationAudit(input))
@@ -480,11 +576,18 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
   if (
     (decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") &&
     crossesPhase &&
-    hasAuthenticatedCombinedDesignApproval(input) &&
+    (hasAuthenticatedCombinedDesignApproval(input) || ruleAccepted) &&
     input.commit_observed !== true
   ) return invalid(input, from, to);
   if (
-    !legalMovement(input) ||
+    decodedCurrent.kind === "design" && crossesPhase && ruleAccepted &&
+    input.derived_planned_final_phase === undefined
+  ) return invalid(input, from, to);
+  const legalMovementFromCurrentCursor = legalMovement(input) || (
+    crossesPhase && legalSettledDocumentProduceExitMovement(input)
+  );
+  if (
+    !legalMovementFromCurrentCursor ||
     !artifactMatches(input) ||
     !resultReferenceMatches(input) ||
     !constitutionReferenceMatches(input) ||
@@ -539,6 +642,12 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
       [...(humanRevisionHistory ?? []), record].sort((left, right) => left.gate_id.localeCompare(right.gate_id)),
     );
   }
+  // The rule settlement joins the draft exactly as the kernel commits it: appended into the
+  // sorted set (triple key), frozen, with no second file and no separate write — so a crash
+  // replays the identical entry bytes through the kernel's own plan replay.
+  const ruleSettlements = ruleSettlement === undefined
+    ? preserved.rule_settlements
+    : Object.freeze([...(preserved.rule_settlements ?? []), ruleSettlement].sort(compareRuleSettlements));
   const draft: NextStateDraft = Object.freeze({
     ...preserved,
     phase_instance: input.target.phase_instance,
@@ -554,6 +663,7 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     ...(plannedFinalPhase === undefined || plannedFinalPhase === null
       ? {}
       : { planned_final_phase: parseSafeInteger(plannedFinalPhase) }),
+    ...(ruleSettlements === undefined ? {} : { rule_settlements: ruleSettlements }),
   });
   if (
     input.result_reference === undefined &&

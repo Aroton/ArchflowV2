@@ -5,17 +5,26 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { canonicalDocument, canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
+import { canonicalDocument, canonicalJsonDigest, parseGitOid, sha256Bytes } from "../../src/contracts/canonical.js";
+import { parseConfigYaml, type TaskConfigSnapshot } from "../../src/contracts/config.js";
 import { parseActiveGate, parseGateRequest } from "../../src/contracts/durable-gate.js";
-import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
+import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
+import type { ImplementationOutputV1 } from "../../src/contracts/durable-implementation-output.js";
+import type { RuleSettlementV1, TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parsePathSafeId, parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { computeGateContextDigest } from "../../src/contracts/fingerprints.js";
+import { parseRepositoryPathClaim, parseTaskPathClaim } from "../../src/contracts/path-claims.js";
+import { encodePhaseInstance } from "../../src/contracts/phase-instance.js";
 import { resolvePinnedConstitution } from "../../src/state/constitution.js";
 import { createProductionServices } from "../../src/state/production.js";
 import {
+  buildAutonomousDesignCommitInput,
+  buildAutonomousImplementationCommitInput,
   buildCommitAuthorizationInput,
   buildDesignApprovalInput,
   computeTaskStatus,
+  contentTriggerDetails,
+  currentApprovedUpstreams,
   partitionExpectedReentryEdits,
   resolveStatusEvidenceAssessment,
 } from "../../src/state/status.js";
@@ -73,6 +82,82 @@ async function harness() {
   });
   return { root, services: created.value, state };
 }
+
+const blob = (size: number) => ({
+  oid: parseGitOid("1".repeat(40)), mode: "100644" as const, size_bytes: parseSafeInteger(size),
+});
+
+const implementationWith = (
+  outputs: ImplementationOutputV1["outputs"],
+): ImplementationOutputV1 => ({ outputs } as unknown as ImplementationOutputV1);
+
+const settlementWith = (
+  conclusion: RuleSettlementV1["conclusion"],
+): RuleSettlementV1 => ({ conclusion } as unknown as RuleSettlementV1);
+
+describe("contentTriggerDetails", () => {
+  it("formats every operation with exact endpoint sizes and an explicit signed delta", () => {
+    const output = implementationWith([
+      { operation: "add", path: parseRepositoryPathClaim("a-added.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", after: blob(12) },
+      { operation: "delete", path: parseRepositoryPathClaim("b-deleted.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", before: blob(9) },
+      { operation: "modify", path: parseRepositoryPathClaim("c-modified.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", before: blob(7), after: blob(7) },
+      { operation: "rename", path: parseRepositoryPathClaim("e-new.sql"), previous_path: parseRepositoryPathClaim("d-old.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", before: blob(4), after: blob(10) },
+    ]);
+    const settlement = settlementWith({
+      wait: true,
+      match: { kind: "content", paths: ["a-added.sql", "b-deleted.sql", "c-modified.sql", "d-old.sql", "e-new.sql"] },
+    });
+
+    expect(contentTriggerDetails(settlement, output)).toEqual([
+      "a-added.sql: added (0 → 12 bytes (+12 bytes))",
+      "b-deleted.sql: deleted (9 → 0 bytes (-9 bytes))",
+      "c-modified.sql: modified (7 → 7 bytes (+0 bytes))",
+      "d-old.sql: renamed to e-new.sql (4 → 10 bytes (+6 bytes))",
+      "e-new.sql: renamed from d-old.sql (4 → 10 bytes (+6 bytes))",
+    ]);
+  });
+
+  it("keeps settlement order and emits rename sources before every current-path endpoint", () => {
+    const output = implementationWith([
+      { operation: "rename", path: parseRepositoryPathClaim("z-new.sql"), previous_path: parseRepositoryPathClaim("old.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", before: blob(2), after: blob(3) },
+      { operation: "add", path: parseRepositoryPathClaim("old.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", after: blob(8) },
+      { operation: "rename", path: parseRepositoryPathClaim("a-new.sql"), previous_path: parseRepositoryPathClaim("old.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", before: blob(5), after: blob(4) },
+    ]);
+    const settlement = settlementWith({
+      wait: true,
+      match: { kind: "content", paths: ["old.sql", "z-new.sql"] },
+    });
+
+    expect(contentTriggerDetails(settlement, output)).toEqual([
+      "old.sql: renamed to a-new.sql (5 → 4 bytes (-1 bytes))",
+      "old.sql: renamed to z-new.sql (2 → 3 bytes (+1 bytes))",
+      "old.sql: added (0 → 8 bytes (+8 bytes))",
+      "z-new.sql: renamed from old.sql (2 → 3 bytes (+1 bytes))",
+    ]);
+  });
+
+  it("returns no details without an eligible content match", () => {
+    const output = implementationWith([
+      { operation: "add", path: parseRepositoryPathClaim("change.ts"), path_class: "repository-source", storage: "git-object", file_type: "regular", after: blob(1) },
+    ]);
+    expect(contentTriggerDetails(undefined, output)).toBeUndefined();
+    expect(contentTriggerDetails(settlementWith({ wait: false, match: null }), output)).toBeUndefined();
+    expect(contentTriggerDetails(settlementWith({ wait: true, match: { kind: "subject", subject: "phase-impl" } }), output)).toBeUndefined();
+  });
+
+  it("fails the complete join when any persisted match has no retained endpoint", () => {
+    const output = implementationWith([
+      { operation: "add", path: parseRepositoryPathClaim("matched.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", after: blob(1) },
+    ]);
+    const settlement = settlementWith({
+      wait: true,
+      match: { kind: "content", paths: ["matched.sql", "missing.sql"] },
+    });
+
+    expect(() => contentTriggerDetails(settlement, output))
+      .toThrow("content-trigger path has no retained implementation endpoint: missing.sql");
+  });
+});
 
 describe("partitionExpectedReentryEdits", () => {
   it("treats produce-projection drift as expected while a produce re-entry is recorded", () => {
@@ -146,6 +231,57 @@ describe("computeTaskStatus", () => {
     expect(fixedPointFailure).toEqual({ blocking_reason: "fixed-point-disagreement" });
   });
 
+  it("does not accept a rule settlement as upstream authority when no approval authenticates", async () => {
+    const h = await harness();
+    const prdPhase = encodePhaseInstance({ kind: "prd" });
+    const prdArtifact: DocumentArtifactV1 = {
+      schema_version: "1", artifact_kind: "document", task_id: TASK,
+      phase_instance: prdPhase, step: "produce",
+      document_path: parseTaskPathClaim("prd.md"), path_class: "document",
+      byte_count: parseSafeInteger(2), content_digest: D("6"),
+      declared_inputs: [], input_fingerprint: D("2"),
+      snapshot_digest: D("6"), projection_target: parseRepositoryPathClaim(`.archflow/tasks/${TASK}/prd.md`),
+    };
+    const upstreamDigest = canonicalJsonDigest(prdArtifact);
+    const retained = {
+      manifest: { value: {
+        artifact_digest: upstreamDigest, source_artifact: prdArtifact,
+        accounting: { measured_at_revision: parseSafeInteger(2) },
+      } },
+    };
+    const dependencies = {
+      load_retained_manifest: async () => Object.freeze({ schema_version: "1" as const, ok: true, value: retained }),
+    } as unknown as Parameters<typeof currentApprovedUpstreams>[0];
+    // The state names a candidate approval, but no archived decision authenticates it.
+    const approvalEntry = {
+      gate_id: parsePathSafeId("gate-1"), gate_kind: "artifact-approval" as const,
+      subject_digest: upstreamDigest, decision_digest: D("d"), resolved_at_revision: parseSafeInteger(3),
+    };
+    const reference = {
+      phase_instance: prdPhase, step: "produce" as const, result_digest: D("9"),
+      result_id: "prd-result" as never, input_fingerprint: D("2"),
+    };
+    const receipt = {
+      task_id: TASK, phase_instance: prdPhase, step: "adjudicate" as const,
+      subject_digest: upstreamDigest, conclusion: { wait: false, match: null } as const,
+      config_digest: D("7"), settled_at_revision: parseSafeInteger(3),
+    };
+    const withUpstream = (ruleAdvances: readonly [typeof receipt]): TaskStateV1 => h.state({
+      phase_instance: encodePhaseInstance({ kind: "design" }),
+      authoritative_results: [reference],
+      approvals: [approvalEntry],
+      rule_settlements: ruleAdvances,
+    });
+
+    // The exact digest-bound settlement remains evidence only.
+    await expect(currentApprovedUpstreams(dependencies, h.services.authority, withUpstream([receipt]), [], undefined))
+      .rejects.toThrow("current upstream produced authority lacks approval");
+    // A settlement for different bytes fails closed as well.
+    await expect(currentApprovedUpstreams(
+      dependencies, h.services.authority, withUpstream([{ ...receipt, subject_digest: D("e") }]), [], undefined,
+    )).rejects.toThrow("current upstream produced authority lacks approval");
+  });
+
   it("materializes sorted retained commit-authorization resume facts without a rubric digest", () => {
     const evidence = {
       set_digest: D("8"),
@@ -185,6 +321,51 @@ describe("computeTaskStatus", () => {
       target_ref_guidance: "Current symbolic branch ref observed from repository authority.",
     });
     expect(input).not.toHaveProperty("rubric_digest");
+  });
+
+  it("derives autonomous implementation commit facts only from retained output authority", () => {
+    const output = {
+      task_id: TASK,
+      phase_instance: PHASE,
+      base_commit: parseGitOid("a".repeat(40)),
+      outputs: [
+        { operation: "delete", path: parseRepositoryPathClaim("z.ts") },
+        { operation: "rename", path: parseRepositoryPathClaim("b.ts"), previous_path: parseRepositoryPathClaim("a.ts") },
+      ],
+    } as unknown as ImplementationOutputV1;
+    expect(buildAutonomousImplementationCommitInput(output, "refs/heads/feature")).toEqual({
+      paths: ["a.ts", "b.ts", "z.ts"],
+      message: "ArchFlow: Implement status-task phase 17",
+      target_ref: "refs/heads/feature",
+      baseline_commit: "a".repeat(40),
+    });
+  });
+
+  it("binds autonomous design commit facts to the settlement producer phase and baseline", async () => {
+    const h = await harness();
+    const phase = encodePhaseInstance({ kind: "phase-design", phase: 5 as never });
+    const current = h.state({ phase_instance: phase });
+    const settlement = {
+      task_id: TASK,
+      phase_instance: phase,
+      step: "triage",
+      subject_digest: D("8"),
+      conclusion: { wait: false, match: null },
+      config_digest: D("9"),
+      settled_at_revision: parseSafeInteger(4),
+      milestone_baseline_commit: parseGitOid("b".repeat(40)),
+    } as RuleSettlementV1;
+    expect(buildAutonomousDesignCommitInput(current, settlement, "refs/heads/feature")).toEqual({
+      path: `.archflow/tasks/${TASK}`,
+      message: "ArchFlow: Approve status-task phase 5 design",
+      target_ref: "refs/heads/feature",
+      baseline_commit: "b".repeat(40),
+    });
+    expect(() => buildAutonomousDesignCommitInput(
+      h.state({ phase_instance: encodePhaseInstance({ kind: "design" }) }),
+      settlement,
+      "refs/heads/feature",
+    )).toThrow(/phase-bound milestone baseline/u);
   });
 
   it("unwraps retained adjudication evidence when presenting design approval", async () => {
@@ -313,7 +494,7 @@ describe("computeTaskStatus", () => {
     expect(status.value.blocking_reasons).not.toContain(`approval-${gateId}-unavailable`);
   });
 
-  it("degrades config and missing gate archive disagreements without throwing", async () => {
+  it("degrades a missing gate archive disagreement without throwing, even over an edited config", async () => {
     const h = await harness();
     const context = { artifact_kind: "phase-implementation" } as const;
     const active = parseActiveGate({
@@ -345,18 +526,17 @@ describe("computeTaskStatus", () => {
     expect(status).toMatchObject({
       ok: true,
       value: {
-        config: { verified: false },
-        next_action: {
-          code: "restore-pinned-config",
-          detail: expect.stringContaining("new task or the explicit upgrade flow"),
-        },
+        config: { verified: true },
+        next_action: { code: "resolve-current-authority" },
       },
     });
     if (status.ok) {
       expect(status.value.blocking_reasons).toContain("active-gate-request-missing");
       expect(status.value).not.toHaveProperty("open_gate");
+      // This task predates the change notice: with no recorded last_seen_config, an edit is
+      // verified and unnoted — the next transaction silently establishes the baseline.
+      expect(status.value).not.toHaveProperty("config_change");
     }
-    writeFileSync(h.services.authority.config.absolute, configText);
     const gateBlocked = await computeTaskStatus(h.services.dependencies, h.services.authority);
     expect(gateBlocked).toMatchObject({
       ok: true,
@@ -365,32 +545,46 @@ describe("computeTaskStatus", () => {
     if (gateBlocked.ok) expect(gateBlocked.value).not.toHaveProperty("open_gate");
   });
 
-  it("reports a pinned config the installed schema cannot parse as a tooling mismatch, not a change", async () => {
+  it("reports a field-level config change as informational without moving the action", async () => {
     const h = await harness();
-    // Bytes the current schema rejects, pinned exactly: restoring or editing the file cannot
-    // help, so the blocker must name the real situation instead of the impossible restore advice.
-    const pinnedBytes = Buffer.from('schema_version: "1"\nroles:\n  reviewer: { model: claude-opus-4-6, effort: high }\n');
-    writeFileSync(h.services.authority.config.absolute, pinnedBytes);
+    const baseline = parseConfigYaml(configText, "baseline") as TaskConfigSnapshot;
     writeFileSync(h.services.authority.state.absolute, canonicalDocument(h.state({
-      config_digest: sha256Bytes(pinnedBytes),
+      last_seen_config: baseline,
+    })).bytes);
+    writeFileSync(h.services.authority.config.absolute, `${configText}max_attempts: 4\n`);
+    const status = await computeTaskStatus(h.services.dependencies, h.services.authority);
+    expect(status).toMatchObject({
+      ok: true,
+      value: {
+        config: { verified: true },
+        next_action: { code: "run-step", step: "produce" },
+      },
+    });
+    if (!status.ok) return;
+    expect(status.value.config_change).toEqual([{ path: "max_attempts", after: 4 }]);
+    expect(status.value.blocking_reasons).not.toContain("config-invalid");
+  });
+
+  it("blocks on an unparseable config with repair advice rather than a restore demand", async () => {
+    const h = await harness();
+    // Bytes the current schema rejects: editing or restoring the file cannot recover them, so
+    // the blocker names the config file and the next action says to fix the YAML.
+    const invalidBytes = Buffer.from('schema_version: "1"\nroles:\n  reviewer: { model: claude-opus-4-6, effort: high }\n');
+    writeFileSync(h.services.authority.config.absolute, invalidBytes);
+    writeFileSync(h.services.authority.state.absolute, canonicalDocument(h.state({
+      config_digest: sha256Bytes(invalidBytes),
     })).bytes);
     const status = await computeTaskStatus(h.services.dependencies, h.services.authority);
     expect(status).toMatchObject({
       ok: true,
       value: {
-        config: {
-          verified: false,
-          issue: "pinned-config-schema-unsupported",
-          expected_digest: sha256Bytes(pinnedBytes),
-          observed_digest: sha256Bytes(pinnedBytes),
-        },
-        blocking_reasons: expect.arrayContaining(["pinned-config-schema-unsupported"]),
-        next_action: { code: "upgrade-tooling", human_required: true },
+        config: { verified: false, issue: "config-invalid" },
+        blocking_reasons: expect.arrayContaining(["config-invalid"]),
+        next_action: { code: "inspect-state", human_required: true },
       },
     });
     if (status.ok) {
-      expect(status.value.blocking_reasons).not.toContain("config-invalid");
-      expect(status.value.next_action.detail).not.toMatch(/Restore/u);
+      expect(status.value.next_action.detail).toContain("fix the YAML");
       expect(status.value.next_action.detail).not.toContain("new task or the explicit upgrade flow");
     }
   });

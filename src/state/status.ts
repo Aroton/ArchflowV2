@@ -3,17 +3,19 @@ import { join } from "node:path";
 
 import { canonicalJsonDigest, parseCanonicalDocument, type CanonicalDocument } from "../contracts/canonical.js";
 import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
-import { parseConfigYaml } from "../contracts/config.js";
+import type { ConfigV1, TaskConfigSnapshot } from "../contracts/config.js";
+import type { ImplementationOutputV1 } from "../contracts/durable-implementation-output.js";
 import { exactCommitAuthorizationContext, parseActiveGate, parsePersistedGateRequest, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
-import type { TaskStateV1 } from "../contracts/durable-state.js";
+import type { ConfigChangeEntry, RuleSettlementV1, TaskStateV1 } from "../contracts/durable-state.js";
+export type { ConfigChangeEntry } from "../contracts/durable-state.js";
 import type { AdjudicationEvidence } from "../contracts/adjudication.js";
 import type { ProjectError, ProjectResult } from "../contracts/errors.js";
-import { baselineAdoptionDriftDigest, computeGateContextDigest, verifyPinnedConfig } from "../contracts/fingerprints.js";
+import { baselineAdoptionDriftDigest, computeGateContextDigest } from "../contracts/fingerprints.js";
 import type { PathSafeId, Sha256Digest, TaskSlug } from "../contracts/evidence.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
 import type { BaselineObservationRef, GateContext } from "../contracts/gates.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
-import type { ReviewEvidence } from "../contracts/review.js";
+import type { ReviewEvidence, RouteOverrideRecord } from "../contracts/review.js";
 import type { CurrentEvidenceSetRef } from "../contracts/trust.js";
 import { resolveDispatchRoute, type DispatchRoute } from "../dispatch/routing.js";
 import { designApprovalPolicyContext, selectAdjudicationGates } from "../review/adjudication.js";
@@ -22,12 +24,13 @@ import { canonicalRubricForPhaseKind, type CanonicalRubric } from "../review/rub
 import { createGitRunner, preflightGit, resolveCommit } from "../repository/git.js";
 import { discoverWorktree } from "../repository/identity.js";
 import { readTaskState } from "./read.js";
+import { computeConfigChange } from "./config-change.js";
 import type { TransactionAuthority } from "./authority.js";
 import { assertInternalTransactionAuthority, createInternalTransactionAuthority } from "./authority.js";
-import { resolvePinnedConstitution, type ResolvedConstitution } from "./constitution.js";
+import { authenticateRuleAcceptancePolicy, resolvePinnedConstitution, type ResolvedConstitution } from "./constitution.js";
 import { deriveCurrentEvidenceSet, loadRetainedEvidence, type RetainedEvidenceSet } from "./evidence-results.js";
 import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "./gate-approvals.js";
-import { authenticatedApprovalIsEligibleAfterLatestRestart } from "./restart-authority.js";
+import { acceptedNoWaitSettlement, authenticatedApprovalIsEligibleAfterLatestRestart, latestEligibleRuleSettlement } from "./restart-authority.js";
 import {
   buildGateDecisionTemplates,
   buildHumanGatePresentation,
@@ -37,7 +40,13 @@ import { activeProjection, type GateLifecycleDependencies } from "./gate-core.js
 import { deriveNextAction, type NextAction } from "./next-action.js";
 import { expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject, produceOwnedTaskDocumentPaths, produceProjectionPins, produceUpstreamBindingsForSubject, readProduceProjection, readProduceProjectionSet } from "./produce-subject.js";
 import type { CurrentProduceSubject } from "./produce-subject.js";
-import { designArtifactCommittedAtCurrentTarget, implementationOutputCommittedAtCurrentTarget, type DesignMilestoneMiss } from "./implementation-manifest.js";
+import {
+  autonomousDesignArtifactCommittedAtCurrentTarget,
+  autonomousImplementationOutputCommittedAtCurrentTarget,
+  designArtifactCommittedAtCurrentTarget,
+  implementationOutputCommittedAtCurrentTarget,
+  type DesignMilestoneMiss,
+} from "./implementation-manifest.js";
 import { phaseStatusResources, type StatusResource } from "./phase-documents.js";
 import { inspectWorkspaceCleanup, type WorkspaceCleanupReport } from "./workspace-cleanup.js";
 import { discoverReconciliationInput } from "./reconciliation-discovery.js";
@@ -54,8 +63,6 @@ const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1
 
 type ConfigVerification = Readonly<{
   verified: boolean;
-  expected_digest?: Sha256Digest;
-  observed_digest?: Sha256Digest;
   issue?: string;
 }>;
 
@@ -90,6 +97,7 @@ type StatusEvidence = Readonly<{
     model_family: string;
     model: string;
     effort: string;
+    route_override?: RouteOverrideRecord;
   }>;
   assessment: EvidenceAssessment;
 }>;
@@ -222,6 +230,13 @@ export type TaskStatusV1 = Readonly<{
    */
   subject_digest?: Sha256Digest;
   config: ConfigVerification;
+  /**
+   * Field-level changes between the live parsed config and `state.last_seen_config`. Informational
+   * only — never a blocker and never an action-kind change. Absent `last_seen_config`
+   * (pre-cutover tasks) notices nothing: the first transaction after upgrade establishes the
+   * baseline silently.
+   */
+  config_change?: readonly ConfigChangeEntry[];
   /** The dispatched review routes for the current phase kind; the producer is the host, never routed. */
   routes?: Readonly<{ counter_reviewer: DispatchRoute; adjudicator: DispatchRoute }>;
   constitution?: Readonly<{
@@ -386,11 +401,9 @@ export function partitionExpectedReentryEdits(
   });
 }
 
-function unavailableConfig(expected?: Sha256Digest, observed?: Sha256Digest, issue?: string): ConfigVerification {
+function unavailableConfig(issue?: string): ConfigVerification {
   return Object.freeze({
     verified: false,
-    ...(expected === undefined ? {} : { expected_digest: expected }),
-    ...(observed === undefined ? {} : { observed_digest: observed }),
     ...(issue === undefined ? {} : { issue }),
   });
 }
@@ -485,6 +498,8 @@ export async function currentApprovedUpstreams(
   authenticated: readonly AuthenticatedGateApproval[],
   subject: CurrentProduceSubject | undefined,
 ): Promise<readonly Sha256Digest[]> {
+  let settlementPolicy: ReturnType<typeof authenticateRuleAcceptancePolicy>;
+  let settlementPolicyLoaded = false;
   const bindings = subject === undefined
     ? expectedProduceUpstreamBindings(state)
     : produceUpstreamBindingsForSubject(state, subject.artifact);
@@ -515,7 +530,26 @@ export async function currentApprovedUpstreams(
             item.request.context.artifact_kind === ownerKind);
       })
       .sort((left, right) => right.approval.resolved_at_revision - left.approval.resolved_at_revision)[0];
-    if (approval === undefined) throw new TypeError("current upstream produced authority lacks approval");
+    if (!settlementPolicyLoaded && approval === undefined) {
+      settlementPolicyLoaded = true;
+      if (state.policy_base_commit !== undefined && state.constitution_digest !== undefined) {
+        const resolvedConstitution = await resolvePinnedConstitution(
+          dependencies.runner, state.policy_base_commit, authority.context,
+        );
+        settlementPolicy = resolvedConstitution.ok
+          ? authenticateRuleAcceptancePolicy(state, resolvedConstitution.value)
+          : undefined;
+      }
+    }
+    const settled = settlementPolicy === undefined ? undefined : acceptedNoWaitSettlement(
+      settlementPolicy,
+      state,
+      loaded.value.artifact_digest,
+      loaded.value.artifact.phase_instance,
+    );
+    if (approval === undefined && settled === undefined) {
+      throw new TypeError("current upstream produced authority lacks approval or accepted settlement");
+    }
     digests.add(loaded.value.artifact_digest);
   }
   return Object.freeze([...digests].sort());
@@ -594,7 +628,69 @@ export function pendingAdjudicationGate(
   return pendingAdjudicationGates(state, constitution, retained, authenticated)[0];
 }
 
-function gateStatus(active: ActiveGateV1): OpenGateStatus {
+function compareCodeUnits(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function sizeChange(before: number, after: number): string {
+  const delta = after - before;
+  return `${before} → ${after} bytes (${delta >= 0 ? "+" : ""}${delta} bytes)`;
+}
+
+/**
+ * Reconstructs the complete disposable explanation of a frozen content-rule match.
+ *
+ * The settlement and retained implementation output are the entire authority surface: callers
+ * cannot pass live config, Git state, or filesystem observations. Persisted match order is kept,
+ * while all endpoints for one path are rendered in the contract's deterministic source/current
+ * order. A missing endpoint is an authority disagreement, not a skippable presentation detail.
+ */
+export function contentTriggerDetails(
+  settlement: RuleSettlementV1 | undefined,
+  output: ImplementationOutputV1,
+): readonly string[] | undefined {
+  const conclusion = settlement?.conclusion;
+  if (conclusion === undefined || conclusion.wait === false || conclusion.match.kind !== "content") {
+    return undefined;
+  }
+
+  const details: string[] = [];
+  for (const matchedPath of conclusion.match.paths) {
+    const renameSources = output.outputs
+      .filter((entry): entry is Extract<ImplementationOutputV1["outputs"][number], { operation: "rename" }> =>
+        entry.operation === "rename" && entry.previous_path === matchedPath)
+      .sort((left, right) => compareCodeUnits(left.path, right.path));
+    const currentPaths = output.outputs
+      .filter((entry) => entry.path === matchedPath)
+      .sort((left, right) => compareCodeUnits(left.path, right.path));
+
+    if (renameSources.length + currentPaths.length === 0) {
+      throw new TypeError(`content-trigger path has no retained implementation endpoint: ${matchedPath}`);
+    }
+
+    for (const entry of renameSources) {
+      details.push(
+        `${matchedPath}: renamed to ${entry.path} (${sizeChange(entry.before.size_bytes, entry.after.size_bytes)})`,
+      );
+    }
+    for (const entry of currentPaths) {
+      if (entry.operation === "add") {
+        details.push(`${matchedPath}: added (${sizeChange(0, entry.after.size_bytes)})`);
+      } else if (entry.operation === "delete") {
+        details.push(`${matchedPath}: deleted (${sizeChange(entry.before.size_bytes, 0)})`);
+      } else if (entry.operation === "modify") {
+        details.push(`${matchedPath}: modified (${sizeChange(entry.before.size_bytes, entry.after.size_bytes)})`);
+      } else {
+        details.push(
+          `${matchedPath}: renamed from ${entry.previous_path} (${sizeChange(entry.before.size_bytes, entry.after.size_bytes)})`,
+        );
+      }
+    }
+  }
+  return Object.freeze(details);
+}
+
+function gateStatus(active: ActiveGateV1, triggerDetails?: readonly string[]): OpenGateStatus {
   return Object.freeze({
     gate_id: active.gate_id,
     kind: active.kind,
@@ -602,7 +698,7 @@ function gateStatus(active: ActiveGateV1): OpenGateStatus {
     archive_decision_path: `.archflow/tasks/${active.task_id}/authority/decisions/${active.gate_id}/decision.json`,
     request_path: `.archflow/tasks/${active.task_id}/authority/decisions/${active.gate_id}/request.json`,
     decision_templates: buildGateDecisionTemplates(active),
-    presentation: buildHumanGatePresentation(active),
+    presentation: buildHumanGatePresentation(active, triggerDetails),
   });
 }
 
@@ -665,6 +761,46 @@ export function buildCommitAuthorizationInput(
   });
 }
 
+/** Exact client commit facts for an authenticated implementation no-wait settlement. */
+export function buildAutonomousImplementationCommitInput(
+  output: ImplementationOutputV1,
+  targetRef: string,
+): Readonly<{ paths: readonly string[]; message: string; target_ref: string; baseline_commit: string }> {
+  const paths = new Set<string>();
+  for (const entry of output.outputs) {
+    paths.add(entry.path);
+    if (entry.operation === "rename") paths.add(entry.previous_path);
+  }
+  const phase = decodePhaseInstance(output.phase_instance);
+  return Object.freeze({
+    paths: Object.freeze([...paths].sort()),
+    message: `ArchFlow: Implement ${output.task_id} phase ${phase.kind === "phase-impl" ? String(phase.phase) : output.phase_instance}`,
+    target_ref: targetRef,
+    baseline_commit: output.base_commit,
+  });
+}
+
+/** Exact task-local milestone facts bound by an authenticated design no-wait settlement. */
+export function buildAutonomousDesignCommitInput(
+  state: TaskStateV1,
+  settlement: RuleSettlementV1,
+  targetRef: string,
+): Readonly<{ path: string; message: string; target_ref: string; baseline_commit: string }> {
+  const phase = decodePhaseInstance(state.phase_instance);
+  if ((phase.kind !== "design" && phase.kind !== "phase-design") ||
+      settlement.phase_instance !== state.phase_instance ||
+      settlement.milestone_baseline_commit === undefined) {
+    throw new TypeError("autonomous design commit requires a phase-bound milestone baseline");
+  }
+  const phaseLabel = phase.kind === "design" ? "design" : `phase ${String(phase.phase)} design`;
+  return Object.freeze({
+    path: `.archflow/tasks/${state.task_id}`,
+    message: `ArchFlow: Approve ${state.task_id} ${phaseLabel}`,
+    target_ref: targetRef,
+    baseline_commit: settlement.milestone_baseline_commit,
+  });
+}
+
 /** Builds the combined design/policy approval and the exact task-local commit it authorizes. */
 export async function buildDesignApprovalInput(
   dependencies: GateLifecycleDependencies,
@@ -717,7 +853,7 @@ async function computeTaskStatusDetailedInternal(
     const status = Object.freeze({
       task_id: authority.task_id,
       state: "missing" as const,
-      config: unavailableConfig(undefined, undefined, "status-authority-invalid"),
+      config: unavailableConfig("status-authority-invalid"),
       blocking_reasons: Object.freeze(["status-authority-invalid"]),
       next_action: next,
     });
@@ -730,7 +866,7 @@ async function computeTaskStatusDetailedInternal(
     const status = Object.freeze({
       task_id: authority.task_id,
       state: "missing" as const,
-      config: unavailableConfig(undefined, undefined, "state-unavailable"),
+      config: unavailableConfig("state-unavailable"),
       blocking_reasons: Object.freeze([reason]),
       next_action: next,
     });
@@ -740,32 +876,20 @@ async function computeTaskStatusDetailedInternal(
   const state = stateDocument.value;
 
   let config: ConfigVerification;
-  let parsedConfig: ReturnType<typeof parseConfigYaml> | undefined;
+  let parsedConfig: ConfigV1 | undefined;
+  let liveConfigDigest: Sha256Digest | undefined;
   try {
     const read = await dependencies.read_config(authority.config);
-    if (read.kind === "invalid" && read.digest === state.config_digest) {
-      // The bytes are exactly the pinned ones, so restoring or editing the file cannot help:
-      // this build's schema no longer accepts what the task pinned. That is a different
-      // situation from a changed config and must not be reported as one.
-      config = unavailableConfig(state.config_digest, read.digest, "pinned-config-schema-unsupported");
-      blockers.push("pinned-config-schema-unsupported");
-    } else if (read.kind !== "valid") {
-      config = unavailableConfig(
-        state.config_digest,
-        read.kind === "invalid" ? read.digest : undefined,
-        `config-${read.kind}`,
-      );
+    if (read.kind !== "valid") {
+      config = unavailableConfig(`config-${read.kind}`);
       blockers.push(`config-${read.kind}`);
     } else {
-      const verified = verifyPinnedConfig(state.config_digest, read.snapshot.bytes);
-      config = verified.ok
-        ? Object.freeze({ verified: true, expected_digest: state.config_digest, observed_digest: verified.value })
-        : unavailableConfig(state.config_digest, read.snapshot.digest, "pinned-config-mismatch");
-      if (!verified.ok) blockers.push("pinned-config-mismatch");
-      parsedConfig = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(read.snapshot.bytes), "task config");
+      config = Object.freeze({ verified: true });
+      liveConfigDigest = read.snapshot.digest;
+      parsedConfig = read.snapshot.parsed as unknown as ConfigV1;
     }
   } catch {
-    config = unavailableConfig(state.config_digest, undefined, "config-unresolvable");
+    config = unavailableConfig("config-unresolvable");
     blockers.push("config-unresolvable");
   }
 
@@ -779,6 +903,14 @@ async function computeTaskStatusDetailedInternal(
     } catch {
       blockers.push("dispatch-routes-invalid");
     }
+  }
+
+  // The change notice: diffed only when a recorded baseline exists. A pre-cutover task (no
+  // `last_seen_config`) records nothing and notices nothing until its next config-observing commit.
+  let configChange: readonly ConfigChangeEntry[] | undefined;
+  if (parsedConfig !== undefined && state.last_seen_config !== undefined) {
+    const entries = computeConfigChange(state.last_seen_config, parsedConfig as TaskConfigSnapshot);
+    if (entries.length > 0) configChange = entries;
   }
 
   let constitution: ResolvedConstitution | undefined;
@@ -899,6 +1031,18 @@ async function computeTaskStatusDetailedInternal(
     }
   }
 
+  const settlementPolicy = constitution === undefined
+    ? undefined
+    : authenticateRuleAcceptancePolicy(state, constitution);
+  const acceptedSettlement = settlementPolicy === undefined || produceSubject === undefined
+    ? undefined
+    : acceptedNoWaitSettlement(
+      settlementPolicy,
+      state,
+      produceSubject.artifact_digest,
+      produceSubject.artifact.phase_instance,
+    );
+
   let commitObserved = false;
   let commitBlockedReason: DesignMilestoneMiss | undefined;
   let implementationCommit: Readonly<{
@@ -907,6 +1051,7 @@ async function computeTaskStatusDetailedInternal(
     target_ref: string;
     baseline_commit: string;
   }> | undefined;
+  let humanImplementationCommitAuthority = false;
   if (produceSubject?.artifact.artifact_kind === "implementation-output") {
     for (const authenticated of authenticatedApprovals) {
       if (
@@ -919,6 +1064,7 @@ async function computeTaskStatusDetailedInternal(
       // path set cannot attest one now; it stays authentic authority, just not commit evidence.
       const exact = exactCommitAuthorizationContext(authenticated.request.context);
       if (exact === undefined) continue;
+      humanImplementationCommitAuthority = true;
       implementationCommit = Object.freeze({
         paths: exact.paths,
         message: exact.commit_message,
@@ -933,6 +1079,35 @@ async function computeTaskStatusDetailedInternal(
         )) {
           commitObserved = true;
           break;
+        }
+      } catch {
+        blockers.push("commit-observation-unavailable");
+      }
+    }
+    if (!commitObserved && implementationCommit !== undefined) {
+      try {
+        if (await resolveCommit(dependencies.runner, implementationCommit.target_ref) !== implementationCommit.baseline_commit) {
+          implementationCommit = undefined;
+          blockers.push("implementation-commit-target-moved");
+        }
+      } catch {
+        implementationCommit = undefined;
+        blockers.push("commit-observation-unavailable");
+      }
+    }
+    if (!commitObserved && !humanImplementationCommitAuthority && implementationCommit === undefined && acceptedSettlement !== undefined) {
+      const target = await currentTargetRef(dependencies);
+      const autonomousCommit = buildAutonomousImplementationCommitInput(
+        produceSubject.artifact, target.value,
+      );
+      try {
+        commitObserved = await autonomousImplementationOutputCommittedAtCurrentTarget(
+          dependencies.runner, produceSubject.artifact, target.value, autonomousCommit.message,
+        );
+        if (!commitObserved && await resolveCommit(dependencies.runner, target.value) === produceSubject.artifact.base_commit) {
+          implementationCommit = autonomousCommit;
+        } else if (!commitObserved) {
+          blockers.push("implementation-commit-target-moved");
         }
       } catch {
         blockers.push("commit-observation-unavailable");
@@ -1011,6 +1186,35 @@ async function computeTaskStatusDetailedInternal(
         if (!observation.observed && observation.blocking) {
           commitBlockedReason = observation.reason;
           blockers.push(`design-milestone-${observation.reason}`);
+        }
+      } catch {
+        blockers.push("commit-observation-unavailable");
+      }
+    }
+    if (!commitObserved && designCommit === undefined &&
+        acceptedSettlement?.milestone_baseline_commit !== undefined) {
+      const target = await currentTargetRef(dependencies);
+      designCommit = buildAutonomousDesignCommitInput(state, acceptedSettlement, target.value);
+      try {
+        const observation = await autonomousDesignArtifactCommittedAtCurrentTarget(
+          dependencies.runner,
+          state,
+          produceSubject.artifact,
+          produceSubject.retained.manifest.value.outputs,
+          target.value,
+          acceptedSettlement.milestone_baseline_commit,
+          designCommit.message,
+          authority.context,
+        );
+        commitObserved = observation.observed;
+        if (!observation.observed && observation.blocking) {
+          const targetHead = await resolveCommit(dependencies.runner, target.value);
+          commitBlockedReason = observation.reason === "approved-document-mismatch"
+            ? observation.reason
+            : targetHead === acceptedSettlement.milestone_baseline_commit
+            ? observation.reason
+            : "target-moved";
+          blockers.push(`design-milestone-${commitBlockedReason}`);
         }
       } catch {
         blockers.push("commit-observation-unavailable");
@@ -1201,7 +1405,32 @@ async function computeTaskStatusDetailedInternal(
         blockers.push("active-gate-mismatch");
         gateBindingBlocker = "active-gate-mismatch";
       } else {
-        openGate = gateStatus(activeGate);
+        try {
+          let triggerDetails: readonly string[] | undefined;
+          if (activeGate.kind === "commit-authorization") {
+            if (
+              produceSubject?.artifact.artifact_kind !== "implementation-output" ||
+              produceSubject.artifact_digest !== activeGate.subject_digest
+            ) {
+              throw new TypeError("commit-authorization presentation requires its exact retained implementation output");
+            }
+            triggerDetails = contentTriggerDetails(
+              latestEligibleRuleSettlement(
+                state,
+                produceSubject.artifact_digest,
+                produceSubject.artifact.phase_instance,
+              ),
+              produceSubject.artifact,
+            );
+          }
+          openGate = gateStatus(activeGate, triggerDetails);
+        } catch {
+          // A disposable decision interface must never make an incomplete authority join look
+          // plausible. Keep the durable gate open, withhold its human choices, and route status
+          // to inspection until the retained output/settlement disagreement is resolved.
+          blockers.push("content-trigger-presentation-invalid");
+          gateBindingBlocker = "content-trigger-presentation-invalid";
+        }
       }
     } catch {
       blockers.push("active-gate-invalid");
@@ -1227,9 +1456,7 @@ async function computeTaskStatusDetailedInternal(
     repository_initialized: true,
     state,
     config_verified: config.verified,
-    ...(config.verified !== true && config.issue === "pinned-config-schema-unsupported"
-      ? { config_schema_unsupported: true }
-      : {}),
+    ...(config.verified !== true && config.issue !== undefined ? { config_issue: config.issue } : {}),
     ...(statusReconciliation === undefined ? {} : { reconciliation_findings: statusReconciliation.findings }),
     reconciliation_blocking_reasons: Object.freeze([
       ...reconciliationBlockers,
@@ -1245,6 +1472,10 @@ async function computeTaskStatusDetailedInternal(
     evidence_available: evidence.available,
     ...(subjectDigest === undefined ? {} : { subject_digest: subjectDigest }),
     authenticated_approvals: approvalFacts,
+    ...(acceptedSettlement === undefined ? {} : { accepted_no_wait_settlement: acceptedSettlement }),
+    ...(acceptedSettlement?.milestone_baseline_commit === undefined ? {} : {
+      milestone_refresh_config_matches: liveConfigDigest === acceptedSettlement.config_digest,
+    }),
     commit_observed: commitObserved,
     ...(commitBlockedReason === undefined ? {} : { commit_blocked_reason: commitBlockedReason }),
     ...(designCommit === undefined ? {} : { design_commit: designCommit }),
@@ -1313,6 +1544,7 @@ async function computeTaskStatusDetailedInternal(
     review_policy: canonicalRubricForPhaseKind(decodePhaseInstance(state.phase_instance).kind),
     ...(subjectDigest === undefined ? {} : { subject_digest: subjectDigest }),
     config,
+    ...(configChange === undefined ? {} : { config_change: configChange }),
     ...(routes === undefined ? {} : { routes }),
     ...(constitutionStatus === undefined ? {} : { constitution: constitutionStatus }),
     ...(state.open_gate === undefined ? {} : { open_gate_id: state.open_gate.gate_id }),

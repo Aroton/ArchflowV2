@@ -1,6 +1,6 @@
 # COMPLEXITY
 
-**Explored:** 2026-08-16 · **Commit:** `d60da73` · **Covers:** the whole repository
+**Explored:** 2026-08-21 · **Commit:** `869c189` · **Covers:** the whole repository
 
 A per-subsystem audit of where the machinery is heaviest, what it buys, and what could be simplified. Written to support iterating on the workflow — each item states the concrete problem the complexity solves so a simplification can be judged against it, per the engineering priorities in CLAUDE.md.
 
@@ -12,9 +12,11 @@ Three categories recur:
 - **Duplication** — the same logic or shape exists twice or more; consolidation is nearly free correctness.
 - **Questionable weight** — machinery whose cost may exceed its prototype-stage value; candidates for the "documented limitation instead of a subsystem" trade.
 
-## Current top target: the client orchestration surface
+## Current top target: concentrated workflow authority
 
-The cutover is complete. The public catalogue is exactly `archflow_status` and `archflow_apply`, and every workflow — document production, phase implementation, status reporting, and legacy adoption after its local staging and adoption steps — runs through the one read-only-view-plus-bounded-action loop. The retired legacy client loop (request templates, the request-building CLI door, staged request files, the preview/decide CLI pair, the local commit command, and the four low-level tool handlers' MCP-facing halves) is deleted rather than maintained in parallel; the request composer, the state and counter-review services, and the direct decision services survive as the semantic surface's internal machinery. The gate inversion stays resolved: a `gate-summary` opens a nonblocking presentation, and the selected decision archives and settles through freshness-bound substeps instead of a blocked call, status polling, and a second CLI writer. The simplification never moved authorship into the server: Claude Code or Codex still produces documents and code, runs verification, supplies triage and human decisions, and owns Git — every commit is client-created from the returned authorized facts and observed by read-only status. What remains of the local CLI is deliberate: bootstrap, the legacy-upgrade adapter, diagnostics, and the degraded classifier.
+The client cutover is complete. The public catalogue is exactly `archflow_status` and `archflow_apply`, and every workflow — document production, phase implementation, status reporting, and legacy adoption after its local staging and adoption steps — runs through the one read-only-view-plus-bounded-action loop. The retired legacy client loop is gone rather than maintained in parallel. The simplification never moved authorship into the server: Claude Code or Codex still produces documents and code, runs verification, supplies triage and human decisions, and owns Git.
+
+The present hotspot is server-side authority assembly. `src/state/gates.ts` is 2,010 lines, `src/state/status.ts` is 1,648, `src/state/implementation-manifest.ts` is 1,129, and `src/mcp/handlers/state.ts` is 900. Together they authenticate gate history, join current evidence, reconstruct presentations and implementation facts, enforce transition ordering, and project the one client action. That machinery protects real trust boundaries, but changes to approval rules, exact commit authorization, or implementation evidence commonly touch several of these files and their mirrored guards. The maintainability need is to keep shared derivations named and single-sourced as concrete duplication appears, not to introduce a speculative workflow framework.
 
 ## Ranked simplification targets
 
@@ -22,9 +24,11 @@ The cutover is complete. The public catalogue is exactly `archflow_status` and `
 
 The audit asked directly: how often is the MCP server actually down, and could degraded mode shrink to "read-only status + stop" instead of a full recording workflow? It could, and it did. The offline write path and its parallel gate/import driver (~3,000 lines of mirror machinery, every normal-path invariant change carrying a mirror obligation) are removed; `manual-status` survives as a read-only classifier, with no persisted compatibility layer.
 
-### 2. `gates.ts` at 2,311 lines — resolved 2026-08-11
+### 2. Gate lifecycle concentration — improved, now a renewed hotspot
 
-**Resolved 2026-08-11.** The audit found at least five responsibilities in one file: gate lifecycle, decision templates, interface projection, approval re-authentication, and design-document phase parsing. (The sixth — an entire manual gate lifecycle, nearly a second implementation of the first — left with the degraded-mode retirement, #1.) The file is now split along those seams with no behavior change: `gate-core.ts` (shared vocabulary, dependency types, small pure helpers), `gate-approvals.ts` (the approval trust brand — WeakSet, assert, and the single mint site in `loadAuthenticatedGateApproval`, co-resident so minting stays module-private), `gate-decision-interface.ts` (decision templates and the human decision file), `legacy-import-resume.ts`, `planned-final-phase.ts`, and a ~900-line `gates.ts` that keeps the gate lifecycle itself.
+The 2026-08-11 split remains useful: decision templates, approval trust brands, legacy-import resume logic, and planned-final-phase parsing still live in focused modules. But `gates.ts` has grown back to 2,010 lines as triggered-versus-autonomous rule settlement, exception precedence, exact commit facts, content-trigger presentation, waiver handling, and legacy archive compatibility accumulated in the lifecycle join. Calling this resolved or approximately 900 lines is no longer honest.
+
+The adjacent hotspots matter as much as raw size. `status.ts` assembles authenticated state, reviews, settlements, config-change notices, content detail, and successor/commit projections; `implementation-manifest.ts` derives and authenticates client-declared work against Git and retained payloads; the state handler coordinates transaction and replay boundaries. A future simplification should start only when a repeated derivation or guard can move behind one named function without hiding the ordering and human-authority checks. The current requirement does not justify a registry, plugin layer, or generalized gate engine.
 
 ### 3. Double protocol validation in `mcp/` — resolved 2026-08-11
 
@@ -32,7 +36,7 @@ The audit asked for an explicit decision about how much SDK distrust the prototy
 
 ### 4. Dual shape authorities in `contracts/` — resolved 2026-08-11
 
-Agent-facing shapes existed as JSON Schema *and* a Zod mirror, with `assertZodAgreement` proving they matched — three artifacts per shape, with some rules living in a *third* place (custom Ajv keywords). Zod is now the single runtime authority: 31 of the 32 committed schemas are generated from it (`generate:schemas` / `check:schemas`), the release manifest stays hand-written, keyword logic became Zod refines, and Ajv left production entirely — it is a dev dependency compiled only by `test/helpers/json-schema.ts` and the release scripts.
+Agent-facing shapes existed as JSON Schema *and* a Zod mirror, with `assertZodAgreement` proving they matched — three artifacts per shape, with some rules living in a *third* place (custom Ajv keywords). Zod is now the single runtime authority: 32 of the 33 committed schemas are generated from it (`generate:schemas` / `check:schemas`), the release manifest stays hand-written, keyword logic became Zod refines, and Ajv left production entirely — it is a dev dependency compiled only by `test/helpers/json-schema.ts` and the release scripts.
 
 ### 5. Four CLI commands overlap `build-request` — resolved 2026-08-11
 
@@ -83,7 +87,7 @@ For balance — machinery that directly implements the trust boundaries and shou
 ## Suggested audit order
 
 1. ~~Decide the degraded-mode question (#1)~~ — decided and done: degraded mode is read-only status only.
-2. ~~Split `gates.ts` (#2) and name the predicates in `fixed-point.ts` (#6)~~ — done: six focused gate modules; named binding-failure predicates.
+2. Re-audit the renewed gate/status/implementation concentration (#2) around concrete duplicate joins or guards; preserve the existing focused modules and named fixed-point predicates.
 3. ~~Pick one shape authority (#4)~~ — done: Zod generates the schemas; Ajv is dev-only.
 4. ~~Sweep the small items (#7, #9)~~ — done except one deliberate keep: the `unified-diff` tier (documented limitation; behavior-changing to remove). The advertised-schema pruner left with the two-tool cutover.
 5. ~~Revisit SDK distrust (#3)~~ — decided and done: the pinned, probed SDK is the JSON-RPC authority; the session layer is retired.

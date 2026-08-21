@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
+import { taskStateV1Schema, type RuleSettlementV1, type TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parsePathSafeId, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePhaseInstanceId, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
@@ -8,6 +8,15 @@ import { legalRunStepStatus, planPlanningRestart, planStateTransition } from "..
 
 const D = (value: string) => parseSha256Digest(value.repeat(64));
 const phase = (kind: "phase-design" | "phase-impl", number: number) => encodePhaseInstance({ kind, phase: parsePositiveSafePhaseNumber(number) });
+const receipt = (phaseInstance: TaskStateV1["phase_instance"], subjectDigest: ReturnType<typeof D>, settledAt: number): RuleSettlementV1 => ({
+  task_id: parseTaskSlug("task-1"),
+  phase_instance: phaseInstance,
+  step: "triage",
+  subject_digest: subjectDigest,
+  conclusion: { wait: false, match: null },
+  config_digest: D("3"),
+  settled_at_revision: parseSafeInteger(settledAt),
+});
 
 function state(overrides: Partial<TaskStateV1> = {}): TaskStateV1 {
   return {
@@ -254,6 +263,16 @@ describe("planStateTransition", () => {
     expect(result.value.human_revision_history?.at(-1)).toMatchObject({
       classification: "simple", previous_attempt: 3, resulting_attempt: 3, evidence,
     });
+
+    const settlementCarrier = planStateTransition({
+      current,
+      target: { phase_instance: phaseInstance, step: "produce", status: "succeeded", attempt: parseSafeInteger(3), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"), artifact, result_reference: replacement,
+      resulting_subject_digest: D("c"),
+      human_revision: { classification: "simple", rationale: "Wording only." },
+      rule_settlement: { ...receipt(phaseInstance, D("c"), 5), step: "produce" },
+    });
+    expect(settlementCarrier).toMatchObject({ ok: false, error: { code: "TRANSITION_INVALID" } });
   });
 
   it("archives old evidence and resets to attempt 1 for a significant human revision", () => {
@@ -684,5 +703,293 @@ describe("planStateTransition", () => {
     });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.planned_final_phase).toBe(parseSafeInteger(10));
+  });
+
+  it("does not accept a rule settlement as artifact phase-exit authority", () => {
+    const prdExit = state({
+      phase_instance: parsePhaseInstanceId("prd"),
+      status: "succeeded",
+      step: "triage",
+      attempt: parseSafeInteger(1),
+      rule_settlements: [receipt(parsePhaseInstanceId("prd"), D("5"), 4)],
+    });
+    const prdCrossing = planStateTransition({
+      current: prdExit,
+      target: { phase_instance: parsePhaseInstanceId("design"), step: "produce", status: "running", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"),
+      completion_subject_digest: D("5"),
+    });
+    expect(prdCrossing.ok ? undefined : prdCrossing.error.code).toBe("TRANSITION_INVALID");
+
+    // A digest bound to another subject is not this crossing's authority.
+    const wrongSubject = planStateTransition({
+      current: state({
+        phase_instance: parsePhaseInstanceId("prd"),
+        status: "succeeded",
+        step: "triage",
+        attempt: parseSafeInteger(1),
+        rule_settlements: [receipt(parsePhaseInstanceId("prd"), D("6"), 4)],
+      }),
+      target: { phase_instance: parsePhaseInstanceId("design"), step: "produce", status: "running", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"),
+      completion_subject_digest: D("5"),
+    });
+    expect(wrongSubject.ok ? undefined : wrongSubject.error.code).toBe("TRANSITION_INVALID");
+  });
+
+  it("does not accept a rule settlement plus commit observation as design crossing authority", () => {
+    const designExit = (ruleAdvances: readonly RuleSettlementV1[], observed: boolean) => planStateTransition({
+      current: state({
+        phase_instance: parsePhaseInstanceId("design"),
+        status: "succeeded",
+        step: "triage",
+        attempt: parseSafeInteger(1),
+        rule_settlements: ruleAdvances,
+      }),
+      target: { phase_instance: phase("phase-design", 1), step: "produce", status: "running", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"),
+      completion_subject_digest: D("5"),
+      commit_observed: observed,
+    });
+    expect(designExit([receipt(parsePhaseInstanceId("design"), D("5"), 4)], true).ok).toBe(false);
+    expect(designExit([receipt(parsePhaseInstanceId("design"), D("5"), 4)], false).ok).toBe(false);
+    expect(designExit([], true).ok).toBe(false);
+  });
+
+  it("rejects a plain-object imitation of autonomous crossing authority", () => {
+    const current = state({
+      phase_instance: parsePhaseInstanceId("prd"), status: "succeeded", step: "triage",
+      rule_settlements: [receipt(parsePhaseInstanceId("prd"), D("5"), 4)],
+    });
+    expect(() => planStateTransition({
+      current,
+      target: { phase_instance: parsePhaseInstanceId("design"), step: "produce", status: "running", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"), completion_subject_digest: D("5"),
+      authenticated_rule_acceptance: {
+        policy: {
+          task_id: current.task_id,
+          policy_base_commit: current.policy_base_commit,
+          constitution_digest: current.constitution_digest,
+        } as never,
+        settlement: current.rule_settlements![0]!,
+      },
+    })).toThrow(/authenticated rule acceptance policy/u);
+  });
+
+  it("does not recover a document handoff from settlement evidence alone", () => {
+    const phaseDesign = phase("phase-design", 2);
+    const current = state({
+      phase_instance: phaseDesign,
+      step: "produce",
+      status: "succeeded",
+      rule_settlements: [receipt(phaseDesign, D("5"), 4)],
+    });
+    const target = {
+      phase_instance: phase("phase-impl", 2),
+      step: "produce" as const,
+      status: "running" as const,
+      attempt: parseSafeInteger(1),
+      input_fingerprint: D("8"),
+    };
+
+    expect(planStateTransition({
+      current,
+      target,
+      recomputed_input_fingerprint: D("8"),
+      completion_subject_digest: D("5"),
+      commit_observed: true,
+    }).ok).toBe(false);
+
+    // Neither the cursor shape nor commit proof alone supplies authority.
+    expect(planStateTransition({
+      current: { ...current, rule_settlements: [] },
+      target,
+      recomputed_input_fingerprint: D("8"),
+      completion_subject_digest: D("5"),
+      commit_observed: true,
+    }).ok).toBe(false);
+    expect(planStateTransition({
+      current,
+      target,
+      recomputed_input_fingerprint: D("8"),
+      completion_subject_digest: D("5"),
+      commit_observed: false,
+    }).ok).toBe(false);
+
+    // Recovery remains the fixed graph edge, never a phase skip.
+    expect(planStateTransition({
+      current,
+      target: { ...target, phase_instance: phase("phase-design", 3) },
+      recomputed_input_fingerprint: D("8"),
+      completion_subject_digest: D("5"),
+      commit_observed: true,
+    }).ok).toBe(false);
+  });
+
+  it("refuses both stale and fresh phase-exit settlements without human approval", () => {
+    const restart = {
+      restart_id: "restart-1",
+      source_phase_instance: phase("phase-design", 2),
+      target_phase_instance: parsePhaseInstanceId("prd"),
+      reason: "reconsider the plan",
+      restarted_at_revision: parseSafeInteger(6),
+      superseded_results: [],
+      cleared_waivers: [],
+      human_provenance: {} as never,
+    } as never;
+    const superseded = state({
+      phase_instance: parsePhaseInstanceId("prd"),
+      status: "succeeded",
+      step: "triage",
+      attempt: parseSafeInteger(1),
+      revision: parseSafeInteger(9),
+      rule_settlements: [receipt(parsePhaseInstanceId("prd"), D("5"), 4)],
+      restart_history: [restart],
+    });
+    const refused = planStateTransition({
+      current: superseded,
+      target: { phase_instance: parsePhaseInstanceId("design"), step: "produce", status: "running", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"),
+      completion_subject_digest: D("5"),
+    });
+    expect(refused.ok ? undefined : refused.error.code).toBe("TRANSITION_INVALID");
+
+    // A fresh post-restart evaluation remains evidence only.
+    const resettleState = state({
+      phase_instance: parsePhaseInstanceId("prd"),
+      status: "succeeded",
+      step: "triage",
+      attempt: parseSafeInteger(1),
+      revision: parseSafeInteger(9),
+      rule_settlements: [receipt(parsePhaseInstanceId("prd"), D("5"), 4), receipt(parsePhaseInstanceId("prd"), D("5"), 8)],
+      restart_history: [restart],
+    });
+    const freshRefused = planStateTransition({
+      current: resettleState,
+      target: { phase_instance: parsePhaseInstanceId("design"), step: "produce", status: "running", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"),
+      completion_subject_digest: D("5"),
+    });
+    expect(freshRefused.ok ? undefined : freshRefused.error.code).toBe("TRANSITION_INVALID");
+  });
+
+  it("appends the settle-path receipt as one sorted-set entry bound to the settling revision", () => {
+    const current = state({ step: "triage" });
+    const reference = {
+      phase_instance: current.phase_instance,
+      step: "triage" as const,
+      result_digest: D("9"),
+      result_id: parseSafeId("triage-result"),
+      input_fingerprint: D("8"),
+    };
+    const first = planStateTransition({
+      current,
+      target: { phase_instance: current.phase_instance, step: "triage", status: "succeeded", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"),
+      result_reference: reference,
+      artifact: { artifact_kind: "triage", evidence: {
+        task_id: current.task_id, phase_instance: current.phase_instance, step: "triage",
+        input_fingerprint: D("8"), subject_digest: D("5"),
+      } } as never,
+      rule_settlement: receipt(current.phase_instance, D("5"), 5),
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.value.rule_settlements).toEqual([receipt(current.phase_instance, D("5"), 5)]);
+
+    // An exact planning restart re-settles the same (phase_instance, subject_digest) pair at a
+    // new revision: the triple key keeps the sorted set valid with both entries present. The
+    // order is the durable invariant's own — the schema's tuple key stringifies the revision, so
+    // the planner sorts exactly as the strict state schema will re-check it.
+    const restartCurrent = state({
+      step: "triage",
+      revision: parseSafeInteger(9),
+      rule_settlements: [receipt(phase("phase-design", 1), D("7"), 3), receipt(current.phase_instance, D("5"), 5)],
+    });
+    const resettle = planStateTransition({
+      current: restartCurrent,
+      target: { phase_instance: restartCurrent.phase_instance, step: "triage", status: "succeeded", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"),
+      result_reference: { ...reference, input_fingerprint: D("8") },
+      artifact: { artifact_kind: "triage", evidence: {
+        task_id: restartCurrent.task_id, phase_instance: restartCurrent.phase_instance, step: "triage",
+        input_fingerprint: D("8"), subject_digest: D("5"),
+      } } as never,
+      rule_settlement: receipt(restartCurrent.phase_instance, D("5"), 10),
+    });
+    expect(resettle.ok).toBe(true);
+    if (!resettle.ok) return;
+    expect(resettle.value.rule_settlements).toEqual([
+      receipt(phase("phase-design", 1), D("7"), 3),
+      receipt(restartCurrent.phase_instance, D("5"), 5),
+      receipt(restartCurrent.phase_instance, D("5"), 10),
+    ]);
+    expect(taskStateV1Schema.safeParse({
+      ...resettle.value,
+      revision: parseSafeInteger(10),
+    }).success).toBe(true);
+
+    // A receipt that does not bind this exact transaction — wrong revision, wrong phase, wrong
+    // task — is refused rather than appended.
+    for (const mismatch of [
+      receipt(current.phase_instance, D("5"), 4),
+      receipt(phase("phase-design", 3), D("5"), 5),
+      { ...receipt(current.phase_instance, D("5"), 5), task_id: parseTaskSlug("other-task") },
+    ] as const) {
+      const refused = planStateTransition({
+        current,
+        target: { phase_instance: current.phase_instance, step: "triage", status: "succeeded", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
+        recomputed_input_fingerprint: D("8"),
+        result_reference: reference,
+        artifact: { artifact_kind: "triage", evidence: {
+          task_id: current.task_id, phase_instance: current.phase_instance, step: "triage",
+          input_fingerprint: D("8"), subject_digest: D("5"),
+        } } as never,
+        rule_settlement: mismatch,
+      });
+      expect(refused.ok ? undefined : refused.error.code).toBe("TRANSITION_INVALID");
+    }
+  });
+
+  it("accepts a settlement carrier only for exact editorial produce re-entry", () => {
+    const current = state({ step: "produce", status: "running" });
+    const reference = {
+      phase_instance: current.phase_instance,
+      step: "produce" as const,
+      result_digest: D("9"),
+      result_id: parseSafeId("editorial-produce-result"),
+      input_fingerprint: D("8"),
+    };
+    const artifact = {
+      artifact_kind: "document",
+      task_id: current.task_id,
+      phase_instance: current.phase_instance,
+      step: "produce",
+      input_fingerprint: D("8"),
+      editorial_predecessor: {
+        subject_digest: D("4"), input_fingerprint: D("8"), triage_result_digest: D("3"),
+      },
+    } as never;
+    const transition = (stateOverrides: Partial<TaskStateV1> = {}) => planStateTransition({
+      current: state({ ...current, ...stateOverrides }),
+      target: {
+        phase_instance: current.phase_instance, step: "produce", status: "succeeded",
+        attempt: current.attempt, input_fingerprint: D("8"),
+      },
+      recomputed_input_fingerprint: D("8"), artifact, result_reference: reference,
+      resulting_subject_digest: D("5"),
+      rule_settlement: { ...receipt(current.phase_instance, D("5"), 5), step: "produce" },
+    });
+
+    expect(transition().ok).toBe(true);
+    // A pending human revision marks the simple/significant human-owned path, where settlement
+    // creation is forbidden even if an artifact tries to carry an editorial predecessor.
+    expect(transition({
+      pending_human_revision: {
+        gate_id: parsePathSafeId("human-revision"), gate_kind: "artifact-approval",
+        predecessor_subject_digest: D("4"), predecessor_input_fingerprint: D("8"),
+        requested_at_revision: parseSafeInteger(4), attempt: current.attempt, evidence: [],
+      },
+    }).ok).toBe(false);
   });
 });

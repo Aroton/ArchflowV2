@@ -100,7 +100,7 @@ describe("durable gate decisions", () => {
     const inputFingerprint = D("2");
     const initial: TaskStateV1 = { ...state(), repository_identity_digest: authority.repository_identity_digest, config_digest: sha256Bytes(configBytes), input_fingerprint: inputFingerprint };
     writeFileSync(join(taskRoot, "state.json"), canonicalDocument(initial).bytes);
-    const dependencies = { runner: runnerResult.value, environment: git.value, atomic: createAtomicWriter(), lock: createTaskLock(), read_state: readTaskState, read_config: readTaskConfig, read_receipt: readIntentReceipt, resolve_input_fingerprint: async () => ({ schema_version: "1" as const, ok: true as const, value: {} as InputFingerprintSubject }) };
+    const dependencies = { runner: runnerResult.value, environment: git.value, atomic: createAtomicWriter(), lock: createTaskLock(), read_state: readTaskState, read_config: readTaskConfig, read_receipt: readIntentReceipt, resolve_input_fingerprint: async () => ({ schema_version: "1" as const, ok: true as const, value: { subject: {} as InputFingerprintSubject, fingerprint: D("2") } }) };
     const reviewContext = { constitution: "pass", failed_rules: [], uncertain_rules: [], matched_trigger_rules: [RULE], uncertain_trigger_rules: [], eligible_waivers: [{ rule: RULE, scope: { operation: "review-trigger", boundary: "subject" } }] } as const;
     const base = {
       schema_version: "1", task_id: "task-1", phase_instance: initial.phase_instance,
@@ -281,7 +281,7 @@ describe("durable gate decisions", () => {
     const git = await preflightGit(runnerResult.value, operation); if (!git.ok) throw new Error("preflight failed");
     const authorityResult = await createInternalTransactionAuthority({ runner: runnerResult.value, environment: git.value, task_id: parseTaskSlug("task-1"), context: operation }); if (!authorityResult.ok) throw new Error("authority failed");
     const authority = authorityResult.value;
-    const dependencies = { runner: runnerResult.value, environment: git.value, atomic: createAtomicWriter(), lock: createTaskLock(), read_state: readTaskState, read_config: readTaskConfig, read_receipt: readIntentReceipt, resolve_input_fingerprint: async () => ({ schema_version: "1" as const, ok: true as const, value: {} as InputFingerprintSubject }) };
+    const dependencies = { runner: runnerResult.value, environment: git.value, atomic: createAtomicWriter(), lock: createTaskLock(), read_state: readTaskState, read_config: readTaskConfig, read_receipt: readIntentReceipt, resolve_input_fingerprint: async () => ({ schema_version: "1" as const, ok: true as const, value: { subject: {} as InputFingerprintSubject, fingerprint: D("2") } }) };
     const inputFingerprint = D("2");
     const migrationSubject = D("7");
     const evidenceBase = { schema_version: "1" as const, task_id: "task-1", phase_instance: "design", subject_digest: migrationSubject, input_fingerprint: inputFingerprint };
@@ -387,7 +387,7 @@ describe("durable gate decisions", () => {
     const dependencies = {
       runner: runnerResult.value, environment: git.value, atomic: createAtomicWriter(), lock: createTaskLock(),
       read_state: readTaskState, read_config: readTaskConfig, read_receipt: readIntentReceipt,
-      resolve_input_fingerprint: async () => ({ schema_version: "1" as const, ok: true as const, value: {} as InputFingerprintSubject }),
+      resolve_input_fingerprint: async () => ({ schema_version: "1" as const, ok: true as const, value: { subject: {} as InputFingerprintSubject, fingerprint: D("2") } }),
       resolve_gate_reentry_fingerprint: async () => ({ schema_version: "1" as const, ok: true as const, value: inputFingerprint }),
       load_retained_result: async () => ({ schema_version: "1" as const, ok: true as const, value: retained as never }),
     };

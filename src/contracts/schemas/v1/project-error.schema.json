@@ -1370,57 +1370,6 @@
       ],
       "additionalProperties": false
     },
-    "E_PINNED_CONFIG_MISMATCH": {
-      "type": "object",
-      "properties": {
-        "schema_version": {
-          "type": "string",
-          "const": "1"
-        },
-        "code": {
-          "type": "string",
-          "const": "PINNED_CONFIG_MISMATCH"
-        },
-        "owner": {
-          "type": "string",
-          "const": "policy"
-        },
-        "retryable": {
-          "type": "boolean",
-          "const": false
-        },
-        "diagnostic": {
-          "type": "object",
-          "properties": {
-            "template_id": {
-              "type": "string",
-              "const": "PINNED_CONFIG_MISMATCH"
-            },
-            "parameters": {
-              "$ref": "#/$defs/digests"
-            }
-          },
-          "required": [
-            "template_id",
-            "parameters"
-          ],
-          "additionalProperties": false
-        },
-        "next_action": {
-          "type": "string",
-          "const": "restore-pinned-config"
-        }
-      },
-      "required": [
-        "schema_version",
-        "code",
-        "owner",
-        "retryable",
-        "diagnostic",
-        "next_action"
-      ],
-      "additionalProperties": false
-    },
     "E_STALE_SKILLS": {
       "type": "object",
       "properties": {
@@ -3452,9 +3401,6 @@
     },
     {
       "$ref": "#/$defs/E_WORKFLOW_MISMATCH"
-    },
-    {
-      "$ref": "#/$defs/E_PINNED_CONFIG_MISMATCH"
     },
     {
       "$ref": "#/$defs/E_STALE_SKILLS"

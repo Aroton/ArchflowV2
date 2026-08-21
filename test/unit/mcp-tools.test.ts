@@ -161,6 +161,16 @@ describe("correlated MCP tool contracts", () => {
     expect(() => parseToolCall("archflow_state", { ...restart, step: "triage" })).toThrow();
     expect(() => parseToolCall("archflow_state", { ...stateInput, target_phase_instance: "prd", reason: "forged" })).toThrow();
   });
+  it("keeps milestone baseline refresh a payload-free state operation", () => {
+    const refresh = {
+      ...stateInput, intent_id: "refresh-baseline-1", phase_instance: "phase-design-2",
+      step: "triage", status: "succeeded", operation: "refresh_milestone_baseline",
+    } as const;
+    expect(parseToolCall("archflow_state", refresh).input.operation).toBe("refresh_milestone_baseline");
+    expect(() => parseToolCall("archflow_state", { ...refresh, artifact: taskInitialization })).toThrow();
+    expect(() => parseToolCall("archflow_state", { ...refresh, step: "produce" })).toThrow();
+    expect(() => parseToolCall("archflow_state", { ...refresh, reason: "move it" })).toThrow();
+  });
   it("checks direct state request/result equalities", () => {
     const call = bindParsedToolCallRequest(parseToolCall("archflow_state", stateInput), parseSha256Digest("b".repeat(64)));
     expect(() => validateProjectResultStructure(call, { schema_version: "1", ok: true, value: { path: "phases/2/result.json", revision: 3, status: "failed" } })).toThrow(/status mismatch/);

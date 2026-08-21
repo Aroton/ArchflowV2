@@ -1,6 +1,6 @@
 # LIMITATIONS
 
-**Explored:** 2026-08-12 · **Commit:** `247df34` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`
+**Explored:** 2026-08-21 · **Commit:** `869c189` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`
 
 ArchFlow is a local developer-workflow prototype, not a security sandbox. The controls below reduce accidental context leakage and constrain ordinary operation, but the listed cases are unsupported because the current implementation cannot prove the claimed boundary. A planted canary not appearing in output is evidence about that run; it is not proof that the child could not read the canary.
 
@@ -82,19 +82,38 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 **Not provided:** Nothing in the request pipeline distinguishes a substitute reviewer the human asked for from one the agent picked to get past a failed dispatch. `route_override` carries a free-text `reason`, and the server validates the *route* it names exactly as it validates a pinned one — but it never validates the *authorization*. The skills instruct the agent to report an outage and ask rather than substitute on its own, and that instruction is the only thing enforcing it.
 
-**Existing mitigation:** The override is covered by the request digest, so it cannot be added to a composed request without invalidating it, and it is recorded on the produced evidence with the route it displaced. That provenance travels into the status block the human gate is built from, and the skills require the substitution to be stated in plain language when the review is presented — so an unauthorized substitution is visible at the approval gate rather than silent, even though it is not blocked.
+**Existing mitigation:** The override is covered by the request digest, so it cannot be added to a composed request without invalidating it, and it is recorded on the produced evidence with the route it displaced. That provenance remains auditable and is shown in plain language whenever a later human presentation opens. Under targeted approval rules an eligible `wait:false` path may have no later human gate, so the override can remain evidence-only rather than being surfaced to a person during that run.
 
-**Why accepted:** Reviewer routing is policy, not a trust boundary — families are recorded rather than enforced, and a same-family reviewer is already a legal config choice, so a substitute is the same kind of decision made later. Enforcing authorization would mean a second human gate in front of the review, which costs more than the risk: the human still approves the work itself downstream, with the substitution disclosed. Making the deviation loud is the least machinery that keeps the decision honest.
+**Why accepted:** Reviewer routing is policy, not a trust boundary — families are recorded rather than enforced, and a same-family reviewer is already a legal config choice, so a substitute is the same kind of decision made later. Enforcing authorization would mean a human gate in front of the review, which costs more than the risk for this prototype. The current guarantee is authenticated provenance, not proof of human selection or eventual human visibility.
 
-## Config schema evolution without migration
+## Trusted live config edits can weaken policy
 
-**Not provided:** There is no config re-pin, schema migration, or in-task amendment. (A counter-review call may carry a per-dispatch `route_override` for a reviewer outage, but that substitutes one dispatch's route and leaves the pin itself unchanged — it is not an amendment.) Retired config keys are individually granted read tolerance (the removed `producer` role, like the retired `independence` evidence field), but a pinned config whose bytes fail to parse under any other future schema change strands the task: status reports `pinned-config-schema-unsupported` with an `upgrade-tooling` action, and the honest exits are resuming with tooling that accepts the pinned bytes or restarting as a new task.
+**Not protected:** Task-local config is mutable throughout a task. A developer or agent with write access can lower review effort, change routes, or remove an approval rule before a later settlement. The server reports field-level changes and records dispatch provenance and settlement config digests, but it does not require a separate authorization for the edit or interpret whether the new policy is weaker.
 
-**Existing mitigation:** Every retirement granted so far keeps pre-removal pinned configs working unchanged, unknown keys still fail closed so a typo cannot silently drop a route, and the byte pin still rejects any edit of the pinned file. The `upgrade-tooling` blocker names the real situation instead of impossible `restore-pinned-config` advice, so a human is never told to restore bytes that already match the pin.
-## One-hop simple revisions that retain an accepted finding
+**Existing mitigation:** Every config-observing transaction parses the complete strict shape, records it in `last_seen_config`, and status reports later changes without invalidating already-authenticated review evidence or retroactively changing a settled conclusion. Unknown fields fail closed instead of silently disappearing. Per-dispatch provenance records what actually ran, and settlements bind the exact config digest they evaluated.
 
-**Not protected:** A produce revision classified `simple` reuses the prior review and triage evidence for one hop. When that retained triage contains an accepted finding, the review fixed point demands a re-triage while durable state sits at `produce-succeeded`, but the fixed pipeline (`[produce, counter_review, triage]`) has no `produce-succeeded → triage` edge. The status projection then offers a `triage` action that no surface — semantic or legacy — can execute; applying it fails with `TRANSITION_INVALID` and the loop wedges at that boundary.
+**Why accepted:** ArchFlow's prototype operating model already trusts the developer account and repository writers. Making config edits visible and binding each resulting action is proportional; a full policy-amendment authorization system would recreate the lock-in this feature removes.
 
-**Existing mitigation:** The wedge is reachable only through the exhaustion gate's revise settlement (or any human-requested revision) followed by a `simple` classification while an accepted finding's revision intent remains unconsummated. Classifying such a revision `significant` resets the review evidence and proceeds normally; the implementation notes for the phase that exposed this record the exact failing transition, and a journey test pins the boundary where the loop stops.
+## Editable config is not schema migration
 
-**Why accepted:** The honest fix is a fixed-point rule that recognizes a completed human-requested revision as the consummation of the accepted finding's re-entry, or a legal pipeline edge for the re-triage — both are core review-loop changes beyond the semantic-surface migration that exposed the wedge. The workaround (prefer `significant` when accepted findings are outstanding) is cheap and explicit.
+**Not provided:** Making the task-local config live and editable does not make older or future config shapes migratable. Every config-observing transaction and dispatch still parses the complete current strict schema; unknown fields, unsupported values, malformed YAML, and otherwise incompatible shapes fail closed. The retired `roles.producer` key is one narrow read-compatibility allowance for configs created before the connected host became the producer. Nothing consumes that key, and its acceptance is not a general unknown-field or version fallback.
+
+**Existing mitigation:** A valid edit becomes the normalized `last_seen_config` snapshot and later field-level changes are informational. An invalid edit cannot dispatch review or advance state, and status reports repair guidance without pretending that read-only degraded mode can repair the bytes.
+
+**Why accepted:** Automatic schema migration would need explicit version transforms, ownership of rewritten bytes, and review of policy-changing defaults. The prototype instead keeps one current strict authority and fails visibly when a human must update an incompatible config.
+
+## Content approval triggers are path heuristics
+
+**Not provided:** Content triggers do not inspect file bytes, language semantics, embedded SQL, generated effects, or dependency impact. They examine only the changed paths declared by a `phase-impl` implementation output; planning artifacts never run through content globs. Matching is case-sensitive over the whole repository-relative slash-separated path: `*` and `?` stay inside one segment, while `**` is recursive only as a complete segment. Path naming can therefore under-match semantically relevant work or over-match unrelated work.
+
+**Existing mitigation:** Subject triggers can require approval for the whole `phase-impl` subject independently of content paths. When a content rule does match, the settlement freezes the complete sorted path set; a later presentation reconstructs operations and signed byte deltas from those paths and retained outputs without re-evaluating mutable config.
+
+**Why accepted:** Path globs are understandable repository policy and sufficient for representative triggers such as migration-file locations. Semantic inspection would introduce a language-specific policy engine whose complexity is disproportionate to this prototype.
+
+## Legacy fingerprint compatibility is one bounded read retry
+
+**Not provided:** The compatibility reader does not migrate arbitrary in-flight state or accept approximately matching evidence. It runs only when a caller supplies an exact expected pre-cutover fingerprint that the current composition does not reproduce, and it can succeed only by recomputing the retired composition with that same task state's creation-time `config_digest` provenance.
+
+**Existing mitigation:** The resolver computes the current fingerprint first, then makes one read-side legacy comparison. A mismatch under both compositions remains a mismatch. Success returns the already expected legacy digest for that read; it rewrites no state, evidence, subject, config, or retained result.
+
+**Why accepted:** This preserves narrowly identifiable work created before config left the fingerprint without turning compatibility into a migration subsystem or weakening exact digest authentication.

@@ -1,6 +1,7 @@
 # ArchFlow copies this template to .archflow/config.yaml during repository initialization.
-# Task creation copies and byte-pins it at .archflow/tasks/<task>/config.yaml.
-# Changing routing after that point requires creating a new task.
+# Task creation copies it to .archflow/tasks/<task>/config.yaml, which stays an ordinary
+# editable input: edit it at any point and the next workflow step uses the new values.
+# Status reports field-level changes since the last state transaction — nothing blocks.
 schema_version: "1"
 roles:
   producer:
@@ -17,6 +18,17 @@ roles:
 # gate opens; defaults to 3. This is a thrash backstop, not the primary brake — the
 # loop ends when triage accepts nothing, so review convergence is a triage judgment.
 # max_attempts: 3
+
+# Optional. Approval triggers declare which completed steps wait for explicit human
+# judgment. `subjects` may contain prd, design, phase-design, or phase-impl. `content`
+# rules watch repository paths touched by a phase-impl change. Counter-review still
+# runs for every subject; when no rule matches and no safety condition opens a gate,
+# the authenticated workflow advances and commits without a human decision. The
+# repository defaults gate the PRD, the architecture/design, and SQL changes.
+approval_rules:
+  subjects: [prd, design]
+  content:
+    - paths: ["**/*.sql"]
 
 # Codex-producer orientation (replace the active document above with this block):
 # schema_version: "1"

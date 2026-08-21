@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import type { GitOid } from "./canonical.js";
 import { gitOidV1Schema } from "./canonical.js";
+import type { TaskConfigSnapshot, WorkflowSubject } from "./config.js";
+import { approvalRulesSchema, configOverridesSchema, configRolesSchema, configRouteSchema, configV1Schema, workflowSubjectV1Schema } from "./config.js";
 import type { PathSafeId, SafeCode, SafeId, SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
 import { pathSafeIdV1Schema, safeCodeV1Schema, safeIdV1Schema, safeIntegerV1Schema, sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
 import type { GateKind, WaiverScope } from "./gates.js";
@@ -10,7 +12,7 @@ import type { PlainJsonValue } from "./plain-json.js";
 import type { ProjectionDigestRef } from "./durable-primitives.js";
 import { repositoryPathClaimV1Schema } from "./path-claims.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
-import { isStrictlyEarlierPlanningPhase, phaseInstanceIdV1Schema } from "./phase-instance.js";
+import { decodePhaseInstance, isStrictlyEarlierPlanningPhase, phaseInstanceIdV1Schema } from "./phase-instance.js";
 import { isSortedUniqueBy, tupleKey } from "./validators.js";
 import type { PipelineStep } from "./vocabulary.js";
 import { PIPELINE_STEPS } from "./vocabulary.js";
@@ -197,6 +199,54 @@ export type BaselineAdoptionRecord = {
   readonly adopted_absences?: readonly ProjectionDigestRef["path"][];
 };
 
+export type RuleSettlementConclusionV1 =
+  | { readonly wait: false; readonly match: null }
+  | {
+    readonly wait: true;
+    readonly match:
+      | { readonly kind: "subject"; readonly subject: WorkflowSubject }
+      | { readonly kind: "content"; readonly paths: readonly string[] };
+  };
+
+/**
+ * The rule decision frozen by the transaction that first establishes a clean final-review fixed
+ * point. Both outcomes are recorded. During the staged rollout they are evaluation evidence,
+ * not approval authority; `wait:true` also preserves the exact trigger for human presentation.
+ */
+export type RuleSettlementV1 = {
+  readonly task_id: TaskSlug;
+  readonly phase_instance: PhaseInstanceId;
+  readonly step: PipelineStep;
+  readonly subject_digest: Sha256Digest;
+  readonly conclusion: RuleSettlementConclusionV1;
+  readonly config_digest: Sha256Digest;
+  /**
+   * Git baseline captured with an autonomous planning milestone. It is intentionally absent from
+   * implementation settlements (whose output already pins `base_commit`) and from every waiting
+   * settlement.
+   */
+  readonly milestone_baseline_commit?: GitOid;
+  /** `>= 1` (D8), and no later than the containing state's revision. */
+  readonly settled_at_revision: SafeInteger;
+};
+
+/**
+ * Canonical order for settlements. Unlike `tupleKey`, the final component remains numeric, so
+ * revision 9 sorts before 10 (and 99 before 100). Construction and validation share this exact
+ * comparator, and equality across all three components identifies a duplicate.
+ */
+export function compareRuleSettlements(left: RuleSettlementV1, right: RuleSettlementV1): number {
+  const phase = left.phase_instance < right.phase_instance ? -1 : left.phase_instance > right.phase_instance ? 1 : 0;
+  if (phase !== 0) return phase;
+  const digest = left.subject_digest < right.subject_digest ? -1 : left.subject_digest > right.subject_digest ? 1 : 0;
+  if (digest !== 0) return digest;
+  return left.settled_at_revision - right.settled_at_revision;
+}
+
+export function isSortedUniqueRuleSettlements(items: readonly RuleSettlementV1[]): boolean {
+  return items.every((item, index) => index === 0 || compareRuleSettlements(items[index - 1]!, item) < 0);
+}
+
 /**
  * `expires` is the const `"task-complete"` — the narrowest representation of the only expiry this
  * project has. That is a *format* decision. Phase 12 records waiver scope; Phase 14 owns expiry
@@ -296,8 +346,34 @@ export type TaskStateV1 = {
   readonly restart_history?: readonly PlanningRestartRecord[];
   /** Human-approved re-baselines of drifted projections; see `BaselineAdoptionRecord`. */
   readonly baseline_adoptions?: readonly BaselineAdoptionRecord[];
+  /**
+   * Approval-rule settlements, written for both evaluated outcomes by the transaction
+   * that first establishes the clean fixed point. SET — sorted by the tuple
+   * `(phase_instance, subject_digest, settled_at_revision)`, duplicates rejected. The triple, not
+   * the pair: an exact planning restart that ends in byte-identical re-production legally
+   * re-settles the same `(phase_instance, subject_digest)` at the new revision.
+   */
+  readonly rule_settlements?: readonly RuleSettlementV1[];
+  /**
+   * The parsed config this task's state last transacted against — the baseline the status change
+   * notice diffs the live parsed config over. Written only by commit-time normalization and
+   * revision-zero seeding; a settlement commit that never reads config leaves it unchanged. Absent
+   * (pre-cutover tasks) records nothing and notices nothing.
+   */
+  readonly last_seen_config?: TaskConfigSnapshot;
   readonly last_transition?: LastTransition;
   readonly terminal?: TerminalState;
+};
+
+/**
+ * One leaf-level config change for the status change notice: `path` is a dot-separated segment
+ * string (array items addressed by index); an absent side omits its field (added or removed leaf).
+ * Informational only — a change entry is never a blocker and never changes an action kind.
+ */
+export type ConfigChangeEntry = {
+  readonly path: string;
+  readonly before?: PlainJsonValue;
+  readonly after?: PlainJsonValue;
 };
 
 const sha256Digest = sha256DigestV1Schema as unknown as z.ZodType<Sha256Digest>;
@@ -473,6 +549,41 @@ export const baselineAdoptionRecordV1Schema = z.object({
     .refine((items) => isSortedUniqueBy(items), "adopted absences must be sorted with no duplicates"),
 }).strict() as unknown as z.ZodType<BaselineAdoptionRecord>;
 
+const ruleSettlementMatchV1Schema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("subject"), subject: workflowSubjectV1Schema }).strict(),
+  z.object({
+    kind: z.literal("content"),
+    paths: z.array(z.string()).min(1)
+      .refine((items) => isSortedUniqueBy(items), "content match paths must be sorted with no duplicates"),
+  }).strict(),
+]);
+
+export const ruleSettlementConclusionV1Schema = z.discriminatedUnion("wait", [
+  z.object({ wait: z.literal(false), match: z.literal(null) }).strict(),
+  z.object({ wait: z.literal(true), match: ruleSettlementMatchV1Schema }).strict(),
+]) as unknown as z.ZodType<RuleSettlementConclusionV1>;
+
+export const ruleSettlementV1Schema = z.object({
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: z.enum(PIPELINE_STEPS),
+  subject_digest: sha256Digest,
+  conclusion: ruleSettlementConclusionV1Schema,
+  config_digest: sha256Digest,
+  milestone_baseline_commit: gitOidV1Schema.optional(),
+  settled_at_revision: positiveSafeInteger,
+}).strict().superRefine((settlement, context) => {
+  if (settlement.milestone_baseline_commit === undefined) return;
+  const kind = decodePhaseInstance(settlement.phase_instance).kind;
+  if (settlement.conclusion.wait || (kind !== "design" && kind !== "phase-design")) {
+    context.addIssue({
+      code: "custom",
+      path: ["milestone_baseline_commit"],
+      message: "milestone baseline is allowed only on a design or phase-design wait:false settlement",
+    });
+  }
+}) as unknown as z.ZodType<RuleSettlementV1>;
+
 export const planningRestartRecordV1Schema = z.object({
   restart_id: pathSafeIdV1Schema,
   source_phase_instance: phaseInstanceIdV1Schema,
@@ -507,6 +618,38 @@ export const lastTransitionV1Schema = z.object({
   prior_revision: safeIntegerV1Schema,
   resulting_revision: positiveSafeInteger,
 }).strict() as unknown as z.ZodType<LastTransition>;
+
+// Task-state owns its own config-snapshot mirror rather than $ref-ing the `config` document's
+// defs — the same self-containment rule as the projection-ref mirror above. Every config schema
+// instance is registered under `config#/$defs/...`, and task-state does not carry that document,
+// so a shared instance would emit an unresolvable cross-document `$ref` here. Each level is a
+// parentless clone that keeps its source's own def and re-parents its nested schemas onto the
+// clones, so the mirror shares every check with the config parser and re-derives its structure
+// from the source shapes at module load — it cannot drift silently. The clones register as this
+// document's own `$defs` (see the schema-generation manifest), so each shape emits once.
+export const taskConfigRouteV1Schema = configRouteSchema.clone(configRouteSchema.def);
+export const taskConfigRolesV1Schema = configRolesSchema.clone({
+  ...configRolesSchema.def,
+  shape: Object.fromEntries(
+    Object.entries(configRolesSchema.shape).map(([role]) => [role, taskConfigRouteV1Schema.optional()]),
+  ) as typeof configRolesSchema.shape,
+});
+export const taskConfigOverridesV1Schema = configOverridesSchema.clone({
+  ...configOverridesSchema.def,
+  shape: Object.fromEntries(
+    Object.entries(configOverridesSchema.shape).map(([phase]) => [phase, taskConfigRolesV1Schema.optional()]),
+  ) as typeof configOverridesSchema.shape,
+});
+export const taskConfigApprovalRulesV1Schema = approvalRulesSchema.clone(approvalRulesSchema.def);
+export const taskConfigSnapshotV1Schema = configV1Schema.clone({
+  ...configV1Schema.def,
+  shape: {
+    ...configV1Schema.shape,
+    roles: taskConfigRolesV1Schema,
+    overrides: taskConfigOverridesV1Schema.optional(),
+    approval_rules: taskConfigApprovalRulesV1Schema.optional(),
+  },
+});
 
 /**
  * The authority. Each of the three set fields calls `isSortedUniqueBy` with `tupleKey` over its
@@ -547,6 +690,10 @@ export const taskStateV1Schema = z.object({
   baseline_adoptions: z.array(baselineAdoptionRecordV1Schema)
     .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "baseline_adoptions must be sorted by gate_id with no duplicates")
     .optional(),
+  rule_settlements: z.array(ruleSettlementV1Schema)
+    .refine(isSortedUniqueRuleSettlements, "rule_settlements must be sorted by (phase_instance, subject_digest, settled_at_revision) with no duplicates")
+    .optional(),
+  last_seen_config: taskConfigSnapshotV1Schema.optional(),
   last_transition: lastTransitionV1Schema.optional(),
   terminal: z.enum(TERMINAL_STATES).optional(),
 }).strict().superRefine((state, context) => {
@@ -558,6 +705,11 @@ export const taskStateV1Schema = z.object({
   state.baseline_adoptions?.forEach((adoption, index) => {
     if (adoption.adopted_at_revision > state.revision) {
       context.addIssue({ code: "custom", path: ["baseline_adoptions", index, "adopted_at_revision"], message: "baseline adoption revision cannot exceed the current state revision" });
+    }
+  });
+  state.rule_settlements?.forEach((settlement, index) => {
+    if (settlement.settled_at_revision > state.revision) {
+      context.addIssue({ code: "custom", path: ["rule_settlements", index, "settled_at_revision"], message: "rule settlement revision cannot exceed the current state revision" });
     }
   });
   const pending = state.pending_human_revision;

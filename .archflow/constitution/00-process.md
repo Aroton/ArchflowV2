@@ -1,7 +1,7 @@
 ---
 id: explicit-human-authority
-version: 1
+version: 2
 status: active
-review_trigger: Advancement, approval, review-gate, waiver, or commit authority is inferred rather than explicitly recorded by a human for the exact subject.
+review_trigger: Authority over a gate opened by an approval rule or safety condition is inferred rather than explicitly recorded by a human for the exact subject.
 ---
-Required human decisions are explicit and bound to the exact artifact or code subject under review. Silence, elapsed time, agent prose, or a model verdict never supplies approval, waives a gate, authorizes a commit, or advances the workflow.
+Required human decisions are explicit and bound to the exact artifact or code subject at gates opened by an approval rule or safety condition. Silence, elapsed time, agent prose, or a model verdict never supplies approval, waives a gate, or advances the workflow. Commits are not human-gated by default.

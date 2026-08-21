@@ -182,8 +182,9 @@ function mapRunStep(status: TaskStatusV1, action: NextAction, snapshot: Semantic
     case "counter_review":
       return Object.freeze({
         condition: "awaiting-client", headline: "Independent review is ready", detail: action.detail,
-        action_kind: "review", instruction: "Run or resume the server-owned independent review action.",
-        expected_submission: "none",
+        action_kind: "review",
+        instruction: "Run or resume the server-owned independent review action, carrying a review-dispatch submission with route_override only when requesting a human-authorized reviewer substitution with a reason.",
+        expected_submission: "review-dispatch",
       });
     case "triage":
       return snapshot.full_findings.length === 0
@@ -243,8 +244,6 @@ function mapNextAction(status: TaskStatusV1, snapshot: SemanticStatusSnapshotV1)
     case "inspect-retained-receipt":
     case "create-fresh-intent":
     case "resolve-current-authority":
-    case "restore-pinned-config":
-    case "upgrade-tooling":
       return inspect(action.detail);
     case "open-gate":
       return Object.freeze({
@@ -280,23 +279,35 @@ function mapNextAction(status: TaskStatusV1, snapshot: SemanticStatusSnapshotV1)
         action_kind: "commit", instruction: "Perform the exact client-side Git commit, then request fresh status.",
         commit: Object.freeze({
           paths: Object.freeze([action.commit_path]), message: action.commit_message, target_ref: action.commit_target_ref,
-          baseline: action.commit_baseline, requires_human_confirmation: false,
+          baseline: action.commit_baseline,
+          requires_human_confirmation: action.commit_requires_human_confirmation ?? false,
         }),
       });
-    case "commit-phase":
+    case "refresh-milestone-baseline":
+      return Object.freeze({
+        condition: "ready", headline: "The milestone baseline is ready to refresh", detail: action.detail,
+        action_kind: "refresh-milestone-baseline",
+        instruction: "Record the current unchanged target as the reviewed milestone baseline, then request fresh status.",
+        expected_submission: "none",
+      });
+    case "commit-phase": {
       if (action.commit_paths === undefined || action.commit_message === undefined || action.commit_target_ref === undefined || action.commit_baseline === undefined) {
         return inspect("Inspect why the approved implementation commit authority is unavailable.");
       }
+      const requiresHumanConfirmation = action.commit_requires_human_confirmation ?? true;
       return Object.freeze({
         condition: "awaiting-client", headline: "The authorized implementation commit is ready", detail: action.detail,
         action_kind: "commit",
-        instruction: "Stage exactly the authorized paths, show the human the staged diff and the exact message and obtain explicit confirmation, create the commit, then request fresh read-only status so the server observes proof.",
+        instruction: requiresHumanConfirmation
+          ? "Prior human commit authority is recorded. Separately confirm HEAD matches the authorized baseline and target ref, stage exactly the authorized paths, show the human the staged diff and exact message and obtain explicit confirmation, create the commit with those exact facts while preserving unrelated changes, then request fresh read-only status so the server observes proof."
+          : "Authenticated rule authority permits direct client execution. Confirm HEAD matches the authorized baseline and target ref, stage and inspect exactly the authorized paths, create the commit directly with the exact returned message while preserving unrelated changes, then request fresh read-only status so the server observes proof.",
         commit: Object.freeze({
           paths: Object.freeze([...action.commit_paths].sort()), message: action.commit_message,
           target_ref: action.commit_target_ref, baseline: action.commit_baseline,
-          requires_human_confirmation: true,
+          requires_human_confirmation: requiresHumanConfirmation,
         }),
       });
+    }
     case "advance-phase":
       return Object.freeze({
         condition: "ready", headline: "The next skill is ready", detail: action.detail,
@@ -404,6 +415,12 @@ export function projectSemanticStatus(
   const mismatch = invocation !== undefined && !owns
     ? ` The invoked skill does not own this current action; continue with the action shown or invoke its owning skill.`
     : "";
+  // Informational only: a config change notice never changes the condition or the action kind, so
+  // it appends one prose line and the verbatim entries rather than routing through the shape.
+  const configChange = status.config_change;
+  const configChangeNotice = configChange === undefined ? "" : configChange.length === 1
+    ? " Task config changed since the last state transaction (1 field); see config_change."
+    : ` Task config changed since the last state transaction (${configChange.length} fields); see config_change.`;
   const nextAction: SemanticNextActionV1 = Object.freeze({
     kind: shape.action_kind,
     instruction: shape.instruction,
@@ -421,7 +438,7 @@ export function projectSemanticStatus(
     task_id: status.task_id,
     condition: shape.condition,
     headline: shape.headline,
-    detail: `${shape.detail}${mismatch}`,
+    detail: `${shape.detail}${mismatch}${configChangeNotice}`,
     ...(position === undefined ? {} : { position }),
     // A settled re-entry decision is close-only authority. Document write slots become visible
     // only after the separately offered revision-entry transition commits.
@@ -430,6 +447,7 @@ export function projectSemanticStatus(
     ...(shape.findings !== true ? {} : { findings: snapshot.full_findings }),
     ...(context === undefined ? {} : { review_context: context }),
     ...(shape.presentation === undefined ? {} : { presentation: shape.presentation }),
+    ...(configChange === undefined ? {} : { config_change: configChange }),
   });
   return Object.freeze({ view, ...(offer === undefined ? {} : { internal_offer: offer }) });
 }

@@ -1,7 +1,6 @@
 import type { AdjudicationEvidence } from "../contracts/adjudication.js";
 import type { ResultManifestV1 } from "../contracts/durable-result-manifest.js";
 import type {
-  ApprovalRef,
   TaskStateV1,
   WaiverRef,
 } from "../contracts/durable-state.js";
@@ -538,6 +537,10 @@ function decideNextAction(
     return decision("produce", { reentry_required: true });
   }
   if (!current.includes("triage") || !disposition.complete) return decision("triage");
+  // A simple human revision is wording/formatting-only by definition. It cannot satisfy or
+  // erase an accepted material finding from the retained review, even when its one-hop
+  // predecessor proof is exact. Material findings require a significant revision and fresh
+  // review; otherwise triage remains the fail-closed action.
   if (disposition.accepted) return decision("triage");
   if (editorialRevisionPending(triageCurrent, disposition, subject)) {
     // Not a re-entry: the attempt budget and the retained review evidence both survive.
@@ -567,7 +570,9 @@ export function assessCurrentEvidence(
   const stale = EVIDENCE_STEPS.filter((step) =>
     retained.has(step) && !current.includes(step));
   const disposition = dispositionState(retained, reviews, triageCurrent);
-  const action = decideNextAction(state, retained, subject, current, disposition, triageCurrent);
+  const action = decideNextAction(
+    state, retained, subject, current, disposition, triageCurrent,
+  );
   const exhausted = action.reentry_required && state.attempt >= maximum;
   return Object.freeze({
     current: Object.freeze([...current]),
@@ -582,19 +587,43 @@ export function assessCurrentEvidence(
   });
 }
 
-/** Refuses an upstream unless durable human approval binds its exact current digest. */
+/**
+ * Normalizes the digests of upstreams whose authority was already authenticated with their exact
+ * producer phases by the shared loader/caller. The two-argument form remains for legacy callers
+ * that have only approval references; new settlement-aware callers must not discard the producer
+ * phase and then repeat this digest-only human scan.
+ */
 export function requireApprovedUpstreamDigests(
-  approvals: readonly ApprovalRef[],
+  authenticatedUpstreams: readonly Readonly<{
+    subject_digest: Sha256Digest;
+    producer_phase: TaskStateV1["phase_instance"];
+  }>[],
+): readonly Sha256Digest[];
+export function requireApprovedUpstreamDigests(
+  state: TaskStateV1,
   upstreamDigests: readonly Sha256Digest[],
+): readonly Sha256Digest[];
+export function requireApprovedUpstreamDigests(
+  stateOrDigests: TaskStateV1 | readonly Readonly<{
+    subject_digest: Sha256Digest;
+    producer_phase: TaskStateV1["phase_instance"];
+  }>[],
+  legacyDigests?: readonly Sha256Digest[],
 ): readonly Sha256Digest[] {
+  const upstreamDigests = legacyDigests ??
+    (stateOrDigests as readonly Readonly<{ subject_digest: Sha256Digest }>[])
+      .map((authority) => authority.subject_digest);
   const sorted = [...upstreamDigests].sort();
   if (new Set(sorted).size !== sorted.length) {
     throw new TypeError("approved upstream digests must be unique");
   }
+  if (legacyDigests === undefined) return Object.freeze(sorted);
+  const state = stateOrDigests as TaskStateV1;
   for (const digest of sorted) {
-    if (!approvals.some((approval) =>
+    const approved = state.approvals.some((approval) =>
       (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") &&
-      approval.subject_digest === digest)) {
+      approval.subject_digest === digest);
+    if (!approved) {
       throw new TypeError(`upstream ${digest} lacks current document approval`);
     }
   }

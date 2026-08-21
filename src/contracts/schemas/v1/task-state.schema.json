@@ -539,6 +539,137 @@
       ],
       "additionalProperties": false
     },
+    "ruleSettlementConclusion": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "wait": {
+              "type": "boolean",
+              "const": false
+            },
+            "match": {
+              "type": "null",
+              "const": null
+            }
+          },
+          "required": [
+            "wait",
+            "match"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "wait": {
+              "type": "boolean",
+              "const": true
+            },
+            "match": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "subject"
+                    },
+                    "subject": {
+                      "type": "string",
+                      "enum": [
+                        "prd",
+                        "design",
+                        "phase-design",
+                        "phase-impl"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "subject"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "content"
+                    },
+                    "paths": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "paths"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "wait",
+            "match"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ruleSettlement": {
+      "type": "object",
+      "properties": {
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+        },
+        "step": {
+          "type": "string",
+          "enum": [
+            "produce",
+            "counter_review",
+            "triage",
+            "adjudicate"
+          ]
+        },
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "conclusion": {
+          "$ref": "#/$defs/ruleSettlementConclusion"
+        },
+        "config_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "milestone_baseline_commit": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+        },
+        "settled_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "task_id",
+        "phase_instance",
+        "step",
+        "subject_digest",
+        "conclusion",
+        "config_digest",
+        "settled_at_revision"
+      ],
+      "additionalProperties": false
+    },
     "lastTransition": {
       "type": "object",
       "properties": {
@@ -627,6 +758,143 @@
           }
         }
       ]
+    },
+    "configRoute": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "effort": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ]
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      },
+      "required": [
+        "model",
+        "effort"
+      ],
+      "additionalProperties": false
+    },
+    "configRoles": {
+      "type": "object",
+      "properties": {
+        "producer": {
+          "$ref": "#/$defs/configRoute"
+        },
+        "counter-reviewer": {
+          "$ref": "#/$defs/configRoute"
+        },
+        "adjudicator": {
+          "$ref": "#/$defs/configRoute"
+        }
+      },
+      "additionalProperties": false
+    },
+    "configOverrides": {
+      "type": "object",
+      "properties": {
+        "explore": {
+          "$ref": "#/$defs/configRoles"
+        },
+        "prd": {
+          "$ref": "#/$defs/configRoles"
+        },
+        "design": {
+          "$ref": "#/$defs/configRoles"
+        },
+        "phase-design": {
+          "$ref": "#/$defs/configRoles"
+        },
+        "phase-impl": {
+          "$ref": "#/$defs/configRoles"
+        }
+      },
+      "additionalProperties": false
+    },
+    "configApprovalRules": {
+      "type": "object",
+      "properties": {
+        "subjects": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "prd",
+              "design",
+              "phase-design",
+              "phase-impl"
+            ]
+          }
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                }
+              }
+            },
+            "required": [
+              "paths"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "subjects",
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "configSnapshot": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "roles": {
+          "$ref": "#/$defs/configRoles"
+        },
+        "overrides": {
+          "$ref": "#/$defs/configOverrides"
+        },
+        "max_attempts": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "approval_rules": {
+          "$ref": "#/$defs/configApprovalRules"
+        }
+      },
+      "required": [
+        "schema_version",
+        "roles"
+      ],
+      "additionalProperties": false
     }
   },
   "type": "object",
@@ -771,6 +1039,15 @@
         ],
         "additionalProperties": false
       }
+    },
+    "rule_settlements": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ruleSettlement"
+      }
+    },
+    "last_seen_config": {
+      "$ref": "#/$defs/configSnapshot"
     },
     "last_transition": {
       "$ref": "#/$defs/lastTransition"

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { parseConstitutionRuleFiles, parseConstitutionRuleMarkdown, validateConstitutionEvolution, type ConstitutionRuleV1 } from "../../src/contracts/constitution.js";
 import { parseConstitutionRuleV1 } from "../../src/contracts/constitution.js";
 import { PlainJsonError } from "../../src/contracts/plain-json.js";
+import { SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2 } from "../../src/state/constitution.js";
 
 const rule = (overrides: Partial<ConstitutionRuleV1> = {}): ConstitutionRuleV1 => ({ id: "stable-rule", version: 1, status: "active", text: "Preserve the invariant.", ...overrides });
 
@@ -14,6 +15,32 @@ describe("constitution Markdown", () => {
     const files = Object.fromEntries(await Promise.all(paths.map(async (path) => [path, await readFile(new URL(path, directory), "utf8")] as const)));
     const registry = parseConstitutionRuleFiles(files);
     expect([...registry.keys()]).toEqual(["explicit-human-authority", "approved-design-before-code", "task-and-evidence-isolation", "honest-human-centered-outcomes"]);
+  });
+
+  it("ships byte-identical live and seed rules for the exact supported v2 profile", async () => {
+    const seedDirectory = new URL("../../assets/constitution/", import.meta.url);
+    const liveDirectory = new URL("../../.archflow/constitution/", import.meta.url);
+    const selectedFiles = ["00-process.md", "10-architecture.md"] as const;
+    const sources: Record<string, string> = {};
+
+    for (const path of selectedFiles) {
+      const seed = await readFile(new URL(path, seedDirectory), "utf8");
+      const live = await readFile(new URL(path, liveDirectory), "utf8");
+      expect(live).toBe(seed);
+      sources[path] = seed;
+    }
+
+    const registry = parseConstitutionRuleFiles(sources);
+    const normalized = SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2.map(({ id }) => {
+      const parsed = registry.get(id);
+      expect(parsed).toBeDefined();
+      return {
+        ...parsed!,
+        review_trigger: parsed!.review_trigger ?? "",
+        enforced_by: [...new Set(parsed!.enforced_by ?? [])].sort(),
+      };
+    }).sort((left, right) => left.id.localeCompare(right.id));
+    expect(normalized).toEqual(SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2);
   });
 
   it("parses deterministic frontmatter and prose", async () => {

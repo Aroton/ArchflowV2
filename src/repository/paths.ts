@@ -275,7 +275,7 @@ const WORKSPACE_CLASS_RULES: readonly ClassRule<WorkspacePathClass>[] = [
  * | `shared-workflow`          | `.archflow/workflow.yaml`                     | — (read-only)        |
  * | `shared-constitution`      | `.archflow/constitution/<name>.md`            | name (read-only)     |
  * | `task-branch-constitution` | `.archflow/constitution/<name>.md`            | name                 |
- * | `repository-source`        | any repository claim **not** under `.archflow/` | —                  |
+ * | `repository-source`        | any repository claim outside `.archflow/`, plus the repository seed `.archflow/config.yaml` | — |
  *
  * **`shared-constitution` and `task-branch-constitution` share one template deliberately.** They
  * name the same file and are distinguished by *operation*, not by path: reading pinned policy versus
@@ -286,6 +286,11 @@ const WORKSPACE_CLASS_RULES: readonly ClassRule<WorkspacePathClass>[] = [
  */
 const REPOSITORY_CLASS_RULES: readonly ClassRule<RepositoryPathClass>[] = [
   { path_class: "shared-workflow", pattern: anchored("\\.archflow/workflow\\.yaml") },
+  // The repository-level config is a mutable seed for future tasks, not task-local durable
+  // authority. Treat the one exact path as an ordinary implementation output so an approved
+  // activation phase can review, retain, restore, and commit it without opening the rest of the
+  // managed `.archflow/` tree to repository-source claims.
+  { path_class: "repository-source", pattern: anchored("\\.archflow/config\\.yaml") },
   {
     path_class: "shared-constitution",
     pattern: anchored(`\\.archflow/constitution/${PATH_SAFE_ID}\\.md`),
@@ -407,9 +412,10 @@ export function classifyWorkspacePath(
 /**
  * Classifies a claim rooted at the worktree against the repository-scoped table.
  *
- * Anything outside the `.archflow/` tree is `repository-source`. Anything inside it that matches
- * neither the shared workflow nor a shared constitution is a task-scoped path presented in the wrong
- * frame, and is rejected rather than mapped to a repository class.
+ * Anything outside the `.archflow/` tree and the one exact repository seed config are
+ * `repository-source`. Any other path inside `.archflow/` that matches neither the shared workflow
+ * nor a shared constitution is a managed path presented in the wrong frame, and is rejected rather
+ * than mapped to a repository class.
  */
 export function classifyRepositoryPath(
   claim: RepositoryPathClaim

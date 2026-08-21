@@ -1,6 +1,6 @@
 # cli/COMMANDS
 
-**Explored:** 2026-08-16 · **Commit:** `d60da73` · **Covers:** `src/local/`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
+**Explored:** 2026-08-21 · **Commit:** `869c189` · **Covers:** `src/local/`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
 
 `archflow-local` is the agent's local adapter surface: repository bootstrap, the legacy-upgrade adapter, bounded diagnostics, and a read-only classification of where a task stands when the MCP server is unavailable. It is deliberately *not* the authority — with one narrow exception (the staged legacy import and its atomic adoption), it derives and verifies rather than writes.
 

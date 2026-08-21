@@ -1,6 +1,6 @@
 # PATTERNS
 
-**Explored:** 2026-08-16 · **Commit:** `d60da73` · **Covers:** `src/`, `test/`, `scripts/`, repository policy
+**Explored:** 2026-08-21 · **Commit:** `869c189` · **Covers:** `src/`, `test/`, `scripts/`, repository policy
 
 This is a strict TypeScript/Node package whose conventions are enforced primarily by the type checker, runtime validators, and tests. There is no configured linter or formatter. Match the surrounding file: contract registries intentionally use dense declarations, while state, repository, and MCP algorithms favor expanded control flow and rationale-heavy comments.
 
@@ -161,6 +161,17 @@ Planning restart is the one narrow transaction that may clear active gate-relate
 - I/O and state dependencies are injected through explicit dependency records, enabling deterministic unit and crash testing without weakening production boundaries.
 - The gate interface is a reconstructible projection below ignored runtime, not authority. Records under `authority/decisions/` and state remain sufficient if it is missing or corrupt. In the normal path the connected handler writes the preview-bound choice and archives it synchronously; the standalone decision-file writer remains recovery machinery, never a prerequisite for resolving already authenticated authority.
 
+### Observe mutable policy, freeze conclusions, reconstruct detail
+
+Four related values deliberately have different lifetimes and authority:
+
+- **Mutable observed config:** each config-observing transaction strictly parses the live task-local file and records its normalized value as `last_seen_config`. Status compares a later valid parse with that snapshot to report field-level changes; the creation-time `config_digest` remains provenance rather than a pin on current bytes.
+- **Frozen rule settlement:** after mandatory review reaches a clean fixed point, the state records the exact subject, rule conclusion, matched subject or complete content-path set, and config digest evaluated at that revision. Later config edits do not reinterpret that historical conclusion.
+- **Reconstructed content details:** a content settlement persists matched paths, not a second mutable presentation cache. Status joins those frozen paths to the retained implementation outputs to derive add/delete/modify/rename operations and signed byte deltas for the human presentation.
+- **Server-returned authority:** neither config, review evidence, nor a settlement authorizes a client action by itself. A human presentation still requires a human decision; eligible autonomous progress and both commit branches are usable only through the fresh semantic action and exact Git facts returned by the server.
+
+Keep these layers separate when extending policy behavior. Snapshotting live config into permanent policy, re-evaluating a settlement during presentation, persisting derived display detail as authority, or letting a client infer an action would collapse distinct provenance and trust boundaries.
+
 ## CLI and MCP conventions
 
 - `src/main.ts` is intentionally small: validate that the MCP executable received no arguments, then wire stdin/stdout/stderr into the runtime.
@@ -174,11 +185,11 @@ Vitest runs in Node with explicit imports (`describe`, `it`, `expect`, hooks); g
 
 | Directory | Files | Role |
 |---|---:|---|
-| `test/unit/` | 104 | Module-level behavior and boundary tests; dependencies are usually injected rather than module-mocked |
-| `test/contracts/` | 26 | JSON Schema/Zod agreement, cross-authority parity, durable structural and semantic corpora |
-| `test/integration/` | 37 | Real Git repositories, process wiring, local CLI, MCP handlers/stdio, initialization, replay, and state lifecycle |
+| `test/unit/` | 107 | Module-level behavior and boundary tests; dependencies are usually injected rather than module-mocked |
+| `test/contracts/` | 27 | JSON Schema/Zod agreement, cross-authority parity, durable structural and semantic corpora |
+| `test/integration/` | 40 | Real Git repositories, process wiring, local CLI, MCP handlers/stdio, initialization, replay, and state lifecycle |
 | `test/crash/` | 3 | Child-process fault injection and recovery/idempotence |
-| `test/real-host/` | 5 | Live host/preflight/terminal journeys and benchmark coverage |
+| `test/real-host/` | 7 | Live host/preflight/terminal journeys, provider dispatch, host selection, and benchmark coverage |
 | `test/helpers/` | 5 | Reusable repository, workspace, constitution, and host harnesses |
 | `test/fixtures/` | 81 | JSON/YAML corpora, fake CLIs, legacy layouts, and crash helpers |
 | `test/types/` | 1 | Compile-only MCP SDK public-surface probe included by `tsc` |
