@@ -1,6 +1,6 @@
 # DEPENDENCIES
 
-**Explored:** 2026-08-16 · **Commit:** `d60da73` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, `src/init/`, release tooling
+**Explored:** 2026-08-21 · **Commit:** `869c189` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, `src/init/`, `src/contracts/config.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`, `src/state/read.ts`, `src/dispatch/`, release tooling
 
 ## Runtime and package baseline
 
@@ -13,7 +13,7 @@
 | Package | Pin | Concrete use |
 | --- | --- | --- |
 | `@modelcontextprotocol/server` | `2.0.0` | The public-root SDK boundary in `src/mcp/sdk-adapter.ts`: `Server`, `ProtocolError`, `specTypeSchemas`, and MCP types. It resolves `@modelcontextprotocol/core@2.0.0` transitively. |
-| `zod` | `4.4.3` | The single runtime shape authority: strict parsing for agent-facing, durable, and in-memory contracts throughout `src/contracts/`, and the source the 31 generated JSON Schemas are emitted from (`npm run generate:schemas`). |
+| `zod` | `4.4.3` | The single runtime shape authority: strict parsing for agent-facing, durable, and in-memory contracts throughout `src/contracts/`, and the source for 32 generated JSON Schemas (`npm run generate:schemas`). Together with the hand-written release-manifest schema, the committed directory contains 33 schemas. |
 | `yaml` | `2.9.0` | `src/contracts/yaml.ts` implements strict, single-document YAML parsing used by `config.yaml` and `workflow.yaml`. |
 | `@secretlint/core` | `13.0.4` | `src/state/secret-scan.ts` calls `lintSource` before retaining implementation output. |
 | `@secretlint/secretlint-rule-preset-recommend` | `13.0.4` | Supplies the production detector set; the filter-comments rule is removed before scanning. |
@@ -67,7 +67,7 @@ The repository itself contains current examples in `.mcp.json` and `.codex/confi
 
 `src/dispatch/` launches authenticated first-party `claude` or `codex` CLIs to perform the independent rubric and constitution reviews. It does not call provider HTTP APIs directly.
 
-`src/dispatch/routing.ts` reads the task-pinned YAML configuration and maps model prefixes to adapters (`claude-*` to `claude-cli`, `gpt-*` to `codex-cli`; a route naming a cc-switch `provider` forces the claude CLI). The config describes only the dispatched roles — counter-reviewer and adjudicator (the constitution-review route); the producer is the connected host itself and is never dispatched. The active template at `assets/config.template.yaml` defaults both roles to the claude host's opposite family (`gpt-5.6-sol`); `.archflow/config.yaml` is the current repository copy. Optional per-workflow overrides exist for `explore`, `prd`, `design`, `phase-design`, and `phase-impl`.
+`src/dispatch/routing.ts` consumes the strictly parsed live task-local YAML configuration and maps model prefixes to adapters (`claude-*` to `claude-cli`, `gpt-*` to `codex-cli`; a route naming a cc-switch `provider` forces the claude CLI). The config describes only the dispatched roles — counter-reviewer and adjudicator (the constitution-review route); the producer is the connected host itself and is never dispatched. The active template at `assets/config.template.yaml` defaults both roles to the claude host's opposite family (`gpt-5.6-sol`); `.archflow/config.yaml` is the repository seed copied into each task. Optional per-workflow overrides exist for `explore`, `prd`, `design`, `phase-design`, and `phase-impl`.
 
 `src/dispatch/cli.ts` defines the concrete adapters:
 
@@ -105,10 +105,13 @@ There is no server or cloud database. Durable authority is ordinary tracked repo
 
 Runtime workflow configuration is file-backed:
 
-- `assets/config.template.yaml` is copied to `.archflow/config.yaml`, then byte-pinned per task at `.archflow/tasks/<task>/config.yaml`.
+- `assets/config.template.yaml` is copied to `.archflow/config.yaml`, then copied again to `.archflow/tasks/<task>/config.yaml` when a task is created. That task-local copy remains live and editable: every config-observing transaction or dispatch strictly parses its current bytes, and invalid or unsupported YAML fails closed rather than falling back to an older snapshot.
+- Successful config-observing transactions record the normalized parsed shape as `TaskStateV1.last_seen_config`. Read-only status compares that snapshot with the current parsed file and reports informational leaf-level `config_change` entries; a valid edit does not by itself stale an open gate or retained evidence.
 - `assets/archflow.gitignore` is copied exactly to `.archflow/.gitignore`; its sole `/runtime/` rule owns only ArchFlow's nested workspace ignore boundary.
-- `assets/workflow.yaml` defines the workflow graph; `assets/constitution/` supplies repository-owned policy documents.
-- `src/contracts/config.ts` validates `schema_version: "1"`, role routes, optional phase-kind overrides, and optional positive `max_attempts` (default behavior is three attempts).
+- `assets/workflow.yaml` defines the workflow graph and remains digest-pinned by task state; `assets/constitution/` supplies repository-owned policy documents whose selected Git identities remain pinned to the task policy base. Live config editability does not relax either pin.
+- `src/contracts/config.ts` validates `schema_version: "1"`, role routes, optional phase-kind overrides, optional positive `max_attempts` (default behavior is three attempts), and optional `approval_rules` with subject triggers plus phase-implementation changed-path triggers. The retired `producer` route is a narrow read-compatibility field; it is ignored when config-change snapshots are normalized.
+- The task state's `config_digest` remains the creation-time provenance for the copied config, and a rule settlement separately records the live config digest it evaluated. Config is not part of the current input-fingerprint subject, so valid edits do not invalidate gates or evidence through fingerprint churn.
+- `src/state/fingerprint.ts` has one bounded read-compatibility retry for pre-cutover evidence: only an exact expected old fingerprint can be matched using that task state's creation `config_digest`. It never uses live config for the retry, rewrites evidence, or migrates arbitrary old state.
 
 Environment inputs are narrow and purpose-specific:
 

@@ -1,8 +1,8 @@
 # OVERVIEW
 
-**Explored:** 2026-08-20 · **Commit:** `b6f0b74` · **Covers:** the whole repository
+**Explored:** 2026-08-21 · **Commit:** `869c189` · **Covers:** the whole repository
 
-ArchFlow is a governed development workflow for AI coding agents. A *task* moves through fixed stages — PRD → design → per-phase design → per-phase implementation — and at every stage the agent must produce an artifact, review it, and survive an adversarial review dispatched to an independent reviewer CLI (the **other model family** by default, either family by explicit config). Project `approval_rules` decide which clean document subjects then stop for a human; safety and policy exception gates remain unconditional. The system's core belief, stated plainly:
+ArchFlow is a governed development workflow for AI coding agents. A *task* moves through fixed stages — PRD → design → per-phase design → per-phase implementation — and at every stage the agent must produce an artifact, review it, and survive an adversarial review dispatched to an independent reviewer CLI (the **other model family** by default, either family by explicit config). Project `approval_rules` decide which clean PRD, design, phase-design, or phase-implementation subjects stop for a human; changed-path content triggers add phase-implementation-only waits. Safety and policy exception gates remain unconditional. The system's core belief, stated plainly:
 
 > **Nothing an agent says is trusted until the server has re-derived it.** The only authority is durable state on disk, written and verified by the server.
 

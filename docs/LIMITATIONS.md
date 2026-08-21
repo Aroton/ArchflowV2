@@ -1,6 +1,6 @@
 # LIMITATIONS
 
-**Explored:** 2026-08-20 · **Commit:** `b6f0b74` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`
+**Explored:** 2026-08-21 · **Commit:** `869c189` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`
 
 ArchFlow is a local developer-workflow prototype, not a security sandbox. The controls below reduce accidental context leakage and constrain ordinary operation, but the listed cases are unsupported because the current implementation cannot prove the claimed boundary. A planted canary not appearing in output is evidence about that run; it is not proof that the child could not read the canary.
 
@@ -93,3 +93,27 @@ These limitations assume a trusted developer account and a filesystem not being 
 **Existing mitigation:** Every config-observing transaction parses the complete strict shape, records it in `last_seen_config`, and status reports later changes without invalidating already-authenticated review evidence or retroactively changing a settled conclusion. Unknown fields fail closed instead of silently disappearing. Per-dispatch provenance records what actually ran, and settlements bind the exact config digest they evaluated.
 
 **Why accepted:** ArchFlow's prototype operating model already trusts the developer account and repository writers. Making config edits visible and binding each resulting action is proportional; a full policy-amendment authorization system would recreate the lock-in this feature removes.
+
+## Editable config is not schema migration
+
+**Not provided:** Making the task-local config live and editable does not make older or future config shapes migratable. Every config-observing transaction and dispatch still parses the complete current strict schema; unknown fields, unsupported values, malformed YAML, and otherwise incompatible shapes fail closed. The retired `roles.producer` key is one narrow read-compatibility allowance for configs created before the connected host became the producer. Nothing consumes that key, and its acceptance is not a general unknown-field or version fallback.
+
+**Existing mitigation:** A valid edit becomes the normalized `last_seen_config` snapshot and later field-level changes are informational. An invalid edit cannot dispatch review or advance state, and status reports repair guidance without pretending that read-only degraded mode can repair the bytes.
+
+**Why accepted:** Automatic schema migration would need explicit version transforms, ownership of rewritten bytes, and review of policy-changing defaults. The prototype instead keeps one current strict authority and fails visibly when a human must update an incompatible config.
+
+## Content approval triggers are path heuristics
+
+**Not provided:** Content triggers do not inspect file bytes, language semantics, embedded SQL, generated effects, or dependency impact. They examine only the changed paths declared by a `phase-impl` implementation output; planning artifacts never run through content globs. Matching is case-sensitive over the whole repository-relative slash-separated path: `*` and `?` stay inside one segment, while `**` is recursive only as a complete segment. Path naming can therefore under-match semantically relevant work or over-match unrelated work.
+
+**Existing mitigation:** Subject triggers can require approval for the whole `phase-impl` subject independently of content paths. When a content rule does match, the settlement freezes the complete sorted path set; a later presentation reconstructs operations and signed byte deltas from those paths and retained outputs without re-evaluating mutable config.
+
+**Why accepted:** Path globs are understandable repository policy and sufficient for representative triggers such as migration-file locations. Semantic inspection would introduce a language-specific policy engine whose complexity is disproportionate to this prototype.
+
+## Legacy fingerprint compatibility is one bounded read retry
+
+**Not provided:** The compatibility reader does not migrate arbitrary in-flight state or accept approximately matching evidence. It runs only when a caller supplies an exact expected pre-cutover fingerprint that the current composition does not reproduce, and it can succeed only by recomputing the retired composition with that same task state's creation-time `config_digest` provenance.
+
+**Existing mitigation:** The resolver computes the current fingerprint first, then makes one read-side legacy comparison. A mismatch under both compositions remains a mismatch. Success returns the already expected legacy digest for that read; it rewrites no state, evidence, subject, config, or retained result.
+
+**Why accepted:** This preserves narrowly identifiable work created before config left the fingerprint without turning compatibility into a migration subsystem or weakening exact digest authentication.

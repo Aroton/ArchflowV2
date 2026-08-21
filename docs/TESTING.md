@@ -1,6 +1,6 @@
 # TESTING
 
-**Explored:** 2026-08-20 · **Commit:** `b6f0b74` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/smoke-release-bundle.mjs`
+**Explored:** 2026-08-21 · **Commit:** `869c189` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/smoke-release-bundle.mjs`
 
 ## Test runner and configuration
 
@@ -13,7 +13,7 @@ The live semantic document-journey and handler suites pass for this change. The 
 
 ## Suite inventory by behavior
 
-### Unit: `test/unit/` (103 files)
+### Unit: `test/unit/` (107 files)
 
 The unit layer is broad and normally imports production modules directly.
 
@@ -25,6 +25,8 @@ The unit layer is broad and normally imports production modules directly.
 - **Initialization and local surfaces:** asset/config scaffolding, host registration crash safety, task initialization, legacy upgrade preview/stage/discard, atomic visible adoption, in-flight resume derivation, local command dispatch, and the read-only `manual-status` classifier (including reusable and incompatible upgrade staging). See `test/unit/init-registration-crash-safety.test.ts`, `test/unit/init-task-initialization.test.ts`, `test/unit/status-classification.test.ts`, `test/unit/legacy-upgrade.test.ts`, and `test/integration/legacy-upgrade.test.ts`.
 
 Success cases are paired with representative boundary failures: malformed/non-plain inputs and split-observation getters; digest, revision, task, and phase mismatches; stale or contradictory evidence; traversal/symlink/class-confusion paths; lock and snapshot limits; secret-bearing output; process cancellation/overflow; and unsupported or unauthenticated host classifications.
+
+Current policy-flexibility coverage is intentionally distributed across layers. `config-editing.test.ts`, `config-change.test.ts`, `state-status.test.ts`, and the integration `config-editing.test.ts` prove valid live edits, normalized observation, field-level notices, open-gate survival, and fail-closed invalid config. `fingerprints.test.ts` and `mcp-handler-state-replay.test.ts` prove current composition plus the exact expected-digest legacy fallback. `semantic-actions.test.ts`, `state-request.test.ts`, `semantic-composition-parity.test.ts`, and `review-dispatch-override.test.ts` bind a reasoned route override to the request and retained evidence without changing the subject fingerprint. `approval-rules.test.ts`, `durable-state-validation.test.ts`, and the semantic document/implementation journeys cover settlement persistence, phase-implementation-only content matching, reconstructed operation/byte-delta details, exact-v2 autonomous authority versus legacy/divergent fail-closed policy, and the two values of `requires_human_confirmation`.
 
 ### Contract: `test/contracts/` (27 files)
 
@@ -40,7 +42,7 @@ This layer pins the published contract surface: the Zod shape authority's accept
 
 Fixtures under `test/fixtures/contracts/`, `test/fixtures/foundation/`, and `test/fixtures/mcp/` provide known-valid documents plus invalid traversal, contradictory review, malformed state, protocol, and adversarial-byte examples. Several corpus tests explicitly prove error precedence and total ordering, not merely acceptance/rejection.
 
-### Integration: `test/integration/` (38 files)
+### Integration: `test/integration/` (40 files)
 
 Integration tests assemble production services around real temporary repositories, real child processes, stdio framing, or generated bundles. They cover:
 

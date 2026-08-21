@@ -1,6 +1,6 @@
 # review/COUNTER-REVIEW
 
-**Explored:** 2026-08-20 · **Commit:** `b6f0b74` · **Covers:** `src/review/`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
+**Explored:** 2026-08-21 · **Commit:** `869c189` · **Covers:** `src/review/`, `src/dispatch/`, `src/contracts/mcp-tools.ts`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
 
 Counter-review is the system's adversarial check: every artifact is reviewed by a server-dispatched reviewer — the producer's *opposite model family* by default (the shipped template's choice), either family by explicit config — so the evidence is something the producer cannot author. One offered semantic `review` action reaches the direct handler seam and covers up to two dispatches: the rubric counter-review, and — only when the pinned constitution has active rules, a decision the server makes alone — the constitution review (see below). Semantic review owns the outer process FIFO across replay, dispatch, and commit; the direct inner seam never queues itself again. This page covers the review envelope, the review flow, the constitution review, and waivers.
 
@@ -83,7 +83,7 @@ The 1 MiB cap remains a control-plane safeguard. An overflow now means compact d
 
 The task's routing config is freely editable and reported through `config_change`, but editing project policy is the wrong tool for one reviewer outage: it persists beyond the failed call and affects later dispatches. Without a per-dispatch escape hatch, a logged-out or rate-limited reviewer CLI still forces either a lasting config edit or a stranded task.
 
-So one counter-review call may carry a `route_override`: a substitute `{model, effort, provider?}` for the counter-reviewer, the adjudicator, or both, plus the human's `reason` for it. It applies to that dispatch and nothing else — `config.yaml` is untouched, the next call reads its normal live route again, and a role the override does not name keeps the configured route.
+So a dispatching semantic `review` offer optionally accepts a `review-dispatch` submission carrying `route_override`: a substitute `{model, effort, provider?}` for the counter-reviewer, the adjudicator, or both, plus the human's nonempty `reason` for it. The offer and submission digest bind that declaration to the request and review operation. It applies to that run and nothing else — `config.yaml` is untouched, the next call reads its normal live route again, and a role the override does not name keeps the configured route.
 
 Two things keep this honest rather than a way around the reviewer:
 
