@@ -1,0 +1,33 @@
+{
+  "context_digest": "c80c8f211e2c235ff9a706868c60827c73881f06a91ec0adc59dc53e007d4871",
+  "envelope": {
+    "context_digest": "c80c8f211e2c235ff9a706868c60827c73881f06a91ec0adc59dc53e007d4871",
+    "gate_id": "g-ae0aa381783a4badeb18ffa2e57d3e2c48753a317a6019a302d7b1a7f5fa2c26",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-31253ae4265e25e17503d0a167bf6b1b889c6d5f9c5349e378d24caa14209e3f",
+      "recorded_at": "2026-08-23T20:39:19.218Z",
+      "request_id_digest": "e74118e685125f821e4de05e9896d7173bf77315fa0b6db406f58a7d8f5634ed",
+      "schema_version": "1"
+    },
+    "kind": "constitution-review",
+    "payload": {
+      "decision": "approve",
+      "reason": "approve"
+    },
+    "phase_instance": "phase-design-1",
+    "schema_version": "1",
+    "subject_digest": "8d647d5207f17538a6cf15ae8f1e558a223eb43fb3e98e2d63da823851469e55",
+    "task_id": "free-form-changes"
+  },
+  "gate_id": "g-ae0aa381783a4badeb18ffa2e57d3e2c48753a317a6019a302d7b1a7f5fa2c26",
+  "kind": "constitution-review",
+  "outcome": "decided",
+  "phase_instance": "phase-design-1",
+  "schema_version": "1",
+  "subject_digest": "8d647d5207f17538a6cf15ae8f1e558a223eb43fb3e98e2d63da823851469e55",
+  "task_id": "free-form-changes"
+}

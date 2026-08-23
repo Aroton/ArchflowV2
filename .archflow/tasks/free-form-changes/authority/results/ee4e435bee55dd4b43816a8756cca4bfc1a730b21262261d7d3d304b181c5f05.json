@@ -1,0 +1,109 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 41,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 158747
+  },
+  "artifact_digest": "c8426274e3a54504f7584d8f242c1d5fce07f0206fe26a3ad71981357a5980c5",
+  "input_fingerprint": "5253b50ac47d6f3985c7bb05f7aee98d5fc28c10c3fc0e7cf383228fcd88511a",
+  "outputs": [],
+  "phase_instance": "phase-design-1",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-0c9e92f130971a1f78c0c725dd854db4",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [],
+      "assurance": "server-attested",
+      "cli_version": "2.1.241",
+      "constitution": "pass",
+      "drift": "aligned",
+      "drift_findings": [],
+      "effort": "medium",
+      "envelope_input_digest": "535cbfaf08a820815cc32ada1602ebf72017d6020d06ede0d2bc926d90a9a2e6",
+      "input_fingerprint": "5253b50ac47d6f3985c7bb05f7aee98d5fc28c10c3fc0e7cf383228fcd88511a",
+      "invocation_id": "adjudication-invocation-be9fc648968f765611c0cbf071c9047c",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 2
+        },
+        {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 2
+        },
+        {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "4c70cb9d0b201fd31a2a395321e3d1bffc9d87c921e8b44961b32ea2e8355465",
+      "phase_instance": "phase-design-1",
+      "pinned_constitution_digest": "c75a16798a5a143c3bd117bdcbbb5a6ddc8cc1b1adcd584d802f154dfddcef1b",
+      "result_id": "adjudication-result-0c9e92f130971a1f78c0c725dd854db4",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "The phase design tracks its parent design.md and prd.md without material departure: the MilestoneProof resolver, first-parent candidate selection, governing-document classification before ordinary adoption, same-position recovery with authority cutoffs, stale-gate supersession, the unchanged no-wait design refresh exception, and the no-empty-commit rewritten-history inspection all restate parent commitments, and its requirement mapping/success criteria trace to PRD R1-R8. Repository-convention additions (type aliases, plain-object schema roots, dist/ staging and promotion) are execution constraints rather than architectural deviations, and the named scripts (release:stage --output, release:write --stage, check:deep, check:schemas) exist in package.json and scripts/. The workspace shows no implementation started ahead of approval: no occurrence of MilestoneProof, recover-milestone-authority, refresh-stale-baseline, or milestone_recovery_history anywhere under src/. The artifact also preserves the boundary rather than weakening it, requiring governing-document drift to re-enter its owning review position before dependent work advances.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 2,
+          "trigger": "matched",
+          "trigger_evidence": "The artifact is the phase-design plan that authorizes implementation; it declares scope (\"This phase implements the complete task\"), a \"Deviations from parent documents: None\" section with a bounded fit check, and explicitly names the \"no-code-before-approved-phase-design\" boundary as retained."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "No authority is inferred. Recovery records are explicitly \"server-authenticated recovery evidence, not human provenance and not a human revision record\"; they clear and record active waivers and pending human revision rather than granting approval, and create an eligibility cutoff so byte-identical reproduction cannot revive stale approvals or settlements. refresh-stale-baseline removes only a stale disposable interface projection and records a GateSupersessionRecord, with durable semantics forbidding it from earning an approval or baseline-adoption record and explicitly not fabricating cancellation, adoption, restoration, or human provenance. Settlement recomputes the exact semantic subject (target ref, complete changed/deleted paths and digests, committedness, first-parent continuity) under the task lock, so a stale choice fails closed; an unrelated descendant that leaves that exact subject identical settles the decision the human actually made, which keeps authority bound to the exact subject rather than inferring it. Rendering states plainly that keeping current versions performs no fresh review and grants no commit authorization, and owning skills are restricted to applying the returned offer and must never infer recovery from Git evidence or choose a human decision. requires_human_confirmation semantics at the implementation commit action are retained unchanged.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 2,
+          "trigger": "matched",
+          "trigger_evidence": "The design adds two server-selected no-submission actions (recover-milestone-authority, refresh-stale-baseline) that interact with open human baseline-adoption gates, waivers, and pending human revision, and it changes when a presented human decision is re-prompted versus settled."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Failure states stay visible with a safe next action. Git command failures and missing objects are classified as unverifiable rather than ordinary absence, so an observation failure is never reported as a proven or missing milestone. A content-preserving rewrite with no committable delta yields an explicit inspection naming two safe remedies instead of an offer that could only produce an empty synthetic commit, and inspection responses must name the failed fact and a concrete recovery rather than requiring authenticated state edits. A later descendant is never described as reviewed or authorized, adoption copy separates acceptance from review and commit authorization, and the uncommitted case discloses that a fresh clone recovers only the last committed repository. Verification explicitly requires evidence of actual returned semantic actions and successful consumption rather than mere absence of inspection, which guards against silently masking non-success.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The design governs failure and uncertainty representation: it distinguishes proven / not-created / missing-from-history / unverifiable milestone proof and specifies what status returns when proof is absent, history was rewritten, or Git is unreadable."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Evidence stays bound to its exact subject and fails closed. Milestone proof validates the immutable first-parent candidate against the original exact subject (parent, message, sorted path set including rename endpoints, retained modes/OIDs, deletions, authority) and never scans other refs for a lookalike tree; ancestry and target ref are re-read after tree inspection to close the observation window. Both new offers accept no client submission and revalidate repository identity, target ref/head, state revision, subject digest, drift classification, and cause under the task lock, and are replay-safe. New no-wait settlements persist target_ref and baseline together so authority is not derived from whichever branch is checked out, and legacy records without those facts are readable but cannot gain invented historical target identity. Recovery and planning-restart revisions feed a shared eligibility cutoff so approvals, settlements, and waivers older than the newest cutoff cannot revive. Task isolation, canonical state validation, digest binding, and cross-task path boundaries are explicitly stated as unchanged, and verification requires sentinels proving unrelated index/worktree bytes are preserved through adoption, restore, recovery, handoff, and completion.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The design adds durable records (milestone_recovery_history, gate_supersessions, no-wait milestone target facts) and new offers whose acceptance depends on subject digests, repository identity, and target history."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "90d515a47734126cfbe71aedb6a5b260449a5a57ec25b780bc8275edbabdf035",
+      "step": "adjudicate",
+      "subject_digest": "8d647d5207f17538a6cf15ae8f1e558a223eb43fb3e98e2d63da823851469e55",
+      "task_id": "free-form-changes",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "free-form-changes"
+}
