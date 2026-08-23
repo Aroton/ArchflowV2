@@ -325,8 +325,16 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
 
     // The client creates the commit itself, staging exactly the authorized paths.
     clientCommit(workspace, commit);
+    const milestoneCommit = headAt(workspace);
     expect(gitAt(workspace, "rev-parse", "HEAD^")).toBe(commit.baseline);
     expect(gitAt(workspace, "log", "-1", "--pretty=%B")).toBe(commit.message);
+    writeFileSync(join(workspace.root, "post-phase-maintenance.txt"), "ordinary descendant\n");
+    execFileSync("git", ["add", "--", "post-phase-maintenance.txt"], { cwd: workspace.root });
+    execFileSync("git", [
+      "-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid",
+      "commit", "-q", "-m", "ordinary descendant after implementation",
+    ], { cwd: workspace.root });
+    expect(gitAt(workspace, "merge-base", "--is-ancestor", milestoneCommit, "HEAD")).toBe("");
 
     // One read-only status observes the proof; the finishing invocation gets no offer to apply.
     const observed = await h.status(invocation);
@@ -370,6 +378,13 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     const { work, commit, reviews } = await reachAuthorizedImplementationCommit(workspace, h, invocation, "terminal-round-1");
     expect(commit.paths).toEqual([...work.outputs]);
     clientCommit(workspace, commit);
+    const milestoneCommit = headAt(workspace);
+    writeFileSync(join(workspace.root, "post-final-maintenance.txt"), "ordinary final descendant\n");
+    execFileSync("git", ["add", "--", "post-final-maintenance.txt"], { cwd: workspace.root });
+    execFileSync("git", [
+      "-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid",
+      "commit", "-q", "-m", "ordinary descendant after final implementation",
+    ], { cwd: workspace.root });
 
     // The final implementation invocation owns and applies its finish-task offer.
     const observed = await h.status(invocation);
@@ -380,7 +395,7 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(finished.next_action).toMatchObject({ kind: "none" });
     expect(finished.next_action.offer).toBeUndefined();
     expect(reviewCountAt(workspace)).toBe(reviews);
-    expect(gitAt(workspace, "rev-parse", "HEAD^")).toBe(commit.baseline);
+    expect(gitAt(workspace, "merge-base", "--is-ancestor", milestoneCommit, "HEAD")).toBe("");
 
     // Terminal state is stable under re-reads and offers no further mutation.
     const reread = await h.status(invocation);
@@ -389,6 +404,40 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(reread.next_action.offer).toBeUndefined();
     const stale = await h.apply(invocation, observed, undefined);
     expect(stale).toMatchObject({ ok: false, error: { retryable: false } });
+  });
+
+  it("keeps governing-plan drift out of adoption and refuses empty recovery after a content-preserving rewrite", async () => {
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-impl-recovery-boundaries",
+      label: "semantic-impl-recovery-boundaries",
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
+    });
+    workspaces.push(workspace);
+    excludeStubArtifacts(workspace);
+    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []]));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
+
+    await applied(h, invocation, handoff);
+    const { commit } = await reachAuthorizedImplementationCommit(
+      workspace, h, invocation, "recovery-boundaries-round-1",
+    );
+    clientCommit(workspace, commit);
+
+    const designPath = `.archflow/tasks/${workspace.taskId}/design.md`;
+    writeFileSync(join(workspace.root, designPath), `${readFileSync(join(workspace.root, designPath), "utf8")}\nUnreviewed governing edit.\n`);
+    let view = await h.status(invocation);
+    expect(view.next_action.kind).toBe("inspect");
+    expect(view.next_action.kind).not.toBe("decide");
+
+    execFileSync("git", ["checkout", "--", designPath], { cwd: workspace.root });
+    execFileSync("git", [
+      "-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid",
+      "commit", "--amend", "-q", "-m", "rewritten milestone with identical content",
+    ], { cwd: workspace.root });
+    view = await h.status(invocation);
+    expect(view.next_action.kind).toBe("inspect");
+    expect(view.detail).toMatch(/no committable delta/u);
   });
 
   it("freezes a content wait through later config edits and presents every matched operation with exact byte deltas", async () => {
@@ -522,15 +571,45 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
       baseline: headAt(workspace),
       requires_human_confirmation: false,
     });
+    const settledState = JSON.parse(readFileSync(workspace.services.authority.state.absolute, "utf8"));
+    const implementationSettlement = [...(settledState.rule_settlements ?? [])]
+      .filter((entry: { phase_instance?: string }) => entry.phase_instance === "phase-impl-1")
+      .sort((left: { settled_at_revision: number }, right: { settled_at_revision: number }) =>
+        right.settled_at_revision - left.settled_at_revision)[0];
+    expect(implementationSettlement).toMatchObject({
+      milestone_baseline_commit: commit.baseline,
+      milestone_target_ref: commit.target_ref,
+      milestone_target_head: commit.baseline,
+    });
     expect(commit.paths).toEqual([...work.outputs]);
     clientCommit(workspace, commit);
     expect(gitAt(workspace, "rev-parse", "HEAD^")).toBe(commit.baseline);
     expect(gitAt(workspace, "log", "-1", "--pretty=%B")).toBe(commit.message);
     view = await h.status(invocation);
     expect(view.next_action).toMatchObject({ kind: "finish-task", expected_submission: "none" });
-    view = await applied(h, invocation, view);
-    expect(view.condition).toBe("complete");
-    expect(view.next_action).toMatchObject({ kind: "none" });
+    const pinnedBranch = gitAt(workspace, "symbolic-ref", "--short", "HEAD");
+    gitAt(workspace, "switch", "-q", "-c", "same-commit-implementation-race");
+    const switched = await h.apply(invocation, view);
+    expect(switched).toMatchObject({ ok: false, error: { retryable: false } });
+    gitAt(workspace, "switch", "-q", pinnedBranch);
+
+    const legacyState = JSON.parse(readFileSync(workspace.services.authority.state.absolute, "utf8"));
+    const legacySettlement = legacyState.rule_settlements.find(
+      (entry: { phase_instance?: string }) => entry.phase_instance === "phase-impl-1",
+    );
+    delete legacySettlement.milestone_target_ref;
+    delete legacySettlement.milestone_target_head;
+    writeFileSync(workspace.services.authority.state.absolute, canonicalJsonBytes(legacyState));
+    const legacyOffer = await h.status(invocation);
+    expect(legacyOffer.next_action).toMatchObject({ kind: "finish-task", expected_submission: "none" });
+    writeFileSync(join(workspace.root, "post-implementation.txt"), "ordinary descendant\n");
+    gitAt(workspace, "add", "--", "post-implementation.txt");
+    gitAt(
+      workspace, "-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid",
+      "commit", "-qm", "ordinary descendant after implementation",
+    );
+    const descendantRefusal = await h.apply(invocation, legacyOffer);
+    expect(descendantRefusal).toMatchObject({ ok: false, error: { retryable: false } });
   });
 
   it("returns request-changes to a close-only checkpoint that requires the separate revise action before re-editing", async () => {

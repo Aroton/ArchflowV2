@@ -181,7 +181,7 @@ function directDecisionRequestDigest(
 }
 
 function semanticDecisionOperation(decision: ArchivedGateDecisionRecordV1): Sha256Digest | undefined {
-  if (decision.outcome === "superseded") return undefined;
+  if (decision.outcome === "superseded" || decision.outcome === "superseded-stale-baseline") return undefined;
   const provenance = decision.outcome === "decided" ? decision.envelope.human_provenance : decision.human_provenance;
   if (provenance.channel !== "connected-host") return undefined;
   const match = /^afdecision-([0-9a-f]{64})$/u.exec(provenance.decision_event_id);
@@ -189,7 +189,7 @@ function semanticDecisionOperation(decision: ArchivedGateDecisionRecordV1): Sha2
 }
 
 function decisionProvenance(decision: ArchivedGateDecisionRecordV1) {
-  if (decision.outcome === "superseded") return undefined;
+  if (decision.outcome === "superseded" || decision.outcome === "superseded-stale-baseline") return undefined;
   return decision.outcome === "decided" ? decision.envelope.human_provenance : decision.human_provenance;
 }
 

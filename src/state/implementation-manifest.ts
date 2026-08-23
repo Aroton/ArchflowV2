@@ -24,7 +24,7 @@ import type {
   OutputEntry,
   SnapshotAccountingEntry,
 } from "../contracts/durable-primitives.js";
-import type { TaskStateV1 } from "../contracts/durable-state.js";
+import { taskStateV1Schema, type TaskStateV1 } from "../contracts/durable-state.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import type { DeclaredInputRef } from "../contracts/fingerprints.js";
 import { parseSafeInteger, type PathSafeId, type SafeCode, type SafeId, type Sha256Digest } from "../contracts/evidence.js";
@@ -34,13 +34,16 @@ import { assertPlainJson } from "../contracts/plain-json.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
 import {
   hashGitBlobIdentity,
+  isCommitAncestor,
   isCommitAncestorOfHead,
+  readFirstParentChildAfter,
   readCommitTreeBlob,
   readGitBlobBytes,
   readGitBlobProjectedBytes,
   readGitBlobSize,
   readChangedGitPaths,
   resolveCommit,
+  GitInvocationError,
   type RepositoryOperationContext,
 } from "../repository/git.js";
 import type { RootBoundGitRunner } from "../repository/identity.js";
@@ -116,65 +119,181 @@ export type CurrentAuthoritativeOutputSource =
   | Readonly<{ path: RepositoryPathClaim; state: "absent" }>
   | Readonly<{ path: RepositoryPathClaim; state: "present"; identity: BlobIdentity; bytes?: Uint8Array }>;
 
+/** One exact historical-milestone predicate that the selected immutable candidate failed. */
+export type MilestoneMiss =
+  | "target-moved"
+  | "baseline-not-ancestor"
+  | "candidate-not-found"
+  | "base-commit-mismatch"
+  | "parent-not-baseline"
+  | "message-mismatch"
+  | "paths-mismatch"
+  | "tree-mismatch"
+  | "paths-outside-task"
+  | "missing-recovery-authority"
+  | "approved-document-mismatch"
+  | "unauthorized-task-document";
+
 /**
- * Proves that HEAD is exactly the commit authorized by the authenticated implementation gate:
- * the target is current, the approved baseline is its direct parent, its subject/message/path
- * set are exact, and its tree contains every retained after-image or absence. Unrelated worktree
- * and index state are deliberately irrelevant after commit.
+ * Shared proof vocabulary for document and implementation milestones. `proven.commit` is always
+ * the original candidate, never a later descendant. Target facts are the fresh pin against which
+ * the immutable candidate was inspected.
  */
-export async function implementationOutputCommittedAtCurrentTarget(
+export type MilestoneProof =
+  | Readonly<{ kind: "proven"; commit: GitOid; target_ref: string; target_head: GitOid }>
+  | Readonly<{ kind: "not-created"; target_ref: string; target_head: GitOid }>
+  | Readonly<{
+      kind: "missing-from-history";
+      reason: MilestoneMiss;
+      target_ref: string;
+      target_head: GitOid;
+      paths?: readonly string[];
+    }>
+  | Readonly<{ kind: "unverifiable"; reason: "git-unavailable" | "repository-observation-failed" }>;
+
+function missing(
+  targetRef: string,
+  targetHead: GitOid,
+  reason: MilestoneMiss,
+  paths?: readonly string[],
+): MilestoneProof {
+  return Object.freeze({
+    kind: "missing-from-history",
+    reason,
+    target_ref: targetRef,
+    target_head: targetHead,
+    ...(paths === undefined ? {} : { paths: Object.freeze([...paths]) }),
+  });
+}
+
+type PinnedMilestoneTarget = Readonly<{
+  target_ref: string;
+  target_head: GitOid;
+  candidate?: GitOid;
+}>;
+
+async function pinMilestoneTarget(
   runner: RootBoundGitRunner,
-  output: ImplementationOutputV1,
-  context: GateContext<"commit-authorization">,
+  targetRef: string,
+  baseline: GitOid,
+): Promise<MilestoneProof | PinnedMilestoneTarget> {
+  try {
+    const symbolicRef = await runner.runText({
+      argv: ["symbolic-ref", "--quiet", "HEAD"],
+      operation: "git-current-milestone-target" as SafeCode,
+      expectedAbsence: [{ code: 1, stderrIncludes: "" }],
+    });
+    const head = await resolveCommit(runner, "HEAD");
+    const targetHead = await resolveCommit(runner, targetRef);
+    if ((targetRef === "HEAD" ? symbolicRef !== "" : symbolicRef !== targetRef) || head !== targetHead) {
+      return missing(targetRef, targetHead, "target-moved");
+    }
+    if (targetHead === baseline) return Object.freeze({ target_ref: targetRef, target_head: targetHead });
+    if (!await isCommitAncestor(runner, baseline, targetHead)) {
+      return missing(targetRef, targetHead, "baseline-not-ancestor");
+    }
+    const candidate = await readFirstParentChildAfter(runner, baseline, targetHead);
+    if (candidate === undefined) return missing(targetRef, targetHead, "candidate-not-found");
+    return Object.freeze({ target_ref: targetRef, target_head: targetHead, candidate });
+  } catch (error) {
+    return Object.freeze({
+      kind: "unverifiable",
+      reason: error instanceof GitInvocationError ? "git-unavailable" : "repository-observation-failed",
+    });
+  }
+}
+
+function isMilestoneProof(value: MilestoneProof | PinnedMilestoneTarget): value is MilestoneProof {
+  return "kind" in value;
+}
+
+async function candidateStillPinned(
+  runner: RootBoundGitRunner,
+  pin: Required<PinnedMilestoneTarget>,
+  baseline: GitOid,
 ): Promise<boolean> {
   const symbolicRef = await runner.runText({
     argv: ["symbolic-ref", "--quiet", "HEAD"],
-    operation: "git-current-commit-target" as SafeCode,
+    operation: "git-current-milestone-target" as SafeCode,
     expectedAbsence: [{ code: 1, stderrIncludes: "" }],
   });
-  if (context.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== context.target_ref) return false;
-  const headCommit = await resolveCommit(runner, "HEAD");
-  const targetCommit = await resolveCommit(runner, context.target_ref);
-  if (headCommit !== targetCommit) return false;
-  if (context.baseline_commit !== output.base_commit || headCommit === context.baseline_commit) return false;
-  if (await resolveCommit(runner, `${headCommit}^`) !== context.baseline_commit) return false;
-  const message = await runner.runText({
-    argv: ["log", "-1", "--format=%s", headCommit],
-    operation: "git-implementation-commit-message" as SafeCode,
-  });
-  if (message !== context.commit_message) return false;
-
-  const authorizedPaths = [...context.paths].sort(ordinal);
-  if (JSON.stringify(authorizedPaths) !== JSON.stringify(sortedUniquePaths(output))) return false;
-  const changedPaths = [...new Set(await runner.runNulFields({
-    argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", context.baseline_commit, headCommit, "--"],
-    operation: "git-implementation-commit-paths" as SafeCode,
-  }))].sort(ordinal);
-  if (JSON.stringify(changedPaths) !== JSON.stringify(authorizedPaths)) return false;
-
-  for (const entry of output.outputs) {
-    const committed = await readCommitTreeBlob(runner, headCommit, entry.path);
-    if (entry.operation === "delete") {
-      if (committed !== undefined) return false;
-      continue;
-    }
-    if (committed?.mode !== entry.after.mode || committed.oid !== entry.after.oid) return false;
-    if (entry.operation === "rename" &&
-        await readCommitTreeBlob(runner, headCommit, entry.previous_path) !== undefined) return false;
-  }
-  // Close the observation window after all explicit-commit tree reads.
-  return await resolveCommit(runner, "HEAD") === headCommit &&
-    await resolveCommit(runner, context.target_ref) === headCommit;
+  if ((pin.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== pin.target_ref) ||
+      await resolveCommit(runner, "HEAD") !== pin.target_head ||
+      await resolveCommit(runner, pin.target_ref) !== pin.target_head ||
+      !await isCommitAncestor(runner, baseline, pin.target_head)) return false;
+  return await readFirstParentChildAfter(runner, baseline, pin.target_head) === pin.candidate;
 }
 
-/** Exact autonomous implementation proof, derived only from the reviewed output itself. */
-export async function autonomousImplementationOutputCommittedAtCurrentTarget(
+/** Resolves and proves the exact implementation milestone on the target's first-parent history. */
+export async function resolveImplementationMilestoneProof(
+  runner: RootBoundGitRunner,
+  output: ImplementationOutputV1,
+  context: GateContext<"commit-authorization">,
+): Promise<MilestoneProof> {
+  if (context.baseline_commit !== output.base_commit) {
+    try {
+      const targetHead = await resolveCommit(runner, context.target_ref);
+      return missing(context.target_ref, targetHead, "base-commit-mismatch");
+    } catch (error) {
+      return Object.freeze({ kind: "unverifiable", reason: error instanceof GitInvocationError ? "git-unavailable" : "repository-observation-failed" });
+    }
+  }
+  const pinned = await pinMilestoneTarget(runner, context.target_ref, context.baseline_commit);
+  if (isMilestoneProof(pinned)) return pinned;
+  if (pinned.candidate === undefined) {
+    return Object.freeze({ kind: "not-created", target_ref: pinned.target_ref, target_head: pinned.target_head });
+  }
+  const pin = pinned as Required<PinnedMilestoneTarget>;
+  try {
+    if (await resolveCommit(runner, `${pin.candidate}^`) !== context.baseline_commit) {
+      return missing(pin.target_ref, pin.target_head, "parent-not-baseline");
+    }
+    const message = await runner.runText({
+      argv: ["log", "-1", "--format=%s", pin.candidate],
+      operation: "git-implementation-commit-message" as SafeCode,
+    });
+    if (message !== context.commit_message) return missing(pin.target_ref, pin.target_head, "message-mismatch");
+    const authorizedPaths = [...context.paths].sort(ordinal);
+    if (JSON.stringify(authorizedPaths) !== JSON.stringify(sortedUniquePaths(output))) {
+      return missing(pin.target_ref, pin.target_head, "paths-mismatch");
+    }
+    const changedPaths = [...new Set(await runner.runNulFields({
+      argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", context.baseline_commit, pin.candidate, "--"],
+      operation: "git-implementation-commit-paths" as SafeCode,
+    }))].sort(ordinal);
+    if (JSON.stringify(changedPaths) !== JSON.stringify(authorizedPaths)) {
+      return missing(pin.target_ref, pin.target_head, "paths-mismatch", changedPaths);
+    }
+    for (const entry of output.outputs) {
+      const committed = await readCommitTreeBlob(runner, pin.candidate, entry.path);
+      if (entry.operation === "delete") {
+        if (committed !== undefined) return missing(pin.target_ref, pin.target_head, "tree-mismatch", [entry.path]);
+        continue;
+      }
+      if (committed?.mode !== entry.after.mode || committed.oid !== entry.after.oid) {
+        return missing(pin.target_ref, pin.target_head, "tree-mismatch", [entry.path]);
+      }
+      if (entry.operation === "rename" &&
+          await readCommitTreeBlob(runner, pin.candidate, entry.previous_path) !== undefined) {
+        return missing(pin.target_ref, pin.target_head, "tree-mismatch", [entry.previous_path]);
+      }
+    }
+    if (!await candidateStillPinned(runner, pin, context.baseline_commit)) {
+      return missing(pin.target_ref, pin.target_head, "target-moved");
+    }
+    return Object.freeze({ kind: "proven", commit: pin.candidate, target_ref: pin.target_ref, target_head: pin.target_head });
+  } catch (error) {
+    return Object.freeze({ kind: "unverifiable", reason: error instanceof GitInvocationError ? "git-unavailable" : "repository-observation-failed" });
+  }
+}
+
+export async function resolveAutonomousImplementationMilestoneProof(
   runner: RootBoundGitRunner,
   output: ImplementationOutputV1,
   targetRef: string,
   commitMessage: string,
-): Promise<boolean> {
-  return implementationOutputCommittedAtCurrentTarget(runner, output, {
+): Promise<MilestoneProof> {
+  return resolveImplementationMilestoneProof(runner, output, {
     target_ref: targetRef,
     baseline_commit: output.base_commit,
     commit_message: commitMessage,
@@ -182,49 +301,6 @@ export async function autonomousImplementationOutputCommittedAtCurrentTarget(
     diff_digest: output.diff_digest,
     current_artifact_digests: Object.freeze([]),
     parent_document_digests: Object.freeze(output.parent_documents.map((entry) => entry.content_digest).sort()),
-  });
-}
-
-/**
- * Why the design milestone could not be observed. Every value names one predicate the commit failed,
- * so status can say what is wrong instead of silently re-offering an action that cannot succeed.
- */
-export type DesignMilestoneMiss =
-  | "target-moved"
-  | "not-committed"
-  | "parent-not-baseline"
-  | "message-mismatch"
-  | "paths-outside-task"
-  | "missing-recovery-authority"
-  | "approved-document-mismatch"
-  | "unauthorized-task-document"
-  | "task-tree-dirty";
-
-/**
- * `blocking` is false only for `not-committed`, the one miss the authorized commit action can still
- * resolve by running. Every other miss means the action is unperformable — the local commit path
- * requires HEAD to still be the baseline — so a human has to intervene.
- */
-export type DesignMilestoneObservation =
-  | Readonly<{ observed: true }>
-  | Readonly<{
-      observed: false;
-      reason: DesignMilestoneMiss;
-      blocking: boolean;
-      paths?: readonly string[];
-    }>;
-
-const observed: DesignMilestoneObservation = Object.freeze({ observed: true });
-
-function missed(
-  reason: DesignMilestoneMiss,
-  paths?: readonly string[],
-): DesignMilestoneObservation {
-  return Object.freeze({
-    observed: false,
-    reason,
-    blocking: reason !== "not-committed",
-    ...(paths === undefined ? {} : { paths: Object.freeze([...paths]) }),
   });
 }
 
@@ -238,7 +314,7 @@ function missed(
  * swept into the whole-task-directory commit and only be rejected afterwards, at a point where the
  * commit can no longer be retried. Reporting it up front keeps the failure fixable.
  */
-export async function designArtifactCommittedAtCurrentTarget(
+async function resolveDesignMilestoneProofUnchecked(
   runner: RootBoundGitRunner,
   taskId: string,
   artifact: DocumentArtifactV1,
@@ -247,18 +323,7 @@ export async function designArtifactCommittedAtCurrentTarget(
     Readonly<{
       authorized_document_paths?: readonly RepositoryPathClaim[];
     }>,
-): Promise<DesignMilestoneObservation> {
-  const symbolicRef = await runner.runText({
-    argv: ["symbolic-ref", "--quiet", "HEAD"],
-    operation: "git-current-design-target" as SafeCode,
-    expectedAbsence: [{ code: 1, stderrIncludes: "" }],
-  });
-  if (context.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== context.target_ref) {
-    return missed("target-moved");
-  }
-  const head = await resolveCommit(runner, "HEAD");
-  if (await resolveCommit(runner, context.target_ref) !== head) return missed("target-moved");
-
+): Promise<MilestoneProof> {
   const prefix = `.archflow/tasks/${taskId}/`;
   const additional = artifact.additional_documents ?? [];
   const approvedDocumentPaths = new Set<RepositoryPathClaim>([
@@ -275,59 +340,72 @@ export async function designArtifactCommittedAtCurrentTarget(
       isTaskDocumentPath(path.slice(prefix.length)) &&
       !authorizedDocumentPaths.has(path as RepositoryPathClaim));
 
-  if (head === context.baseline_commit) {
+  const pinned = await pinMilestoneTarget(runner, context.target_ref, context.baseline_commit);
+  if (isMilestoneProof(pinned)) return pinned;
+  if (pinned.candidate === undefined) {
     const pending = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
     const unauthorized = unauthorizedDocuments(pending.paths);
-    if (unauthorized.length > 0) return missed("unauthorized-task-document", unauthorized);
-    return missed("not-committed");
+    if (unauthorized.length > 0) return missing(pinned.target_ref, pinned.target_head, "unauthorized-task-document", unauthorized);
+    return Object.freeze({ kind: "not-created", target_ref: pinned.target_ref, target_head: pinned.target_head });
   }
-
-  if (await resolveCommit(runner, `${head}^`) !== context.baseline_commit) {
-    return missed("parent-not-baseline");
+  const pin = pinned as Required<PinnedMilestoneTarget>;
+  if (await resolveCommit(runner, `${pin.candidate}^`) !== context.baseline_commit) {
+    return missing(pin.target_ref, pin.target_head, "parent-not-baseline");
   }
   const message = await runner.runText({
-    argv: ["log", "-1", "--format=%s", head],
+    argv: ["log", "-1", "--format=%s", pin.candidate],
     operation: "git-design-commit-message" as SafeCode,
   });
-  if (message !== context.commit_message) return missed("message-mismatch");
+  if (message !== context.commit_message) return missing(pin.target_ref, pin.target_head, "message-mismatch");
 
   const changed = await runner.runNulFields({
-    argv: ["diff-tree", "--no-commit-id", "--name-only", "-z", "-r", context.baseline_commit, head, "--"],
+    argv: ["diff-tree", "--no-commit-id", "--name-only", "-z", "-r", context.baseline_commit, pin.candidate, "--"],
     operation: "git-design-commit-paths" as SafeCode,
   });
-  if (changed.length === 0) return missed("paths-outside-task");
+  if (changed.length === 0) return missing(pin.target_ref, pin.target_head, "paths-outside-task");
   const outsideTask = changed.filter((path) => !path.startsWith(prefix));
-  if (outsideTask.length > 0) return missed("paths-outside-task", outsideTask);
-  if (!changed.includes(`${prefix}state.json`)) return missed("missing-recovery-authority");
+  if (outsideTask.length > 0) return missing(pin.target_ref, pin.target_head, "paths-outside-task", outsideTask);
+  if (!changed.includes(`${prefix}state.json`)) return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
   const archivedDecisionPair =
     changed.some((path) => path.startsWith(`${prefix}authority/decisions/`) && path.endsWith("/request.json")) &&
     changed.some((path) => path.startsWith(`${prefix}authority/decisions/`) && path.endsWith("/decision.json"));
-  if (!archivedDecisionPair) return missed("missing-recovery-authority");
+  if (!archivedDecisionPair) return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
 
   for (const path of approvedDocumentPaths) {
     const output = outputs.find((entry) => entry.path === path);
-    if (output === undefined || output.operation === "delete") return missed("approved-document-mismatch", [path]);
-    const committed = await readCommitTreeBlob(runner, head, path);
+    if (output === undefined || output.operation === "delete") return missing(pin.target_ref, pin.target_head, "approved-document-mismatch", [path]);
+    const committed = await readCommitTreeBlob(runner, pin.candidate, path);
     if (committed?.mode !== output.after.mode || committed.oid !== output.after.oid) {
-      return missed("approved-document-mismatch", [path]);
+      return missing(pin.target_ref, pin.target_head, "approved-document-mismatch", [path]);
     }
     const baseline = await readCommitTreeBlob(runner, context.baseline_commit, path);
     const differsFromBaseline = baseline?.mode !== output.after.mode || baseline.oid !== output.after.oid;
-    if (differsFromBaseline && !changed.includes(path)) return missed("approved-document-mismatch", [path]);
+    if (differsFromBaseline && !changed.includes(path)) return missing(pin.target_ref, pin.target_head, "approved-document-mismatch", [path]);
   }
   const unauthorized = unauthorizedDocuments(changed);
-  if (unauthorized.length > 0) return missed("unauthorized-task-document", unauthorized);
-
-  const dirty = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
-  if (dirty.paths.length !== 0 || dirty.unrepresentable_count !== 0) {
-    return missed("task-tree-dirty", dirty.paths);
+  if (unauthorized.length > 0) return missing(pin.target_ref, pin.target_head, "unauthorized-task-document", unauthorized);
+  if (!await candidateStillPinned(runner, pin, context.baseline_commit)) {
+    return missing(pin.target_ref, pin.target_head, "target-moved");
   }
-  // Close the observation window: a concurrent target move after the initial pin must not let
-  // stale commit evidence authorize the phase transition.
-  return await resolveCommit(runner, "HEAD") === head &&
-    await resolveCommit(runner, context.target_ref) === head
-    ? observed
-    : missed("target-moved");
+  return Object.freeze({ kind: "proven", commit: pin.candidate, target_ref: pin.target_ref, target_head: pin.target_head });
+}
+
+export async function resolveDesignMilestoneProof(
+  runner: RootBoundGitRunner,
+  taskId: string,
+  artifact: DocumentArtifactV1,
+  outputs: readonly OutputEntry[],
+  context: Pick<GateContext<"design-approval">, "target_ref" | "baseline_commit" | "commit_message"> &
+    Readonly<{ authorized_document_paths?: readonly RepositoryPathClaim[] }>,
+): Promise<MilestoneProof> {
+  try {
+    return await resolveDesignMilestoneProofUnchecked(runner, taskId, artifact, outputs, context);
+  } catch (error) {
+    return Object.freeze({
+      kind: "unverifiable",
+      reason: error instanceof GitInvocationError ? "git-unavailable" : "repository-observation-failed",
+    });
+  }
 }
 
 /**
@@ -335,6 +413,166 @@ export async function designArtifactCommittedAtCurrentTarget(
  * gate path, there is no decision archive: the canonical state containing the accepted settlement
  * is the recovery authority, and the commit may change exactly that file plus the reviewed docs.
  */
+async function resolveAutonomousDesignMilestoneProofUnchecked(
+  runner: RootBoundGitRunner,
+  state: TaskStateV1,
+  artifact: DocumentArtifactV1,
+  outputs: readonly OutputEntry[],
+  targetRef: string,
+  baselineCommit: string,
+  commitMessage: string,
+  context: RepositoryOperationContext,
+): Promise<MilestoneProof> {
+  if (!await approvedDesignWorktreeMatchesRetainedArtifact(runner, state.task_id, artifact, outputs, context)) {
+    try {
+      return missing(targetRef, await resolveCommit(runner, targetRef), "approved-document-mismatch");
+    } catch (error) {
+      return Object.freeze({ kind: "unverifiable", reason: error instanceof GitInvocationError ? "git-unavailable" : "repository-observation-failed" });
+    }
+  }
+  const pinned = await pinMilestoneTarget(runner, targetRef, parseGitOid(baselineCommit));
+  if (isMilestoneProof(pinned)) return pinned;
+  const prefix = `.archflow/tasks/${state.task_id}/`;
+  const approvedPaths = [artifact.projection_target, ...(artifact.additional_documents ?? []).map((entry) => entry.projection_target)];
+  const approvedPathSet = new Set<string>(approvedPaths);
+  const unauthorizedDocuments = (paths: readonly string[]): readonly string[] => paths.filter((path) =>
+    path.startsWith(prefix) && isTaskDocumentPath(path.slice(prefix.length)) && !approvedPathSet.has(path));
+  if (pinned.candidate === undefined) {
+    const pending = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
+    const unexpected = unauthorizedDocuments(pending.paths);
+    return unexpected.length === 0
+      ? Object.freeze({ kind: "not-created", target_ref: pinned.target_ref, target_head: pinned.target_head })
+      : missing(pinned.target_ref, pinned.target_head, "unauthorized-task-document", unexpected);
+  }
+  const pin = pinned as Required<PinnedMilestoneTarget>;
+  if (await resolveCommit(runner, `${pin.candidate}^`) !== baselineCommit) return missing(pin.target_ref, pin.target_head, "parent-not-baseline");
+  const message = await runner.runText({
+    argv: ["log", "-1", "--format=%s", pin.candidate],
+    operation: "git-autonomous-design-commit-message" as SafeCode,
+  });
+  if (message !== commitMessage) return missing(pin.target_ref, pin.target_head, "message-mismatch");
+  const changed = [...new Set(await runner.runNulFields({
+    argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", baselineCommit, pin.candidate, "--"],
+    operation: "git-autonomous-design-commit-paths" as SafeCode,
+  }))].sort(ordinal);
+  if (changed.length === 0 || changed.some((path) => !path.startsWith(prefix))) return missing(pin.target_ref, pin.target_head, "paths-outside-task", changed);
+  if (!changed.includes(`${prefix}state.json`)) return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
+  for (const path of approvedPaths) {
+    const output = outputs.find((entry) => entry.path === path);
+    if (output === undefined || output.operation === "delete") return missing(pin.target_ref, pin.target_head, "approved-document-mismatch", [path]);
+    const committed = await readCommitTreeBlob(runner, pin.candidate, path);
+    if (committed?.mode !== output.after.mode || committed.oid !== output.after.oid) {
+      return missing(pin.target_ref, pin.target_head, "approved-document-mismatch", [path]);
+    }
+  }
+  const unauthorized = unauthorizedDocuments(changed);
+  if (unauthorized.length !== 0) return missing(pin.target_ref, pin.target_head, "unauthorized-task-document", unauthorized);
+  const committedState = await readCommitTreeBlob(runner, pin.candidate, `${prefix}state.json`);
+  if (committedState === undefined) return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
+  const committedStateBytes = await readGitBlobBytes(runner, committedState.oid);
+  let historicalState: TaskStateV1;
+  try {
+    const decoded = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(committedStateBytes)) as unknown;
+    historicalState = taskStateV1Schema.parse(decoded);
+    if (!isDeepStrictEqual(canonicalJsonBytes(historicalState), committedStateBytes)) {
+      return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
+    }
+  } catch {
+    return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
+  }
+  const subjectDigest = canonicalJsonDigest(artifact);
+  const historicalSettlement = historicalState.rule_settlements?.find((settlement) =>
+    settlement.task_id === state.task_id &&
+    settlement.phase_instance === artifact.phase_instance &&
+    settlement.subject_digest === subjectDigest &&
+    settlement.conclusion.wait === false &&
+    settlement.milestone_baseline_commit === baselineCommit);
+  const currentSettlement = state.rule_settlements?.find((settlement) =>
+    historicalSettlement !== undefined && isDeepStrictEqual(settlement, historicalSettlement));
+  if (historicalSettlement === undefined || currentSettlement === undefined) {
+    return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
+  }
+  if (!await candidateStillPinned(runner, pin, parseGitOid(baselineCommit))) {
+    return missing(pin.target_ref, pin.target_head, "target-moved");
+  }
+  return Object.freeze({ kind: "proven", commit: pin.candidate, target_ref: pin.target_ref, target_head: pin.target_head });
+}
+
+export async function resolveAutonomousDesignMilestoneProof(
+  runner: RootBoundGitRunner,
+  state: TaskStateV1,
+  artifact: DocumentArtifactV1,
+  outputs: readonly OutputEntry[],
+  targetRef: string,
+  baselineCommit: string,
+  commitMessage: string,
+  context: RepositoryOperationContext,
+): Promise<MilestoneProof> {
+  try {
+    return await resolveAutonomousDesignMilestoneProofUnchecked(
+      runner, state, artifact, outputs, targetRef, baselineCommit, commitMessage, context,
+    );
+  } catch (error) {
+    return Object.freeze({
+      kind: "unverifiable",
+      reason: error instanceof GitInvocationError ? "git-unavailable" : "repository-observation-failed",
+    });
+  }
+}
+
+/** @deprecated Callers selecting workflow authority must consume `MilestoneProof` directly. */
+export async function implementationOutputCommittedAtCurrentTarget(
+  runner: RootBoundGitRunner,
+  output: ImplementationOutputV1,
+  context: GateContext<"commit-authorization">,
+): Promise<boolean> {
+  return (await resolveImplementationMilestoneProof(runner, output, context)).kind === "proven";
+}
+
+/** @deprecated Callers selecting workflow authority must consume `MilestoneProof` directly. */
+export async function autonomousImplementationOutputCommittedAtCurrentTarget(
+  runner: RootBoundGitRunner,
+  output: ImplementationOutputV1,
+  targetRef: string,
+  commitMessage: string,
+): Promise<boolean> {
+  return (await resolveAutonomousImplementationMilestoneProof(runner, output, targetRef, commitMessage)).kind === "proven";
+}
+
+export type DesignMilestoneMiss = "target-moved" | "not-committed" | MilestoneMiss;
+export type DesignMilestoneObservation =
+  | Readonly<{ observed: true }>
+  | Readonly<{ observed: false; reason: DesignMilestoneMiss; blocking: boolean; paths?: readonly string[] }>;
+
+function legacyDesignObservation(proof: MilestoneProof): DesignMilestoneObservation {
+  if (proof.kind === "proven") return Object.freeze({ observed: true });
+  if (proof.kind === "not-created") {
+    return Object.freeze({ observed: false, reason: "not-committed", blocking: false });
+  }
+  if (proof.kind === "unverifiable") {
+    throw new TypeError(`milestone proof unavailable: ${proof.reason}`);
+  }
+  return Object.freeze({
+    observed: false,
+    reason: proof.reason,
+    blocking: true,
+    ...(proof.paths === undefined ? {} : { paths: proof.paths }),
+  });
+}
+
+/** @deprecated Callers selecting workflow authority must consume `MilestoneProof` directly. */
+export async function designArtifactCommittedAtCurrentTarget(
+  runner: RootBoundGitRunner,
+  taskId: string,
+  artifact: DocumentArtifactV1,
+  outputs: readonly OutputEntry[],
+  context: Pick<GateContext<"design-approval">, "target_ref" | "baseline_commit" | "commit_message"> &
+    Readonly<{ authorized_document_paths?: readonly RepositoryPathClaim[] }>,
+): Promise<DesignMilestoneObservation> {
+  return legacyDesignObservation(await resolveDesignMilestoneProof(runner, taskId, artifact, outputs, context));
+}
+
+/** @deprecated Callers selecting workflow authority must consume `MilestoneProof` directly. */
 export async function autonomousDesignArtifactCommittedAtCurrentTarget(
   runner: RootBoundGitRunner,
   state: TaskStateV1,
@@ -345,56 +583,9 @@ export async function autonomousDesignArtifactCommittedAtCurrentTarget(
   commitMessage: string,
   context: RepositoryOperationContext,
 ): Promise<DesignMilestoneObservation> {
-  if (!await approvedDesignWorktreeMatchesRetainedArtifact(runner, state.task_id, artifact, outputs, context)) {
-    return missed("approved-document-mismatch");
-  }
-  const symbolicRef = await runner.runText({
-    argv: ["symbolic-ref", "--quiet", "HEAD"],
-    operation: "git-current-autonomous-design-target" as SafeCode,
-    expectedAbsence: [{ code: 1, stderrIncludes: "" }],
-  });
-  if (targetRef === "HEAD" ? symbolicRef !== "" : symbolicRef !== targetRef) return missed("target-moved");
-  const head = await resolveCommit(runner, "HEAD");
-  if (await resolveCommit(runner, targetRef) !== head) return missed("target-moved");
-  const prefix = `.archflow/tasks/${state.task_id}/`;
-  const approvedPaths = [artifact.projection_target, ...(artifact.additional_documents ?? []).map((entry) => entry.projection_target)];
-  const approvedPathSet = new Set<string>(approvedPaths);
-  const unauthorizedDocuments = (paths: readonly string[]): readonly string[] => paths.filter((path) =>
-    path.startsWith(prefix) && isTaskDocumentPath(path.slice(prefix.length)) && !approvedPathSet.has(path));
-  if (head === baselineCommit) {
-    const pending = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
-    const unexpected = unauthorizedDocuments(pending.paths);
-    return unexpected.length === 0 ? missed("not-committed") : missed("unauthorized-task-document", unexpected);
-  }
-  if (await resolveCommit(runner, `${head}^`) !== baselineCommit) return missed("parent-not-baseline");
-  const message = await runner.runText({
-    argv: ["log", "-1", "--format=%s", head],
-    operation: "git-autonomous-design-commit-message" as SafeCode,
-  });
-  if (message !== commitMessage) return missed("message-mismatch");
-  const changed = [...new Set(await runner.runNulFields({
-    argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", baselineCommit, head, "--"],
-    operation: "git-autonomous-design-commit-paths" as SafeCode,
-  }))].sort(ordinal);
-  if (changed.length === 0 || changed.some((path) => !path.startsWith(prefix))) return missed("paths-outside-task", changed);
-  if (!changed.includes(`${prefix}state.json`)) return missed("missing-recovery-authority");
-  for (const path of approvedPaths) {
-    const output = outputs.find((entry) => entry.path === path);
-    if (output === undefined || output.operation === "delete") return missed("approved-document-mismatch", [path]);
-    const committed = await readCommitTreeBlob(runner, head, path);
-    if (committed?.mode !== output.after.mode || committed.oid !== output.after.oid) {
-      return missed("approved-document-mismatch", [path]);
-    }
-  }
-  const unauthorized = unauthorizedDocuments(changed);
-  if (unauthorized.length !== 0) return missed("unauthorized-task-document", unauthorized);
-  const committedState = await readCommitTreeBlob(runner, head, `${prefix}state.json`);
-  const expectedState = canonicalJsonBytes(state);
-  if (committedState?.oid !== gitBlobOid(expectedState)) return missed("missing-recovery-authority");
-  const dirty = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
-  if (dirty.paths.length !== 0 || dirty.unrepresentable_count !== 0) return missed("task-tree-dirty", dirty.paths);
-  return await resolveCommit(runner, "HEAD") === head && await resolveCommit(runner, targetRef) === head
-    ? observed : missed("target-moved");
+  return legacyDesignObservation(await resolveAutonomousDesignMilestoneProof(
+    runner, state, artifact, outputs, targetRef, baselineCommit, commitMessage, context,
+  ));
 }
 
 /**

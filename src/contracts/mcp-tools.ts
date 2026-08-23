@@ -72,7 +72,18 @@ export type RefreshMilestoneBaselineInput = CommonToolInput & {
   readonly reason?: never;
   readonly ask_base_digest?: never;
 };
-export type StateInput = StateBoundaryInput | PlanningRestartInput | RefreshMilestoneBaselineInput;
+export type AuthorityRecoveryInput = CommonToolInput & {
+  readonly operation: "recover_milestone_authority" | "refresh_stale_baseline";
+  readonly phase_instance: PhaseInstanceId;
+  readonly step: "produce" | "counter_review" | "triage";
+  readonly status: "running" | "succeeded" | "failed";
+  readonly artifact?: never;
+  readonly human_revision?: never;
+  readonly target_phase_instance?: never;
+  readonly reason?: never;
+  readonly ask_base_digest?: never;
+};
+export type StateInput = StateBoundaryInput | PlanningRestartInput | RefreshMilestoneBaselineInput | AuthorityRecoveryInput;
 // Every success value optionally echoes the request_digest the server recorded for the call, so
 // a client can compare one string against its envelope output to prove the arguments arrived
 // untranscribed. Optional in the contract because receipts recorded before the echo existed must
@@ -170,7 +181,7 @@ export const stateInputSchema = z.object({
   status: z.enum(["running", "succeeded", "failed"]),
   artifact: durableArtifact.optional(),
   human_revision: humanRevisionDeclarationSchema.optional(),
-  operation: z.enum(["planning_restart", "refresh_milestone_baseline"]).optional(),
+  operation: z.enum(["planning_restart", "refresh_milestone_baseline", "recover_milestone_authority", "refresh_stale_baseline"]).optional(),
   target_phase_instance: phase.optional(),
   reason: text.optional(),
   ask_base_digest: digest.optional(),
@@ -188,6 +199,12 @@ export const stateInputSchema = z.object({
     if (input.step !== "triage" || input.status !== "succeeded") context.addIssue({ code: "custom", path: ["step"], message: "refresh_milestone_baseline requires triage/succeeded" });
     if (input.artifact !== undefined || input.human_revision !== undefined || input.target_phase_instance !== undefined || input.reason !== undefined || input.ask_base_digest !== undefined) {
       context.addIssue({ code: "custom", path: ["operation"], message: "refresh_milestone_baseline carries no artifact, revision, restart target, reason, or ask digest" });
+    }
+    return;
+  }
+  if (input.operation === "recover_milestone_authority" || input.operation === "refresh_stale_baseline") {
+    if (input.artifact !== undefined || input.human_revision !== undefined || input.target_phase_instance !== undefined || input.reason !== undefined || input.ask_base_digest !== undefined) {
+      context.addIssue({ code: "custom", path: ["operation"], message: `${input.operation} carries no artifact, revision, restart target, reason, or ask digest` });
     }
     return;
   }
@@ -305,7 +322,9 @@ function successFor<K extends ToolName>(call: Extract<ParsedToolCall, { name: K 
   const parsed = toolSuccessSchemas[call.name].parse(value) as ToolSuccess<K>;
   if (call.name === "archflow_state") {
     const input = call.input as ParsedToolInput<"archflow_state">;
-    const expectedStatus = input.operation === "planning_restart" ? "running" : input.status;
+    const expectedStatus = input.operation === "planning_restart" || input.operation === "recover_milestone_authority"
+      ? "running"
+      : input.status;
     if ((parsed as StateSuccess).status !== expectedStatus) throw new TypeError("state status mismatch");
   }
   if (call.name === "archflow_gate") {

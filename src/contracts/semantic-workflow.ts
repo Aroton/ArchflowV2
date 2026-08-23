@@ -95,7 +95,8 @@ export type WorkflowReopenImpactV1 = {
 
 export const SEMANTIC_ACTION_KINDS = [
   "initialize-task", "begin-work", "submit-work", "review", "triage", "revise", "reopen",
-  "open-waiver", "decide", "refresh-milestone-baseline", "commit", "start-next-skill", "finish-task", "inspect", "none",
+  "open-waiver", "decide", "refresh-milestone-baseline", "recover-milestone-authority", "refresh-stale-baseline",
+  "commit", "start-next-skill", "finish-task", "inspect", "none",
 ] as const;
 export type SemanticActionKindV1 = (typeof SEMANTIC_ACTION_KINDS)[number];
 export const APPLY_SUBMISSION_KINDS = ["none", "task-ask", "work-result", "triage", "gate-summary", "reopening-request", "decision", "review-dispatch"] as const;
@@ -213,6 +214,7 @@ export const SEMANTIC_SUBSTEPS = [
   "initialize-task", "begin-work", "submit-work", "review-enter", "review-run", "review-empty-triage",
   "triage-enter", "triage", "revise-enter", "reopen", "open-gate", "open-waiver", "decision-archive",
   "decision-settle", "refresh-milestone-baseline", "start-next-skill", "finish-task",
+  "recover-milestone-authority", "refresh-stale-baseline",
 ] as const;
 export type SemanticSubstepV1 = (typeof SEMANTIC_SUBSTEPS)[number];
 

@@ -19,7 +19,9 @@ import { installPlanningRestartAskAppend } from "../../src/state/phase-documents
 import { retainedResultReferences } from "../../src/state/retained-result-graph.js";
 import {
   approvalIsEligibleAfterLatestRestart,
+  isExactMilestoneRecoveryDraft,
   isExactPlanningRestartDraft,
+  latestAuthorityCutoffRevision,
   latestRestartRevisionAffectingPhase,
 } from "../../src/state/restart-authority.js";
 import { planPlanningRestart } from "../../src/state/transitions.js";
@@ -178,6 +180,41 @@ describe("planning restart runtime", () => {
     };
     expect(approvalIsEligibleAfterLatestRestart(current, approval, parsePhaseInstanceId("phase-impl-1"))).toBe(false);
     expect(approvalIsEligibleAfterLatestRestart(current, { ...approval, resolved_at_revision: parseSafeInteger(16) }, parsePhaseInstanceId("phase-impl-1"))).toBe(true);
+  });
+
+  it("validates same-position milestone recovery and cuts off older authority", () => {
+    const current = state();
+    const superseded = current.authoritative_results.filter((item) => item.phase_instance === current.phase_instance);
+    const recovery = {
+      recovery_id: parsePathSafeId("recovery-1"),
+      phase_instance: current.phase_instance,
+      cause: "milestone-proof-missing" as const,
+      target_ref: "refs/heads/main",
+      target_head: current.policy_base_commit,
+      subject_digest: D("a"),
+      recovered_at_revision: parseSafeInteger(current.revision + 1),
+      superseded_results: superseded,
+      cleared_waivers: current.waivers,
+    };
+    const { revision: _revision, last_transition: _transition, ...base } = current;
+    const next = {
+      ...base,
+      step: "produce" as const,
+      status: "running" as const,
+      attempt: parseSafeInteger(1),
+      input_fingerprint: D("d"),
+      authoritative_results: current.authoritative_results.filter((item) => item.phase_instance !== current.phase_instance),
+      waivers: [],
+      milestone_recovery_history: [recovery],
+    };
+    expect(isExactMilestoneRecoveryDraft(current, next)).toBe(true);
+    expect(latestAuthorityCutoffRevision({ ...next, revision: parseSafeInteger(21) }, current.phase_instance)).toBe(21);
+    expect(approvalIsEligibleAfterLatestRestart(
+      { ...next, revision: parseSafeInteger(21) },
+      { gate_id: parsePathSafeId("gate-old"), gate_kind: "commit-authorization", subject_digest: D("b"), decision_digest: D("c"), resolved_at_revision: parseSafeInteger(20) },
+      current.phase_instance,
+    )).toBe(false);
+    expect(isExactMilestoneRecoveryDraft(current, { ...next, authoritative_results: current.authoritative_results })).toBe(false);
   });
 
   it("installs one operation-bound PRD correction and authenticates exact retry", async () => {

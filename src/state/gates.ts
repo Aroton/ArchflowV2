@@ -11,6 +11,7 @@ import {
   parsePersistedGateRequest,
   type GateDecisionRecordV1,
   type GateRequestV1,
+  type StaleBaselineGateSupersessionV1,
   type WaiverGateContext,
 } from "../contracts/durable-gate.js";
 import {
@@ -79,7 +80,7 @@ import {
   type CurrentProduceSubject,
   type ProduceUpstreamSubject,
 } from "./produce-subject.js";
-import { reconcileCurrentAuthority, type ReconciliationFinding } from "./reconciliation.js";
+import { assessBaselineSubjectFreshness, reconcileCurrentAuthority, type ReconciliationFinding } from "./reconciliation.js";
 import { currentProjectionDigest, discoverNewestProjections, discoverReconciliationInput } from "./reconciliation-discovery.js";
 import { applyProjectionPlan, captureProjectionTarget, prepareProjectionPlan, projectionGenerationDigest, type ProjectionSource } from "./snapshots.js";
 import { cleanTaskWorkspace } from "./workspace-cleanup.js";
@@ -653,12 +654,30 @@ async function stateAfterPolicyWaiverSettlement(
     ruleContext.config, ruleContext.subject, ruleContext.changedPaths,
   );
   const kind = decodePhaseInstance(current.value.phase_instance).kind;
-  const milestoneBaseline = !conclusion.wait && (kind === "design" || kind === "phase-design")
-    ? await resolveCommit(dependencies.runner, "HEAD")
+  const milestoneBearing = !conclusion.wait &&
+    (kind === "design" || kind === "phase-design" || kind === "phase-impl");
+  const symbolicTarget = milestoneBearing
+    ? await dependencies.runner.runText({
+        argv: ["symbolic-ref", "--quiet", "HEAD"],
+        operation: parseSafeCode("git-rule-settlement-target"),
+        expectedAbsence: [{ code: 1, stderrIncludes: "" }],
+      })
     : undefined;
+  const milestoneTargetRef = symbolicTarget === undefined ? undefined : symbolicTarget === "" ? "HEAD" : symbolicTarget;
+  const milestoneTargetHead = milestoneTargetRef === undefined
+    ? undefined
+    : await resolveCommit(dependencies.runner, milestoneTargetRef);
+  const milestoneBaseline = milestoneTargetRef === undefined
+    ? undefined
+    : produce.value.artifact.artifact_kind === "implementation-output"
+      ? produce.value.artifact.base_commit
+      : milestoneTargetHead;
   const settled = nextStateForRecord(current.value, record, digest);
   const settlement = buildRuleSettlement(
     current.value, produce.value.artifact_digest, config.snapshot.digest, conclusion, milestoneBaseline,
+    milestoneTargetRef === undefined || milestoneTargetHead === undefined
+      ? undefined
+      : { ref: milestoneTargetRef, head: milestoneTargetHead },
   );
   const ruleSettlements = Object.freeze([
     ...(settled.value.rule_settlements ?? []),
@@ -710,6 +729,146 @@ function exactOpenGateMatches(state: TaskStateV1, request: GateRequestV1): boole
   ) return false;
   const { open_gate: _open, last_transition: _transition, ...base } = state;
   return open.frozen_state_digest === openGateFrozenStateDigest(base as TaskStateV1);
+}
+
+export type StaleBaselineRefreshPlan = Readonly<{
+  state: CanonicalDocument<TaskStateV1>;
+  supersession: CanonicalDocument<StaleBaselineGateSupersessionV1>;
+}>;
+
+export type LiveBaselineSubject = Readonly<{
+  context: Extract<GateRequestV1, { readonly kind: "baseline-adoption" }>["context"];
+  presented_head_on_current_first_parent: boolean;
+}>;
+
+export type StaleBaselineRefreshResult = Readonly<{
+  state: CanonicalDocument<TaskStateV1>;
+  supersession: CanonicalDocument<StaleBaselineGateSupersessionV1>;
+  replayed: boolean;
+}>;
+
+/**
+ * Plans the authority-only portion of `refresh-stale-baseline`. The caller owns repository
+ * discovery and atomically archiving the returned record/removing the disposable projection.
+ * This function deliberately does not open a replacement gate: fresh status must compose it from
+ * the newly observed subject.
+ */
+export function planStaleBaselineGateRefresh(
+  current: CanonicalDocument<TaskStateV1>,
+  request: Extract<GateRequestV1, { readonly kind: "baseline-adoption" }>,
+  liveContext: Extract<GateRequestV1, { readonly kind: "baseline-adoption" }>["context"],
+): ProjectResult<StaleBaselineRefreshPlan> {
+  if (!exactOpenGateMatches(current.value, request)) {
+    return issue("STATE_INVALID", current.value, "stale-baseline-open-gate-mismatch");
+  }
+  const liveSubjectDigest = baselineAdoptionDriftDigest(liveContext);
+  const liveContextDigest = computeGateContextDigest("baseline-adoption", liveContext);
+  if (liveSubjectDigest === request.subject_digest && liveContextDigest === request.context_digest) {
+    return issue("STATE_INVALID", current.value, "baseline-adoption-interface-current");
+  }
+  const resultingRevision = parseSafeInteger(current.value.revision + 1);
+  const { open_gate: _openGate, last_transition: _lastTransition, ...preserved } = current.value;
+  const next = canonicalDocument({ ...preserved, revision: resultingRevision } as TaskStateV1);
+  const supersession = canonicalDocument({
+    schema_version: "1",
+    gate_id: request.gate_id,
+    task_id: request.task_id,
+    phase_instance: request.phase_instance,
+    kind: "baseline-adoption",
+    subject_digest: request.subject_digest,
+    context_digest: request.context_digest,
+    outcome: "superseded-stale-baseline",
+    live_subject_digest: liveSubjectDigest,
+    live_context_digest: liveContextDigest,
+    superseded_at_revision: resultingRevision,
+  } satisfies StaleBaselineGateSupersessionV1);
+  return ok(Object.freeze({ state: next, supersession }));
+}
+
+/**
+ * Locked, crash-resumable stale-interface mutation. Live discovery runs inside the task lock. The
+ * immutable archive is installed before state is replaced, so a crash can only leave an archive
+ * that the next call authenticates and completes; it can never clear the open authority without
+ * preserving why. Disposable gate projections are removed only after durable state lands.
+ */
+export async function refreshStaleBaselineGate(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  expectedRevision: number,
+  discoverLiveSubject: (
+    current: CanonicalDocument<TaskStateV1>,
+    request: Extract<GateRequestV1, { readonly kind: "baseline-adoption" }>,
+  ) => Promise<ProjectResult<LiveBaselineSubject>>,
+): Promise<ProjectResult<StaleBaselineRefreshResult>> {
+  try {
+    return await dependencies.lock.runExclusive(authority.workspace_root, async () => {
+      const stateResult = await stateOrFailure(dependencies, authority);
+      if (!stateResult.ok) return stateResult;
+      const current = stateResult.value;
+      if (current.value.revision !== expectedRevision) {
+        return issue("STATE_INVALID", current.value, "stale-baseline-revision-mismatch");
+      }
+      const open = current.value.open_gate;
+      if (open === undefined || open.gate_kind !== "baseline-adoption") {
+        return issue("STATE_INVALID", current.value, "stale-baseline-open-gate-missing");
+      }
+      const requestPath = await resolvePath(dependencies, authority, gateRequestClaim(open.gate_id), "authority-decision");
+      const archivePath = await resolvePath(dependencies, authority, gateDecisionClaim(open.gate_id), "authority-decision");
+      if (!requestPath.ok) return requestPath;
+      if (!archivePath.ok) return archivePath;
+      const loaded = await readCanonical(requestPath.value, "baseline gate request", parsePersistedGateRequest);
+      if (loaded === "missing" || loaded === "invalid" || loaded.value.kind !== "baseline-adoption") {
+        return issue("STATE_INVALID", current.value, "stale-baseline-request-invalid");
+      }
+      const request = loaded.value as Extract<GateRequestV1, { readonly kind: "baseline-adoption" }>;
+      const existing = await readCanonical(archivePath.value, "stale baseline supersession", (value) => {
+        const parsed = parseArchivedGateDecisionRecord(value);
+        if (parsed.outcome !== "superseded-stale-baseline") throw new TypeError("not a stale baseline supersession");
+        return parsed;
+      });
+      if (existing === "invalid") return issue("STATE_INVALID", current.value, "stale-baseline-archive-invalid");
+
+      let plan: ProjectResult<StaleBaselineRefreshPlan>;
+      if (existing === "missing") {
+        const live = await discoverLiveSubject(current, request);
+        if (!live.ok) return live;
+        const freshness = assessBaselineSubjectFreshness(
+          request, live.value.context, live.value.presented_head_on_current_first_parent,
+        );
+        if (freshness.classification !== "stale") {
+          return issue("STATE_INVALID", current.value, "baseline-adoption-interface-current");
+        }
+        plan = planStaleBaselineGateRefresh(current, request, live.value.context);
+        if (!plan.ok) return plan;
+        if (await dependencies.atomic.createExclusive(archivePath.value, plan.value.supersession.bytes) !== "created") {
+          return issue("STATE_INVALID", current.value, "stale-baseline-supersession-race");
+        }
+      } else {
+        if (
+          existing.value.gate_id !== request.gate_id ||
+          existing.value.task_id !== request.task_id ||
+          existing.value.phase_instance !== request.phase_instance ||
+          existing.value.subject_digest !== request.subject_digest ||
+          existing.value.context_digest !== request.context_digest ||
+          existing.value.superseded_at_revision !== current.value.revision + 1
+        ) return issue("STATE_INVALID", current.value, "stale-baseline-archive-binding-invalid");
+        const { open_gate: _openGate, last_transition: _transition, ...preserved } = current.value;
+        plan = ok({
+          state: canonicalDocument({ ...preserved, revision: parseSafeInteger(current.value.revision + 1) } as TaskStateV1),
+          supersession: existing,
+        });
+      }
+      if (!plan.ok) return plan;
+      await dependencies.atomic.replace(authority.state, plan.value.state.bytes);
+      for (const projection of ["gate.json", "gate.decision"] as const) {
+        const path = await resolvePath(dependencies, authority, projection, "workspace-gate-interface");
+        if (path.ok) await dependencies.atomic.removeGateInterface(path.value);
+      }
+      return ok(Object.freeze({ ...plan.value, replayed: existing !== "missing" }));
+    });
+  } catch (error) {
+    return error instanceof TaskLockError ? io(authority, `stale-baseline-lock-${error.stage}`) : io(authority, "stale-baseline-refresh");
+  }
 }
 
 function completedMaterialDriftRestartMatches(

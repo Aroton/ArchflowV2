@@ -310,6 +310,8 @@
             "open-waiver",
             "decide",
             "refresh-milestone-baseline",
+            "recover-milestone-authority",
+            "refresh-stale-baseline",
             "commit",
             "start-next-skill",
             "finish-task",

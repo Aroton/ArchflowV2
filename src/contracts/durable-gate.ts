@@ -136,10 +136,22 @@ export type GateDecisionRecordV1 = GateDecisionRecordCommon & (
   | { readonly outcome: "cancelled"; readonly reason: string; readonly human_provenance: HumanDecisionProvenance }
 );
 
+/**
+ * Server-authored audit record for disposal of a stale baseline interface. It records no human
+ * decision and grants no adoption, restoration, review, approval, or commit authority.
+ */
+export type StaleBaselineGateSupersessionV1 = GateDecisionRecordCommon & {
+  readonly kind: "baseline-adoption";
+  readonly outcome: "superseded-stale-baseline";
+  readonly live_subject_digest: Sha256Digest;
+  readonly live_context_digest: Sha256Digest;
+  readonly superseded_at_revision: SafeInteger;
+};
+
 type LegacyGateDecisionRecordCommonV1 = GateDecisionRecordCommon & {
   readonly supplemental: LegacySupplementalLedgerV1;
 };
-export type ArchivedGateDecisionRecordV1 = GateDecisionRecordV1 | (LegacyGateDecisionRecordCommonV1 & (
+export type ArchivedGateDecisionRecordV1 = GateDecisionRecordV1 | StaleBaselineGateSupersessionV1 | (LegacyGateDecisionRecordCommonV1 & (
   | { readonly outcome: "decided"; readonly envelope: GateDecisionEnvelope }
   | { readonly outcome: "waiver-decided"; readonly granted: boolean; readonly scope: WaiverScope; readonly origin: WaiverOriginRef; readonly notes: string; readonly human_provenance: HumanDecisionProvenance }
   | { readonly outcome: "cancelled"; readonly reason: string; readonly human_provenance: HumanDecisionProvenance }
@@ -206,6 +218,15 @@ const decisionRecordArms = {
   waiverDecided: z.object({ ...base, outcome: z.literal("waiver-decided"), granted: z.boolean(), scope, origin, notes: text, human_provenance: humanDecisionProvenanceV1Schema }).strict(),
   cancelled: z.object({ ...base, outcome: z.literal("cancelled"), reason: text, human_provenance: humanDecisionProvenanceV1Schema }).strict(),
 } as const;
+
+export const staleBaselineGateSupersessionV1Schema = z.object({
+  ...base,
+  kind: z.literal("baseline-adoption"),
+  outcome: z.literal("superseded-stale-baseline"),
+  live_subject_digest: digest,
+  live_context_digest: digest,
+  superseded_at_revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+}).strict() as unknown as z.ZodType<StaleBaselineGateSupersessionV1>;
 
 export const gateDecisionRecordV1Schema = z.discriminatedUnion("outcome", [
   decisionRecordArms.decided,
@@ -461,7 +482,9 @@ export function parsePersistedGateRequest(value: unknown): GateRequestV1 {
 export function parseArchivedGateDecisionRecord(value: unknown): ArchivedGateDecisionRecordV1 {
   assertPlainJson(value, "archived gate decision record");
   const current = gateDecisionRecordV1Schema.safeParse(value);
-  return (current.success ? current.data : legacyDecisionRecordV1Schema.parse(value)) as ArchivedGateDecisionRecordV1;
+  if (current.success) return current.data;
+  const supersession = staleBaselineGateSupersessionV1Schema.safeParse(value);
+  return (supersession.success ? supersession.data : legacyDecisionRecordV1Schema.parse(value)) as ArchivedGateDecisionRecordV1;
 }
 
 export function parseActiveGate(value: unknown): ActiveGateV1 {

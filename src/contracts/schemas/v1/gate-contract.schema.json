@@ -468,6 +468,18 @@
             ],
             "additionalProperties": false
           }
+        },
+        "target_ref": {
+          "$ref": "#/$defs/text"
+        },
+        "target_head": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+        },
+        "uncommitted_paths": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+          }
         }
       },
       "required": [

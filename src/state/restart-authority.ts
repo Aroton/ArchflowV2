@@ -27,12 +27,25 @@ export function latestRestartRevisionAffectingPhase(
   return latest;
 }
 
+/** Latest authority reset, including same-position milestone recovery. */
+export function latestAuthorityCutoffRevision(
+  state: TaskStateV1,
+  authorityPhase: PhaseInstanceId,
+): number | undefined {
+  let latest = latestRestartRevisionAffectingPhase(state, authorityPhase);
+  for (const recovery of state.milestone_recovery_history ?? []) {
+    if (recovery.phase_instance !== authorityPhase) continue;
+    if (latest === undefined || recovery.recovered_at_revision > latest) latest = recovery.recovered_at_revision;
+  }
+  return latest;
+}
+
 export function approvalIsEligibleAfterLatestRestart(
   state: TaskStateV1,
   approval: ApprovalRef,
   authorityPhase: PhaseInstanceId,
 ): boolean {
-  const cutoff = latestRestartRevisionAffectingPhase(state, authorityPhase);
+  const cutoff = latestAuthorityCutoffRevision(state, authorityPhase);
   return cutoff === undefined || approval.resolved_at_revision > cutoff;
 }
 
@@ -49,7 +62,7 @@ export function ruleSettlementIsEligibleAfterLatestRestart(
   settlement: RuleSettlementV1,
   authorityPhase: PhaseInstanceId,
 ): boolean {
-  const cutoff = latestRestartRevisionAffectingPhase(state, authorityPhase);
+  const cutoff = latestAuthorityCutoffRevision(state, authorityPhase);
   return cutoff === undefined || settlement.settled_at_revision > cutoff;
 }
 
@@ -170,6 +183,59 @@ export function isExactPlanningRestartDraft(current: TaskStateV1, next: StateDra
     ...(targetKind === "prd" || targetKind === "design" || plannedFinalPhase === undefined
       ? {}
       : { planned_final_phase: plannedFinalPhase }),
+  };
+  return isDeepStrictEqual(next, expected);
+}
+
+/** Independent transaction-kernel validation for a same-position milestone authority recovery. */
+export function isExactMilestoneRecoveryDraft(current: TaskStateV1, next: StateDraft): boolean {
+  if (current.terminal !== undefined || current.open_gate !== undefined || next.open_gate !== undefined) return false;
+  const previous = current.milestone_recovery_history ?? [];
+  const following = next.milestone_recovery_history ?? [];
+  if (following.length !== previous.length + 1) return false;
+  const priorById = new Map(previous.map((record) => [record.recovery_id, record]));
+  const additions = following.filter((record) => !priorById.has(record.recovery_id));
+  if (additions.length !== 1 || previous.some((record) =>
+    !isDeepStrictEqual(record, following.find((candidate) => candidate.recovery_id === record.recovery_id)))) return false;
+  const recovery = additions[0]!;
+  if (
+    recovery.phase_instance !== current.phase_instance ||
+    next.phase_instance !== current.phase_instance ||
+    recovery.recovered_at_revision !== current.revision + 1 ||
+    recovery.target_ref.trim() === "" ||
+    next.step !== "produce" || next.status !== "running" || next.attempt !== 1 ||
+    !isDeepStrictEqual(recovery.cleared_waivers, current.waivers) || next.waivers.length !== 0 ||
+    !isDeepStrictEqual(recovery.cleared_pending_human_revision, current.pending_human_revision) ||
+    next.pending_human_revision !== undefined ||
+    !isDeepStrictEqual(next.approvals, current.approvals) ||
+    next.planned_final_phase !== current.planned_final_phase
+  ) return false;
+  const superseded = current.authoritative_results.filter((reference) =>
+    reference.phase_instance === current.phase_instance);
+  const retained = current.authoritative_results.filter((reference) =>
+    reference.phase_instance !== current.phase_instance);
+  if (!isDeepStrictEqual(recovery.superseded_results, superseded) ||
+      !isDeepStrictEqual(next.authoritative_results, retained)) return false;
+
+  const {
+    revision: _revision,
+    last_transition: _lastTransition,
+    pending_human_revision: _pendingHumanRevision,
+    milestone_recovery_history: _recoveryHistory,
+    ...preserved
+  } = current;
+  const expectedHistory = Object.freeze(
+    [...previous, recovery].sort((left, right) => left.recovery_id.localeCompare(right.recovery_id)),
+  );
+  const expected: StateDraft = {
+    ...preserved,
+    step: "produce",
+    status: "running",
+    attempt: 1 as TaskStateV1["attempt"],
+    input_fingerprint: next.input_fingerprint,
+    authoritative_results: retained,
+    waivers: [],
+    milestone_recovery_history: expectedHistory,
   };
   return isDeepStrictEqual(next, expected);
 }

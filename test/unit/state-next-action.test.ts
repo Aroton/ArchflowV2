@@ -148,6 +148,36 @@ describe("deriveNextAction", () => {
       commit_blocked_reason: "target-moved", milestone_refresh_config_matches: false,
     }))).toMatchObject({ code: "run-step", step: "produce", human_required: false });
   });
+
+  it("routes stale interfaces and missing milestone proof through server-selected no-submission actions", () => {
+    expect(deriveNextAction(input({
+      stale_baseline_refresh_required: true,
+      state: state(),
+    }))).toMatchObject({ code: "refresh-stale-baseline", human_required: false });
+    expect(deriveNextAction(input({
+      milestone_recovery_required: true,
+      assessment: assessment("advance"),
+    }))).toMatchObject({ code: "recover-milestone-authority", human_required: false });
+    expect(deriveNextAction(input({
+      milestone_proof_unverifiable_reason: "git-unavailable",
+      assessment: assessment("advance"),
+    }))).toMatchObject({ code: "inspect-state", human_required: true });
+    expect(deriveNextAction(input({
+      milestone_recovery_required: true,
+      milestone_recovery_no_delta: true,
+      assessment: assessment("advance"),
+    }))).toMatchObject({ code: "inspect-state", human_required: true });
+    const governingDrift: ReconciliationFinding = {
+      kind: "projection-mismatch", path: parseRepositoryPathClaim(".archflow/tasks/task/design.md"),
+      recorded_digest: D("a"), observed_digest: D("b"), next_action: "open-baseline-adoption-gate",
+    };
+    expect(deriveNextAction(input({
+      governing_document_recovery_required: true,
+      milestone_recovery_required: true,
+      reconciliation_findings: [governingDrift],
+      assessment: assessment("advance"),
+    }))).toMatchObject({ code: "recover-milestone-authority", human_required: false });
+  });
   it("reopens the produce window when a missing projection has no retained bytes to restore", () => {
     const unrestorable: ReconciliationFinding = {
       kind: "projection-mismatch", path: parseRepositoryPathClaim("src/gone.ts"),

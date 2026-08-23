@@ -1,6 +1,6 @@
 # mcp/SERVER
 
-**Explored:** 2026-08-21 · **Commit:** `869c189` · **Covers:** `src/main.ts`, `src/mcp/`, `src/state/semantic-*.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`
+**Explored:** 2026-08-23 · **Commit:** `0c23ade` · **Covers:** `src/main.ts`, `src/mcp/`, `src/state/semantic-*.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`
 
 `archflow-mcp` is a stdio MCP server speaking newline-delimited JSON-RPC. It is the system's sole authority: the only writer of durable state and the only judge of request validity. It takes no arguments and has no other mode — `src/main.ts` is 28 lines that either print usage or start the runtime.
 
@@ -36,6 +36,8 @@ Human gates deliberately do not keep the MCP request open while waiting for anot
 The shipped v2 constitution makes those presentations targeted rather than universal. Counter-review and constitution review still run first. An exact authenticated approval-rule settlement with `wait:false`, a passing constitution result, aligned upstreams, and no safety or migration condition lets the server return the next commit or successor action directly; the settlement is evidence the server consumes, never authority the caller may interpret for itself. Its `config_digest` records the live rules it evaluated, separately from the task's creation provenance. `wait:true` opens the matching approval presentation, and policy failure or uncertainty, review-trigger matches, migration audit, attempts exhaustion, drift/restore/baseline adoption, cancellation, and the other exception paths remain human-required. In every branch, authority is the fresh action the server returns, not the settlement record.
 
 Commit facts expose that distinction without weakening Git binding. `commit.requires_human_confirmation:true` means durable human authorization already exists but the implementation client must still obtain the separate conversational confirmation before staging and committing. `false` means authenticated rule authority permits direct execution and the client must not invent a confirmation or describe a human decision. In both branches the server supplies the exact baseline, target ref, paths, and message; the client verifies and uses only those facts, then calls read-only status so the server can observe commit proof. Document milestone commits also use `false`: their authority may follow either a settled human gate or an authenticated no-wait path, and clients do not infer which from the boolean.
+
+The semantic action vocabulary also contains two no-submission recovery actions. `refresh-stale-baseline` removes only a stale disposable baseline interface after recomputing its complete repository subject; `recover-milestone-authority` starts a fresh significant owning-position cycle while preserving repository bytes. Their opaque offers bind repository identity, state revision, target/history facts, and the relevant drift or proof cause, and apply revalidates those facts under the task lock. Clients cannot request either action by diagnosis, attach a decision, or treat successful application as approval.
 
 ## How a request flows
 

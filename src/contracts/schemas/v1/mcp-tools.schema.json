@@ -230,7 +230,9 @@
             "type": "string",
             "enum": [
               "planning_restart",
-              "refresh_milestone_baseline"
+              "refresh_milestone_baseline",
+              "recover_milestone_authority",
+              "refresh_stale_baseline"
             ]
           },
           "target_phase_instance": {

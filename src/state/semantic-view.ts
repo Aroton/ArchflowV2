@@ -290,6 +290,20 @@ function mapNextAction(status: TaskStatusV1, snapshot: SemanticStatusSnapshotV1)
         instruction: "Record the current unchanged target as the reviewed milestone baseline, then request fresh status.",
         expected_submission: "none",
       });
+    case "recover-milestone-authority":
+      return Object.freeze({
+        condition: "ready", headline: "Fresh milestone authority is ready", detail: action.detail,
+        action_kind: "recover-milestone-authority",
+        instruction: "Record the same-position authority recovery, then request fresh status before editing.",
+        expected_submission: "none",
+      });
+    case "refresh-stale-baseline":
+      return Object.freeze({
+        condition: "ready", headline: "The stale baseline decision is ready to refresh", detail: action.detail,
+        action_kind: "refresh-stale-baseline",
+        instruction: "Supersede only the stale baseline interface, then request fresh status for the live repository subject.",
+        expected_submission: "none",
+      });
     case "commit-phase": {
       if (action.commit_paths === undefined || action.commit_message === undefined || action.commit_target_ref === undefined || action.commit_baseline === undefined) {
         return inspect("Inspect why the approved implementation commit authority is unavailable.");

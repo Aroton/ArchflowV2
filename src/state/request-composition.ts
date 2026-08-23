@@ -49,7 +49,7 @@ export const APPROVAL_ARTIFACT_KINDS = {
   "phase-design": "phase-design",
   "phase-impl": "phase-implementation",
 } as const;
-import { baselineAdoptionInputFromFindings, buildCommitAuthorizationInput, buildDesignApprovalInput, computeTaskStatus, currentApprovedUpstreams, currentReviewPredecessor, currentTargetRef, pendingAdjudicationGate } from "./status.js";
+import { baselineAdoptionInputFromFindings, buildCommitAuthorizationInput, buildDesignApprovalInput, computeTaskStatus, currentApprovedUpstreams, currentBaselineTargetFacts, currentReviewPredecessor, currentTargetRef, pendingAdjudicationGate } from "./status.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { legalRunStepStatus } from "./transitions.js";
 import {
@@ -72,6 +72,7 @@ export const BUILD_REQUEST_KINDS = Object.freeze([
   "initialize", "produce", "failed", "running", "triage",
   "counter-review", "gate", "advance", "planning-restart", "waiver",
   "refresh-milestone-baseline",
+  "recover-milestone-authority", "refresh-stale-baseline",
 ] as const);
 export type BuildRequestKind = typeof BUILD_REQUEST_KINDS[number];
 
@@ -530,7 +531,10 @@ async function composeGate(
     if (!discovered.ok) return discovered;
     const drift = reconcileCurrentAuthority(discovered.value);
     if (drift.classification === "reconciliation-required") {
-      const adoption = baselineAdoptionInputFromFindings(services.authority.task_id, state, drift.findings);
+      const target = await currentBaselineTargetFacts(services.dependencies, drift.findings);
+      const adoption = baselineAdoptionInputFromFindings(
+        services.authority.task_id, state, drift.findings, target,
+      );
       if (adoption !== undefined) {
         // A restore that can never apply is refused later, before the human decision is archived:
         // the decided interface is immutable, so recording it would wedge the gate behind an
@@ -812,6 +816,30 @@ async function composeRefreshMilestoneBaseline(
   });
 }
 
+async function composeMilestoneRecoveryAction(
+  services: ProductionServices,
+  state: TaskStateV1,
+  intentId: string,
+  code: "recover-milestone-authority" | "refresh-stale-baseline",
+  operation: "recover_milestone_authority" | "refresh_stale_baseline",
+): Promise<ProjectResult<CallEnvelope>> {
+  const computed = await computeTaskStatus(services.dependencies, services.authority);
+  if (!computed.ok) return computed;
+  if (computed.value.next_action.code !== code || computed.value.revision !== state.revision) {
+    return transitionInvalid(state, code);
+  }
+  return computeCallEnvelope(services, {
+    tool: "archflow_state",
+    input: {
+      ...mechanicalInput(services, state, intentId),
+      phase_instance: state.phase_instance,
+      step: state.step,
+      status: state.status,
+      operation,
+    },
+  });
+}
+
 export async function composePlanningRestartRequest(
   services: ProductionServices,
   state: TaskStateV1,
@@ -971,6 +999,18 @@ export async function composeRequest(
     }
     case "refresh-milestone-baseline": {
       const composed = await composeRefreshMilestoneBaseline(services, state, intentId);
+      return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+    }
+    case "recover-milestone-authority": {
+      const composed = await composeMilestoneRecoveryAction(
+        services, state, intentId, "recover-milestone-authority", "recover_milestone_authority",
+      );
+      return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+    }
+    case "refresh-stale-baseline": {
+      const composed = await composeMilestoneRecoveryAction(
+        services, state, intentId, "refresh-stale-baseline", "refresh_stale_baseline",
+      );
       return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
     }
     default:

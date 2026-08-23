@@ -7,6 +7,7 @@ import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parseSafeCode, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import {
   computeInputFingerprint,
+  baselineAdoptionDriftDigest,
   computePinnedConstitutionDigest,
   computePinnedConfigDigest,
   computeRequestDigest,
@@ -312,6 +313,26 @@ const withGetter = <T extends object>(source: T, key: keyof T & string, values: 
   Object.defineProperty(clone, key, { enumerable: true, configurable: true, get: togglingGetter(values) });
   return clone;
 };
+
+describe("baseline adoption subject", () => {
+  it("binds target identity and complete committedness while retaining legacy digest compatibility", () => {
+    const drifted = [{ path: claim("src/a.ts"), recorded_digest: digest("1"), observed_digest: digest("2") }];
+    const legacy = baselineAdoptionDriftDigest({ drifted_projections: drifted });
+    const current = baselineAdoptionDriftDigest({
+      drifted_projections: drifted,
+      target_ref: "refs/heads/main",
+      target_head: oid("a"),
+      uncommitted_paths: [claim("src/a.ts")],
+    });
+    expect(current).not.toBe(legacy);
+    expect(baselineAdoptionDriftDigest({
+      drifted_projections: drifted,
+      target_ref: "refs/heads/main",
+      target_head: oid("a"),
+      uncommitted_paths: [],
+    })).not.toBe(current);
+  });
+});
 
 describe("split-observation defence", () => {
   it("rejects a getter-backed operation_fields instead of digesting a smuggled excluded field", () => {

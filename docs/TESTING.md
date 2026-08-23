@@ -1,6 +1,6 @@
 # TESTING
 
-**Explored:** 2026-08-23 · **Commit:** `92fa1f6` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/build-temp.mjs`, `scripts/smoke-release-bundle.mjs`
+**Explored:** 2026-08-23 · **Commit:** `0c23ade` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/build-temp.mjs`, `scripts/smoke-release-bundle.mjs`
 
 ## The default is deliberately fast
 
@@ -35,6 +35,8 @@ The fast project currently contains 99 unit files and 27 contract files. Slow wo
 The schema split preserves cheap trust boundaries in the fast project. `schema-registry.test.ts` pins the registry/directory identity, generation inventory, and public barrel; `mcp-advertisement.test.ts` pins the two tool names, descriptions, plain input roots, and byte ceiling. Repeated strict Ajv compilation and the classified MCP corpus live in `test/extended/`.
 
 TypeScript still includes every `test/**/*.ts` file, so optional tests cannot silently rot at compile time. `test/types/mcp-sdk-public-surface.ts` remains compile-only coverage exercised by `npm run typecheck`.
+
+Milestone recovery crosses the contract, real-Git, gate, and semantic-journey layers. Focused integration coverage proves first-parent candidate selection through descendants and merges; rejects wrong targets, messages, paths, trees, authorities, rewritten history, missing objects, and ref races; and exercises document, intermediate implementation, and final-completion handoffs under human and no-wait authority. Gate and journey coverage binds the complete drift subject, committed/uncommitted classification, stale-interface refresh and replay refusal, governing-document routing, adoption/restore continuation, missing-proof fresh recovery, the no-empty-commit rewrite inspection, and preservation of unrelated index/worktree sentinels.
 
 ## Commands and targeting
 

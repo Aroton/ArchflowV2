@@ -19,6 +19,15 @@ const taskInitialization = JSON.parse(readFileSync(
 )) as Record<string, unknown>;
 
 describe("correlated MCP tool contracts", () => {
+  it("accepts only payload-free milestone recovery operations", () => {
+    for (const operation of ["recover_milestone_authority", "refresh_stale_baseline"] as const) {
+      const parsed = parseToolCall("archflow_state", { ...stateInput, operation });
+      expect(parsed.input.operation).toBe(operation);
+      expect(() => parseToolCall("archflow_state", { ...stateInput, operation, reason: "invented provenance" })).toThrow(/carries no/);
+      expect(() => parseToolCall("archflow_state", { ...stateInput, operation, artifact: taskInitialization })).toThrow(/carries no/);
+    }
+  });
+
   it("publishes exactly four exact schema fragment pairs", () => {
     expect(Object.keys(TOOL_DEFINITIONS)).toEqual(["archflow_state", "archflow_counter_review", "archflow_gate", "archflow_waiver"]);
     for (const [name, definition] of Object.entries(TOOL_DEFINITIONS)) {

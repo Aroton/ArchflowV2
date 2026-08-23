@@ -1,7 +1,7 @@
 import type { InvocationContext } from "../../contracts/contexts.js";
 import { createProjectError, type ProjectResult } from "../../contracts/errors.js";
 import { canonicalJsonDigest, sha256Bytes } from "../../contracts/canonical.js";
-import { parseSafeId, parseSafeInteger } from "../../contracts/evidence.js";
+import { parsePathSafeId, parseSafeId, parseSafeInteger } from "../../contracts/evidence.js";
 import type { Sha256Digest } from "../../contracts/evidence.js";
 import {
   createInternalResultExpectation,
@@ -11,7 +11,7 @@ import {
 } from "../../contracts/mcp-tools.js";
 import { parseTaskPathClaim } from "../../contracts/path-claims.js";
 import { resolveTaskPath } from "../../repository/paths.js";
-import { resolveCommit } from "../../repository/git.js";
+import { readFirstParentChildAfter, resolveCommit } from "../../repository/git.js";
 import {
   loadAuthenticatedGateApproval,
   type AuthenticatedGateApproval,
@@ -34,11 +34,11 @@ import { runStateInitialization } from "../../state/initialization.js";
 import { identifyTransactionRequest } from "../../state/request.js";
 import { loadCurrentProduceSubject, type CurrentProduceSubject } from "../../state/produce-subject.js";
 import {
-  autonomousDesignArtifactCommittedAtCurrentTarget,
-  autonomousImplementationOutputCommittedAtCurrentTarget,
   approvedDesignWorktreeMatchesRetainedArtifact,
   designArtifactCommittedAtCurrentTarget,
   implementationOutputCommittedAtCurrentTarget,
+  resolveAutonomousDesignMilestoneProof,
+  resolveAutonomousImplementationMilestoneProof,
 } from "../../state/implementation-manifest.js";
 import { decodePhaseInstance } from "../../contracts/phase-instance.js";
 import { exactCommitAuthorizationContext } from "../../contracts/durable-gate.js";
@@ -63,9 +63,12 @@ import {
 import {
   currentApprovedUpstreams,
   currentReviewPredecessor,
+  currentBaselineTargetFacts,
   currentTargetRef,
+  computeTaskStatus,
+  baselineAdoptionInputFromFindings,
 } from "../../state/status.js";
-import { planStateTransition } from "../../state/transitions.js";
+import { planMilestoneRecovery, planStateTransition } from "../../state/transitions.js";
 import { planPlanningRestart } from "../../state/transitions.js";
 import { installPlanningRestartAskAppend, validatePlanningRestartAskAppend } from "../../state/phase-documents.js";
 import {
@@ -80,6 +83,7 @@ import {
 } from "../../state/planned-final-phase.js";
 import { discoverReconciliationInput } from "../../state/reconciliation-discovery.js";
 import { reconcileCurrentAuthority } from "../../state/reconciliation.js";
+import { refreshStaleBaselineGate } from "../../state/gates.js";
 import { compareRuleSettlements } from "../../contracts/durable-state.js";
 import { mapHandlerErrors } from "./errors.js";
 import { openHandlerSession } from "./session.js";
@@ -189,11 +193,20 @@ async function settleApprovalRules(
       ruleContext.config, ruleContext.subject, ruleContext.changedPaths,
     );
     const kind = decodePhaseInstance(current.phase_instance).kind;
-    const milestoneBaseline = !conclusion.wait && (kind === "design" || kind === "phase-design")
-      ? await resolveCommit(services.runner, "HEAD")
+    const milestoneTarget = !conclusion.wait && (kind === "design" || kind === "phase-design" || kind === "phase-impl")
+      ? await currentTargetRef(services.dependencies)
       : undefined;
+    const observedTargetHead = milestoneTarget === undefined
+      ? undefined
+      : await resolveCommit(services.runner, milestoneTarget.value);
+    const milestoneBaseline = milestoneTarget === undefined
+      ? undefined
+      : produce.artifact.artifact_kind === "implementation-output"
+        ? produce.artifact.base_commit
+        : observedTargetHead;
     return buildRuleSettlement(
       current, produce.artifact_digest, config.digest, conclusion, milestoneBaseline,
+      milestoneTarget === undefined ? undefined : { ref: milestoneTarget.value, head: observedTargetHead! },
     );
   } catch {
     // The guard mirror turns these throws into gate-fixed-point-disagreement; a settle that
@@ -212,9 +225,12 @@ export async function handleState(
     const { services } = session.value;
     const restartInput = call.input.operation === "planning_restart" ? call.input : undefined;
     const refreshInput = call.input.operation === "refresh_milestone_baseline" ? call.input : undefined;
-    const artifact = restartInput === undefined && refreshInput === undefined ? call.input.artifact : undefined;
+    const recoveryInput = call.input.operation === "recover_milestone_authority" ? call.input : undefined;
+    const staleBaselineInput = call.input.operation === "refresh_stale_baseline" ? call.input : undefined;
+    const artifact = restartInput === undefined && refreshInput === undefined &&
+      recoveryInput === undefined && staleBaselineInput === undefined ? call.input.artifact : undefined;
     if (services.state === undefined) {
-      if (restartInput !== undefined || refreshInput !== undefined) {
+      if (restartInput !== undefined || refreshInput !== undefined || recoveryInput !== undefined || staleBaselineInput !== undefined) {
         return fail(createProjectError("STATE_MISSING", { phase_instance: call.input.phase_instance }));
       }
       const initialized = await runStateInitialization(services.dependencies, {
@@ -224,6 +240,54 @@ export async function handleState(
       return initialized.ok
         ? Object.freeze({ schema_version: "1", ok: true, value: initialized.value.outcome })
         : initialized;
+    }
+
+    if (staleBaselineInput !== undefined) {
+      const identified = identifyTransactionRequest(call, services.authority, staleBaselineInput.input_fingerprint);
+      const refreshed = await refreshStaleBaselineGate(
+        services.dependencies,
+        services.authority,
+        staleBaselineInput.expected_revision,
+        async (current, request) => {
+          const discovered = await discoverReconciliationInput(services.dependencies, services.authority, current);
+          if (!discovered.ok) return discovered;
+          const reconciliation = reconcileCurrentAuthority(discovered.value);
+          const target = await currentBaselineTargetFacts(services.dependencies, reconciliation.findings);
+          const live = baselineAdoptionInputFromFindings(
+            services.authority.task_id, current.value, reconciliation.findings, target,
+          );
+          if (live === undefined) {
+            return fail(createProjectError("STATE_INVALID", {
+              phase_instance: current.value.phase_instance,
+              issue_code: "stale-baseline-live-subject-unrepresentable",
+            }));
+          }
+          const presentedHead = request.context.target_head;
+          const continuous = presentedHead !== undefined && (
+            presentedHead === target.target_head ||
+            await readFirstParentChildAfter(services.runner, presentedHead, target.target_head) !== undefined
+          );
+          return Object.freeze({
+            schema_version: "1" as const,
+            ok: true as const,
+            value: Object.freeze({
+              context: live.context,
+              presented_head_on_current_first_parent: continuous,
+            }),
+          });
+        },
+      );
+      if (!refreshed.ok) return refreshed;
+      return Object.freeze({
+        schema_version: "1",
+        ok: true,
+        value: Object.freeze({
+          path: parseTaskPathClaim("state.json"),
+          revision: refreshed.value.state.value.revision,
+          status: refreshed.value.state.value.status,
+          request_digest: identified.request_digest,
+        }),
+      });
     }
 
     if (restartInput !== undefined) {
@@ -292,6 +356,49 @@ export async function handleState(
       services.dependencies,
       { authority: services.authority, call },
       async (current, identifiedCall, liveConfig): Promise<ProjectResult<PreparedTransaction<"archflow_state">>> => {
+        if (recoveryInput !== undefined) {
+          const computed = await computeTaskStatus(services.dependencies, services.authority);
+          const recovery = computed.ok ? computed.value.milestone_recovery : undefined;
+          if (!computed.ok || computed.value.next_action.code !== "recover-milestone-authority" ||
+              computed.value.revision !== current.value.revision || recovery === undefined ||
+              recoveryInput.phase_instance !== current.value.phase_instance ||
+              recoveryInput.step !== current.value.step || recoveryInput.status !== current.value.status) {
+            return fail(createProjectError("TRANSITION_INVALID", {
+              phase_instance: current.value.phase_instance,
+              from: `${current.value.step}-${current.value.status}`,
+              to: "milestone-recovery",
+            }));
+          }
+          const recoveryId = parsePathSafeId(`milestone-recovery-${identified.request_digest}`);
+          const planned = planMilestoneRecovery({
+            current: current.value,
+            recovery_id: recoveryId,
+            cause: recovery.cause,
+            target_ref: recovery.target_ref,
+            target_head: recovery.target_head,
+            subject_digest: recovery.subject_digest,
+            recomputed_input_fingerprint: identified.input_fingerprint,
+          });
+          if (!planned.ok) return planned;
+          const revision = parseSafeInteger(current.value.revision + 1);
+          const success = Object.freeze({
+            path: parseTaskPathClaim("state.json"), revision, status: "running" as const,
+            request_digest: identified.request_digest,
+          });
+          const expectation = createInternalResultExpectation({
+            schema_version: "1", tool: "archflow_state", task_id: services.authority.task_id,
+            intent_id: recoveryInput.intent_id, input_fingerprint: identified.input_fingerprint,
+            request_digest: identified.request_digest, result_id: parseSafeId(recoveryId),
+            resulting_revision: revision, success,
+          });
+          const result = validateProjectResultStructure(identifiedCall, {
+            schema_version: "1", ok: true, value: success,
+          });
+          return Object.freeze({
+            schema_version: "1", ok: true,
+            value: Object.freeze({ expectation, result, next_state: planned.value }),
+          });
+        }
         if (refreshInput !== undefined) {
           const state = current.value;
           const decoded = decodePhaseInstance(state.phase_instance);
@@ -335,7 +442,15 @@ export async function handleState(
               phase_instance: state.phase_instance, issue_code: "milestone-baseline-refresh-reconciliation-required",
             }));
           }
-          const head = await resolveCommit(services.runner, "HEAD");
+          const currentTarget = await currentTargetRef(services.dependencies);
+          if (prior.milestone_target_ref !== undefined && currentTarget.value !== prior.milestone_target_ref) {
+            return fail(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance, issue_code: "milestone-baseline-refresh-target-changed",
+            }));
+          }
+          const head = await resolveCommit(
+            services.runner, prior.milestone_target_ref ?? currentTarget.value,
+          );
           if (head === prior.milestone_baseline_commit) {
             return fail(createProjectError("STATE_INVALID", {
               phase_instance: state.phase_instance, issue_code: "milestone-baseline-refresh-not-needed",
@@ -346,6 +461,10 @@ export async function handleState(
             ...prior,
             settled_at_revision: revision,
             milestone_baseline_commit: head,
+            ...(prior.milestone_target_ref === undefined ? {} : {
+              milestone_target_ref: prior.milestone_target_ref,
+              milestone_target_head: head,
+            }),
           });
           const { revision: _revision, last_transition: _transition, ...preserved } = state;
           const settlements = Object.freeze([...(state.rule_settlements ?? []), replacement].sort(compareRuleSettlements));
@@ -704,20 +823,31 @@ export async function handleState(
               }
             }
             if (!commitObserved && authenticatedRuleAcceptance !== undefined) {
-              const baseline = authenticatedRuleAcceptance.settlement.milestone_baseline_commit;
+              const settlement = authenticatedRuleAcceptance.settlement;
+              const baseline = settlement.milestone_baseline_commit;
               if (baseline !== undefined) {
-                const target = await currentTargetRef(services.dependencies);
+                const currentTarget = await currentTargetRef(services.dependencies);
+                const legacyTarget = settlement.milestone_target_ref === undefined;
+                const pinnedTargetValid = legacyTarget || (
+                  settlement.milestone_target_head === baseline &&
+                  currentTarget.value === settlement.milestone_target_ref
+                );
+                const targetRef = legacyTarget ? currentTarget.value : settlement.milestone_target_ref!;
                 const phase = decodePhaseInstance(current.value.phase_instance);
                 if (phase.kind !== "design" && phase.kind !== "phase-design") {
                   throw new TypeError("autonomous design commit has a non-design phase");
                 }
                 const phaseLabel = phase.kind === "design" ? "design" : `phase ${String(phase.phase)} design`;
-                commitObserved = (await autonomousDesignArtifactCommittedAtCurrentTarget(
-                  services.runner, current.value, currentProduce.artifact,
-                  currentProduce.retained.manifest.value.outputs, target.value, baseline,
-                  `ArchFlow: Approve ${current.value.task_id} ${phaseLabel}`,
-                  services.authority.context,
-                )).observed;
+                const proof = pinnedTargetValid
+                  ? await resolveAutonomousDesignMilestoneProof(
+                      services.runner, current.value, currentProduce.artifact,
+                      currentProduce.retained.manifest.value.outputs, targetRef, baseline,
+                      `ArchFlow: Approve ${current.value.task_id} ${phaseLabel}`,
+                      services.authority.context,
+                    )
+                  : undefined;
+                commitObserved = proof?.kind === "proven" &&
+                  (!legacyTarget || proof.commit === proof.target_head);
               }
               if (commitObserved && current.value.phase_instance === "design") {
                 const bound = await loadAutonomousDesignFinalPhase(
@@ -759,12 +889,24 @@ export async function handleState(
               }
             }
             if (!commitObserved && authenticatedRuleAcceptance !== undefined) {
-              const target = await currentTargetRef(services.dependencies);
-              const phase = decodePhaseInstance(source.phase_instance);
-              commitObserved = await autonomousImplementationOutputCommittedAtCurrentTarget(
-                services.runner, source, target.value,
-                `ArchFlow: Implement ${source.task_id} phase ${phase.kind === "phase-impl" ? String(phase.phase) : source.phase_instance}`,
+              const settlement = authenticatedRuleAcceptance.settlement;
+              const currentTarget = await currentTargetRef(services.dependencies);
+              const legacyTarget = settlement.milestone_target_ref === undefined;
+              const pinnedTargetValid = legacyTarget || (
+                settlement.milestone_target_head === source.base_commit &&
+                settlement.milestone_baseline_commit === source.base_commit &&
+                currentTarget.value === settlement.milestone_target_ref
               );
+              const targetRef = legacyTarget ? currentTarget.value : settlement.milestone_target_ref!;
+              const phase = decodePhaseInstance(source.phase_instance);
+              const proof = pinnedTargetValid
+                ? await resolveAutonomousImplementationMilestoneProof(
+                    services.runner, source, targetRef,
+                    `ArchFlow: Implement ${source.task_id} phase ${phase.kind === "phase-impl" ? String(phase.phase) : source.phase_instance}`,
+                  )
+                : undefined;
+              commitObserved = proof?.kind === "proven" &&
+                (!legacyTarget || proof.commit === proof.target_head);
             }
           }
         }
@@ -822,6 +964,31 @@ export async function handleState(
                 )).observed;
               }
             }
+          }
+        }
+        // A consuming mutation independently closes the reconciliation race. The milestone
+        // observations above are compatibility wrappers over the shared structured proof
+        // resolver, so this preserves one proof interpretation without requiring a raw state-tool
+        // caller to reproduce status's higher-level action projection.
+        if (completionSignal || artifactPhaseExitSignal || legacyJumpSignal) {
+          const discovered = await discoverReconciliationInput(
+            services.dependencies, services.authority, current,
+          );
+          if (!discovered.ok) return discovered;
+          const reconciled = reconcileCurrentAuthority(discovered.value);
+          if (reconciled.findings.length !== 0 || (discovered.value.blocking_reasons ?? []).length !== 0) {
+            return fail(createProjectError("STATE_INVALID", {
+              phase_instance: current.value.phase_instance,
+              issue_code: "milestone-consumption-reconciliation-required",
+            }));
+          }
+          if (commitObserved && artifactPhaseExitSignal && current.value.phase_instance === "design" &&
+              authenticatedRuleAcceptance !== undefined && derivedPlannedFinalPhase === undefined) {
+            const bound = await loadAutonomousDesignFinalPhase(
+              services.dependencies, current.value, completionSubjectDigest!,
+            );
+            if (!bound.ok) return bound;
+            derivedPlannedFinalPhase = bound.value;
           }
         }
         const transitionInput = {
