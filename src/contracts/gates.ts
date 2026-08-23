@@ -73,7 +73,19 @@ export interface GateContractByKind {
    * pins the exact byte set the human decision covers: the adoption records `observed_digest`, the
    * restore rewrites to `recorded_digest`, and neither can be re-pointed at other bytes.
    */
-  readonly "baseline-adoption": { readonly context: { readonly drifted_projections: readonly BaselineDriftedProjection[]; /** Absent on archives written before deletion adoption existed; fresh contexts always carry it. */ readonly deleted_projections?: readonly BaselineDeletedProjection[] }; readonly decision: { readonly decision: "adopt-current-bytes" | "restore-recorded-bytes" | "adopt-committed-deletions" | "abort"; readonly reason: string } };
+  readonly "baseline-adoption": { readonly context: {
+    readonly drifted_projections: readonly BaselineDriftedProjection[];
+    /** Absent on archives written before deletion adoption existed; fresh contexts always carry it. */
+    readonly deleted_projections?: readonly BaselineDeletedProjection[];
+    /**
+     * Present together on newly composed requests. The target head is the disclosed continuity
+     * anchor; `uncommitted_paths` is the complete committedness classification for the drift set.
+     * Legacy archives omit the whole trio and remain readable.
+     */
+    readonly target_ref?: string;
+    readonly target_head?: GitOid;
+    readonly uncommitted_paths?: readonly RepositoryPathClaim[];
+  }; readonly decision: { readonly decision: "adopt-current-bytes" | "restore-recorded-bytes" | "adopt-committed-deletions" | "abort"; readonly reason: string } };
   readonly "migration-audit": { readonly context: { readonly source_identity_digest: Sha256Digest; readonly destination_identity_digest: Sha256Digest; readonly import_digest: Sha256Digest; readonly code_baseline_digest: Sha256Digest; readonly policy_baseline_digest: Sha256Digest; readonly resume_phase?: PhaseInstanceId; readonly planned_final_phase?: number; readonly imported_documents?: readonly { readonly path: RepositoryPathClaim; readonly content_digest: Sha256Digest }[]; readonly target_ref?: string; readonly baseline_commit?: GitOid; readonly commit_message?: string }; readonly decision: { readonly decision: "accept-import-audit" | "revise" | "abort"; readonly reason: string } };
 }
 
@@ -224,10 +236,26 @@ const contexts = {
     // `default` is an annotation, so a required-but-defaulted field would retroactively reject
     // decisions a human already made.
     deleted_projections: z.array(z.object({ path: repositoryPathClaimV1Schema, recorded_digest: digest }).strict()).optional(),
+    target_ref: boundedText.optional(),
+    target_head: gitOidV1Schema.optional(),
+    uncommitted_paths: z.array(repositoryPathClaimV1Schema).optional(),
   }).strict().superRefine((value, context) => {
     const deleted = value.deleted_projections ?? [];
     if (!sortedUnique(value.drifted_projections, (left, right) => left.path.localeCompare(right.path))) context.addIssue({ code: "custom", message: "drifted projections must be sorted by path with no duplicates" });
     if (value.drifted_projections.some((item) => item.recorded_digest === item.observed_digest)) context.addIssue({ code: "custom", message: "a drifted projection must differ between its recorded and observed digests" });
+    const targetFacts = [value.target_ref, value.target_head, value.uncommitted_paths];
+    if (targetFacts.some((item) => item !== undefined) && targetFacts.some((item) => item === undefined)) {
+      context.addIssue({ code: "custom", path: ["target_ref"], message: "baseline target ref, head, and uncommitted paths must be written together" });
+    }
+    if (value.uncommitted_paths !== undefined &&
+        !sortedUnique(value.uncommitted_paths, (left, right) => left.localeCompare(right))) {
+      context.addIssue({ code: "custom", path: ["uncommitted_paths"], message: "uncommitted paths must be sorted with no duplicates" });
+    }
+    if (value.uncommitted_paths?.some((path) =>
+      !value.drifted_projections.some((entry) => entry.path === path) &&
+      !deleted.some((entry) => entry.path === path))) {
+      context.addIssue({ code: "custom", path: ["uncommitted_paths"], message: "uncommitted paths must belong to the complete drift set" });
+    }
     if (!sortedUnique(deleted, (left, right) => left.path.localeCompare(right.path))) context.addIssue({ code: "custom", message: "deleted projections must be sorted by path with no duplicates" });
     if (value.drifted_projections.length === 0 && deleted.length === 0) context.addIssue({ code: "custom", message: "a baseline adoption must name at least one drifted or deleted projection" });
     const driftedPaths = new Set(value.drifted_projections.map((item) => item.path));

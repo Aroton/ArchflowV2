@@ -373,6 +373,11 @@ export function baselineAdoptionDriftDigest(context: GateContext<"baseline-adopt
     digest_kind: "baseline-adoption-drift",
     drifted_projections: snapshot.drifted_projections,
     ...((snapshot.deleted_projections ?? []).length === 0 ? {} : { deleted_projections: snapshot.deleted_projections }),
+    ...(snapshot.target_ref === undefined ? {} : {
+      target_ref: snapshot.target_ref,
+      target_head: snapshot.target_head,
+      uncommitted_paths: snapshot.uncommitted_paths,
+    }),
   });
 }
 

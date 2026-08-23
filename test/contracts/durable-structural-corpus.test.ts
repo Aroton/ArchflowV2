@@ -318,6 +318,25 @@ const taskStateRestartCollections: JsonObject = {
   ],
 };
 
+const recoveryRecord = (recoveryId: string, phaseInstance: string, fill: string): JsonObject => ({
+  recovery_id: recoveryId,
+  phase_instance: phaseInstance,
+  cause: "milestone-proof-missing",
+  target_ref: "refs/heads/main",
+  target_head: fill.repeat(40),
+  subject_digest: fill.repeat(64),
+  recovered_at_revision: 4,
+  superseded_results: [restartResult("phase-impl-1", "a"), restartResult("phase-impl-2", "b")],
+  cleared_waivers: [restartWaiver("gate-a", "c"), restartWaiver("gate-b", "d")],
+});
+const taskStateMilestoneRecoveryCollections: JsonObject = {
+  ...taskStateWithoutOpenGate,
+  milestone_recovery_history: [
+    recoveryRecord("recovery-a", "phase-impl-1", "a"),
+    recoveryRecord("recovery-b", "phase-impl-2", "b"),
+  ],
+};
+
 const taskStateBaselineAdoptionCollections: JsonObject = {
   ...taskStateWithoutOpenGate,
   baseline_adoptions: [
@@ -405,6 +424,9 @@ const DECLARED_SETS: readonly { readonly shape: string; readonly path: string; r
   { shape: "task-state", path: "restart_history", base: taskStateRestartCollections },
   { shape: "task-state", path: "restart_history.0.superseded_results", base: taskStateRestartCollections },
   { shape: "task-state", path: "restart_history.0.cleared_waivers", base: taskStateRestartCollections },
+  { shape: "task-state", path: "milestone_recovery_history", base: taskStateMilestoneRecoveryCollections },
+  { shape: "task-state", path: "milestone_recovery_history.0.superseded_results", base: taskStateMilestoneRecoveryCollections },
+  { shape: "task-state", path: "milestone_recovery_history.0.cleared_waivers", base: taskStateMilestoneRecoveryCollections },
   { shape: "task-state", path: "baseline_adoptions", base: taskStateBaselineAdoptionCollections },
   { shape: "task-state", path: "baseline_adoptions.0.adopted_projections", base: taskStateBaselineAdoptionCollections },
   { shape: "task-state", path: "baseline_adoptions.0.adopted_absences", base: taskStateBaselineAdoptionCollections },
@@ -516,6 +538,9 @@ describe("no array in this phase is exempt from set ordering", () => {
         "task-state/properties/baseline_adoptions/items/properties/adopted_absences",
         "task-state/properties/baseline_adoptions/items/properties/adopted_projections",
         "task-state/properties/human_revision_history",
+        "task-state/properties/milestone_recovery_history",
+        "task-state/properties/milestone_recovery_history/items/properties/cleared_waivers",
+        "task-state/properties/milestone_recovery_history/items/properties/superseded_results",
         "task-state/properties/restart_history",
         "task-state/$defs/ruleSettlementConclusion/oneOf/1/properties/match/oneOf/1/properties/paths",
         "task-state/properties/rule_settlements",

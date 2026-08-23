@@ -178,6 +178,24 @@ export type PlanningRestartRecord = {
 };
 
 /**
+ * Audit evidence for a same-position recovery after the authorized milestone can no longer be
+ * proved on the target. Recovery grants no approval: it retires the active authority graph and
+ * starts a fresh significant production attempt at the same phase instance.
+ */
+export type MilestoneRecoveryRecord = {
+  readonly recovery_id: PathSafeId;
+  readonly phase_instance: PhaseInstanceId;
+  readonly cause: "milestone-proof-missing" | "governing-document-drift";
+  readonly target_ref: string;
+  readonly target_head: GitOid;
+  readonly subject_digest: Sha256Digest;
+  readonly recovered_at_revision: SafeInteger;
+  readonly superseded_results: readonly AuthoritativeResultRef[];
+  readonly cleared_waivers: readonly WaiverRef[];
+  readonly cleared_pending_human_revision?: PendingHumanRevision;
+};
+
+/**
  * One human-approved re-baseline of drifted projections to their observed bytes. Reconciliation
  * overlays these newest-per-path over the retained result manifests' own projections, using
  * `adopted_at_revision` as the ordering key — so a later implementation produce still supersedes
@@ -226,6 +244,9 @@ export type RuleSettlementV1 = {
    * settlement.
    */
   readonly milestone_baseline_commit?: GitOid;
+  /** Written as a pair for new no-wait design milestones; legacy settlements omit both. */
+  readonly milestone_target_ref?: string;
+  readonly milestone_target_head?: GitOid;
   /** `>= 1` (D8), and no later than the containing state's revision. */
   readonly settled_at_revision: SafeInteger;
 };
@@ -344,6 +365,8 @@ export type TaskStateV1 = {
   readonly human_revision_history?: readonly HumanRevisionRecord[];
   /** Sorted by `restart_id`; absent means no planning restart has occurred. */
   readonly restart_history?: readonly PlanningRestartRecord[];
+  /** Sorted by `recovery_id`; absent means no same-position milestone recovery has occurred. */
+  readonly milestone_recovery_history?: readonly MilestoneRecoveryRecord[];
   /** Human-approved re-baselines of drifted projections; see `BaselineAdoptionRecord`. */
   readonly baseline_adoptions?: readonly BaselineAdoptionRecord[];
   /**
@@ -571,18 +594,41 @@ export const ruleSettlementV1Schema = z.object({
   conclusion: ruleSettlementConclusionV1Schema,
   config_digest: sha256Digest,
   milestone_baseline_commit: gitOidV1Schema.optional(),
+  milestone_target_ref: z.string().min(1).max(4096).regex(/\S/u).optional(),
+  milestone_target_head: gitOidV1Schema.optional(),
   settled_at_revision: positiveSafeInteger,
 }).strict().superRefine((settlement, context) => {
+  if ((settlement.milestone_target_ref === undefined) !== (settlement.milestone_target_head === undefined)) {
+    context.addIssue({ code: "custom", path: ["milestone_target_ref"], message: "milestone target ref and head must be written together" });
+  }
+  if (settlement.milestone_target_ref !== undefined && settlement.milestone_baseline_commit === undefined) {
+    context.addIssue({ code: "custom", path: ["milestone_target_ref"], message: "milestone target facts require a milestone baseline" });
+  }
   if (settlement.milestone_baseline_commit === undefined) return;
   const kind = decodePhaseInstance(settlement.phase_instance).kind;
-  if (settlement.conclusion.wait || (kind !== "design" && kind !== "phase-design")) {
+  if (settlement.conclusion.wait || (kind !== "design" && kind !== "phase-design" && kind !== "phase-impl")) {
     context.addIssue({
       code: "custom",
       path: ["milestone_baseline_commit"],
-      message: "milestone baseline is allowed only on a design or phase-design wait:false settlement",
+      message: "milestone baseline is allowed only on a design, phase-design, or phase-implementation wait:false settlement",
     });
   }
 }) as unknown as z.ZodType<RuleSettlementV1>;
+
+export const milestoneRecoveryRecordV1Schema = z.object({
+  recovery_id: pathSafeIdV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  cause: z.enum(["milestone-proof-missing", "governing-document-drift"]),
+  target_ref: z.string().min(1).max(4096).regex(/\S/u),
+  target_head: gitOidV1Schema,
+  subject_digest: sha256Digest,
+  recovered_at_revision: positiveSafeInteger,
+  superseded_results: z.array(authoritativeResultRefV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "superseded_results must be sorted by (phase_instance, step) with no duplicates"),
+  cleared_waivers: z.array(waiverRefV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "cleared_waivers must be sorted by gate_id with no duplicates"),
+  cleared_pending_human_revision: pendingHumanRevisionV1Schema.optional(),
+}).strict() as unknown as z.ZodType<MilestoneRecoveryRecord>;
 
 export const planningRestartRecordV1Schema = z.object({
   restart_id: pathSafeIdV1Schema,
@@ -687,6 +733,9 @@ export const taskStateV1Schema = z.object({
   restart_history: z.array(planningRestartRecordV1Schema)
     .refine((items) => isSortedUniqueBy(items, tupleKey("restart_id")), "restart_history must be sorted by restart_id with no duplicates")
     .optional(),
+  milestone_recovery_history: z.array(milestoneRecoveryRecordV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("recovery_id")), "milestone recovery history must be sorted by recovery_id with no duplicates")
+    .optional(),
   baseline_adoptions: z.array(baselineAdoptionRecordV1Schema)
     .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "baseline_adoptions must be sorted by gate_id with no duplicates")
     .optional(),
@@ -700,6 +749,11 @@ export const taskStateV1Schema = z.object({
   state.restart_history?.forEach((restart, index) => {
     if (restart.restarted_at_revision > state.revision) {
       context.addIssue({ code: "custom", path: ["restart_history", index, "restarted_at_revision"], message: "restart revision cannot exceed the current state revision" });
+    }
+  });
+  state.milestone_recovery_history?.forEach((recovery, index) => {
+    if (recovery.recovered_at_revision > state.revision) {
+      context.addIssue({ code: "custom", path: ["milestone_recovery_history", index, "recovered_at_revision"], message: "milestone recovery revision cannot exceed the current state revision" });
     }
   });
   state.baseline_adoptions?.forEach((adoption, index) => {

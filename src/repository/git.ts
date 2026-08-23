@@ -262,6 +262,7 @@ export type GitCommitTreeEntry = Readonly<{
 
 const HASH_OBJECT_OPERATION = "git-hash-object" as SafeCode;
 const ANCESTOR_OPERATION = "git-ancestor" as SafeCode;
+const FIRST_PARENT_PATH_OPERATION = "git-first-parent-path" as SafeCode;
 const TREE_ENTRY_OPERATION = "git-tree-entry" as SafeCode;
 const TREE_LIST_OPERATION = "git-tree-list" as SafeCode;
 const TREE_DIFF_OPERATION = "git-tree-diff-paths" as SafeCode;
@@ -377,6 +378,29 @@ export async function isCommitAncestorOfHead(
   ancestor: string
 ): Promise<boolean> {
   return isCommitAncestor(runner, ancestor, "HEAD");
+}
+
+/**
+ * Selects the only commit that can be an authorized milestone after `baseline`: the first child
+ * on `target`'s first-parent path. A merge through a non-first parent therefore cannot make an
+ * unrelated milestone appear authorized. Callers pin `target` to an immutable commit before using
+ * this reader and revalidate the live ref after inspecting the returned candidate.
+ */
+export async function readFirstParentChildAfter(
+  runner: GitRunner,
+  baseline: string,
+  target: string,
+): Promise<GitOid | undefined> {
+  if (baseline === target) return undefined;
+  if (!await isCommitAncestor(runner, baseline, target)) return undefined;
+  const commits = await runner.runText({
+    argv: ["rev-list", "--first-parent", target],
+    operation: FIRST_PARENT_PATH_OPERATION,
+  });
+  const chain = commits === "" ? [] : commits.split("\n");
+  const baselineIndex = chain.indexOf(baseline);
+  if (baselineIndex <= 0) return undefined;
+  return parseGitOid(chain[baselineIndex - 1]!);
 }
 
 /** Resolves one exact blob entry from a commit tree; empty output is ordinary absence. */

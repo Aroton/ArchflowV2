@@ -23246,11 +23246,24 @@ var contexts = {
     // field, and the published contract must describe those archives as valid — a JSON Schema
     // `default` is an annotation, so a required-but-defaulted field would retroactively reject
     // decisions a human already made.
-    deleted_projections: external_exports.array(external_exports.object({ path: repositoryPathClaimV1Schema, recorded_digest: digest }).strict()).optional()
+    deleted_projections: external_exports.array(external_exports.object({ path: repositoryPathClaimV1Schema, recorded_digest: digest }).strict()).optional(),
+    target_ref: boundedText.optional(),
+    target_head: gitOidV1Schema.optional(),
+    uncommitted_paths: external_exports.array(repositoryPathClaimV1Schema).optional()
   }).strict().superRefine((value, context2) => {
     const deleted = value.deleted_projections ?? [];
     if (!sortedUnique(value.drifted_projections, (left, right) => left.path.localeCompare(right.path))) context2.addIssue({ code: "custom", message: "drifted projections must be sorted by path with no duplicates" });
     if (value.drifted_projections.some((item) => item.recorded_digest === item.observed_digest)) context2.addIssue({ code: "custom", message: "a drifted projection must differ between its recorded and observed digests" });
+    const targetFacts = [value.target_ref, value.target_head, value.uncommitted_paths];
+    if (targetFacts.some((item) => item !== void 0) && targetFacts.some((item) => item === void 0)) {
+      context2.addIssue({ code: "custom", path: ["target_ref"], message: "baseline target ref, head, and uncommitted paths must be written together" });
+    }
+    if (value.uncommitted_paths !== void 0 && !sortedUnique(value.uncommitted_paths, (left, right) => left.localeCompare(right))) {
+      context2.addIssue({ code: "custom", path: ["uncommitted_paths"], message: "uncommitted paths must be sorted with no duplicates" });
+    }
+    if (value.uncommitted_paths?.some((path2) => !value.drifted_projections.some((entry) => entry.path === path2) && !deleted.some((entry) => entry.path === path2))) {
+      context2.addIssue({ code: "custom", path: ["uncommitted_paths"], message: "uncommitted paths must belong to the complete drift set" });
+    }
     if (!sortedUnique(deleted, (left, right) => left.path.localeCompare(right.path))) context2.addIssue({ code: "custom", message: "deleted projections must be sorted by path with no duplicates" });
     if (value.drifted_projections.length === 0 && deleted.length === 0) context2.addIssue({ code: "custom", message: "a baseline adoption must name at least one drifted or deleted projection" });
     const driftedPaths = new Set(value.drifted_projections.map((item) => item.path));
@@ -23854,6 +23867,14 @@ var decisionRecordArms = {
   waiverDecided: external_exports.object({ ...base, outcome: external_exports.literal("waiver-decided"), granted: external_exports.boolean(), scope, origin, notes: text, human_provenance: humanDecisionProvenanceV1Schema }).strict(),
   cancelled: external_exports.object({ ...base, outcome: external_exports.literal("cancelled"), reason: text, human_provenance: humanDecisionProvenanceV1Schema }).strict()
 };
+var staleBaselineGateSupersessionV1Schema = external_exports.object({
+  ...base,
+  kind: external_exports.literal("baseline-adoption"),
+  outcome: external_exports.literal("superseded-stale-baseline"),
+  live_subject_digest: digest4,
+  live_context_digest: digest4,
+  superseded_at_revision: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER)
+}).strict();
 var gateDecisionRecordV1Schema = external_exports.discriminatedUnion("outcome", [
   decisionRecordArms.decided,
   decisionRecordArms.waiverDecided,
@@ -24014,7 +24035,9 @@ function parsePersistedGateRequest(value) {
 function parseArchivedGateDecisionRecord(value) {
   assertPlainJson(value, "archived gate decision record");
   const current = gateDecisionRecordV1Schema.safeParse(value);
-  return current.success ? current.data : legacyDecisionRecordV1Schema.parse(value);
+  if (current.success) return current.data;
+  const supersession = staleBaselineGateSupersessionV1Schema.safeParse(value);
+  return supersession.success ? supersession.data : legacyDecisionRecordV1Schema.parse(value);
 }
 function parseActiveGate(value) {
   assertPlainJson(value, "active gate");
@@ -25171,6 +25194,7 @@ function createGitRunner(options) {
 }
 var HASH_OBJECT_OPERATION = "git-hash-object";
 var ANCESTOR_OPERATION = "git-ancestor";
+var FIRST_PARENT_PATH_OPERATION = "git-first-parent-path";
 var TREE_ENTRY_OPERATION = "git-tree-entry";
 var TREE_LIST_OPERATION = "git-tree-list";
 var TREE_DIFF_OPERATION = "git-tree-diff-paths";
@@ -25251,6 +25275,18 @@ async function isCommitAncestor(runner, ancestor, descendant) {
 }
 async function isCommitAncestorOfHead(runner, ancestor) {
   return isCommitAncestor(runner, ancestor, "HEAD");
+}
+async function readFirstParentChildAfter(runner, baseline, target) {
+  if (baseline === target) return void 0;
+  if (!await isCommitAncestor(runner, baseline, target)) return void 0;
+  const commits = await runner.runText({
+    argv: ["rev-list", "--first-parent", target],
+    operation: FIRST_PARENT_PATH_OPERATION
+  });
+  const chain = commits === "" ? [] : commits.split("\n");
+  const baselineIndex = chain.indexOf(baseline);
+  if (baselineIndex <= 0) return void 0;
+  return parseGitOid(chain[baselineIndex - 1]);
 }
 async function readCommitTreeBlob(runner, commit, path2) {
   const fields = await runner.runNulFields({
@@ -25558,12 +25594,12 @@ async function resolveRepositoryIdentity(runner, environment, context2) {
     throw error51;
   }
 }
-function verifyRepositoryIdentity(expected, observed2) {
-  if (expected === observed2.digest) return ok3(observed2);
+function verifyRepositoryIdentity(expected, observed) {
+  if (expected === observed.digest) return ok3(observed);
   return fail4(
     createProjectError("REPOSITORY_MISMATCH", {
       expected_digest: expected,
-      observed_digest: observed2.digest
+      observed_digest: observed.digest
     })
   );
 }
@@ -26078,18 +26114,38 @@ var ruleSettlementV1Schema = external_exports.object({
   conclusion: ruleSettlementConclusionV1Schema,
   config_digest: sha256Digest5,
   milestone_baseline_commit: gitOidV1Schema.optional(),
+  milestone_target_ref: external_exports.string().min(1).max(4096).regex(/\S/u).optional(),
+  milestone_target_head: gitOidV1Schema.optional(),
   settled_at_revision: positiveSafeInteger
 }).strict().superRefine((settlement, context2) => {
+  if (settlement.milestone_target_ref === void 0 !== (settlement.milestone_target_head === void 0)) {
+    context2.addIssue({ code: "custom", path: ["milestone_target_ref"], message: "milestone target ref and head must be written together" });
+  }
+  if (settlement.milestone_target_ref !== void 0 && settlement.milestone_baseline_commit === void 0) {
+    context2.addIssue({ code: "custom", path: ["milestone_target_ref"], message: "milestone target facts require a milestone baseline" });
+  }
   if (settlement.milestone_baseline_commit === void 0) return;
   const kind = decodePhaseInstance(settlement.phase_instance).kind;
-  if (settlement.conclusion.wait || kind !== "design" && kind !== "phase-design") {
+  if (settlement.conclusion.wait || kind !== "design" && kind !== "phase-design" && kind !== "phase-impl") {
     context2.addIssue({
       code: "custom",
       path: ["milestone_baseline_commit"],
-      message: "milestone baseline is allowed only on a design or phase-design wait:false settlement"
+      message: "milestone baseline is allowed only on a design, phase-design, or phase-implementation wait:false settlement"
     });
   }
 });
+var milestoneRecoveryRecordV1Schema = external_exports.object({
+  recovery_id: pathSafeIdV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  cause: external_exports.enum(["milestone-proof-missing", "governing-document-drift"]),
+  target_ref: external_exports.string().min(1).max(4096).regex(/\S/u),
+  target_head: gitOidV1Schema,
+  subject_digest: sha256Digest5,
+  recovered_at_revision: positiveSafeInteger,
+  superseded_results: external_exports.array(authoritativeResultRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "superseded_results must be sorted by (phase_instance, step) with no duplicates"),
+  cleared_waivers: external_exports.array(waiverRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "cleared_waivers must be sorted by gate_id with no duplicates"),
+  cleared_pending_human_revision: pendingHumanRevisionV1Schema.optional()
+}).strict();
 var planningRestartRecordV1Schema = external_exports.object({
   restart_id: pathSafeIdV1Schema,
   source_phase_instance: phaseInstanceIdV1Schema,
@@ -26165,6 +26221,7 @@ var taskStateV1Schema = external_exports.object({
   pending_human_revision: pendingHumanRevisionV1Schema.optional(),
   human_revision_history: external_exports.array(humanRevisionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "human_revision_history must be sorted by gate_id with no duplicates").optional(),
   restart_history: external_exports.array(planningRestartRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("restart_id")), "restart_history must be sorted by restart_id with no duplicates").optional(),
+  milestone_recovery_history: external_exports.array(milestoneRecoveryRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("recovery_id")), "milestone recovery history must be sorted by recovery_id with no duplicates").optional(),
   baseline_adoptions: external_exports.array(baselineAdoptionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "baseline_adoptions must be sorted by gate_id with no duplicates").optional(),
   rule_settlements: external_exports.array(ruleSettlementV1Schema).refine(isSortedUniqueRuleSettlements, "rule_settlements must be sorted by (phase_instance, subject_digest, settled_at_revision) with no duplicates").optional(),
   last_seen_config: taskConfigSnapshotV1Schema.optional(),
@@ -26174,6 +26231,11 @@ var taskStateV1Schema = external_exports.object({
   state.restart_history?.forEach((restart, index) => {
     if (restart.restarted_at_revision > state.revision) {
       context2.addIssue({ code: "custom", path: ["restart_history", index, "restarted_at_revision"], message: "restart revision cannot exceed the current state revision" });
+    }
+  });
+  state.milestone_recovery_history?.forEach((recovery, index) => {
+    if (recovery.recovered_at_revision > state.revision) {
+      context2.addIssue({ code: "custom", path: ["milestone_recovery_history", index, "recovered_at_revision"], message: "milestone recovery revision cannot exceed the current state revision" });
     }
   });
   state.baseline_adoptions?.forEach((adoption, index) => {
@@ -26264,7 +26326,7 @@ var stateInputSchema = external_exports.object({
   status: external_exports.enum(["running", "succeeded", "failed"]),
   artifact: durableArtifact.optional(),
   human_revision: humanRevisionDeclarationSchema.optional(),
-  operation: external_exports.enum(["planning_restart", "refresh_milestone_baseline"]).optional(),
+  operation: external_exports.enum(["planning_restart", "refresh_milestone_baseline", "recover_milestone_authority", "refresh_stale_baseline"]).optional(),
   target_phase_instance: phase2.optional(),
   reason: text2.optional(),
   ask_base_digest: digest7.optional()
@@ -26282,6 +26344,12 @@ var stateInputSchema = external_exports.object({
     if (input.step !== "triage" || input.status !== "succeeded") context2.addIssue({ code: "custom", path: ["step"], message: "refresh_milestone_baseline requires triage/succeeded" });
     if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0) {
       context2.addIssue({ code: "custom", path: ["operation"], message: "refresh_milestone_baseline carries no artifact, revision, restart target, reason, or ask digest" });
+    }
+    return;
+  }
+  if (input.operation === "recover_milestone_authority" || input.operation === "refresh_stale_baseline") {
+    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0) {
+      context2.addIssue({ code: "custom", path: ["operation"], message: `${input.operation} carries no artifact, revision, restart target, reason, or ask digest` });
     }
     return;
   }
@@ -26392,7 +26460,7 @@ function successFor(call, value) {
   const parsed = toolSuccessSchemas[call.name].parse(value);
   if (call.name === "archflow_state") {
     const input = call.input;
-    const expectedStatus = input.operation === "planning_restart" ? "running" : input.status;
+    const expectedStatus = input.operation === "planning_restart" || input.operation === "recover_milestone_authority" ? "running" : input.status;
     if (parsed.status !== expectedStatus) throw new TypeError("state status mismatch");
   }
   if (call.name === "archflow_gate") {
@@ -26821,7 +26889,12 @@ function baselineAdoptionDriftDigest(context2) {
     schema_version: "1",
     digest_kind: "baseline-adoption-drift",
     drifted_projections: snapshot2.drifted_projections,
-    ...(snapshot2.deleted_projections ?? []).length === 0 ? {} : { deleted_projections: snapshot2.deleted_projections }
+    ...(snapshot2.deleted_projections ?? []).length === 0 ? {} : { deleted_projections: snapshot2.deleted_projections },
+    ...snapshot2.target_ref === void 0 ? {} : {
+      target_ref: snapshot2.target_ref,
+      target_head: snapshot2.target_head,
+      uncommitted_paths: snapshot2.uncommitted_paths
+    }
   });
 }
 function computePinnedConfigDigest(configBytes) {
@@ -27151,7 +27224,7 @@ async function readConstitutionTreeFiles(runner, commit) {
     oid: parseGitOid(entry.oid)
   })).sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
 }
-function invalidPolicyBase(policyBaseCommit, observed2) {
+function invalidPolicyBase(policyBaseCommit, observed) {
   const expected = canonicalJsonDigest({
     schema_version: "1",
     digest_kind: "policy-base-commit",
@@ -27159,7 +27232,7 @@ function invalidPolicyBase(policyBaseCommit, observed2) {
   });
   return createProjectError("POLICY_BASE_INVALID", {
     expected_digest: expected,
-    ...observed2 === void 0 ? {} : { observed_digest: observed2 }
+    ...observed === void 0 ? {} : { observed_digest: observed }
   });
 }
 async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
@@ -32301,7 +32374,7 @@ function createSecretlintScanner() {
 // src/state/snapshots.ts
 import { chmod, lstat as lstat6, readlink as readlink2 } from "node:fs/promises";
 import { resolve as resolvePath5 } from "node:path";
-import { isDeepStrictEqual as isDeepStrictEqual5 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual6 } from "node:util";
 
 // src/contracts/durable.ts
 import { isDeepStrictEqual as isDeepStrictEqual4 } from "node:util";
@@ -32824,8 +32897,8 @@ function validateDurableSemantics(subject) {
     const stepped = artifact === void 0 ? void 0 : durableSteppedPayload(artifact);
     if (stepped !== void 0 && stepped.phase_instance === state.phase_instance && stepped.step === state.step && stepped.input_fingerprint !== state.input_fingerprint) {
       const expected = state.input_fingerprint;
-      const observed2 = stepped.input_fingerprint;
-      return fail7(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest: expected, observed_digest: observed2 }));
+      const observed = stepped.input_fingerprint;
+      return fail7(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest: expected, observed_digest: observed }));
     }
   }
   if (relation !== void 0 && receipt !== void 0 && intentState !== void 0) {
@@ -32900,43 +32973,112 @@ function validateDurableSemantics(subject) {
 // src/state/implementation-manifest.ts
 import { lstat as lstat5, readFile as readFile2, readlink } from "node:fs/promises";
 import { resolve as resolvePath4 } from "node:path";
-async function implementationOutputCommittedAtCurrentTarget(runner, output, context2) {
+import { isDeepStrictEqual as isDeepStrictEqual5 } from "node:util";
+function missing(targetRef, targetHead, reason2, paths) {
+  return Object.freeze({
+    kind: "missing-from-history",
+    reason: reason2,
+    target_ref: targetRef,
+    target_head: targetHead,
+    ...paths === void 0 ? {} : { paths: Object.freeze([...paths]) }
+  });
+}
+async function pinMilestoneTarget(runner, targetRef, baseline) {
+  try {
+    const symbolicRef = await runner.runText({
+      argv: ["symbolic-ref", "--quiet", "HEAD"],
+      operation: "git-current-milestone-target",
+      expectedAbsence: [{ code: 1, stderrIncludes: "" }]
+    });
+    const head = await resolveCommit(runner, "HEAD");
+    const targetHead = await resolveCommit(runner, targetRef);
+    if ((targetRef === "HEAD" ? symbolicRef !== "" : symbolicRef !== targetRef) || head !== targetHead) {
+      return missing(targetRef, targetHead, "target-moved");
+    }
+    if (targetHead === baseline) return Object.freeze({ target_ref: targetRef, target_head: targetHead });
+    if (!await isCommitAncestor(runner, baseline, targetHead)) {
+      return missing(targetRef, targetHead, "baseline-not-ancestor");
+    }
+    const candidate = await readFirstParentChildAfter(runner, baseline, targetHead);
+    if (candidate === void 0) return missing(targetRef, targetHead, "candidate-not-found");
+    return Object.freeze({ target_ref: targetRef, target_head: targetHead, candidate });
+  } catch (error51) {
+    return Object.freeze({
+      kind: "unverifiable",
+      reason: error51 instanceof GitInvocationError ? "git-unavailable" : "repository-observation-failed"
+    });
+  }
+}
+function isMilestoneProof(value) {
+  return "kind" in value;
+}
+async function candidateStillPinned(runner, pin, baseline) {
   const symbolicRef = await runner.runText({
     argv: ["symbolic-ref", "--quiet", "HEAD"],
-    operation: "git-current-commit-target",
+    operation: "git-current-milestone-target",
     expectedAbsence: [{ code: 1, stderrIncludes: "" }]
   });
-  if (context2.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== context2.target_ref) return false;
-  const headCommit = await resolveCommit(runner, "HEAD");
-  const targetCommit = await resolveCommit(runner, context2.target_ref);
-  if (headCommit !== targetCommit) return false;
-  if (context2.baseline_commit !== output.base_commit || headCommit === context2.baseline_commit) return false;
-  if (await resolveCommit(runner, `${headCommit}^`) !== context2.baseline_commit) return false;
-  const message = await runner.runText({
-    argv: ["log", "-1", "--format=%s", headCommit],
-    operation: "git-implementation-commit-message"
-  });
-  if (message !== context2.commit_message) return false;
-  const authorizedPaths = [...context2.paths].sort(ordinal5);
-  if (JSON.stringify(authorizedPaths) !== JSON.stringify(sortedUniquePaths(output))) return false;
-  const changedPaths = [...new Set(await runner.runNulFields({
-    argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", context2.baseline_commit, headCommit, "--"],
-    operation: "git-implementation-commit-paths"
-  }))].sort(ordinal5);
-  if (JSON.stringify(changedPaths) !== JSON.stringify(authorizedPaths)) return false;
-  for (const entry of output.outputs) {
-    const committed2 = await readCommitTreeBlob(runner, headCommit, entry.path);
-    if (entry.operation === "delete") {
-      if (committed2 !== void 0) return false;
-      continue;
-    }
-    if (committed2?.mode !== entry.after.mode || committed2.oid !== entry.after.oid) return false;
-    if (entry.operation === "rename" && await readCommitTreeBlob(runner, headCommit, entry.previous_path) !== void 0) return false;
-  }
-  return await resolveCommit(runner, "HEAD") === headCommit && await resolveCommit(runner, context2.target_ref) === headCommit;
+  if ((pin.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== pin.target_ref) || await resolveCommit(runner, "HEAD") !== pin.target_head || await resolveCommit(runner, pin.target_ref) !== pin.target_head || !await isCommitAncestor(runner, baseline, pin.target_head)) return false;
+  return await readFirstParentChildAfter(runner, baseline, pin.target_head) === pin.candidate;
 }
-async function autonomousImplementationOutputCommittedAtCurrentTarget(runner, output, targetRef, commitMessage) {
-  return implementationOutputCommittedAtCurrentTarget(runner, output, {
+async function resolveImplementationMilestoneProof(runner, output, context2) {
+  if (context2.baseline_commit !== output.base_commit) {
+    try {
+      const targetHead = await resolveCommit(runner, context2.target_ref);
+      return missing(context2.target_ref, targetHead, "base-commit-mismatch");
+    } catch (error51) {
+      return Object.freeze({ kind: "unverifiable", reason: error51 instanceof GitInvocationError ? "git-unavailable" : "repository-observation-failed" });
+    }
+  }
+  const pinned = await pinMilestoneTarget(runner, context2.target_ref, context2.baseline_commit);
+  if (isMilestoneProof(pinned)) return pinned;
+  if (pinned.candidate === void 0) {
+    return Object.freeze({ kind: "not-created", target_ref: pinned.target_ref, target_head: pinned.target_head });
+  }
+  const pin = pinned;
+  try {
+    if (await resolveCommit(runner, `${pin.candidate}^`) !== context2.baseline_commit) {
+      return missing(pin.target_ref, pin.target_head, "parent-not-baseline");
+    }
+    const message = await runner.runText({
+      argv: ["log", "-1", "--format=%s", pin.candidate],
+      operation: "git-implementation-commit-message"
+    });
+    if (message !== context2.commit_message) return missing(pin.target_ref, pin.target_head, "message-mismatch");
+    const authorizedPaths = [...context2.paths].sort(ordinal5);
+    if (JSON.stringify(authorizedPaths) !== JSON.stringify(sortedUniquePaths(output))) {
+      return missing(pin.target_ref, pin.target_head, "paths-mismatch");
+    }
+    const changedPaths = [...new Set(await runner.runNulFields({
+      argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", context2.baseline_commit, pin.candidate, "--"],
+      operation: "git-implementation-commit-paths"
+    }))].sort(ordinal5);
+    if (JSON.stringify(changedPaths) !== JSON.stringify(authorizedPaths)) {
+      return missing(pin.target_ref, pin.target_head, "paths-mismatch", changedPaths);
+    }
+    for (const entry of output.outputs) {
+      const committed2 = await readCommitTreeBlob(runner, pin.candidate, entry.path);
+      if (entry.operation === "delete") {
+        if (committed2 !== void 0) return missing(pin.target_ref, pin.target_head, "tree-mismatch", [entry.path]);
+        continue;
+      }
+      if (committed2?.mode !== entry.after.mode || committed2.oid !== entry.after.oid) {
+        return missing(pin.target_ref, pin.target_head, "tree-mismatch", [entry.path]);
+      }
+      if (entry.operation === "rename" && await readCommitTreeBlob(runner, pin.candidate, entry.previous_path) !== void 0) {
+        return missing(pin.target_ref, pin.target_head, "tree-mismatch", [entry.previous_path]);
+      }
+    }
+    if (!await candidateStillPinned(runner, pin, context2.baseline_commit)) {
+      return missing(pin.target_ref, pin.target_head, "target-moved");
+    }
+    return Object.freeze({ kind: "proven", commit: pin.candidate, target_ref: pin.target_ref, target_head: pin.target_head });
+  } catch (error51) {
+    return Object.freeze({ kind: "unverifiable", reason: error51 instanceof GitInvocationError ? "git-unavailable" : "repository-observation-failed" });
+  }
+}
+async function resolveAutonomousImplementationMilestoneProof(runner, output, targetRef, commitMessage) {
+  return resolveImplementationMilestoneProof(runner, output, {
     target_ref: targetRef,
     baseline_commit: output.base_commit,
     commit_message: commitMessage,
@@ -32946,26 +33088,7 @@ async function autonomousImplementationOutputCommittedAtCurrentTarget(runner, ou
     parent_document_digests: Object.freeze(output.parent_documents.map((entry) => entry.content_digest).sort())
   });
 }
-var observed = Object.freeze({ observed: true });
-function missed(reason2, paths) {
-  return Object.freeze({
-    observed: false,
-    reason: reason2,
-    blocking: reason2 !== "not-committed",
-    ...paths === void 0 ? {} : { paths: Object.freeze([...paths]) }
-  });
-}
-async function designArtifactCommittedAtCurrentTarget(runner, taskId, artifact, outputs, context2) {
-  const symbolicRef = await runner.runText({
-    argv: ["symbolic-ref", "--quiet", "HEAD"],
-    operation: "git-current-design-target",
-    expectedAbsence: [{ code: 1, stderrIncludes: "" }]
-  });
-  if (context2.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== context2.target_ref) {
-    return missed("target-moved");
-  }
-  const head = await resolveCommit(runner, "HEAD");
-  if (await resolveCommit(runner, context2.target_ref) !== head) return missed("target-moved");
+async function resolveDesignMilestoneProofUnchecked(runner, taskId, artifact, outputs, context2) {
   const prefix = `.archflow/tasks/${taskId}/`;
   const additional = artifact.additional_documents ?? [];
   const approvedDocumentPaths = /* @__PURE__ */ new Set([
@@ -32977,98 +33100,145 @@ async function designArtifactCommittedAtCurrentTarget(runner, taskId, artifact, 
     ...context2.authorized_document_paths ?? []
   ]);
   const unauthorizedDocuments = (paths) => paths.filter((path2) => path2.startsWith(prefix) && isTaskDocumentPath(path2.slice(prefix.length)) && !authorizedDocumentPaths.has(path2));
-  if (head === context2.baseline_commit) {
+  const pinned = await pinMilestoneTarget(runner, context2.target_ref, context2.baseline_commit);
+  if (isMilestoneProof(pinned)) return pinned;
+  if (pinned.candidate === void 0) {
     const pending = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
     const unauthorized2 = unauthorizedDocuments(pending.paths);
-    if (unauthorized2.length > 0) return missed("unauthorized-task-document", unauthorized2);
-    return missed("not-committed");
+    if (unauthorized2.length > 0) return missing(pinned.target_ref, pinned.target_head, "unauthorized-task-document", unauthorized2);
+    return Object.freeze({ kind: "not-created", target_ref: pinned.target_ref, target_head: pinned.target_head });
   }
-  if (await resolveCommit(runner, `${head}^`) !== context2.baseline_commit) {
-    return missed("parent-not-baseline");
+  const pin = pinned;
+  if (await resolveCommit(runner, `${pin.candidate}^`) !== context2.baseline_commit) {
+    return missing(pin.target_ref, pin.target_head, "parent-not-baseline");
   }
   const message = await runner.runText({
-    argv: ["log", "-1", "--format=%s", head],
+    argv: ["log", "-1", "--format=%s", pin.candidate],
     operation: "git-design-commit-message"
   });
-  if (message !== context2.commit_message) return missed("message-mismatch");
+  if (message !== context2.commit_message) return missing(pin.target_ref, pin.target_head, "message-mismatch");
   const changed = await runner.runNulFields({
-    argv: ["diff-tree", "--no-commit-id", "--name-only", "-z", "-r", context2.baseline_commit, head, "--"],
+    argv: ["diff-tree", "--no-commit-id", "--name-only", "-z", "-r", context2.baseline_commit, pin.candidate, "--"],
     operation: "git-design-commit-paths"
   });
-  if (changed.length === 0) return missed("paths-outside-task");
+  if (changed.length === 0) return missing(pin.target_ref, pin.target_head, "paths-outside-task");
   const outsideTask = changed.filter((path2) => !path2.startsWith(prefix));
-  if (outsideTask.length > 0) return missed("paths-outside-task", outsideTask);
-  if (!changed.includes(`${prefix}state.json`)) return missed("missing-recovery-authority");
+  if (outsideTask.length > 0) return missing(pin.target_ref, pin.target_head, "paths-outside-task", outsideTask);
+  if (!changed.includes(`${prefix}state.json`)) return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
   const archivedDecisionPair = changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/request.json")) && changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/decision.json"));
-  if (!archivedDecisionPair) return missed("missing-recovery-authority");
+  if (!archivedDecisionPair) return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
   for (const path2 of approvedDocumentPaths) {
     const output = outputs.find((entry) => entry.path === path2);
-    if (output === void 0 || output.operation === "delete") return missed("approved-document-mismatch", [path2]);
-    const committed2 = await readCommitTreeBlob(runner, head, path2);
+    if (output === void 0 || output.operation === "delete") return missing(pin.target_ref, pin.target_head, "approved-document-mismatch", [path2]);
+    const committed2 = await readCommitTreeBlob(runner, pin.candidate, path2);
     if (committed2?.mode !== output.after.mode || committed2.oid !== output.after.oid) {
-      return missed("approved-document-mismatch", [path2]);
+      return missing(pin.target_ref, pin.target_head, "approved-document-mismatch", [path2]);
     }
     const baseline = await readCommitTreeBlob(runner, context2.baseline_commit, path2);
     const differsFromBaseline = baseline?.mode !== output.after.mode || baseline.oid !== output.after.oid;
-    if (differsFromBaseline && !changed.includes(path2)) return missed("approved-document-mismatch", [path2]);
+    if (differsFromBaseline && !changed.includes(path2)) return missing(pin.target_ref, pin.target_head, "approved-document-mismatch", [path2]);
   }
   const unauthorized = unauthorizedDocuments(changed);
-  if (unauthorized.length > 0) return missed("unauthorized-task-document", unauthorized);
-  const dirty = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
-  if (dirty.paths.length !== 0 || dirty.unrepresentable_count !== 0) {
-    return missed("task-tree-dirty", dirty.paths);
+  if (unauthorized.length > 0) return missing(pin.target_ref, pin.target_head, "unauthorized-task-document", unauthorized);
+  if (!await candidateStillPinned(runner, pin, context2.baseline_commit)) {
+    return missing(pin.target_ref, pin.target_head, "target-moved");
   }
-  return await resolveCommit(runner, "HEAD") === head && await resolveCommit(runner, context2.target_ref) === head ? observed : missed("target-moved");
+  return Object.freeze({ kind: "proven", commit: pin.candidate, target_ref: pin.target_ref, target_head: pin.target_head });
 }
-async function autonomousDesignArtifactCommittedAtCurrentTarget(runner, state, artifact, outputs, targetRef, baselineCommit, commitMessage, context2) {
-  if (!await approvedDesignWorktreeMatchesRetainedArtifact(runner, state.task_id, artifact, outputs, context2)) {
-    return missed("approved-document-mismatch");
+async function resolveDesignMilestoneProof(runner, taskId, artifact, outputs, context2) {
+  try {
+    return await resolveDesignMilestoneProofUnchecked(runner, taskId, artifact, outputs, context2);
+  } catch (error51) {
+    return Object.freeze({
+      kind: "unverifiable",
+      reason: error51 instanceof GitInvocationError ? "git-unavailable" : "repository-observation-failed"
+    });
   }
-  const symbolicRef = await runner.runText({
-    argv: ["symbolic-ref", "--quiet", "HEAD"],
-    operation: "git-current-autonomous-design-target",
-    expectedAbsence: [{ code: 1, stderrIncludes: "" }]
-  });
-  if (targetRef === "HEAD" ? symbolicRef !== "" : symbolicRef !== targetRef) return missed("target-moved");
-  const head = await resolveCommit(runner, "HEAD");
-  if (await resolveCommit(runner, targetRef) !== head) return missed("target-moved");
+}
+async function resolveAutonomousDesignMilestoneProofUnchecked(runner, state, artifact, outputs, targetRef, baselineCommit, commitMessage, context2) {
+  if (!await approvedDesignWorktreeMatchesRetainedArtifact(runner, state.task_id, artifact, outputs, context2)) {
+    try {
+      return missing(targetRef, await resolveCommit(runner, targetRef), "approved-document-mismatch");
+    } catch (error51) {
+      return Object.freeze({ kind: "unverifiable", reason: error51 instanceof GitInvocationError ? "git-unavailable" : "repository-observation-failed" });
+    }
+  }
+  const pinned = await pinMilestoneTarget(runner, targetRef, parseGitOid(baselineCommit));
+  if (isMilestoneProof(pinned)) return pinned;
   const prefix = `.archflow/tasks/${state.task_id}/`;
   const approvedPaths = [artifact.projection_target, ...(artifact.additional_documents ?? []).map((entry) => entry.projection_target)];
   const approvedPathSet = new Set(approvedPaths);
   const unauthorizedDocuments = (paths) => paths.filter((path2) => path2.startsWith(prefix) && isTaskDocumentPath(path2.slice(prefix.length)) && !approvedPathSet.has(path2));
-  if (head === baselineCommit) {
+  if (pinned.candidate === void 0) {
     const pending = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
     const unexpected = unauthorizedDocuments(pending.paths);
-    return unexpected.length === 0 ? missed("not-committed") : missed("unauthorized-task-document", unexpected);
+    return unexpected.length === 0 ? Object.freeze({ kind: "not-created", target_ref: pinned.target_ref, target_head: pinned.target_head }) : missing(pinned.target_ref, pinned.target_head, "unauthorized-task-document", unexpected);
   }
-  if (await resolveCommit(runner, `${head}^`) !== baselineCommit) return missed("parent-not-baseline");
+  const pin = pinned;
+  if (await resolveCommit(runner, `${pin.candidate}^`) !== baselineCommit) return missing(pin.target_ref, pin.target_head, "parent-not-baseline");
   const message = await runner.runText({
-    argv: ["log", "-1", "--format=%s", head],
+    argv: ["log", "-1", "--format=%s", pin.candidate],
     operation: "git-autonomous-design-commit-message"
   });
-  if (message !== commitMessage) return missed("message-mismatch");
+  if (message !== commitMessage) return missing(pin.target_ref, pin.target_head, "message-mismatch");
   const changed = [...new Set(await runner.runNulFields({
-    argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", baselineCommit, head, "--"],
+    argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", baselineCommit, pin.candidate, "--"],
     operation: "git-autonomous-design-commit-paths"
   }))].sort(ordinal5);
-  if (changed.length === 0 || changed.some((path2) => !path2.startsWith(prefix))) return missed("paths-outside-task", changed);
-  if (!changed.includes(`${prefix}state.json`)) return missed("missing-recovery-authority");
+  if (changed.length === 0 || changed.some((path2) => !path2.startsWith(prefix))) return missing(pin.target_ref, pin.target_head, "paths-outside-task", changed);
+  if (!changed.includes(`${prefix}state.json`)) return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
   for (const path2 of approvedPaths) {
     const output = outputs.find((entry) => entry.path === path2);
-    if (output === void 0 || output.operation === "delete") return missed("approved-document-mismatch", [path2]);
-    const committed2 = await readCommitTreeBlob(runner, head, path2);
+    if (output === void 0 || output.operation === "delete") return missing(pin.target_ref, pin.target_head, "approved-document-mismatch", [path2]);
+    const committed2 = await readCommitTreeBlob(runner, pin.candidate, path2);
     if (committed2?.mode !== output.after.mode || committed2.oid !== output.after.oid) {
-      return missed("approved-document-mismatch", [path2]);
+      return missing(pin.target_ref, pin.target_head, "approved-document-mismatch", [path2]);
     }
   }
   const unauthorized = unauthorizedDocuments(changed);
-  if (unauthorized.length !== 0) return missed("unauthorized-task-document", unauthorized);
-  const committedState = await readCommitTreeBlob(runner, head, `${prefix}state.json`);
-  const expectedState = canonicalJsonBytes(state);
-  if (committedState?.oid !== gitBlobOid(expectedState)) return missed("missing-recovery-authority");
-  const dirty = await readChangedGitPaths(runner, [`:(top,literal)${prefix.slice(0, -1)}`]);
-  if (dirty.paths.length !== 0 || dirty.unrepresentable_count !== 0) return missed("task-tree-dirty", dirty.paths);
-  return await resolveCommit(runner, "HEAD") === head && await resolveCommit(runner, targetRef) === head ? observed : missed("target-moved");
+  if (unauthorized.length !== 0) return missing(pin.target_ref, pin.target_head, "unauthorized-task-document", unauthorized);
+  const committedState = await readCommitTreeBlob(runner, pin.candidate, `${prefix}state.json`);
+  if (committedState === void 0) return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
+  const committedStateBytes = await readGitBlobBytes(runner, committedState.oid);
+  let historicalState;
+  try {
+    const decoded = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(committedStateBytes));
+    historicalState = taskStateV1Schema.parse(decoded);
+    if (!isDeepStrictEqual5(canonicalJsonBytes(historicalState), committedStateBytes)) {
+      return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
+    }
+  } catch {
+    return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
+  }
+  const subjectDigest = canonicalJsonDigest(artifact);
+  const historicalSettlement = historicalState.rule_settlements?.find((settlement) => settlement.task_id === state.task_id && settlement.phase_instance === artifact.phase_instance && settlement.subject_digest === subjectDigest && settlement.conclusion.wait === false && settlement.milestone_baseline_commit === baselineCommit);
+  const currentSettlement = state.rule_settlements?.find((settlement) => historicalSettlement !== void 0 && isDeepStrictEqual5(settlement, historicalSettlement));
+  if (historicalSettlement === void 0 || currentSettlement === void 0) {
+    return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
+  }
+  if (!await candidateStillPinned(runner, pin, parseGitOid(baselineCommit))) {
+    return missing(pin.target_ref, pin.target_head, "target-moved");
+  }
+  return Object.freeze({ kind: "proven", commit: pin.candidate, target_ref: pin.target_ref, target_head: pin.target_head });
+}
+async function resolveAutonomousDesignMilestoneProof(runner, state, artifact, outputs, targetRef, baselineCommit, commitMessage, context2) {
+  try {
+    return await resolveAutonomousDesignMilestoneProofUnchecked(
+      runner,
+      state,
+      artifact,
+      outputs,
+      targetRef,
+      baselineCommit,
+      commitMessage,
+      context2
+    );
+  } catch (error51) {
+    return Object.freeze({
+      kind: "unverifiable",
+      reason: error51 instanceof GitInvocationError ? "git-unavailable" : "repository-observation-failed"
+    });
+  }
 }
 async function approvedDesignWorktreeMatchesRetainedArtifact(runner, taskId, artifact, outputs, context2) {
   if (artifact.task_id !== taskId) return false;
@@ -33114,8 +33284,8 @@ function deriveSnapshotDigest(entries) {
     entries: [...entries].sort((left, right) => ordinal5(left.path, right.path))
   });
 }
-function sameIdentity(observed2, expected) {
-  return observed2.state === "present" && observed2.oid === expected.oid && observed2.mode === expected.mode && observed2.size_bytes === expected.size_bytes;
+function sameIdentity(observed, expected) {
+  return observed.state === "present" && observed.oid === expected.oid && observed.mode === expected.mode && observed.size_bytes === expected.size_bytes;
 }
 async function observePath(runner, resolved) {
   const lexicalPath = resolvePath4(runner.location.worktreeRoot, resolved.repositoryRelative);
@@ -33552,21 +33722,21 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
   }
   const entries = [];
   for (const source of materialized) {
-    const observed2 = await observe(source.target);
+    const observed = await observe(source.target);
     if (source.authenticated_before.state === "present") {
-      if (source.rollback === void 0 || !isDeepStrictEqual5(desiredObservation(source.rollback), source.authenticated_before)) {
+      if (source.rollback === void 0 || !isDeepStrictEqual6(desiredObservation(source.rollback), source.authenticated_before)) {
         throw new TypeError("present authenticated before-image requires matching rollback bytes");
       }
     } else if (source.rollback !== void 0 && source.rollback.state !== "absent") {
       throw new TypeError("absent authenticated before-image cannot carry present rollback bytes");
     }
-    const exact = isDeepStrictEqual5(observed2, desiredObservation(source.desired));
-    const before = isDeepStrictEqual5(observed2, source.authenticated_before);
-    const renameDestinationBlocked = source.rename_pair?.role === "destination" && observed2.state !== "absent" && !exact;
+    const exact = isDeepStrictEqual6(observed, desiredObservation(source.desired));
+    const before = isDeepStrictEqual6(observed, source.authenticated_before);
+    const renameDestinationBlocked = source.rename_pair?.role === "destination" && observed.state !== "absent" && !exact;
     entries.push(Object.freeze({
       path: source.path,
       target: source.target,
-      observed_before: observed2,
+      observed_before: observed,
       desired: source.desired,
       ...source.rollback === void 0 ? {} : { rollback: source.rollback },
       git_tracked: source.git_tracked,
@@ -33801,13 +33971,13 @@ async function createProductionServices(input) {
     context: provisionalContext
   });
   if (!provisionalAuthority.ok) return provisionalAuthority;
-  const observed2 = await readTaskState(provisionalAuthority.value.state);
-  if (observed2.kind === "unreadable") {
+  const observed = await readTaskState(provisionalAuthority.value.state);
+  if (observed.kind === "unreadable") {
     return fail9(createProjectError("IO_ERROR", { operation: input.operation, attempt: provisionalContext.attempt }));
   }
-  if (observed2.kind === "noncanonical") return stateFailure(provisionalPhase, "task-state-noncanonical");
-  const resolvedContext = observed2.kind === "canonical" ? context(input, observed2.document.value.phase_instance, observed2.document.value.attempt) : provisionalContext;
-  const authorityResult = observed2.kind === "canonical" ? await createInternalTransactionAuthority({
+  if (observed.kind === "noncanonical") return stateFailure(provisionalPhase, "task-state-noncanonical");
+  const resolvedContext = observed.kind === "canonical" ? context(input, observed.document.value.phase_instance, observed.document.value.attempt) : provisionalContext;
+  const authorityResult = observed.kind === "canonical" ? await createInternalTransactionAuthority({
     runner: discovered.value,
     environment: environment.value,
     task_id: input.task_id,
@@ -33886,7 +34056,7 @@ async function createProductionServices(input) {
     runner: discovered.value,
     environment: environment.value,
     authority,
-    ...observed2.kind === "canonical" ? { state: observed2.document } : {},
+    ...observed.kind === "canonical" ? { state: observed.document } : {},
     dependencies
   }));
 }
@@ -33899,6 +34069,20 @@ function activeGateHead(active, request) {
     subject_digest: request.subject_digest,
     context_digest: request.context_digest
   });
+}
+function assessBaselineSubjectFreshness(request, liveContext, presentedHeadOnCurrentFirstParent) {
+  assertPlainJson(request, "baseline adoption request");
+  assertPlainJson(liveContext, "live baseline adoption context");
+  const context2 = request.context.target_head === void 0 || !presentedHeadOnCurrentFirstParent ? structuredClone(liveContext) : { ...structuredClone(liveContext), target_head: request.context.target_head };
+  const liveSubjectDigest = baselineAdoptionDriftDigest(context2);
+  const liveContextDigest = computeGateContextDigest("baseline-adoption", context2);
+  if (!presentedHeadOnCurrentFirstParent) {
+    return Object.freeze({ classification: "stale", reason: "target-history-replaced", live_subject_digest: liveSubjectDigest, live_context_digest: liveContextDigest });
+  }
+  if (liveSubjectDigest !== request.subject_digest || liveContextDigest !== request.context_digest) {
+    return Object.freeze({ classification: "stale", reason: "drift-subject-changed", live_subject_digest: liveSubjectDigest, live_context_digest: liveContextDigest });
+  }
+  return Object.freeze({ classification: "current", live_subject_digest: liveSubjectDigest, live_context_digest: liveContextDigest });
 }
 function materialize3(input) {
   const stateValue = ownData(input.state, "value", "reconciliation state");
@@ -33948,11 +34132,11 @@ function ownData(value, field, label) {
 function reconcileCurrentAuthority(value) {
   const input = materialize3(value);
   const findings = [];
-  const observed2 = new Map(input.current_projections.map((projection) => [projection.path, projection.content_digest]));
+  const observed = new Map(input.current_projections.map((projection) => [projection.path, projection.content_digest]));
   const unrestorable = new Set(input.unrestorable_paths ?? []);
   const committedAbsent = new Set(input.committed_absent_paths ?? []);
   for (const recorded of input.recorded_projections) {
-    const digest9 = observed2.get(recorded.path);
+    const digest9 = observed.get(recorded.path);
     if (digest9 !== recorded.content_digest) {
       findings.push(Object.freeze({
         kind: "projection-mismatch",
@@ -36036,13 +36220,13 @@ async function validateLiveInitialization(dependencies, request, initialization)
   const commits = initialization.artifact_kind === "task-initialization" ? [initialization.code_baseline_commit, initialization.policy_base_commit] : [initialization.import_baseline_commit, initialization.code_baseline_commit, initialization.policy_base_commit];
   for (const oid of new Set(commits)) {
     try {
-      const observed2 = await dependencies.runner.run({
+      const observed = await dependencies.runner.run({
         argv: ["rev-parse", "--verify", "--quiet", `${oid}^{commit}`],
         operation: parseSafeCode("validate-initialization-commit"),
         expectedAbsence: [{ code: 1, stderrIncludes: "" }]
       });
-      if (observed2.absent) return contract("initialization-commit-missing");
-      const resolved = new TextDecoder("utf-8", { fatal: true }).decode(observed2.stdout).trim();
+      if (observed.absent) return contract("initialization-commit-missing");
+      const resolved = new TextDecoder("utf-8", { fatal: true }).decode(observed.stdout).trim();
       if (resolved !== oid) return contract("initialization-commit-mismatch");
     } catch {
       return io2(request, "validate-initialization-commit");
@@ -36295,9 +36479,9 @@ async function executeLocked(dependencies, request, path2) {
       }
       const installed = await installLegacyDestination(request, artifact, artifactDocument.bytes, final.bytes);
       if (!installed.ok) return installed;
-      const observed3 = await dependencies.read_state(request.authority.state);
-      if (observed3.kind !== "canonical" || observed3.document.digest !== final.digest) return contract("transaction-outcome-ambiguous");
-      return ok11(Object.freeze({ state: observed3.document, outcome, replayed: false }));
+      const observed2 = await dependencies.read_state(request.authority.state);
+      if (observed2.kind !== "canonical" || observed2.document.digest !== final.digest) return contract("transaction-outcome-ambiguous");
+      return ok11(Object.freeze({ state: observed2.document, outcome, replayed: false }));
     }
     await ensureAuthorityDirectory(request.authority);
     await ensureIntentDirectory(request.authority);
@@ -36330,17 +36514,17 @@ async function executeLocked(dependencies, request, path2) {
   } catch (error51) {
     if (error51 instanceof IntentLayoutError) return io2(request, "intent-receipt-create");
     if (!(error51 instanceof AtomicReplaceError)) throw error51;
-    const observed3 = await dependencies.read_state(request.authority.state);
-    if (observed3.kind === "canonical" && observed3.document.digest === final.digest) {
-      return ok11(Object.freeze({ state: observed3.document, outcome, replayed: false }));
+    const observed2 = await dependencies.read_state(request.authority.state);
+    if (observed2.kind === "canonical" && observed2.document.digest === final.digest) {
+      return ok11(Object.freeze({ state: observed2.document, outcome, replayed: false }));
     }
-    if (observed3.kind === "missing") return io2(request, error51.operation === "replace" ? "task-state-replace" : "intent-receipt-create");
+    if (observed2.kind === "missing") return io2(request, error51.operation === "replace" ? "task-state-replace" : "intent-receipt-create");
     return contract("transaction-outcome-ambiguous");
   }
-  const observed2 = await dependencies.read_state(request.authority.state);
-  if (observed2.kind !== "canonical" || observed2.document.digest !== final.digest) return contract("transaction-outcome-ambiguous");
-  await cleanTaskWorkspace(dependencies, request.authority, observed2.document.value).catch(() => void 0);
-  return ok11(Object.freeze({ state: observed2.document, outcome, replayed: false }));
+  const observed = await dependencies.read_state(request.authority.state);
+  if (observed.kind !== "canonical" || observed.document.digest !== final.digest) return contract("transaction-outcome-ambiguous");
+  await cleanTaskWorkspace(dependencies, request.authority, observed.document.value).catch(() => void 0);
+  return ok11(Object.freeze({ state: observed.document, outcome, replayed: false }));
 }
 async function runStateInitialization(dependencies, request) {
   assertInternalTransactionAuthority(request.authority, { runner: dependencies.runner, environment: dependencies.environment });
@@ -37277,12 +37461,20 @@ function latestRestartRevisionAffectingPhase(state, authorityPhase) {
   }
   return latest;
 }
+function latestAuthorityCutoffRevision(state, authorityPhase) {
+  let latest = latestRestartRevisionAffectingPhase(state, authorityPhase);
+  for (const recovery of state.milestone_recovery_history ?? []) {
+    if (recovery.phase_instance !== authorityPhase) continue;
+    if (latest === void 0 || recovery.recovered_at_revision > latest) latest = recovery.recovered_at_revision;
+  }
+  return latest;
+}
 function approvalIsEligibleAfterLatestRestart(state, approval, authorityPhase) {
-  const cutoff = latestRestartRevisionAffectingPhase(state, authorityPhase);
+  const cutoff = latestAuthorityCutoffRevision(state, authorityPhase);
   return cutoff === void 0 || approval.resolved_at_revision > cutoff;
 }
 function ruleSettlementIsEligibleAfterLatestRestart(state, settlement, authorityPhase) {
-  const cutoff = latestRestartRevisionAffectingPhase(state, authorityPhase);
+  const cutoff = latestAuthorityCutoffRevision(state, authorityPhase);
   return cutoff === void 0 || settlement.settled_at_revision > cutoff;
 }
 function latestEligibleRuleSettlement(state, subjectDigest, authorityPhase) {
@@ -37613,7 +37805,7 @@ function deriveEvidenceSetFromCounter(counter) {
 }
 
 // src/state/gate-approvals.ts
-import { isDeepStrictEqual as isDeepStrictEqual6 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual7 } from "node:util";
 var authenticatedGateApprovals = /* @__PURE__ */ new WeakSet();
 var authenticatedGateApprovalBrand = /* @__PURE__ */ Symbol("AuthenticatedGateApproval");
 function assertAuthenticatedGateApproval(value) {
@@ -37635,7 +37827,7 @@ async function loadAuthenticatedGateApproval(dependencies, authority, approval) 
     authority.repository_identity
   ).ok) return issue2("STATE_INVALID", current.value.value, "gate-approval-state-authority-mismatch");
   const durable = current.value.value.approvals.find((entry) => entry.gate_id === claimed.gate_id);
-  if (durable === void 0 || !isDeepStrictEqual6(durable, claimed)) {
+  if (durable === void 0 || !isDeepStrictEqual7(durable, claimed)) {
     return issue2("STATE_INVALID", current.value.value, "gate-approval-not-current");
   }
   const requestPath = await resolvePath7(
@@ -38060,7 +38252,7 @@ var PRESENTATION_COPY = Object.freeze({
   }),
   "baseline-adoption": Object.freeze({
     title: "Decide what to do with changed files",
-    question: "These files changed after ArchFlow recorded their reviewed bytes (for example by later commits or a merge), or were deleted by an already-committed change. Keep the current state as the new baseline, restore the recorded versions, or stop?"
+    question: "These files changed after ArchFlow recorded its baseline (for example by later commits or a merge), or were deleted by an already-committed change. Keep the current state as the new workflow baseline, restore the recorded versions, or stop?"
   }),
   "migration-audit": Object.freeze({
     title: "Review the imported task",
@@ -38080,8 +38272,8 @@ var OPTION_COPY = Object.freeze({
   "authorize-commit": Object.freeze({ token: "authorize-commit", label: "Authorize the commit", consequence: "Permit ArchFlow to commit the exact reviewed changes; this is the final human confirmation." }),
   "discard-and-restore": Object.freeze({ token: "restore-saved-version", label: "Restore the saved version", consequence: "Discard the conflicting workspace copy and reconstruct it from durable authority." }),
   "adopt-as-new-generation": Object.freeze({ token: "keep-current-version", label: "Keep the current version", consequence: "Treat the current workspace copy as a new generation of the artifact." }),
-  "adopt-current-bytes": Object.freeze({ token: "keep-current-versions", label: "Keep the current versions", consequence: "Record the current file versions as the reviewed baseline without re-reviewing them. Nothing is lost, and the next implementation phase still reviews everything it touches." }),
-  "adopt-committed-deletions": Object.freeze({ token: "keep-the-deletions", label: "Keep the deletions", consequence: "Accept the committed deletions as the reviewed baseline. These files were already removed by an authorized commit; ArchFlow's records stop claiming them, and nothing is restored." }),
+  "adopt-current-bytes": Object.freeze({ token: "keep-current-versions", label: "Keep the current versions", consequence: "Accept the current file versions as the workflow baseline. This performs no fresh review and grants no commit authority." }),
+  "adopt-committed-deletions": Object.freeze({ token: "keep-the-deletions", label: "Keep the deletions", consequence: "Accept the committed deletions as the workflow baseline. This performs no fresh review and grants no commit authority." }),
   "restore-recorded-bytes": Object.freeze({ token: "restore-recorded-versions", label: "Restore the recorded versions", consequence: "Discard the current versions of these files and rewrite the recorded ones. The discarded changes stay in git history." }),
   "accept-import-audit": Object.freeze({ token: "accept-import", label: "Accept the import", consequence: "Confirm that the imported task faithfully represents the legacy source and continue." }),
   cancel: Object.freeze({ token: "cancel", label: "Cancel this decision", consequence: "Close this decision without approving anything; the workflow will remain stopped here." }),
@@ -38149,6 +38341,10 @@ function buildHumanGatePresentation(active, contentTriggerDetails2) {
     } : {},
     ...request.kind === "baseline-adoption" ? {
       details: Object.freeze([
+        ...request.context.target_ref === void 0 ? [] : [
+          `Target ${request.context.target_ref} was observed at ${request.context.target_head}.`,
+          `${request.context.uncommitted_paths.length} drifted path${request.context.uncommitted_paths.length === 1 ? " is" : "s are"} uncommitted; the remaining drift is committed on that target.`
+        ],
         ...request.context.drifted_projections.length === 0 ? [] : [
           `${request.context.drifted_projections.length} file${request.context.drifted_projections.length === 1 ? "" : "s"} changed, including:`,
           ...request.context.drifted_projections.slice(0, 10).map((drifted) => drifted.path),
@@ -38344,6 +38540,22 @@ function deriveNextAction(input) {
       state
     );
   }
+  if (input.stale_baseline_refresh_required === true) {
+    return action(
+      "refresh-stale-baseline",
+      "The open baseline decision no longer matches the live repository subject. Supersede only that stale interface and request fresh status.",
+      false,
+      state
+    );
+  }
+  if (input.governing_document_recovery_required === true) {
+    return action(
+      "recover-milestone-authority",
+      "A governing planning document changed after its authority was established. Preserve the repository bytes, retire stale authority, and begin a fresh significant production and review cycle at this owning design position.",
+      false,
+      state
+    );
+  }
   const finding = input.reconciliation_findings?.[0];
   if (finding !== void 0) {
     if (finding.kind === "projection-mismatch") {
@@ -38359,14 +38571,14 @@ function deriveNextAction(input) {
       if ((input.upstream_document_drift ?? []).length > 0) {
         return upstreamDocumentDriftAction(state, input.upstream_document_drift);
       }
-      const missing = (input.reconciliation_findings ?? []).filter(
+      const missing2 = (input.reconciliation_findings ?? []).filter(
         (candidate) => candidate.kind === "projection-mismatch" && candidate.observed_digest === void 0
       );
-      if (missing.length > 0) {
+      if (missing2.length > 0) {
         const produceReentryApplies = state.step === "produce" && state.status === "succeeded" && state.authoritative_results.some((reference) => reference.phase_instance === state.phase_instance && reference.step === "produce");
-        const committedDeletions = missing.filter((candidate) => candidate.committed_absent === true && candidate.restore_unavailable === true);
+        const committedDeletions = missing2.filter((candidate) => candidate.committed_absent === true && candidate.restore_unavailable === true);
         const redeclarable = (input.reconciliation_findings ?? []).some((candidate) => candidate.kind === "projection-mismatch" && (candidate.observed_digest !== void 0 || !(candidate.committed_absent === true && candidate.restore_unavailable === true)));
-        if (produceReentryApplies && redeclarable && missing.some((candidate) => candidate.restore_unavailable === true)) {
+        if (produceReentryApplies && redeclarable && missing2.some((candidate) => candidate.restore_unavailable === true)) {
           return action(
             "run-step",
             "A recorded projection is missing from the worktree and has no retained bytes to restore from. Reopen the produce window and record a fresh terminal produce that re-declares the drifted paths and the deletion; the review boundary then covers the new bytes. A deletion already absent from HEAD cannot be re-declared and settles at its own human decision afterwards.",
@@ -38406,6 +38618,39 @@ function deriveNextAction(input) {
   const discoveryBlocker = input.reconciliation_blocking_reasons?.[0];
   if (discoveryBlocker !== void 0) {
     return discoveryBlocker === "retained-receipt-ambiguity" ? action("inspect-retained-receipt", "Inspect the ambiguous retained successor receipts.", true, state) : action("inspect-state", `Inspect reconciliation discovery blocker ${discoveryBlocker}.`, true, state);
+  }
+  if (input.milestone_proof_unverifiable_reason !== void 0) {
+    return action(
+      "inspect-state",
+      `Milestone proof is unavailable (${input.milestone_proof_unverifiable_reason}); inspect repository identity and Git object availability before retrying.`,
+      true,
+      state
+    );
+  }
+  if (input.milestone_recovery_required === true) {
+    if (input.accepted_no_wait_settlement?.milestone_baseline_commit !== void 0 && input.milestone_refresh_config_matches !== true) {
+      return action(
+        "run-step",
+        "The approval-rule configuration changed after this design settled. Reopen produce so the current subject is reviewed under the live configuration before recovering milestone authority.",
+        false,
+        state,
+        { step: "produce" }
+      );
+    }
+    if (input.milestone_recovery_no_delta === true) {
+      return action(
+        "inspect-state",
+        "The milestone is missing from target history, but the current tree has no committable delta for a replacement milestone. Restore the authorized baseline or make the intended change explicit before recovering authority.",
+        true,
+        state
+      );
+    }
+    return action(
+      "recover-milestone-authority",
+      "The authorized milestone is missing from target history. Retire this phase's stale authority and begin a fresh significant production attempt at the same position.",
+      false,
+      state
+    );
   }
   if (state.terminal !== void 0) {
     return action(
@@ -38809,14 +39054,19 @@ async function discoverReconciliationInput(dependencies, authority, state) {
 
 // src/state/status.ts
 var ok18 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-function baselineAdoptionInputFromFindings(task_id, state, findings) {
+function baselineAdoptionInputFromFindings(task_id, state, findings, target) {
   const mismatches = findings.filter((finding) => finding.kind === "projection-mismatch");
   const drifted = mismatches.filter((finding) => finding.observed_digest !== void 0);
   const deleted = mismatches.filter((finding) => finding.observed_digest === void 0 && finding.restore_unavailable === true && finding.committed_absent === true);
   if (drifted.length + deleted.length === 0 || drifted.length + deleted.length !== mismatches.length) return void 0;
   const context2 = Object.freeze({
     drifted_projections: Object.freeze(drifted.map((finding) => Object.freeze({ path: finding.path, recorded_digest: finding.recorded_digest, observed_digest: finding.observed_digest })).sort((left, right) => left.path.localeCompare(right.path))),
-    deleted_projections: Object.freeze(deleted.map((finding) => Object.freeze({ path: finding.path, recorded_digest: finding.recorded_digest })).sort((left, right) => left.path.localeCompare(right.path)))
+    deleted_projections: Object.freeze(deleted.map((finding) => Object.freeze({ path: finding.path, recorded_digest: finding.recorded_digest })).sort((left, right) => left.path.localeCompare(right.path))),
+    ...target === void 0 ? {} : {
+      target_ref: target.target_ref,
+      target_head: target.target_head,
+      uncommitted_paths: Object.freeze([...target.uncommitted_paths].sort())
+    }
   });
   const subjectDigest = baselineAdoptionDriftDigest(context2);
   return Object.freeze({
@@ -38832,6 +39082,38 @@ function baselineAdoptionInputFromFindings(task_id, state, findings) {
     }),
     context: context2
   });
+}
+async function currentBaselineTargetFacts(dependencies, findings) {
+  const target = await currentTargetRef(dependencies);
+  const targetHead = await resolveCommit(dependencies.runner, target.value);
+  const changed = await readChangedGitPaths(dependencies.runner);
+  const driftPaths = findings.filter((finding) => finding.kind === "projection-mismatch").map((finding) => finding.path);
+  const changedPaths = new Set(changed.paths);
+  return Object.freeze({
+    target_ref: target.value,
+    target_head: targetHead,
+    uncommitted_paths: Object.freeze(driftPaths.filter((path2) => changedPaths.has(path2)).sort())
+  });
+}
+async function implementationRecoveryHasNoDelta(dependencies, output, targetHead) {
+  const paths = [...new Set(output.outputs.flatMap((entry) => entry.operation === "rename" ? [entry.previous_path, entry.path] : [entry.path]))].sort();
+  const changed = await readChangedGitPaths(
+    dependencies.runner,
+    paths.map((path2) => `:(top,literal)${path2}`)
+  );
+  if (changed.paths.length !== 0 || changed.unrepresentable_count !== 0) return false;
+  for (const entry of output.outputs) {
+    const current = await readCommitTreeBlob(dependencies.runner, targetHead, entry.path);
+    if (entry.operation === "delete") {
+      if (current !== void 0) return false;
+      continue;
+    }
+    if (current?.mode !== entry.after.mode || current.oid !== entry.after.oid) return false;
+    if (entry.operation === "rename" && await readCommitTreeBlob(dependencies.runner, targetHead, entry.previous_path) !== void 0) {
+      return false;
+    }
+  }
+  return true;
 }
 function partitionExpectedReentryEdits(findings, assessment, produceSubject, state) {
   const activeProduce = state.step === "produce" && state.status !== "succeeded";
@@ -39169,7 +39451,8 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   let routes;
   if (parsedConfig !== void 0) {
     try {
-      const phaseKind = decodePhaseInstance(state.phase_instance).kind;
+      const decodedPhase = decodePhaseInstance(state.phase_instance);
+      const phaseKind = decodedPhase.kind;
       const counterReviewer = resolveDispatchRoute(parsedConfig, phaseKind, "counter-reviewer");
       const adjudicator = resolveDispatchRoute(parsedConfig, phaseKind, "adjudicator");
       routes = Object.freeze({ counter_reviewer: counterReviewer, adjudicator });
@@ -39289,6 +39572,21 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   );
   let commitObserved = false;
   let commitBlockedReason;
+  let milestoneRecoveryRequired = false;
+  let milestoneRecoveryNoDelta = false;
+  let governingDocumentRecoveryRequired = false;
+  let milestoneProofUnverifiableReason;
+  let milestoneRecoveryFacts;
+  const recordMissingMilestone = (proof) => {
+    if (subjectDigest === void 0) throw new TypeError("milestone recovery requires the current subject");
+    milestoneRecoveryRequired = true;
+    milestoneRecoveryFacts = Object.freeze({
+      cause: "milestone-proof-missing",
+      target_ref: proof.target_ref,
+      target_head: proof.target_head,
+      subject_digest: subjectDigest
+    });
+  };
   let implementationCommit;
   let humanImplementationCommitAuthority = false;
   if (produceSubject?.artifact.artifact_kind === "implementation-output") {
@@ -39304,46 +39602,78 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         baseline_commit: exact.baseline_commit
       });
       try {
-        if (await implementationOutputCommittedAtCurrentTarget(
+        const proof = await resolveImplementationMilestoneProof(
           dependencies.runner,
           produceSubject.artifact,
           exact
-        )) {
+        );
+        if (proof.kind === "proven") {
           commitObserved = true;
           break;
-        }
-      } catch {
-        blockers.push("commit-observation-unavailable");
-      }
-    }
-    if (!commitObserved && implementationCommit !== void 0) {
-      try {
-        if (await resolveCommit(dependencies.runner, implementationCommit.target_ref) !== implementationCommit.baseline_commit) {
+        } else if (proof.kind === "missing-from-history") {
+          recordMissingMilestone(proof);
           implementationCommit = void 0;
-          blockers.push("implementation-commit-target-moved");
+          try {
+            milestoneRecoveryNoDelta = await implementationRecoveryHasNoDelta(
+              dependencies,
+              produceSubject.artifact,
+              proof.target_head
+            );
+          } catch {
+            milestoneRecoveryRequired = false;
+            milestoneRecoveryFacts = void 0;
+            milestoneProofUnverifiableReason = "repository-observation-failed";
+            blockers.push("commit-observation-unavailable");
+          }
+        } else if (proof.kind === "unverifiable") {
+          milestoneProofUnverifiableReason = proof.reason;
+          blockers.push("commit-observation-unavailable");
         }
       } catch {
-        implementationCommit = void 0;
         blockers.push("commit-observation-unavailable");
       }
     }
+    if (milestoneRecoveryRequired) implementationCommit = void 0;
     if (!commitObserved && !humanImplementationCommitAuthority && implementationCommit === void 0 && acceptedSettlement !== void 0) {
-      const target = await currentTargetRef(dependencies);
+      const legacyTarget = acceptedSettlement.milestone_target_ref === void 0;
+      const target = legacyTarget ? await currentTargetRef(dependencies) : Object.freeze({ value: acceptedSettlement.milestone_target_ref, guidance: "Pinned autonomous milestone target." });
       const autonomousCommit = buildAutonomousImplementationCommitInput(
         produceSubject.artifact,
         target.value
       );
       try {
-        commitObserved = await autonomousImplementationOutputCommittedAtCurrentTarget(
+        const observedProof = await resolveAutonomousImplementationMilestoneProof(
           dependencies.runner,
           produceSubject.artifact,
           target.value,
           autonomousCommit.message
         );
-        if (!commitObserved && await resolveCommit(dependencies.runner, target.value) === produceSubject.artifact.base_commit) {
+        const proof = legacyTarget && observedProof.kind === "proven" && observedProof.commit !== observedProof.target_head ? Object.freeze({
+          kind: "missing-from-history",
+          reason: "target-moved",
+          target_ref: observedProof.target_ref,
+          target_head: observedProof.target_head
+        }) : observedProof;
+        commitObserved = proof.kind === "proven";
+        if (proof.kind === "not-created") {
           implementationCommit = autonomousCommit;
-        } else if (!commitObserved) {
-          blockers.push("implementation-commit-target-moved");
+        } else if (proof.kind === "missing-from-history") {
+          recordMissingMilestone(proof);
+          try {
+            milestoneRecoveryNoDelta = await implementationRecoveryHasNoDelta(
+              dependencies,
+              produceSubject.artifact,
+              proof.target_head
+            );
+          } catch {
+            milestoneRecoveryRequired = false;
+            milestoneRecoveryFacts = void 0;
+            milestoneProofUnverifiableReason = "repository-observation-failed";
+            blockers.push("commit-observation-unavailable");
+          }
+        } else if (proof.kind === "unverifiable") {
+          milestoneProofUnverifiableReason = proof.reason;
+          blockers.push("commit-observation-unavailable");
         }
       } catch {
         blockers.push("commit-observation-unavailable");
@@ -39361,17 +39691,21 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         baseline_commit: authenticated.request.context.baseline_commit
       });
       try {
-        const observation = await designArtifactCommittedAtCurrentTarget(
+        const observation = await resolveDesignMilestoneProof(
           dependencies.runner,
           state.task_id,
           produceSubject.artifact,
           produceSubject.retained.manifest.value.outputs,
           authenticated.request.context
         );
-        commitObserved = observation.observed;
-        if (!observation.observed && observation.blocking) {
+        commitObserved = observation.kind === "proven";
+        if (observation.kind === "missing-from-history") {
           commitBlockedReason = observation.reason;
+          recordMissingMilestone(observation);
           blockers.push(`design-milestone-${observation.reason}`);
+        } else if (observation.kind === "unverifiable") {
+          milestoneProofUnverifiableReason = observation.reason;
+          blockers.push("commit-observation-unavailable");
         }
       } catch {
         blockers.push("commit-observation-unavailable");
@@ -39386,7 +39720,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         baseline_commit: migration.request.context.baseline_commit
       });
       try {
-        const observation = await designArtifactCommittedAtCurrentTarget(
+        const observation = await resolveDesignMilestoneProof(
           dependencies.runner,
           state.task_id,
           produceSubject.artifact,
@@ -39400,20 +39734,25 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
             }
           }
         );
-        commitObserved = observation.observed;
-        if (!observation.observed && observation.blocking) {
+        commitObserved = observation.kind === "proven";
+        if (observation.kind === "missing-from-history") {
+          recordMissingMilestone(observation);
           commitBlockedReason = observation.reason;
           blockers.push(`design-milestone-${observation.reason}`);
+        } else if (observation.kind === "unverifiable") {
+          milestoneProofUnverifiableReason = observation.reason;
+          blockers.push("commit-observation-unavailable");
         }
       } catch {
         blockers.push("commit-observation-unavailable");
       }
     }
     if (!commitObserved && designCommit === void 0 && acceptedSettlement?.milestone_baseline_commit !== void 0) {
-      const target = await currentTargetRef(dependencies);
+      const legacyTarget = acceptedSettlement.milestone_target_ref === void 0;
+      const target = legacyTarget ? await currentTargetRef(dependencies) : Object.freeze({ value: acceptedSettlement.milestone_target_ref, guidance: "Pinned autonomous milestone target." });
       designCommit = buildAutonomousDesignCommitInput(state, acceptedSettlement, target.value);
       try {
-        const observation = await autonomousDesignArtifactCommittedAtCurrentTarget(
+        const observedProof = await resolveAutonomousDesignMilestoneProof(
           dependencies.runner,
           state,
           produceSubject.artifact,
@@ -39423,11 +39762,21 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
           designCommit.message,
           authority.context
         );
-        commitObserved = observation.observed;
-        if (!observation.observed && observation.blocking) {
-          const targetHead = await resolveCommit(dependencies.runner, target.value);
-          commitBlockedReason = observation.reason === "approved-document-mismatch" ? observation.reason : targetHead === acceptedSettlement.milestone_baseline_commit ? observation.reason : "target-moved";
-          blockers.push(`design-milestone-${commitBlockedReason}`);
+        const observation = legacyTarget && observedProof.kind === "proven" && observedProof.commit !== observedProof.target_head ? Object.freeze({
+          kind: "missing-from-history",
+          reason: "target-moved",
+          target_ref: observedProof.target_ref,
+          target_head: observedProof.target_head
+        }) : observedProof;
+        commitObserved = observation.kind === "proven";
+        if (observation.kind === "missing-from-history") {
+          const boundedRefresh = observation.reason !== "approved-document-mismatch" && observation.target_head !== acceptedSettlement.milestone_baseline_commit;
+          commitBlockedReason = boundedRefresh ? "target-moved" : observation.reason;
+          if (!boundedRefresh) recordMissingMilestone(observation);
+          blockers.push(`design-milestone-${observation.reason}`);
+        } else if (observation.kind === "unverifiable") {
+          milestoneProofUnverifiableReason = observation.reason;
+          blockers.push("commit-observation-unavailable");
         }
       } catch {
         blockers.push("commit-observation-unavailable");
@@ -39513,6 +39862,33 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       findings: partitioned.remaining,
       ...partitioned.expected_reentry_edits.length === 0 ? {} : { expected_reentry_edits: partitioned.expected_reentry_edits }
     });
+    const taskRoot = `.archflow/tasks/${state.task_id}/`;
+    const governingPaths = partitioned.remaining.filter((finding) => finding.kind === "projection-mismatch").map((finding) => finding.path).filter((path2) => path2 === `${taskRoot}prd.md` || path2 === `${taskRoot}design.md` || path2.startsWith(`${taskRoot}phases/`) && path2.endsWith("/design.md"));
+    if (governingPaths.length !== 0 && !midProduce && state.open_gate === void 0) {
+      const decodedPhase = decodePhaseInstance(state.phase_instance);
+      const phaseKind = decodedPhase.kind;
+      const ownedPath = phaseKind === "prd" ? `${taskRoot}prd.md` : phaseKind === "design" ? `${taskRoot}design.md` : phaseKind === "phase-design" ? `${taskRoot}phases/${decodedPhase.phase}/design.md` : void 0;
+      const ownedGoverningPaths = ownedPath === void 0 ? [] : governingPaths.filter((path2) => path2 === ownedPath);
+      const recoverableOwnedGoverningPaths = ownedGoverningPaths.filter((path2) => !produceSubjectDrift.includes(path2));
+      const dependentGoverningPaths = governingPaths.filter((path2) => path2 !== ownedPath);
+      const governingRecoverySubjectDigest = subjectDigest ?? retained.get("produce")?.manifest.artifact_digest;
+      upstreamDocumentDrift.push(...dependentGoverningPaths.filter((path2) => !upstreamDocumentDrift.includes(path2)));
+      if (recoverableOwnedGoverningPaths.length !== 0 && (phaseKind === "prd" || phaseKind === "design" || phaseKind === "phase-design") && governingRecoverySubjectDigest !== void 0) {
+        try {
+          const target = await currentTargetRef(dependencies);
+          governingDocumentRecoveryRequired = true;
+          milestoneRecoveryRequired = true;
+          milestoneRecoveryFacts = Object.freeze({
+            cause: "governing-document-drift",
+            target_ref: target.value,
+            target_head: await resolveCommit(dependencies.runner, target.value),
+            subject_digest: governingRecoverySubjectDigest
+          });
+        } catch {
+          blockers.push("commit-observation-unavailable");
+        }
+      }
+    }
   }
   let evidence;
   try {
@@ -39568,6 +39944,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   let activeGate;
   let openGate;
   let gateBindingBlocker;
+  let staleBaselineRefreshRequired = false;
   if (state.open_gate !== void 0) {
     blockers.push("gate-decision-required");
     try {
@@ -39586,6 +39963,24 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         blockers.push("active-gate-mismatch");
         gateBindingBlocker = "active-gate-mismatch";
       } else {
+        if (request?.kind === "baseline-adoption" && statusReconciliation !== void 0) {
+          const target = await currentBaselineTargetFacts(dependencies, statusReconciliation.findings);
+          const live = baselineAdoptionInputFromFindings(
+            authority.task_id,
+            state,
+            statusReconciliation.findings,
+            target
+          );
+          if (live !== void 0) {
+            const presented = request.context.target_head;
+            const continuous = presented !== void 0 && (presented === target.target_head || await readFirstParentChildAfter(dependencies.runner, presented, target.target_head) !== void 0);
+            staleBaselineRefreshRequired = assessBaselineSubjectFreshness(
+              request,
+              live.context,
+              continuous
+            ).classification === "stale";
+          }
+        }
         try {
           let triggerDetails;
           if (activeGate.kind === "commit-authorization") {
@@ -39642,6 +40037,13 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     },
     commit_observed: commitObserved,
     ...commitBlockedReason === void 0 ? {} : { commit_blocked_reason: commitBlockedReason },
+    ...milestoneRecoveryRequired ? { milestone_recovery_required: true } : {},
+    ...governingDocumentRecoveryRequired ? { governing_document_recovery_required: true } : {},
+    ...milestoneRecoveryNoDelta ? { milestone_recovery_no_delta: true } : {},
+    ...milestoneProofUnverifiableReason === void 0 ? {} : {
+      milestone_proof_unverifiable_reason: milestoneProofUnverifiableReason
+    },
+    ...staleBaselineRefreshRequired ? { stale_baseline_refresh_required: true } : {},
     ...designCommit === void 0 ? {} : { design_commit: designCommit },
     ...implementationCommit === void 0 ? {} : { implementation_commit: implementationCommit },
     ...adjudicationGateKind === void 0 ? {} : { adjudication_gate_kind: adjudicationGateKind },
@@ -39661,7 +40063,13 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     );
   }
   if (nextAction.code === "open-gate" && nextAction.gate_kind === "baseline-adoption" && statusReconciliation !== void 0) {
-    baselineAdoptionInput = baselineAdoptionInputFromFindings(authority.task_id, state, statusReconciliation.findings);
+    const target = await currentBaselineTargetFacts(dependencies, statusReconciliation.findings);
+    baselineAdoptionInput = baselineAdoptionInputFromFindings(
+      authority.task_id,
+      state,
+      statusReconciliation.findings,
+      target
+    );
   }
   let workspace;
   try {
@@ -39706,6 +40114,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     ...editorialRevision === void 0 ? {} : { editorial_revision: editorialRevision },
     ...gateInput === void 0 ? {} : { gate_input: gateInput },
     ...baselineAdoptionInput === void 0 ? {} : { baseline_adoption_gate: baselineAdoptionInput },
+    ...milestoneRecoveryFacts === void 0 ? {} : { milestone_recovery: milestoneRecoveryFacts },
     workspace,
     blocking_reasons: Object.freeze([...new Set(blockers)]),
     next_action: nextAction

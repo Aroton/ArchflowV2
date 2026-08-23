@@ -226,11 +226,15 @@ export function buildRuleSettlement(
   configDigest: Sha256Digest,
   conclusion: RuleSettlementConclusionV1,
   milestoneBaselineCommit?: GitOid,
+  milestoneTarget?: Readonly<{ ref: string; head: GitOid }>,
 ): RuleSettlementV1 {
   const kind = decodePhaseInstance(state.phase_instance).kind;
-  const baselineAllowed = !conclusion.wait && (kind === "design" || kind === "phase-design");
+  const baselineAllowed = !conclusion.wait && (kind === "design" || kind === "phase-design" || kind === "phase-impl");
   if ((milestoneBaselineCommit !== undefined) !== baselineAllowed) {
-    throw new TypeError("a milestone baseline is required exactly for design and phase-design wait:false settlements");
+    throw new TypeError("a milestone baseline is required exactly for milestone-bearing wait:false settlements");
+  }
+  if ((milestoneTarget !== undefined) !== baselineAllowed) {
+    throw new TypeError("milestone target facts are required exactly for milestone-bearing wait:false settlements");
   }
   return Object.freeze({
     task_id: state.task_id,
@@ -240,6 +244,10 @@ export function buildRuleSettlement(
     conclusion: structuredClone(conclusion),
     config_digest: configDigest,
     ...(milestoneBaselineCommit === undefined ? {} : { milestone_baseline_commit: milestoneBaselineCommit }),
+    ...(milestoneTarget === undefined ? {} : {
+      milestone_target_ref: milestoneTarget.ref,
+      milestone_target_head: milestoneTarget.head,
+    }),
     settled_at_revision: parseSafeInteger(state.revision + 1),
   });
 }

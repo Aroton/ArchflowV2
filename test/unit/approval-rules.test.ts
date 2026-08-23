@@ -248,6 +248,8 @@ describe("planning milestone settlement baseline", () => {
   const digest = parseSha256Digest("a".repeat(64));
   const configDigest = parseSha256Digest("b".repeat(64));
   const baseline = parseGitOid("c".repeat(40));
+  const targetHead = parseGitOid("d".repeat(40));
+  const target = { ref: "refs/heads/main", head: targetHead } as const;
   const state = (phaseInstance: string): TaskStateV1 => ({
     task_id: parseTaskSlug("settlement-task"),
     phase_instance: phaseInstance,
@@ -257,16 +259,17 @@ describe("planning milestone settlement baseline", () => {
 
   it.each(["design", "phase-design-2"])("requires and retains a baseline for %s wait:false", (phase) => {
     const settlement = buildRuleSettlement(
-      state(phase), digest, configDigest, { wait: false, match: null }, baseline,
+      state(phase), digest, configDigest, { wait: false, match: null }, baseline, target,
     );
     expect(settlement.milestone_baseline_commit).toBe(baseline);
+    expect(settlement).toMatchObject({ milestone_target_ref: target.ref, milestone_target_head: target.head });
     expect(ruleSettlementV1Schema.parse(settlement)).toEqual(settlement);
     expect(() => buildRuleSettlement(
       state(phase), digest, configDigest, { wait: false, match: null },
     )).toThrow(/milestone baseline is required/u);
   });
 
-  it("forbids the baseline on waiting and implementation settlements", () => {
+  it("forbids milestone facts on waiting settlements and requires them for implementation no-wait", () => {
     const waiting = {
       ...buildRuleSettlement(
         state("design"), digest, configDigest,
@@ -277,6 +280,10 @@ describe("planning milestone settlement baseline", () => {
     expect(ruleSettlementV1Schema.safeParse(waiting).success).toBe(false);
     expect(() => buildRuleSettlement(
       state("phase-impl-2"), digest, configDigest, { wait: false, match: null }, baseline,
-    )).toThrow(/milestone baseline is required/u);
+    )).toThrow(/milestone target facts are required/u);
+    const implementation = buildRuleSettlement(
+      state("phase-impl-2"), digest, configDigest, { wait: false, match: null }, baseline, target,
+    );
+    expect(ruleSettlementV1Schema.parse(implementation)).toEqual(implementation);
   });
 });

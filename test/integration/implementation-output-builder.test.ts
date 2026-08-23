@@ -48,7 +48,7 @@ const gitEnv: NodeJS.ProcessEnv = {
 };
 
 describe("implementation-output builder", () => {
-  it("proves only the exact task-local design milestone authorized by approval", async () => {
+  it("proves the immutable design milestone independently of later worktree drift", async () => {
     const root = mkdtempSync(join(tmpdir(), "archflow-design-commit-"));
     roots.push(root);
     execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root, env: gitEnv });
@@ -179,13 +179,15 @@ describe("implementation-output builder", () => {
     execFileSync("git", ["commit", "--amend", "--no-edit", "-q"], { cwd: root, env: gitEnv });
     expect(await observe()).toEqual({ observed: true });
 
+    // A symbolic target switch at the same commit is still target movement. Rechecking only OIDs
+    // would miss this race and let a consuming mutation cross the authorized ref boundary.
+    execFileSync("git", ["switch", "-qc", "same-commit-other"], { cwd: root, env: gitEnv });
+    expect(await observe()).toEqual({ observed: false, reason: "target-moved", blocking: true });
+    execFileSync("git", ["switch", "-q", "main"], { cwd: root, env: gitEnv });
+
+    // Reconciliation owns current drift. It cannot erase an already-proven immutable milestone.
     writeFileSync(join(taskRoot, "late-change.txt"), "dirty\n");
-    expect(await observe()).toEqual({
-      observed: false,
-      reason: "task-tree-dirty",
-      blocking: true,
-      paths: [`${taskPath}/late-change.txt`],
-    });
+    expect(await observe()).toEqual({ observed: true });
     rmSync(join(taskRoot, "late-change.txt"));
 
     execFileSync("git", ["commit", "--amend", "-qm", "Not the approved message"], { cwd: root, env: gitEnv });
@@ -492,10 +494,12 @@ describe("implementation-output builder", () => {
       discovered.value, first.value, approvalContext,
     )).resolves.toBe(true);
 
+    // A descendant is current baseline drift, not a replacement for or invalidation of the
+    // original authorized candidate.
     execFileSync("git", ["commit", "--allow-empty", "-qm", "unauthorized successor"], { cwd: root, env: gitEnv });
     await expect(implementationOutputCommittedAtCurrentTarget(
       discovered.value, first.value, approvalContext,
-    )).resolves.toBe(false);
+    )).resolves.toBe(true);
     execFileSync("git", ["reset", "--hard", "-q", authorizedCommit], { cwd: root, env: gitEnv });
 
     execFileSync("git", ["switch", "--detach", "-q", authorizedCommit], { cwd: root, env: gitEnv });

@@ -4,7 +4,7 @@ import { taskStateV1Schema, type RuleSettlementV1, type TaskStateV1 } from "../.
 import { parsePathSafeId, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePhaseInstanceId, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
-import { legalRunStepStatus, planPlanningRestart, planStateTransition } from "../../src/state/transitions.js";
+import { legalRunStepStatus, planMilestoneRecovery, planPlanningRestart, planStateTransition } from "../../src/state/transitions.js";
 
 const D = (value: string) => parseSha256Digest(value.repeat(64));
 const phase = (kind: "phase-design" | "phase-impl", number: number) => encodePhaseInstance({ kind, phase: parsePositiveSafePhaseNumber(number) });
@@ -40,6 +40,36 @@ function state(overrides: Partial<TaskStateV1> = {}): TaskStateV1 {
 }
 
 describe("planStateTransition", () => {
+  it("recovers missing milestone authority at the same position and archives the retired graph", () => {
+    const current = state({
+      step: "triage", status: "succeeded", attempt: parseSafeInteger(3),
+      authoritative_results: [{
+        phase_instance: phase("phase-design", 2), step: "produce", result_digest: D("7"),
+        result_id: parseSafeId("produce-result"), input_fingerprint: D("2"),
+      }],
+    });
+    const result = planMilestoneRecovery({
+      current,
+      recovery_id: parsePathSafeId("milestone-recovery-test"),
+      cause: "milestone-proof-missing",
+      target_ref: "refs/heads/main",
+      target_head: "abcdef0123456789abcdef0123456789abcdef02" as TaskStateV1["policy_base_commit"],
+      subject_digest: D("7"),
+      recomputed_input_fingerprint: D("2"),
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toMatchObject({
+        phase_instance: current.phase_instance, step: "produce", status: "running", attempt: 1,
+        authoritative_results: [], waivers: [],
+      });
+      expect(result.value.milestone_recovery_history?.[0]).toMatchObject({
+        cause: "milestone-proof-missing", recovered_at_revision: 5,
+        superseded_results: current.authoritative_results,
+      });
+    }
+  });
+
   it("plans the exact running-to-succeeded lifecycle move", () => {
     const current = state({ step: "counter_review" });
     const reference = {

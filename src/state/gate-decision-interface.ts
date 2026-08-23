@@ -191,7 +191,7 @@ const PRESENTATION_COPY = Object.freeze({
   }),
   "baseline-adoption": Object.freeze({
     title: "Decide what to do with changed files",
-    question: "These files changed after ArchFlow recorded their reviewed bytes (for example by later commits or a merge), or were deleted by an already-committed change. Keep the current state as the new baseline, restore the recorded versions, or stop?",
+    question: "These files changed after ArchFlow recorded its baseline (for example by later commits or a merge), or were deleted by an already-committed change. Keep the current state as the new workflow baseline, restore the recorded versions, or stop?",
   }),
   "migration-audit": Object.freeze({
     title: "Review the imported task",
@@ -212,8 +212,8 @@ const OPTION_COPY = Object.freeze({
   "authorize-commit": Object.freeze({ token: "authorize-commit", label: "Authorize the commit", consequence: "Permit ArchFlow to commit the exact reviewed changes; this is the final human confirmation." }),
   "discard-and-restore": Object.freeze({ token: "restore-saved-version", label: "Restore the saved version", consequence: "Discard the conflicting workspace copy and reconstruct it from durable authority." }),
   "adopt-as-new-generation": Object.freeze({ token: "keep-current-version", label: "Keep the current version", consequence: "Treat the current workspace copy as a new generation of the artifact." }),
-  "adopt-current-bytes": Object.freeze({ token: "keep-current-versions", label: "Keep the current versions", consequence: "Record the current file versions as the reviewed baseline without re-reviewing them. Nothing is lost, and the next implementation phase still reviews everything it touches." }),
-  "adopt-committed-deletions": Object.freeze({ token: "keep-the-deletions", label: "Keep the deletions", consequence: "Accept the committed deletions as the reviewed baseline. These files were already removed by an authorized commit; ArchFlow's records stop claiming them, and nothing is restored." }),
+  "adopt-current-bytes": Object.freeze({ token: "keep-current-versions", label: "Keep the current versions", consequence: "Accept the current file versions as the workflow baseline. This performs no fresh review and grants no commit authority." }),
+  "adopt-committed-deletions": Object.freeze({ token: "keep-the-deletions", label: "Keep the deletions", consequence: "Accept the committed deletions as the workflow baseline. This performs no fresh review and grants no commit authority." }),
   "restore-recorded-bytes": Object.freeze({ token: "restore-recorded-versions", label: "Restore the recorded versions", consequence: "Discard the current versions of these files and rewrite the recorded ones. The discarded changes stay in git history." }),
   "accept-import-audit": Object.freeze({ token: "accept-import", label: "Accept the import", consequence: "Confirm that the imported task faithfully represents the legacy source and continue." }),
   cancel: Object.freeze({ token: "cancel", label: "Cancel this decision", consequence: "Close this decision without approving anything; the workflow will remain stopped here." }),
@@ -296,6 +296,10 @@ export function buildHumanGatePresentation(
     } : {}),
     ...(request.kind === "baseline-adoption" ? {
       details: Object.freeze([
+        ...(request.context.target_ref === undefined ? [] : [
+          `Target ${request.context.target_ref} was observed at ${request.context.target_head}.`,
+          `${request.context.uncommitted_paths!.length} drifted path${request.context.uncommitted_paths!.length === 1 ? " is" : "s are"} uncommitted; the remaining drift is committed on that target.`,
+        ]),
         ...(request.context.drifted_projections.length === 0 ? [] : [
           `${request.context.drifted_projections.length} file${request.context.drifted_projections.length === 1 ? "" : "s"} changed, including:`,
           ...request.context.drifted_projections.slice(0, 10).map((drifted) => drifted.path),

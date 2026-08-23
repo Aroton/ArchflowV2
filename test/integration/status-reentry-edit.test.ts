@@ -273,9 +273,8 @@ describe("post-triage re-entry edits are expected", () => {
       writeFileSync(prdPath, "# PRD\n\nPremature edit before any accepted finding.\n");
       const premature = await h.status();
       expect(premature.next_action).toMatchObject({
-        code: "open-gate",
-        gate_kind: "baseline-adoption",
-        human_required: true,
+        code: "recover-milestone-authority",
+        human_required: false,
       });
       expect(premature.reconciliation?.classification).toBe("reconciliation-required");
       expect(premature.reconciliation?.findings.map((finding) => finding.kind)).toContain("projection-mismatch");
@@ -543,15 +542,14 @@ describe("post-triage re-entry edits are expected", () => {
     }
   }, TIMEOUT);
 
-  it("resolves post-milestone projection drift through the human baseline decision", async () => {
+  it("recovers post-review governing drift through fresh production and review", async () => {
     const fixture = await repository();
     const prdPath = join(fixture.root, ".archflow", "tasks", task, "prd.md");
     const recordedPrd = "# PRD\n\nBaseline requirements.\n";
     const mergedPrd = "# PRD\n\nBaseline requirements, plus merged changes from main.\n";
-    const postAdoptionDrift = "# PRD\n\nBaseline requirements, plus merged changes, then more.\n";
     const prd = { skill: "archflow-prd", intent: "resume" } as const;
     const h = semanticJourneyHarness({ root: fixture.root, taskId: task } as never);
-    restorers.push(installSemanticReviewStub(fixture.root, [[]]));
+    restorers.push(installSemanticReviewStub(fixture.root, [[], []]));
 
     // Create the task and drive the PRD through produce and a clean (empty-findings) review, so
     // the recorded projection exists and later drift is strict — exactly like a design phase
@@ -568,73 +566,23 @@ describe("post-triage re-entry edits are expected", () => {
     expect(view.next_action.kind).toBe("decide");
     expect(view.next_action.expected_submission).toBe("gate-summary");
 
-    // The drift: the branch legitimately moves past the recorded bytes (a merge, later work).
-    // Reconciliation blocking routes ahead of the approval gate, so the pending decision becomes
-    // the human baseline adoption instead of the PRD approval.
+    // The drift changes the current position's governing document after review. It cannot be
+    // adopted as reviewed bytes: the server must retire the stale result/review authority and
+    // start a fresh significant production boundary without changing repository bytes.
     writeFileSync(prdPath, mergedPrd);
     view = await h.status(prd);
-    expect(view.next_action.kind).toBe("decide");
-    expect(view.next_action.expected_submission).toBe("gate-summary");
-    const opened = await applySemanticOk(h, prd, view, {
-      kind: "gate-summary", summary: "Files changed after their recorded review bytes.",
-    });
-    expect(opened.condition).toBe("awaiting-human");
-    expect(opened.presentation?.options.map((option) => option.token))
-      .toEqual(expect.arrayContaining(["keep-current-versions", "restore-recorded-versions"]));
-
-    // Restore first: the human discards the drift and takes the recorded bytes back. The rewrite
-    // uses the existing projection-plan machinery, so the file is byte-identical to the reviewed
-    // produce result and reconciliation goes clean on its own.
-    let decided = await applySemanticOk(h, prd, opened, {
-      kind: "decision", choice: "restore-recorded-versions", reason: "Rewrite the recorded versions.",
-    });
-    expect(readFileSync(prdPath, "utf8")).toBe(recordedPrd);
-    expect(decided.next_action.kind).not.toBe("inspect");
-
-    // Adopt: drift again, and this time the human keeps the current bytes. One decision and the
-    // pipeline resumes — this is the resolution the merge deadlock needed.
-    writeFileSync(prdPath, mergedPrd);
-    view = await h.status(prd);
-    expect(view.next_action.kind).toBe("decide");
-    const adoptOpened = await applySemanticOk(h, prd, view, {
-      kind: "gate-summary", summary: "Files changed after their recorded review bytes.",
-    });
-    decided = await applySemanticOk(h, prd, adoptOpened, {
-      kind: "decision", choice: "keep-current-versions", reason: "Keep the merge.",
-    });
+    expect(view.next_action.kind).toBe("recover-milestone-authority");
+    expect(view.next_action.expected_submission).toBe("none");
+    view = await applySemanticOk(h, prd, view);
+    expect(view.next_action.kind).toBe("submit-work");
     expect(readFileSync(prdPath, "utf8")).toBe(mergedPrd);
-    expect(decided.next_action.kind).not.toBe("inspect");
-
-    // Drift the same path again: the adopted generation is now the recorded baseline, so new
-    // drift opens a fresh decision — adoption did not silently immunize the path. But the
-    // adopted bytes exist only in the worktree and git, never in a retained manifest, so a
-    // restore can never apply: the choice is refused before the decision is archived (a decided
-    // interface is immutable, so archiving first would wedge the gate behind it).
-    writeFileSync(prdPath, postAdoptionDrift);
-    view = await h.status(prd);
-    expect(view.next_action.kind).toBe("decide");
-    const redriftOpened = await applySemanticOk(h, prd, view, {
-      kind: "gate-summary", summary: "Drift after adoption.",
-    });
-    const refused = await h.apply(prd, redriftOpened, {
-      kind: "decision", choice: "restore-recorded-versions", reason: "Try to restore adoption bytes.",
-    });
-    expect(refused.ok).toBe(false);
-    if (refused.ok) throw new Error("unreachable");
-    expect(refused.error.code).toBe("STATE_INVALID");
-    expect(refused.error.message).toContain("baseline-adoption-restore-source-unavailable");
-
-    // The sanctioned exit from post-adoption drift is a second adoption. The refused restore
-    // invalidated the previous offer, so the decision goes through a fresh authenticated view.
-    const afterRefusal = await h.status(prd);
-    decided = await applySemanticOk(h, prd, afterRefusal, {
-      kind: "decision", choice: "keep-current-versions", reason: "Keep the follow-up work too.",
-    });
-    expect(readFileSync(prdPath, "utf8")).toBe(postAdoptionDrift);
-    expect(decided.next_action.kind).not.toBe("inspect");
+    view = await applySemanticOk(h, prd, view, { kind: "work-result", outcome: "succeeded" });
+    expect(view.next_action.kind).toBe("review");
+    view = await applySemanticOk(h, prd, view);
+    expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
   }, TIMEOUT);
 
-  it("adopts a committed deletion through the human baseline decision", async () => {
+  it("keeps an executable offer after a committed governing-document deletion", async () => {
     const fixture = await repository();
     const prdPath = join(fixture.root, ".archflow", "tasks", task, "prd.md");
     const prd = { skill: "archflow-prd", intent: "resume" } as const;
@@ -651,49 +599,27 @@ describe("post-triage re-entry edits are expected", () => {
     view = await applySemanticOk(h, prd, view, { kind: "work-result", outcome: "succeeded" });
     view = await applySemanticOk(h, prd, view);
 
-    // Adopt once, so the newest recorded projection for the path is an adoption — digest-only,
-    // with no retained bytes to restore from.
+    // Recover once so the merged governing bytes become a fresh produced subject rather than an
+    // adopted reviewed baseline. Leave that fresh result before review so no human gate masks the
+    // committed-deletion reconciliation below.
     writeFileSync(prdPath, "# PRD\n\nBaseline requirements, merged.\n");
     view = await h.status(prd);
-    let opened = await applySemanticOk(h, prd, view, {
-      kind: "gate-summary", summary: "Files changed after their recorded review bytes.",
-    });
-    await applySemanticOk(h, prd, opened, {
-      kind: "decision", choice: "keep-current-versions", reason: "Keep the merged bytes.",
-    });
+    expect(view.next_action.kind).toBe("recover-milestone-authority");
+    view = await applySemanticOk(h, prd, view);
+    view = await applySemanticOk(h, prd, view, { kind: "work-result", outcome: "succeeded" });
 
     // Commit the task document, then delete it with another commit. The deletion is now
-    // committed reality while the recorded projection is adoption-sourced: neither a restore
-    // (no retained bytes) nor a produce re-declaration (no before-image in the base) can run,
-    // so the one honest resolution is the human adopting the deletion.
+    // committed reality. A governing document still cannot enter baseline adoption: status must
+    // return an executable same-owner recovery offer instead of a dead-end inspection.
     git(fixture.root, "add", "--", `.archflow/tasks/${task}`);
     git(fixture.root, "commit", "-q", "-m", "task documents");
     rmSync(prdPath);
     git(fixture.root, "add", "--", `.archflow/tasks/${task}`);
     git(fixture.root, "commit", "-q", "-m", "remove the PRD");
     view = await h.status(prd);
-    expect(view.next_action.kind).toBe("decide");
-    expect(view.next_action.expected_submission).toBe("gate-summary");
-    opened = await applySemanticOk(h, prd, view, {
-      kind: "gate-summary", summary: "The PRD was deleted by an already-committed change.",
-    });
-    const tokens = opened.presentation?.options.map((option) => option.token) ?? [];
-    expect(tokens).toContain("keep-the-deletions");
-    expect(tokens).not.toContain("keep-current-versions");
-    expect(tokens).not.toContain("restore-recorded-versions");
-    const decided = await applySemanticOk(h, prd, opened, {
-      kind: "decision", choice: "keep-the-deletions", reason: "The deletion is committed history.",
-    });
-    expect(decided.next_action.kind).not.toBe("inspect");
-
-    // The retirement is durable: re-deriving discovery no longer reports the deleted path, so
-    // the pipeline resumes its pending approval and no second deletion decision is offered.
-    const followUp = await h.status(prd);
-    const followUpOpened = await applySemanticOk(h, prd, followUp, {
-      kind: "gate-summary", summary: "Resume the pending approval.",
-    });
-    const followUpTokens = followUpOpened.presentation?.options.map((option) => option.token) ?? [];
-    expect(followUpTokens).not.toContain("keep-the-deletions");
+    expect(view.next_action.kind).not.toBe("inspect");
+    expect(view.next_action.expected_submission).toBe("none");
+    expect(view.next_action.offer).toBeDefined();
   }, TIMEOUT);
 
   it("admits the author-initiated produce re-entry door from counter_review-succeeded", async () => {

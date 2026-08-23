@@ -321,6 +321,8 @@ function fixedSubsteps(
     case "reopen": return Object.freeze(["reopen"]);
     case "open-waiver": return Object.freeze(["open-waiver"]);
     case "refresh-milestone-baseline": return Object.freeze(["refresh-milestone-baseline"]);
+    case "recover-milestone-authority": return Object.freeze(["recover-milestone-authority"]);
+    case "refresh-stale-baseline": return Object.freeze(["refresh-stale-baseline"]);
     case "decide": return expectedSubmission === "gate-summary"
       ? Object.freeze(["open-gate"])
       : expectedSubmission === "decision"
@@ -392,6 +394,10 @@ function requestFacts(
       return { execution: "compose-request", facts: { kind: "waiver", intent_id: intentId } };
     case "refresh-milestone-baseline":
       return { execution: "compose-request", facts: { kind: "refresh-milestone-baseline", intent_id: intentId } };
+    case "recover-milestone-authority":
+      return { execution: "compose-request", facts: { kind: "recover-milestone-authority", intent_id: intentId } };
+    case "refresh-stale-baseline":
+      return { execution: "compose-request", facts: { kind: "refresh-stale-baseline", intent_id: intentId } };
     case "start-next-skill":
     case "finish-task":
       return { execution: "compose-request", facts: { kind: "advance", intent_id: intentId } };

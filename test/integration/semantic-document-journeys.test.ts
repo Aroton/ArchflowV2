@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { parseSafeCode } from "../../src/contracts/evidence.js";
-import { sha256Bytes } from "../../src/contracts/canonical.js";
+import { canonicalJsonBytes, sha256Bytes } from "../../src/contracts/canonical.js";
 import { handleSemanticApply } from "../../src/mcp/handlers/semantic.js";
 import { createProductionServices } from "../../src/state/production.js";
 import { readTaskState } from "../../src/state/read.js";
@@ -596,6 +596,14 @@ roles:
     });
     const phaseInvocation = { skill: "archflow-phase-design", phase: 1, intent: "resume" } as const;
     view = await h.status(phaseInvocation);
+    const designPinnedBranch = execFileSync(
+      "git", ["symbolic-ref", "--short", "HEAD"], { cwd: workspace.root, encoding: "utf8" },
+    ).trim();
+    execFileSync("git", ["switch", "-q", "-c", "same-commit-design-race"], { cwd: workspace.root });
+    const designSwitched = await h.apply(phaseInvocation, view);
+    expect(designSwitched).toMatchObject({ ok: false, error: { retryable: false } });
+    execFileSync("git", ["switch", "-q", designPinnedBranch], { cwd: workspace.root });
+    view = await h.status(phaseInvocation);
     result = await h.apply(phaseInvocation, view);
     if (!result.ok) throw new Error(JSON.stringify(result));
     const phaseResource = result.value.resources.find((resource) => resource.role === "current-artifact");
@@ -644,6 +652,14 @@ The implementation handoff is offered after exact commit proof.
     const phaseCommit = result.value.next_action.commit;
     if (phaseCommit === undefined) throw new Error("autonomous phase-design commit unavailable");
     expect(phaseCommit.requires_human_confirmation).toBe(false);
+    const legacyState = JSON.parse(readFileSync(workspace.services.authority.state.absolute, "utf8"));
+    for (const legacySettlement of legacyState.rule_settlements.filter(
+      (entry: { phase_instance?: string }) => entry.phase_instance === "phase-design-1",
+    )) {
+      delete legacySettlement.milestone_target_ref;
+      delete legacySettlement.milestone_target_head;
+    }
+    writeFileSync(workspace.services.authority.state.absolute, canonicalJsonBytes(legacyState));
     execFileSync("git", ["add", "-A", "--", ...phaseCommit.paths], { cwd: workspace.root });
     execFileSync("git", [
       "-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid",
@@ -653,6 +669,20 @@ The implementation handoff is offered after exact commit proof.
     expect(view.next_action).toMatchObject({
       kind: "start-next-skill", skill: "archflow-phase-impl", skill_args: ["1"],
     });
+
+    const implementationInvocation = { skill: "archflow-phase-impl", phase: 1, intent: "resume" } as const;
+    // A pre-target-facts settlement remains readable, but only at the exact milestone tip. An
+    // unrelated descendant after the offer cannot acquire invented target identity at apply.
+    const legacyOffer = await h.status(implementationInvocation);
+    expect(legacyOffer.next_action).toMatchObject({ kind: "start-next-skill", expected_submission: "none" });
+    writeFileSync(join(workspace.root, "post-phase-design.txt"), "ordinary descendant\n");
+    execFileSync("git", ["add", "--", "post-phase-design.txt"], { cwd: workspace.root });
+    execFileSync("git", [
+      "-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid",
+      "commit", "-q", "-m", "ordinary descendant after phase design",
+    ], { cwd: workspace.root });
+    const descendantRefusal = await h.apply(implementationInvocation, legacyOffer);
+    expect(descendantRefusal).toMatchObject({ ok: false, error: { retryable: false } });
     expect(readFileSync(join(workspace.root, "semantic-review-count"), "utf8")).toBe("3");
   });
 
@@ -728,6 +758,12 @@ The implementation handoff is offered after exact commit proof.
       conclusion: { wait: false, match: null },
       config_digest: sha256Bytes(readFileSync(workspace.services.authority.config.absolute)),
       milestone_baseline_commit: execFileSync(
+        "git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" },
+      ).trim(),
+      milestone_target_ref: execFileSync(
+        "git", ["symbolic-ref", "-q", "HEAD"], { cwd: workspace.root, encoding: "utf8" },
+      ).trim(),
+      milestone_target_head: execFileSync(
         "git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" },
       ).trim(),
       settled_at_revision: settled.document.value.revision,
@@ -875,6 +911,12 @@ The committed state carries the settlement and the successor hand-off is offered
       milestone_baseline_commit: execFileSync(
         "git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" },
       ).trim(),
+      milestone_target_ref: execFileSync(
+        "git", ["symbolic-ref", "-q", "HEAD"], { cwd: workspace.root, encoding: "utf8" },
+      ).trim(),
+      milestone_target_head: execFileSync(
+        "git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" },
+      ).trim(),
       settled_at_revision: settled.document.value.revision,
     };
     expect(settled.document.value.rule_settlements).toEqual(expect.arrayContaining([receipt]));
@@ -989,6 +1031,12 @@ The committed state carries the settlement and the successor hand-off is offered
       conclusion: { wait: false, match: null },
       config_digest: sha256Bytes(readFileSync(workspace.services.authority.config.absolute)),
       milestone_baseline_commit: execFileSync(
+        "git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" },
+      ).trim(),
+      milestone_target_ref: execFileSync(
+        "git", ["symbolic-ref", "-q", "HEAD"], { cwd: workspace.root, encoding: "utf8" },
+      ).trim(),
+      milestone_target_head: execFileSync(
         "git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" },
       ).trim(),
       settled_at_revision: settled.document.value.revision,

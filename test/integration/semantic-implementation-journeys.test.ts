@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { canonicalJsonBytes } from "../../src/contracts/canonical.js";
 import type { WorkflowViewV1 } from "../../src/contracts/semantic-workflow.js";
 import {
   installSemanticReviewStub,
@@ -498,5 +499,146 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     expect(redeclared.value.condition).not.toBe("blocked");
     expect(redeclared.value.next_action.kind).toBe("review");
     expect(existsSync(work.sourceAbsolute)).toBe(false);
+  });
+
+  it("supersedes stale baseline interfaces and refuses replay across changed and replaced history", async () => {
+    const workspace = await createTaskWorkspace({ taskId: "semantic-stale-baseline-refresh", label: "semantic-stale-baseline-refresh" });
+    workspaces.push(workspace);
+    restorers.push(installSemanticReviewStub(workspace.root, [[]]));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, view } = await consumeImplementationHandoff(workspace, h);
+    const work = writeClientImplementationWork(workspace, view, {
+      source: SOURCE_BYTES, notes: IMPLEMENTATION_NOTES, transcript: TRANSCRIPT_BYTES,
+    });
+    const submitted = await h.apply(invocation, view, implementationSubmission(workspace, work.outputs));
+    expect(submitted.ok, JSON.stringify(submitted)).toBe(true);
+    if (!submitted.ok) return;
+
+    writeFileSync(work.sourceAbsolute, SOURCE_BYTES_REVISED);
+    let drift = await h.status(invocation);
+    expect(drift.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    let opened = await h.apply(invocation, drift, { kind: "gate-summary", summary: "Review the exact source drift." });
+    expect(opened.ok, JSON.stringify(opened)).toBe(true);
+    if (!opened.ok) return;
+    const firstGate = (readTaskState(workspace).open_gate as { gate_id: string }).gate_id;
+
+    // Change the complete live drift subject after presentation. Status must offer only the
+    // server-authored refresh; applying it archives supersession and recomposes a fresh decision.
+    writeFileSync(work.sourceAbsolute, `${SOURCE_BYTES_REVISED}\n// independently changed after presentation\n`);
+    const staleOffer = await h.status(invocation);
+    expect(staleOffer.next_action).toMatchObject({ kind: "refresh-stale-baseline", expected_submission: "none" });
+    const refreshed = await h.apply(invocation, staleOffer);
+    expect(refreshed.ok, JSON.stringify(refreshed)).toBe(true);
+    if (!refreshed.ok) return;
+    expect(refreshed.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    const archived = JSON.parse(readFileSync(join(
+      workspace.services.authority.task_root, "authority", "decisions", firstGate, "decision.json",
+    ), "utf8")) as Record<string, unknown>;
+    expect(archived).toMatchObject({ outcome: "superseded-stale-baseline", gate_id: firstGate });
+    const replay = await h.apply(invocation, staleOffer);
+    expect(replay).toMatchObject({ ok: false, error: { code: "SEMANTIC_SUBMISSION_MISMATCH" } });
+
+    opened = await h.apply(invocation, refreshed.value, { kind: "gate-summary", summary: "Review the recomposed exact drift." });
+    expect(opened.ok, JSON.stringify(opened)).toBe(true);
+    if (!opened.ok) return;
+
+    // Replace the target with a sibling-history commit carrying the identical tracked tree.
+    // Worktree bytes, repository roots, drift membership, and committedness are unchanged, but
+    // first-parent continuity from the presented head is gone.
+    const tree = execFileSync("git", ["write-tree"], { cwd: workspace.root, encoding: "utf8" }).trim();
+    const rootCommit = execFileSync("git", ["rev-list", "--max-parents=0", "HEAD"], { cwd: workspace.root, encoding: "utf8" }).trim();
+    const replacement = execFileSync("git", ["-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid", "commit-tree", tree, "-p", rootCommit], {
+      cwd: workspace.root, encoding: "utf8", input: "identical-tree non-descendant replacement\n",
+    }).trim();
+    const target = execFileSync("git", ["symbolic-ref", "-q", "HEAD"], { cwd: workspace.root, encoding: "utf8" }).trim();
+    execFileSync("git", ["update-ref", target, replacement], { cwd: workspace.root });
+
+    const replaced = await h.status(invocation);
+    expect(replaced.next_action).toMatchObject({ kind: "refresh-stale-baseline", expected_submission: "none" });
+    const replacedRefresh = await h.apply(invocation, replaced);
+    expect(replacedRefresh.ok, JSON.stringify(replacedRefresh)).toBe(true);
+    if (!replacedRefresh.ok) return;
+    expect(replacedRefresh.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+  });
+
+  it("recovers missing phase-milestone proof without disturbing unrelated index or worktree bytes", async () => {
+    const workspace = await createTaskWorkspace({ taskId: "semantic-missing-milestone-recovery", label: "semantic-missing-milestone-recovery" });
+    workspaces.push(workspace);
+    restorers.push(installSemanticReviewStub(workspace.root, [[], [], [], []]));
+    const h = semanticJourneyHarness(workspace);
+    await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
+    const invocation = { skill: "archflow-phase-design", phase: 1, intent: "resume" } as const;
+
+    // Replace the exact authorized milestone with the first sibling-history candidate after the
+    // same baseline. Its tree preserves the reviewed task bytes, but its unauthorized message
+    // makes historical proof genuinely missing instead of merely not-yet-created.
+    const milestone = gitHead(workspace);
+    const baseline = execFileSync("git", ["rev-parse", `${milestone}^`], { cwd: workspace.root, encoding: "utf8" }).trim();
+    const tree = execFileSync("git", ["rev-parse", `${milestone}^{tree}`], { cwd: workspace.root, encoding: "utf8" }).trim();
+    const replacement = execFileSync("git", [
+      "-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid",
+      "commit-tree", tree, "-p", baseline,
+    ], { cwd: workspace.root, encoding: "utf8", input: "unauthorized replacement milestone\n" }).trim();
+    const target = execFileSync("git", ["symbolic-ref", "-q", "HEAD"], { cwd: workspace.root, encoding: "utf8" }).trim();
+    execFileSync("git", ["update-ref", target, replacement], { cwd: workspace.root });
+
+    const sentinel = join(workspace.root, "recovery-sentinel.txt");
+    writeFileSync(sentinel, "staged sentinel bytes\n");
+    execFileSync("git", ["add", "--", "recovery-sentinel.txt"], { cwd: workspace.root });
+    writeFileSync(sentinel, "unstaged sentinel bytes\n");
+    const stagedBytes = execFileSync("git", ["show", ":recovery-sentinel.txt"], { cwd: workspace.root, encoding: "utf8" });
+    const worktreeBytes = readFileSync(sentinel, "utf8");
+
+    // A task-complete waiver is durable across ordinary transitions. Recovery must clear it
+    // through the transaction kernel's exact recovery-draft exception and retain it in audit.
+    const beforeRecovery = readTaskState(workspace) as Record<string, unknown> & { revision: number };
+    const activeWaiver = {
+      gate_id: "recovery-waiver-gate",
+      rule_id: "recovery-waiver-rule",
+      rule_version: 1,
+      subject_digest: "a".repeat(64),
+      scope: { operation: "review-trigger", boundary: "subject" },
+      granted: true,
+      expires: "task-complete",
+      granted_at_revision: beforeRecovery.revision,
+    };
+    writeFileSync(workspace.services.authority.state.absolute, canonicalJsonBytes({
+      ...beforeRecovery,
+      waivers: [activeWaiver],
+    }));
+
+    const offer = await h.status(invocation);
+    expect(offer.next_action).toMatchObject({ kind: "recover-milestone-authority", expected_submission: "none" });
+    const recovered = await h.apply(invocation, offer);
+    expect(recovered.ok, JSON.stringify(recovered)).toBe(true);
+    if (!recovered.ok) return;
+    expect(recovered.value.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
+    expect(execFileSync("git", ["show", ":recovery-sentinel.txt"], { cwd: workspace.root, encoding: "utf8" })).toBe(stagedBytes);
+    expect(readFileSync(sentinel, "utf8")).toBe(worktreeBytes);
+    const state = readTaskState(workspace) as {
+      authoritative_results?: readonly { phase_instance: string }[];
+      milestone_recovery_history?: readonly {
+        phase_instance: string;
+        cause: string;
+        cleared_waivers: readonly { gate_id: string }[];
+      }[];
+      waivers?: readonly unknown[];
+    };
+    expect(state.milestone_recovery_history?.at(-1)).toMatchObject({
+      phase_instance: "phase-design-1",
+      cause: "milestone-proof-missing",
+      cleared_waivers: [{ gate_id: "recovery-waiver-gate" }],
+    });
+    expect(state.waivers).toEqual([]);
+    expect(state.authoritative_results?.some((entry) => entry.phase_instance === "phase-design-1")).toBe(false);
+
+    const replay = await h.apply(invocation, offer);
+    expect(replay).toMatchObject({ ok: false, error: { code: "SEMANTIC_SUBMISSION_MISMATCH" } });
+    const reproduced = await h.apply(invocation, recovered.value, { kind: "work-result", outcome: "succeeded" });
+    expect(reproduced.ok, JSON.stringify(reproduced)).toBe(true);
+    if (!reproduced.ok) return;
+    expect(reproduced.value.next_action.kind).toBe("review");
+    expect(execFileSync("git", ["show", ":recovery-sentinel.txt"], { cwd: workspace.root, encoding: "utf8" })).toBe(stagedBytes);
+    expect(readFileSync(sentinel, "utf8")).toBe(worktreeBytes);
   });
 });

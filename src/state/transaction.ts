@@ -77,7 +77,7 @@ import {
   type ProjectionPlan,
 } from "./snapshots.js";
 import { cleanTaskWorkspace, cleanTerminalTaskWorkspace, removeSupersededPhaseDocuments } from "./workspace-cleanup.js";
-import { isExactPlanningRestartDraft } from "./restart-authority.js";
+import { isExactMilestoneRecoveryDraft, isExactPlanningRestartDraft } from "./restart-authority.js";
 
 const MAX_RECEIPT_BYTES = 1024 * 1024;
 
@@ -333,7 +333,11 @@ function assertPreserved(current: TaskStateV1, next: NextStateDraft): void {
     isDeepStrictEqual(next.approvals, current.approvals) &&
     isDeepStrictEqual(next.waivers, current.waivers);
   const restartHistoryChanged = !isDeepStrictEqual(next.restart_history, current.restart_history);
-  if ((!gateAuthorityPreserved || restartHistoryChanged) && !isExactPlanningRestartDraft(current, next)) {
+  if (
+    (!gateAuthorityPreserved || restartHistoryChanged) &&
+    !isExactPlanningRestartDraft(current, next) &&
+    !isExactMilestoneRecoveryDraft(current, next)
+  ) {
     throw new TypeError("next state draft changed gate authority");
   }
 }

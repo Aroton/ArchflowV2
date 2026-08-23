@@ -1,6 +1,6 @@
 # OVERVIEW
 
-**Explored:** 2026-08-21 · **Commit:** `869c189` · **Covers:** the whole repository
+**Explored:** 2026-08-23 · **Commit:** `0c23ade` · **Covers:** the whole repository
 
 ArchFlow is a governed development workflow for AI coding agents. A *task* moves through fixed stages — PRD → design → per-phase design → per-phase implementation — and at every stage the agent must produce an artifact, review it, and survive an adversarial review dispatched to an independent reviewer CLI (the **other model family** by default, either family by explicit config). Project `approval_rules` decide which clean PRD, design, phase-design, or phase-implementation subjects stop for a human; changed-path content triggers add phase-implementation-only waits. Safety and policy exception gates remain unconditional. The system's core belief, stated plainly:
 
@@ -46,6 +46,10 @@ flowchart TB
 One client loop serves every workflow. PRD, task design, phase design, phase implementation, status reporting, and legacy adoption all use `archflow_status` for one reconciled, read-only view and `archflow_apply` for exactly one server-offered action. The offer hides revisions, digests, gate bindings, and request composition while keeping the client responsible for authored production and triage submissions. The one purpose-specific local adapter is the legacy upgrade: preview, stage, and atomic adoption run through `archflow-local upgrade` because the task does not exist yet at adoption time; everything after adoption is ordinary semantic surface. Git also remains client-owned: the semantic view returns exact authorized commit facts — for an implementation, the plural path set, message, target ref, baseline, and `requires_human_confirmation`. The client always verifies and stages those exact facts; it obtains a separate conversational confirmation only when that flag is `true`, then creates the commit itself. The server never stages or commits repository bytes.
 
 The boundary is intentionally exact. Generic `archflow_status` is a common read-only view and mints no mutation offer. A producing invocation can own only its current position, document or implementation phase, except that the exact server-named successor skill may finish an authenticated hand-off. One `archflow_apply` call executes one bounded offered action and returns a fresh view; it never chooses or loops into the next action.
+
+Milestone proof and the current workflow baseline are separate facts. The server proves an authorized design or implementation milestone at the first commit after its bound baseline on the authorized target's first-parent history; ordinary descendant commits therefore do not erase completion or inherit the original review authority. Separately, projected bytes are reconciled against the current worktree. Eligible ordinary drift can be adopted or restored, but adoption is only acceptance of the current workflow baseline: it performs no review and grants no commit authority. Changed governing planning documents must instead be restored or re-enter their owning review boundary before dependent work can continue.
+
+When history no longer proves the milestone, the server either retains the narrow unchanged no-wait design refresh, offers a same-position significant production/review recovery when a real committable delta exists, or returns an actionable inspection for corrupt evidence and content-preserving rewritten history. A stale baseline decision gets a server-owned refresh that replaces only its disposable interface and records no human choice. Both recovery actions are opaque, replay-safe, no-submission offers; clients never infer them from Git.
 
 ## The evidence pipeline
 

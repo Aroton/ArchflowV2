@@ -15,6 +15,7 @@ import {
   hashGitBlob,
   hashGitBlobIdentity,
   isCommitAncestorOfHead,
+  readFirstParentChildAfter,
   readGitBlobBytes,
   readCommitTreeBlob,
   readChangedGitPaths,
@@ -42,6 +43,37 @@ function verificationEvidence(root: string, taskId: string): ImplementationOutpu
 }
 
 describe("Git object proofs", () => {
+  it("selects only the first child after an exact first-parent baseline", async () => {
+    const root = mkdtempSync(join(tmpdir(), "archflow-first-parent-proof-"));
+    roots.push(root);
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root });
+    execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: root });
+    execFileSync("git", ["config", "user.name", "Test"], { cwd: root });
+    writeFileSync(join(root, "value.txt"), "root\n");
+    execFileSync("git", ["add", "."], { cwd: root });
+    execFileSync("git", ["commit", "-qm", "root"], { cwd: root });
+    writeFileSync(join(root, "value.txt"), "base\n");
+    execFileSync("git", ["commit", "-qam", "base"], { cwd: root });
+    const baseline = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+    writeFileSync(join(root, "value.txt"), "candidate\n");
+    execFileSync("git", ["commit", "-qam", "candidate"], { cwd: root });
+    const candidate = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+    execFileSync("git", ["commit", "--allow-empty", "-qm", "descendant"], { cwd: root });
+    const descendant = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+    const runner = createGitRunner({ cwd: root });
+
+    await expect(readFirstParentChildAfter(runner, baseline, descendant)).resolves.toBe(candidate);
+    await expect(readFirstParentChildAfter(runner, descendant, descendant)).resolves.toBeUndefined();
+
+    // The baseline is reachable only through the merge's second parent, so it is not on the
+    // authorized target first-parent path and cannot nominate a candidate.
+    execFileSync("git", ["switch", "-qc", "other", `${baseline}^`], { cwd: root });
+    execFileSync("git", ["commit", "--allow-empty", "-qm", "other root"], { cwd: root });
+    execFileSync("git", ["merge", "--no-ff", "-qm", "merge baseline second", baseline], { cwd: root });
+    const secondParentOnly = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+    await expect(readFirstParentChildAfter(runner, baseline, secondParentOnly)).resolves.toBeUndefined();
+  });
+
   it("uses path conversion for regular bytes and no conversion for symlink target bytes", async () => {
     const root = mkdtempSync(join(tmpdir(), "archflow-git-proofs-"));
     roots.push(root);

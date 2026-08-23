@@ -6,6 +6,7 @@ import type { TaskStateV1 } from "../contracts/durable-state.js";
 import type { ActiveGateV1, GateRequestV1 } from "../contracts/durable-gate.js";
 import { parsePathSafeId, type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
 import { assertPlainJson } from "../contracts/plain-json.js";
+import { baselineAdoptionDriftDigest, computeGateContextDigest } from "../contracts/fingerprints.js";
 
 export type ActiveAuthorityHeads = Readonly<{
   gate?: Readonly<{ gate_id: PathSafeId; subject_digest: Sha256Digest; context_digest: Sha256Digest }>;
@@ -67,6 +68,40 @@ export type ReconciliationResult = Readonly<{
   classification: "consistent" | "reconciliation-required";
   findings: readonly ReconciliationFinding[];
 }>;
+
+export type BaselineSubjectFreshness = Readonly<{
+  classification: "current" | "stale";
+  reason?: "target-history-replaced" | "drift-subject-changed";
+  live_subject_digest: Sha256Digest;
+  live_context_digest: Sha256Digest;
+}>;
+
+/**
+ * Revalidates the complete baseline subject without making ordinary descendant movement stale.
+ * The presented head remains the digest/disclosure anchor when it is still on the current target's
+ * first-parent history; callers supply that independently proved continuity fact. A rewritten
+ * target fails before byte equality can accidentally preserve the interface.
+ */
+export function assessBaselineSubjectFreshness(
+  request: Extract<GateRequestV1, { readonly kind: "baseline-adoption" }>,
+  liveContext: Extract<GateRequestV1, { readonly kind: "baseline-adoption" }>["context"],
+  presentedHeadOnCurrentFirstParent: boolean,
+): BaselineSubjectFreshness {
+  assertPlainJson(request, "baseline adoption request");
+  assertPlainJson(liveContext, "live baseline adoption context");
+  const context = request.context.target_head === undefined || !presentedHeadOnCurrentFirstParent
+    ? structuredClone(liveContext)
+    : { ...structuredClone(liveContext), target_head: request.context.target_head };
+  const liveSubjectDigest = baselineAdoptionDriftDigest(context);
+  const liveContextDigest = computeGateContextDigest("baseline-adoption", context);
+  if (!presentedHeadOnCurrentFirstParent) {
+    return Object.freeze({ classification: "stale", reason: "target-history-replaced", live_subject_digest: liveSubjectDigest, live_context_digest: liveContextDigest });
+  }
+  if (liveSubjectDigest !== request.subject_digest || liveContextDigest !== request.context_digest) {
+    return Object.freeze({ classification: "stale", reason: "drift-subject-changed", live_subject_digest: liveSubjectDigest, live_context_digest: liveContextDigest });
+  }
+  return Object.freeze({ classification: "current", live_subject_digest: liveSubjectDigest, live_context_digest: liveContextDigest });
+}
 
 function materialize(input: ReconciliationInput): ReconciliationInput {
   const stateValue = ownData(input.state, "value", "reconciliation state");

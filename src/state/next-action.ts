@@ -20,6 +20,8 @@ export type NextActionCode =
   | "commit-artifacts"
   | "commit-phase"
   | "refresh-milestone-baseline"
+  | "recover-milestone-authority"
+  | "refresh-stale-baseline"
   | "advance-phase"
   | "complete-task"
   | "task-complete"
@@ -100,6 +102,16 @@ export type NextActionInput = Readonly<{
    * make the commit unprovable the moment it is made. Absent when the commit is simply not made yet.
    */
   commit_blocked_reason?: string;
+  /** Server-proved same-position recovery after a milestone is missing from target history. */
+  milestone_recovery_required?: boolean;
+  /** Changed governing planning bytes are owned by the current design position and must re-enter review before any other drift is adopted. */
+  governing_document_recovery_required?: boolean;
+  /** Git/object/identity failures are inspection-only and never treated as missing authority. */
+  milestone_proof_unverifiable_reason?: string;
+  /** A stale open adoption interface must be superseded before status can render a fresh one. */
+  stale_baseline_refresh_required?: boolean;
+  /** Recovery would have no committable delta and therefore cannot produce a new milestone. */
+  milestone_recovery_no_delta?: boolean;
   design_commit?: Readonly<{
     path: string;
     message: string;
@@ -363,6 +375,22 @@ export function deriveNextAction(input: NextActionInput): NextAction {
       state,
     );
   }
+  if (input.stale_baseline_refresh_required === true) {
+    return action(
+      "refresh-stale-baseline",
+      "The open baseline decision no longer matches the live repository subject. Supersede only that stale interface and request fresh status.",
+      false,
+      state,
+    );
+  }
+  if (input.governing_document_recovery_required === true) {
+    return action(
+      "recover-milestone-authority",
+      "A governing planning document changed after its authority was established. Preserve the repository bytes, retire stale authority, and begin a fresh significant production and review cycle at this owning design position.",
+      false,
+      state,
+    );
+  }
   const finding = input.reconciliation_findings?.[0];
   if (finding !== undefined) {
     if (finding.kind === "projection-mismatch") {
@@ -452,6 +480,40 @@ export function deriveNextAction(input: NextActionInput): NextAction {
     return discoveryBlocker === "retained-receipt-ambiguity"
       ? action("inspect-retained-receipt", "Inspect the ambiguous retained successor receipts.", true, state)
       : action("inspect-state", `Inspect reconciliation discovery blocker ${discoveryBlocker}.`, true, state);
+  }
+  if (input.milestone_proof_unverifiable_reason !== undefined) {
+    return action(
+      "inspect-state",
+      `Milestone proof is unavailable (${input.milestone_proof_unverifiable_reason}); inspect repository identity and Git object availability before retrying.`,
+      true,
+      state,
+    );
+  }
+  if (input.milestone_recovery_required === true) {
+    if (input.accepted_no_wait_settlement?.milestone_baseline_commit !== undefined &&
+        input.milestone_refresh_config_matches !== true) {
+      return action(
+        "run-step",
+        "The approval-rule configuration changed after this design settled. Reopen produce so the current subject is reviewed under the live configuration before recovering milestone authority.",
+        false,
+        state,
+        { step: "produce" },
+      );
+    }
+    if (input.milestone_recovery_no_delta === true) {
+      return action(
+        "inspect-state",
+        "The milestone is missing from target history, but the current tree has no committable delta for a replacement milestone. Restore the authorized baseline or make the intended change explicit before recovering authority.",
+        true,
+        state,
+      );
+    }
+    return action(
+      "recover-milestone-authority",
+      "The authorized milestone is missing from target history. Retire this phase's stale authority and begin a fresh significant production attempt at the same position.",
+      false,
+      state,
+    );
   }
   if (state.terminal !== undefined) {
     return action(

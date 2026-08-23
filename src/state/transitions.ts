@@ -4,6 +4,7 @@ import type { DurableArtifact } from "../contracts/durable.js";
 import type {
   AuthoritativeResultRef,
   HumanRevisionRecord,
+  MilestoneRecoveryRecord,
   PlanningRestartRecord,
   TaskStateV1,
   RuleSettlementV1,
@@ -93,6 +94,16 @@ export type PlanningRestartPlanInput = Readonly<{
   human_provenance: PlanningRestartRecord["human_provenance"];
 }>;
 
+export type MilestoneRecoveryPlanInput = Readonly<{
+  current: TaskStateV1;
+  recovery_id: MilestoneRecoveryRecord["recovery_id"];
+  cause: MilestoneRecoveryRecord["cause"];
+  target_ref: MilestoneRecoveryRecord["target_ref"];
+  target_head: MilestoneRecoveryRecord["target_head"];
+  subject_digest: MilestoneRecoveryRecord["subject_digest"];
+  recomputed_input_fingerprint: Sha256Digest;
+}>;
+
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 
 function restartInvalid(input: PlanningRestartPlanInput, issue: string): ProjectResult<never> {
@@ -167,6 +178,71 @@ export function planPlanningRestart(value: PlanningRestartPlanInput): ProjectRes
     ...(targetKind === "prd" || targetKind === "design" || plannedFinalPhase === undefined
       ? {}
       : { planned_final_phase: plannedFinalPhase }),
+  }));
+}
+
+/**
+ * Retires the current phase's authority after its milestone can no longer be proved, without
+ * moving the task to another phase or changing repository bytes. The recovery record is audit
+ * evidence only: fresh production, review, and approval are still required from attempt one.
+ */
+export function planMilestoneRecovery(value: MilestoneRecoveryPlanInput): ProjectResult<NextStateDraft> {
+  assertPlainJson(value, "milestone recovery input");
+  const input = structuredClone(value);
+  const current = input.current;
+  const invalidRecovery = () => Object.freeze({
+    schema_version: "1" as const,
+    ok: false as const,
+    error: createProjectError("TRANSITION_INVALID", {
+      phase_instance: current.phase_instance,
+      from: `${current.step}-${current.status}`,
+      to: "milestone-recovery",
+    }),
+  });
+  if (
+    current.terminal !== undefined || current.open_gate !== undefined ||
+    input.target_ref.trim() === "" ||
+    (current.milestone_recovery_history ?? []).some((record) => record.recovery_id === input.recovery_id)
+  ) return invalidRecovery();
+
+  const superseded = current.authoritative_results.filter((reference) =>
+    reference.phase_instance === current.phase_instance);
+  const retained = current.authoritative_results.filter((reference) =>
+    reference.phase_instance !== current.phase_instance);
+  const recoveredAtRevision = parseSafeInteger(current.revision + 1);
+  const record: MilestoneRecoveryRecord = Object.freeze({
+    recovery_id: input.recovery_id,
+    phase_instance: current.phase_instance,
+    cause: input.cause,
+    target_ref: input.target_ref,
+    target_head: input.target_head,
+    subject_digest: input.subject_digest,
+    recovered_at_revision: recoveredAtRevision,
+    superseded_results: Object.freeze(superseded),
+    cleared_waivers: Object.freeze([...current.waivers]),
+    ...(current.pending_human_revision === undefined
+      ? {}
+      : { cleared_pending_human_revision: current.pending_human_revision }),
+  });
+  const history = Object.freeze(
+    [...(current.milestone_recovery_history ?? []), record]
+      .sort((left, right) => left.recovery_id.localeCompare(right.recovery_id)),
+  );
+  const {
+    revision: _revision,
+    last_transition: _lastTransition,
+    pending_human_revision: _pendingHumanRevision,
+    ...preserved
+  } = current;
+  return ok(Object.freeze({
+    ...preserved,
+    step: "produce",
+    status: "running",
+    attempt: parseSafeInteger(1),
+    input_fingerprint: input.recomputed_input_fingerprint,
+    authoritative_results: Object.freeze(retained),
+    waivers: Object.freeze([]),
+    milestone_recovery_history: history,
   }));
 }
 

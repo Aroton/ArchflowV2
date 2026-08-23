@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { canonicalDocument, canonicalJsonDigest } from "../../src/contracts/canonical.js";
+import { canonicalDocument, canonicalJsonDigest, parseGitOid } from "../../src/contracts/canonical.js";
 import { intentOutcomeDigest, parseIntentReceipt, type IntentReceiptV1 } from "../../src/contracts/durable-intent.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
+import type { GateRequestV1 } from "../../src/contracts/durable-gate.js";
 import { parsePathSafeId, parseSafeCode, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { baselineAdoptionDriftDigest, computeGateContextDigest } from "../../src/contracts/fingerprints.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
-import { reconcileCurrentAuthority } from "../../src/state/reconciliation.js";
+import { assessBaselineSubjectFreshness, reconcileCurrentAuthority } from "../../src/state/reconciliation.js";
 
 const D = (value: string) => parseSha256Digest(value.repeat(64));
 const PHASE = encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(10) });
@@ -20,6 +22,28 @@ const STATE: TaskStateV1 = {
 };
 
 describe("reconcileCurrentAuthority", () => {
+  it("keeps an identical baseline subject current across descendants but rejects replaced history", () => {
+    const context = {
+      drifted_projections: [{
+        path: parseRepositoryPathClaim("src/a.ts"), recorded_digest: D("a"), observed_digest: D("b"),
+      }],
+      target_ref: "refs/heads/main",
+      target_head: parseGitOid("a".repeat(40)),
+      uncommitted_paths: [parseRepositoryPathClaim("src/a.ts")],
+    } as const;
+    const request = {
+      kind: "baseline-adoption",
+      context,
+      subject_digest: baselineAdoptionDriftDigest(context),
+      context_digest: computeGateContextDigest("baseline-adoption", context),
+    } as unknown as Extract<GateRequestV1, { kind: "baseline-adoption" }>;
+    const liveDescendant = { ...context, target_head: parseGitOid("b".repeat(40)) };
+    expect(assessBaselineSubjectFreshness(request, liveDescendant, true).classification).toBe("current");
+    expect(assessBaselineSubjectFreshness(request, liveDescendant, false)).toMatchObject({
+      classification: "stale", reason: "target-history-replaced",
+    });
+  });
+
   it("classifies only supplied matching projections as consistent", () => {
     const projection = { path: parseRepositoryPathClaim("src/a.ts"), content_digest: D("a") };
     expect(reconcileCurrentAuthority({
