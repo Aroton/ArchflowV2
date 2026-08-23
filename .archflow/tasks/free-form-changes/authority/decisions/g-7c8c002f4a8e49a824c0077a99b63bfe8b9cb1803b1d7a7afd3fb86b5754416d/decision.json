@@ -1,0 +1,33 @@
+{
+  "context_digest": "d308a4687289f060a6c238b84a3651cc14f87ab257dffffa80817bfa433bc9ac",
+  "envelope": {
+    "context_digest": "d308a4687289f060a6c238b84a3651cc14f87ab257dffffa80817bfa433bc9ac",
+    "gate_id": "g-7c8c002f4a8e49a824c0077a99b63bfe8b9cb1803b1d7a7afd3fb86b5754416d",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-f8f123a4a4c221fd5d704f9876ba49e04994e9b4f6889f7eb847d37fcaf8af88",
+      "recorded_at": "2026-08-23T20:19:34.717Z",
+      "request_id_digest": "cb6e1dfe582727d204ad51a977fe5a0211a5214d27687704ab67f3a39eb2712e",
+      "schema_version": "1"
+    },
+    "kind": "design-approval",
+    "payload": {
+      "decision": "approve",
+      "reason": "approve"
+    },
+    "phase_instance": "design",
+    "schema_version": "1",
+    "subject_digest": "e0153ff1cd6c5c83aaa89db513d3c873a1986940e31362eacb16c47e60b683b1",
+    "task_id": "free-form-changes"
+  },
+  "gate_id": "g-7c8c002f4a8e49a824c0077a99b63bfe8b9cb1803b1d7a7afd3fb86b5754416d",
+  "kind": "design-approval",
+  "outcome": "decided",
+  "phase_instance": "design",
+  "schema_version": "1",
+  "subject_digest": "e0153ff1cd6c5c83aaa89db513d3c873a1986940e31362eacb16c47e60b683b1",
+  "task_id": "free-form-changes"
+}

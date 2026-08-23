@@ -1,0 +1,57 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 9,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 16743
+  },
+  "artifact_digest": "1d951dce87e2042c585b272f55bffb93a640a8c2ed557186788db682bd9889bd",
+  "input_fingerprint": "06623011d28910c8f14fcbda9a96ee7bfc479f216eb4b0ec0635f276b25540d6",
+  "outputs": [],
+  "phase_instance": "prd",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "result-f4fd6f15e6024d70767b5d39c2444b06",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "review-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "assurance": "server-attested",
+      "blocking_count": 0,
+      "cli_version": "2.1.241",
+      "effort": "medium",
+      "envelope_input_digest": "02896f3c7686a1d566bf7ce0cf652951406c1b8d6e08f909452c23a8e69214ae",
+      "findings": [],
+      "input_fingerprint": "06623011d28910c8f14fcbda9a96ee7bfc479f216eb4b0ec0635f276b25540d6",
+      "invocation_id": "invocation-7291348bd0a841016737307486b0f02a",
+      "matched_rule_versions": [],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "058021f5d1934e94c991fecfa1a1d869342e00abc949b8286bd665ff0a0ab18b",
+      "phase_instance": "prd",
+      "producer_family": "codex",
+      "result_id": "result-f4fd6f15e6024d70767b5d39c2444b06",
+      "role": "counter-review",
+      "rubric_digest": "fad1d0bc48da5d04d33147d8bc18688d85d1ae18f782fac6a7f3e5c6f51d521f",
+      "schema_version": "1",
+      "step": "counter_review",
+      "subject_digest": "563407c950220a081c06a5995fb3dfd01fdf6d4f4acc89744c95a2d30427e2ba",
+      "task_id": "free-form-changes",
+      "verdict": "pass"
+    },
+    "schema_version": "1"
+  },
+  "step": "counter_review",
+  "task_id": "free-form-changes"
+}

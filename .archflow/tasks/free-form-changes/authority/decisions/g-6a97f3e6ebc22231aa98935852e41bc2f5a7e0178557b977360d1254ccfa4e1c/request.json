@@ -1,0 +1,34 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "cancel"
+  ],
+  "context": {
+    "artifact_kind": "prd"
+  },
+  "context_digest": "03096477ebcc02b146d4258ef3a5cda48613ec1aaba04af403e0a909f975888c",
+  "current_evidence": {
+    "set_digest": "24ce4200a1cfb400966e75a37aa5d43e04e3b714790dcffb2f744bf17ffd63d4",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "1d951dce87e2042c585b272f55bffb93a640a8c2ed557186788db682bd9889bd",
+        "producer_family": "codex",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-6a97f3e6ebc22231aa98935852e41bc2f5a7e0178557b977360d1254ccfa4e1c",
+  "intent_id": "afop-f5fe7910bdbf98e8ea061803b25498c513a73eb99da32ed3198067a98fd09654-open-gate",
+  "kind": "artifact-approval",
+  "opened_at_revision": 15,
+  "phase_instance": "prd",
+  "request_digest": "9d27bb1a152a300bce7a45a7c49aae3b5e8d9775ba29deeb2405f470d8e5aad6",
+  "schema_version": "1",
+  "subject_digest": "563407c950220a081c06a5995fb3dfd01fdf6d4f4acc89744c95a2d30427e2ba",
+  "summary": "The final PRD is ready for approval. It defines ArchFlow as a structured workflow that must coexist with ordinary repository edits, commits, and merges rather than locking the branch between phases.\n\nThe requirements preserve completed task-design, phase-design, and implementation milestones when their exact authorized commits remain provable in descendant history. Later implementation-output drift remains explicit: the human may keep current versions or restore retained reviewed versions, and either settled choice must lead to a usable successor or completion action. If the original milestone commit cannot be proven, ArchFlow uses the eligible unchanged-design baseline refresh or re-enters the owning workflow position as a significant revision for fresh authority.\n\nThe independent review initially found that design milestones were omitted; that gap was fixed, and the fresh review found no remaining defects. The separate constitution/policy review has also been explicitly approved. Retained risks are handled by keeping historical commit proof separate from current baseline adoption, refusing to describe adopted descendants as reviewed, failing closed on rewritten or missing history, revalidating stale decisions, and disclosing the durability limitation of uncommitted adopted bytes.",
+  "task_id": "free-form-changes"
+}

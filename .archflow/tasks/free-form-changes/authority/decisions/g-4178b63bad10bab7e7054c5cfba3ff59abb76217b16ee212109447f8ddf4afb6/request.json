@@ -1,0 +1,84 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "constitution": "pass",
+    "eligible_waivers": [
+      {
+        "rule": {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 2
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      }
+    ],
+    "failed_rules": [],
+    "matched_trigger_rules": [
+      {
+        "rule_id": "explicit-human-authority",
+        "rule_version": 2
+      },
+      {
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 1
+      }
+    ],
+    "uncertain_rules": [],
+    "uncertain_trigger_rules": []
+  },
+  "context_digest": "c299c5ae401e68b56affff8347a8d37c62a6ba3defba8f169c8d657c493f1a37",
+  "current_evidence": {
+    "set_digest": "24ce4200a1cfb400966e75a37aa5d43e04e3b714790dcffb2f744bf17ffd63d4",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "1d951dce87e2042c585b272f55bffb93a640a8c2ed557186788db682bd9889bd",
+        "producer_family": "codex",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-4178b63bad10bab7e7054c5cfba3ff59abb76217b16ee212109447f8ddf4afb6",
+  "intent_id": "afop-eab1bd16c454cf090d89afb5d123584244950557441d4f341f7103aff55084c8-open-gate",
+  "kind": "constitution-review",
+  "opened_at_revision": 13,
+  "phase_instance": "prd",
+  "request_digest": "5f9c552cfe851bf3e29febc1e85af3b7a0e6d18120cec36d77226b553a5ca381",
+  "schema_version": "1",
+  "subject_digest": "563407c950220a081c06a5995fb3dfd01fdf6d4f4acc89744c95a2d30427e2ba",
+  "summary": "The PRD is ready for your decision. It addresses the reported dead end by separating proof that an exact authorized workflow milestone commit occurred from the later file versions accepted as the current baseline. Ordinary descendant commits will no longer erase completed task-design, phase-design, or implementation milestones. When later implementation changes touch previously reviewed outputs, ArchFlow will still require the applicable keep-or-restore decision, but a settled choice must lead to the successor or task completion instead of stale commit replay or an inspection dead end. If the original milestone commit cannot be proven, the workflow will use the existing eligible unchanged-design refresh or re-enter the owning position for a significant revision and fresh authority.\n\nThe first counter-review found that the draft covered implementation commits but omitted the equivalent design-milestone failure. That finding was accepted and the PRD was materially revised to cover both design and implementation milestones. The fresh independent review found no remaining product defects.\n\nThe important retained boundaries are that adoption is not fresh review, a later descendant is never retroactively treated as the authorized milestone commit, rewritten or missing history fails closed into a supported recovery, and uncommitted adopted bytes carry an explicit fresh-clone durability limitation.",
+  "task_id": "free-form-changes"
+}

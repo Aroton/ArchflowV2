@@ -1,0 +1,98 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "constitution": "pass",
+    "eligible_waivers": [
+      {
+        "rule": {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 2
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 2
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      }
+    ],
+    "failed_rules": [],
+    "matched_trigger_rules": [
+      {
+        "rule_id": "approved-design-before-code",
+        "rule_version": 2
+      },
+      {
+        "rule_id": "explicit-human-authority",
+        "rule_version": 2
+      },
+      {
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 1
+      }
+    ],
+    "uncertain_rules": [],
+    "uncertain_trigger_rules": []
+  },
+  "context_digest": "c80c8f211e2c235ff9a706868c60827c73881f06a91ec0adc59dc53e007d4871",
+  "current_evidence": {
+    "set_digest": "343be21b6be8255f8393015dff3680e297fb970980363fc9384f2e78ac405bf6",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "a72e57a73b7d15f9d134969d668837d56a94a5fc95645945229d73652aa079af",
+        "producer_family": "codex",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-6462c2030d55aab59858d5454b2bf176f7f6827a45153d5602804e13ce48ff82",
+  "intent_id": "afop-30dd27ed220b500ada7dfd937a4b44d97ee759b48a644564382ec1b80fa8c3d5-open-gate",
+  "kind": "constitution-review",
+  "opened_at_revision": 29,
+  "phase_instance": "design",
+  "request_digest": "8782c09b2b3841c390614b7bc62ee42a1cedfb815f4eb681a53d9f818263a4cd",
+  "schema_version": "1",
+  "subject_digest": "e0153ff1cd6c5c83aaa89db513d3c873a1986940e31362eacb16c47e60b683b1",
+  "summary": "The design separates historical milestone proof from the current accepted baseline. It validates the original exact milestone as the first first-parent commit after its authorized baseline and requires it to remain reachable on the authorized target, while later projected-file drift continues through exact human adoption or restore without treating descendant commits as reviewed. New no-wait target facts make target identity durable. Representable missing proof enters a server-authenticated same-position fresh review cycle with authority cutoffs; content-preserving rewritten history with no committable delta returns explicit safe inspection rather than a synthetic commit. Governing PRD/task-design/phase-design bytes are classified by successor consumption at every handoff, including when co-produced by implementation, and cannot be baseline-adopted into dependent work without owning review. Baseline decisions bind the full path/digest/committedness subject, disclose uncommitted clone limits, tolerate unrelated descendants that do not change that subject, and refresh genuinely stale interfaces without fabricating a human choice. The plan is one atomic phase because contracts, Git proof, recovery transitions, gate behavior, skills, documentation, and end-to-end verification form one inseparable authority boundary. Automatic counter-review and constitution review completed with no remaining findings after revisions.",
+  "task_id": "free-form-changes"
+}
