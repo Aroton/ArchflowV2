@@ -1,6 +1,6 @@
 # review/COUNTER-REVIEW
 
-**Explored:** 2026-08-21 · **Commit:** `869c189` · **Covers:** `src/review/`, `src/dispatch/`, `src/contracts/mcp-tools.ts`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
+**Explored:** 2026-08-23 · **Commit:** `92fa1f6` · **Covers:** `src/review/`, `src/dispatch/`, `src/contracts/mcp-tools.ts`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
 
 Counter-review is the system's adversarial check: every artifact is reviewed by a server-dispatched reviewer — the producer's *opposite model family* by default (the shipped template's choice), either family by explicit config — so the evidence is something the producer cannot author. One offered semantic `review` action reaches the direct handler seam and covers up to two dispatches: the rubric counter-review, and — only when the pinned constitution has active rules, a decision the server makes alone — the constitution review (see below). Semantic review owns the outer process FIFO across replay, dispatch, and commit; the direct inner seam never queues itself again. This page covers the review envelope, the review flow, the constitution review, and waivers.
 
@@ -40,6 +40,7 @@ The production rubrics use one consequence-based standard across initial and rem
 - **Remediation review has a primary and secondary task.** First verify every accepted revision intent. Second, catch a newly introduced or previously undiscovered defect only when it clears the same materiality bar. This escape hatch keeps a terrible new issue actionable without turning every fix into another general search for improvements.
 - **Non-material output is suppressed, not deferred to the human.** Optional polish, harmless wording refinements, stylistic preferences, and completeness suggestions do not become a gate backlog. Structured review and triage evidence remains embedded in the current durable result manifest; Markdown renderings are disposable cache, not permanent outputs.
 - **Evidence gaps are proportional.** `unverifiable-claims` reports a gap only when missing evidence prevents a material judgment; explicit assumptions remain under `stated-assumptions`.
+- **Phase-boundary findings use the same materiality bar.** A reviewer may challenge a split, merge, or sequence when it makes a repository-ready outcome, stable predecessor input, valid completion state, or understandable verification story materially worse. Numeric preferences, file-count rules, phase-count targets, layer boundaries, and the fact that a design contains several work chunks are not defects by themselves. Broad, small, and genuinely open-ended plans are acceptable when their concrete exception value is explained.
 
 The honest limit remains: `prior-triage` reaches back exactly one round. The protocol reduces serial rediscovery by narrowing later work to remediation and material regressions; it does not make generative judgment deterministic.
 

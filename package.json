@@ -8,12 +8,14 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:unit": "vitest run test/unit",
-    "test:contracts": "vitest run test/contracts",
-    "test:mcp-runtime": "vitest run test/unit/mcp-*.test.ts test/integration/mcp-stdio.test.ts",
-    "test:real-host": "vitest run --no-file-parallelism test/real-host",
-    "bench:review": "vitest run test/real-host/review-benchmark.test.ts",
+    "test": "vitest run --project fast",
+    "test:unit": "vitest run --project fast test/unit",
+    "test:contracts": "vitest run --project fast test/contracts",
+    "test:extended": "vitest run --project extended",
+    "test:integration": "vitest run --project integration",
+    "test:crash": "vitest run --project crash",
+    "test:real-host": "vitest run --project real-host",
+    "bench:review": "vitest run --project real-host test/real-host/review-benchmark.test.ts",
     "probe:mcp-sdk-compatibility": "node scripts/probe-mcp-sdk-compatibility.mjs",
     "build:temp": "node scripts/build-temp.mjs",
     "release:stage": "node scripts/build-release.mjs",
@@ -29,7 +31,8 @@
     "test:notices-policy": "node scripts/test-notices-policy.mjs",
     "check:mcp-sdk-boundary": "node scripts/check-mcp-sdk-boundary.mjs",
     "test:mcp-sdk-boundary-policy": "node scripts/test-mcp-sdk-boundary-policy.mjs",
-    "check": "npm run probe:mcp-sdk-compatibility && npm run typecheck && npm run check:schemas && npm run test:mcp-runtime && npm test && npm run test:contracts && npm run build:temp && npm run check:notices && npm run test:notices-policy && npm run check:mcp-sdk-boundary && npm run test:mcp-sdk-boundary-policy && npm run check:release"
+    "check": "npm run probe:mcp-sdk-compatibility && npm run typecheck && npm test && npm run build:temp && npm run check:notices && npm run check:mcp-sdk-boundary",
+    "check:deep": "npm run check && npm run check:schemas && npm run test:extended && npm run test:integration && npm run test:crash && npm run test:notices-policy && npm run test:mcp-sdk-boundary-policy && npm run check:release"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",

@@ -1,6 +1,6 @@
 # workflow/LIFECYCLE
 
-**Explored:** 2026-08-21 · **Commit:** `869c189` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/contracts/config.ts`, `src/state/approval-rules.ts`, `src/state/semantic-*.ts`, `src/mcp/handlers/semantic.ts`, `skills/`
+**Explored:** 2026-08-23 · **Commit:** `92fa1f6` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/contracts/config.ts`, `src/state/approval-rules.ts`, `src/state/semantic-*.ts`, `src/mcp/handlers/semantic.ts`, `skills/`
 
 How a task moves from idea to committed code, and where a human must decide.
 
@@ -41,6 +41,14 @@ The workflow file's bytes are digest-pinned into each task at creation, so chang
 | status | `archflow-status` | nothing — read-only | surfaces gates, resolves none |
 
 Tracked task documents and authority live under `.archflow/tasks/<task>/`; transient, cache, and diagnostic bytes live under ignored `.archflow/runtime/tasks/<task>/`. Both resolvers enforce the same containment, symlink, and task boundary. The only shared material is repository policy and the maintained `docs/` set. **Tasks never read each other's files** — this isolation is real and test-enforced.
+
+## How implementation phases are bounded
+
+The default phase is one coherent repository-ready increment: it has one primary outcome, leaves the repository in a valid completion state, receives stable inputs from its predecessors, and has one verification story a human can understand. That shape makes each milestone a useful checkpoint for review, recovery, and later implementation; it avoids phases that are merely arbitrary slices of labor or bundles of unrelated outcomes.
+
+Architecture design performs observable checks in both directions. It merges neighboring phases when neither is a useful outcome without the other, and splits a phase when it contains independently valuable outcomes with separate completion and verification stories. Work chunks do not automatically become phases, and crossing UI, service, persistence, documentation, or other repository layers is normal when the changes jointly deliver one outcome. A broad or unusually small phase can remain when the design names its concrete exception value. A genuinely open-ended plan can remain open-ended for the same reason; the marker is not an escape from boundary reasoning.
+
+The numbered phase-design skill performs one bounded fit check against the reviewed parent plan. If it discovers a materially harmful split, merge, or sequencing defect, the correction travels through the existing compound parent-document result and server authority; it does not create a side-channel planning decision. Phase sizing remains engineering judgment. ArchFlow does not pretend that file counts, layer counts, phase counts, token estimates, or a one-session heuristic can determine the right boundary.
 
 ## The pipeline inside each gated stage
 

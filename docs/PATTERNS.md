@@ -185,9 +185,10 @@ Vitest runs in Node with explicit imports (`describe`, `it`, `expect`, hooks); g
 
 | Directory | Files | Role |
 |---|---:|---|
-| `test/unit/` | 107 | Module-level behavior and boundary tests; dependencies are usually injected rather than module-mocked |
-| `test/contracts/` | 27 | JSON Schema/Zod agreement, cross-authority parity, durable structural and semantic corpora |
-| `test/integration/` | 40 | Real Git repositories, process wiring, local CLI, MCP handlers/stdio, initialization, replay, and state lifecycle |
+| `test/unit/` | 99 | Fast module-level behavior and boundary tests; dependencies are usually injected rather than module-mocked |
+| `test/contracts/` | 27 | Fast representative public-shape, package-boundary, and durable-contract checks |
+| `test/extended/` | 2 | Exhaustive schema compilation and advertised-schema corpus traversal |
+| `test/integration/` | 49 | Real Git repositories, durable filesystem workflows, process wiring, local CLI, MCP handlers/stdio, initialization, replay, and state lifecycle |
 | `test/crash/` | 3 | Child-process fault injection and recovery/idempotence |
 | `test/real-host/` | 7 | Live host/preflight/terminal journeys, provider dispatch, host selection, and benchmark coverage |
 | `test/helpers/` | 5 | Reusable repository, workspace, constitution, and host harnesses |
@@ -210,12 +211,15 @@ Common verification commands:
 npm run typecheck
 npm run test:unit
 npm run test:contracts
-npm run test:mcp-runtime
+npm run test:extended
+npm run test:integration -- test/integration/mcp-stdio.test.ts
+npm run test:crash
 npm test
 npm run check
+npm run check:deep
 ```
 
-`npm run check` is the full maintainer-run gate: SDK compatibility, typecheck, MCP runtime and full tests, contract tests, temporary build, dependency/notice policies, MCP SDK boundary policy, and release integrity/reproducibility checks. The repository has no hosted CI workflow, so running this gate before merge is an explicit maintainer action.
+`npm test` and `npm run check` are the fast editing/CI surface. The check runs the SDK probe, typecheck, fast project once, temporary bundle smoke, notice inventory, and MCP SDK import boundary. Exhaustive schema, integration, crash, policy-mutation, and release validation live behind `check:deep`; authenticated real-host and benchmark projects remain separate even from that command. The repository has no hosted CI workflow.
 
 ## High-risk convention checklist
 

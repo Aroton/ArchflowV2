@@ -83,9 +83,8 @@ describe("the contracts / repository directional boundary", () => {
 });
 
 /**
- * The Vitest include pattern already covers every test file under `test/`, so bare `npm test` — the
- * fourth step of `npm run check` and of CI — picks the integration suite up automatically. Phase 9
- * admits one persistence dependency and narrows the engine while leaving the script surface fixed.
+ * The fast project is the ordinary local/CI surface. Expensive projects remain independently
+ * selectable and `check:deep` composes the local deep tiers without ever opting into real hosts.
  */
 describe("package.json dependencies and scripts", () => {
   const manifest = JSON.parse(
@@ -122,11 +121,12 @@ describe("package.json dependencies and scripts", () => {
     }
   });
 
-  it("keeps opt-in real-host scripts outside `check` and runs the ordinary suite exactly once", () => {
+  it("keeps expensive projects outside the fast check and runs the ordinary suite exactly once", () => {
     expect(Object.keys(manifest.scripts).sort()).toEqual([
       "bench:review",
       "build:temp",
       "check",
+      "check:deep",
       "check:mcp-sdk-boundary",
       "check:notices",
       "check:release",
@@ -141,15 +141,42 @@ describe("package.json dependencies and scripts", () => {
       "release:write",
       "test",
       "test:contracts",
-      "test:mcp-runtime",
+      "test:crash",
+      "test:extended",
+      "test:integration",
       "test:mcp-sdk-boundary-policy",
       "test:notices-policy",
       "test:real-host",
       "test:unit",
       "typecheck",
     ]);
+    expect(manifest.scripts["test"]).toBe("vitest run --project fast");
     expect(manifest.scripts["check"]?.split("npm test").length).toBe(2);
-    expect(manifest.scripts["check"]).not.toContain("test:real-host");
-    expect(manifest.scripts["check"]).not.toContain("bench:review");
+    for (const excluded of [
+      "check:schemas",
+      "test:extended",
+      "test:integration",
+      "test:crash",
+      "test:notices-policy",
+      "test:mcp-sdk-boundary-policy",
+      "check:release",
+      "test:real-host",
+      "bench:review",
+    ]) {
+      expect(manifest.scripts["check"], excluded).not.toContain(excluded);
+    }
+    for (const included of [
+      "check:schemas",
+      "test:extended",
+      "test:integration",
+      "test:crash",
+      "test:notices-policy",
+      "test:mcp-sdk-boundary-policy",
+      "check:release",
+    ]) {
+      expect(manifest.scripts["check:deep"], included).toContain(included);
+    }
+    expect(manifest.scripts["check:deep"]).not.toContain("test:real-host");
+    expect(manifest.scripts["check:deep"]).not.toContain("bench:review");
   });
 });

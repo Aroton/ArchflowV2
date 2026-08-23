@@ -6747,7 +6747,7 @@
       ]
     },
     "src/review/rubrics.ts": {
-      "bytes": 11226,
+      "bytes": 12418,
       "format": "esm",
       "imports": [
         {
@@ -9005,7 +9005,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1631823,
+      "bytes": 1633015,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10110,7 +10110,7 @@
           "bytesInOutput": 13871
         },
         "src/review/rubrics.ts": {
-          "bytesInOutput": 10586
+          "bytesInOutput": 11778
         },
         "src/state/atomic.ts": {
           "bytesInOutput": 6119
@@ -10205,7 +10205,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2931002,
+      "bytes": 2932194,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -11484,7 +11484,7 @@
           "bytesInOutput": 18687
         },
         "src/review/rubrics.ts": {
-          "bytesInOutput": 10588
+          "bytesInOutput": 11780
         },
         "src/state/approval-rules.ts": {
           "bytesInOutput": 5528

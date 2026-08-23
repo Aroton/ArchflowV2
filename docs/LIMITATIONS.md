@@ -1,6 +1,6 @@
 # LIMITATIONS
 
-**Explored:** 2026-08-21 · **Commit:** `869c189` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`
+**Explored:** 2026-08-23 · **Commit:** `92fa1f6` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `skills/archflow-design/`, `skills/archflow-phase-design/`
 
 ArchFlow is a local developer-workflow prototype, not a security sandbox. The controls below reduce accidental context leakage and constrain ordinary operation, but the listed cases are unsupported because the current implementation cannot prove the claimed boundary. A planted canary not appearing in output is evidence about that run; it is not proof that the child could not read the canary.
 
@@ -13,6 +13,14 @@ These limitations assume a trusted developer account and a filesystem not being 
 **Existing mitigation:** Initial rubrics ask only for defects with a concrete material downstream consequence. When prior triage exists, the sealed instruction makes verification of accepted revision intents the primary task and admits a previously undiscovered issue only when it clears the same materiality bar. Prior-triage now carries the original evidence and suggested resolution together with the producer rationale and revision intent. Non-material suggestions are suppressed rather than deferred to human approval, while the attempt budget and durable human gates remain backstops.
 
 **Why accepted:** The product needs independent semantic judgment, not identical prose from repeated model calls. ArchFlow claims deterministic inputs, provenance, evidence currency, state transitions, and approval authority; it does not claim deterministic model judgment.
+
+## Phase sizing is judgment, not calculation
+
+**Not deterministic:** ArchFlow cannot calculate a uniquely correct phase boundary. Whether work forms one coherent repository-ready outcome depends on the product, architecture, predecessor stability, meaningful completion states, and the verification story. File counts, repository layers, work-chunk counts, token estimates, and phase-count targets cannot settle that question.
+
+**Existing mitigation:** Architecture design makes explicit split and merge checks against one default: a phase has one primary outcome, a valid completion state, stable predecessor inputs, and one understandable verification story. Broad, small, and genuinely open-ended plans must explain their concrete exception value. Numbered phase design repeats one bounded fit check, and counter-review raises only materially harmful boundary defects rather than enforcing stylistic or numeric preferences.
+
+**Why accepted:** Coherent outcome checkpoints make review, recovery, verification, and later work easier to reason about, but turning that guidance into a scoring engine would create false precision and invite gaming. Human and reviewer judgment, constrained by material consequences and durable approval, is the honest control for this prototype.
 
 ## Adversarial stdio peers at the JSON-RPC layer
 

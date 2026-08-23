@@ -386,6 +386,36 @@ describe("canonical skill contracts", () => {
     expect(source).toContain("Design artifact approval fails closed");
   });
 
+  it("makes finite phase plans expose coherent repository-ready increments", () => {
+    const source = skill("archflow-design");
+    expect(source).toContain("one coherent repository-ready increment");
+    expect(source).toContain("one primary behavioral or enabling outcome");
+    expect(source).toContain("valid completion state");
+    expect(source).toContain("approved predecessors or stable inputs");
+    expect(source).toContain("one understandable verification story");
+    expect(source).toContain("**split check**");
+    expect(source).toContain("**merge check**");
+    expect(source).toMatch(/unusually broad phase only with a concrete/u);
+    expect(source).toMatch(/unusually small phase only when/u);
+    expect(source).toContain("Phase count, layer count, file count, diff size, and numeric thresholds are not sizing evidence");
+  });
+
+  it("requires open-ended rationale and one bounded numbered-phase fit check", () => {
+    const taskDesign = skill("archflow-design");
+    expect(taskDesign).toContain("why responsible phase boundaries cannot yet be named");
+    expect(taskDesign).toContain("what information will make decomposition possible");
+
+    const phaseDesign = skill("archflow-phase-design");
+    expect(phaseDesign).toContain("perform one bounded fit check");
+    expect(phaseDesign).toContain("Preserve a sound approved boundary");
+    expect(phaseDesign).toContain("phase-worthy increment");
+    expect(phaseDesign).toContain("returned writable task-design or PRD parent");
+    expect(phaseDesign).toContain("existing compound production result");
+    expect(phaseDesign).toContain("revised final bound would be below the current phase");
+    expect(phaseDesign).toContain("explicit human request to reopen task design");
+    expect(phaseDesign).toContain("server-returned authority");
+  });
+
   it("keeps the client instruction files byte-identical", () => {
     expect(readFileSync(resolve(root, "CLAUDE.md")))
       .toEqual(readFileSync(resolve(root, "AGENTS.md")));

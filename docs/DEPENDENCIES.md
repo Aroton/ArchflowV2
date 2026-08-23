@@ -143,13 +143,14 @@ There are no application-managed users, sessions, OAuth flows, API tokens, or au
 Important `package.json` scripts:
 
 - `typecheck`: strict TypeScript validation.
-- `test`, `test:unit`, `test:contracts`, `test:mcp-runtime`: Vitest suites; contract and MCP runtime checks also run separately even though the broad suite includes all matching tests.
+- `test`, `test:unit`, `test:contracts`: the fast Vitest project and its two directory-focused views.
+- `test:extended`, `test:integration`, and `test:crash`: explicit deeper projects for exhaustive schemas, real Git/process journeys, and fault injection.
 - `test:real-host` and `bench:review`: opt-in serialized tests requiring installed/authenticated host CLIs.
 - `build:temp`: esbuild smoke bundles under a unique temporary directory.
 - `check:notices` and `test:notices-policy`: lockfile-to-notice reconciliation and mutation tests.
 - `check:mcp-sdk-boundary` and `test:mcp-sdk-boundary-policy`: production SDK import isolation and mutation tests.
 - `release:stage`, `release:check`, `release:reproduce`, `release:write`, `release:smoke`, and `release:mutations`: deterministic release construction, validation, promotion, smoke tests, and hostile mutations.
-- `check`: the aggregate local verification pipeline.
+- `check`: the under-ten-second local/CI pipeline; `check:deep` explicitly composes every local deep tier and release validation.
 
 No formatter or source linter is configured. Formatting/import style is convention-backed; correctness gates are strict TypeScript, tests, contract agreement checks, notice consistency, SDK boundary checks, and release integrity checks.
 
@@ -168,7 +169,7 @@ The release is not published by automation. `dist/` is tracked and validated aga
 
 ### Automation
 
-The repository has no hosted CI/CD workflow. Maintainers run `npm run check` explicitly for the SDK compatibility probe, typecheck, focused MCP tests, the full suite, contract tests, temporary build, notice and SDK-boundary checks with their mutation tests, and release verification, smoke, mutations, and reproduction. There is no automated deployment, package publication, container build, or artifact upload.
+The repository has no hosted CI/CD workflow. Maintainers run `npm run check` for the SDK compatibility probe, typecheck, fast tests, temporary build smoke, notice inventory, and SDK import boundary. `npm run check:deep` adds schema drift, exhaustive contracts, integration/crash suites, policy mutations, and release integrity/reproduction only for broad changes. Authenticated real-host tests and benchmarks are always separate. There is no automated deployment, package publication, container build, or artifact upload.
 
 ## Change checklist
 

@@ -1,12 +1,11 @@
 import { readFile } from "node:fs/promises";
-import { specTypeSchemas } from "@modelcontextprotocol/server";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import * as formatsModule from "ajv-formats";
 import type { FormatsPlugin } from "ajv-formats";
 import { describe, expect, it } from "vitest";
 
 import { parseToolCall, validateProjectFailureStructure, validateProjectResultStructure } from "../../src/contracts/mcp-tools.js";
-import { ADVERTISED_TOOL_NAMES, SEMANTIC_TOOL_NAMES, TOOL_NAMES, type ToolName } from "../../src/contracts/tool-names.js";
+import { SEMANTIC_TOOL_NAMES, TOOL_NAMES, type ToolName } from "../../src/contracts/tool-names.js";
 import { ADVERTISED_TOOL_CATALOGUE } from "../../src/mcp/tools.js";
 import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 
@@ -236,42 +235,6 @@ function validateAuthenticSuccess(tool: ToolName, rawCall: unknown, value: unkno
 }
 
 describe("advertised MCP tool catalogue", () => {
-  it("passes the public-root neutral ListToolsResult schema with the fixed non-paginated surface", () => {
-    const listed = { tools: ADVERTISED_TOOL_CATALOGUE };
-    const validation = specTypeSchemas.ListToolsResult["~standard"].validate(listed);
-    expect(validation).not.toHaveProperty("issues");
-    expect(validation).toHaveProperty("value");
-    expect(listed).not.toHaveProperty("nextCursor");
-    expect(ADVERTISED_TOOL_CATALOGUE.map(({ name }) => name)).toEqual(ADVERTISED_TOOL_NAMES);
-    expect(ADVERTISED_TOOL_CATALOGUE).toHaveLength(2);
-    expect(ADVERTISED_TOOL_CATALOGUE.every(({ description }) => description.length > 40)).toBe(true);
-  });
-
-  it("pins the final two-tool catalogue: names, plain object roots, purpose descriptions, byte budget", () => {
-    // Final measured size of JSON.stringify({tools: ADVERTISED_TOOL_CATALOGUE}): 23,474 bytes
-    // for the semantic pair with flat single-hop $defs, against the historical 105,478-byte
-    // four-tool catalogue and the 1,316,997-byte unpruned catalogue (whose bytes were ~99%
-    // definitions no tool member referenced; ref-reachable pruning first brought it to
-    // 283,708). The ceiling leaves ~20% headroom for description edits while failing the
-    // accidental return of a retired tool or a definitions blob.
-    expect(ADVERTISED_TOOL_NAMES).toEqual(["archflow_status", "archflow_apply"]);
-    expect(ADVERTISED_TOOL_CATALOGUE.map(({ name }) => name)).toEqual(["archflow_status", "archflow_apply"]);
-    expect(ADVERTISED_TOOL_CATALOGUE.map(({ description }) => description)).toEqual([
-      "Read durable ArchFlow status for one task and optional producing-skill invocation without mutation; returns one reconciled workflow view and at most one bounded offer for the current document owner.",
-      "Apply exactly one supplied server offer using only its expected semantic submission; never chooses or loops to another action and returns the newly authenticated workflow view.",
-    ]);
-    for (const descriptor of ADVERTISED_TOOL_CATALOGUE) {
-      for (const [member, schema] of [["input", descriptor.inputSchema], ["output", descriptor.outputSchema]] as const) {
-        expect(schema.type, `${descriptor.name} ${member} root`).toBe("object");
-      }
-      // The merged-input-root fence: only the result union (output) may carry a root combinator.
-      for (const combinator of ["oneOf", "allOf", "anyOf", "$ref", "if"] as const) {
-        expect(descriptor.inputSchema, `${descriptor.name} input root ${combinator}`).not.toHaveProperty(combinator);
-      }
-    }
-    expect(JSON.stringify({ tools: ADVERTISED_TOOL_CATALOGUE }).length).toBeLessThan(28_200);
-  });
-
   it("compiles every standalone input and output with strict Ajv 2020 and standard formats only", () => {
     for (const descriptor of ADVERTISED_TOOL_CATALOGUE) {
       expect(() => freshAjv().compile(descriptor.inputSchema), `${descriptor.name} input`).not.toThrow();

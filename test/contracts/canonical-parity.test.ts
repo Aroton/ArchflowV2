@@ -19,7 +19,7 @@ import {
  *
  * Only the two importable primitives are covered here. The containment predicate is the third
  * duplicated primitive, but release-support's `isInside` is module-private, so its parity is
- * asserted behaviourally in `test/unit/repository-paths.test.ts` against `src/repository/paths.ts`
+ * asserted behaviourally in `test/integration/repository-paths.test.ts` against `src/repository/paths.ts`
  * — including the one recorded divergence, that `isInside` requires `rel !== ""` and so rejects the
  * root itself while Phase 6 containment accepts `rel === ""`.
  */

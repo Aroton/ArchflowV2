@@ -122,7 +122,7 @@ Creates or revises `.archflow/tasks/my-feature/prd.md`, then drives its review e
 /archflow-design my-feature
 ```
 
-Creates or revises the technical design and phase plan at `.archflow/tasks/my-feature/design.md`, then drives its review evidence and explicit artifact-approval gate. Finite plans use consecutive exact `### Phase N: Name` headings starting at 1. An intentionally open-ended plan instead uses `<!-- archflow:phase-plan:open-ended -->` with no phase headings; malformed or ambiguous plans cannot be approved.
+Creates or revises the technical design and phase plan at `.archflow/tasks/my-feature/design.md`, then drives its review evidence and explicit artifact-approval gate. Finite plans use consecutive exact `### Phase N: Name` headings starting at 1. Each phase normally describes one coherent repository-ready increment: one primary outcome, a valid completion state, stable inputs from its predecessors, and one understandable verification story. Architecture design explicitly checks adjacent phases for both bad splits and bad merges. A broader or smaller phase is retained only when its concrete value is explained; an intentionally open-ended plan likewise needs a genuine reason and uses `<!-- archflow:phase-plan:open-ended -->` with no phase headings. Malformed or ambiguous plans cannot be approved.
 
 ### 7. Design Each Phase
 
@@ -132,7 +132,7 @@ Creates or revises the technical design and phase plan at `.archflow/tasks/my-fe
 
 Creates or revises `.archflow/tasks/my-feature/phases/1/design.md` and drives review, triage, adjudication, and any required human gate. It reports `DESIGNED` only when durable state proves the fixed point is closed.
 
-Phases are sized to the implementation budget: each must fit one implementation session — orchestrated through sub-agents — without context compaction. If a design reveals more work than fits, the phase gets split and the technical design is updated.
+The numbered phase design makes one bounded fit check against that outcome-shaped boundary. Work chunks help organize implementation but do not automatically become phases, and a phase may cross repository layers when those changes belong to the same outcome. If the check exposes a harmful split, merge, or sequencing problem, the technical design is corrected through its existing reviewed parent and server authority before implementation.
 
 ### 8. Implement Each Phase
 
@@ -197,7 +197,7 @@ only a cache and may be regenerated or cleaned with `archflow-local clean --task
 - **Human-in-the-loop**: You review and approve at every stage — the agent does the labor (including running verification), you exercise the judgment
 - **Durable review fixed point**: Every document records self-review plus a configured opposite-producer-family counter-review, then durable triage and adjudication resolve the findings before the workflow can advance
 - **Optional gate review**: Every human gate offers a ready-to-run prompt for an additional opposite-producer-family review; the human decides whether to run it, and any resulting findings are durably triaged before the gate resolves
-- **Sized to the context budget**: A phase must finish — implementation plus verification — inside one session's context window without compaction. Implementation delegates chunks to sub-agents by default, which keeps the orchestrator's window lean (a delegated chunk costs it a few thousand tokens instead of tens of thousands)
+- **Outcome-sized checkpoints**: A phase normally lands one coherent, repository-ready outcome with a valid stopping point and a verification story a human can understand. These checkpoints make review, recovery, and later changes easier to reason about. Phase sizing remains engineering judgment, not a deterministic rule based on file count, layer count, phase count, or context-window arithmetic.
 - **Inter-phase learning**: Each phase writes `impl-notes.md` with decisions, patterns, gotchas, and interfaces. The technical design absorbs deviations so later phases read current truth; durable conventions get promoted to the project's CLAUDE.md.
 - **Plan stays accurate**: After each phase, `design.md` and `prd.md` are updated to reflect what actually happened, not just what was planned.
 - **Resumable**: If you lose context mid-phase, re-run the skill and it picks up where you left off.
