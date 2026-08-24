@@ -141,8 +141,13 @@ async function consumeImplementationHandoff(
   return { invocation, view: started.value };
 }
 
+export function registerSemanticImplementationJourney(selected: string): void {
 describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
-  it("takes an implementation from its consumed hand-off through client work, one declared submission, review, and the gate boundary", async () => {
+  const register = (name: string, run: () => Promise<void>): void => {
+    if (name === selected) it(name, run);
+  };
+
+  register("takes an implementation from its consumed hand-off through client work, one declared submission, review, and the gate boundary", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "semantic-impl-clean",
       label: "semantic-impl-clean",
@@ -179,7 +184,7 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     expect(reviewCount(workspace)).toBe("4");
   });
 
-  it("refuses a facts-free implementation submission and implementation facts at a document position without mutation", async () => {
+  register("refuses a facts-free implementation submission and implementation facts at a document position without mutation", async () => {
     const workspace = await createTaskWorkspace({ taskId: "semantic-impl-shape", label: "semantic-impl-shape" });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[]]));
@@ -220,7 +225,7 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     expect(existsSync(join(document.root, "semantic-review-count"))).toBe(false);
   });
 
-  it("records a failed implementation submission and offers a fresh bounded begin boundary", async () => {
+  register("records a failed implementation submission and offers a fresh bounded begin boundary", async () => {
     const workspace = await createTaskWorkspace({ taskId: "semantic-impl-failed", label: "semantic-impl-failed" });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[]]));
@@ -247,7 +252,7 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     expect(reviewCount(workspace)).toBe("3");
   });
 
-  it("returns an implementation finding for triage and requires the separate revise action before remediation bytes are accepted", async () => {
+  register("returns an implementation finding for triage and requires the separate revise action before remediation bytes are accepted", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "semantic-impl-remediation",
       label: "semantic-impl-remediation",
@@ -313,7 +318,7 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     expect(reviewCount(workspace)).toBe("5");
   });
 
-  it("fails forged, cross-repository, wrong-phase, and consumed offers at the implementation tier without mutation", async () => {
+  register("fails forged, cross-repository, wrong-phase, and consumed offers at the implementation tier without mutation", async () => {
     const first = await createTaskWorkspace({ taskId: "semantic-impl-offers", label: "semantic-impl-offers-a" });
     const second = await createTaskWorkspace({ taskId: "semantic-impl-offers", label: "semantic-impl-offers-b" });
     workspaces.push(first, second);
@@ -358,7 +363,7 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     expect(reviewCount(first)).toBe("3");
   });
 
-  it("re-derives identical boundary views from read-only status when the run is interrupted between actions", async () => {
+  register("re-derives identical boundary views from read-only status when the run is interrupted between actions", async () => {
     const workspace = await createTaskWorkspace({ taskId: "semantic-impl-resume", label: "semantic-impl-resume" });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[], [], [], [FINDING], []]));
@@ -392,7 +397,7 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     expect(triageBoundaryB).toEqual(reviewed.value);
   });
 
-  it("resumes a mid-review position after a human gate decision overwrote the review entry transition", async () => {
+  register("resumes a mid-review position after a human gate decision overwrote the review entry transition", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "semantic-impl-gate-interloper",
       label: "semantic-impl-gate-interloper",
@@ -449,7 +454,7 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     expect(Number(reviewCount(workspace))).toBe(dispatchesBefore + 1);
   });
 
-  it("recovers an unrestorable missing projection by re-declaring the deletion in a fresh produce", async () => {
+  register("recovers an unrestorable missing projection by re-declaring the deletion in a fresh produce", async () => {
     const workspace = await createTaskWorkspace({ taskId: "semantic-impl-unrestorable", label: "semantic-impl-unrestorable" });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[]]));
@@ -501,7 +506,7 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     expect(existsSync(work.sourceAbsolute)).toBe(false);
   });
 
-  it("supersedes stale baseline interfaces and refuses replay across changed and replaced history", async () => {
+  register("supersedes stale baseline interfaces and refuses replay across changed and replaced history", async () => {
     const workspace = await createTaskWorkspace({ taskId: "semantic-stale-baseline-refresh", label: "semantic-stale-baseline-refresh" });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[]]));
@@ -561,7 +566,7 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     expect(replacedRefresh.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
   });
 
-  it("recovers missing phase-milestone proof without disturbing unrelated index or worktree bytes", async () => {
+  register("recovers missing phase-milestone proof without disturbing unrelated index or worktree bytes", async () => {
     const workspace = await createTaskWorkspace({ taskId: "semantic-missing-milestone-recovery", label: "semantic-missing-milestone-recovery" });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[], [], [], []]));
@@ -642,3 +647,4 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     expect(readFileSync(sentinel, "utf8")).toBe(worktreeBytes);
   });
 });
+}

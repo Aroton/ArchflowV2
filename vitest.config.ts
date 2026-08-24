@@ -22,7 +22,12 @@ export default defineConfig({
         extends: true,
         test: {
           name: "integration",
-          include: ["test/integration/**/*.test.ts"]
+          include: ["test/integration/**/*.test.ts"],
+          exclude: ["test/integration/release-offline.test.ts"],
+          // Integration is an explicit, Git/process-heavy opt-in. Use the final available core
+          // instead of Vitest's ordinary "CPUs minus one" default so independently sharded
+          // semantic journeys do not leave one worker lane idle.
+          maxWorkers: "100%"
         }
       },
       {

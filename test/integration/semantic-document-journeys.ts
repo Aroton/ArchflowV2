@@ -46,8 +46,13 @@ approval_rules:
 `);
 }
 
+export function registerSemanticDocumentJourney(selected: string): void {
 describe("semantic document journeys", { timeout: TIMEOUT }, () => {
-  it("takes a finding-free PRD through client production, one review, a client summary, and a later human decision", async () => {
+  const register = (name: string, run: () => Promise<void>): void => {
+    if (name === selected) it(name, run);
+  };
+
+  register("takes a finding-free PRD through client production, one review, a client summary, and a later human decision", async () => {
     // The walk approves the prd, design, and phase-design tiers, so each must still be gated by a
     // rule (phase-design is not a shipped default subject).
     const workspace = await createTaskWorkspace({
@@ -280,7 +285,7 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
     expect(readFileSync(join(workspace.root, "semantic-review-count"), "utf8")).toBe("3");
   });
 
-  it("returns a material finding for client triage and requires an explicit revise action before remediation bytes are accepted", async () => {
+  register("returns a material finding for client triage and requires an explicit revise action before remediation bytes are accepted", async () => {
     const workspace = await createTaskWorkspace({ taskId: "semantic-prd-remediation", label: "semantic-prd-remediation" });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[{
@@ -327,7 +332,7 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
     expect(execFileSync("git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" })).toBe(initialHead);
   });
 
-  it("returns fresh safe status for stale, forged, cross-repository, and phase-implementation attempts without mutation", async () => {
+  register("returns fresh safe status for stale, forged, cross-repository, and phase-implementation attempts without mutation", async () => {
     const first = await createTaskWorkspace({ taskId: "semantic-negative", label: "semantic-negative-a" });
     const second = await createTaskWorkspace({
       taskId: "semantic-negative", label: "semantic-negative-b",
@@ -380,7 +385,7 @@ roles:
     expect(phaseMutation).toMatchObject({ ok: false, error: { code: "SEMANTIC_OFFER_STALE", retryable: false }, view: phaseView });
   });
 
-  it("keeps the settled approval gate when its approval rule disappears before gate composition", async () => {
+  register("keeps the settled approval gate when its approval rule disappears before gate composition", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "semantic-prd-rule-edit",
       label: "semantic-prd-rule-edit",
@@ -435,7 +440,7 @@ roles:
     }
   });
 
-  it("records wait:false but keeps the document tier behind human approval", async () => {
+  register("records wait:false but keeps the document tier behind human approval", async () => {
     // An explicitly empty ruleset — the template's own defaults now gate prd, so the journey pins
     // the rule-less config itself. No rule waits for any subject, so the completed review must not
     // offer a gate — the status seam evaluated `wait: false` and the next action is the ordinary
@@ -508,7 +513,7 @@ roles:
     expect(startedDesign.value.next_action.kind).toBe("submit-work");
   });
 
-  it("advances shipped-v2 no-wait documents through exact autonomous milestone commits", async () => {
+  register("advances shipped-v2 no-wait documents through exact autonomous milestone commits", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "semantic-v2-autonomous-documents",
       label: "semantic-v2-autonomous-documents",
@@ -686,7 +691,7 @@ The implementation handoff is offered after exact commit proof.
     expect(readFileSync(join(workspace.root, "semantic-review-count"), "utf8")).toBe("3");
   });
 
-  it("records a wait:false design settlement but requires human milestone approval", async () => {
+  register("records a wait:false design settlement but requires human milestone approval", async () => {
     // The PRD records a matching rule and the design records wait:false. Both still require human
     // approval; the settlement never supplies milestone or recovery authority.
     const workspace = await createTaskWorkspace({
@@ -806,7 +811,7 @@ The implementation handoff is offered after exact commit proof.
     expect(observed.next_action).toMatchObject({ kind: "start-next-skill", skill: "archflow-phase-design", skill_args: ["1"] });
   });
 
-  it("keeps shipped-default PRD and design gates while phase design advances autonomously", async () => {
+  register("keeps shipped-default PRD and design gates while phase design advances autonomously", async () => {
     // Fresh-project defaults record matching rules for PRD and design, while the unlisted
     // phase-design subject advances directly from its authenticated shipped-v2 settlement.
     const workspace = await createTaskWorkspace({ taskId: "semantic-template-defaults", label: "semantic-template-defaults" });
@@ -951,7 +956,7 @@ The committed state carries the settlement and the successor hand-off is offered
     expect(observed.next_action.offer).toBeUndefined();
   });
 
-  it("requires approvals even when every configured document rule evaluates wait:false", async () => {
+  register("requires approvals even when every configured document rule evaluates wait:false", async () => {
     // With no matching document rules, each tier records wait:false but still creates an ordinary
     // human decision archive. This pins that settlements alone never become recovery authority.
     const workspace = await createTaskWorkspace({
@@ -1074,7 +1079,7 @@ The committed state carries the settlement and the successor hand-off is offered
     expect(observed.next_action).toMatchObject({ kind: "start-next-skill", skill: "archflow-phase-design", skill_args: ["1"] });
   });
 
-  it("keeps waiver decisions human and advances after their granted wait:false settlement", async () => {
+  register("keeps waiver decisions human and advances after their granted wait:false settlement", async () => {
     // No subject rule waits for the design document, but a constitution rule fails its review:
     // the fixed point never reaches the clean advance, so the settle mints no receipt (wait:false
     // alone is not enough — the policy findings veto it), and the policy arm opens design-approval
@@ -1239,7 +1244,7 @@ The committed state carries the settlement and the successor hand-off is offered
     expect(design.value.next_action.commit?.requires_human_confirmation).toBe(false);
   });
 
-  it("persists and presents a granted wait:true waiver settlement behind PRD approval", async () => {
+  register("persists and presents a granted wait:true waiver settlement behind PRD approval", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "semantic-prd-waiver-wait",
       label: "semantic-prd-waiver-wait",
@@ -1361,7 +1366,7 @@ The committed state carries the settlement and the successor hand-off is offered
     expect(view.value.presentation?.options.map((option) => option.token)).toContain("approve");
   });
 
-  it("refuses human design approval when the phase plan is malformed", async () => {
+  register("refuses human design approval when the phase plan is malformed", async () => {
     // No rule waits for the design subject and its review is clean, but design.md carries no valid
     // phase headings. The settlement records evaluation only; the human approval decision is the
     // first writer of planned_final_phase and therefore owns the phase-count validation.
@@ -1436,3 +1441,4 @@ The committed state carries the settlement and the successor hand-off is offered
     expect(after.document.value.planned_final_phase).toBeUndefined();
   });
 });
+}

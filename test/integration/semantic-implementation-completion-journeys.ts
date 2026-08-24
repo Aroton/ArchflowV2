@@ -278,8 +278,13 @@ async function reachAuthorizedImplementationCommit(
   return Object.freeze({ work, commit, reviews: reviewCountAt(workspace) });
 }
 
-describe("semantic implementation completion journeys", { timeout: TIMEOUT }, () => {
-  it("authorizes the implementation commit, observes the client-created proof, and reports the successor without an offer", async () => {
+export function registerSemanticImplementationCompletionJourney(selected: string): void {
+  describe("semantic implementation completion journeys", { timeout: TIMEOUT }, () => {
+    const scenario = (name: string, run: () => Promise<void>): void => {
+      if (name === selected) it(name, run);
+    };
+
+  scenario("authorizes the implementation commit, observes the client-created proof, and reports the successor without an offer", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "semantic-impl-succession",
       label: "semantic-impl-succession",
@@ -361,7 +366,7 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(startedSuccessor.next_action.kind).toBe("submit-work");
   });
 
-  it("finishes the task terminally at the planned final phase after the observed client commit", async () => {
+  scenario("finishes the task terminally at the planned final phase after the observed client commit", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "semantic-impl-terminal",
       label: "semantic-impl-terminal",
@@ -406,7 +411,7 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(stale).toMatchObject({ ok: false, error: { retryable: false } });
   });
 
-  it("keeps governing-plan drift out of adoption and refuses empty recovery after a content-preserving rewrite", async () => {
+  scenario("keeps governing-plan drift out of adoption and refuses empty recovery after a content-preserving rewrite", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "semantic-impl-recovery-boundaries",
       label: "semantic-impl-recovery-boundaries",
@@ -440,7 +445,7 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(view.detail).toMatch(/no committable delta/u);
   });
 
-  it("freezes a content wait through later config edits and presents every matched operation with exact byte deltas", async () => {
+  scenario("freezes a content wait through later config edits and presents every matched operation with exact byte deltas", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "semantic-impl-content-rule",
       label: "semantic-impl-content-rule",
@@ -514,7 +519,7 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(view.next_action.commit).toMatchObject({ requires_human_confirmation: true });
   });
 
-  it("keeps a TypeScript-only wait:false implementation behind explicit commit authorization without content details", async () => {
+  scenario("keeps a TypeScript-only wait:false implementation behind explicit commit authorization without content details", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "semantic-impl-no-content-rule",
       label: "semantic-impl-no-content-rule",
@@ -546,7 +551,7 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(view.next_action.commit).toMatchObject({ requires_human_confirmation: true });
   });
 
-  it("advances a shipped-v2 TypeScript-only implementation after exact autonomous commit proof", async () => {
+  scenario("advances a shipped-v2 TypeScript-only implementation after exact autonomous commit proof", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "semantic-v2-impl-autonomy",
       label: "semantic-v2-impl-autonomy",
@@ -612,7 +617,7 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(descendantRefusal).toMatchObject({ ok: false, error: { retryable: false } });
   });
 
-  it("returns request-changes to a close-only checkpoint that requires the separate revise action before re-editing", async () => {
+  scenario("returns request-changes to a close-only checkpoint that requires the separate revise action before re-editing", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "semantic-impl-request-changes",
       label: "semantic-impl-request-changes",
@@ -675,7 +680,7 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(observed.next_action).toMatchObject({ kind: "finish-task" });
   });
 
-  it("classifies a forged archive cross-binding at the current checkpoint as invalid, not superseded", async () => {
+  scenario("classifies a forged archive cross-binding at the current checkpoint as invalid, not superseded", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "semantic-impl-forged-archive",
       label: "semantic-impl-forged-archive",
@@ -714,7 +719,7 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(blocked.next_action.offer).toBeUndefined();
   });
 
-  it("opens the attempts-exhausted gate after the fixed-point budget of blocking-finding remediation rounds", async () => {
+  scenario("opens the attempts-exhausted gate after the fixed-point budget of blocking-finding remediation rounds", async () => {
     const blocker = [{
       finding_id: "impl-blocking-gap", severity: "blocker", blocking: true,
       summary: "The verified behavior is not observable.", evidence: "The source defines no observable export.",
@@ -821,7 +826,7 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(reviewCountAt(workspace)).toBe(reviewsBeforeRevision + 1);
   });
 
-  it("resolves material upstream drift by moving the task to the earlier planning boundary", async () => {
+  scenario("resolves material upstream drift by moving the task to the earlier planning boundary", async () => {
     const workspace = await createTaskWorkspace({ taskId: "semantic-impl-drift-upstream", label: "semantic-impl-drift-upstream" });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
@@ -882,7 +887,7 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(produced.next_action.kind).toBe("review");
   });
 
-  it("keeps the earlier plan when material drift chooses to change the current work through the close-only checkpoint", async () => {
+  scenario("keeps the earlier plan when material drift chooses to change the current work through the close-only checkpoint", async () => {
     const workspace = await createTaskWorkspace({ taskId: "semantic-impl-drift-current", label: "semantic-impl-drift-current" });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
@@ -915,7 +920,7 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(view.resources.length).toBeGreaterThan(0);
   });
 
-  it("derives a separate waiver decision from a waiver-requested constitution choice, and a denial grants nothing", async () => {
+  scenario("derives a separate waiver decision from a waiver-requested constitution choice, and a denial grants nothing", async () => {
     const workspace = await createTaskWorkspace({ taskId: "semantic-impl-constitution", label: "semantic-impl-constitution" });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
@@ -966,7 +971,7 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(readFileSync(work.sourcePath, "utf8")).toBe(work.sourceBytes);
   });
 
-  it("reopens earlier planning work from an active implementation position and restores a fresh hand-off", async () => {
+  scenario("reopens earlier planning work from an active implementation position and restores a fresh hand-off", async () => {
     const workspace = await createTaskWorkspace({ taskId: "semantic-impl-reopen", label: "semantic-impl-reopen" });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
@@ -1055,4 +1060,5 @@ describe("semantic implementation completion journeys", { timeout: TIMEOUT }, ()
     expect(restarted.position).toEqual({ kind: "phase-impl", phase: 1 });
     expect(restarted.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
   });
-});
+  });
+}

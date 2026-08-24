@@ -1,6 +1,6 @@
 # TESTING
 
-**Explored:** 2026-08-23 · **Commit:** `0c23ade` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/build-temp.mjs`, `scripts/smoke-release-bundle.mjs`
+**Explored:** 2026-08-23 · **Commit:** `881d152` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/build-temp.mjs`, `scripts/smoke-release-bundle.mjs`, `scripts/test-release-integrity.mjs`
 
 ## The default is deliberately fast
 
@@ -26,11 +26,15 @@ Expected failure-path tests can emit an `INTERNAL_ERROR` diagnostic while passin
 |---|---|---|---|
 | `fast` | `test/unit/`, `test/contracts/` | In-process module behavior, focused durable invariants, package boundaries, and representative public contracts | Yes |
 | `extended` | `test/extended/` | Exhaustive schema compilation, advertised-schema traversal, and large corpora | No |
-| `integration` | `test/integration/` | Real temporary Git repositories, durable filesystem workflows, child processes, CLI/stdio, installers, and full semantic journeys | No |
+| `integration` | `test/integration/` | Real temporary Git repositories, durable filesystem workflows, child processes, CLI/stdio, installers, and sharded semantic journeys | No |
 | `crash` | `test/crash/` | Process termination at persistence cut points and restart recovery | No |
 | `real-host` | `test/real-host/` | Installed bundles, authenticated Claude/Codex calls, host selection, provider behavior, and benchmarks | Never automatically |
 
-The fast project currently contains 99 unit files and 27 contract files. Slow workflow tests that formerly lived under `test/unit/` were moved to integration: live config editing, durable transactions and gates, secret rejection, repository path resolution, status classification, implementation-output construction, legacy upgrade, and task workspaces.
+The fast project currently contains 100 unit files and 27 contract files. Slow workflow tests that formerly lived under `test/unit/` were moved to integration: live config editing, durable transactions and gates, secret rejection, repository path resolution, status classification, implementation-output construction, legacy upgrade, and task workspaces.
+
+The integration project currently contains 81 files and 408 tests. Its independent semantic journeys are deliberately registered through behavior-named one-scenario test files. Vitest schedules files, not ordinary `it` blocks, across its fork workers; keeping dozens of long journeys in three source files made one worker execute almost the entire five-minute critical path while the others went idle. The shared non-test registrar modules retain the scenario bodies without giving up file-level scheduling or the process isolation required by fake reviewer `HOME` and `PATH` values. The integration project uses all available workers because it is an explicit opt-in rather than an everyday background check.
+
+The semantic journey harness returns the apply handler's already-refreshed view directly. Apply/status byte parity is proven separately for an ordinary mutation, a compound review, a human decision, and a refusal carrying a safe view; it is not re-run after every one of the hundreds of journey actions. On the reference 20-core repository machine, this structure reduced the full integration wall time from 322.63 seconds to 53–57 seconds while retaining the real Git, handler, and child-process paths.
 
 The schema split preserves cheap trust boundaries in the fast project. `schema-registry.test.ts` pins the registry/directory identity, generation inventory, and public barrel; `mcp-advertisement.test.ts` pins the two tool names, descriptions, plain input roots, and byte ceiling. Repeated strict Ajv compilation and the classified MCP corpus live in `test/extended/`.
 
@@ -55,7 +59,11 @@ npm run check:deep
 
 Passing a file or filename fragment after `--` narrows within the selected project. This is the preferred debugging loop; an integration failure does not require running every integration journey.
 
+For a sharded semantic journey, target its behavior-named `.test.ts` wrapper. The adjacent registrar module is intentionally not a test entrypoint.
+
 `npm run check:deep` is an explicit, expensive validation for unusually broad changes. It first runs the ordinary check, then schema-byte regeneration comparison, extended tests, all integration and crash tests, notice/SDK-boundary mutation tests, and the full release check. It does not run real hosts or the review benchmark.
+
+The integration timing budget is one minute on the reference machine. Validate performance with at least two complete runs after changing journey layout, worker configuration, shared harnesses, or production code that affects status/apply cost. Machine-independent correctness remains the pass/fail contract; the recorded wall-time budget is the regression signal for this repository's development environment.
 
 There is intentionally no changed-file detector that guesses when deep verification is necessary. The human chooses it when a change crosses many boundaries, modifies schemas/generation, changes durability/process behavior, or alters release construction.
 
@@ -70,6 +78,8 @@ Release commands remain separately selectable:
 - `release:mutations` checks representative hostile payload changes; `release:reproduce` rebuilds and byte-compares tracked `dist/`.
 - `check:release` composes those four checks and runs only from `check:deep` or by explicit request.
 - `release:write` promotes an explicitly staged candidate into tracked `dist/`; it never installs machine-global assets.
+
+Release validation is not repeated as a Vitest integration wrapper. `check:release` owns tracked-payload validation, guarded smoke startup, independent reproduction, and manifest/provenance mutation checks. A focused fast boundary test pins rejection of the repository itself as a release output root without building or copying any payload bytes.
 
 Real hosts require a separate opt-in:
 
@@ -86,7 +96,8 @@ These commands may use credentials, provider quota, installed CLIs, and long pro
 - Put deterministic module behavior and a representative success/failure pair in `unit`.
 - Put cheap public wire/shape invariants in `contracts`.
 - Put exhaustive matrices or third-party compilation of the full published surface in `extended`.
-- Put real Git, multi-file durable workflows, child processes, CLI/stdio, generated bundles, installers, and cross-service journeys in `integration`.
+- Put real Git, multi-file durable workflows, child processes, CLI/stdio, temporary bundles, installers, and cross-service journeys in `integration`.
+- Put tracked release payload validation, reproduction, and hostile release mutations in the explicit release scripts composed by `check:release`.
 - Put deliberate process termination in `crash`; put any authenticated or provider-dependent behavior in `real-host`.
 - Name tests for the behavior they cover, never the workflow phase that introduced them.
 

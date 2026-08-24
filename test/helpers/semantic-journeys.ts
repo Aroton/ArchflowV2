@@ -27,6 +27,11 @@ export type SemanticJourneyHarness = Readonly<{
     view: WorkflowViewV1,
     submission?: ApplySubmissionV1,
   ) => Promise<SemanticResultV1>;
+  applyAndAssertFreshStatus: (
+    invocation: WorkflowInvocationV1,
+    view: WorkflowViewV1,
+    submission?: ApplySubmissionV1,
+  ) => Promise<SemanticResultV1>;
   context: () => ReturnType<typeof createInvocationContext>;
 }>;
 
@@ -60,10 +65,18 @@ export function semanticJourneyHarness(workspace: TaskWorkspace): SemanticJourne
     submission?: ApplySubmissionV1,
   ): Promise<SemanticResultV1> {
     if (view.next_action.offer === undefined) throw new Error("the current view has no semantic offer");
-    const result = await handleSemanticApply({
+    return handleSemanticApply({
       schema_version: "1", task_id: workspace.taskId, invocation,
       action: { offer: view.next_action.offer, ...(submission === undefined ? {} : { submission }) },
     }, context());
+  }
+
+  async function applyAndAssertFreshStatus(
+    invocation: WorkflowInvocationV1,
+    view: WorkflowViewV1,
+    submission?: ApplySubmissionV1,
+  ): Promise<SemanticResultV1> {
+    const result = await apply(invocation, view, submission);
     const fresh = await status(invocation);
     if ((result.ok ? result.value : result.view) !== fresh) {
       expect(result.ok ? result.value : result.view).toEqual(fresh);
@@ -71,7 +84,7 @@ export function semanticJourneyHarness(workspace: TaskWorkspace): SemanticJourne
     return result;
   }
 
-  return { status, apply, context };
+  return { status, apply, applyAndAssertFreshStatus, context };
 }
 
 function expectOk(result: SemanticResultV1): void {
