@@ -1,3 +1,4 @@
+import { resolve as resolveDirectory } from "node:path";
 import { sha256Bytes, type CanonicalDocument } from "../contracts/canonical.js";
 import { lstat, readFile, readlink } from "node:fs/promises";
 import type { BlobIdentity, OutputEntry } from "../contracts/durable-primitives.js";
@@ -286,16 +287,48 @@ export async function readRetainedResult(
   }));
 }
 
+type RepositoryBinding = Readonly<{ runner: RootBoundGitRunner; environment: GitEnvironment }>;
+
+/**
+ * Worktree location, Git version, and object format are constant for a working directory over a
+ * process lifetime, yet every handler call (and every substep refresh inside an apply) opens fresh
+ * services. Successful discovery + preflight is therefore reused per resolved directory; failures
+ * are never stored, and repository identity is still observed live by each services instance.
+ * A repository deleted and re-created at the same path keeps the stale binding until restart — a
+ * documented limitation, not a trust boundary.
+ */
+const repositoryBindings = new Map<string, RepositoryBinding>();
+const MAX_REPOSITORY_BINDINGS = 16;
+
+async function openRepository(
+  workingDirectory: string,
+  operationContext: RepositoryOperationContext,
+): Promise<ProjectResult<RepositoryBinding>> {
+  const key = resolveDirectory(workingDirectory);
+  const cached = repositoryBindings.get(key);
+  if (cached !== undefined) return Object.freeze({ schema_version: "1", ok: true, value: cached });
+  const discovered = await discoverWorktree(createGitRunner({ cwd: workingDirectory }), operationContext);
+  if (!discovered.ok) return discovered;
+  const environment = await preflightGit(discovered.value, operationContext);
+  if (!environment.ok) return environment;
+  const binding: RepositoryBinding = Object.freeze({ runner: discovered.value, environment: environment.value });
+  if (repositoryBindings.size >= MAX_REPOSITORY_BINDINGS) {
+    repositoryBindings.delete(repositoryBindings.keys().next().value as string);
+  }
+  repositoryBindings.set(key, binding);
+  return Object.freeze({ schema_version: "1", ok: true, value: binding });
+}
+
 /** Resolves repository authority and binds every production state/gate dependency. */
 export async function createProductionServices(input: ProductionInput): Promise<ProjectResult<ProductionServices>> {
   const atomic = input.atomic ?? createAtomicWriter();
   const gateSecretScanner = input.gate_secret_scanner ?? createSecretlintScanner();
   const provisionalPhase = input.phase_instance ?? ("prd" as PhaseInstanceId);
   const provisionalContext = context(input, provisionalPhase, parseSafeInteger(1));
-  const discovered = await discoverWorktree(createGitRunner({ cwd: input.working_directory }), provisionalContext);
-  if (!discovered.ok) return discovered;
-  const environment = await preflightGit(discovered.value, provisionalContext);
-  if (!environment.ok) return environment;
+  const repository = await openRepository(input.working_directory, provisionalContext);
+  if (!repository.ok) return repository;
+  const discovered = Object.freeze({ value: repository.value.runner });
+  const environment = Object.freeze({ value: repository.value.environment });
   const provisionalAuthority = await createInternalTransactionAuthority({
     runner: discovered.value,
     environment: environment.value,
@@ -318,6 +351,7 @@ export async function createProductionServices(input: ProductionInput): Promise<
         environment: environment.value,
         task_id: input.task_id,
         context: resolvedContext,
+        identity_source: provisionalAuthority.value,
       })
     : provisionalAuthority;
   if (!authorityResult.ok) return authorityResult;

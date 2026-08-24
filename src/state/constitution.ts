@@ -86,6 +86,14 @@ export type AuthenticatedRuleAcceptancePolicy = Readonly<{
 }>;
 
 const authenticResolvedConstitutions = new WeakSet<object>();
+
+/**
+ * A commit names an immutable tree, so a constitution resolved from one policy-base commit can
+ * never change for that commit: successful resolutions are reused for the process lifetime,
+ * keyed by worktree and commit. Failures are never cached — they carry call-specific context.
+ */
+const resolvedConstitutionCache = new Map<string, ResolvedConstitution>();
+const MAX_CACHED_CONSTITUTIONS = 32;
 const authenticRuleAcceptancePolicies = new WeakSet<object>();
 
 /** Refuses constitution values that were not resolved from an immutable commit tree here. */
@@ -212,7 +220,11 @@ export async function resolvePinnedConstitution(
   policyBaseCommit: GitOid,
   context: RepositoryOperationContext,
 ): Promise<ProjectResult<ResolvedConstitution>> {
+  let cacheKey: string;
   try {
+    cacheKey = `${runner.location.worktreeRoot}\0${policyBaseCommit}`;
+    const cached = resolvedConstitutionCache.get(cacheKey);
+    if (cached !== undefined) return ok(cached);
     const selected = await readConstitutionTreeFiles(runner, policyBaseCommit);
     if (selected.length === 0) return fail(invalidPolicyBase(policyBaseCommit));
 
@@ -235,6 +247,10 @@ export async function resolvePinnedConstitution(
       files: Object.freeze(selected.map((file) => Object.freeze({ ...file }))),
     });
     authenticResolvedConstitutions.add(resolved);
+    if (resolvedConstitutionCache.size >= MAX_CACHED_CONSTITUTIONS) {
+      resolvedConstitutionCache.delete(resolvedConstitutionCache.keys().next().value as string);
+    }
+    resolvedConstitutionCache.set(cacheKey, resolved);
     return ok(resolved);
   } catch (error) {
     if (error instanceof GitInvocationError) {

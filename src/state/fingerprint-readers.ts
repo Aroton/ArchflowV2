@@ -43,9 +43,19 @@ function stateIssue(input: FingerprintReadContext<any>, issueCode: string): Proj
   });
 }
 
+/**
+ * The workflow digest is a pure function of the immutable policy-base commit, so a successful
+ * read is reused per worktree and commit for the process lifetime; failures are never cached.
+ */
+const workflowDigestCache = new Map<string, Sha256Digest>();
+const MAX_CACHED_WORKFLOW_DIGESTS = 32;
+
 /** Reads the workflow bytes from the immutable policy-base tree. */
 export const readCanonicalWorkflowDigest: CanonicalWorkflowDigestReader = async (input) => {
   try {
+    const cacheKey = `${input.runner.location.worktreeRoot}\0${input.state.value.policy_base_commit}`;
+    const cached = workflowDigestCache.get(cacheKey);
+    if (cached !== undefined) return ok(cached);
     const entry = await readCommitTreeBlob(
       input.runner,
       input.state.value.policy_base_commit,
@@ -60,7 +70,12 @@ export const readCanonicalWorkflowDigest: CanonicalWorkflowDigestReader = async 
       argv: ["cat-file", "blob", entry.oid],
       operation: "git-workflow-read" as SafeCode,
     });
-    return ok(sha256Bytes(bytes.stdout));
+    const digest = sha256Bytes(bytes.stdout);
+    if (workflowDigestCache.size >= MAX_CACHED_WORKFLOW_DIGESTS) {
+      workflowDigestCache.delete(workflowDigestCache.keys().next().value as string);
+    }
+    workflowDigestCache.set(cacheKey, digest);
+    return ok(digest);
   } catch (error) {
     if (error instanceof GitInvocationError) {
       return fail(projectErrorForGitFailure(error, input.runner, input.context));

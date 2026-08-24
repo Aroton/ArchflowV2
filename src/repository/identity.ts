@@ -69,19 +69,19 @@ export interface TaskIdentity {
 }
 
 const LOCATION_OPERATION = "git-rev-parse-location" as SafeCode;
-const SUPERPROJECT_OPERATION = "git-rev-parse-superproject" as SafeCode;
-const SHALLOW_OPERATION = "git-rev-parse-shallow" as SafeCode;
-const TOPLEVEL_OPERATION = "git-rev-parse-toplevel" as SafeCode;
 const GIT_DIR_OPERATION = "git-rev-parse-git-dir" as SafeCode;
 const HEAD_OPERATION = "git-rev-parse-head" as SafeCode;
 const ROOTS_OPERATION = "git-rev-list-roots" as SafeCode;
 
 /**
  * Absence declared per command, never inferred from a bare exit 128. Outside any repository
- * `git rev-parse` exits 128 with this exact diagnostic; every other 128 stays a failure.
+ * `git rev-parse` exits 128 with the first diagnostic; in a bare repository or with the cwd inside
+ * `.git/`, the batched location query prints its boolean flags and then dies with the second one
+ * at `--show-toplevel`. Both are "no usable work tree here"; every other 128 stays a failure.
  */
 const NOT_A_REPOSITORY: readonly ExpectedAbsence[] = [
   { code: 128, stderrIncludes: "not a git repository" },
+  { code: 128, stderrIncludes: "must be run in a work tree" },
 ];
 
 /**
@@ -154,6 +154,9 @@ function bindToRoot(runner: GitRunner, location: WorktreeLocation): RootBoundGit
  * - shallow clone — `--is-shallow-repository`; a shallow clone's `rev-list --max-parents=0` returns
  *   the grafted boundary commit, which is not the true root and varies with clone depth.
  *
+ * All of those flags are answered by a single `rev-parse` invocation (see the body for the
+ * line-count rule its superproject flag imposes).
+ *
  * Unborn HEAD is refused by `resolveRepositoryIdentity`, where the root-commit query lives.
  *
  * `--git-dir` and `--git-common-dir` return the relative path `.git` at the top of the main
@@ -166,39 +169,37 @@ export async function discoverWorktree(
   context: RepositoryOperationContext
 ): Promise<ProjectResult<RootBoundGitRunner>> {
   try {
-    const flags = (
+    // One process answers the whole matrix. `rev-parse` prints one line per flag in argument
+    // order, except `--show-superproject-working-tree`, which prints nothing at all outside a
+    // submodule — so it goes last: exactly five lines means "not a submodule", a sixth line is the
+    // superproject path. Any other shape is refused rather than guessed at.
+    const lines = (
       await runner.runText({
         argv: [
           "rev-parse",
           "--is-inside-work-tree",
           "--is-bare-repository",
           "--is-inside-git-dir",
+          "--is-shallow-repository",
+          "--show-toplevel",
+          "--show-superproject-working-tree",
         ],
         operation: LOCATION_OPERATION,
         expectedAbsence: NOT_A_REPOSITORY,
       })
     ).split("\n");
-    if (flags[0] !== "true" || flags[1] !== "false" || flags[2] !== "false") {
+    const toplevel = lines[4];
+    if (
+      lines.length !== 5 ||
+      lines[0] !== "true" ||
+      lines[1] !== "false" ||
+      lines[2] !== "false" ||
+      lines[3] !== "false" ||
+      toplevel === undefined ||
+      toplevel === ""
+    ) {
       return fail(repositoryNotFound(runner));
     }
-
-    const superproject = await runner.runText({
-      argv: ["rev-parse", "--show-superproject-working-tree"],
-      operation: SUPERPROJECT_OPERATION,
-    });
-    if (superproject !== "") return fail(repositoryNotFound(runner));
-
-    const shallow = await runner.runText({
-      argv: ["rev-parse", "--is-shallow-repository"],
-      operation: SHALLOW_OPERATION,
-    });
-    if (shallow !== "false") return fail(repositoryNotFound(runner));
-
-    const toplevel = await runner.runText({
-      argv: ["rev-parse", "--show-toplevel"],
-      operation: TOPLEVEL_OPERATION,
-    });
-    if (toplevel === "") return fail(repositoryNotFound(runner));
 
     const worktreeRoot = await realpath(toplevel);
 

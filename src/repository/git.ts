@@ -551,16 +551,27 @@ export async function readGitBlobSize(runner: GitRunner, oid: string): Promise<n
   return size;
 }
 
-/** Reads one authenticated Git blob without permitting a result-sized object to exceed storage bounds. */
+/**
+ * Reads one authenticated Git blob without permitting a result-sized object to exceed storage
+ * bounds. The bound is enforced by the read itself: `maxBuffer` fails the command the moment output
+ * passes the limit, so no separate size probe is needed, and the overflow is reported as the same
+ * `TypeError` a caller would see from an explicit size check.
+ */
 export async function readGitBlobBytes(runner: GitRunner, oid: string): Promise<Uint8Array> {
-  const size = await readGitBlobSize(runner, oid);
-  if (size > MAX_RESULT_BLOB_BYTES) throw new TypeError("Git blob exceeds the bounded result-byte limit");
-  const result = await runner.run({
-    argv: ["cat-file", "blob", oid],
-    operation: OBJECT_READ_OPERATION,
-    maxBuffer: MAX_RESULT_BLOB_BYTES,
-  });
-  if (result.stdout.byteLength !== size) throw new TypeError("git cat-file blob size changed during read");
+  if (!GIT_OID.test(oid)) throw new TypeError("Git blob object id is invalid");
+  let result: GitInvocationResult;
+  try {
+    result = await runner.run({
+      argv: ["cat-file", "blob", oid],
+      operation: OBJECT_READ_OPERATION,
+      maxBuffer: MAX_RESULT_BLOB_BYTES,
+    });
+  } catch (error) {
+    if (error instanceof GitInvocationError && error.kind === "output-overflow") {
+      throw new TypeError("Git blob exceeds the bounded result-byte limit");
+    }
+    throw error;
+  }
   return new Uint8Array(result.stdout);
 }
 

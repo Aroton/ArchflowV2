@@ -125,3 +125,11 @@ These limitations assume a trusted developer account and a filesystem not being 
 **Existing mitigation:** The resolver computes the current fingerprint first, then makes one read-side legacy comparison. A mismatch under both compositions remains a mismatch. Success returns the already expected legacy digest for that read; it rewrites no state, evidence, subject, config, or retained result.
 
 **Why accepted:** This preserves narrowly identifiable work created before config left the fingerprint without turning compatibility into a migration subsystem or weakening exact digest authentication.
+
+## Memoized repository binding in a long-lived server
+
+**Not protected:** The MCP server memoizes worktree discovery and Git preflight per working directory for its process lifetime. If a repository is deleted and re-created at the same path while the server is running, later calls keep the stale worktree binding: a different repository surfaces as `REPOSITORY_MISMATCH` and a removed one as `IO_ERROR` rather than `REPOSITORY_NOT_FOUND`, until the server restarts.
+
+**Existing mitigation:** Only successful discovery is memoized; repository identity (root commits) is still observed live on every call and compared against `state.json`; the pinned constitution memo is keyed by an immutable commit, so it can never serve stale policy bytes.
+
+**Why accepted:** Re-probing the repository on every handler call and every substep refresh cost more child processes than the work itself, in tests and in ordinary use. Replacing a repository underneath a running server is not a supported workflow, and the failure it produces is loud rather than silent.

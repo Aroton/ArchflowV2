@@ -68,6 +68,17 @@ describe("production dependency assembly", () => {
     expect(services.value.dependencies.gate_secret_scanner).toBe(gateSecretScanner);
   });
 
+  it("reuses one discovered repository binding across services for the same directory", async () => {
+    const root = repository();
+    const input = { working_directory: root, task_id: task, operation: parseSafeCode("production-binding") };
+    const first = await createProductionServices(input);
+    const second = await createProductionServices({ ...input, operation: parseSafeCode("production-binding-again") });
+    if (!first.ok || !second.ok) throw new Error("services must open");
+    expect(second.value.runner).toBe(first.value.runner);
+    expect(second.value.environment).toBe(first.value.environment);
+    expect(second.value.authority.repository_identity_digest).toBe(first.value.authority.repository_identity_digest);
+  });
+
   it("uses the caller phase only for bootstrap, then rebuilds authority from committed phase and attempt", async () => {
     const root = repository();
     const input = { working_directory: root, task_id: task, operation: parseSafeCode("production-test"), phase_instance: requestedPhase };

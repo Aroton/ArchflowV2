@@ -47,17 +47,31 @@ export function assertInternalTransactionAuthority(
   }
 }
 
+/**
+ * Mints an authority. `identity_source` lets a caller that has just minted one authority for the
+ * same task through the same runner mint another (differing only in context) without re-querying
+ * the repository; the donor must be authentic and registered against exactly this runner and
+ * environment, so no unverified identity can enter through the seam.
+ */
 export async function createInternalTransactionAuthority(input: Readonly<{
   runner: RootBoundGitRunner;
   environment: GitEnvironment;
   task_id: TaskSlug;
   context: RepositoryOperationContext;
+  identity_source?: TransactionAuthority;
 }>): Promise<ProjectResult<TransactionAuthority>> {
   assertPlainJson(input.context, "repository operation context");
   const context = Object.freeze(structuredClone(input.context));
   if (context.task_id !== input.task_id) throw new TypeError("authority task_id must match context task_id");
 
-  const repository = await resolveRepositoryIdentity(input.runner, input.environment, context);
+  let repository: ProjectResult<RepositoryIdentity>;
+  if (input.identity_source === undefined) {
+    repository = await resolveRepositoryIdentity(input.runner, input.environment, context);
+  } else {
+    assertInternalTransactionAuthority(input.identity_source, { runner: input.runner, environment: input.environment });
+    if (input.identity_source.task_id !== input.task_id) throw new TypeError("identity source must belong to the same task");
+    repository = Object.freeze({ schema_version: "1", ok: true, value: input.identity_source.repository_identity });
+  }
   if (!repository.ok) return repository;
   const taskIdentity = computeTaskIdentity(input.task_id, repository.value);
   const taskRoot = await resolveTaskRoot({ runner: input.runner, taskId: input.task_id, context });

@@ -1,6 +1,6 @@
 # TESTING
 
-**Explored:** 2026-08-23 · **Commit:** `881d152` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/build-temp.mjs`, `scripts/smoke-release-bundle.mjs`, `scripts/test-release-integrity.mjs`
+**Explored:** 2026-08-23 · **Commit:** `beb0072` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/build-temp.mjs`, `scripts/smoke-release-bundle.mjs`, `scripts/test-release-integrity.mjs`
 
 ## The default is deliberately fast
 
@@ -36,6 +36,8 @@ The integration project currently contains 81 files and 408 tests. Its independe
 
 The semantic journey harness returns the apply handler's already-refreshed view directly. Apply/status byte parity is proven separately for an ordinary mutation, a compound review, a human decision, and a refusal carrying a safe view; it is not re-run after every one of the hundreds of journey actions. On the reference 20-core repository machine, this structure reduced the full integration wall time from 322.63 seconds to 53–57 seconds while retaining the real Git, handler, and child-process paths.
 
+The next floor was the handlers themselves, not the tests. A `git` shim on `PATH` counted 4,013 git child processes in the single longest journey: every handler call (and every substep refresh inside an apply) re-discovered the worktree, re-ran the Git preflight, resolved repository identity twice, and re-read the pinned constitution and workflow from an immutable commit. Memoizing those repository-constant reads in production code (per working directory for discovery/preflight, per policy-base commit for constitution and workflow digests, one identity resolve per session) and batching the discovery `rev-parse` flags into one process brought that journey to about 680 calls and 12 seconds, and the full integration project to 27–32 seconds with CPU time roughly halved. Repository identity is still observed live on every call; the remaining spawns are that pair plus genuine milestone and snapshot proofs. When integration time regresses, count spawns with the shim before restructuring tests.
+
 The schema split preserves cheap trust boundaries in the fast project. `schema-registry.test.ts` pins the registry/directory identity, generation inventory, and public barrel; `mcp-advertisement.test.ts` pins the two tool names, descriptions, plain input roots, and byte ceiling. Repeated strict Ajv compilation and the classified MCP corpus live in `test/extended/`.
 
 TypeScript still includes every `test/**/*.ts` file, so optional tests cannot silently rot at compile time. `test/types/mcp-sdk-public-surface.ts` remains compile-only coverage exercised by `npm run typecheck`.
@@ -63,7 +65,7 @@ For a sharded semantic journey, target its behavior-named `.test.ts` wrapper. Th
 
 `npm run check:deep` is an explicit, expensive validation for unusually broad changes. It first runs the ordinary check, then schema-byte regeneration comparison, extended tests, all integration and crash tests, notice/SDK-boundary mutation tests, and the full release check. It does not run real hosts or the review benchmark.
 
-The integration timing budget is one minute on the reference machine. Validate performance with at least two complete runs after changing journey layout, worker configuration, shared harnesses, or production code that affects status/apply cost. Machine-independent correctness remains the pass/fail contract; the recorded wall-time budget is the regression signal for this repository's development environment.
+The integration timing budget is 40 seconds on the reference machine (27–32 seconds measured). Validate performance with at least two complete runs after changing journey layout, worker configuration, shared harnesses, or production code that affects status/apply cost. Machine-independent correctness remains the pass/fail contract; the recorded wall-time budget is the regression signal for this repository's development environment.
 
 There is intentionally no changed-file detector that guesses when deep verification is necessary. The human chooses it when a change crosses many boundaries, modifies schemas/generation, changes durability/process behavior, or alters release construction.
 

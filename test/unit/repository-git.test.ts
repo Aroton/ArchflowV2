@@ -16,6 +16,7 @@ import {
   GitInvocationError,
   preflightGit,
   projectErrorForGitFailure,
+  readGitBlobBytes,
   type GitCommandSpec,
   type GitRunner,
   type RepositoryOperationContext,
@@ -363,5 +364,31 @@ describe("preflightGit", () => {
     expect(failure.kind).toBe("command-failed");
     expect(failure.code).toBe(128);
     expect(projectErrorForGitFailure(failure, runner, context).code).toBe("IO_ERROR");
+  });
+});
+
+describe("readGitBlobBytes", () => {
+  it("reports an over-limit blob as the bounded-size TypeError, not a git failure", async () => {
+    const runner = shellRunner();
+    const oid = "a".repeat(40);
+    const stub: GitRunner = {
+      cwd: runner.cwd,
+      runText: runner.runText,
+      runNulFields: runner.runNulFields,
+      run: async (spec) => {
+        expect(spec.argv).toEqual(["cat-file", "blob", oid]);
+        throw new GitInvocationError({ kind: "output-overflow", operation: spec.operation, argv: spec.argv });
+      },
+    };
+    await expect(readGitBlobBytes(stub, oid)).rejects.toThrow(/exceeds the bounded result-byte limit/u);
+  });
+
+  it("rejects a malformed object id before spawning anything", async () => {
+    const runner = shellRunner();
+    const stub: GitRunner = {
+      ...runner,
+      run: async () => Promise.reject(new Error("must not spawn")),
+    };
+    await expect(readGitBlobBytes(stub, "not-an-oid")).rejects.toThrow(/object id is invalid/u);
   });
 });
