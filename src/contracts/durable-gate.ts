@@ -5,18 +5,25 @@ import { pathSafeIdV1Schema, taskSlugV1Schema, type PathSafeId, type SafeInteger
 import {
   GATE_CONTRACTS,
   GATE_KINDS,
-  archivedCommitAuthorizationContextSchema,
+  archivedPreExactCommitAuthorizationContextSchema,
   baselineObservationRefV1Schema,
   gateDecisionEnvelopeV1Schema,
   gateRuleVersionRefSchema,
   gateWaiverScopeSchema,
   humanDecisionProvenanceV1Schema,
+  legacyArtifactApprovalContextSchema,
+  legacyDesignApprovalContextSchema,
+  legacyExactCommitAuthorizationContextSchema,
+  type ArchivedPreExactCommitAuthorizationContextV1,
   type BaselineObservationRef,
   type GateContext,
   type GateDecisionEnvelope,
   type GateDecisionPayload,
   type GateKind,
   type HumanDecisionProvenance,
+  type LegacyArtifactApprovalContextV1,
+  type LegacyDesignApprovalContextV1,
+  type LegacyExactCommitAuthorizationContextV1,
   type WaiverOriginRef,
   type WaiverScope,
 } from "./gates.js";
@@ -94,13 +101,40 @@ export type GateRequestV1 = {
  * became required. Read-only, like every shape in this family: the current writer type above is
  * what a new request must satisfy.
  */
-export type ArchivedCommitAuthorizationRequestV1 = GateRequestCommon & {
+export type ArchivedPreExactCommitAuthorizationRequestV1 = GateRequestCommon & {
   readonly kind: "commit-authorization";
-  readonly context: Omit<GateContext<"commit-authorization">, "baseline_commit" | "commit_message" | "paths">;
-  readonly allowed_decisions: readonly (GateDecisionPayload<"commit-authorization">["decision"] | "cancel")[];
+  readonly context: ArchivedPreExactCommitAuthorizationContextV1;
+  readonly allowed_decisions: readonly ["authorize-commit", "revise", "abort", "cancel"];
 };
 
-type ArchivedGateRequestShapeV1 = GateRequestV1 | ArchivedCommitAuthorizationRequestV1;
+export type ArchivedArtifactApprovalRequestV1 = GateRequestCommon & {
+  readonly kind: "artifact-approval";
+  readonly context: LegacyArtifactApprovalContextV1;
+  readonly allowed_decisions: readonly ["approve", "revise", "reject", "cancel"];
+};
+export type ArchivedDesignApprovalRequestV1 = GateRequestCommon & {
+  readonly kind: "design-approval";
+  readonly context: LegacyDesignApprovalContextV1;
+  readonly allowed_decisions: readonly ["approve", "revise", "reject", "waiver-requested", "cancel"];
+};
+export type ArchivedExactCommitAuthorizationRequestV1 = GateRequestCommon & {
+  readonly kind: "commit-authorization";
+  readonly context: LegacyExactCommitAuthorizationContextV1;
+  readonly allowed_decisions: readonly ["authorize-commit", "revise", "abort", "cancel"];
+};
+
+/** Historical name retained for callers that specifically mean the pre-exact context. */
+export type ArchivedCommitAuthorizationRequestV1 = ArchivedPreExactCommitAuthorizationRequestV1;
+
+type ArchivedOrdinaryGateRequestV1 =
+  | ArchivedArtifactApprovalRequestV1
+  | ArchivedDesignApprovalRequestV1
+  | ArchivedExactCommitAuthorizationRequestV1
+  | ArchivedPreExactCommitAuthorizationRequestV1;
+
+type ArchivedGateRequestShapeV1 = GateRequestV1 | ArchivedOrdinaryGateRequestV1;
+
+export type ExactCommitAuthorizationContextV1 = GateContext<"commit-authorization"> | LegacyExactCommitAuthorizationContextV1;
 
 /**
  * Narrows an archived commit-authorization context to the current shape, or `undefined` when it
@@ -109,10 +143,10 @@ type ArchivedGateRequestShapeV1 = GateRequestV1 | ArchivedCommitAuthorizationReq
  * rather than compare against absent values.
  */
 export function exactCommitAuthorizationContext(
-  context: GateContext<"commit-authorization"> | ArchivedCommitAuthorizationRequestV1["context"],
+  context: ExactCommitAuthorizationContextV1 | ArchivedPreExactCommitAuthorizationContextV1,
 ): GateContext<"commit-authorization"> | undefined {
   return "baseline_commit" in context && "commit_message" in context && "paths" in context
-    ? context
+    ? context as GateContext<"commit-authorization">
     : undefined;
 }
 
@@ -247,19 +281,22 @@ const legacyDecisionRecordV1Schema = z.discriminatedUnion("outcome", [
  * is part of the contract, so the mirror models each as a tuple of literals.
  */
 const GATE_REQUEST_DECISIONS = {
-  "artifact-approval": ["approve", "revise", "reject", "cancel"],
+  "artifact-approval": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "design-approval": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "constitution-review": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
   "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
   "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
-  "commit-authorization": ["authorize-commit", "revise", "abort", "cancel"],
+  "commit-authorization": ["authorize-commit", "revise", "abort", "waiver-requested", "cancel"],
   "restore-collision": ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"],
   "baseline-adoption": ["adopt-current-bytes", "restore-recorded-bytes", "adopt-committed-deletions", "abort", "cancel"],
   "migration-audit": ["accept-import-audit", "revise", "abort", "cancel"],
 } as const satisfies Readonly<Record<GateKind, readonly [string, ...string[]]>>;
 
 const WAIVER_DECISIONS = ["grant", "deny", "cancel"] as const;
+const LEGACY_ARTIFACT_APPROVAL_DECISIONS = ["approve", "revise", "reject", "cancel"] as const;
+const LEGACY_DESIGN_APPROVAL_DECISIONS = ["approve", "revise", "reject", "waiver-requested", "cancel"] as const;
+const LEGACY_COMMIT_AUTHORIZATION_DECISIONS = ["authorize-commit", "revise", "abort", "cancel"] as const;
 
 const literalTuple = (values: readonly [string, ...string[]]) =>
   z.tuple(values.map((value) => z.literal(value)) as [z.ZodLiteral<string>, ...z.ZodLiteral<string>[]]);
@@ -295,7 +332,10 @@ const gateArm = (kind: GateKind, context: z.ZodType, decisions: z.ZodType, extra
   z.object({ ...gateRequestCommon, ...extra, kind: z.literal(kind), context, allowed_decisions: decisions }).strict();
 
 /**
- * One arm per `gate-request.schema.json` `$defs` branch: the eight gate kinds plus the waiver arm,
+ * One arm per current `gate-request.schema.json` `$defs` branch. The policy-context
+ * `constitution-review` arm is intentionally absent: new policy findings are folded into the
+ * ordinary artifact/design/commit gate, while a fresh constitution-review is only the separate
+ * waiver grant/deny decision.
  * keyed by their committed def names. Non-waiver arms embed `GATE_CONTRACTS[kind].context` —
  * the same Zod context schemas `parseGateContext` runs — so the gate-semantics checks
  * (sorted-unique rule sets, eligible-waiver axis match, attempts >= maximum) ride along instead of
@@ -305,7 +345,6 @@ const gateArm = (kind: GateKind, context: z.ZodType, decisions: z.ZodType, extra
 const gateArms = (extra: Record<string, z.ZodType>) => ({
   artifactApproval: gateArm("artifact-approval", GATE_CONTRACTS["artifact-approval"].context, allowedDecisionTuples["artifact-approval"], extra),
   designApproval: gateArm("design-approval", GATE_CONTRACTS["design-approval"].context, allowedDecisionTuples["design-approval"], extra),
-  constitutionReview: gateArm("constitution-review", GATE_CONTRACTS["constitution-review"].context, allowedDecisionTuples["constitution-review"], extra),
   materialDrift: gateArm("material-drift", GATE_CONTRACTS["material-drift"].context, allowedDecisionTuples["material-drift"], extra),
   attemptsExhausted: gateArm("attempts-exhausted", GATE_CONTRACTS["attempts-exhausted"].context, allowedDecisionTuples["attempts-exhausted"], extra),
   constitutionEdit: gateArm("constitution-edit", GATE_CONTRACTS["constitution-edit"].context, allowedDecisionTuples["constitution-edit"], extra),
@@ -316,24 +355,38 @@ const gateArms = (extra: Record<string, z.ZodType>) => ({
   constitutionWaiver: gateArm("constitution-review", waiverGateContextSchema, waiverDecisionsTuple, extra),
 });
 
+/** Read-only policy gate retained so old open and decided constitution reviews remain usable. */
+const archivedPolicyGateArm = (extra: Record<string, z.ZodType>) => ({
+  constitutionReview: gateArm("constitution-review", GATE_CONTRACTS["constitution-review"].context, allowedDecisionTuples["constitution-review"], extra),
+});
+
+const archivedGateArms = (extra: Record<string, z.ZodType>) => ({
+  ...gateArms(extra),
+  ...archivedPolicyGateArm(extra),
+});
+
 const armUnion = (arms: Record<string, z.ZodType>) =>
   z.union(Object.values(arms) as unknown as [z.ZodType, z.ZodType, ...z.ZodType[]]);
 
 const gateRequestArms = gateArms({});
 
 export const gateRequestV1Schema = armUnion(gateRequestArms) as unknown as z.ZodType<GateRequestV1>;
-const legacyGateRequestV1Schema = armUnion(gateArms({ supersedes: legacySupersession }));
+const archivedPolicyGateRequestV1Schema = armUnion(archivedPolicyGateArm({}));
+const legacyGateRequestV1Schema = armUnion(archivedGateArms({ supersedes: legacySupersession }));
 
 /**
- * The one arm whose *context* has an archived shape rather than an archived extra field: a
- * commit-authorization request written before `baseline_commit`, `commit_message` and `paths`
- * existed. It is deliberately absent from `gateRequestArms`, `activeGateV1Schema` and
- * `gateRequestSchemaDefs` — the published schema must keep advertising only the writer shape.
+ * Explicit compatibility arms for ordinary requests written before approval triggers became
+ * required. Their exact historical contexts and decision tuples remain read-only: none is
+ * registered in the fresh request or active-gate schemas.
  */
-const archivedCommitAuthorizationArm = (extra: Record<string, z.ZodType>) =>
-  gateArm("commit-authorization", archivedCommitAuthorizationContextSchema, allowedDecisionTuples["commit-authorization"], extra);
-const archivedCommitAuthorizationRequestV1Schema = archivedCommitAuthorizationArm({});
-const archivedLegacyCommitAuthorizationRequestV1Schema = archivedCommitAuthorizationArm({ supersedes: legacySupersession });
+const archivedOrdinaryGateArms = (extra: Record<string, z.ZodType>) => ({
+  artifactApproval: gateArm("artifact-approval", legacyArtifactApprovalContextSchema, literalTuple(LEGACY_ARTIFACT_APPROVAL_DECISIONS), extra),
+  designApproval: gateArm("design-approval", legacyDesignApprovalContextSchema, literalTuple(LEGACY_DESIGN_APPROVAL_DECISIONS), extra),
+  exactCommitAuthorization: gateArm("commit-authorization", legacyExactCommitAuthorizationContextSchema, literalTuple(LEGACY_COMMIT_AUTHORIZATION_DECISIONS), extra),
+  preExactCommitAuthorization: gateArm("commit-authorization", archivedPreExactCommitAuthorizationContextSchema, literalTuple(LEGACY_COMMIT_AUTHORIZATION_DECISIONS), extra),
+});
+const archivedOrdinaryGateRequestV1Schema = armUnion(archivedOrdinaryGateArms({}));
+const archivedSupersededOrdinaryGateRequestV1Schema = armUnion(archivedOrdinaryGateArms({ supersedes: legacySupersession }));
 
 /**
  * A baseline-adoption request written before deletion adoption existed pinned only the four
@@ -349,6 +402,12 @@ const archivedBaselineAdoptionRequestV1Schema = gateArm(
   GATE_CONTRACTS["baseline-adoption"].context,
   literalTuple(["adopt-current-bytes", "restore-recorded-bytes", "abort", "cancel"]),
   { current_evidence: baselineObservationRefV1Schema },
+);
+const archivedSupersededBaselineAdoptionRequestV1Schema = gateArm(
+  "baseline-adoption",
+  GATE_CONTRACTS["baseline-adoption"].context,
+  literalTuple(["adopt-current-bytes", "restore-recorded-bytes", "abort", "cancel"]),
+  { current_evidence: baselineObservationRefV1Schema, supersedes: legacySupersession },
 );
 
 const PAYLOAD_REQUIRED_FIELDS = ["payload", "human_provenance"] as const;
@@ -376,6 +435,27 @@ export const activeGateV1Schema = armUnion(gateArms({
   decision_template: gateDecisionTemplateV1Schema,
 })) as unknown as z.ZodType<ActiveGateV1>;
 
+const archivedActiveGateExtra = {
+  status: z.literal("awaiting-human"),
+  decision_template: gateDecisionTemplateV1Schema,
+};
+const archivedOrdinaryActiveGateV1Schema = armUnion(archivedOrdinaryGateArms(archivedActiveGateExtra));
+const archivedPolicyActiveGateV1Schema = armUnion(archivedPolicyGateArm(archivedActiveGateExtra));
+const archivedSupersededActiveGateV1Schema = armUnion(archivedGateArms({ ...archivedActiveGateExtra, supersedes: legacySupersession }));
+const archivedSupersededOrdinaryActiveGateV1Schema = armUnion(archivedOrdinaryGateArms({ ...archivedActiveGateExtra, supersedes: legacySupersession }));
+const archivedBaselineActiveGateV1Schema = gateArm(
+  "baseline-adoption",
+  GATE_CONTRACTS["baseline-adoption"].context,
+  literalTuple(["adopt-current-bytes", "restore-recorded-bytes", "abort", "cancel"]),
+  { ...archivedActiveGateExtra, current_evidence: baselineObservationRefV1Schema },
+);
+const archivedSupersededBaselineActiveGateV1Schema = gateArm(
+  "baseline-adoption",
+  GATE_CONTRACTS["baseline-adoption"].context,
+  literalTuple(["adopt-current-bytes", "restore-recorded-bytes", "abort", "cancel"]),
+  { ...archivedActiveGateExtra, current_evidence: baselineObservationRefV1Schema, supersedes: legacySupersession },
+);
+
 /**
  * The generated `$defs` layouts, keyed by committed def name. The arms are the union options above,
  * registered so each document root emits `$ref`s instead of nine inline copies.
@@ -387,7 +467,6 @@ export const gateRequestSchemaDefs: Readonly<Record<string, z.ZodType>> = Object
   waiverContext: waiverGateContextSchema,
   artifactApprovalDecisions: allowedDecisionTuples["artifact-approval"],
   designApprovalDecisions: allowedDecisionTuples["design-approval"],
-  constitutionReviewDecisions: allowedDecisionTuples["constitution-review"],
   materialDriftDecisions: allowedDecisionTuples["material-drift"],
   attemptsExhaustedDecisions: allowedDecisionTuples["attempts-exhausted"],
   constitutionEditDecisions: allowedDecisionTuples["constitution-edit"],
@@ -407,7 +486,6 @@ export const gateRequestSchemaDefs: Readonly<Record<string, z.ZodType>> = Object
 export const gateRequestSchemaDefOverrides: Readonly<Record<string, Readonly<Record<string, unknown>>>> = Object.freeze({
   artifactApprovalDecisions: { const: GATE_REQUEST_DECISIONS["artifact-approval"] },
   designApprovalDecisions: { const: GATE_REQUEST_DECISIONS["design-approval"] },
-  constitutionReviewDecisions: { const: GATE_REQUEST_DECISIONS["constitution-review"] },
   materialDriftDecisions: { const: GATE_REQUEST_DECISIONS["material-drift"] },
   attemptsExhaustedDecisions: { const: GATE_REQUEST_DECISIONS["attempts-exhausted"] },
   constitutionEditDecisions: { const: GATE_REQUEST_DECISIONS["constitution-edit"] },
@@ -456,11 +534,19 @@ export function parseGateDecisionRecord(value: unknown): GateDecisionRecordV1 {
  */
 export function parseArchivedGateRequest(value: unknown): ArchivedGateRequestV1 {
   assertPlainJson(value, "archived gate request");
-  for (const candidate of [gateRequestV1Schema, archivedCommitAuthorizationRequestV1Schema, archivedLegacyCommitAuthorizationRequestV1Schema, archivedBaselineAdoptionRequestV1Schema]) {
+  for (const candidate of [
+    gateRequestV1Schema,
+    archivedPolicyGateRequestV1Schema,
+    archivedOrdinaryGateRequestV1Schema,
+    archivedBaselineAdoptionRequestV1Schema,
+    legacyGateRequestV1Schema,
+    archivedSupersededOrdinaryGateRequestV1Schema,
+    archivedSupersededBaselineAdoptionRequestV1Schema,
+  ]) {
     const parsed = candidate.safeParse(value);
     if (parsed.success) return parsed.data as ArchivedGateRequestV1;
   }
-  return legacyGateRequestV1Schema.parse(value) as ArchivedGateRequestV1;
+  return archivedSupersededOrdinaryGateRequestV1Schema.parse(value) as ArchivedGateRequestV1;
 }
 
 /**
@@ -489,7 +575,19 @@ export function parseArchivedGateDecisionRecord(value: unknown): ArchivedGateDec
 
 export function parseActiveGate(value: unknown): ActiveGateV1 {
   assertPlainJson(value, "active gate");
-  return activeGateV1Schema.parse(value);
+  for (const candidate of [
+    activeGateV1Schema,
+    archivedPolicyActiveGateV1Schema,
+    archivedOrdinaryActiveGateV1Schema,
+    archivedBaselineActiveGateV1Schema,
+    archivedSupersededBaselineActiveGateV1Schema,
+    archivedSupersededActiveGateV1Schema,
+    archivedSupersededOrdinaryActiveGateV1Schema,
+  ]) {
+    const parsed = candidate.safeParse(value);
+    if (parsed.success) return parsed.data as ActiveGateV1;
+  }
+  return archivedOrdinaryActiveGateV1Schema.parse(value) as ActiveGateV1;
 }
 
 export type GateRequestDocument = CanonicalDocument<GateRequestV1>;

@@ -1,10 +1,14 @@
 import { z } from "zod";
 
 import { configRouteSchema, type ModelRouteV1 } from "./config.js";
+import {
+  publicDispatchFailureV1Schema,
+  type PublicDispatchFailureV1,
+} from "./dispatch-failure.js";
 import type { ConfigChangeEntry, TaskStateV1 } from "./durable-state.js";
 import type { Sha256Digest, TaskSlug } from "./evidence.js";
 import { sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
-import type { RouteOverrideDeclaration } from "./mcp-tools.js";
+import type { ReviewRouteSetV1, RouteOverrideDeclaration } from "./mcp-tools.js";
 import type { PlainJsonValue } from "./plain-json.js";
 import { assertPlainJson } from "./plain-json.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
@@ -60,11 +64,17 @@ export type PublicReviewContextV1 = {
 };
 
 export type HumanPresentationOptionV1 = { readonly token: string; readonly label: string; readonly consequence: string };
+export type HumanPresentationReasonV1 = {
+  readonly class: "configured-approval" | "exception";
+  readonly text: string;
+};
 export type HumanPresentationV1 = {
+  readonly class: "configured-approval" | "exception";
   readonly title: string;
   readonly summary: string;
   readonly details?: readonly string[];
   readonly question: string;
+  readonly reasons: readonly HumanPresentationReasonV1[];
   readonly options: readonly HumanPresentationOptionV1[];
 };
 
@@ -72,11 +82,14 @@ export type WorkflowPositionV1 =
   | { readonly kind: "prd" | "design" }
   | { readonly kind: "phase-design" | "phase-impl"; readonly phase: number };
 
+/** Public route declaration repeated unchanged for one producer skill invocation. */
+export type WorkflowReviewRoutesV1 = ReviewRouteSetV1;
+
 export type WorkflowInvocationV1 =
-  | { readonly skill: "archflow-prd"; readonly intent: "resume" | "reopen" }
-  | { readonly skill: "archflow-design"; readonly intent: "resume" | "reopen" }
-  | { readonly skill: "archflow-phase-design"; readonly phase: number; readonly intent: "resume" | "reopen" }
-  | { readonly skill: "archflow-phase-impl"; readonly phase: number; readonly intent: "resume" };
+  | { readonly skill: "archflow-prd"; readonly intent: "resume" | "reopen"; readonly review_routes?: WorkflowReviewRoutesV1 }
+  | { readonly skill: "archflow-design"; readonly intent: "resume" | "reopen"; readonly review_routes?: WorkflowReviewRoutesV1 }
+  | { readonly skill: "archflow-phase-design"; readonly phase: number; readonly intent: "resume" | "reopen"; readonly review_routes?: WorkflowReviewRoutesV1 }
+  | { readonly skill: "archflow-phase-impl"; readonly phase: number; readonly intent: "resume"; readonly review_routes?: WorkflowReviewRoutesV1 };
 
 export type WorkflowReopenImpactV1 = {
   readonly target: WorkflowPositionV1;
@@ -114,7 +127,6 @@ export type SemanticNextActionV1 = {
     readonly message: string;
     readonly target_ref: string;
     readonly baseline: string;
-    readonly requires_human_confirmation: boolean;
   };
   readonly reopen?: WorkflowReopenImpactV1;
 };
@@ -131,6 +143,7 @@ export type WorkflowViewV1 = {
   readonly findings?: readonly PublicFindingV1[];
   readonly review_context?: PublicReviewContextV1;
   readonly presentation?: HumanPresentationV1;
+  readonly dispatch_failure?: PublicDispatchFailureV1;
   /**
    * Informational field-level config changes since the last config-observing commit, projected
    * verbatim from the status notice. Never changes the condition or the next action.
@@ -182,6 +195,12 @@ export type SemanticStatusSnapshotV1 = {
   readonly schema_version: "1";
   readonly repository_identity_digest: Sha256Digest;
   readonly state?: TaskStateV1;
+  /** Digest of the exact canonical state document read for this snapshot. */
+  readonly state_document_digest?: Sha256Digest;
+  /** Digest of the live parsed task config read inside the same coherent status computation. */
+  readonly live_config_digest?: Sha256Digest;
+  /** Authenticated initialization binding; used only to retain legacy migration-audit ownership. */
+  readonly legacy_import_initialization?: true;
   readonly status: PlainJsonValue;
   readonly full_findings: readonly PublicFindingV1[];
   readonly pending_waiver_origin?: PlainJsonValue;
@@ -264,18 +283,31 @@ const publicConstitutionRuleV1Schema = z.object({ id: nonBlank, version: positiv
 const rubricCriterionV1Schema = z.object({ id: nonBlank, text: nonBlank, blocking: z.boolean() }).strict();
 const publicRubricV1Schema = z.object({ schema_version: z.literal("1"), kind: z.enum(["artifact", "implementation"]), mode: z.literal("adversarial"), criteria: z.array(rubricCriterionV1Schema).min(1) }).strict();
 const publicReviewContextV1Schema = z.object({ rubric: publicRubricV1Schema, active_rules: z.array(publicConstitutionRuleV1Schema) }).strict();
-const humanPresentationV1Schema = z.object({ title: nonBlank, summary: nonBlank, details: z.array(nonBlank).optional(), question: nonBlank, options: z.array(z.object({ token: nonBlank, label: nonBlank, consequence: nonBlank }).strict()).min(1) }).strict();
+const presentationClass = z.enum(["configured-approval", "exception"]);
+const humanPresentationV1Schema = z.object({ class: presentationClass, title: nonBlank, summary: nonBlank, details: z.array(nonBlank).optional(), question: nonBlank, reasons: z.array(z.object({ class: presentationClass, text: nonBlank }).strict()).min(1), options: z.array(z.object({ token: nonBlank, label: nonBlank, consequence: nonBlank }).strict()).min(1) }).strict().superRefine((presentation, context) => {
+  const expected = presentation.reasons.some((reason) => reason.class === "exception") ? "exception" : "configured-approval";
+  if (presentation.class !== expected) context.addIssue({ code: "custom", path: ["class"], message: `presentation class must be ${expected}` });
+});
 export const workflowPositionV1Schema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("prd") }).strict(),
   z.object({ kind: z.literal("design") }).strict(),
   z.object({ kind: z.literal("phase-design"), phase: positiveSafePhaseNumberV1Schema }).strict(),
   z.object({ kind: z.literal("phase-impl"), phase: positiveSafePhaseNumberV1Schema }).strict(),
 ]);
+export const workflowReviewModelRouteV1Schema = configRouteSchema.clone(configRouteSchema.def) as z.ZodType<ModelRouteV1>;
+export const workflowReviewRoutesV1Schema = z.object({
+  "counter-reviewer": workflowReviewModelRouteV1Schema.optional(),
+  adjudicator: workflowReviewModelRouteV1Schema.optional(),
+}).strict().superRefine((routes, context) => {
+  if (routes["counter-reviewer"] === undefined && routes.adjudicator === undefined) {
+    context.addIssue({ code: "custom", message: "review_routes must name counter-reviewer, adjudicator, or both" });
+  }
+}) as z.ZodType<ReviewRouteSetV1>;
 export const workflowInvocationV1Schema = z.discriminatedUnion("skill", [
-  z.object({ skill: z.literal("archflow-prd"), intent: z.enum(["resume", "reopen"]) }).strict(),
-  z.object({ skill: z.literal("archflow-design"), intent: z.enum(["resume", "reopen"]) }).strict(),
-  z.object({ skill: z.literal("archflow-phase-design"), phase: positiveSafePhaseNumberV1Schema, intent: z.enum(["resume", "reopen"]) }).strict(),
-  z.object({ skill: z.literal("archflow-phase-impl"), phase: positiveSafePhaseNumberV1Schema, intent: z.literal("resume") }).strict(),
+  z.object({ skill: z.literal("archflow-prd"), intent: z.enum(["resume", "reopen"]), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
+  z.object({ skill: z.literal("archflow-design"), intent: z.enum(["resume", "reopen"]), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
+  z.object({ skill: z.literal("archflow-phase-design"), phase: positiveSafePhaseNumberV1Schema, intent: z.enum(["resume", "reopen"]), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
+  z.object({ skill: z.literal("archflow-phase-impl"), phase: positiveSafePhaseNumberV1Schema, intent: z.literal("resume"), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
 ]) as unknown as z.ZodType<WorkflowInvocationV1>;
 const reopenImpactV1Schema = z.object({
   target: workflowPositionV1Schema,
@@ -286,7 +318,7 @@ const reopenImpactV1Schema = z.object({
   appends_prd_ask_history: z.boolean(),
   requires_fresh_review_and_approval: z.literal(true),
 }).strict();
-const commitInstructionV1Schema = z.object({ paths: z.array(nonBlank).min(1), message: nonBlank, target_ref: nonBlank, baseline: nonBlank, requires_human_confirmation: z.boolean() }).strict().superRefine((commit, context) => {
+const commitInstructionV1Schema = z.object({ paths: z.array(nonBlank).min(1), message: nonBlank, target_ref: nonBlank, baseline: nonBlank }).strict().superRefine((commit, context) => {
   if (commit.paths.some((path, index) => index > 0 && commit.paths[index - 1]! > path)) {
     context.addIssue({ code: "custom", path: ["paths"], message: "commit paths must be sorted ascending" });
   }
@@ -306,7 +338,7 @@ export const configChangeEntryV1Schema = z.object({
   after: configChangeValueV1Schema.optional(),
 }).strict() as unknown as z.ZodType<ConfigChangeEntry>;
 
-export const workflowViewV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, condition: z.enum(WORKFLOW_CONDITIONS), headline: nonBlank, detail: nonBlank, position: workflowPositionV1Schema.optional(), resources: z.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: z.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), presentation: humanPresentationV1Schema.optional(), config_change: z.array(configChangeEntryV1Schema).optional() }).strict() as unknown as z.ZodType<WorkflowViewV1>;
+export const workflowViewV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, condition: z.enum(WORKFLOW_CONDITIONS), headline: nonBlank, detail: nonBlank, position: workflowPositionV1Schema.optional(), resources: z.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: z.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), presentation: humanPresentationV1Schema.optional(), dispatch_failure: publicDispatchFailureV1Schema.optional(), config_change: z.array(configChangeEntryV1Schema).optional() }).strict() as unknown as z.ZodType<WorkflowViewV1>;
 
 export const semanticErrorSummaryV1Schema = z.object({
   code: nonBlank.max(128),

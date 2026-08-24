@@ -17,7 +17,7 @@ import type {
   UndeclaredChangeReport,
 } from "../contracts/durable-implementation-output.js";
 import type { DocumentArtifactV1 } from "../contracts/durable-document.js";
-import type { GateContext } from "../contracts/gates.js";
+import type { GateContext, LegacyExactCommitAuthorizationContextV1 } from "../contracts/gates.js";
 import type {
   BlobIdentity,
   ClaimableOutputPathClass,
@@ -228,7 +228,7 @@ async function candidateStillPinned(
 export async function resolveImplementationMilestoneProof(
   runner: RootBoundGitRunner,
   output: ImplementationOutputV1,
-  context: GateContext<"commit-authorization">,
+  context: GateContext<"commit-authorization"> | LegacyExactCommitAuthorizationContextV1,
 ): Promise<MilestoneProof> {
   if (context.baseline_commit !== output.base_commit) {
     try {

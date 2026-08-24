@@ -1,4 +1,3 @@
-import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { ProjectResult } from "../contracts/errors.js";
@@ -7,6 +6,7 @@ import type { PlainJsonValue } from "../contracts/plain-json.js";
 import { parsePhaseInstanceId } from "../contracts/phase-instance.js";
 import { createGitRunner } from "../repository/git.js";
 import { discoverWorktree } from "../repository/identity.js";
+import { inspectLegacyUpgradeStage } from "../init/legacy-upgrade-stage.js";
 import { createProductionServices } from "../state/production.js";
 import { classifyDurableStateReadability, computeTaskStatus, type TaskStatusV1 } from "../state/status.js";
 
@@ -24,6 +24,10 @@ export type WorkflowStatusClassification = Readonly<{
   next_action: StatusNextAction;
 }>;
 
+export type StagedUpgradeStatus = WorkflowStatusClassification & Readonly<{
+  mode: "upgrade-staged" | "upgrade-restart-required";
+}>;
+
 export type ClassifyWorkflowStatusInput = Readonly<{
   working_directory: string;
   task_id: TaskSlug;
@@ -35,7 +39,7 @@ function action(code: string, detail: string, human: boolean, commands?: Readonl
   return Object.freeze({ code, detail, human_required: human, ...(commands === undefined ? {} : { commands }), ...(input === undefined ? {} : { input }) });
 }
 
-async function stagedUpgradeStatus(input: ClassifyWorkflowStatusInput): Promise<WorkflowStatusClassification | undefined> {
+export async function stagedUpgradeStatus(input: ClassifyWorkflowStatusInput): Promise<StagedUpgradeStatus | undefined> {
   const discovered = await discoverWorktree(createGitRunner({ cwd: input.working_directory }), {
     task_id: input.task_id,
     phase_instance: parsePhaseInstanceId("prd"),
@@ -44,26 +48,18 @@ async function stagedUpgradeStatus(input: ClassifyWorkflowStatusInput): Promise<
   });
   if (!discovered.ok) return undefined;
   const imports = join(discovered.value.location.worktreeRoot, ".archflow", "runtime", "tasks", input.task_id, "cache", "imports");
-  let digests: string[];
-  try { digests = (await readdir(imports)).filter((entry) => /^[a-f0-9]{64}$/u.test(entry)).sort(); }
-  catch { return undefined; }
-  if (digests.length === 0) return undefined;
-  const stages: Array<Record<string, PlainJsonValue>> = [];
-  for (const digest of digests) {
-    try {
-      const parsed = JSON.parse(await readFile(join(imports, digest, "stage.json"), "utf8")) as unknown;
-      if (parsed !== null && !Array.isArray(parsed) && typeof parsed === "object") stages.push(parsed as Record<string, PlainJsonValue>);
-    } catch { /* A pre-fix stage has no stage descriptor. */ }
-  }
-  if (digests.length === 1 && stages.length === 1 && stages[0]!.task_id === input.task_id && stages[0]!.import_digest === digests[0]) {
+  const inspected = await inspectLegacyUpgradeStage(imports, input.task_id);
+  if (inspected.kind === "absent") return undefined;
+  if (inspected.kind === "current") {
+    const stage = inspected.descriptor;
     return Object.freeze({
       mode: "upgrade-staged" as const,
       next_action: action(
         "resume-upgrade-in-mcp-session",
-        `A reviewed legacy import is staged for this task and no durable state exists. Resume the upgrade in a session that exposes the ArchFlow MCP server; ${String(stages[0]!.resume_phase)} is the proposed continuation point.`,
+        `A reviewed legacy import is staged for this task and no durable state exists. Resume the upgrade in a session that exposes the ArchFlow MCP server; ${stage.resume_phase} is the proposed continuation point.`,
         false,
         Object.freeze({ claude: `/archflow-upgrade ${input.task_id}`, codex: `$archflow-upgrade ${input.task_id}` }),
-        structuredClone(stages[0]!) as PlainJsonValue,
+        structuredClone(stage) as PlainJsonValue,
       ),
     });
   }
@@ -74,7 +70,7 @@ async function stagedUpgradeStatus(input: ClassifyWorkflowStatusInput): Promise<
       "An older or ambiguous legacy import stage exists, but no durable state was created. Discard the explicitly reported stage, then rerun upgrade preview and staging with an active MCP server.",
       true,
       undefined,
-      { operation: "discard-stage", task_id: input.task_id, import_digests: digests },
+      { operation: "discard-stage", task_id: input.task_id, import_digests: inspected.digests },
     ),
   });
 }

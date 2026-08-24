@@ -2,8 +2,13 @@ import { isDeepStrictEqual } from "node:util";
 
 import { parseActiveGate, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
 import type { PathSafeId, Sha256Digest } from "../contracts/evidence.js";
-import { validateGateDecision, type GateContext } from "../contracts/gates.js";
+import {
+  validateArchivedGateDecision,
+  validateGateDecision,
+  type DesignPolicyFinding,
+} from "../contracts/gates.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
+import type { HumanPresentationReasonV1 } from "../contracts/semantic-workflow.js";
 import {
   deepFreezeGateJson,
   waiverContext,
@@ -79,7 +84,7 @@ export function buildGateDecisionTemplates(active: ActiveGateV1): readonly Plain
     if (decision === "waiver-requested") {
       // One template per waivable (rule, axis) pair: waiving a rule's compliance and waiving its
       // review trigger are different requests, and the human must be shown both.
-      const eligible = (context as GateContext<"constitution-review"> | GateContext<"design-approval">).eligible_waivers;
+      const eligible = "eligible_waivers" in context ? context.eligible_waivers : [];
       for (const item of eligible) {
         payloads.push({
           decision,
@@ -103,7 +108,14 @@ export function buildGateDecisionTemplates(active: ActiveGateV1): readonly Plain
     }
 
     for (const payload of payloads) {
-      validateGateDecision(request.kind, request.context as never, payload as never);
+      const archivedOrdinary =
+        (request.kind === "artifact-approval" || request.kind === "design-approval" || request.kind === "commit-authorization") &&
+        !("approval_trigger" in request.context);
+      if (archivedOrdinary) {
+        validateArchivedGateDecision(request.kind, request.context as never, payload as never);
+      } else {
+        validateGateDecision(request.kind, request.context as never, payload as never);
+      }
       templates.push({ ...base, kind: request.kind, payload });
     }
   }
@@ -118,12 +130,14 @@ export type HumanGateDecisionOption = Readonly<{
 }>;
 
 export type HumanGatePresentation = Readonly<{
+  class: "configured-approval" | "exception";
   title: string;
   /** The summary stored with the durable gate request, not a reconstruction from protocol data. */
   summary: string;
   /** Self-contained review context so the human never has to inspect an internal artifact. */
   details?: readonly string[];
   question: string;
+  reasons: readonly HumanPresentationReasonV1[];
   options: readonly HumanGateDecisionOption[];
 }>;
 
@@ -158,8 +172,8 @@ type PresentationBinding = Readonly<{
 
 const PRESENTATION_COPY = Object.freeze({
   "artifact-approval": Object.freeze({
-    title: "Review the finished work",
-    question: "Does this work meet your expectations, or would you like it changed?",
+    title: "Review and approve the requirements",
+    question: "Should ArchFlow approve these requirements, advance to design, and include them in the later design milestone?",
   }),
   "design-approval": Object.freeze({
     title: "Review and approve the design",
@@ -182,8 +196,8 @@ const PRESENTATION_COPY = Object.freeze({
     question: "Should the policy edit be undone, moved into the project baseline, or abandoned?",
   }),
   "commit-authorization": Object.freeze({
-    title: "Authorize the commit",
-    question: "Do you authorize committing the reviewed changes, or should they be revised first?",
+    title: "Authorize, commit, and continue",
+    question: "Do you authorize ArchFlow to commit the exact reviewed changes and continue, or should they be revised first?",
   }),
   "restore-collision": Object.freeze({
     title: "Resolve a workspace conflict",
@@ -209,7 +223,7 @@ const OPTION_COPY = Object.freeze({
   abort: Object.freeze({ token: "stop-work", label: "Stop this work", consequence: "End this workflow path without approval." }),
   "revert-edit": Object.freeze({ token: "undo-policy-change", label: "Undo the policy edit", consequence: "Restore the policy version this task originally reviewed against." }),
   "start-base-amendment": Object.freeze({ token: "update-project-policy", label: "Update the project policy", consequence: "Move the policy change into the project baseline before continuing this task." }),
-  "authorize-commit": Object.freeze({ token: "authorize-commit", label: "Authorize the commit", consequence: "Permit ArchFlow to commit the exact reviewed changes; this is the final human confirmation." }),
+  "authorize-commit": Object.freeze({ token: "authorize-commit", label: "Authorize, commit, and continue", consequence: "Authorize ArchFlow to commit the exact reviewed changes and continue; this decision is the final human commit authorization." }),
   "discard-and-restore": Object.freeze({ token: "restore-saved-version", label: "Restore the saved version", consequence: "Discard the conflicting workspace copy and reconstruct it from durable authority." }),
   "adopt-as-new-generation": Object.freeze({ token: "keep-current-version", label: "Keep the current version", consequence: "Treat the current workspace copy as a new generation of the artifact." }),
   "adopt-current-bytes": Object.freeze({ token: "keep-current-versions", label: "Keep the current versions", consequence: "Accept the current file versions as the workflow baseline. This performs no fresh review and grants no commit authority." }),
@@ -250,7 +264,13 @@ function presentationBindings(active: ActiveGateV1): readonly PresentationBindin
   return Object.freeze(buildGateDecisionTemplates(active).flatMap((template): PresentationBinding[] => {
     const decision = gateDecisionTemplateName(template);
     if (decision === "unknown") return [];
-    const option = active.kind === "design-approval" && decision === "approve"
+    const option = active.kind === "artifact-approval" && decision === "approve"
+      ? Object.freeze({
+          token: "approve",
+          label: "Approve and continue to design",
+          consequence: "Approve the exact reviewed requirements, advance to design, and include the requirements in the later design milestone commit.",
+        })
+      : active.kind === "design-approval" && decision === "approve"
       ? Object.freeze({
           token: "approve",
           label: "Approve, commit, and continue",
@@ -260,6 +280,118 @@ function presentationBindings(active: ActiveGateV1): readonly PresentationBindin
       ? waiverOption(template, ++waiverIndex)
       : OPTION_COPY[decision];
     return [Object.freeze({ token: option.token, decision, template, option })];
+  }));
+}
+
+function policyFindingReasons(findings: readonly DesignPolicyFinding[]): HumanPresentationReasonV1[] {
+  return findings.flatMap((finding): HumanPresentationReasonV1[] => {
+    const identity = `Constitution rule ${finding.rule_id} version ${finding.rule_version}`;
+    return [
+      ...(finding.compliance === "pass" ? [] : [Object.freeze({
+        class: "exception" as const,
+        text: `${identity} has a ${finding.compliance} policy-compliance finding.`,
+      })]),
+      ...(finding.trigger === "not-matched" ? [] : [Object.freeze({
+        class: "exception" as const,
+        text: `${identity} has a ${finding.trigger} human-review trigger.`,
+      })]),
+    ];
+  });
+}
+
+function ordinaryReasons(active: ActiveGateV1): readonly HumanPresentationReasonV1[] | undefined {
+  if (active.kind !== "artifact-approval" && active.kind !== "design-approval" &&
+      active.kind !== "commit-authorization") return undefined;
+  const context = active.context;
+  if (!("approval_trigger" in context)) {
+    return Object.freeze([Object.freeze({
+      class: "exception" as const,
+      text: `This archived ${active.kind} decision predates authenticated approval-trigger reasons and still requires human judgment.`,
+    })]);
+  }
+
+  const trigger = context.approval_trigger;
+  const reasons: HumanPresentationReasonV1[] = [];
+  if (trigger.kind === "human-revision-reapproval") {
+    reasons.push(Object.freeze({
+      class: trigger.prior_gate.class,
+      text: "The final bytes after your requested simple revision need your approval.",
+    }));
+  } else {
+    if (trigger.conclusion.wait && trigger.conclusion.match.kind === "subject") {
+      reasons.push(Object.freeze({
+        class: "configured-approval",
+        text: `This project requires human approval for the ${trigger.conclusion.match.subject} subject.`,
+      }));
+    } else if (trigger.conclusion.wait && trigger.conclusion.match.kind === "content") {
+      const paths = trigger.conclusion.match.paths;
+      reasons.push(Object.freeze({
+        class: "configured-approval",
+        text: `Configured content approval rules matched ${paths.length} reviewed path${paths.length === 1 ? "" : "s"}: ${paths.join(", ")}.`,
+      }));
+    }
+    if (trigger.rule_authority === "unavailable") {
+      reasons.push(Object.freeze({
+        class: "exception",
+        text: "The pinned constitution does not authorize rule-based advancement, so this reviewed subject requires a human decision.",
+      }));
+    }
+  }
+  reasons.push(...policyFindingReasons(context.policy_findings));
+  if (reasons.length === 0) {
+    throw new TypeError("fresh ordinary gate has no authenticated human-boundary reason");
+  }
+  return Object.freeze(reasons);
+}
+
+function exceptionalReasons(active: ActiveGateV1): readonly HumanPresentationReasonV1[] {
+  const text = (() => {
+    switch (active.kind) {
+      case "constitution-review":
+        return waiverContext(active.context) === undefined
+          ? "This archived constitution-review policy boundary requires human judgment."
+          : "A separate human decision must grant, deny, or cancel the requested policy exception.";
+      case "material-drift":
+        return "The reviewed work materially diverges from approved upstream work and requires a recovery decision.";
+      case "attempts-exhausted":
+        return `Automated review reached its limit after ${active.context.attempts} attempts and requires human direction.`;
+      case "constitution-edit":
+        return "The project constitution changed from the version this task reviewed and requires a policy decision.";
+      case "restore-collision":
+        return `The current workspace version of ${active.context.path} conflicts with its recorded workflow version.`;
+      case "baseline-adoption": {
+        const affected = active.context.drifted_projections.length + (active.context.deleted_projections?.length ?? 0);
+        return `${affected} recorded workflow path${affected === 1 ? " has" : "s have"} changed or been deleted and require a baseline decision.`;
+      }
+      case "migration-audit":
+        return "The imported legacy task requires a human audit before its bytes become the reviewed workflow baseline.";
+      case "artifact-approval":
+      case "design-approval":
+      case "commit-authorization":
+        throw new TypeError("ordinary gate reasons must be derived from its approval trigger");
+    }
+  })();
+  return Object.freeze([Object.freeze({ class: "exception", text })]);
+}
+
+function presentationReasons(active: ActiveGateV1): readonly HumanPresentationReasonV1[] {
+  return ordinaryReasons(active) ?? exceptionalReasons(active);
+}
+
+function policyDetails(active: ActiveGateV1): readonly string[] {
+  if (active.kind !== "artifact-approval" && active.kind !== "design-approval" &&
+      active.kind !== "commit-authorization") return Object.freeze([]);
+  const context = active.context;
+  if (!("policy_findings" in context)) return Object.freeze([]);
+  return Object.freeze(context.policy_findings.flatMap((finding) => {
+    const lines: string[] = [];
+    if (finding.compliance !== "pass") {
+      lines.push(`${finding.rule_id}: policy compliance is ${finding.compliance}. ${finding.rationale}`);
+    }
+    if (finding.trigger !== "not-matched") {
+      lines.push(`${finding.rule_id}: review trigger is ${finding.trigger}. ${finding.trigger_evidence}`);
+    }
+    return lines;
   }));
 }
 
@@ -279,43 +411,36 @@ export function buildHumanGatePresentation(
         title: "Decide a policy exception",
         question: "Should this narrowly scoped policy exception be granted?",
       });
+  const reasons = presentationReasons(request);
+  const details = [
+    ...policyDetails(request),
+    ...(request.kind === "baseline-adoption" ? [
+      ...(request.context.target_ref === undefined ? [] : [
+        `Target ${request.context.target_ref} was observed at ${request.context.target_head}.`,
+        `${request.context.uncommitted_paths!.length} drifted path${request.context.uncommitted_paths!.length === 1 ? " is" : "s are"} uncommitted; the remaining drift is committed on that target.`,
+      ]),
+      ...(request.context.drifted_projections.length === 0 ? [] : [
+        `${request.context.drifted_projections.length} file${request.context.drifted_projections.length === 1 ? "" : "s"} changed, including:`,
+        ...request.context.drifted_projections.slice(0, 10).map((drifted) => drifted.path),
+        ...(request.context.drifted_projections.length > 10 ? [`… and ${request.context.drifted_projections.length - 10} more`] : []),
+      ]),
+      ...((request.context.deleted_projections ?? []).length === 0 ? [] : [
+        `${request.context.deleted_projections!.length} file${request.context.deleted_projections!.length === 1 ? "" : "s"} deleted by an already-committed change:`,
+        ...request.context.deleted_projections!.slice(0, 10).map((deleted) => deleted.path),
+        ...(request.context.deleted_projections!.length > 10 ? [`… and ${request.context.deleted_projections!.length - 10} more`] : []),
+      ]),
+    ] : []),
+    ...(request.kind === "commit-authorization" && contentTriggerDetails !== undefined
+      ? [...contentTriggerDetails]
+      : []),
+  ];
   return Object.freeze({
+    class: reasons.some((reason) => reason.class === "exception") ? "exception" : "configured-approval",
     title: copy.title,
     summary: request.summary,
-    ...(request.kind === "design-approval" ? {
-      details: Object.freeze(request.context.policy_findings.flatMap((finding) => {
-        const lines: string[] = [];
-        if (finding.compliance !== "pass") {
-          lines.push(`${finding.rule_id}: policy compliance is ${finding.compliance}. ${finding.rationale}`);
-        }
-        if (finding.trigger !== "not-matched") {
-          lines.push(`${finding.rule_id}: review trigger is ${finding.trigger}. ${finding.trigger_evidence}`);
-        }
-        return lines;
-      })),
-    } : {}),
-    ...(request.kind === "baseline-adoption" ? {
-      details: Object.freeze([
-        ...(request.context.target_ref === undefined ? [] : [
-          `Target ${request.context.target_ref} was observed at ${request.context.target_head}.`,
-          `${request.context.uncommitted_paths!.length} drifted path${request.context.uncommitted_paths!.length === 1 ? " is" : "s are"} uncommitted; the remaining drift is committed on that target.`,
-        ]),
-        ...(request.context.drifted_projections.length === 0 ? [] : [
-          `${request.context.drifted_projections.length} file${request.context.drifted_projections.length === 1 ? "" : "s"} changed, including:`,
-          ...request.context.drifted_projections.slice(0, 10).map((drifted) => drifted.path),
-          ...(request.context.drifted_projections.length > 10 ? [`… and ${request.context.drifted_projections.length - 10} more`] : []),
-        ]),
-        ...((request.context.deleted_projections ?? []).length === 0 ? [] : [
-          `${request.context.deleted_projections!.length} file${request.context.deleted_projections!.length === 1 ? "" : "s"} deleted by an already-committed change:`,
-          ...request.context.deleted_projections!.slice(0, 10).map((deleted) => deleted.path),
-          ...(request.context.deleted_projections!.length > 10 ? [`… and ${request.context.deleted_projections!.length - 10} more`] : []),
-        ]),
-      ]),
-    } : {}),
-    ...(request.kind === "commit-authorization" && contentTriggerDetails !== undefined ? {
-      details: Object.freeze([...contentTriggerDetails]),
-    } : {}),
+    ...(details.length === 0 ? {} : { details: Object.freeze(details) }),
     question: `${copy.question} Choose an option and briefly explain why.`,
+    reasons,
     options: Object.freeze(presentationBindings(request).map((binding) => binding.option)),
   });
 }

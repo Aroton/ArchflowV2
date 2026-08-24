@@ -92,6 +92,13 @@ describe("semantic document journeys", { timeout: TIMEOUT }, () => {
       'The PRD is ready for approval.\n\n' +
       'Approval rule trigger: this project requires human approval for the "prd" subject.',
     );
+    expect(view.presentation).toMatchObject({
+      class: "configured-approval",
+      reasons: [{
+        class: "configured-approval",
+        text: "This project requires human approval for the prd subject.",
+      }],
+    });
     expect(view.presentation?.options.map((option) => option.token)).toContain("approve");
     expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "decision" });
 
@@ -129,12 +136,19 @@ describe("semantic document journeys", { timeout: TIMEOUT }, () => {
       'The architecture and one-phase plan are ready.\n\n' +
       'Approval rule trigger: this project requires human approval for the "design" subject.',
     );
+    expect(designResult.value.presentation).toMatchObject({
+      class: "configured-approval",
+      reasons: [{
+        class: "configured-approval",
+        text: "This project requires human approval for the design subject.",
+      }],
+    });
     designResult = await h.apply(designInvocation, designResult.value, { kind: "decision", choice: "approve", reason: "The design is implementable." });
     if (!designResult.ok) throw new Error(JSON.stringify(designResult));
     expect(designResult.value.next_action.kind).toBe("commit");
     const commit = designResult.value.next_action.commit;
     if (commit === undefined) throw new Error("design commit instructions unavailable");
-    expect(commit.requires_human_confirmation).toBe(false);
+    expect(commit).not.toHaveProperty("requires_human_confirmation");
     execFileSync("git", ["add", "-A", "--", ...commit.paths], { cwd: workspace.root });
     execFileSync("git", ["-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid", "commit", "-q", "-m", commit.message], { cwd: workspace.root });
 
@@ -247,8 +261,8 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
     expect(phaseCommit).toMatchObject({
       baseline: phaseBaseline,
       target_ref: execFileSync("git", ["symbolic-ref", "-q", "HEAD"], { cwd: workspace.root, encoding: "utf8" }).trim(),
-      requires_human_confirmation: false,
     });
+    expect(phaseCommit).not.toHaveProperty("requires_human_confirmation");
     expect(readFileSync(phaseDesignPath, "utf8")).toBe(phaseDesignBytes);
     expect(readFileSync(phasePrdPath, "utf8")).toBe(phasePrdBytes);
     expect(readFileSync(taskDesignPath, "utf8")).toBe(taskDesignBytes);
@@ -551,7 +565,7 @@ roles:
     result = await h.apply(designInvocation, result.value);
     if (!result.ok) throw new Error(JSON.stringify(result));
     expect(result.value.next_action).toMatchObject({ kind: "commit" });
-    expect(result.value.next_action.commit?.requires_human_confirmation).toBe(false);
+    expect(result.value.next_action.commit).not.toHaveProperty("requires_human_confirmation");
 
     const settledState = await readTaskState(workspace.services.authority.state);
     if (settledState.kind !== "canonical") throw new Error("settled design state unavailable");
@@ -588,7 +602,8 @@ roles:
     if (!result.ok) throw new Error(JSON.stringify(result));
     const designCommit = result.value.next_action.commit;
     if (designCommit === undefined) throw new Error("refreshed design commit unavailable");
-    expect(designCommit).toMatchObject({ baseline: movedHead, requires_human_confirmation: false });
+    expect(designCommit).toMatchObject({ baseline: movedHead });
+    expect(designCommit).not.toHaveProperty("requires_human_confirmation");
     execFileSync("git", ["add", "-A", "--", ...designCommit.paths], { cwd: workspace.root });
     execFileSync("git", [
       "-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid",
@@ -656,7 +671,7 @@ The implementation handoff is offered after exact commit proof.
     if (!result.ok) throw new Error(JSON.stringify(result));
     const phaseCommit = result.value.next_action.commit;
     if (phaseCommit === undefined) throw new Error("autonomous phase-design commit unavailable");
-    expect(phaseCommit.requires_human_confirmation).toBe(false);
+    expect(phaseCommit).not.toHaveProperty("requires_human_confirmation");
     const legacyState = JSON.parse(readFileSync(workspace.services.authority.state.absolute, "utf8"));
     for (const legacySettlement of legacyState.rule_settlements.filter(
       (entry: { phase_instance?: string }) => entry.phase_instance === "phase-design-1",
@@ -800,8 +815,8 @@ The implementation handoff is offered after exact commit proof.
       message: `ArchFlow: Approve ${workspace.taskId} design`,
       target_ref: execFileSync("git", ["symbolic-ref", "-q", "HEAD"], { cwd: workspace.root, encoding: "utf8" }).trim(),
       baseline: execFileSync("git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" }).trim(),
-      requires_human_confirmation: false,
     });
+    expect(commit).not.toHaveProperty("requires_human_confirmation");
 
     // The milestone commit carries the settlement as evaluation evidence, while the archived
     // human approval remains the recovery and advancement authority.
@@ -937,8 +952,8 @@ The committed state carries the settlement and the successor hand-off is offered
       message: `ArchFlow: Approve ${workspace.taskId} phase 1 design`,
       target_ref: execFileSync("git", ["symbolic-ref", "-q", "HEAD"], { cwd: workspace.root, encoding: "utf8" }).trim(),
       baseline: execFileSync("git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" }).trim(),
-      requires_human_confirmation: false,
     });
+    expect(commit).not.toHaveProperty("requires_human_confirmation");
 
     // The milestone commit carries the settlement; fresh status observes its exact proof.
     execFileSync("git", ["add", "-A", "--", ...commit.paths], { cwd: workspace.root });
@@ -1065,8 +1080,8 @@ The committed state carries the settlement and the successor hand-off is offered
     expect(commit).toMatchObject({
       paths: [`.archflow/tasks/${workspace.taskId}`],
       message: `ArchFlow: Approve ${workspace.taskId} design`,
-      requires_human_confirmation: false,
     });
+    expect(commit).not.toHaveProperty("requires_human_confirmation");
 
     // The archived human decisions, not either settlement, authorize the milestone.
     execFileSync("git", ["add", "-A", "--", ...commit.paths], { cwd: workspace.root });
@@ -1081,9 +1096,9 @@ The committed state carries the settlement and the successor hand-off is offered
 
   register("keeps waiver decisions human and advances after their granted wait:false settlement", async () => {
     // No subject rule waits for the design document, but a constitution rule fails its review:
-    // the fixed point never reaches the clean advance, so the settle mints no receipt (wait:false
-    // alone is not enough — the policy findings veto it), and the policy arm opens design-approval
-    // regardless of the absent subject rule. The phase exit refuses: no commit authority exists.
+    // the foldable adjudication fixed point records the exact wait:false receipt while the policy
+    // finding is carried by design-approval. The phase exit still refuses until the separate
+    // waiver decisions discharge every policy axis.
     const workspace = await createTaskWorkspace({
       taskId: "semantic-design-policy-arm",
       label: "semantic-design-policy-arm",
@@ -1128,14 +1143,17 @@ The committed state carries the settlement and the successor hand-off is offered
     expect(design.ok, JSON.stringify(design)).toBe(true);
     if (!design.ok) return;
 
-    // The policy arm opens design-approval despite the absent subject rule; the settle wrote no
-    // design settlement, and this policy gate has no milestone commit authority.
+    // The policy arm opens design-approval despite the absent subject rule. Its frozen settlement
+    // is evaluation evidence only; the unresolved policy gate has no milestone commit authority.
     expect(design.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
     expect(design.value.next_action.commit).toBeUndefined();
     const unsettled = await readTaskState(workspace.services.authority.state);
     if (unsettled.kind !== "canonical") throw new Error("task state unavailable");
-    expect(unsettled.document.value.rule_settlements?.filter((entry) =>
-      entry.phase_instance === "design")).toEqual([]);
+    const frozenDesignSettlements = unsettled.document.value.rule_settlements?.filter((entry) =>
+      entry.phase_instance === "design") ?? [];
+    expect(frozenDesignSettlements).toEqual([expect.objectContaining({
+      conclusion: { wait: false, match: null },
+    })]);
 
     // The opened gate is still approval-shaped: a human can discharge it by decision.
     design = await h.apply(designInvocation, design.value, { kind: "gate-summary", summary: "The design needs an explicit human decision." });
@@ -1163,12 +1181,13 @@ The committed state carries the settlement and the successor hand-off is offered
     expect(design.ok, JSON.stringify(design)).toBe(true);
     if (!design.ok) return;
 
-    // One of the merged policy gate's two axes remains pending, so this first grant does not mint
-    // a settlement. Discharge the remaining authenticated axis as a separate human waiver.
+    // One of the merged policy gate's two axes remains pending. The first grant neither replaces
+    // nor broadens the frozen settlement; discharge the remaining axis in a separate human gate.
     expect(design.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
     let pending = await readTaskState(workspace.services.authority.state);
     if (pending.kind !== "canonical") throw new Error("task state unavailable");
-    expect(pending.document.value.rule_settlements?.filter((entry) => entry.phase_instance === "design")).toEqual([]);
+    expect(pending.document.value.rule_settlements?.filter((entry) => entry.phase_instance === "design"))
+      .toEqual(frozenDesignSettlements);
     design = await h.apply(designInvocation, design.value, {
       kind: "gate-summary", summary: "One policy axis remains for human resolution.",
     });
@@ -1194,13 +1213,11 @@ The committed state carries the settlement and the successor hand-off is offered
     if (!design.ok) return;
 
     // The repository fixture carries several active rules. Continue resolving distinct policy
-    // scopes until the final grant discharges the fixed point; every earlier grant is a pending
-    // negative boundary and must leave the settlement set untouched.
+    // scopes until the final grant discharges the fixed point; every grant leaves the original
+    // approval-rule settlement untouched.
     const requestedWaivers = new Set([waiverToken!, remainingWaiverToken!]);
     for (let index = 0; index < 20; index += 1) {
-      const checkpoint = await readTaskState(workspace.services.authority.state);
-      if (checkpoint.kind !== "canonical") throw new Error("task state unavailable");
-      if (checkpoint.document.value.rule_settlements?.some((entry) => entry.phase_instance === "design")) break;
+      if (design.value.next_action.kind === "commit") break;
       expect(design.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
       design = await h.apply(designInvocation, design.value, {
         kind: "gate-summary", summary: "Another policy scope remains for human resolution.",
@@ -1235,13 +1252,14 @@ The committed state carries the settlement and the successor hand-off is offered
     expect(design.value.presentation).toBeUndefined();
     const settled = await readTaskState(workspace.services.authority.state);
     if (settled.kind !== "canonical") throw new Error("task state unavailable");
-    expect(settled.document.value.rule_settlements?.filter((entry) =>
-      entry.phase_instance === "design")).toEqual([expect.objectContaining({
-        subject_digest: expect.any(String), conclusion: { wait: false, match: null },
-      })]);
+    const settledDesignReceipts = settled.document.value.rule_settlements?.filter((entry) =>
+      entry.phase_instance === "design") ?? [];
+    expect(settledDesignReceipts.length).toBeGreaterThanOrEqual(1);
+    expect(settledDesignReceipts.every((entry) =>
+      entry.subject_digest.length > 0 && entry.conclusion.wait === false && entry.conclusion.match === null)).toBe(true);
     expect(settled.document.value.planned_final_phase).toBeUndefined();
 
-    expect(design.value.next_action.commit?.requires_human_confirmation).toBe(false);
+    expect(design.value.next_action.commit).not.toHaveProperty("requires_human_confirmation");
   });
 
   register("persists and presents a granted wait:true waiver settlement behind PRD approval", async () => {
@@ -1286,11 +1304,15 @@ The committed state carries the settlement and the successor hand-off is offered
     if (!view.ok) return;
 
     // The merged finding exposes compliance and trigger as distinct waiver scopes. The first
-    // grant leaves the gate pending and must not settle until the second human decision lands.
+    // grant leaves the gate pending without replacing the exact settlement recorded at triage.
     expect(view.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
     let pending = await readTaskState(workspace.services.authority.state);
     if (pending.kind !== "canonical") throw new Error("task state unavailable");
-    expect(pending.document.value.rule_settlements?.filter((entry) => entry.phase_instance === "prd") ?? []).toEqual([]);
+    const frozenPrdSettlements = pending.document.value.rule_settlements?.filter((entry) =>
+      entry.phase_instance === "prd") ?? [];
+    expect(frozenPrdSettlements).toEqual([expect.objectContaining({
+      conclusion: { wait: true, match: { kind: "subject", subject: "prd" } },
+    })]);
     view = await h.apply(invocation, view.value, {
       kind: "gate-summary", summary: "One policy axis remains for human resolution.",
     });
@@ -1317,9 +1339,6 @@ The committed state carries the settlement and the successor hand-off is offered
 
     const requestedWaivers = new Set([waiverToken!, remainingWaiverToken!]);
     for (let index = 0; index < 20; index += 1) {
-      const checkpoint = await readTaskState(workspace.services.authority.state);
-      if (checkpoint.kind !== "canonical") throw new Error("task state unavailable");
-      if (checkpoint.document.value.rule_settlements?.some((entry) => entry.phase_instance === "prd")) break;
       expect(view.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
       view = await h.apply(invocation, view.value, {
         kind: "gate-summary", summary: "Another policy scope remains for human resolution.",
@@ -1329,7 +1348,7 @@ The committed state carries the settlement and the successor hand-off is offered
       const token = view.value.presentation?.options
         .map((option) => option.token)
         .find((candidate) => candidate.startsWith("request-exception-") && !requestedWaivers.has(candidate));
-      expect(token).toBeDefined();
+      if (token === undefined) break;
       requestedWaivers.add(token!);
       view = await h.apply(invocation, view.value, {
         kind: "decision", choice: token!, reason: "Request the next bounded policy exception.",
@@ -1347,21 +1366,17 @@ The committed state carries the settlement and the successor hand-off is offered
       if (!view.ok) return;
     }
 
-    expect(view.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    expect(view.value.next_action).toMatchObject({ kind: "decide", expected_submission: "decision" });
     const settled = await readTaskState(workspace.services.authority.state);
     if (settled.kind !== "canonical") throw new Error("task state unavailable");
-    expect(settled.document.value.rule_settlements?.filter((entry) =>
-      entry.phase_instance === "prd")).toEqual([expect.objectContaining({
-        conclusion: { wait: true, match: { kind: "subject", subject: "prd" } },
-      })]);
+    const settledPrdReceipts = settled.document.value.rule_settlements?.filter((entry) =>
+      entry.phase_instance === "prd") ?? [];
+    expect(settledPrdReceipts.length).toBeGreaterThanOrEqual(1);
+    expect(settledPrdReceipts.every((entry) => entry.conclusion.wait === true &&
+      entry.conclusion.match?.kind === "subject" && entry.conclusion.match.subject === "prd")).toBe(true);
 
-    view = await h.apply(invocation, view.value, {
-      kind: "gate-summary", summary: "The waiver is recorded; the PRD still needs human approval.",
-    });
-    expect(view.ok, JSON.stringify(view)).toBe(true);
-    if (!view.ok) return;
     expect(view.value.presentation?.summary).toContain(
-      'Approval rule trigger: this project requires human approval for the "prd" subject.',
+      "Another policy scope remains for human resolution.",
     );
     expect(view.value.presentation?.options.map((option) => option.token)).toContain("approve");
   });

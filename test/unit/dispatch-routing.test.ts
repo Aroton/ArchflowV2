@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ConfigV1 } from "../../src/contracts/config.js";
 import { EFFORT_VALUES } from "../../src/contracts/review.js";
-import { DispatchRoutingError, resolveDispatchRoute, routeFromConfiguredRoute, type RoutingRole } from "../../src/dispatch/routing.js";
+import { DispatchRoutingError, resolveDispatchRoute, routeFromConfiguredRoute, selectDispatchRoute, type RoutingRole } from "../../src/dispatch/routing.js";
 
 const config = (roles: ConfigV1["roles"], overrides?: ConfigV1["overrides"]): ConfigV1 => ({
   schema_version: "1",
@@ -137,5 +137,79 @@ describe("route override validation", () => {
     expectRoutingError(() => routeFromConfiguredRoute({ model: "gpt-5.3-codex", effort: "high", provider: "zhipu" }), "CONFIG_INVALID", { issue_code: "provider-unsupported" });
     expectRoutingError(() => routeFromConfiguredRoute({ model: "claude-opus-4-6", effort: "ultra" }), "CONFIG_INVALID", { issue_code: "effort-unsupported" });
     expectRoutingError(() => routeFromConfiguredRoute({ model: "llama-4", effort: "high" }), "CONFIG_MODEL_UNSUPPORTED", { model: "llama-4" });
+  });
+});
+
+describe("role-level route selection provenance", () => {
+  const configured = config({
+    "counter-reviewer": { model: "gpt-configured", effort: "high" },
+    adjudicator: { model: "claude-configured", effort: "max", provider: "configured-provider" },
+  });
+
+  it("uses configuration when no higher-precedence route is declared", () => {
+    expect(selectDispatchRoute(configured, "design", "counter-reviewer")).toMatchObject({
+      route: { model: "gpt-configured", effort: "high" },
+      source: { provenance: "configured" },
+    });
+  });
+
+  it("selects invocation routing independently per role and records raw configured displacement", () => {
+    expect(selectDispatchRoute(
+      configured,
+      "design",
+      "adjudicator",
+      { model: "glm-5-3", effort: "high", provider: "invocation-provider" },
+    )).toMatchObject({
+      route: { adapter: "claude-cli", family: "claude", model: "glm-5-3", effort: "high", provider: "invocation-provider" },
+      source: {
+        provenance: "invocation-declared",
+        displaced: {
+          source: "configured",
+          model: "claude-configured",
+          effort: "max",
+          provider: "configured-provider",
+        },
+      },
+    });
+    expect(selectDispatchRoute(configured, "design", "counter-reviewer").source.provenance).toBe("configured");
+  });
+
+  it("gives a human override precedence while retaining the normally selected invocation route", () => {
+    expect(selectDispatchRoute(
+      configured,
+      "design",
+      "counter-reviewer",
+      { model: "gpt-invocation", effort: "xhigh" },
+      { model: "claude-human", effort: "high" },
+    )).toMatchObject({
+      route: { model: "claude-human", effort: "high" },
+      source: {
+        provenance: "route-override",
+        displaced: { source: "invocation-declared", model: "gpt-invocation", effort: "xhigh" },
+      },
+    });
+  });
+
+  it("permits invocation or human routing when the configured role is missing", () => {
+    const missing = config({});
+    expect(selectDispatchRoute(missing, "phase-impl", "counter-reviewer", { model: "gpt-invocation", effort: "high" }).source)
+      .toEqual({ provenance: "invocation-declared" });
+    expect(selectDispatchRoute(missing, "phase-impl", "counter-reviewer", undefined, { model: "claude-human", effort: "high" }).source)
+      .toEqual({ provenance: "route-override" });
+  });
+
+  it("validates only the selected route and never falls back after an invalid invocation", () => {
+    expectRoutingError(
+      () => selectDispatchRoute(configured, "design", "counter-reviewer", { model: "unsupported-model", effort: "high" }),
+      "CONFIG_MODEL_UNSUPPORTED",
+      { model: "unsupported-model" },
+    );
+    expect(selectDispatchRoute(
+      config({ "counter-reviewer": { model: "unsupported-config", effort: "high" } }),
+      "design",
+      "counter-reviewer",
+      undefined,
+      { model: "gpt-human", effort: "high" },
+    ).route.model).toBe("gpt-human");
   });
 });

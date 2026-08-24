@@ -51,6 +51,18 @@ const activeGateValidator: JsonSchemaValidator<unknown> = createJsonSchemaValida
 
 const d = (character: string): string => character.repeat(64);
 const rule = (id: string, version: number): JsonObject => ({ rule_id: id, rule_version: version });
+const approvalTrigger = (subject: "prd" | "design" | "phase-design" | "phase-impl"): JsonObject => ({
+  kind: "rule-settlement",
+  settlement: { subject_digest: d("c"), config_digest: d("0"), settled_at_revision: 3 },
+  conclusion: { wait: true, match: { kind: "subject", subject } },
+  rule_authority: "authenticated",
+});
+const ordinaryPolicy = (subject: "prd" | "design" | "phase-design" | "phase-impl"): JsonObject => ({
+  constitution: "pass",
+  policy_findings: [],
+  eligible_waivers: [],
+  approval_trigger: approvalTrigger(subject),
+});
 
 const waiverOrigin = (operation: "review-trigger" | "adjudication-failure"): JsonObject => ({
   origin_gate_id: "gate-0",
@@ -64,14 +76,14 @@ const waiverOrigin = (operation: "review-trigger" | "adjudication-failure"): Jso
   scope: { operation, boundary: "subject" },
 });
 
-/** One sample per `gate-request.schema.json` `oneOf` arm: the eight kinds plus both waiver-axis arms. */
+/** One sample per current `gate-request.schema.json` `oneOf` arm. */
 const ARM_SAMPLES: readonly { name: string; kind: string; context: JsonObject; allowed: readonly string[]; waiver: boolean }[] = [
-  { name: "artifact-approval", kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, allowed: ["approve", "revise", "reject", "cancel"], waiver: false },
-  { name: "constitution-review", kind: "constitution-review", context: { constitution: "fail", failed_rules: [rule("rule-a", 1)], uncertain_rules: [], matched_trigger_rules: [rule("rule-b", 2)], uncertain_trigger_rules: [rule("rule-c", 1)], eligible_waivers: [{ rule: rule("rule-a", 1), scope: { operation: "adjudication-failure", boundary: "subject" } }, { rule: rule("rule-b", 2), scope: { operation: "review-trigger", boundary: "subject" } }] }, allowed: ["approve", "revise", "reject", "waiver-requested", "cancel"], waiver: false },
+  { name: "artifact-approval", kind: "artifact-approval", context: { artifact_kind: "prd", ...ordinaryPolicy("prd") }, allowed: ["approve", "revise", "reject", "waiver-requested", "cancel"], waiver: false },
+  { name: "design-approval", kind: "design-approval", context: { artifact_kind: "design", ...ordinaryPolicy("design"), target_ref: "refs/heads/feature", baseline_commit: "1".repeat(40), commit_message: "ArchFlow: Approve task-1 design" }, allowed: ["approve", "revise", "reject", "waiver-requested", "cancel"], waiver: false },
   { name: "material-drift", kind: "material-drift", context: { affected_upstream: { kind: "prd", digest: d("4") }, drift: "material", affected_claim_ids: ["claim-a", "claim-b"] }, allowed: ["amend-upstream", "revise-current", "reject", "cancel"], waiver: false },
   { name: "attempts-exhausted", kind: "attempts-exhausted", context: { step: "produce", attempts: 3, maximum_attempts: 3 }, allowed: ["retry-once", "revise", "abort", "cancel"], waiver: false },
   { name: "constitution-edit", kind: "constitution-edit", context: { pinned_constitution_digest: d("5"), current_constitution_digest: d("6"), changed_path_class: "task-branch-constitution" }, allowed: ["revert-edit", "start-base-amendment", "abort", "cancel"], waiver: false },
-  { name: "commit-authorization", kind: "commit-authorization", context: { target_ref: "refs/heads/feature", baseline_commit: "1".repeat(40), commit_message: "ArchFlow: Implement task-1 phase 1", paths: ["tracked.txt"], diff_digest: d("7"), current_artifact_digests: [d("8")], parent_document_digests: [d("9")] }, allowed: ["authorize-commit", "revise", "abort", "cancel"], waiver: false },
+  { name: "commit-authorization", kind: "commit-authorization", context: { ...ordinaryPolicy("phase-impl"), target_ref: "refs/heads/feature", baseline_commit: "1".repeat(40), commit_message: "ArchFlow: Implement task-1 phase 1", paths: ["tracked.txt"], diff_digest: d("7"), current_artifact_digests: [d("8")], parent_document_digests: [d("9")] }, allowed: ["authorize-commit", "revise", "abort", "waiver-requested", "cancel"], waiver: false },
   { name: "restore-collision", kind: "restore-collision", context: { path: "docs/notes.md", recorded_generation_digest: d("a"), current_generation_digest: d("b"), adoption_candidate: { link_digest: d("0"), purpose: "restore-adoption", proposed_generation_digest: d("1"), changed_input_fingerprint: d("2") } }, allowed: ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"], waiver: false },
   { name: "migration-audit", kind: "migration-audit", context: { source_identity_digest: d("1"), destination_identity_digest: d("2"), import_digest: d("3"), code_baseline_digest: d("4"), policy_baseline_digest: d("5") }, allowed: ["accept-import-audit", "revise", "abort", "cancel"], waiver: false },
   { name: "trigger-axis waiver", kind: "constitution-review", context: { origin: waiverOrigin("review-trigger"), rationale: "Waiver requested for the flagged rule" }, allowed: ["grant", "deny", "cancel"], waiver: true },
@@ -146,6 +158,16 @@ describe("the gate roots validate under the Zod authority", () => {
     const mutated = { ...clone(fixture("gate-request.valid")), allowed_decisions: ["authorize-commit", "revise", "abort", "cancel"] };
     expect(gateRequestV1Schema.safeParse(mutated).success).toBe(false);
   });
+
+  it("rejects the retired policy-context constitution review from both fresh writer roots", () => {
+    const retired = {
+      name: "retired constitution policy gate", kind: "constitution-review",
+      context: { constitution: "fail", failed_rules: [rule("rule-a", 1)], uncertain_rules: [], matched_trigger_rules: [], uncertain_trigger_rules: [], eligible_waivers: [{ rule: rule("rule-a", 1), scope: { operation: "adjudication-failure", boundary: "subject" } }] },
+      allowed: ["approve", "revise", "reject", "waiver-requested", "cancel"], waiver: false,
+    };
+    expect(gateRequestV1Schema.safeParse(armRequest(retired)).success).toBe(false);
+    expect(activeGateV1Schema.safeParse(armActiveGate(retired)).success).toBe(false);
+  });
 });
 
 /**
@@ -170,31 +192,29 @@ describe("negatives under retired keyword-backed rules are rejected by the Zod a
 });
 
 /**
- * The gate-semantics violations. The structural compiled validators accept these — the two schema
- * roots do not carry `x-archflow-gate-semantics` — so the rejection authority is `parseGateRequest`
- * (with `parseGateContext`) and the Zod roots reject on their own. The `validate(...)).toBe(true)`
- * assertions pin that gap: if a later change adds the keyword back to the schemas, they should flip
- * to `false` and this suite can tighten.
+ * Retired policy-context constitution requests are structurally rejected by the fresh roots. The
+ * context parser is tested separately so its gate semantics remain pinned for archived readers;
+ * writer rejection must not accidentally erase archive validation.
  */
 describe("gate-semantics negatives are rejected by the Zod authority", () => {
   it("rejects an eligible waiver naming a rule the gate never flagged", () => {
     const sample = fixture("gate-request.invalid-ineligible-waiver-rule");
     expect(gateRequestV1Schema.safeParse(sample).success).toBe(false);
-    expect(() => parseGateRequest(clone(sample))).toThrowError(/axis its operation covers/);
-    expect(gateRequestValidator.validate(clone(sample))).toBe(true);
+    expect(() => parseGateContext("constitution-review", sample.context)).toThrowError(/axis its operation covers/);
+    expect(gateRequestValidator.validate(clone(sample))).toBe(false);
   });
 
   it("rejects matched rules that are unique but not sorted", () => {
     const sample = fixture("gate-request.invalid-unsorted-matched-rules");
     expect(gateRequestV1Schema.safeParse(sample).success).toBe(false);
-    expect(() => parseGateRequest(clone(sample))).toThrowError(/sorted and unique/);
-    expect(gateRequestValidator.validate(clone(sample))).toBe(true);
+    expect(() => parseGateContext("constitution-review", sample.context)).toThrowError(/sorted and unique/);
+    expect(gateRequestValidator.validate(clone(sample))).toBe(false);
   });
 
   it("rejects an active constitution-review gate offering a waiver on an axis the rule is not on", () => {
     const sample = fixture("active-gate.invalid-waiver-scope-operation");
     expect(activeGateV1Schema.safeParse(sample).success).toBe(false);
     expect(() => parseGateContext("constitution-review", sample.context)).toThrowError(/axis its operation covers/);
-    expect(activeGateValidator.validate(clone(sample))).toBe(true);
+    expect(activeGateValidator.validate(clone(sample))).toBe(false);
   });
 });

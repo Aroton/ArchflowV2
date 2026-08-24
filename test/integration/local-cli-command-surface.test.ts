@@ -113,7 +113,11 @@ describe("bundled local CLI", () => {
     const rejected = cli(fixture.root, "validate", { kind: "unknown", value: {} });
     expect(rejected.status).not.toBe(0);
     expect(rejected.stderr).toMatch(/not supported/u);
-    expect(rejected.stdout).toBe("");
+    expect(rejected.value).toMatchObject({
+      schema_version: "1",
+      ok: false,
+      error: { code: "CONTRACT_INVALID", diagnostic: { parameters: { issue_code: "local-command-invalid" } } },
+    });
   }, TIMEOUT);
 
   it("classifies a task without durable state through manual-status", async () => {

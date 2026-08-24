@@ -40,8 +40,11 @@ describe("archflow-local process", () => {
       stdio: ["pipe", "pipe", "pipe"],
     });
     let stderr = "";
+    let stdout = "";
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => { stderr += chunk; });
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => { stdout += chunk; });
 
     const result = await new Promise<Readonly<{ code: number | null; signal: NodeJS.Signals | null }>>((resolveResult, reject) => {
       const timer = setTimeout(() => {
@@ -56,6 +59,7 @@ describe("archflow-local process", () => {
     });
 
     expect(result).toEqual({ code: 1, signal: null });
+    expect(JSON.parse(stdout)).toMatchObject({ schema_version: "1", ok: false, error: { code: "CONTRACT_INVALID" } });
     expect(stderr).toContain("manual-status requires --task <task>");
     child.stdin.destroy();
   }, TEST_TIMEOUT_MS);
@@ -66,8 +70,11 @@ describe("archflow-local process", () => {
       stdio: ["pipe", "pipe", "pipe"],
     });
     let stderr = "";
+    let stdout = "";
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => { stderr += chunk; });
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => { stdout += chunk; });
 
     const result = await new Promise<Readonly<{ code: number | null; signal: NodeJS.Signals | null }>>((resolveResult, reject) => {
       const timer = setTimeout(() => {
@@ -82,6 +89,7 @@ describe("archflow-local process", () => {
     });
 
     expect(result).toEqual({ code: 1, signal: null });
+    expect(JSON.parse(stdout)).toMatchObject({ schema_version: "1", ok: false, error: { code: "CONTRACT_INVALID" } });
     expect(stderr).toContain("clean requires current task state");
     child.stdin.destroy();
   }, TEST_TIMEOUT_MS);

@@ -97,11 +97,17 @@ describe("semantic status projection", () => {
             ? { skill: "archflow-phase-design", skill_args: ["2"] }
             : {};
       const statusExtras: Partial<TaskStatusV1> = code === "resolve-open-gate"
-        ? ({ open_gate: { presentation: { title: "Choose", summary: "Summary", question: "Continue?", options: [{ token: "approve", label: "Approve", consequence: "Continue." }] } } } as unknown as Partial<TaskStatusV1>)
+        ? ({ open_gate: { presentation: { class: "configured-approval", title: "Choose", summary: "Summary", question: "Continue?", reasons: [{ class: "configured-approval", text: "Configured approval is required." }], options: [{ token: "approve", label: "Approve", consequence: "Continue." }] } } } as unknown as Partial<TaskStatusV1>)
         : {};
       const result = projectSemanticStatus(snapshot(fullStatus(action(code, extras), statusExtras)), invocation);
       expect(result.view.next_action.kind).toBeTruthy();
       expect(JSON.stringify(result.view)).not.toContain("request_digest");
+      if (code === "resolve-open-gate") {
+        expect(result.view.presentation).toMatchObject({
+          class: "configured-approval",
+          reasons: [{ class: "configured-approval", text: "Configured approval is required." }],
+        });
+      }
     }
   });
 
@@ -128,6 +134,22 @@ describe("semantic status projection", () => {
     const review = fullStatus(action("run-step", { step: "counter_review" }), { step: "produce", status: "succeeded" });
     expect(projectSemanticStatus(snapshot(review), invocation).view.next_action.kind).toBe("review");
 
+    const failedDispatch = fullStatus(action("run-step", { step: "counter_review" }), {
+      step: "counter_review",
+      status: "running",
+      dispatch_failure: {
+        role: "counter-reviewer",
+        code: "AUTH_UNAVAILABLE",
+        message: "The required reviewer authentication is unavailable.",
+        route: { model: "claude-fable-5", effort: "high", source: "invocation-declared" },
+      },
+    });
+    const failedDispatchView = projectSemanticStatus(snapshot(failedDispatch), invocation).view;
+    expect(failedDispatchView.next_action).toMatchObject({ kind: "review", expected_submission: "review-dispatch" });
+    expect(failedDispatchView.dispatch_failure).toEqual(failedDispatch.dispatch_failure);
+    expect(failedDispatchView.dispatch_failure).not.toHaveProperty("attempt");
+    expect(failedDispatchView.dispatch_failure).not.toHaveProperty("observed_at_revision");
+
     const emptyTriage = fullStatus(action("run-step", { step: "triage" }), { step: "counter_review", status: "succeeded" });
     expect(projectSemanticStatus(snapshot(emptyTriage), invocation).view.next_action.kind).toBe("review");
 
@@ -151,29 +173,23 @@ describe("semantic status projection", () => {
       message: "Implement the approved phase",
       target_ref: "refs/heads/main",
       baseline: "2".repeat(40),
-      requires_human_confirmation: true,
     });
     expect(authorized.offer).toBeUndefined();
-    expect(authorized.instruction).toContain("Prior human commit authority is recorded");
-    expect(authorized.instruction).toContain("explicit confirmation");
     expect(authorized.instruction).toContain("baseline and target ref");
-    expect(authorized.instruction).toContain("stage exactly the authorized paths");
-    expect(authorized.instruction).toContain("exact message");
+    expect(authorized.instruction).toContain("stage and inspect exactly the authorized paths");
+    expect(authorized.instruction).toContain("exact returned message");
     expect(authorized.instruction).toContain("preserving unrelated changes");
 
     const autonomous = projectSemanticStatus(snapshot(fullStatus(action("commit-phase", {
       commit_paths: ["src/a.ts"], commit_message: "Implement the reviewed phase",
       commit_target_ref: "refs/heads/main", commit_baseline: "2".repeat(40),
-      commit_requires_human_confirmation: false,
     }))), invocation).view.next_action;
-    expect(autonomous.commit?.requires_human_confirmation).toBe(false);
-    expect(autonomous.instruction).toContain("Authenticated rule authority permits direct client execution");
     expect(autonomous.instruction).toContain("create the commit directly");
     expect(autonomous.instruction).toContain("baseline and target ref");
     expect(autonomous.instruction).toContain("stage and inspect exactly the authorized paths");
     expect(autonomous.instruction).toContain("exact returned message");
     expect(autonomous.instruction).toContain("preserving unrelated changes");
-    expect(autonomous.instruction).not.toContain("human");
+    expect(autonomous.commit).not.toHaveProperty("requires_human_confirmation");
 
     const missingAuthority = projectSemanticStatus(snapshot(fullStatus(action("commit-phase"))), invocation).view.next_action;
     expect(missingAuthority.kind).toBe("inspect");
@@ -191,7 +207,6 @@ describe("semantic status projection", () => {
       message: "Approve design",
       target_ref: "refs/heads/main",
       baseline: "1".repeat(40),
-      requires_human_confirmation: false,
     });
   });
 
@@ -231,7 +246,6 @@ describe("semantic status projection", () => {
       message: "Import legacy task semantic-test",
       target_ref: "refs/heads/main",
       baseline: "3".repeat(40),
-      requires_human_confirmation: false,
     });
   });
 

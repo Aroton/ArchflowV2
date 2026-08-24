@@ -80,6 +80,7 @@ docs/
   cli/COMMANDS.md          # archflow-local adapters, upgrade adoption, degraded mode
   review/COUNTER-REVIEW.md # dispatch envelopes, pinned context, review flow, constitution review, waivers
   contracts/CONTRACTS.md   # canonical JSON, digests, trust brands
+  contracts/AUTOMATION.md  # read-only controller status contract and launch loop
   state/DURABLE-STATE.md   # .archflow layout, transactions, state machine, git boundary
 ```
 
@@ -145,5 +146,6 @@ Learned the hard way in this repository; all apply to any future work.
 - **A disposable human-facing interface must be reconstructible from durable authority and must never be required to resolve authority already authenticated elsewhere.** Losing or corrupting an interface projection may remove convenience, but it must not strand durable state or force a human to author an internal archive.
 - **When one published interface is the only renderer for a human action, its template must enumerate every decision shape the resolver accepts.** Include parallel shapes such as waivers and the cancellation escape path; requiring a human to read server source defeats the interface's trust purpose.
 - **A CLI command with no input payload must not read stdin.** Parents commonly keep stdin open, so an input-free command that waits for EOF hangs even though it has everything needed to answer. Parse the command first and read stdin only for commands whose contract requires a payload.
+- **Every explicit payload-free state operation must retain its discriminator in both the request digest and `last_transition`.** Hashing only the shared phase/step/status fields collapses distinct refresh and recovery intents into the same replay identity, even though their transition effects differ.
 - **Name tests, classes, files, scripts, and identifiers for the behavior they cover, never for the workflow phase that produced them** — phase numbers are workflow state, not code structure, and finding the right artifact must not require knowing project history.
 - **An advertised MCP tool inputSchema must keep a plain object root — never a root-level `oneOf`/`allOf`/`$ref`.** At least one host flattens a root-level oneOf by dropping every branch it cannot resolve, advertising the tool as a zero-field object; the model then guesses all-string inputs, and an opaque rejection cannot correct the guess. Merge union arms into one object root (union of properties, shared fields required, a description naming the groups) and keep combinators below the root, where hosts preserve them; the server's strict validation stays the authority, and rejections must name the offending fields.

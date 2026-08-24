@@ -39,13 +39,13 @@ import { projectionGenerationDigest } from "./snapshots.js";
 import type { SecretScanner } from "../contracts/secret-scan.js";
 
 export const DECISIONS: Readonly<Record<GateKind, readonly string[]>> = Object.freeze({
-  "artifact-approval": ["approve", "revise", "reject", "cancel"],
+  "artifact-approval": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "design-approval": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "constitution-review": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
   "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
   "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
-  "commit-authorization": ["authorize-commit", "revise", "abort", "cancel"],
+  "commit-authorization": ["authorize-commit", "revise", "abort", "waiver-requested", "cancel"],
   "restore-collision": ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"],
   "baseline-adoption": ["adopt-current-bytes", "restore-recorded-bytes", "adopt-committed-deletions", "abort", "cancel"],
   "migration-audit": ["accept-import-audit", "revise", "abort", "cancel"],

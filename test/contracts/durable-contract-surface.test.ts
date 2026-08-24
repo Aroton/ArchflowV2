@@ -361,10 +361,10 @@ describe("the pinned $def inventory resolves", () => {
 });
 
 describe("schema registry invariants", () => {
-  it("SCHEMA_IDS holds 33 entries in exact bijection with the schema directory", () => {
-    expect(Object.keys(SCHEMA_IDS)).toHaveLength(33);
-    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(33);
-    expect(schemaFileNames()).toHaveLength(33);
+  it("SCHEMA_IDS holds 35 entries in exact bijection with the schema directory", () => {
+    expect(Object.keys(SCHEMA_IDS)).toHaveLength(35);
+    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(35);
+    expect(schemaFileNames()).toHaveLength(35);
 
     const idsInFiles = [...ALL_SCHEMAS.values()].map((document) => document.$id as string).sort();
     expect(idsInFiles).toEqual([...Object.values(SCHEMA_IDS)].sort());
@@ -490,8 +490,17 @@ describe("the phase's exclusions hold", () => {
     };
     for (const [stem, document] of ALL_SCHEMAS) walk(document, stem);
     // Optional durable fields still use omission. PlainJson permits null data, and the approved
-    // autonomous settlement arm deliberately pins `match: null` to make the conclusion complete.
+    // autonomous settlement arm deliberately pins `match: null` to make the conclusion complete,
+    // including when that frozen conclusion is copied into a fresh ordinary gate trigger.
     expect(nullNodes).toEqual([
+      "automation-status/oneOf/0/properties/state_revision/anyOf/1/type",
+      "automation-status/oneOf/1/properties/state_revision/anyOf/1/type",
+      "automation-status/oneOf/2/properties/state_revision/anyOf/1/type",
+      "automation-status/oneOf/3/properties/state_revision/anyOf/1/type",
+      "automation-status/oneOf/4/properties/state_revision/anyOf/1/type",
+      "automation-status/oneOf/4/properties/position/type",
+      "automation-status/oneOf/5/properties/state_revision/anyOf/1/type",
+      "gate-contract/$defs/approvalTrigger/oneOf/0/properties/conclusion/oneOf/0/properties/match/type",
       "intent-receipt/$defs/plainJson/anyOf/0/type",
       "semantic-workflow/$defs/plainJson/anyOf/0/type",
       "task-state/$defs/ruleSettlementConclusion/oneOf/0/properties/match/type",

@@ -47,6 +47,12 @@ export type StateArtifactOperation =
   | "record-implementation-output"
   | "record-triage";
 
+export type StateControlOperation =
+  | "refresh-milestone-baseline"
+  | "recover-milestone-authority"
+  | "recover-approval-trigger-authority"
+  | "refresh-stale-baseline";
+
 export type PinnedConstitutionFile = Readonly<{
   path: RepositoryPathClaim;
   oid: GitOid;
@@ -71,9 +77,13 @@ export type RequestDigestSubject = RequestDigestCommon & ({
   readonly operation: "planning-restart";
   readonly operation_fields: Pick<Extract<StateInput, { readonly operation: "planning_restart" }>, "phase_instance" | "target_phase_instance" | "reason" | "ask_base_digest">;
 } | {
+  readonly tool: "archflow_state";
+  readonly operation: StateControlOperation;
+  readonly operation_fields: Pick<StateInput, "phase_instance" | "step" | "status">;
+} | {
   readonly tool: "archflow_counter_review";
   readonly operation: "counter-review";
-  readonly operation_fields: Pick<CounterReviewInput, "artifact_path" | "route_override">;
+  readonly operation_fields: Pick<CounterReviewInput, "artifact_path" | "invocation_routes" | "route_override">;
 } | {
   readonly tool: "archflow_gate";
   readonly operation: "gate";
@@ -86,7 +96,7 @@ export type RequestDigestSubject = RequestDigestCommon & ({
 
 type SelectorKeys = {
   readonly archflow_state: "phase_instance" | "step" | "status" | "artifact" | "human_revision" | "operation" | "target_phase_instance" | "reason" | "ask_base_digest";
-  readonly archflow_counter_review: "artifact_path" | "route_override";
+  readonly archflow_counter_review: "artifact_path" | "invocation_routes" | "route_override";
   readonly archflow_gate: "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "kind" | "context" | "preview_digest" | "decision";
   readonly archflow_waiver: "origin" | "rationale" | "preview_digest" | "decision";
 };
@@ -225,6 +235,12 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
         const boundary = fields as Pick<StateInput, "phase_instance" | "step" | "status">;
         return { phase_instance: boundary.phase_instance, step: boundary.step, status: boundary.status };
       }
+      if (subject.operation === "refresh-milestone-baseline" || subject.operation === "recover-milestone-authority" ||
+          subject.operation === "recover-approval-trigger-authority" || subject.operation === "refresh-stale-baseline") {
+        exactFields(fields, ["phase_instance", "step", "status"]);
+        const control = fields as Pick<StateInput, "phase_instance" | "step" | "status">;
+        return { phase_instance: control.phase_instance, step: control.step, status: control.status };
+      }
       const artifactFields = fields as StateArtifactOperationFields;
       const operationForKind: Readonly<Record<StateArtifactOperationFields["artifact_kind"], StateArtifactOperation>> = {
         "task-initialization": "adopt-task-initialization",
@@ -252,10 +268,12 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
       const fields = (subject as Extract<RequestDigestSubject, { tool: "archflow_counter_review" }>).operation_fields;
       if (subject.operation !== "counter-review") throw new TypeError("invalid archflow_counter_review operation");
       const expected = ["artifact_path"];
+      if (fields.invocation_routes !== undefined) expected.push("invocation_routes");
       if (fields.route_override !== undefined) expected.push("route_override");
       exactFields(fields, expected);
       return {
         artifact_path: fields.artifact_path,
+        ...(fields.invocation_routes === undefined ? {} : { invocation_routes: fields.invocation_routes as unknown as PlainJsonValue }),
         ...(fields.route_override === undefined ? {} : { route_override: fields.route_override as unknown as PlainJsonValue }),
       };
     }

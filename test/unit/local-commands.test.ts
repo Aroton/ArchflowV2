@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import { canonicalJsonDigest } from "../../src/contracts/canonical.js";
-import { LOCAL_COMMANDS, runLocalCommand } from "../../src/local/commands.js";
+import { INPUT_FREE_COMMANDS, LOCAL_COMMANDS, LOCAL_COMMAND_CONTRACTS, runLocalCommand } from "../../src/local/commands.js";
 
 describe("archflow-local pure adapters", () => {
-  it("publishes exactly the eleven surviving local commands", () => {
+  it("publishes exactly the twelve supported local commands", () => {
     expect([...LOCAL_COMMANDS].sort()).toEqual([
-      "clean", "hash", "init", "manual-status", "reconcile", "render", "restore",
+      "automation-status", "clean", "hash", "init", "manual-status", "reconcile", "render", "restore",
       "snapshot", "upgrade", "upgrade-adopt", "validate",
     ]);
+  });
+
+  it("registers automation status as task-required and input-free", () => {
+    expect(LOCAL_COMMAND_CONTRACTS["automation-status"]).toEqual({ payload: null, task: "required" });
+    expect(INPUT_FREE_COMMANDS.has("automation-status")).toBe(true);
   });
 
   it("hashes the exact canonical JSON value", async () => {

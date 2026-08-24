@@ -72,6 +72,7 @@ import { loadLegacyImportInitialization, loadLegacyImportResumePhase } from "./l
 import { TaskLockError } from "./lock.js";
 import { loadApprovedDesignFinalPhase } from "./planned-final-phase.js";
 import { planPlanningRestart, planStateTransition } from "./transitions.js";
+import { isWaiverOriginRequest } from "./waiver-origin.js";
 import {
   expectedProduceUpstreamBindings,
   loadCurrentProduceSubject,
@@ -178,8 +179,10 @@ async function authenticateWaiverOrigin(
   const request = await readCanonical(requestPath.value, "waiver origin request", parseArchivedGateRequest);
   const decision = await readCanonical(decisionPath.value, "waiver origin decision", parseArchivedGateDecisionRecord);
   if (request === "missing" || request === "invalid" || decision === "missing" || decision === "invalid") return issue("CONTRACT_INVALID", undefined, "waiver-origin-archive-invalid");
-  // Checked before the compound binding so the kind narrowing also fixes the evidence shape below.
-  if (request.value.kind !== "constitution-review" && request.value.kind !== "design-approval") return issue("CONTRACT_INVALID", undefined, "waiver-origin-decision-invalid");
+  // New waiver requests originate at the phase's ordinary approval gate. An archived policy
+  // constitution gate remains consumable only because its old human interface offered the same
+  // choice; the later grant/deny request still cannot originate another waiver.
+  if (!isWaiverOriginRequest(request.value)) return issue("CONTRACT_INVALID", undefined, "waiver-origin-decision-invalid");
   if (!validateDurableSemantics({ gate_request: request, gate_decision: decision }).ok || decision.digest !== context.origin.origin_decision_digest || decision.value.outcome !== "decided" || decision.value.envelope.payload.decision !== "waiver-requested") return issue("CONTRACT_INVALID", undefined, "waiver-origin-decision-invalid");
   const payload = decision.value.envelope.payload as Extract<typeof decision.value.envelope.payload, { decision: "waiver-requested" }>;
   const requestContext = request.value.context;

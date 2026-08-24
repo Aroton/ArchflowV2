@@ -13,8 +13,8 @@ import { LOCAL_COMMANDS } from "../../src/local/commands.js";
  * archflow-status must drive read-only archflow_status as its primary path, keep manual-status as
  * its only fallback helper, and document the classification modes with wait guidance.
  *
- * The one route-only exception: when the server is reachable and only the configured reviewer
- * route is unavailable, the reviewing skills ask the human for a substitute route and reason and
+ * The one route-only exception: when the server is reachable and the selected reviewer
+ * route is unavailable, the reviewing skills explain its safe observation, ask the human for a substitute route and reason, and
  * carry them as a review-dispatch submission that parameterizes — never skips — the automatic
  * counter-review for that dispatch.
  */
@@ -56,15 +56,19 @@ describe("server-outage skill contracts", () => {
       expect(skill, `${name} carries the review-dispatch submission shape`)
         .toContain('`{"kind":"review-dispatch","route_override"');
       expect(skill, `${name} scopes the failure to a reachable server and a route-only outage`)
-        .toContain("both workflow tools answer but a counter-review dispatch fails because the configured reviewer route itself is unavailable");
+        .toContain("both workflow tools answer but `dispatch_failure` reports that the selected counter-reviewer or adjudicator route failed");
+      expect(skill, `${name} refuses silent fallback for invocation-declared routing`)
+        .toContain("An invalid or unavailable invocation route never falls back to configuration");
+      expect(skill, `${name} explains both safe repair paths`)
+        .toContain("repair the declared or configured route and resume with one identically normalized invocation");
       expect(skill, `${name} asks for the substitute route fields and the human reason`)
         .toContain("(`model`, `effort`, optionally `provider`)");
       expect(skill, `${name} requires the human reason and records it on the evidence`)
         .toContain("The reason is required, carries the human's words, and is recorded on the review evidence");
       expect(skill, `${name} never skips or replaces the automatic counter-review`)
         .toContain("never skips or replaces it");
-      expect(skill, `${name} keeps the substitution the single routing exception`)
-        .toContain("the single human-authorized exception to never supplying routing");
+      expect(skill, `${name} keeps invocation routing distinct from human substitution`)
+        .toContain("invocation-declared routing is normal run input and is never described as human- or controller-authenticated");
       expect(skill, `${name} keeps the degraded stop path distinct from a route outage`)
         .toContain("it is not degraded operation");
     }

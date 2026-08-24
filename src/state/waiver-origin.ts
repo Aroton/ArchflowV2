@@ -6,7 +6,29 @@ import type {
   ArchivedGateRequestV1,
 } from "../contracts/durable-gate.js";
 import { validateDurableSemantics } from "../contracts/durable.js";
-import type { WaiverOriginRef } from "../contracts/gates.js";
+import type { GateContext, WaiverOriginRef } from "../contracts/gates.js";
+import type { CurrentEvidenceSetRef } from "../contracts/trust.js";
+
+type WaiverOriginRequest = ArchivedGateRequestV1 & Readonly<{
+  current_evidence: CurrentEvidenceSetRef;
+  context:
+    | GateContext<"artifact-approval">
+    | GateContext<"design-approval">
+    | GateContext<"commit-authorization">
+    | GateContext<"constitution-review">;
+}>;
+
+/**
+ * The closed set of request shapes that may be consumed as a waiver origin. New policy findings
+ * use an ordinary gate; the fourth arm exists only for an archived policy-context constitution
+ * review whose old human interface already offered `waiver-requested`.
+ */
+export function isWaiverOriginRequest(request: ArchivedGateRequestV1): request is WaiverOriginRequest {
+  return "eligible_waivers" in request.context && (
+    request.kind === "artifact-approval" || request.kind === "design-approval" ||
+    request.kind === "commit-authorization" || request.kind === "constitution-review"
+  );
+}
 
 /** Re-verifies every caller-supplied waiver origin field against the archived human decision. */
 export function authenticWaiverOriginArchive(
@@ -15,9 +37,11 @@ export function authenticWaiverOriginArchive(
   origin: WaiverOriginRef,
 ): boolean {
   const payload = decision.value.outcome === "decided" ? decision.value.envelope.payload : undefined;
-  // Checked first so the kind narrowing also fixes the evidence shape below: only reviewed gate
-  // kinds carry an evidence set a waiver origin can cite.
-  if (request.value.kind !== "constitution-review" && request.value.kind !== "design-approval") return false;
+  // Fresh policy findings redirect through one of the three ordinary gates. A historical
+  // policy-context constitution review remains a valid origin only because its archived human
+  // interface offered the same waiver-requested choice. The new waiver context has `origin`
+  // rather than `eligible_waivers`, so it can never authenticate itself as another waiver origin.
+  if (!isWaiverOriginRequest(request.value)) return false;
   return request.value.gate_id === origin.origin_gate_id &&
     request.value.task_id === origin.task_id &&
     request.value.phase_instance === origin.phase_instance &&

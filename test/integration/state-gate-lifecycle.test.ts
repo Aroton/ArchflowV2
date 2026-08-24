@@ -13,6 +13,7 @@ import type { IntentReceiptV1 } from "../../src/contracts/durable-intent.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parsePathSafeId, parseSafeCode, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import type { GateDecisionEnvelope, WaiverOriginRef } from "../../src/contracts/gates.js";
+import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import type { SecretScanner } from "../../src/contracts/secret-scan.js";
 import { computeInputFingerprint, type InputFingerprintSubject } from "../../src/contracts/fingerprints.js";
@@ -138,7 +139,10 @@ function gateInput(h: Harness, intent = "gate-intent"): GateOpenInput {
       slots: [
         { role: "counter-review", evidence_digest: D("c"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" },
       ],
-    }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" },
+    }, kind: "artifact-approval", context: {
+      artifact_kind: "phase-implementation",
+      ...ordinaryApprovalFacts("phase-impl", D("9")),
+    },
   };
 }
 
@@ -185,13 +189,18 @@ async function expectRefusalDidNotAdvance(
 async function waiverInput(h: Harness, intent: string): Promise<GateOpenInput> {
   const rule = { rule_id: "human-review", rule_version: 1 } as const;
   const originInput: GateOpenInput = {
-    ...gateInput(h, `${intent}-origin`), kind: "constitution-review",
-    context: { constitution: "pass", failed_rules: [], uncertain_rules: [], matched_trigger_rules: [rule], uncertain_trigger_rules: [], eligible_waivers: [{ rule, scope: { operation: "review-trigger", boundary: "phase" } }] },
+    ...gateInput(h, `${intent}-origin`), kind: "artifact-approval",
+    context: {
+      artifact_kind: "phase-implementation", constitution: "pass",
+      policy_findings: [{ ...rule, compliance: "pass", rationale: "The rule passed.", trigger: "matched", trigger_evidence: "The protected boundary matched." }],
+      eligible_waivers: [{ rule, scope: { operation: "review-trigger", boundary: "phase" } }],
+      approval_trigger: ordinaryApprovalFacts("phase-impl", D("9")).approval_trigger,
+    },
   };
   const opened = await openDurableGate(h.dependencies, originInput);
   if (!opened.ok) throw new Error("origin gate open failed");
   const originEnvelope: GateDecisionEnvelope = {
-    schema_version: "1", gate_id: opened.value.gate_id, task_id: TASK, phase_instance: PHASE, kind: "constitution-review",
+    schema_version: "1", gate_id: opened.value.gate_id, task_id: TASK, phase_instance: PHASE, kind: "artifact-approval",
     subject_digest: originInput.subject_digest, context_digest: opened.value.request.value.context_digest, human_provenance: PROVENANCE,
     payload: { decision: "waiver-requested", reason: "Request waiver", rule, operation: "review-trigger", rationale: "Human waiver requested" },
   };
@@ -457,15 +466,7 @@ describe("durable gate lifecycle", () => {
         return { schema_version: "1", ok: true, value: nextFingerprint };
       },
     };
-    const input: GateOpenInput = {
-      ...gateInput(h, "gate-reentry"),
-      kind: "constitution-review",
-      context: {
-        constitution: "pass", failed_rules: [], uncertain_rules: [],
-        matched_trigger_rules: [{ rule_id: "review-required", rule_version: 1 }],
-        uncertain_trigger_rules: [], eligible_waivers: [],
-      },
-    };
+    const input: GateOpenInput = gateInput(h, "gate-reentry");
     const opened = await openDurableGate(dependencies, input);
     expect(opened.ok).toBe(true);
     if (!opened.ok) return;
@@ -488,7 +489,7 @@ describe("durable gate lifecycle", () => {
           attempt: 3, input_fingerprint: nextFingerprint,
           pending_human_revision: {
             gate_id: opened.value.gate_id,
-            gate_kind: "constitution-review",
+            gate_kind: "artifact-approval",
             attempt: 3,
           },
         } },
@@ -750,11 +751,6 @@ describe("durable gate lifecycle", () => {
       const input: GateOpenInput = {
         ...gateInput(h, `gate-wrong-${testCase.label}`),
         phase_instance: testCase.phase,
-        kind: "constitution-review",
-        context: {
-          constitution: "pass", failed_rules: [], uncertain_rules: [],
-          matched_trigger_rules: [{ rule_id: "review-required", rule_version: 1 }], uncertain_trigger_rules: [], eligible_waivers: [],
-        },
       };
       const opened = await openDurableGate(dependencies, input);
       expect(opened.ok, testCase.label).toBe(true);
@@ -1398,12 +1394,8 @@ describe("durable gate lifecycle", () => {
       resolve_gate_reentry_fingerprint: async () => ({ schema_version: "1", ok: true, value: D("e") }),
     };
     const input: GateOpenInput = {
-      ...gateInput(h, "legacy-reentry-archive"), phase_instance: legacyPhase, kind: "constitution-review",
-      context: {
-        constitution: "pass", failed_rules: [], uncertain_rules: [],
-        matched_trigger_rules: [{ rule_id: "review-required", rule_version: 1 }],
-        uncertain_trigger_rules: [], eligible_waivers: [],
-      },
+      ...gateInput(h, "legacy-reentry-archive"), phase_instance: legacyPhase,
+      context: { artifact_kind: "prd", ...ordinaryApprovalFacts("prd", D("9")) },
     };
     const opened = await openDurableGate(liveDependencies, input);
     expect(opened.ok, opened.ok ? undefined : JSON.stringify(opened.error)).toBe(true);

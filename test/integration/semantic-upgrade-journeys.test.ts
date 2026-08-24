@@ -218,8 +218,8 @@ async function acceptAndCommit(
   expect(commit).toMatchObject({
     paths: [`.archflow/tasks/${fixture.taskId}`],
     message: fixture.commitMessage,
-    requires_human_confirmation: false,
   });
+  expect(commit).not.toHaveProperty("requires_human_confirmation");
   git(fixture.root, "add", "-A", "--", ...commit.paths);
   git(fixture.root, "-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid",
     "commit", "-q", "-m", commit.message, "--", ...commit.paths);
@@ -260,6 +260,13 @@ describe("migration-audit semantic upgrade journeys", () => {
     }
 
     const { opened } = await acceptAndCommit(fixture, "accept-import");
+    expect(opened.presentation).toMatchObject({
+      class: "exception",
+      reasons: [{
+        class: "exception",
+        text: "The imported legacy task requires a human audit before its bytes become the reviewed workflow baseline.",
+      }],
+    });
     const optionTokens = opened.presentation?.options.map((option) => option.token) ?? [];
     expect(optionTokens).toEqual(expect.arrayContaining(["accept-import", "request-changes", "stop-work"]));
 
@@ -331,7 +338,8 @@ describe("migration-audit semantic upgrade journeys", () => {
     const accepted = await applyOk(fixture.h, design, reopened, {
       kind: "decision", choice: "accept-import", reason: "The revised import matches the reviewed legacy history.",
     });
-    expect(accepted.next_action.commit).toMatchObject({ message: fixture.commitMessage, requires_human_confirmation: false });
+    expect(accepted.next_action.commit).toMatchObject({ message: fixture.commitMessage });
+    expect(accepted.next_action.commit).not.toHaveProperty("requires_human_confirmation");
   }, TIMEOUT);
 
   it("converges without duplicate effects across adoption and decision-archive crash cuts", async () => {

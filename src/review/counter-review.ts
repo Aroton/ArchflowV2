@@ -23,7 +23,15 @@ import {
   mintReviewObservation,
   serializeDispatch,
 } from "../dispatch/cli.js";
-import { configuredRoute, resolveDispatchRoute, routeFromConfiguredRoute, type DispatchRoute, type RoutingRole } from "../dispatch/routing.js";
+import {
+  configuredRoute,
+  selectDispatchRouteCandidate,
+  validateSelectedDispatchRoute,
+  type DispatchRoute,
+  type RoutingRole,
+  type SelectedDispatchRoute,
+  type SelectedRouteCandidate,
+} from "../dispatch/routing.js";
 import type { TransactionAuthority } from "../state/authority.js";
 import { adjudicationReviewClaim, counterReviewClaim, type ResolvedTaskPath } from "../repository/paths.js";
 import {
@@ -95,6 +103,12 @@ export type RunCounterReviewDependencies = Readonly<{
   reobserve_projection_digest: () => Promise<ProjectResult<ReviewEvidence["subject_digest"]>>;
   /** The default process-wide FIFO, or a direct runner when the caller already owns that FIFO. */
   serialize_dispatch?: <T>(operation: () => Promise<T>) => Promise<T>;
+  /** Best-effort runtime observation seam. It must never replace the original routing/dispatch error. */
+  observe_failure?: (
+    role: RoutingRole,
+    selected: SelectedRouteCandidate | undefined,
+    error: unknown,
+  ) => void | Promise<void>;
 }>;
 
 /**
@@ -273,15 +287,31 @@ export async function runCounterReview(
   ) {
     throw new TypeError("counter-review subject is not derived from the server-owned request");
   }
-  // The pin is resolved only when no substitute was named for the role. Resolving it first would
-  // throw on exactly the configurations the override exists to relieve — a role the config never
-  // pinned, or one pinned at an effort its adapter rejects — and strand the task on a
-  // "repair-config" action against a file that cannot be repaired in-task.
-  const routeFor = (role: RoutingRole): DispatchRoute => {
-    const substitute = input.call.input.route_override?.[role];
-    return substitute === undefined
-      ? resolveDispatchRoute(input.config, input.phase_kind, role)
-      : routeFromConfiguredRoute(substitute);
+  const selectAndDispatch = async <T>(
+    role: RoutingRole,
+    dispatch: (route: DispatchRoute) => Promise<T>,
+  ): Promise<Readonly<{ selection: SelectedDispatchRoute; result: T }>> => {
+    let selected: SelectedRouteCandidate | undefined;
+    try {
+      selected = selectDispatchRouteCandidate(
+        input.config,
+        input.phase_kind,
+        role,
+        input.call.input.invocation_routes?.[role],
+        input.call.input.route_override?.[role],
+      );
+      const selection = validateSelectedDispatchRoute(selected);
+      return Object.freeze({ selection, result: await dispatch(selection.route) });
+    } catch (error) {
+      // Runtime diagnostics are observation-only. A failure to record one cannot disguise or
+      // replace the routing/dispatch failure the semantic caller must receive.
+      try {
+        await dependencies.observe_failure?.(role, selected, error);
+      } catch {
+        // Best effort by contract.
+      }
+      throw error;
+    }
   };
   // Recorded on the evidence only when the dispatched route actually displaced the pinned one,
   // so the deviation and the human's reason for it are legible at the gate that reads it.
@@ -293,10 +323,15 @@ export async function runCounterReview(
     const pinned = configuredRoute(input.config, input.phase_kind, role);
     return Object.freeze({
       reason: declared.reason,
-      ...(pinned === undefined ? {} : { pinned_model: pinned.model, pinned_effort: pinned.effort }),
+      ...(pinned === undefined
+        ? {}
+        : {
+          pinned_model: pinned.model,
+          pinned_effort: pinned.effort,
+          ...(pinned.provider === undefined ? {} : { pinned_provider: pinned.provider }),
+        }),
     });
   };
-  const route = routeFor("counter-reviewer");
   const reviewOverride = overrideRecordFor("counter-reviewer");
   // The server stamps the durable attempt counter into the child-visible subject from the same
   // transaction authority the dispatch runs under, so the round number is never a caller claim.
@@ -306,8 +341,10 @@ export async function runCounterReview(
   });
   const envelope = buildReviewEnvelopeWithCap({ ...input.envelope, subject });
   const serialize = dependencies.serialize_dispatch ?? serializeDispatch;
-  const dispatched = await serialize(() =>
-    dependencies.dispatch(route, envelope, reviewOutputSchema as PlainJsonValue));
+  const reviewDispatch = await selectAndDispatch("counter-reviewer", (route) => serialize(() =>
+    dependencies.dispatch(route, envelope, reviewOutputSchema as PlainJsonValue)));
+  const route = reviewDispatch.selection.route;
+  const dispatched = reviewDispatch.result;
   const currentProjection = await dependencies.reobserve_projection_digest();
   if (!currentProjection.ok) return currentProjection;
   if (currentProjection.value !== input.projection_digest) {
@@ -325,6 +362,7 @@ export async function runCounterReview(
     adapter: route.adapter,
     cli_version: dispatched.cli_version,
     route,
+    route_source: reviewDispatch.selection.source,
     envelope_input_digest: envelope.digest,
     extracted_output_bytes: dispatched.extracted_output_bytes,
     ...(reviewOverride === undefined ? {} : { route_override: reviewOverride }),
@@ -344,7 +382,6 @@ export async function runCounterReview(
     // both are installed by the one transaction below.
     const derivedSet = deriveEvidenceSetFromCounter(observed.evidence);
     const setDigest = derivedSet.current_evidence_set.set_digest;
-    const constitutionRoute = routeFor("adjudicator");
     const constitutionOverride = overrideRecordFor("adjudicator");
     const constitutionSubject = Object.freeze({
       task_id: input.envelope.subject.task_id,
@@ -367,14 +404,17 @@ export async function runCounterReview(
       workspace: plan.workspace,
       subject: constitutionSubject,
     });
-    const constitutionDispatched = await serialize(() =>
-      plan.dispatch(constitutionRoute, constitutionEnvelope, adjudicationOutputSchema as PlainJsonValue));
+    const constitutionDispatch = await selectAndDispatch("adjudicator", (route) => serialize(() =>
+      plan.dispatch(route, constitutionEnvelope, adjudicationOutputSchema as PlainJsonValue)));
+    const constitutionRoute = constitutionDispatch.selection.route;
+    const constitutionDispatched = constitutionDispatch.result;
     try {
       const observedConstitution = mintAdjudicationObservation({
         subject: constitutionSubject,
         adapter: constitutionRoute.adapter,
         cli_version: constitutionDispatched.cli_version,
         route: constitutionRoute,
+        route_source: constitutionDispatch.selection.source,
         envelope_input_digest: constitutionEnvelope.digest,
         extracted_output_bytes: constitutionDispatched.extracted_output_bytes,
         ...(constitutionOverride === undefined ? {} : { route_override: constitutionOverride }),

@@ -15,6 +15,7 @@ import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
 import { discoverReconciliationInput } from "../../src/state/reconciliation-discovery.js";
 import { reconcileCurrentAuthority } from "../../src/state/reconciliation.js";
 import { createProductionServices } from "../../src/state/production.js";
+import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -119,7 +120,10 @@ describe("discoverReconciliationInput", () => {
     } as TaskStateV1["authoritative_results"][number];
 
     const gateId = parsePathSafeId("gate-1");
-    const gateContext = { artifact_kind: "phase-implementation" } as const;
+    const gateContext = {
+      artifact_kind: "phase-implementation" as const,
+      ...ordinaryApprovalFacts("phase-impl", D("7")),
+    };
     const contextDigest = computeGateContextDigest("artifact-approval", gateContext);
     const slot = () => ({
       role: "counter-review" as const, evidence_digest: D("9"),
@@ -132,7 +136,7 @@ describe("discoverReconciliationInput", () => {
       task_id: TASK, phase_instance: PHASE, summary: "Approve", subject_digest: D("b"),
       context_digest: contextDigest, current_evidence: { set_digest: D("c"), slots: [slot()] },
       kind: "artifact-approval", context: gateContext,
-      allowed_decisions: ["approve", "revise", "reject", "cancel"], opened_at_revision: 4,
+      allowed_decisions: ["approve", "revise", "reject", "waiver-requested", "cancel"], opened_at_revision: 4,
     });
     mkdirSync(join(h.services.authority.task_root, "authority", "decisions", gateId), { recursive: true });
     writeFileSync(join(h.services.authority.task_root, "authority", "decisions", gateId, "request.json"), canonicalDocument(request).bytes);

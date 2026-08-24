@@ -9,14 +9,22 @@ import { exactCommitAuthorizationContext, parseActiveGate, parsePersistedGateReq
 import type { ConfigChangeEntry, RuleSettlementV1, TaskStateV1 } from "../contracts/durable-state.js";
 export type { ConfigChangeEntry } from "../contracts/durable-state.js";
 import type { AdjudicationEvidence } from "../contracts/adjudication.js";
+import {
+  projectDispatchFailureObservation,
+  type PublicDispatchFailureV1,
+} from "../contracts/dispatch-failure.js";
 import type { ProjectError, ProjectResult } from "../contracts/errors.js";
 import { baselineAdoptionDriftDigest, computeGateContextDigest } from "../contracts/fingerprints.js";
 import type { PathSafeId, Sha256Digest, TaskSlug } from "../contracts/evidence.js";
 import type { RepositoryPathClaim } from "../contracts/path-claims.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
-import type { BaselineObservationRef, GateContext } from "../contracts/gates.js";
+import type {
+  BaselineObservationRef,
+  GateContext,
+  LegacyDesignApprovalContextV1,
+} from "../contracts/gates.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
-import type { ReviewEvidence, RouteOverrideRecord } from "../contracts/review.js";
+import type { ReviewEvidence, RouteOverrideRecord, RouteSourceRecord } from "../contracts/review.js";
 import type { CurrentEvidenceSetRef } from "../contracts/trust.js";
 import { resolveDispatchRoute, type DispatchRoute } from "../dispatch/routing.js";
 import { designApprovalPolicyContext, selectAdjudicationGates } from "../review/adjudication.js";
@@ -24,14 +32,19 @@ import { assessCurrentEvidence, DEFAULT_MAX_ATTEMPTS, waiverInForce, type Eviden
 import { canonicalRubricForPhaseKind, type CanonicalRubric } from "../review/rubrics.js";
 import { createGitRunner, preflightGit, readChangedGitPaths, readCommitTreeBlob, readFirstParentChildAfter, resolveCommit } from "../repository/git.js";
 import { discoverWorktree } from "../repository/identity.js";
-import { readTaskState } from "./read.js";
+import { readTaskConfig, readTaskState } from "./read.js";
 import { computeConfigChange } from "./config-change.js";
 import type { TransactionAuthority } from "./authority.js";
 import { assertInternalTransactionAuthority, createInternalTransactionAuthority } from "./authority.js";
 import { authenticateRuleAcceptancePolicy, resolvePinnedConstitution, type ResolvedConstitution } from "./constitution.js";
 import { deriveCurrentEvidenceSet, loadRetainedEvidence, type RetainedEvidenceSet } from "./evidence-results.js";
 import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "./gate-approvals.js";
-import { acceptedNoWaitSettlement, authenticatedApprovalIsEligibleAfterLatestRestart, latestEligibleRuleSettlement } from "./restart-authority.js";
+import {
+  acceptedNoWaitSettlementWithoutOrdinaryApproval,
+  authenticatedApprovalIsEligibleAfterLatestRestart,
+  latestEligibleRuleSettlement,
+  matchingOrdinaryApproval,
+} from "./restart-authority.js";
 import {
   buildGateDecisionTemplates,
   buildHumanGatePresentation,
@@ -60,6 +73,7 @@ import {
 } from "./reconciliation.js";
 import { gateRequestClaim, parseWorkspacePathClaim, resolveTaskPath, resolveTaskWorkspacePath } from "../repository/paths.js";
 import { loadLegacyImportInitialization } from "./legacy-import-resume.js";
+import { readCurrentDispatchFailure } from "../dispatch/failure-observation.js";
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 
@@ -99,6 +113,9 @@ type StatusEvidence = Readonly<{
     model_family: string;
     model: string;
     effort: string;
+    adapter?: string;
+    provider?: string;
+    route_source?: RouteSourceRecord;
     route_override?: RouteOverrideRecord;
   }>;
   assessment: EvidenceAssessment;
@@ -153,7 +170,7 @@ export type CommitAuthorizationInput = Readonly<{
 
 export type DesignApprovalInput = Readonly<{
   kind: "design-approval";
-  context: GateContext<"design-approval">;
+  context: LegacyDesignApprovalContextV1;
   target_ref_guidance: string;
 }>;
 
@@ -299,6 +316,8 @@ export type TaskStatusV1 = Readonly<{
   config_change?: readonly ConfigChangeEntry[];
   /** The dispatched review routes for the current phase kind; the producer is the host, never routed. */
   routes?: Readonly<{ counter_reviewer: DispatchRoute; adjudicator: DispatchRoute }>;
+  /** Safe exact-current dispatch outage facts; carries no runtime path or state join identifiers. */
+  dispatch_failure?: PublicDispatchFailureV1;
   constitution?: Readonly<{
     digest: Sha256Digest;
     active_rules: readonly Readonly<{
@@ -349,6 +368,9 @@ export type TaskStatusV1 = Readonly<{
 export type DetailedTaskStatusV1 = Readonly<{
   status: TaskStatusV1;
   state?: TaskStateV1;
+  state_document_digest?: Sha256Digest;
+  live_config_digest?: Sha256Digest;
+  legacy_import_initialization?: true;
   retained: RetainedEvidenceSet;
 }>;
 
@@ -608,11 +630,12 @@ export async function currentApprovedUpstreams(
           : undefined;
       }
     }
-    const settled = settlementPolicy === undefined ? undefined : acceptedNoWaitSettlement(
+    const settled = settlementPolicy === undefined ? undefined : acceptedNoWaitSettlementWithoutOrdinaryApproval(
       settlementPolicy,
       state,
       loaded.value.artifact_digest,
       loaded.value.artifact.phase_instance,
+      authenticated,
     );
     if (approval === undefined && settled === undefined) {
       throw new TypeError("current upstream produced authority lacks approval or accepted settlement");
@@ -666,7 +689,7 @@ export function pendingAdjudicationGates(
   try { currentSet = deriveCurrentEvidenceSet(retained).current_evidence_set; } catch { /* degraded below */ }
   for (const gate of selectAdjudicationGates(constitution.rules, source.evidence)) {
     const contextDigest = computeGateContextDigest(gate.kind, gate.context);
-    const approved = currentSet !== undefined && authenticated.some((item) =>
+    const exactGateApproved = currentSet !== undefined && authenticated.some((item) =>
       item.approval.gate_kind === gate.kind &&
       item.approval.subject_digest === gate.subject_digest &&
       item.request.phase_instance === state.phase_instance &&
@@ -674,6 +697,27 @@ export function pendingAdjudicationGates(
       item.request.kind !== "baseline-adoption" && // narrowed: a drift observation is not an evidence set
       item.request.current_evidence.set_digest === currentSet.set_digest &&
       source.evidence.source_evidence_set_digest === currentSet.set_digest);
+    const designPhase = state.phase_instance === "design" || state.phase_instance.startsWith("phase-design-");
+    const ordinaryKind = state.phase_instance === "prd"
+      ? "artifact-approval"
+      : designPhase
+        ? "design-approval"
+        : state.phase_instance.startsWith("phase-impl-")
+          ? "commit-authorization"
+          : undefined;
+    const ordinaryApproval = gate.kind === "constitution-review" && currentSet !== undefined &&
+      ordinaryKind !== undefined && authenticated.some((item) => {
+        const decision = item.decision.envelope.payload.decision;
+        return item.approval.gate_kind === ordinaryKind &&
+          item.approval.subject_digest === gate.subject_digest &&
+          item.request.kind === ordinaryKind &&
+          item.request.phase_instance === state.phase_instance &&
+          item.request.subject_digest === gate.subject_digest &&
+          item.request.current_evidence.set_digest === currentSet!.set_digest &&
+          source.evidence.source_evidence_set_digest === currentSet!.set_digest &&
+          (decision === "approve" || decision === "authorize-commit");
+      });
+    const approved = exactGateApproved || ordinaryApproval;
     let waived = false;
     if (gate.kind === "constitution-review" && "eligible_waivers" in gate.context) {
       const eligible = gate.context.eligible_waivers;
@@ -929,6 +973,15 @@ async function computeTaskStatusDetailedInternal(
 
   if (stateRead.kind !== "canonical") {
     const reason = stateRead.kind === "missing" ? "state-missing" : `state-${stateRead.kind}`;
+    let liveConfigDigest: Sha256Digest | undefined;
+    try {
+      const read = await dependencies.read_config(authority.config);
+      if (read.kind === "valid") liveConfigDigest = read.snapshot.digest;
+      else if (read.kind === "invalid") liveConfigDigest = read.digest;
+    } catch {
+      // Missing-state status remains observable when config identity cannot be established; null
+      // in the automation authority records that exact classification without a second read.
+    }
     const next = deriveNextAction({ repository_initialized: true });
     const status = Object.freeze({
       task_id: authority.task_id,
@@ -937,7 +990,11 @@ async function computeTaskStatusDetailedInternal(
       blocking_reasons: Object.freeze([reason]),
       next_action: next,
     });
-    return ok(Object.freeze({ status, retained: new Map() }));
+    return ok(Object.freeze({
+      status,
+      ...(liveConfigDigest === undefined ? {} : { live_config_digest: liveConfigDigest }),
+      retained: new Map(),
+    }));
   }
   const stateDocument = stateRead.document;
   const state = stateDocument.value;
@@ -950,6 +1007,7 @@ async function computeTaskStatusDetailedInternal(
     if (read.kind !== "valid") {
       config = unavailableConfig(`config-${read.kind}`);
       blockers.push(`config-${read.kind}`);
+      if (read.kind === "invalid") liveConfigDigest = read.digest;
     } else {
       config = Object.freeze({ verified: true });
       liveConfigDigest = read.snapshot.digest;
@@ -1104,11 +1162,12 @@ async function computeTaskStatusDetailedInternal(
     : authenticateRuleAcceptancePolicy(state, constitution);
   const acceptedSettlement = settlementPolicy === undefined || produceSubject === undefined
     ? undefined
-    : acceptedNoWaitSettlement(
+    : acceptedNoWaitSettlementWithoutOrdinaryApproval(
       settlementPolicy,
       state,
       produceSubject.artifact_digest,
       produceSubject.artifact.phase_instance,
+      authenticatedApprovals,
     );
 
   let commitObserved = false;
@@ -1544,6 +1603,13 @@ async function computeTaskStatusDetailedInternal(
         model_family: counter.model_family,
         model: counter.model,
         effort: counter.effort,
+        ...(counter.assurance === "server-attested" ? { adapter: counter.adapter } : {}),
+        ...(counter.assurance === "server-attested" && counter.provider !== undefined
+          ? { provider: counter.provider }
+          : {}),
+        ...(counter.assurance === "server-attested" && counter.route_source !== undefined
+          ? { route_source: counter.route_source }
+          : {}),
         // Present only when a human substituted this review's route for the pinned one. It travels
         // with the provenance because the gate correspondence is built from this block: without it
         // the human sees which model reviewed but never that it was not the configured one.
@@ -1646,10 +1712,38 @@ async function computeTaskStatusDetailedInternal(
     pendingGates = pendingAdjudicationGates(state, constitution, retained, authenticatedApprovals);
   }
   const adjudicationGateKind = pendingGates[0]?.kind;
+  const eligibleTriggerSettlement = produceSubject === undefined
+    ? undefined
+    : latestEligibleRuleSettlement(
+      state, produceSubject.artifact_digest, produceSubject.artifact.phase_instance,
+    );
+  const currentSimpleRevision = produceSubject === undefined
+    ? undefined
+    : [...(state.human_revision_history ?? [])]
+      .filter((record) =>
+        record.phase_instance === state.phase_instance &&
+        record.classification === "simple" &&
+        record.resulting_subject_digest === produceSubject.artifact_digest &&
+        record.resulting_result_digest === produceSubject.reference.result_digest)
+      .sort((left, right) => right.resulting_attempt - left.resulting_attempt)[0];
+  const currentOrdinaryApproval = produceSubject === undefined
+    ? undefined
+    : matchingOrdinaryApproval(
+      state,
+      authenticatedApprovals,
+      produceSubject.artifact_digest,
+      produceSubject.artifact.phase_instance,
+    );
   const legacyInitialization = await loadLegacyImportInitialization(dependencies, authority, state);
   const migrationAuditRequired = legacyInitialization.ok && legacyInitialization.value !== undefined &&
     state.phase_instance === "design" &&
     !authenticatedApprovals.some((item) => item.request.kind === "migration-audit" && item.decision.envelope.payload.decision === "accept-import-audit");
+  const approvalTriggerRecoveryRequired =
+    !migrationAuditRequired && state.terminal === undefined && state.open_gate === undefined &&
+    state.pending_human_revision === undefined && state.step === "triage" &&
+    state.status === "succeeded" && assessment?.next === "adjudication-gate" &&
+    adjudicationGateKind === "constitution-review" && eligibleTriggerSettlement === undefined &&
+    currentSimpleRevision === undefined && currentOrdinaryApproval === undefined;
   // Once the audit is accepted, the design phase exits to the import's authenticated resume
   // point, so status reports the server-derived resume skill instead of a phase-1 hand-off.
   const migrationAuditAccepted = legacyInitialization.ok && legacyInitialization.value !== undefined &&
@@ -1682,6 +1776,7 @@ async function computeTaskStatusDetailedInternal(
     commit_observed: commitObserved,
     ...(commitBlockedReason === undefined ? {} : { commit_blocked_reason: commitBlockedReason }),
     ...(milestoneRecoveryRequired ? { milestone_recovery_required: true } : {}),
+    ...(approvalTriggerRecoveryRequired ? { approval_trigger_recovery_required: true } : {}),
     ...(governingDocumentRecoveryRequired ? { governing_document_recovery_required: true } : {}),
     ...(milestoneRecoveryNoDelta ? { milestone_recovery_no_delta: true } : {}),
     ...(milestoneProofUnverifiableReason === undefined ? {} : {
@@ -1744,6 +1839,14 @@ async function computeTaskStatusDetailedInternal(
     });
   }
 
+  let dispatchFailure: PublicDispatchFailureV1 | undefined;
+  try {
+    const observed = await readCurrentDispatchFailure(dependencies, authority, state);
+    if (observed !== undefined) dispatchFailure = projectDispatchFailureObservation(observed);
+  } catch {
+    // A disposable diagnostic projection never blocks or changes canonical workflow status.
+  }
+
   const status: TaskStatusV1 = Object.freeze({
     task_id: authority.task_id,
     state: state.terminal ?? "active",
@@ -1759,6 +1862,7 @@ async function computeTaskStatusDetailedInternal(
     config,
     ...(configChange === undefined ? {} : { config_change: configChange }),
     ...(routes === undefined ? {} : { routes }),
+    ...(dispatchFailure === undefined ? {} : { dispatch_failure: dispatchFailure }),
     ...(constitutionStatus === undefined ? {} : { constitution: constitutionStatus }),
     ...(state.open_gate === undefined ? {} : { open_gate_id: state.open_gate.gate_id }),
     ...(openGate === undefined ? {} : { open_gate: openGate }),
@@ -1773,7 +1877,16 @@ async function computeTaskStatusDetailedInternal(
     blocking_reasons: Object.freeze([...new Set(blockers)]),
     next_action: nextAction,
   });
-  return ok(Object.freeze({ status, state, retained }));
+  return ok(Object.freeze({
+    status,
+    state,
+    state_document_digest: stateDocument.digest,
+    ...(liveConfigDigest === undefined ? {} : { live_config_digest: liveConfigDigest }),
+    ...(legacyInitialization.ok && legacyInitialization.value !== undefined
+      ? { legacy_import_initialization: true as const }
+      : {}),
+    retained,
+  }));
 }
 
 /** Computes status and exposes the exact authenticated state/evidence read to internal consumers. */
@@ -1812,6 +1925,10 @@ export type DurableStateReadability =
       /** Human-readable description of where the task last stood, as far as it can be recovered. */
       summary: string;
       details: UnreadableStateDetails;
+      /** Present when repository authority was established before state parsing failed. */
+      repository_identity_digest?: Sha256Digest;
+      /** Exact live config-byte identity when readable, otherwise null. */
+      live_config_digest?: Sha256Digest | null;
     }>;
 
 /** Best-effort position fields from noncanonical state bytes; any failure yields undefined. */
@@ -1839,6 +1956,10 @@ function unreadableState(
   taskId: TaskSlug,
   reason: UnreadableStateDetails["reason"],
   position?: UnreadableStateDetails["position"],
+  identity?: Readonly<{
+    repository_identity_digest: Sha256Digest;
+    live_config_digest: Sha256Digest | null;
+  }>,
 ): Extract<DurableStateReadability, { readability: "unreadable" }> {
   const located = position === undefined
     ? "its last recorded position could not be recovered"
@@ -1857,6 +1978,7 @@ function unreadableState(
     readability: "unreadable" as const,
     summary: `Task ${taskId}: ${problem}; ${located}.`,
     details: Object.freeze({ reason, ...(position === undefined ? {} : { position }) }),
+    ...(identity === undefined ? {} : identity),
   });
 }
 
@@ -1871,6 +1993,7 @@ export async function classifyDurableStateReadability(input: Readonly<{
 }>): Promise<DurableStateReadability> {
   let stateRead: Awaited<ReturnType<typeof readTaskState>>;
   let statePath: string;
+  let readabilityAuthority: TransactionAuthority;
   try {
     const context = Object.freeze({
       task_id: input.task_id,
@@ -1889,6 +2012,7 @@ export async function classifyDurableStateReadability(input: Readonly<{
       context,
     });
     if (!authority.ok) return unreadableState(input.task_id, "status-authority-invalid");
+    readabilityAuthority = authority.value;
     statePath = authority.value.state.absolute;
     stateRead = await readTaskState(authority.value.state);
   } catch {
@@ -1902,5 +2026,12 @@ export async function classifyDurableStateReadability(input: Readonly<{
     ? "state-unreadable" as const
     : "state-noncanonical" as const;
   const position = reason === "state-noncanonical" ? await recoverStatePosition(statePath) : undefined;
-  return unreadableState(input.task_id, reason, position);
+  const config = await readTaskConfig(readabilityAuthority.config);
+  const liveConfigDigest = config.kind === "valid" ? config.snapshot.digest
+    : config.kind === "invalid" ? config.digest
+    : null;
+  return unreadableState(input.task_id, reason, position, Object.freeze({
+    repository_identity_digest: readabilityAuthority.repository_identity_digest,
+    live_config_digest: liveConfigDigest,
+  }));
 }

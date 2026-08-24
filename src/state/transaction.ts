@@ -273,6 +273,15 @@ function fingerprintMismatch(expected_digest: Sha256Digest, observed_digest: Sha
 function operationFor(call: ParsedToolCall): IntentReceiptV1["operation"] {
   switch (call.name) {
     case "archflow_state": {
+      if (call.input.operation !== undefined) {
+        return ({
+          planning_restart: "planning-restart",
+          refresh_milestone_baseline: "refresh-milestone-baseline",
+          recover_milestone_authority: "recover-milestone-authority",
+          recover_approval_trigger_authority: "recover-approval-trigger-authority",
+          refresh_stale_baseline: "refresh-stale-baseline",
+        } as const)[call.input.operation] as IntentReceiptV1["operation"];
+      }
       const artifact = call.input.artifact;
       if (artifact === undefined) return "record-state-boundary" as IntentReceiptV1["operation"];
       switch (artifact.artifact_kind) {

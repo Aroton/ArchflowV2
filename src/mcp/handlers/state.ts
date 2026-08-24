@@ -67,13 +67,19 @@ import {
   currentTargetRef,
   computeTaskStatus,
   baselineAdoptionInputFromFindings,
+  pendingAdjudicationGates,
 } from "../../state/status.js";
-import { planMilestoneRecovery, planStateTransition } from "../../state/transitions.js";
+import {
+  planApprovalTriggerAuthorityRecovery,
+  planMilestoneRecovery,
+  planStateTransition,
+} from "../../state/transitions.js";
 import { planPlanningRestart } from "../../state/transitions.js";
 import { installPlanningRestartAskAppend, validatePlanningRestartAskAppend } from "../../state/phase-documents.js";
 import {
   acceptedNoWaitSettlement,
   authenticatedApprovalIsEligibleAfterLatestRestart,
+  matchingOrdinaryApproval,
 } from "../../state/restart-authority.js";
 import { completedPlanningRestartMatches, planningRestartId } from "../../state/planning-restart.js";
 import {
@@ -187,7 +193,13 @@ async function settleApprovalRules(
         ...(config.parsed.max_attempts === undefined ? {} : { max_attempts: config.parsed.max_attempts }),
       },
     );
-    if (assessment.next !== "advance") return undefined;
+    if (assessment.next !== "advance") {
+      if (assessment.next !== "adjudication-gate") return undefined;
+      const pending = pendingAdjudicationGates(
+        prospective, constitution.value, retained, authenticated,
+      );
+      if (pending[0]?.kind !== "constitution-review") return undefined;
+    }
     const ruleContext = approvalRuleContext(current, produce, config.parsed);
     const conclusion = evaluateApprovalRules(
       ruleContext.config, ruleContext.subject, ruleContext.changedPaths,
@@ -226,11 +238,12 @@ export async function handleState(
     const restartInput = call.input.operation === "planning_restart" ? call.input : undefined;
     const refreshInput = call.input.operation === "refresh_milestone_baseline" ? call.input : undefined;
     const recoveryInput = call.input.operation === "recover_milestone_authority" ? call.input : undefined;
+    const triggerRecoveryInput = call.input.operation === "recover_approval_trigger_authority" ? call.input : undefined;
     const staleBaselineInput = call.input.operation === "refresh_stale_baseline" ? call.input : undefined;
     const artifact = restartInput === undefined && refreshInput === undefined &&
-      recoveryInput === undefined && staleBaselineInput === undefined ? call.input.artifact : undefined;
+      recoveryInput === undefined && triggerRecoveryInput === undefined && staleBaselineInput === undefined ? call.input.artifact : undefined;
     if (services.state === undefined) {
-      if (restartInput !== undefined || refreshInput !== undefined || recoveryInput !== undefined || staleBaselineInput !== undefined) {
+      if (restartInput !== undefined || refreshInput !== undefined || recoveryInput !== undefined || triggerRecoveryInput !== undefined || staleBaselineInput !== undefined) {
         return fail(createProjectError("STATE_MISSING", { phase_instance: call.input.phase_instance }));
       }
       const initialized = await runStateInitialization(services.dependencies, {
@@ -399,6 +412,47 @@ export async function handleState(
             value: Object.freeze({ expectation, result, next_state: planned.value }),
           });
         }
+        if (triggerRecoveryInput !== undefined) {
+          const computed = await computeTaskStatus(services.dependencies, services.authority);
+          if (
+            !computed.ok ||
+            computed.value.next_action.code !== "recover-approval-trigger-authority" ||
+            computed.value.revision !== current.value.revision ||
+            triggerRecoveryInput.phase_instance !== current.value.phase_instance ||
+            triggerRecoveryInput.step !== current.value.step ||
+            triggerRecoveryInput.status !== current.value.status
+          ) {
+            return fail(createProjectError("TRANSITION_INVALID", {
+              phase_instance: current.value.phase_instance,
+              from: `${current.value.step}-${current.value.status}`,
+              to: "approval-trigger-authority-recovery",
+            }));
+          }
+          const planned = planApprovalTriggerAuthorityRecovery({
+            current: current.value,
+            recomputed_input_fingerprint: identified.input_fingerprint,
+          });
+          if (!planned.ok) return planned;
+          const revision = parseSafeInteger(current.value.revision + 1);
+          const success = Object.freeze({
+            path: parseTaskPathClaim("state.json"), revision, status: "running" as const,
+            request_digest: identified.request_digest,
+          });
+          const expectation = createInternalResultExpectation({
+            schema_version: "1", tool: "archflow_state", task_id: services.authority.task_id,
+            intent_id: triggerRecoveryInput.intent_id, input_fingerprint: identified.input_fingerprint,
+            request_digest: identified.request_digest,
+            result_id: stateResultId(triggerRecoveryInput.intent_id),
+            resulting_revision: revision, success,
+          });
+          const result = validateProjectResultStructure(identifiedCall, {
+            schema_version: "1", ok: true, value: success,
+          });
+          return Object.freeze({
+            schema_version: "1", ok: true,
+            value: Object.freeze({ expectation, result, next_state: planned.value }),
+          });
+        }
         if (refreshInput !== undefined) {
           const state = current.value;
           const decoded = decodePhaseInstance(state.phase_instance);
@@ -417,7 +471,21 @@ export async function handleState(
           const policy = authenticateRuleAcceptancePolicy(state, constitution.value);
           const produce = await loadCurrentProduceSubject(services.dependencies, state);
           if (!produce.ok) return produce;
-          const prior = policy === undefined ? undefined : acceptedNoWaitSettlement(
+          const refreshApprovals: AuthenticatedGateApproval[] = [];
+          for (const approval of state.approvals) {
+            if (approval.subject_digest !== produce.value.artifact_digest) continue;
+            const loaded = await loadAuthenticatedGateApproval(
+              services.dependencies, services.authority, approval,
+            );
+            if (!loaded.ok) return loaded;
+            if (authenticatedApprovalIsEligibleAfterLatestRestart(state, loaded.value)) {
+              refreshApprovals.push(loaded.value);
+            }
+          }
+          const humanApproved = matchingOrdinaryApproval(
+            state, refreshApprovals, produce.value.artifact_digest, state.phase_instance,
+          ) !== undefined;
+          const prior = policy === undefined || humanApproved ? undefined : acceptedNoWaitSettlement(
             policy, state, produce.value.artifact_digest, state.phase_instance,
           );
           if (prior?.milestone_baseline_commit === undefined || prior.config_digest !== liveConfig.digest) {
@@ -806,6 +874,17 @@ export async function handleState(
             authenticatedGateApprovals.push(loaded.value);
           }
           if (
+            completionSubjectDigest !== undefined &&
+            matchingOrdinaryApproval(
+              current.value,
+              authenticatedGateApprovals,
+              completionSubjectDigest,
+              current.value.phase_instance,
+            ) !== undefined
+          ) {
+            authenticatedRuleAcceptance = undefined;
+          }
+          if (
             designExit &&
             currentProduce?.artifact.artifact_kind === "document"
           ) {
@@ -871,6 +950,17 @@ export async function handleState(
             if (!loaded.ok) return loaded;
             if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
             authenticatedGateApprovals.push(loaded.value);
+          }
+          if (
+            completionSubjectDigest !== undefined &&
+            matchingOrdinaryApproval(
+              current.value,
+              authenticatedGateApprovals,
+              completionSubjectDigest,
+              current.value.phase_instance,
+            ) !== undefined
+          ) {
+            authenticatedRuleAcceptance = undefined;
           }
           const source = currentProduce.artifact;
           if (source.artifact_kind === "implementation-output") {

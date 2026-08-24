@@ -32,6 +32,68 @@ export type DesignPolicyFinding = RuleVersionRef & {
   readonly trigger_evidence: string;
 };
 
+export type ApprovalRuleSettlementRef = {
+  readonly subject_digest: Sha256Digest;
+  readonly config_digest: Sha256Digest;
+  readonly settled_at_revision: number;
+};
+export type ApprovalRuleConclusion =
+  | { readonly wait: false; readonly match: null }
+  | {
+    readonly wait: true;
+    readonly match:
+      | { readonly kind: "subject"; readonly subject: "prd" | "design" | "phase-design" | "phase-impl" }
+      | { readonly kind: "content"; readonly paths: readonly string[] };
+  };
+export type RuleSettlementApprovalTrigger = {
+  readonly kind: "rule-settlement";
+  readonly settlement: ApprovalRuleSettlementRef;
+  readonly conclusion: ApprovalRuleConclusion;
+  readonly rule_authority: "authenticated" | "unavailable";
+};
+export type HumanRevisionReapprovalTrigger = {
+  readonly kind: "human-revision-reapproval";
+  readonly prior_gate: {
+    readonly gate_id: PathSafeId;
+    readonly decision_digest: Sha256Digest;
+    readonly class: "configured-approval" | "exception";
+  };
+  readonly revision_checkpoint: {
+    readonly classification: "simple";
+    readonly predecessor_subject_digest: Sha256Digest;
+    readonly subject_digest: Sha256Digest;
+  };
+};
+export type ApprovalTrigger = RuleSettlementApprovalTrigger | HumanRevisionReapprovalTrigger;
+
+type OrdinaryPolicyContext = {
+  readonly constitution: "pass" | "fail" | "uncertain";
+  readonly policy_findings: readonly DesignPolicyFinding[];
+  readonly eligible_waivers: readonly EligibleWaiver[];
+  readonly approval_trigger: ApprovalTrigger;
+};
+
+type WaiverRequestedDecision = {
+  readonly decision: "waiver-requested";
+  readonly reason: string;
+  readonly rule: RuleVersionRef;
+  readonly operation: WaivableOperation;
+  readonly rationale: string;
+};
+
+export type LegacyArtifactApprovalContextV1 = {
+  readonly artifact_kind: "prd" | "design" | "phase-design" | "phase-implementation";
+};
+export type LegacyDesignApprovalContextV1 = Omit<GateContractByKind["design-approval"]["context"], "approval_trigger">;
+export type LegacyExactCommitAuthorizationContextV1 = Omit<
+  GateContractByKind["commit-authorization"]["context"],
+  "constitution" | "policy_findings" | "eligible_waivers" | "approval_trigger"
+>;
+export type ArchivedPreExactCommitAuthorizationContextV1 = Omit<
+  LegacyExactCommitAuthorizationContextV1,
+  "baseline_commit" | "commit_message" | "paths"
+>;
+
 export type HumanDecisionProvenance =
   | Readonly<{ schema_version: "1"; actor_class: "human" | "archforge"; assurance: "declared-local-trace"; channel: "connected-host"; decision_event_id: string; connection_id: string; request_id_digest: Sha256Digest; recorded_at: string }>
   | Readonly<{ schema_version: "1"; actor_class: "human" | "archforge"; assurance: "declared-local-trace"; channel: "archflow-local"; decision_event_id: string; helper_invocation_id: string; recorded_at: string }>;
@@ -43,20 +105,21 @@ export type AuthorityLinkRef = {
   readonly changed_input_fingerprint: Sha256Digest;
 }
 
-export interface GateContractByKind {
-  readonly "artifact-approval": { readonly context: { readonly artifact_kind: "prd" | "design" | "phase-design" | "phase-implementation" }; readonly decision: { readonly decision: "approve" | "revise" | "reject"; readonly reason: string } };
+export type GateContractByKind = {
+  readonly "artifact-approval": { readonly context: OrdinaryPolicyContext & { readonly artifact_kind: "prd" | "design" | "phase-design" | "phase-implementation" }; readonly decision: { readonly decision: "approve" | "revise" | "reject"; readonly reason: string } | WaiverRequestedDecision };
   /** One final design decision that includes any constitution findings and authorizes its milestone commit. */
   readonly "design-approval": { readonly context: {
     readonly artifact_kind: "design" | "phase-design";
     readonly constitution: "pass" | "fail" | "uncertain";
     readonly policy_findings: readonly DesignPolicyFinding[];
     readonly eligible_waivers: readonly EligibleWaiver[];
+    readonly approval_trigger: ApprovalTrigger;
     readonly target_ref: string;
     readonly baseline_commit: GitOid;
     readonly commit_message: string;
   }; readonly decision:
     | { readonly decision: "approve" | "revise" | "reject"; readonly reason: string }
-    | { readonly decision: "waiver-requested"; readonly reason: string; readonly rule: RuleVersionRef; readonly operation: WaivableOperation; readonly rationale: string } };
+    | WaiverRequestedDecision };
   /**
    * One human decision per constitution review. Compliance and trigger are separate judgments that
    * frequently share a root cause, so the gate discloses both axes at once rather than asking twice
@@ -66,7 +129,7 @@ export interface GateContractByKind {
   readonly "material-drift": { readonly context: { readonly affected_upstream: EvidenceIdentityRef; readonly drift: "material"; readonly affected_claim_ids: readonly string[] }; readonly decision: { readonly decision: "amend-upstream" | "revise-current" | "reject"; readonly reason: string } };
   readonly "attempts-exhausted": { readonly context: { readonly step: PipelineStep; readonly attempts: number; readonly maximum_attempts: number }; readonly decision: { readonly decision: "retry-once" | "revise" | "abort"; readonly reason: string } };
   readonly "constitution-edit": { readonly context: { readonly pinned_constitution_digest: Sha256Digest; readonly current_constitution_digest: Sha256Digest; readonly changed_path_class: "task-branch-constitution" }; readonly decision: { readonly decision: "revert-edit" | "start-base-amendment" | "abort"; readonly reason: string } };
-  readonly "commit-authorization": { readonly context: { readonly target_ref: string; readonly baseline_commit: GitOid; readonly commit_message: string; readonly paths: readonly RepositoryPathClaim[]; readonly diff_digest: Sha256Digest; readonly current_artifact_digests: readonly Sha256Digest[]; readonly parent_document_digests: readonly Sha256Digest[] }; readonly decision: { readonly decision: "authorize-commit" | "revise" | "abort"; readonly reason: string } };
+  readonly "commit-authorization": { readonly context: OrdinaryPolicyContext & { readonly target_ref: string; readonly baseline_commit: GitOid; readonly commit_message: string; readonly paths: readonly RepositoryPathClaim[]; readonly diff_digest: Sha256Digest; readonly current_artifact_digests: readonly Sha256Digest[]; readonly parent_document_digests: readonly Sha256Digest[] }; readonly decision: { readonly decision: "authorize-commit" | "revise" | "abort"; readonly reason: string } | WaiverRequestedDecision };
   readonly "restore-collision": { readonly context: { readonly path: TaskPathClaim; readonly recorded_generation_digest: Sha256Digest; readonly current_generation_digest: Sha256Digest; readonly adoption_candidate?: AuthorityLinkRef }; readonly decision: { readonly decision: "discard-and-restore" | "abort"; readonly reason: string } | { readonly decision: "adopt-as-new-generation"; readonly reason: string; readonly adoption_authority: AuthorityLinkRef; readonly rationale: string } };
   /**
    * One projection whose recorded review bytes no longer match the worktree. Binding both digests
@@ -175,28 +238,84 @@ const canonicalDesignPolicyFindings = z.array(designPolicyFinding).superRefine((
   if (!sortedUnique(items, (a, b) => compareRules(a, b))) context.addIssue({ code: "custom", message: "policy findings must be sorted and unique by rule" });
 });
 
+const ruleSettlementMatch = z.union([
+  z.object({ kind: z.literal("subject"), subject: z.enum(["prd", "design", "phase-design", "phase-impl"]) }).strict(),
+  z.object({ kind: z.literal("content"), paths: z.array(z.string()).min(1).superRefine((items, context) => {
+    if (!sortedUnique(items, (left, right) => left.localeCompare(right))) context.addIssue({ code: "custom", message: "content match paths must be sorted with no duplicates" });
+  }) }).strict(),
+]);
+const approvalRuleConclusion = z.discriminatedUnion("wait", [
+  z.object({ wait: z.literal(false), match: z.null() }).strict(),
+  z.object({ wait: z.literal(true), match: ruleSettlementMatch }).strict(),
+]);
+const approvalTrigger = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("rule-settlement"),
+    settlement: z.object({ subject_digest: digest, config_digest: digest, settled_at_revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER) }).strict(),
+    conclusion: approvalRuleConclusion,
+    rule_authority: z.enum(["authenticated", "unavailable"]),
+  }).strict(),
+  z.object({
+    kind: z.literal("human-revision-reapproval"),
+    prior_gate: z.object({ gate_id: pathSafeIdV1Schema, decision_digest: digest, class: z.enum(["configured-approval", "exception"]) }).strict(),
+    revision_checkpoint: z.object({ classification: z.literal("simple"), predecessor_subject_digest: digest, subject_digest: digest }).strict(),
+  }).strict(),
+]);
+
+const ordinaryPolicyFields = {
+  constitution: z.enum(["pass", "fail", "uncertain"]),
+  policy_findings: canonicalDesignPolicyFindings,
+  eligible_waivers: canonicalEligibleWaivers,
+  approval_trigger: approvalTrigger,
+} as const;
+
+function validateOrdinaryPolicyContext(
+  value: Readonly<{ constitution: "pass" | "fail" | "uncertain"; policy_findings: readonly DesignPolicyFinding[]; eligible_waivers: readonly EligibleWaiver[] }>,
+  context: z.core.$RefinementCtx,
+): void {
+  const compliance = new Set(value.policy_findings.filter((item) => item.compliance !== "pass").map(ruleKey));
+  const trigger = new Set(value.policy_findings.filter((item) => item.trigger !== "not-matched").map(ruleKey));
+  const expected = value.policy_findings.some((item) => item.compliance === "fail")
+    ? "fail"
+    : value.policy_findings.some((item) => item.compliance === "uncertain") ? "uncertain" : "pass";
+  if (value.constitution !== expected) context.addIssue({ code: "custom", message: `constitution must be ${expected}` });
+  for (const item of value.eligible_waivers) {
+    const available = item.scope.operation === "adjudication-failure" ? compliance : trigger;
+    if (!available.has(ruleKey(item.rule))) context.addIssue({ code: "custom", message: "eligible waiver must name a policy finding on the selected axis" });
+  }
+}
+
+export const legacyArtifactApprovalContextSchema = z.object({ artifact_kind: z.enum(["prd", "design", "phase-design", "phase-implementation"]) }).strict();
+export const legacyDesignApprovalContextSchema = z.object({
+  artifact_kind: z.enum(["design", "phase-design"]),
+  constitution: z.enum(["pass", "fail", "uncertain"]),
+  policy_findings: canonicalDesignPolicyFindings,
+  eligible_waivers: canonicalEligibleWaivers,
+  target_ref: boundedText,
+  baseline_commit: gitOidV1Schema,
+  commit_message: boundedText,
+}).strict().superRefine(validateOrdinaryPolicyContext);
+export const legacyExactCommitAuthorizationContextSchema = z.object({
+  target_ref: boundedText,
+  baseline_commit: gitOidV1Schema,
+  commit_message: boundedText,
+  paths: z.array(repositoryPathClaimV1Schema).min(1)
+    .refine((items) => sortedUnique(items, (a, b) => (a < b ? -1 : a > b ? 1 : 0)) || sortedUnique(items, (a, b) => a.localeCompare(b)), "paths must be sorted with no duplicates"),
+  diff_digest: digest,
+  current_artifact_digests: canonicalDigests.min(1),
+  parent_document_digests: canonicalDigests.min(1),
+}).strict();
+export const archivedPreExactCommitAuthorizationContextSchema = legacyExactCommitAuthorizationContextSchema.omit({ baseline_commit: true, commit_message: true, paths: true });
+
 const contexts = {
-  "artifact-approval": z.object({ artifact_kind: z.enum(["prd", "design", "phase-design", "phase-implementation"]) }).strict(),
+  "artifact-approval": z.object({ artifact_kind: z.enum(["prd", "design", "phase-design", "phase-implementation"]), ...ordinaryPolicyFields }).strict().superRefine(validateOrdinaryPolicyContext),
   "design-approval": z.object({
     artifact_kind: z.enum(["design", "phase-design"]),
-    constitution: z.enum(["pass", "fail", "uncertain"]),
-    policy_findings: canonicalDesignPolicyFindings,
-    eligible_waivers: canonicalEligibleWaivers,
+    ...ordinaryPolicyFields,
     target_ref: boundedText,
     baseline_commit: gitOidV1Schema,
     commit_message: boundedText,
-  }).strict().superRefine((value, context) => {
-    const compliance = new Set(value.policy_findings.filter((item) => item.compliance !== "pass").map(ruleKey));
-    const trigger = new Set(value.policy_findings.filter((item) => item.trigger !== "not-matched").map(ruleKey));
-    const expected = value.policy_findings.some((item) => item.compliance === "fail")
-      ? "fail"
-      : value.policy_findings.some((item) => item.compliance === "uncertain") ? "uncertain" : "pass";
-    if (value.constitution !== expected) context.addIssue({ code: "custom", message: `constitution must be ${expected}` });
-    for (const item of value.eligible_waivers) {
-      const available = item.scope.operation === "adjudication-failure" ? compliance : trigger;
-      if (!available.has(ruleKey(item.rule))) context.addIssue({ code: "custom", message: "eligible waiver must name a design policy finding on the selected axis" });
-    }
-  }),
+  }).strict().superRefine(validateOrdinaryPolicyContext),
   "constitution-review": z.object({ constitution: z.enum(["pass", "fail", "uncertain"]), failed_rules: canonicalRules, uncertain_rules: canonicalRules, matched_trigger_rules: canonicalRules, uncertain_trigger_rules: canonicalRules, eligible_waivers: canonicalEligibleWaivers }).strict().superRefine((value, context) => {
     const compliance = new Set([...value.failed_rules, ...value.uncertain_rules].map(ruleKey));
     const trigger = new Set([...value.matched_trigger_rules, ...value.uncertain_trigger_rules].map(ruleKey));
@@ -212,6 +331,7 @@ const contexts = {
   "attempts-exhausted": z.object({ step: z.enum(PIPELINE_STEPS), attempts: safeInteger, maximum_attempts: safeInteger }).strict().refine((value) => value.attempts >= value.maximum_attempts, "attempts must be at least maximum_attempts"),
   "constitution-edit": z.object({ pinned_constitution_digest: digest, current_constitution_digest: digest, changed_path_class: z.literal("task-branch-constitution" satisfies PathClass) }).strict(),
   "commit-authorization": z.object({
+    ...ordinaryPolicyFields,
     target_ref: boundedText,
     baseline_commit: gitOidV1Schema,
     commit_message: boundedText,
@@ -226,7 +346,7 @@ const contexts = {
     diff_digest: digest,
     current_artifact_digests: canonicalDigests.min(1),
     parent_document_digests: canonicalDigests.min(1),
-  }).strict(),
+  }).strict().superRefine(validateOrdinaryPolicyContext),
   "restore-collision": z.object({ path: taskPathClaimV1Schema, recorded_generation_digest: digest, current_generation_digest: digest, adoption_candidate: authorityLink.optional() }).strict(),
   "baseline-adoption": z.object({
     drifted_projections: z.array(z.object({ path: repositoryPathClaimV1Schema, recorded_digest: digest, observed_digest: digest }).strict(),
@@ -286,20 +406,26 @@ const contexts = {
  */
 export const archivedCommitAuthorizationContextSchema = z.union([
   contexts["commit-authorization"],
-  contexts["commit-authorization"].omit({ baseline_commit: true, commit_message: true, paths: true }),
+  legacyExactCommitAuthorizationContextSchema,
+  archivedPreExactCommitAuthorizationContextSchema,
 ]);
 
-/** `contexts`, with the one kind whose archived shape differs replaced by its tolerant twin. */
-const archivedContexts = { ...contexts, "commit-authorization": archivedCommitAuthorizationContextSchema } as const;
+/** `contexts`, with strict explicit compatibility arms for the retired ordinary-gate shapes. */
+const archivedContexts = {
+  ...contexts,
+  "artifact-approval": z.union([contexts["artifact-approval"], legacyArtifactApprovalContextSchema]),
+  "design-approval": z.union([contexts["design-approval"], legacyDesignApprovalContextSchema]),
+  "commit-authorization": archivedCommitAuthorizationContextSchema,
+} as const;
 
 const decisions = {
-  "artifact-approval": decision(["approve", "revise", "reject"]),
+  "artifact-approval": z.union([decision(["approve", "revise", "reject"]), z.object({ decision: z.literal("waiver-requested"), reason, rule, operation: z.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
   "design-approval": z.union([decision(["approve", "revise", "reject"]), z.object({ decision: z.literal("waiver-requested"), reason, rule, operation: z.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
   "constitution-review": z.union([decision(["approve", "revise", "reject"]), z.object({ decision: z.literal("waiver-requested"), reason, rule, operation: z.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
   "material-drift": decision(["amend-upstream", "revise-current", "reject"]),
   "attempts-exhausted": decision(["retry-once", "revise", "abort"]),
   "constitution-edit": decision(["revert-edit", "start-base-amendment", "abort"]),
-  "commit-authorization": decision(["authorize-commit", "revise", "abort"]),
+  "commit-authorization": z.union([decision(["authorize-commit", "revise", "abort"]), z.object({ decision: z.literal("waiver-requested"), reason, rule, operation: z.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
   "restore-collision": z.union([decision(["discard-and-restore", "abort"]), z.object({ decision: z.literal("adopt-as-new-generation"), reason, adoption_authority: authorityLink, rationale: boundedText }).strict()]),
   "baseline-adoption": decision(["adopt-current-bytes", "restore-recorded-bytes", "adopt-committed-deletions", "abort"]),
   "migration-audit": decision(["accept-import-audit", "revise", "abort"]),
@@ -357,6 +483,7 @@ export const gateContractSchemaDefs: Readonly<Record<string, z.ZodType>> = Objec
   // a registered def emits as a bare `$ref` plus `minItems`, which Ajv strict mode rejects.
   digest, text: boundedText, safeInteger, rule, rules: canonicalRules,
   waiverScope, eligibleWaiver, eligibleWaivers: canonicalEligibleWaivers, authorityLink,
+  approvalTrigger,
   artifactApprovalContext: contexts["artifact-approval"],
   designApprovalContext: contexts["design-approval"],
   constitutionReviewContext: contexts["constitution-review"],
@@ -437,9 +564,9 @@ function validateDecisionAgainst<K extends GateKind>(
   contextSchemas[kind].parse(context);
   assertPlainJson(payload, `${kind} gate decision`);
   const parsed = decisions[kind].parse(payload) as GateDecisionPayload<K>;
-  if ((kind === "constitution-review" || kind === "design-approval") && parsed.decision === "waiver-requested") {
+  if ((kind === "artifact-approval" || kind === "design-approval" || kind === "constitution-review" || kind === "commit-authorization") && parsed.decision === "waiver-requested") {
     // A waiver names both a rule and the axis it exempts, so both must be offered by the gate.
-    const eligible = (context as GateContext<"constitution-review"> | GateContext<"design-approval">).eligible_waivers;
+    const eligible = (context as GateContext<"artifact-approval"> | GateContext<"design-approval"> | GateContext<"constitution-review"> | GateContext<"commit-authorization">).eligible_waivers;
     if (!eligible.some((item) => ruleKey(item.rule) === ruleKey(parsed.rule) && item.scope.operation === parsed.operation)) throw new TypeError("waiver-requested rule and operation must be eligible");
   }
   if (kind === "restore-collision" && parsed.decision === "adopt-as-new-generation") {

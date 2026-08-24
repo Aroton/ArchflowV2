@@ -73,7 +73,7 @@ export type RefreshMilestoneBaselineInput = CommonToolInput & {
   readonly ask_base_digest?: never;
 };
 export type AuthorityRecoveryInput = CommonToolInput & {
-  readonly operation: "recover_milestone_authority" | "refresh_stale_baseline";
+  readonly operation: "recover_milestone_authority" | "recover_approval_trigger_authority" | "refresh_stale_baseline";
   readonly phase_instance: PhaseInstanceId;
   readonly step: "produce" | "counter_review" | "triage";
   readonly status: "running" | "succeeded" | "failed";
@@ -100,7 +100,21 @@ export type RouteOverrideDeclaration = {
   readonly "counter-reviewer"?: ModelRouteV1;
   readonly adjudicator?: ModelRouteV1;
 };
-export interface CounterReviewInput extends CommonToolInput { readonly artifact_path: TaskPathClaim; readonly route_override?: RouteOverrideDeclaration }
+/** Normal per-invocation reviewer routing, distinct from a human outage substitution. */
+export type ReviewRouteV1 = {
+  readonly model: string;
+  readonly effort: ModelRouteV1["effort"];
+  readonly provider?: string;
+};
+export type ReviewRouteSetV1 = {
+  readonly "counter-reviewer"?: ReviewRouteV1;
+  readonly adjudicator?: ReviewRouteV1;
+};
+export interface CounterReviewInput extends CommonToolInput {
+  readonly artifact_path: TaskPathClaim;
+  readonly invocation_routes?: ReviewRouteSetV1;
+  readonly route_override?: RouteOverrideDeclaration;
+}
 /**
  * The server decides whether the constitution review runs: it is evaluated as a second
  * server-dispatched review inside the same archflow_counter_review call whenever the pinned
@@ -181,7 +195,7 @@ export const stateInputSchema = z.object({
   status: z.enum(["running", "succeeded", "failed"]),
   artifact: durableArtifact.optional(),
   human_revision: humanRevisionDeclarationSchema.optional(),
-  operation: z.enum(["planning_restart", "refresh_milestone_baseline", "recover_milestone_authority", "refresh_stale_baseline"]).optional(),
+  operation: z.enum(["planning_restart", "refresh_milestone_baseline", "recover_milestone_authority", "recover_approval_trigger_authority", "refresh_stale_baseline"]).optional(),
   target_phase_instance: phase.optional(),
   reason: text.optional(),
   ask_base_digest: digest.optional(),
@@ -202,7 +216,7 @@ export const stateInputSchema = z.object({
     }
     return;
   }
-  if (input.operation === "recover_milestone_authority" || input.operation === "refresh_stale_baseline") {
+  if (input.operation === "recover_milestone_authority" || input.operation === "recover_approval_trigger_authority" || input.operation === "refresh_stale_baseline") {
     if (input.artifact !== undefined || input.human_revision !== undefined || input.target_phase_instance !== undefined || input.reason !== undefined || input.ask_base_digest !== undefined) {
       context.addIssue({ code: "custom", path: ["operation"], message: `${input.operation} carries no artifact, revision, restart target, reason, or ask digest` });
     }
@@ -219,17 +233,30 @@ export const stateInputSchema = z.object({
 // A parentless clone, for the same reason as `provenance` above: the shared instance is registered
 // as `config#/$defs/route`, and the advertised catalogue does not carry the config document, so a
 // cross-document reference to it is unresolvable there. The clone inlines instead.
-const overrideRoute = configRouteSchema.clone(configRouteSchema.def) as z.ZodType<ModelRouteV1>;
+const reviewModelRouteV1Schema = configRouteSchema.clone(configRouteSchema.def) as z.ZodType<ModelRouteV1>;
+export const reviewRouteSetV1Schema = z.object({
+  "counter-reviewer": reviewModelRouteV1Schema.optional(),
+  adjudicator: reviewModelRouteV1Schema.optional(),
+}).strict().superRefine((routes, context) => {
+  if (routes["counter-reviewer"] === undefined && routes.adjudicator === undefined) {
+    context.addIssue({ code: "custom", message: "review routes must name counter-reviewer, adjudicator, or both" });
+  }
+}) as z.ZodType<ReviewRouteSetV1>;
 export const routeOverrideSchema = z.object({
   reason: text,
-  "counter-reviewer": overrideRoute.optional(),
-  adjudicator: overrideRoute.optional(),
+  "counter-reviewer": reviewModelRouteV1Schema.optional(),
+  adjudicator: reviewModelRouteV1Schema.optional(),
 }).strict().superRefine((override, context) => {
   if (override["counter-reviewer"] === undefined && override.adjudicator === undefined) {
     context.addIssue({ code: "custom", message: "route_override must name counter-reviewer, adjudicator, or both" });
   }
 });
-export const counterReviewInputSchema = z.object({ ...common, artifact_path: taskPathClaimV1Schema, route_override: routeOverrideSchema.optional() }).strict();
+export const counterReviewInputSchema = z.object({
+  ...common,
+  artifact_path: taskPathClaimV1Schema,
+  invocation_routes: reviewRouteSetV1Schema.optional(),
+  route_override: routeOverrideSchema.optional(),
+}).strict();
 const humanGateChoiceSchema = z.object({ choice: text, reason: text }).strict();
 export const gateInputSchema = z.object({ ...common, phase_instance: phase, summary: text, subject_digest: digest, current_evidence: z.unknown(), kind: z.enum(GATE_KINDS), context: z.unknown(), preview_digest: digest.optional(), decision: humanGateChoiceSchema.optional() }).strict().superRefine((input, context) => {
   try { parseGateContext(input.kind, input.context); } catch (error) { context.addIssue({ code: "custom", path: ["context"], message: error instanceof Error ? error.message : "invalid gate context" }); }
@@ -322,7 +349,7 @@ function successFor<K extends ToolName>(call: Extract<ParsedToolCall, { name: K 
   const parsed = toolSuccessSchemas[call.name].parse(value) as ToolSuccess<K>;
   if (call.name === "archflow_state") {
     const input = call.input as ParsedToolInput<"archflow_state">;
-    const expectedStatus = input.operation === "planning_restart" || input.operation === "recover_milestone_authority"
+    const expectedStatus = input.operation === "planning_restart" || input.operation === "recover_milestone_authority" || input.operation === "recover_approval_trigger_authority"
       ? "running"
       : input.status;
     if ((parsed as StateSuccess).status !== expectedStatus) throw new TypeError("state status mismatch");

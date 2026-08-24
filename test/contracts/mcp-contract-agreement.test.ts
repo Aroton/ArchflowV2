@@ -2,9 +2,11 @@ import { readFile } from "node:fs/promises";
 import { specTypeSchemas } from "@modelcontextprotocol/server";
 import { describe, expect, it } from "vitest";
 import { parseTransportRequestId } from "../../src/contracts/contexts.js";
+import { parseSha256Digest } from "../../src/contracts/evidence.js";
 import { parseToolCall, resultExpectationDataSchema, TOOL_DEFINITIONS, validateProjectResultStructure } from "../../src/contracts/mcp-tools.js";
 import { TOOL_NAMES } from "../../src/contracts/tool-names.js";
 import { createJsonSchemaValidator } from "../helpers/json-schema.js";
+import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
 
 const load = async (path: string) => JSON.parse(await readFile(new URL(path, import.meta.url), "utf8")) as object;
 const durableReferences = async () => Promise.all([
@@ -103,7 +105,7 @@ describe("MCP contract schema agreement", () => {
     const references = [await load("../../src/contracts/schemas/v1/primitives.schema.json"), await load("../../src/contracts/schemas/v1/project-error.schema.json"), await load("../../src/contracts/schemas/v1/rubric.schema.json"), await load("../../src/contracts/schemas/v1/path-claim.schema.json"), await load("../../src/contracts/schemas/v1/evidence-slots.schema.json"), await load("../../src/contracts/schemas/v1/gate-contract.schema.json"), await load("../../src/contracts/schemas/v1/gate-decision.schema.json"), ...(await durableReferences())];
     const validator = createJsonSchemaValidator(mcp, references);
     const counter = { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" };
-    const gate = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: "a".repeat(64), phase_instance: "phase-impl-2", summary: "Review", subject_digest: "a".repeat(64), current_evidence: { set_digest: "3".repeat(64), slots: [counter] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, preview_digest: "5".repeat(64), decision: { choice: "approve", reason: "Reviewed." } };
+    const gate = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: "a".repeat(64), phase_instance: "phase-impl-2", summary: "Review", subject_digest: "a".repeat(64), current_evidence: { set_digest: "3".repeat(64), slots: [counter] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation", ...ordinaryApprovalFacts("phase-impl", parseSha256Digest("a".repeat(64))) }, preview_digest: "5".repeat(64), decision: { choice: "approve", reason: "Reviewed." } };
     expect(validator.validate(gate)).toBe(true);
     for (const invalid of [{ ...gate, current_evidence: { ...gate.current_evidence, slots: [] } }, { ...gate, current_evidence: { ...gate.current_evidence, slots: [counter, counter] } }, { ...gate, kind: "attempts-exhausted", context: { step: "produce", attempts: 1, maximum_attempts: 2 } }]) {
       expect(validator.validate(invalid)).toBe(false);

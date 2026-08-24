@@ -6,6 +6,7 @@ import { gateSchemaGroup } from "./schema-generation-gate.js";
 import { leafSchemaGroup } from "./schema-generation-leaf.js";
 import { mcpToolsSchemaGroup } from "./schema-generation-mcp-tools.js";
 import { semanticWorkflowSchemaGroup } from "./schema-generation-semantic-workflow.js";
+import { automationStatusSchemaGroup } from "./schema-generation-automation-status.js";
 
 /** A hand-authored JSON Schema fragment emitted verbatim in place of a def's Zod emission. */
 export type GeneratedDefOverride = Readonly<Record<string, unknown>>;
@@ -41,7 +42,7 @@ export type SchemaDocumentPlan = {
 };
 
 export type SchemaGenerationGroup = {
-  readonly group: "leaf" | "durable" | "gate" | "errors" | "mcp-tools" | "semantic-workflow";
+  readonly group: "leaf" | "durable" | "gate" | "errors" | "mcp-tools" | "semantic-workflow" | "automation-status";
   readonly documents: readonly SchemaDocumentPlan[];
 };
 
@@ -62,6 +63,7 @@ export const SCHEMA_GENERATION_GROUPS: readonly SchemaGenerationGroup[] = Object
   errorSchemaGroup,
   mcpToolsSchemaGroup,
   semanticWorkflowSchemaGroup,
+  automationStatusSchemaGroup,
 ]);
 
 /** Keeps annotation order while dropping the per-schema envelope Zod stamps on every emission. */

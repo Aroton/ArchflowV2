@@ -58,6 +58,7 @@ import {
   policyBaseInvalid,
   resolveInitializationPolicyBase,
 } from "./task-initialization.js";
+import { inspectLegacyUpgradeStage } from "./legacy-upgrade-stage.js";
 
 export type StageLegacyUpgradeInput = Readonly<{
   working_directory: string;
@@ -488,42 +489,6 @@ export async function discardLegacyUpgrade(input: DiscardLegacyUpgradeInput): Pr
   return ok(Object.freeze({ discarded: true as const }));
 }
 
-type StagedImportDescriptor = Readonly<{
-  import_digest: string;
-  resume_phase: PhaseInstanceId;
-}>;
-
-async function stagedImportDescriptor(
-  importsRoot: string,
-  taskId: ReturnType<typeof parseTaskSlug>,
-): Promise<ProjectResult<StagedImportDescriptor>> {
-  let digests: string[];
-  try { digests = (await readdir(importsRoot)).filter((entry) => /^[a-f0-9]{64}$/u.test(entry)).sort(ordinal); } catch {
-    return fail(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-stage-missing" }));
-  }
-  const matches: StagedImportDescriptor[] = [];
-  for (const digest of digests) {
-    let parsed: unknown;
-    try { parsed = JSON.parse(await readFile(join(importsRoot, digest, "stage.json"), "utf8")); } catch { continue; }
-    if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") continue;
-    const stage = parsed as Record<string, unknown>;
-    if (stage.task_id !== taskId || stage.import_digest !== digest) continue;
-    try {
-      matches.push(Object.freeze({
-        import_digest: digest,
-        resume_phase: parsePhaseInstanceId(String(stage.resume_phase)),
-      }));
-    } catch { /* A malformed stage descriptor is not an adoptable stage. */ }
-  }
-  if (matches.length === 0) {
-    return fail(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-stage-missing" }));
-  }
-  if (matches.length > 1) {
-    return fail(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-stage-ambiguous" }));
-  }
-  return ok(matches[0]!);
-}
-
 /**
  * Atomically adopts the one staged, preview-approved legacy import for this task by running the
  * existing initialization transaction over the staged `legacy-import-initialization` artifact.
@@ -552,22 +517,33 @@ export async function adoptLegacyUpgrade(input: Readonly<{
   if (!created.ok) return created;
   const services = created.value;
   try {
-    const descriptor = await stagedImportDescriptor(join(services.authority.workspace_root, "cache", "imports"), taskId);
-    if (!descriptor.ok) return descriptor;
+    const inspected = await inspectLegacyUpgradeStage(
+      join(services.authority.workspace_root, "cache", "imports"),
+      taskId,
+    );
+    if (inspected.kind !== "current") {
+      return fail(createProjectError("TASK_INVALID", {
+        task_id: taskId,
+        issue_code: inspected.kind === "restart-required" && inspected.valid_descriptor_count > 1
+          ? "legacy-stage-ambiguous"
+          : "legacy-stage-missing",
+      }));
+    }
+    const descriptor = inspected.descriptor;
 
     // The manifest bytes are re-authenticated canonically; replaced or tampered staging fails here.
     const manifestBytes = new Uint8Array(await readFile(
-      join(services.authority.workspace_root, "cache", "imports", descriptor.value.import_digest, "manifest.json"),
+      join(services.authority.workspace_root, "cache", "imports", descriptor.import_digest, "manifest.json"),
     ));
     const manifest = parseCanonicalDocument(manifestBytes, "staged legacy import manifest");
     const initialization = parseLegacyImportInitialization(manifest.value);
-    if (initialization.task_id !== taskId || initialization.import_digest !== descriptor.value.import_digest) {
+    if (initialization.task_id !== taskId || initialization.import_digest !== descriptor.import_digest) {
       return fail(createProjectError("CONTRACT_INVALID", { issue_code: "legacy-stage-manifest-mismatch" }));
     }
 
     // A deterministic intent id makes adoption retry-safe: the transaction replays exactly this
     // adoption, and any other existing state refuses as an already-adopted task.
-    const intentId = parsePathSafeId(`adopt-legacy-import-${descriptor.value.import_digest}`);
+    const intentId = parsePathSafeId(`adopt-legacy-import-${descriptor.import_digest}`);
     if (services.state !== undefined) {
       const transition = services.state.value.last_transition;
       if (services.state.value.revision !== 1 || transition?.intent_id !== intentId) {
@@ -595,10 +571,10 @@ export async function adoptLegacyUpgrade(input: Readonly<{
       call: parseToolCall("archflow_state", envelope.value.request.input),
     });
     if (!adopted.ok) return adopted;
-    const resumePhase = initialization.resume_phase ?? descriptor.value.resume_phase;
+    const resumePhase = initialization.resume_phase ?? descriptor.resume_phase;
     return ok(Object.freeze({
       task_id: taskId,
-      import_digest: descriptor.value.import_digest,
+      import_digest: descriptor.import_digest,
       resume_phase: resumePhase,
       replayed: adopted.value.replayed,
     }));

@@ -19,6 +19,7 @@ import type { TransactionAuthority } from "./authority.js";
 import { deriveCurrentEvidenceSet } from "./evidence-results.js";
 import { readCanonical, type GateLifecycleDependencies } from "./gate-core.js";
 import { computeTaskStatusDetailed, type DetailedTaskStatusV1, type TaskStatusV1 } from "./status.js";
+import { isWaiverOriginRequest } from "./waiver-origin.js";
 
 /**
  * Enrichments that detailed status obtains while it still owns the canonical read. They are
@@ -28,6 +29,9 @@ import { computeTaskStatusDetailed, type DetailedTaskStatusV1, type TaskStatusV1
 export type SemanticStatusEnrichmentsV1 = Readonly<{
   repository_identity_digest: Sha256Digest;
   state?: TaskStateV1;
+  state_document_digest?: Sha256Digest;
+  live_config_digest?: Sha256Digest;
+  legacy_import_initialization?: true;
   full_findings: readonly PublicFindingV1[];
   pending_waiver_origin?: PlainJsonValue;
   archived_decision?: PlainJsonValue;
@@ -299,7 +303,7 @@ async function deriveArchiveEnrichments(
   }
   if (!commonTransitionBinding || request.value.request_digest !== transition.request_digest ||
       request.value.intent_id !== transition.intent_id || transition.operation !== "gate" || payload.decision !== "waiver-requested" ||
-      (request.value.kind !== "constitution-review" && request.value.kind !== "design-approval") ||
+      !isWaiverOriginRequest(request.value) ||
       !("eligible_waivers" in request.value.context) ||
       !request.value.context.eligible_waivers.some((eligible) =>
         isDeepStrictEqual(eligible.rule, payload.rule) && eligible.scope.operation === payload.operation)) {
@@ -339,6 +343,15 @@ export async function computeAuthoritativeSemanticStatus(
   return ok(computeSemanticStatusSnapshot(status, {
     repository_identity_digest: authority.repository_identity_digest,
     ...(state === undefined ? {} : { state }),
+    ...(detailed.value.state_document_digest === undefined ? {} : {
+      state_document_digest: detailed.value.state_document_digest,
+    }),
+    ...(detailed.value.live_config_digest === undefined ? {} : {
+      live_config_digest: detailed.value.live_config_digest,
+    }),
+    ...(detailed.value.legacy_import_initialization !== true ? {} : {
+      legacy_import_initialization: true,
+    }),
     full_findings: fullFindings(detailed.value),
     ...archives,
     reopen_impacts: state === undefined ? Object.freeze([]) : reopenImpacts(state, status),
@@ -375,8 +388,13 @@ export function computeSemanticStatusSnapshot(
     ) {
       throw new TypeError("semantic status and durable state are not from the same canonical read");
     }
+    if (enrichments.state_document_digest === undefined) {
+      throw new TypeError("active semantic state requires its canonical document digest");
+    }
   } else if (status.state !== "missing") {
     throw new TypeError("active semantic status requires its authenticated durable state");
+  } else if (enrichments.state_document_digest !== undefined || enrichments.legacy_import_initialization === true) {
+    throw new TypeError("missing semantic status cannot carry durable state identity");
   }
 
   const findings: readonly PublicFindingV1[] = enrichments.full_findings.map((finding) =>
@@ -385,6 +403,15 @@ export function computeSemanticStatusSnapshot(
     schema_version: "1",
     repository_identity_digest: repositoryIdentity,
     ...(state === undefined ? {} : { state: Object.freeze(state) }),
+    ...(enrichments.state_document_digest === undefined ? {} : {
+      state_document_digest: parseSha256Digest(enrichments.state_document_digest),
+    }),
+    ...(enrichments.live_config_digest === undefined ? {} : {
+      live_config_digest: parseSha256Digest(enrichments.live_config_digest),
+    }),
+    ...(enrichments.legacy_import_initialization !== true ? {} : {
+      legacy_import_initialization: true,
+    }),
     status: statusJson,
     full_findings: Object.freeze(findings),
     ...(enrichments.pending_waiver_origin === undefined ? {} : {

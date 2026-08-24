@@ -14,6 +14,7 @@ import type { GitOid } from "../../contracts/canonical.js";
 import type { TaskStateV1 } from "../../contracts/durable-state.js";
 import { decodePhaseInstance } from "../../contracts/phase-instance.js";
 import { createDispatchCoordinator } from "../../dispatch/coordinator.js";
+import { createDispatchFailureObserver } from "../../dispatch/failure-observation.js";
 import { readHeadCommit } from "../../repository/git.js";
 import type { RootBoundGitRunner } from "../../repository/identity.js";
 import { rulesForEnvelope } from "../../review/adjudication.js";
@@ -433,6 +434,13 @@ export async function handleCounterReview(
     const result = await runCounterReview({
       transaction: services.dependencies,
       dispatch: coordinator,
+      observe_failure: createDispatchFailureObserver({
+        authority: services.authority,
+        dependencies: services.dependencies,
+        phase_instance: state.value.phase_instance,
+        attempt: state.value.attempt,
+        observed_at_revision: state.value.revision,
+      }),
       ...(dispatchAlreadySerialized ? { serialize_dispatch: async <T>(operation: () => Promise<T>) => operation() } : {}),
       prepare_evidence: (evidence, measuredAtRevision) => prepareDispatchEvidence(
         services, retainedBytes, resultId, { kind: "review", evidence }, measuredAtRevision,

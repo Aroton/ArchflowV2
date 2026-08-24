@@ -1,6 +1,6 @@
 # LIMITATIONS
 
-**Explored:** 2026-08-23 · **Commit:** `92fa1f6` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `skills/archflow-design/`, `skills/archflow-phase-design/`
+**Explored:** 2026-08-24 · **Commit:** `8c532b4` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
 
 ArchFlow is a local developer-workflow prototype, not a security sandbox. The controls below reduce accidental context leakage and constrain ordinary operation, but the listed cases are unsupported because the current implementation cannot prove the claimed boundary. A planted canary not appearing in output is evidence about that run; it is not proof that the child could not read the canary.
 
@@ -86,13 +86,29 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 **Why accepted:** Supported first-party CLI processes are expected to keep their ordinary descendants in the adopted group, and the prototype runs under the developer's account on a trusted machine. ArchFlow claims best-effort termination for that ordinary tree, not containment of deliberately detached processes. Stronger coverage requires an OS process namespace, cgroup/job-object equivalent, or another proven containment provider.
 
+## Reviewer route declarations are provenance, not independent authorization
+
+**Not provided:** A route carried through a producer skill invocation is not independently authenticated as coming from an external controller or human. The connected model constructs the semantic invocation, so `invocation-declared` says exactly how the server received the route, not who originated the prompt or CLI argument that led to it.
+
+**Existing mitigation:** Fresh evidence attests the actual adapter, family, model, effort, optional provider, and route source, plus any raw configured route displaced by invocation selection. A controller that needs assurance compares those retained facts with the route it supplied. Invalid or unavailable invocation routing fails visibly and never falls back silently. Invocation route bytes bind every semantic offer/operation and counter-review request in the run, so drift between status and apply is rejected.
+
+**Why accepted:** ArchFlow has no server-observable authenticated controller channel in this phase. Honest provenance supports automation without claiming an authority boundary that does not exist; adding controller authentication would be a separate product and trust design.
+
 ## A reviewer route override is not proof a human chose it
 
 **Not provided:** Nothing in the request pipeline distinguishes a substitute reviewer the human asked for from one the agent picked to get past a failed dispatch. `route_override` carries a free-text `reason`, and the server validates the *route* it names exactly as it validates a pinned one — but it never validates the *authorization*. The skills instruct the agent to report an outage and ask rather than substitute on its own, and that instruction is the only thing enforcing it.
 
-**Existing mitigation:** The override is covered by the request digest, so it cannot be added to a composed request without invalidating it, and it is recorded on the produced evidence with the route it displaced. That provenance remains auditable and is shown in plain language whenever a later human presentation opens. Under targeted approval rules an eligible `wait:false` path may have no later human gate, so the override can remain evidence-only rather than being surfaced to a person during that run.
+**Existing mitigation:** The override is covered by the request digest, so it cannot be added to a composed request without invalidating it, and it is recorded separately from normal route source with the human-supplied reason, actual provider when present, configured-route facts, and normally selected invocation/config route it displaced. That provenance remains auditable and is shown in plain language whenever a later human presentation opens. Under targeted approval rules an eligible `wait:false` path may have no later human gate, so the override can remain evidence-only rather than being surfaced to a person during that run.
 
 **Why accepted:** Reviewer routing is policy, not a trust boundary — families are recorded rather than enforced, and a same-family reviewer is already a legal config choice, so a substitute is the same kind of decision made later. Enforcing authorization would mean a human gate in front of the review, which costs more than the risk for this prototype. The current guarantee is authenticated provenance, not proof of human selection or eventual human visibility.
+
+## Dispatch-failure observations are disposable
+
+**Not provided:** The compact failure projected by status is not durable authority and is not proof that an outage remains current after it was observed. It is an ignored latest-failure runtime interface; a fresh clone or cleanup may lose it, and the same revision can retain it after an operator repairs credentials until review is retried.
+
+**Existing mitigation:** The record is strict and safe: supported classified codes, bounded server-authored prose, role, and optional route/source only. Status reads exactly the deterministic current-attempt path and projects it only when task, phase instance, running step, attempt, and state revision match. No raw exception, path, credential, stdout/stderr tail, transition, attempt consumption, evidence, or authority enters the observation. The original failure remains the operation result.
+
+**Why accepted:** Its purpose is to help the owning interactive skill explain a reviewer outage without parsing forensic files. Durable state already preserves the pending review and safe retry boundary, so making this convenience record authoritative would add complexity and make runtime loss capable of stranding workflow progress.
 
 ## Trusted live config edits can weaken policy
 

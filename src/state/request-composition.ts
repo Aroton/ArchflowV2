@@ -5,7 +5,7 @@ import { canonicalJsonDigest, sha256Bytes } from "../contracts/canonical.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parsePathSafeId, type PathSafeId } from "../contracts/evidence.js";
 import { parseConfigYaml } from "../contracts/config.js";
-import type { GateContext } from "../contracts/gates.js";
+import type { ApprovalTrigger, DesignPolicyFinding, EligibleWaiver, GateContext } from "../contracts/gates.js";
 import {
   parseRepositoryPathClaim,
   parseTaskPathClaim,
@@ -25,6 +25,7 @@ import {
   deriveCurrentEvidenceSet,
   derivePendingEditorialPredecessor,
   loadRetainedEvidence,
+  type RetainedEvidenceSet,
 } from "./evidence-results.js";
 import { buildImplementationOutput, type ImplementationOutputInput } from "./implementation-manifest.js";
 import {
@@ -34,13 +35,19 @@ import {
   planningRestartAskBaseDigest,
   type PhaseImplParentDocument,
 } from "./phase-documents.js";
-import { loadCurrentProduceSubject } from "./produce-subject.js";
+import { loadCurrentProduceSubject, type CurrentProduceSubject } from "./produce-subject.js";
 import { reconcileCurrentAuthority } from "./reconciliation.js";
 import { discoverReconciliationInput } from "./reconciliation-discovery.js";
 import { canonicalDocument } from "../contracts/canonical.js";
 import type { ProductionServices } from "./production.js";
 import { authenticateRuleAcceptancePolicy, resolvePinnedConstitution } from "./constitution.js";
-import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "./gate-approvals.js";
+import {
+  assertAuthenticatedGateDecisionArchive,
+  loadAuthenticatedGateApproval,
+  loadAuthenticatedGateDecisionArchive,
+  type AuthenticatedGateApproval,
+  type AuthenticatedGateDecisionArchive,
+} from "./gate-approvals.js";
 import { loadLegacyImportInitialization } from "./legacy-import-resume.js";
 /** The artifact-kind each planning phase's artifact-approval gate approves. */
 export const APPROVAL_ARTIFACT_KINDS = {
@@ -56,8 +63,10 @@ import {
   acceptedNoWaitSettlement,
   authenticatedApprovalIsEligibleAfterLatestRestart,
   latestEligibleRuleSettlement,
+  matchingOrdinaryApproval,
 } from "./restart-authority.js";
 import { assessCurrentEvidence, DEFAULT_MAX_ATTEMPTS } from "../review/fixed-point.js";
+import { designApprovalPolicyContext } from "../review/adjudication.js";
 import { computeCallEnvelope, type CallEnvelope } from "../local/call-envelope.js";
 import { planningRestartTarget, semanticPlanningRestartId } from "./planning-restart.js";
 import { resolveTaskPath } from "../repository/paths.js";
@@ -72,7 +81,7 @@ export const BUILD_REQUEST_KINDS = Object.freeze([
   "initialize", "produce", "failed", "running", "triage",
   "counter-review", "gate", "advance", "planning-restart", "waiver",
   "refresh-milestone-baseline",
-  "recover-milestone-authority", "refresh-stale-baseline",
+  "recover-milestone-authority", "recover-approval-trigger-authority", "refresh-stale-baseline",
 ] as const);
 export type BuildRequestKind = typeof BUILD_REQUEST_KINDS[number];
 
@@ -83,6 +92,7 @@ const PAYLOAD_SHAPE =
   '"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},' +
   '"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],' +
   '"summary"?:<gate summary text>,' +
+  '"invocation_routes"?:{"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"adjudicator"?:{...}},' +
   '"route_override"?:{"reason":<why the pinned reviewer was substituted>,"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"adjudicator"?:{...}},' +
   '"origin"?:<waiver origin>,"rationale"?:<waiver rationale>}';
 
@@ -497,6 +507,9 @@ function composeCounterReview(
   if (legalRunStepStatus(state, "counter_review") !== "succeeded") {
     return transitionInvalid(state, "counter_review-succeeded");
   }
+  const invocationRoutes = snapshot.invocation_routes === undefined
+    ? undefined
+    : structuredClone(record(snapshot.invocation_routes, "build-request counter-review invocation_routes")) as PlainJsonValue;
   // A route override is a human decision passed straight through: the server validates it against
   // the same rules as a pinned route, so this only refuses a shape that is not an object at all.
   const routeOverride = snapshot.route_override === undefined
@@ -508,8 +521,82 @@ function composeCounterReview(
     input: {
       ...mechanicalInput(services, state, intentId),
       artifact_path: paths.artifact_path,
+      ...(invocationRoutes === undefined ? {} : { invocation_routes: invocationRoutes }),
       ...(routeOverride === undefined ? {} : { route_override: routeOverride }),
     },
+  });
+}
+
+type OrdinaryPolicyFacts = Readonly<{
+  constitution: "pass" | "fail" | "uncertain";
+  policy_findings: readonly DesignPolicyFinding[];
+  eligible_waivers: readonly EligibleWaiver[];
+}>;
+
+function ordinaryPolicyFacts(retained: RetainedEvidenceSet): OrdinaryPolicyFacts {
+  const source = retained.get("adjudicate")?.manifest.source_artifact;
+  if (source === undefined) {
+    return Object.freeze({
+      constitution: "pass",
+      policy_findings: Object.freeze([]),
+      eligible_waivers: Object.freeze([]),
+    });
+  }
+  if (source.artifact_kind !== "adjudication-evidence") {
+    throw new TypeError("retained adjudication result has the wrong artifact kind");
+  }
+  return designApprovalPolicyContext(source.evidence);
+}
+
+function archivedPresentationClass(
+  archive: AuthenticatedGateDecisionArchive,
+): "configured-approval" | "exception" {
+  assertAuthenticatedGateDecisionArchive(archive);
+  const context = archive.request.context;
+  if (!("approval_trigger" in context) || !("policy_findings" in context)) return "exception";
+  if (context.policy_findings.some((finding) =>
+    finding.compliance !== "pass" || finding.trigger !== "not-matched")) return "exception";
+  const trigger = context.approval_trigger;
+  if (trigger.kind === "human-revision-reapproval") return trigger.prior_gate.class;
+  return trigger.rule_authority === "unavailable" ? "exception" : "configured-approval";
+}
+
+async function simpleRevisionApprovalTrigger(
+  services: ProductionServices,
+  state: TaskStateV1,
+  subject: CurrentProduceSubject,
+): Promise<ApprovalTrigger | undefined> {
+  const revision = [...(state.human_revision_history ?? [])]
+    .filter((candidate) =>
+      candidate.phase_instance === state.phase_instance &&
+      candidate.classification === "simple" &&
+      candidate.resulting_subject_digest === subject.artifact_digest &&
+      candidate.resulting_result_digest === subject.reference.result_digest)
+    .sort((left, right) => right.resulting_attempt - left.resulting_attempt)[0];
+  if (revision === undefined) return undefined;
+  const archive = await loadAuthenticatedGateDecisionArchive(
+    services.dependencies, services.authority, revision.gate_id,
+  );
+  if (!archive.ok) throw new TypeError("simple revision prior gate archive is unavailable");
+  assertAuthenticatedGateDecisionArchive(archive.value);
+  if (
+    archive.value.request.phase_instance !== state.phase_instance ||
+    archive.value.request.kind !== revision.gate_kind ||
+    archive.value.request.subject_digest !== revision.predecessor_subject_digest ||
+    archive.value.decision.envelope.payload.decision !== "revise"
+  ) throw new TypeError("simple revision prior gate archive does not bind the revision record");
+  return Object.freeze({
+    kind: "human-revision-reapproval",
+    prior_gate: Object.freeze({
+      gate_id: revision.gate_id,
+      decision_digest: archive.value.decision_digest,
+      class: archivedPresentationClass(archive.value),
+    }),
+    revision_checkpoint: Object.freeze({
+      classification: "simple",
+      predecessor_subject_digest: revision.predecessor_subject_digest,
+      subject_digest: revision.resulting_subject_digest,
+    }),
   });
 }
 
@@ -674,6 +761,23 @@ async function composeGate(
   const settlementPolicy = constitution.ok
     ? authenticateRuleAcceptancePolicy(state, constitution.value)
     : undefined;
+  const policyFacts = ordinaryPolicyFacts(loaded.value);
+  const simpleTrigger = await simpleRevisionApprovalTrigger(services, state, subject.value);
+  const approvalTrigger: ApprovalTrigger | undefined = simpleTrigger ?? (settledRule === undefined
+    ? undefined
+    : Object.freeze({
+        kind: "rule-settlement" as const,
+        settlement: Object.freeze({
+          subject_digest: settledRule.subject_digest,
+          config_digest: settledRule.config_digest,
+          settled_at_revision: settledRule.settled_at_revision,
+        }),
+        conclusion: settledRule.conclusion,
+        rule_authority: settlementPolicy === undefined ? "unavailable" as const : "authenticated" as const,
+      }));
+  const ordinaryApproved = matchingOrdinaryApproval(
+    state, authenticated, subject.value.artifact_digest, state.phase_instance,
+  ) !== undefined;
   const acceptedSettlement = settlementPolicy === undefined
     ? undefined
     : acceptedNoWaitSettlement(
@@ -694,7 +798,7 @@ async function composeGate(
       kind: "attempts-exhausted",
       context: { ...exhaustion, step: state.step },
     };
-  } else if (pendingGate !== undefined) {
+  } else if (pendingGate !== undefined && pendingGate.kind !== "constitution-review") {
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
@@ -714,11 +818,15 @@ async function composeGate(
       kind: "migration-audit",
       context: migrationAuditContext as unknown as PlainJsonValue,
     };
-  } else if (acceptedSettlement !== undefined) {
+  } else if (
+    acceptedSettlement !== undefined && !ordinaryApproved &&
+    simpleTrigger === undefined && pendingGate === undefined
+  ) {
     // Every exception gate above remains human-only. Only the now-unnecessary ordinary phase gate
     // is refused when the exact reviewed no-wait settlement already supplies advancement authority.
     return transitionInvalid(state, `${gateKind}-gate-not-required`);
   } else if (gateKind === "design-approval") {
+    if (approvalTrigger === undefined) return transitionInvalid(state, "approval-trigger-authority-missing");
     const target = await currentTargetRef(services.dependencies);
     const approval = await buildDesignApprovalInput(services.dependencies, state, loaded.value, target);
     input = {
@@ -728,9 +836,10 @@ async function composeGate(
       subject_digest: subject.value.artifact_digest,
       current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
       kind: "design-approval",
-      context: approval.context as unknown as PlainJsonValue,
+      context: { ...approval.context, ...policyFacts, approval_trigger: approvalTrigger } as unknown as PlainJsonValue,
     };
   } else if (gateKind === "commit-authorization") {
+    if (approvalTrigger === undefined) return transitionInvalid(state, "approval-trigger-authority-missing");
     const target = await currentTargetRef(services.dependencies);
     const authorization = buildCommitAuthorizationInput(
       subject.value,
@@ -745,9 +854,10 @@ async function composeGate(
       subject_digest: authorization.subject_digest,
       current_evidence: authorization.current_evidence as unknown as PlainJsonValue,
       kind: "commit-authorization",
-      context: authorization.context as unknown as PlainJsonValue,
+      context: { ...authorization.context, ...policyFacts, approval_trigger: approvalTrigger } as unknown as PlainJsonValue,
     };
   } else {
+    if (approvalTrigger === undefined) return transitionInvalid(state, "approval-trigger-authority-missing");
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
@@ -755,7 +865,11 @@ async function composeGate(
       subject_digest: subject.value.artifact_digest,
       current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
       kind: "artifact-approval",
-      context: { artifact_kind: APPROVAL_ARTIFACT_KINDS[phaseKind] },
+      context: {
+        artifact_kind: APPROVAL_ARTIFACT_KINDS[phaseKind],
+        ...policyFacts,
+        approval_trigger: approvalTrigger,
+      },
     };
   }
   return computeCallEnvelope(services, { tool: "archflow_gate", input });
@@ -820,8 +934,8 @@ async function composeMilestoneRecoveryAction(
   services: ProductionServices,
   state: TaskStateV1,
   intentId: string,
-  code: "recover-milestone-authority" | "refresh-stale-baseline",
-  operation: "recover_milestone_authority" | "refresh_stale_baseline",
+  code: "recover-milestone-authority" | "recover-approval-trigger-authority" | "refresh-stale-baseline",
+  operation: "recover_milestone_authority" | "recover_approval_trigger_authority" | "refresh_stale_baseline",
 ): Promise<ProjectResult<CallEnvelope>> {
   const computed = await computeTaskStatus(services.dependencies, services.authority);
   if (!computed.ok) return computed;
@@ -1004,6 +1118,12 @@ export async function composeRequest(
     case "recover-milestone-authority": {
       const composed = await composeMilestoneRecoveryAction(
         services, state, intentId, "recover-milestone-authority", "recover_milestone_authority",
+      );
+      return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+    }
+    case "recover-approval-trigger-authority": {
+      const composed = await composeMilestoneRecoveryAction(
+        services, state, intentId, "recover-approval-trigger-authority", "recover_approval_trigger_authority",
       );
       return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
     }

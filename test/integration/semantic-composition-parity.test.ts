@@ -7,8 +7,9 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { parseSafeCode, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { parseSafeInteger } from "../../src/contracts/evidence.js";
-import { canonicalDocument } from "../../src/contracts/canonical.js";
-import { parseGateDecisionRecord, parseGateRequest } from "../../src/contracts/durable-gate.js";
+import { canonicalDocument, canonicalJsonDigest } from "../../src/contracts/canonical.js";
+import { parseArchivedGateRequest, parseGateDecisionRecord, parseGateRequest } from "../../src/contracts/durable-gate.js";
+import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import { computeGateContextDigest } from "../../src/contracts/fingerprints.js";
 import { parsePathSafeId, parseSha256Digest } from "../../src/contracts/evidence.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
@@ -17,7 +18,11 @@ import { stageTaskAsk } from "../../src/init/task-initialization.js";
 import { derivePendingWaiverRequest } from "../../src/state/pending-waiver.js";
 import { createProductionServices, type ProductionServices } from "../../src/state/production.js";
 import { composeRequest } from "../../src/state/request-composition.js";
+import { openDurableGate } from "../../src/state/gates.js";
+import { computeAuthoritativeSemanticStatus } from "../../src/state/semantic-status.js";
+import { projectSemanticStatus } from "../../src/state/semantic-view.js";
 import { createTaskWorkspace } from "../helpers/task-workspace.js";
+import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
 
 const roots: string[] = [];
 const gitEnvironment: NodeJS.ProcessEnv = {
@@ -148,7 +153,7 @@ describe("transport-neutral request composition", () => {
     roots.pop();
   });
 
-  it("composes a counter-review route override into the request digest while the subject fingerprint stays neutral", async () => {
+  it("composes invocation routes and a route override into the request digest while the subject fingerprint stays neutral", async () => {
     const fixture = await createTaskWorkspace({ taskId: "composition-review-dispatch", label: "composition-review-dispatch" });
     roots.push(fixture.root);
     writeFileSync(join(fixture.services.authority.task_root, "ask.md"), "Compose the review dispatch.\n");
@@ -172,10 +177,14 @@ describe("transport-neutral request composition", () => {
       reason: "codex CLI auth outage; substitute the reviewer for this dispatch",
       "counter-reviewer": { model: "gpt-5.6-outage-fallback", effort: "high" },
     } as const;
+    const invocationRoutes = {
+      "counter-reviewer": { model: "claude-fable-5", effort: "high", provider: "zai" },
+      adjudicator: { model: "gpt-5.6", effort: "max" },
+    } as const;
     const plain = await composeRequest(atReview.value, { kind: "counter-review", intent_id: "review-dispatch-plain" });
     expect(plain.ok, plain.ok ? undefined : plain.error.code).toBe(true);
     const substituted = await composeRequest(atReview.value, {
-      kind: "counter-review", intent_id: "review-dispatch-plain", route_override: declaration,
+      kind: "counter-review", intent_id: "review-dispatch-plain", invocation_routes: invocationRoutes, route_override: declaration,
     });
     expect(substituted.ok, substituted.ok ? undefined : substituted.error.code).toBe(true);
     if (!plain.ok || !substituted.ok) return;
@@ -183,6 +192,8 @@ describe("transport-neutral request composition", () => {
     const plainInput = plain.value.envelope.request.input as Record<string, unknown>;
     const substitutedInput = substituted.value.envelope.request.input as Record<string, unknown>;
     expect(plainInput).not.toHaveProperty("route_override");
+    expect(plainInput).not.toHaveProperty("invocation_routes");
+    expect(substitutedInput.invocation_routes).toEqual(invocationRoutes);
     expect(substitutedInput.route_override).toEqual(declaration);
     // The substitution is request-scoped: it changes what the call asks for, never the identity of
     // the reviewed subject.
@@ -194,30 +205,68 @@ describe("transport-neutral request composition", () => {
     roots.pop();
   });
 
-  it("derives the pending waiver request entirely from authenticated gate archives", async () => {
+  it.each(["ordinary", "archived-policy"] as const)("derives the pending waiver request entirely from authenticated %s gate archives", async (originShape) => {
     const fixture = await createTaskWorkspace({ taskId: "composition-waiver", label: "composition-waiver" });
     roots.push(fixture.root);
     const state = fixture.services.state!.value;
     const gateId = parsePathSafeId("origin-waiver-gate");
     const rule = { rule_id: "human-review", rule_version: 1 } as const;
     const scope = { operation: "review-trigger", boundary: "phase" } as const;
-    const context = { constitution: "pass", failed_rules: [], uncertain_rules: [], matched_trigger_rules: [rule], uncertain_trigger_rules: [], eligible_waivers: [{ rule, scope }] } as const;
     const subject = parseSha256Digest("9".repeat(64));
+    const context = originShape === "ordinary" ? {
+      artifact_kind: "phase-implementation" as const,
+      constitution: "pass" as const,
+      policy_findings: [{ ...rule, compliance: "pass" as const, rationale: "The rule passed.", trigger: "matched" as const, trigger_evidence: "The protected boundary matched." }],
+      eligible_waivers: [{ rule, scope }],
+      approval_trigger: ordinaryApprovalFacts("phase-impl", subject).approval_trigger,
+    } as const : {
+      constitution: "pass" as const,
+      failed_rules: [], uncertain_rules: [], matched_trigger_rules: [rule], uncertain_trigger_rules: [],
+      eligible_waivers: [{ rule, scope }],
+    } as const;
+    const originKind = originShape === "ordinary" ? "artifact-approval" as const : "constitution-review" as const;
     const currentEvidence = { set_digest: parseSha256Digest("a".repeat(64)), slots: [{ role: "counter-review" as const, evidence_digest: parseSha256Digest("b".repeat(64)), assurance: "server-attested" as const, producer_family: "claude" as const, reviewer_family: "codex" as const, independence: "opposite-family" as const }] };
-    const request = parseGateRequest({ schema_version: "1", gate_id: gateId, intent_id: "waiver-origin-intent", request_digest: "c".repeat(64), task_id: fixture.taskId, phase_instance: state.phase_instance, summary: "Review constitution exception.", subject_digest: subject, context_digest: computeGateContextDigest("constitution-review", context), current_evidence: currentEvidence, kind: "constitution-review", context, allowed_decisions: ["approve", "revise", "reject", "waiver-requested", "cancel"], opened_at_revision: state.revision });
-    const decision = parseGateDecisionRecord({ schema_version: "1", gate_id: gateId, task_id: fixture.taskId, phase_instance: state.phase_instance, kind: "constitution-review", subject_digest: subject, context_digest: request.context_digest, outcome: "decided", envelope: { schema_version: "1", gate_id: gateId, task_id: fixture.taskId, phase_instance: state.phase_instance, kind: "constitution-review", subject_digest: subject, context_digest: request.context_digest, human_provenance: { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "waiver-origin-decision", helper_invocation_id: "waiver-origin-helper", recorded_at: "2026-08-16T12:00:00.000Z" }, payload: { decision: "waiver-requested", reason: "Request a narrow waiver.", rule, operation: "review-trigger", rationale: "The exception is bounded." } } });
+    const requestBytes = { schema_version: "1", gate_id: gateId, intent_id: "waiver-origin-intent", request_digest: "c".repeat(64), task_id: fixture.taskId, phase_instance: state.phase_instance, summary: "Review constitution exception.", subject_digest: subject, context_digest: computeGateContextDigest(originKind, context as never), current_evidence: currentEvidence, kind: originKind, context, allowed_decisions: ["approve", "revise", "reject", "waiver-requested", "cancel"], opened_at_revision: state.revision };
+    const request = originShape === "ordinary" ? parseGateRequest(requestBytes) : parseArchivedGateRequest(requestBytes);
+    const decision = parseGateDecisionRecord({ schema_version: "1", gate_id: gateId, task_id: fixture.taskId, phase_instance: state.phase_instance, kind: originKind, subject_digest: subject, context_digest: request.context_digest, outcome: "decided", envelope: { schema_version: "1", gate_id: gateId, task_id: fixture.taskId, phase_instance: state.phase_instance, kind: originKind, subject_digest: subject, context_digest: request.context_digest, human_provenance: { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "waiver-origin-decision", helper_invocation_id: "waiver-origin-helper", recorded_at: "2026-08-16T12:00:00.000Z" }, payload: { decision: "waiver-requested", reason: "Request a narrow waiver.", rule, operation: "review-trigger", rationale: "The exception is bounded." } } });
+    if (decision.outcome !== "decided") throw new Error("expected decided waiver origin fixture");
     const archive = join(fixture.services.authority.task_root, "authority", "decisions", gateId);
     mkdirSync(archive, { recursive: true });
     writeFileSync(join(archive, "request.json"), canonicalDocument(request).bytes);
     writeFileSync(join(archive, "decision.json"), canonicalDocument(decision).bytes);
     const prior = state.last_transition!;
-    await fixture.services.dependencies.atomic.replace(fixture.services.authority.state, canonicalDocument({ ...state, last_transition: { ...prior, tool: "archflow_gate", operation: parseSafeCode("gate"), result_id: gateId } }).bytes);
+    const outcome = { decision: decision.envelope } as const;
+    await fixture.services.dependencies.atomic.replace(fixture.services.authority.state, canonicalDocument({
+      ...state,
+      last_transition: {
+        ...prior,
+        tool: "archflow_gate",
+        operation: parseSafeCode("gate"),
+        intent_id: request.intent_id,
+        request_digest: request.request_digest,
+        input_fingerprint: state.input_fingerprint,
+        result_id: gateId,
+        prior_revision: parseSafeInteger(state.revision - 1),
+        resulting_revision: state.revision,
+        outcome,
+        outcome_digest: canonicalJsonDigest(outcome),
+      },
+    }).bytes);
     const refreshed = await createProductionServices({ working_directory: fixture.root, task_id: fixture.taskId, operation: parseSafeCode("composition-waiver") });
     if (!refreshed.ok || refreshed.value.state === undefined) throw new Error("waiver services unavailable");
     // The waiver opens and awaits the human decision through the semantic surface; the
     // bounded preview_digest+decision pair retired with the gate-preview machinery.
     const pending = await derivePendingWaiverRequest(refreshed.value);
     if (!pending.ok) throw new Error(pending.error.code);
+    const semantic = await computeAuthoritativeSemanticStatus(
+      refreshed.value.dependencies,
+      refreshed.value.authority,
+    );
+    expect(semantic.ok, semantic.ok ? undefined : semantic.error.code).toBe(true);
+    if (!semantic.ok) return;
+    expect(semantic.value.pending_waiver_origin).toMatchObject({ origin_gate_id: gateId, rule, scope });
+    expect(projectSemanticStatus(semantic.value, { skill: "archflow-prd", intent: "resume" }).view.next_action)
+      .toMatchObject({ kind: "open-waiver", expected_submission: "none" });
     const composed = await composeRequest(refreshed.value, {
       kind: "waiver",
       intent_id: "waiver-composition",
@@ -241,6 +290,24 @@ describe("transport-neutral request composition", () => {
       expect(decidedInput).not.toHaveProperty("preview_digest");
       expect(decidedInput).not.toHaveProperty("decision");
     }
+    if (!composed.ok || !("set_digest" in request.current_evidence)) return;
+    const waiverCall = parseToolCall("archflow_waiver", composed.value.envelope.request.input);
+    if (waiverCall.name !== "archflow_waiver") throw new Error("expected composed waiver call");
+    const opened = await openDurableGate(refreshed.value.dependencies, {
+      authority: refreshed.value.authority,
+      expected_revision: waiverCall.input.expected_revision,
+      intent_id: waiverCall.input.intent_id,
+      request_digest: composed.value.envelope.request_digest,
+      input_fingerprint: waiverCall.input.input_fingerprint,
+      phase_instance: waiverCall.input.origin.phase_instance,
+      summary: `Waiver request for ${waiverCall.input.origin.rule.rule_id}`,
+      subject_digest: waiverCall.input.origin.subject_digest,
+      current_evidence: request.current_evidence,
+      kind: "constitution-review",
+      context: { origin: waiverCall.input.origin, rationale: waiverCall.input.rationale },
+      waiver_origin_gate_id: waiverCall.input.origin.origin_gate_id,
+    });
+    expect(opened.ok, opened.ok ? undefined : opened.error.code).toBe(true);
     fixture.dispose();
     roots.pop();
   });

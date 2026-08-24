@@ -201,96 +201,122 @@
         }
       ]
     },
+    "reviewModelRoute": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "effort": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ]
+        },
+        "provider": {
+          "type": "string",
+          "pattern": "\\S"
+        }
+      },
+      "required": [
+        "model",
+        "effort"
+      ],
+      "additionalProperties": false
+    },
+    "reviewRouteSet": {
+      "type": "object",
+      "minProperties": 1,
+      "properties": {
+        "counter-reviewer": {
+          "$ref": "#/$defs/reviewModelRoute"
+        },
+        "adjudicator": {
+          "$ref": "#/$defs/reviewModelRoute"
+        }
+      },
+      "additionalProperties": false
+    },
     "workflowInvocation": {
-      "oneOf": [
+      "type": "object",
+      "properties": {
+        "skill": {
+          "enum": [
+            "archflow-prd",
+            "archflow-design",
+            "archflow-phase-design",
+            "archflow-phase-impl"
+          ]
+        },
+        "phase": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber"
+        },
+        "intent": {
+          "enum": [
+            "resume",
+            "reopen"
+          ]
+        },
+        "review_routes": {
+          "$ref": "#/$defs/reviewRouteSet"
+        }
+      },
+      "required": [
+        "skill",
+        "intent"
+      ],
+      "additionalProperties": false,
+      "allOf": [
         {
-          "type": "object",
-          "properties": {
-            "skill": {
-              "type": "string",
-              "const": "archflow-prd"
+          "if": {
+            "properties": {
+              "skill": {
+                "enum": [
+                  "archflow-phase-design",
+                  "archflow-phase-impl"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "phase": {}
             },
-            "intent": {
-              "type": "string",
-              "enum": [
-                "resume",
-                "reopen"
+            "required": [
+              "phase"
+            ]
+          },
+          "else": {
+            "not": {
+              "properties": {
+                "phase": {}
+              },
+              "required": [
+                "phase"
               ]
             }
-          },
-          "required": [
-            "skill",
-            "intent"
-          ],
-          "additionalProperties": false
+          }
         },
         {
-          "type": "object",
-          "properties": {
-            "skill": {
-              "type": "string",
-              "const": "archflow-design"
-            },
-            "intent": {
-              "type": "string",
-              "enum": [
-                "resume",
-                "reopen"
-              ]
+          "if": {
+            "properties": {
+              "skill": {
+                "const": "archflow-phase-impl"
+              }
             }
           },
-          "required": [
-            "skill",
-            "intent"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "skill": {
-              "type": "string",
-              "const": "archflow-phase-design"
-            },
-            "phase": {
-              "$ref": "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber"
-            },
-            "intent": {
-              "type": "string",
-              "enum": [
-                "resume",
-                "reopen"
-              ]
+          "then": {
+            "properties": {
+              "intent": {
+                "const": "resume"
+              }
             }
-          },
-          "required": [
-            "skill",
-            "phase",
-            "intent"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "skill": {
-              "type": "string",
-              "const": "archflow-phase-impl"
-            },
-            "phase": {
-              "$ref": "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber"
-            },
-            "intent": {
-              "type": "string",
-              "const": "resume"
-            }
-          },
-          "required": [
-            "skill",
-            "phase",
-            "intent"
-          ],
-          "additionalProperties": false
+          }
         }
       ]
     },
@@ -378,17 +404,13 @@
               "type": "string",
               "minLength": 1,
               "pattern": "\\S"
-            },
-            "requires_human_confirmation": {
-              "type": "boolean"
             }
           },
           "required": [
             "paths",
             "message",
             "target_ref",
-            "baseline",
-            "requires_human_confirmation"
+            "baseline"
           ],
           "additionalProperties": false
         },
@@ -610,6 +632,13 @@
         "presentation": {
           "type": "object",
           "properties": {
+            "class": {
+              "type": "string",
+              "enum": [
+                "configured-approval",
+                "exception"
+              ]
+            },
             "title": {
               "type": "string",
               "minLength": 1,
@@ -632,6 +661,32 @@
               "type": "string",
               "minLength": 1,
               "pattern": "\\S"
+            },
+            "reasons": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "configured-approval",
+                      "exception"
+                    ]
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "class",
+                  "text"
+                ],
+                "additionalProperties": false
+              }
             },
             "options": {
               "minItems": 1,
@@ -665,12 +720,17 @@
             }
           },
           "required": [
+            "class",
             "title",
             "summary",
             "question",
+            "reasons",
             "options"
           ],
           "additionalProperties": false
+        },
+        "dispatch_failure": {
+          "$ref": "#/$defs/publicDispatchFailure"
         },
         "config_change": {
           "type": "array",
@@ -687,6 +747,76 @@
         "detail",
         "resources",
         "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "publicDispatchFailure": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "enum": [
+            "counter-reviewer",
+            "adjudicator"
+          ]
+        },
+        "code": {
+          "enum": [
+            "CONFIG_INVALID",
+            "CONFIG_MODEL_UNSUPPORTED",
+            "CLI_MISSING",
+            "AUTH_UNAVAILABLE",
+            "RATE_LIMITED",
+            "UNSUPPORTED_MODEL",
+            "CLI_VERSION_UNSUPPORTED",
+            "PROCESS_FAILED"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "route": {
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "effort": {
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+                "ultra"
+              ]
+            },
+            "provider": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "source": {
+              "enum": [
+                "configured",
+                "invocation-declared",
+                "route-override"
+              ]
+            }
+          },
+          "required": [
+            "model",
+            "effort",
+            "source"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "role",
+        "code",
+        "message"
       ],
       "additionalProperties": false
     },
@@ -1456,6 +1586,13 @@
     "presentation": {
       "type": "object",
       "properties": {
+        "class": {
+          "type": "string",
+          "enum": [
+            "configured-approval",
+            "exception"
+          ]
+        },
         "title": {
           "type": "string",
           "minLength": 1,
@@ -1478,6 +1615,32 @@
           "type": "string",
           "minLength": 1,
           "pattern": "\\S"
+        },
+        "reasons": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "class": {
+                "type": "string",
+                "enum": [
+                  "configured-approval",
+                  "exception"
+                ]
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "class",
+              "text"
+            ],
+            "additionalProperties": false
+          }
         },
         "options": {
           "minItems": 1,
@@ -1511,12 +1674,17 @@
         }
       },
       "required": [
+        "class",
         "title",
         "summary",
         "question",
+        "reasons",
         "options"
       ],
       "additionalProperties": false
+    },
+    "dispatch_failure": {
+      "$ref": "#/$defs/publicDispatchFailure"
     },
     "config_change": {
       "type": "array",

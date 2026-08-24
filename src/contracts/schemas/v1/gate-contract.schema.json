@@ -113,6 +113,198 @@
       ],
       "additionalProperties": false
     },
+    "approvalTrigger": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "rule-settlement"
+            },
+            "settlement": {
+              "type": "object",
+              "properties": {
+                "subject_digest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "config_digest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "settled_at_revision": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "subject_digest",
+                "config_digest",
+                "settled_at_revision"
+              ],
+              "additionalProperties": false
+            },
+            "conclusion": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "wait": {
+                      "type": "boolean",
+                      "const": false
+                    },
+                    "match": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "wait",
+                    "match"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "wait": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "match": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "subject"
+                            },
+                            "subject": {
+                              "type": "string",
+                              "enum": [
+                                "prd",
+                                "design",
+                                "phase-design",
+                                "phase-impl"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "subject"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "content"
+                            },
+                            "paths": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "paths"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "wait",
+                    "match"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "rule_authority": {
+              "type": "string",
+              "enum": [
+                "authenticated",
+                "unavailable"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "settlement",
+            "conclusion",
+            "rule_authority"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "human-revision-reapproval"
+            },
+            "prior_gate": {
+              "type": "object",
+              "properties": {
+                "gate_id": {
+                  "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+                },
+                "decision_digest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "class": {
+                  "type": "string",
+                  "enum": [
+                    "configured-approval",
+                    "exception"
+                  ]
+                }
+              },
+              "required": [
+                "gate_id",
+                "decision_digest",
+                "class"
+              ],
+              "additionalProperties": false
+            },
+            "revision_checkpoint": {
+              "type": "object",
+              "properties": {
+                "classification": {
+                  "type": "string",
+                  "const": "simple"
+                },
+                "predecessor_subject_digest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "subject_digest": {
+                  "$ref": "#/$defs/digest"
+                }
+              },
+              "required": [
+                "classification",
+                "predecessor_subject_digest",
+                "subject_digest"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "kind",
+            "prior_gate",
+            "revision_checkpoint"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
     "artifactApprovalContext": {
       "type": "object",
       "properties": {
@@ -124,10 +316,75 @@
             "phase-design",
             "phase-implementation"
           ]
+        },
+        "constitution": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "uncertain"
+          ]
+        },
+        "policy_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "compliance": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "fail",
+                  "uncertain"
+                ]
+              },
+              "rationale": {
+                "$ref": "#/$defs/text"
+              },
+              "trigger": {
+                "type": "string",
+                "enum": [
+                  "not-matched",
+                  "matched",
+                  "uncertain"
+                ]
+              },
+              "trigger_evidence": {
+                "$ref": "#/$defs/text"
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version",
+              "compliance",
+              "rationale",
+              "trigger",
+              "trigger_evidence"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "eligible_waivers": {
+          "$ref": "#/$defs/eligibleWaivers"
+        },
+        "approval_trigger": {
+          "$ref": "#/$defs/approvalTrigger"
         }
       },
       "required": [
-        "artifact_kind"
+        "artifact_kind",
+        "constitution",
+        "policy_findings",
+        "eligible_waivers",
+        "approval_trigger"
       ],
       "additionalProperties": false
     },
@@ -199,6 +456,9 @@
         "eligible_waivers": {
           "$ref": "#/$defs/eligibleWaivers"
         },
+        "approval_trigger": {
+          "$ref": "#/$defs/approvalTrigger"
+        },
         "target_ref": {
           "$ref": "#/$defs/text"
         },
@@ -214,6 +474,7 @@
         "constitution",
         "policy_findings",
         "eligible_waivers",
+        "approval_trigger",
         "target_ref",
         "baseline_commit",
         "commit_message"
@@ -356,6 +617,67 @@
     "commitAuthorizationContext": {
       "type": "object",
       "properties": {
+        "constitution": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "uncertain"
+          ]
+        },
+        "policy_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "compliance": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "fail",
+                  "uncertain"
+                ]
+              },
+              "rationale": {
+                "$ref": "#/$defs/text"
+              },
+              "trigger": {
+                "type": "string",
+                "enum": [
+                  "not-matched",
+                  "matched",
+                  "uncertain"
+                ]
+              },
+              "trigger_evidence": {
+                "$ref": "#/$defs/text"
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version",
+              "compliance",
+              "rationale",
+              "trigger",
+              "trigger_evidence"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "eligible_waivers": {
+          "$ref": "#/$defs/eligibleWaivers"
+        },
+        "approval_trigger": {
+          "$ref": "#/$defs/approvalTrigger"
+        },
         "target_ref": {
           "$ref": "#/$defs/text"
         },
@@ -391,6 +713,10 @@
         }
       },
       "required": [
+        "constitution",
+        "policy_findings",
+        "eligible_waivers",
+        "approval_trigger",
         "target_ref",
         "baseline_commit",
         "commit_message",
@@ -550,25 +876,62 @@
       "additionalProperties": false
     },
     "artifactApprovalDecision": {
-      "type": "object",
-      "properties": {
-        "decision": {
-          "type": "string",
-          "enum": [
-            "approve",
-            "revise",
-            "reject"
-          ]
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "enum": [
+                "approve",
+                "revise",
+                "reject"
+              ]
+            },
+            "reason": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "decision",
+            "reason"
+          ],
+          "additionalProperties": false
         },
-        "reason": {
-          "$ref": "#/$defs/text"
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "const": "waiver-requested"
+            },
+            "reason": {
+              "$ref": "#/$defs/text"
+            },
+            "rule": {
+              "$ref": "#/$defs/rule"
+            },
+            "operation": {
+              "type": "string",
+              "enum": [
+                "review-trigger",
+                "adjudication-failure"
+              ]
+            },
+            "rationale": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "decision",
+            "reason",
+            "rule",
+            "operation",
+            "rationale"
+          ],
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "decision",
-        "reason"
-      ],
-      "additionalProperties": false
+      ]
     },
     "designApprovalDecision": {
       "anyOf": [
@@ -750,25 +1113,62 @@
       "additionalProperties": false
     },
     "commitAuthorizationDecision": {
-      "type": "object",
-      "properties": {
-        "decision": {
-          "type": "string",
-          "enum": [
-            "authorize-commit",
-            "revise",
-            "abort"
-          ]
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "enum": [
+                "authorize-commit",
+                "revise",
+                "abort"
+              ]
+            },
+            "reason": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "decision",
+            "reason"
+          ],
+          "additionalProperties": false
         },
-        "reason": {
-          "$ref": "#/$defs/text"
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "const": "waiver-requested"
+            },
+            "reason": {
+              "$ref": "#/$defs/text"
+            },
+            "rule": {
+              "$ref": "#/$defs/rule"
+            },
+            "operation": {
+              "type": "string",
+              "enum": [
+                "review-trigger",
+                "adjudication-failure"
+              ]
+            },
+            "rationale": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "decision",
+            "reason",
+            "rule",
+            "operation",
+            "rationale"
+          ],
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "decision",
-        "reason"
-      ],
-      "additionalProperties": false
+      ]
     },
     "restoreCollisionDecision": {
       "anyOf": [

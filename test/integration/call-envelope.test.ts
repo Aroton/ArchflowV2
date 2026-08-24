@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { canonicalDocument, canonicalJsonDigest } from "../../src/contracts/canonical.js";
-import { parseGateRequest } from "../../src/contracts/durable-gate.js";
+import { parseArchivedGateRequest } from "../../src/contracts/durable-gate.js";
 import { parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { computeGateContextDigest, computeGateId } from "../../src/contracts/fingerprints.js";
 import { parseToolCall } from "../../src/contracts/mcp-tools.js";
@@ -15,6 +15,7 @@ import { stageTaskInitialization } from "../../src/init/task-initialization.js";
 import { computeCallEnvelope } from "../../src/local/call-envelope.js";
 import { runStateInitialization } from "../../src/state/initialization.js";
 import { createProductionServices } from "../../src/state/production.js";
+import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -137,7 +138,7 @@ describe("local call envelopes", () => {
       subject_digest: D("d"),
       current_evidence: currentEvidence,
       kind: "artifact-approval" as const,
-      context: { artifact_kind: "prd" as const },
+      context: { artifact_kind: "prd" as const, ...ordinaryApprovalFacts("prd", D("d")) },
       preview_digest: D("9"),
       decision: { choice: "approve", reason: "Reviewed." },
     };
@@ -160,7 +161,9 @@ describe("local call envelopes", () => {
     const scope = { operation: "review-trigger" as const, boundary: "subject" as const };
     const originContext = { constitution: "pass" as const, failed_rules: [], uncertain_rules: [], matched_trigger_rules: [rule], uncertain_trigger_rules: [], eligible_waivers: [{ rule, scope }] };
     const originContextDigest = computeGateContextDigest("constitution-review", originContext);
-    const originRequest = parseGateRequest({
+    // A policy-context constitution request is archive-only. Keep this fixture historical so the
+    // waiver envelope proves that retired human authority remains consumable.
+    const originRequest = parseArchivedGateRequest({
       schema_version: "1", gate_id: originGateId, intent_id: "origin-intent", request_digest: D("e"), task_id: task,
       phase_instance: "prd", summary: "Review trigger", subject_digest: D("f"), context_digest: originContextDigest,
       current_evidence: currentEvidence, kind: "constitution-review", context: originContext,

@@ -2,7 +2,7 @@ import type { ConfigV1, ModelRouteV1 } from "../contracts/config.js";
 import { ROUTING_ROLES } from "../contracts/config.js";
 import { createProjectError, type ProjectError } from "../contracts/errors.js";
 import { safeIdV1Schema } from "../contracts/evidence.js";
-import type { AdapterId, ModelFamily } from "../contracts/review.js";
+import type { AdapterId, ModelFamily, RouteSourceRecord } from "../contracts/review.js";
 import { EFFORT_VALUES } from "../contracts/review.js";
 import { assertAdapterFamily } from "../contracts/trust.js";
 
@@ -15,6 +15,17 @@ export type DispatchRoute = Readonly<{
   model: string;
   effort: (typeof EFFORT_VALUES)[number];
   provider?: string;
+}>;
+
+export type SelectedDispatchRoute = Readonly<{
+  selected: SelectedRouteCandidate;
+  route: DispatchRoute;
+  source: RouteSourceRecord;
+}>;
+
+export type SelectedRouteCandidate = Readonly<{
+  raw_route: ModelRouteV1;
+  source: RouteSourceRecord;
 }>;
 
 export class DispatchRoutingError extends Error {
@@ -93,14 +104,87 @@ export function configuredRoute(
   return config.overrides?.[phaseKind]?.[role] ?? config.roles[role];
 }
 
+const displacedRoute = (
+  source: "configured" | "invocation-declared",
+  route: ModelRouteV1,
+): NonNullable<RouteSourceRecord["displaced"]> => Object.freeze({
+  source,
+  model: route.model,
+  effort: route.effort,
+  ...(route.provider === undefined ? {} : { provider: route.provider }),
+});
+
+/**
+ * Selects one role's route by trust precedence, then validates only the selected raw candidate.
+ * Displaced facts remain raw on purpose: provenance can describe an invalid configured route
+ * without accidentally resolving it or falling back after a higher-precedence route fails.
+ */
+export function selectDispatchRouteCandidate(
+  config: ConfigV1,
+  phaseKind: RoutingPhaseKind,
+  role: RoutingRole,
+  invocationRoute?: ModelRouteV1,
+  humanOverride?: ModelRouteV1,
+): SelectedRouteCandidate {
+  const configured = configuredRoute(config, phaseKind, role);
+  const normallySelected = invocationRoute ?? configured;
+  if (humanOverride !== undefined) {
+    return Object.freeze({
+      raw_route: humanOverride,
+      source: Object.freeze({
+        provenance: "route-override" as const,
+        ...(normallySelected === undefined
+          ? {}
+          : { displaced: displacedRoute(invocationRoute === undefined ? "configured" : "invocation-declared", normallySelected) }),
+      }),
+    });
+  }
+  if (invocationRoute !== undefined) {
+    return Object.freeze({
+      raw_route: invocationRoute,
+      source: Object.freeze({
+        provenance: "invocation-declared" as const,
+        ...(configured === undefined ? {} : { displaced: displacedRoute("configured", configured) }),
+      }),
+    });
+  }
+  if (configured === undefined) {
+    return fail(createProjectError("CONFIG_INVALID", { issue_code: "route-missing" }));
+  }
+  return Object.freeze({
+    raw_route: configured,
+    source: Object.freeze({ provenance: "configured" as const }),
+  });
+}
+
+export function validateSelectedDispatchRoute(selected: SelectedRouteCandidate): SelectedDispatchRoute {
+  return Object.freeze({
+    selected,
+    route: routeFromConfiguredRoute(selected.raw_route),
+    source: selected.source,
+  });
+}
+
+export function selectDispatchRoute(
+  config: ConfigV1,
+  phaseKind: RoutingPhaseKind,
+  role: RoutingRole,
+  invocationRoute?: ModelRouteV1,
+  humanOverride?: ModelRouteV1,
+): SelectedDispatchRoute {
+  return validateSelectedDispatchRoute(selectDispatchRouteCandidate(
+    config,
+    phaseKind,
+    role,
+    invocationRoute,
+    humanOverride,
+  ));
+}
+
 export function resolveDispatchRoute(
   config: ConfigV1,
   phaseKind: RoutingPhaseKind,
   role: RoutingRole,
 ): DispatchRoute {
-  const configured = configuredRoute(config, phaseKind, role);
-  if (configured === undefined) {
-    return fail(createProjectError("CONFIG_INVALID", { issue_code: "route-missing" }));
-  }
-  return routeFromConfiguredRoute(configured);
+  return selectDispatchRoute(config, phaseKind, role).route;
 }

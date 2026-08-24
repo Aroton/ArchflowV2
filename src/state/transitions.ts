@@ -31,7 +31,7 @@ import {
   assertAuthenticatedRuleAcceptancePolicy,
   type AuthenticatedRuleAcceptancePolicy,
 } from "./constitution.js";
-import { acceptedNoWaitSettlement } from "./restart-authority.js";
+import { acceptedNoWaitSettlementWithoutOrdinaryApproval } from "./restart-authority.js";
 import type { NextStateDraft } from "./transaction.js";
 
 export type TransitionTarget = Readonly<{
@@ -101,6 +101,11 @@ export type MilestoneRecoveryPlanInput = Readonly<{
   target_ref: MilestoneRecoveryRecord["target_ref"];
   target_head: MilestoneRecoveryRecord["target_head"];
   subject_digest: MilestoneRecoveryRecord["subject_digest"];
+  recomputed_input_fingerprint: Sha256Digest;
+}>;
+
+export type ApprovalTriggerAuthorityRecoveryPlanInput = Readonly<{
+  current: TaskStateV1;
   recomputed_input_fingerprint: Sha256Digest;
 }>;
 
@@ -243,6 +248,50 @@ export function planMilestoneRecovery(value: MilestoneRecoveryPlanInput): Projec
     authoritative_results: Object.freeze(retained),
     waivers: Object.freeze([]),
     milestone_recovery_history: history,
+  }));
+}
+
+/**
+ * One-time compatibility recovery for a pre-trigger adjudication fixed point. It preserves the
+ * produced bytes and every upstream authority root, but retires the current phase's downstream
+ * review/triage references so even an unchanged resubmission must receive a fresh review whose
+ * settle transaction can mint the required approval trigger.
+ */
+export function planApprovalTriggerAuthorityRecovery(
+  value: ApprovalTriggerAuthorityRecoveryPlanInput,
+): ProjectResult<NextStateDraft> {
+  assertPlainJson(value, "approval trigger authority recovery input");
+  const input = structuredClone(value);
+  const current = input.current;
+  const invalidRecovery = () => Object.freeze({
+    schema_version: "1" as const,
+    ok: false as const,
+    error: createProjectError("TRANSITION_INVALID", {
+      phase_instance: current.phase_instance,
+      from: `${current.step}-${current.status}`,
+      to: "approval-trigger-authority-recovery",
+    }),
+  });
+  if (
+    current.terminal !== undefined || current.open_gate !== undefined ||
+    current.pending_human_revision !== undefined || current.step !== "triage" ||
+    current.status !== "succeeded"
+  ) return invalidRecovery();
+  const retained = current.authoritative_results.filter((reference) =>
+    reference.phase_instance !== current.phase_instance || reference.step === "produce");
+  if (retained.length === current.authoritative_results.length) return invalidRecovery();
+  const {
+    revision: _revision,
+    last_transition: _lastTransition,
+    ...preserved
+  } = current;
+  return ok(Object.freeze({
+    ...preserved,
+    step: "produce",
+    status: "running",
+    attempt: parseSafeInteger(1),
+    input_fingerprint: input.recomputed_input_fingerprint,
+    authoritative_results: Object.freeze(retained),
   }));
 }
 
@@ -583,8 +632,9 @@ function hasAuthenticatedRuleAcceptance(input: TransitionPlanInput): boolean {
   const digest = input.completion_subject_digest;
   if (accepted === undefined || digest === undefined) return false;
   assertAuthenticatedRuleAcceptancePolicy(accepted.policy);
-  const settlement = acceptedNoWaitSettlement(
+  const settlement = acceptedNoWaitSettlementWithoutOrdinaryApproval(
     accepted.policy, input.current, digest, input.current.phase_instance,
+    input.authenticated_gate_approvals ?? [],
   );
   return settlement !== undefined && isDeepStrictEqual(settlement, accepted.settlement);
 }

@@ -15,6 +15,7 @@ import { computeTaskStatus } from "../../src/state/status.js";
 import { identifyTransactionRequest } from "../../src/state/request.js";
 import { runStateTransaction } from "../../src/state/transaction.js";
 import { createTaskWorkspace, type TaskWorkspace } from "../helpers/task-workspace.js";
+import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
 
 const workspaces: TaskWorkspace[] = [];
 afterEach(() => {
@@ -298,7 +299,7 @@ describe("config as an editable input", () => {
         ],
       },
       kind: "artifact-approval",
-      context: { artifact_kind: "prd" },
+      context: { artifact_kind: "prd", ...ordinaryApprovalFacts("prd", D("9")) },
     };
 
     const result = await openDurableGate(current.services.dependencies, input);

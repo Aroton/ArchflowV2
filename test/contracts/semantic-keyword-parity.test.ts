@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { rawAdjudicationSchema } from "../../src/contracts/adjudication.js";
+import { parseSha256Digest } from "../../src/contracts/evidence.js";
 import { gateInputSchema, resultExpectationDataSchema, waiverInputSchema } from "../../src/contracts/mcp-tools.js";
 import { rawReviewSchema } from "../../src/contracts/review.js";
 import {
@@ -11,6 +12,7 @@ import {
   type JsonSchemaValidator,
   type ZodLikeSchema,
 } from "../helpers/json-schema.js";
+import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
 
 /**
  * Each custom Ajv semantic keyword's logic is wired into the Zod side, which is now the single
@@ -27,6 +29,16 @@ const FIXTURE_DIR = new URL("../fixtures/contracts/", import.meta.url);
 
 const schema = (stem: string): object => JSON.parse(readFileSync(new URL(`${stem}.schema.json`, SCHEMA_DIR), "utf8")) as object;
 const fixture = (name: string): unknown => JSON.parse(readFileSync(new URL(`${name}.json`, FIXTURE_DIR), "utf8"));
+const ordinaryGateFixture = (name: string): unknown => {
+  const value = fixture(name) as Record<string, unknown>;
+  return {
+    ...value,
+    context: {
+      ...(value.context as Record<string, unknown>),
+      ...ordinaryApprovalFacts("phase-impl", parseSha256Digest(value.subject_digest)),
+    },
+  };
+};
 const adjudicationOutput = (value: unknown): Record<string, unknown> => {
   const { constitution: _constitution, drift: _drift, matched_rule_versions: _matched, uncertain_rule_versions: _uncertain, ...output } = value as Record<string, unknown>;
   return output;
@@ -80,9 +92,9 @@ const CASES: readonly KeywordCase[] = [
     json: mcpValidator,
     zod: gateInputSchema,
     jsonKeywordRetired: false,
-    valid: fixture("mcp-tools/gate-valid"),
+    valid: ordinaryGateFixture("mcp-tools/gate-valid"),
     invalid: [
-      ["duplicate evidence digests across review slots", fixture("mcp-tools/gate-invalid-duplicate-evidence-digest")],
+      ["duplicate evidence digests across review slots", ordinaryGateFixture("mcp-tools/gate-invalid-duplicate-evidence-digest")],
       ["an attempts-exhausted context below its maximum", fixture("mcp-tools/gate-invalid-attempts-below-maximum")],
     ],
   },

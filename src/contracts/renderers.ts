@@ -1,5 +1,5 @@
 import type { AdjudicationEvidence } from "./adjudication.js";
-import type { ReviewEvidence, ReviewFinding, RouteOverrideRecord, RuleVersionRef } from "./review.js";
+import type { ReviewEvidence, ReviewFinding, RouteOverrideRecord, RouteSourceRecord, RuleVersionRef } from "./review.js";
 import type { QualifiedAdjudicationEvidence, QualifiedReviewEvidence, VerifiedReferencedEvidence } from "./trust.js";
 import type { TriageDisposition, ValidatedTriage } from "./triage.js";
 import { authenticQualifiedEvidence, authenticValidatedTriage, authenticVerifiedEvidence } from "./internal/trust-brands.js";
@@ -23,6 +23,7 @@ function provenanceMetadata(evidence: ReviewEvidence | AdjudicationEvidence): re
     ["adapter", evidence.assurance === "server-attested" ? evidence.adapter : undefined],
     ["cli_version", evidence.assurance === "server-attested" ? evidence.cli_version : undefined],
     ["model_family", evidence.model_family], ["model", evidence.model], ["effort", evidence.effort],
+    ["provider", evidence.assurance === "server-attested" ? evidence.provider : undefined],
     ["invocation_id", evidence.assurance === "server-attested" ? evidence.invocation_id : undefined],
     ["result_id", evidence.assurance === "server-attested" ? evidence.result_id : undefined],
   ];
@@ -39,8 +40,20 @@ function renderReviewFinding(finding: ReviewFinding): string[] {
 function renderRouteOverride(override: RouteOverrideRecord): string[] {
   const displaced = override.pinned_model === undefined
     ? ["pinned_route: none configured for this role"]
-    : [`pinned_model: ${canonical(override.pinned_model)}`, `pinned_effort: ${canonical(override.pinned_effort)}`];
+    : [`pinned_model: ${canonical(override.pinned_model)}`, `pinned_effort: ${canonical(override.pinned_effort)}`, `pinned_provider: ${optional(override.pinned_provider)}`];
   return ["", "## Route Override", ...displaced, prose("reason", override.reason)];
+}
+
+function renderRouteSource(source: RouteSourceRecord): string[] {
+  const lines = ["", "## Route Source", `provenance: ${canonical(source.provenance)}`];
+  if (source.displaced === undefined) return lines;
+  return [
+    ...lines,
+    `displaced_source: ${canonical(source.displaced.source)}`,
+    `displaced_model: ${canonical(source.displaced.model)}`,
+    `displaced_effort: ${canonical(source.displaced.effort)}`,
+    `displaced_provider: ${optional(source.displaced.provider)}`,
+  ];
 }
 
 export function renderReviewEvidence(
@@ -56,6 +69,7 @@ export function renderReviewEvidence(
   ]), "", "## Findings"];
   for (const finding of evidence.findings) lines.push("", ...renderReviewFinding(finding));
   if (evidence.assurance === "degraded") lines.push("", "## Degraded Assurance", prose("reason", evidence.reason));
+  if (evidence.assurance === "server-attested" && evidence.route_source !== undefined) lines.push(...renderRouteSource(evidence.route_source));
   if (evidence.assurance === "server-attested" && evidence.route_override !== undefined) lines.push(...renderRouteOverride(evidence.route_override));
   return linesToBytes(lines);
 }
@@ -92,6 +106,7 @@ export function renderAdjudicationEvidence(
   lines.push("", "## Drift Findings");
   for (const finding of evidence.drift_findings) lines.push("", `### Upstream ${visibleJsonString(finding.upstream_digest)}`, `drift: ${canonical(finding.drift)}`, `affected_claim_ids: ${canonical(finding.affected_claim_ids)}`, prose("rationale", finding.rationale));
   if (evidence.assurance === "degraded") lines.push("", "## Degraded Assurance", prose("reason", evidence.reason));
+  if (evidence.assurance === "server-attested" && evidence.route_source !== undefined) lines.push(...renderRouteSource(evidence.route_source));
   if (evidence.assurance === "server-attested" && evidence.route_override !== undefined) lines.push(...renderRouteOverride(evidence.route_override));
   return linesToBytes(lines);
 }

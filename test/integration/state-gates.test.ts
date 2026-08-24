@@ -25,6 +25,7 @@ import { readIntentReceipt, readTaskConfig, readTaskState } from "../../src/stat
 import { planStateTransition } from "../../src/state/transitions.js";
 import { resolveInterfaceGateDecision } from "../helpers/resolve-interface-gate.js";
 import { resolvedConstitutionFixture } from "../helpers/resolved-constitution.js";
+import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
 
 const D = (value: string) => parseSha256Digest(value.repeat(64));
 const constitution = await resolvedConstitutionFixture({
@@ -101,7 +102,10 @@ describe("durable gate decisions", () => {
     const initial: TaskStateV1 = { ...state(), repository_identity_digest: authority.repository_identity_digest, config_digest: sha256Bytes(configBytes), input_fingerprint: inputFingerprint };
     writeFileSync(join(taskRoot, "state.json"), canonicalDocument(initial).bytes);
     const dependencies = { runner: runnerResult.value, environment: git.value, atomic: createAtomicWriter(), lock: createTaskLock(), read_state: readTaskState, read_config: readTaskConfig, read_receipt: readIntentReceipt, resolve_input_fingerprint: async () => ({ schema_version: "1" as const, ok: true as const, value: { subject: {} as InputFingerprintSubject, fingerprint: D("2") } }) };
-    const reviewContext = { constitution: "pass", failed_rules: [], uncertain_rules: [], matched_trigger_rules: [RULE], uncertain_trigger_rules: [], eligible_waivers: [{ rule: RULE, scope: { operation: "review-trigger", boundary: "subject" } }] } as const;
+    const reviewContext = {
+      artifact_kind: "phase-implementation" as const,
+      ...ordinaryApprovalFacts("phase-impl", D("c")),
+    };
     const base = {
       schema_version: "1", task_id: "task-1", phase_instance: initial.phase_instance,
       subject_digest: D("c"), input_fingerprint: inputFingerprint,
@@ -139,16 +143,16 @@ describe("durable gate decisions", () => {
     const currentEvidence = deriveCurrentEvidenceSet(new Map([
       ["counter_review", reviewEntry(counterSlot.evidence_digest, counterEvidence)],
     ])).current_evidence_set;
-    const lifecycle = { authority, expected_revision: initial.revision, intent_id: "intent-1" as never, request_digest: D("b"), input_fingerprint: inputFingerprint, phase_instance: initial.phase_instance, summary: "Approve", subject_digest: D("c"), current_evidence: currentEvidence, kind: "constitution-review" as const, context: reviewContext };
+    const lifecycle = { authority, expected_revision: initial.revision, intent_id: "intent-1" as never, request_digest: D("b"), input_fingerprint: inputFingerprint, phase_instance: initial.phase_instance, summary: "Approve", subject_digest: D("c"), current_evidence: currentEvidence, kind: "artifact-approval" as const, context: reviewContext };
     const lifecycleGate = computeGateId({ task_identity_digest: authority.task_identity_digest, intent_id: lifecycle.intent_id, request_digest: lifecycle.request_digest });
     const opened = await openDurableGate(dependencies, lifecycle);
     expect(opened.ok, opened.ok ? undefined : JSON.stringify(opened.error)).toBe(true);
     const pending = await readTaskState(authority.state); expect(pending).toMatchObject({ kind: "canonical", document: { value: { revision: 5, open_gate: { gate_id: lifecycleGate } } } });
-    const lifecycleContextDigest = computeGateContextDigest("constitution-review", reviewContext);
+    const lifecycleContextDigest = computeGateContextDigest("artifact-approval", reviewContext);
     const gateWorkspace = join(authority.workspace_root, "cache", "gates");
     writeFileSync(join(gateWorkspace, "gate.decision"), canonicalDocument({
       schema_version: "1", gate_id: lifecycleGate, task_id: "task-1",
-      phase_instance: initial.phase_instance, kind: "constitution-review",
+      phase_instance: initial.phase_instance, kind: "artifact-approval",
       subject_digest: D("c"), context_digest: lifecycleContextDigest,
       human_provenance: provenance,
       payload: { decision: "approve", reason: "Reviewed" },
@@ -215,10 +219,13 @@ describe("durable gate decisions", () => {
     expect(deriveCurrentEvidenceSet(retained).current_evidence_set)
       .toEqual(currentEvidence);
     const assessmentState = { ...resolvedState.document.value, step: "triage" as const, status: "succeeded" as const };
+    // The fixed-point assessment still reports its policy obligation. Status joins that evidence
+    // with the ordinary approval and folds the obligation there; the policy engine itself does
+    // not reinterpret an artifact approval as a retired constitution-review record.
     expect(assessCurrentEvidence(assessmentState, retained, {
       subject_digest: D("c"), input_fingerprint: inputFingerprint, constitution,
       authenticated_gate_approvals: [loaded.value],
-    }).next).toBe("advance");
+    }).next).toBe("adjudication-gate");
     const changedContext = new Map(retained);
     changedContext.set("adjudicate", entry(D("b"), {
       schema_version: "1", artifact_kind: "adjudication-evidence",
@@ -482,13 +489,17 @@ describe("durable gate decisions", () => {
       current = result.value.state.value;
     };
 
-    await approve("artifact-approval", current.authoritative_results[0]!.result_digest, { artifact_kind: "design" });
+    await approve("artifact-approval", current.authoritative_results[0]!.result_digest, {
+      artifact_kind: "design", ...ordinaryApprovalFacts("design", current.authoritative_results[0]!.result_digest),
+    });
     expect(current.planned_final_phase).toBe(2);
 
     const amended = installDesign("### Phase 1: One\n### Phase 2: Two\n### Phase 3: Three\n", "design-2");
     current = { ...withoutLastTransition(current), revision: parseSafeInteger(current.revision + 1), phase_instance: "design" as TaskStateV1["phase_instance"], step: "triage", status: "succeeded", authoritative_results: [amended] };
     writeFileSync(join(taskRoot, "state.json"), canonicalDocument(current).bytes);
-    await approve("artifact-approval", amended.result_digest, { artifact_kind: "design" });
+    await approve("artifact-approval", amended.result_digest, {
+      artifact_kind: "design", ...ordinaryApprovalFacts("design", amended.result_digest),
+    });
     expect(current.planned_final_phase).toBe(3);
 
     const invalidPlans = [
@@ -507,14 +518,18 @@ describe("durable gate decisions", () => {
       const invalid = installDesign(markdown, `design-invalid-${name.replaceAll(" ", "-")}`);
       current = { ...withoutLastTransition(current), revision: parseSafeInteger(current.revision + 1), phase_instance: "design" as TaskStateV1["phase_instance"], step: "triage", status: "succeeded", authoritative_results: [invalid] };
       writeFileSync(join(taskRoot, "state.json"), canonicalDocument(current).bytes);
-      await approve("artifact-approval", invalid.result_digest, { artifact_kind: "design" }, "approved-design-phase-count-invalid");
+      await approve("artifact-approval", invalid.result_digest, {
+        artifact_kind: "design", ...ordinaryApprovalFacts("design", invalid.result_digest),
+      }, "approved-design-phase-count-invalid");
       expect(current.planned_final_phase).toBe(3);
     }
 
     const openEnded = installDesign("# Intentionally open-ended design\n\n<!-- archflow:phase-plan:open-ended -->\n", "design-3");
     current = { ...withoutLastTransition(current), revision: parseSafeInteger(current.revision + 1), phase_instance: "design" as TaskStateV1["phase_instance"], step: "triage", status: "succeeded", authoritative_results: [openEnded] };
     writeFileSync(join(taskRoot, "state.json"), canonicalDocument(current).bytes);
-    await approve("artifact-approval", openEnded.result_digest, { artifact_kind: "design" });
+    await approve("artifact-approval", openEnded.result_digest, {
+      artifact_kind: "design", ...ordinaryApprovalFacts("design", openEnded.result_digest),
+    });
     expect(current.planned_final_phase).toBeUndefined();
 
     const implementationArtifactDigest = D("d");
@@ -529,6 +544,7 @@ describe("durable gate decisions", () => {
     };
     writeFileSync(join(taskRoot, "state.json"), canonicalDocument(current).bytes);
     await approve("commit-authorization", implementationArtifactDigest, {
+      ...ordinaryApprovalFacts("phase-impl", implementationArtifactDigest),
       target_ref: "refs/heads/task", baseline_commit: "1".repeat(40) as never, commit_message: "ArchFlow: Implement task-1 phase 1", paths: ["tracked.txt" as never], diff_digest: D("e"), current_artifact_digests: [implementationArtifactDigest], parent_document_digests: [D("f")],
     });
     const approval = current.approvals.find((entry) => entry.gate_kind === "commit-authorization")!;
@@ -536,16 +552,24 @@ describe("durable gate decisions", () => {
     expect(authenticated.ok).toBe(true);
     if (!authenticated.ok) return;
 
-    // Commit authorization gained required `baseline_commit`, `commit_message` and `paths` fields
-    // after these approvals were archived. The human authority they carry is still real, so the
-    // four-key context must keep authenticating rather than wedging the task behind
+    // Commit authorization gained policy/trigger facts plus required `baseline_commit`,
+    // `commit_message` and `paths` after these approvals were archived. The human authority they
+    // carry is still real, so the exact legacy context must keep authenticating rather than wedging the task behind
     // `gate-approval-request-invalid`. Unlike the decision archive, an approval's digests do not
     // cover the request, so rewriting request.json needs no matching state.json surgery.
     const archivedRequestPath = join(taskRoot, "authority", "decisions", approval.gate_id, "request.json");
     const archivedRequest = JSON.parse(readFileSync(archivedRequestPath, "utf8")) as Record<string, unknown>;
-    const { baseline_commit: _baseline, commit_message: _message, paths: _paths, ...archivedContext } =
+    const {
+      constitution: _constitution, policy_findings: _policyFindings, eligible_waivers: _eligibleWaivers,
+      approval_trigger: _approvalTrigger, baseline_commit: _baseline, commit_message: _message,
+      paths: _paths, ...archivedContext
+    } =
       archivedRequest.context as Record<string, unknown>;
-    writeFileSync(archivedRequestPath, canonicalDocument({ ...archivedRequest, context: archivedContext } as never).bytes);
+    writeFileSync(archivedRequestPath, canonicalDocument({
+      ...archivedRequest,
+      context: archivedContext,
+      allowed_decisions: ["authorize-commit", "revise", "abort", "cancel"],
+    } as never).bytes);
     const archivedLoaded = await loadAuthenticatedGateApproval(dependencies, authority, approval);
     expect(archivedLoaded).toMatchObject({
       ok: true,
@@ -559,6 +583,7 @@ describe("durable gate decisions", () => {
     writeFileSync(archivedRequestPath, canonicalDocument({
       ...archivedRequest,
       context: withoutDiffDigest,
+      allowed_decisions: ["authorize-commit", "revise", "abort", "cancel"],
     } as never).bytes);
     expect(await loadAuthenticatedGateApproval(dependencies, authority, approval)).toMatchObject({
       ok: false,

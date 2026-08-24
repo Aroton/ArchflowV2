@@ -4,6 +4,13 @@ import { GATE_KINDS, gateDecisionEffect, parseGateContext, parseGateContract, pa
 
 const D = "a".repeat(64);
 const RULE = { rule_id: "trust-boundary", rule_version: 1 };
+const TRIGGER = {
+  kind: "rule-settlement",
+  settlement: { subject_digest: D, config_digest: "b".repeat(64), settled_at_revision: 4 },
+  conclusion: { wait: true, match: { kind: "subject", subject: "phase-impl" } },
+  rule_authority: "authenticated",
+} as const;
+const PASSING_POLICY = { constitution: "pass", policy_findings: [], eligible_waivers: [], approval_trigger: TRIGGER } as const;
 
 describe("gate catalogue", () => {
   it("contains exactly the ten independent kinds", () => {
@@ -25,7 +32,7 @@ describe("gate catalogue", () => {
     // Composers emit code-unit order (the rule every other sorted-path contract applies), but
     // archives written by the previous bundle store localeCompare order; both parse so legacy
     // approvals stay authenticable. Sets sorted in neither order, and duplicates, still throw.
-    const base = { target_ref: "refs/heads/main", baseline_commit: "1".repeat(40), commit_message: "Implement the phase", diff_digest: D, current_artifact_digests: [D], parent_document_digests: [D] };
+    const base = { ...PASSING_POLICY, target_ref: "refs/heads/main", baseline_commit: "1".repeat(40), commit_message: "Implement the phase", diff_digest: D, current_artifact_digests: [D], parent_document_digests: [D] };
     const codeUnit = parseGateContext("commit-authorization", { ...base, paths: ["docs/COMPLEXITY.md", "docs/cli/COMMANDS.md", "src/state/status.ts"] });
     expect(codeUnit.paths).toEqual(["docs/COMPLEXITY.md", "docs/cli/COMMANDS.md", "src/state/status.ts"]);
     const locale = parseGateContext("commit-authorization", { ...base, paths: ["docs/cli/COMMANDS.md", "docs/COMPLEXITY.md", "src/state/status.ts"] });
@@ -35,9 +42,70 @@ describe("gate catalogue", () => {
   });
 
   it("keeps cancellation outside decisions", () => {
-    expect(() => validateGateDecision("artifact-approval", { artifact_kind: "prd" }, { decision: "approve", reason: "Ready" })).not.toThrow();
-    expect(() => validateGateDecision("artifact-approval", { artifact_kind: "prd" }, { decision: "cancelled", reason: "No" } as never)).toThrow();
-    expect(() => validateGateDecision("artifact-approval", { artifact_kind: "prd" }, { action: "decline", reason: "No" } as never)).toThrow();
+    const artifact = parseGateContext("artifact-approval", { ...PASSING_POLICY, artifact_kind: "prd" });
+    expect(() => validateGateDecision("artifact-approval", artifact, { decision: "approve", reason: "Ready" })).not.toThrow();
+    expect(() => validateGateDecision("artifact-approval", artifact, { decision: "cancelled", reason: "No" } as never)).toThrow();
+    expect(() => validateGateDecision("artifact-approval", artifact, { action: "decline", reason: "No" } as never)).toThrow();
+  });
+
+  it("requires provenance on every fresh ordinary gate and authenticates every waiver choice", () => {
+    const finding = {
+      ...RULE,
+      compliance: "pass" as const,
+      rationale: "The rule passed.",
+      trigger: "matched" as const,
+      trigger_evidence: "The protected boundary matched.",
+    };
+    const policy = {
+      constitution: "pass" as const,
+      policy_findings: [finding],
+      eligible_waivers: [{ rule: RULE, scope: { operation: "review-trigger" as const, boundary: "subject" as const } }],
+      approval_trigger: TRIGGER,
+    };
+    const waiver = { decision: "waiver-requested" as const, reason: "Request an exception", rule: RULE, operation: "review-trigger" as const, rationale: "One-time need" };
+    const artifact = parseGateContext("artifact-approval", { ...policy, artifact_kind: "prd" });
+    const commit = parseGateContext("commit-authorization", {
+      ...policy,
+      target_ref: "refs/heads/main",
+      baseline_commit: "1".repeat(40),
+      commit_message: "Implement the phase",
+      paths: ["src/a.ts"],
+      diff_digest: D,
+      current_artifact_digests: [D],
+      parent_document_digests: [D],
+    });
+    expect(validateGateDecision("artifact-approval", artifact, waiver)).toEqual(waiver);
+    expect(validateGateDecision("commit-authorization", commit, waiver)).toEqual(waiver);
+    expect(() => parseGateContext("artifact-approval", { artifact_kind: "prd" })).toThrow();
+    expect(() => parseGateContext("commit-authorization", {
+      target_ref: "refs/heads/main", baseline_commit: "1".repeat(40), commit_message: "Implement",
+      paths: ["src/a.ts"], diff_digest: D, current_artifact_digests: [D], parent_document_digests: [D],
+    })).toThrow();
+    expect(() => validateGateDecision("artifact-approval", artifact, { ...waiver, rule: { rule_id: "other", rule_version: 1 } })).toThrow(/eligible/);
+    expect(() => validateGateDecision("commit-authorization", commit, { ...waiver, operation: "adjudication-failure" })).toThrow(/eligible/);
+  });
+
+  it("accepts only the closed simple-revision reapproval trigger", () => {
+    const trigger = {
+      kind: "human-revision-reapproval",
+      prior_gate: { gate_id: "gate-prior-1", decision_digest: D, class: "configured-approval" },
+      revision_checkpoint: {
+        classification: "simple",
+        predecessor_subject_digest: "b".repeat(64),
+        subject_digest: "c".repeat(64),
+      },
+    } as const;
+    expect(parseGateContext("artifact-approval", {
+      artifact_kind: "prd", constitution: "pass", policy_findings: [], eligible_waivers: [], approval_trigger: trigger,
+    }).approval_trigger).toEqual(trigger);
+    expect(() => parseGateContext("artifact-approval", {
+      artifact_kind: "prd", constitution: "pass", policy_findings: [], eligible_waivers: [],
+      approval_trigger: { ...trigger, revision_checkpoint: { ...trigger.revision_checkpoint, classification: "significant" } },
+    })).toThrow();
+    expect(() => parseGateContext("artifact-approval", {
+      artifact_kind: "prd", constitution: "pass", policy_findings: [], eligible_waivers: [],
+      approval_trigger: { ...trigger, inherited_summary: "caller-authored" },
+    })).toThrow();
   });
 
   it("enforces waiver, attempt, adjudication, and restore sequencing", () => {

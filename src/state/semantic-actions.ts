@@ -342,12 +342,17 @@ function requestFacts(
   substep: SemanticSubstepV1,
   intentId: PathSafeId,
   submission: ApplySubmissionV1 | undefined,
+  nextActionCode?: string,
+  invocation?: WorkflowInvocationV1,
 ): Readonly<{ execution: SemanticExecutionKind; facts?: PlainJsonValue }> {
   switch (action) {
     case "initialize-task":
       if (submission?.kind !== "task-ask") throw new TypeError("validated task ask is unavailable");
       return { execution: "compose-request", facts: { kind: "initialize", intent_id: intentId } };
     case "begin-work":
+      if (nextActionCode === "recover-approval-trigger-authority") {
+        return { execution: "compose-request", facts: { kind: "recover-approval-trigger-authority", intent_id: intentId } };
+      }
     case "revise":
       return { execution: "compose-request", facts: { kind: "running", step: "produce", intent_id: intentId } };
     case "submit-work": {
@@ -370,6 +375,7 @@ function requestFacts(
         facts: {
           kind: "counter-review",
           intent_id: intentId,
+          ...(invocation?.review_routes === undefined ? {} : { invocation_routes: invocation.review_routes as unknown as PlainJsonValue }),
           // The declaration is plain-json-asserted at parse time; the cast only sheds zod's
           // inferred optional `undefined` (not a PlainJsonValue) — the composer applies the same
           // idiom to this value in composeCounterReview.
@@ -501,7 +507,14 @@ export function planSemanticAction(
   const intentId = semanticSubstepIntentId(operationDigest, nextSubstep);
   const effectiveSubstep = isArchivedDecisionRetry ? "decision-archive" as const : nextSubstep;
   const effectiveIntentId = semanticSubstepIntentId(operationDigest, effectiveSubstep);
-  const request = requestFacts(offer.action_kind, effectiveSubstep, effectiveIntentId, input.action.submission);
+  const request = requestFacts(
+    offer.action_kind,
+    effectiveSubstep,
+    effectiveIntentId,
+    input.action.submission,
+    operationOffer.next_action_code,
+    input.invocation,
+  );
   const requestFactsValue = offer.action_kind === "reopen"
     ? {
         kind: "planning-restart",
@@ -639,7 +652,7 @@ function substepPlan(original: SemanticActionPlanV1, substep: SemanticSubstepV1)
   const submission = original.route_override === undefined
     ? undefined
     : ({ kind: "review-dispatch", route_override: original.route_override } as const);
-  const request = requestFacts(original.action_kind, substep, intentId, submission);
+  const request = requestFacts(original.action_kind, substep, intentId, submission, undefined, original.invocation);
   return Object.freeze({
     action_kind: original.action_kind,
     operation_digest: original.operation_digest,

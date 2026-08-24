@@ -5,7 +5,7 @@
   "request_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "task_id": "task-1",
   "phase_instance": "phase-impl-2",
-  "summary": "Run the triggered constitution review before the phase may advance",
+  "summary": "Approve the reviewed phase implementation and its policy findings",
   "subject_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
   "context_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
   "current_evidence": {
@@ -20,25 +20,26 @@
       }
     ]
   },
-  "kind": "constitution-review",
+  "kind": "artifact-approval",
   "context": {
+    "artifact_kind": "phase-implementation",
     "constitution": "pass",
-    "failed_rules": [],
-    "uncertain_rules": [],
-    "matched_trigger_rules": [
+    "policy_findings": [
       {
         "rule_id": "rule-a",
-        "rule_version": 1
+        "rule_version": 1,
+        "compliance": "pass",
+        "rationale": "The implementation follows the rule.",
+        "trigger": "matched",
+        "trigger_evidence": "The changed path matches the protected boundary."
       },
       {
         "rule_id": "rule-b",
-        "rule_version": 2
-      }
-    ],
-    "uncertain_trigger_rules": [
-      {
-        "rule_id": "rule-c",
-        "rule_version": 1
+        "rule_version": 2,
+        "compliance": "pass",
+        "rationale": "The implementation follows the second rule.",
+        "trigger": "not-matched",
+        "trigger_evidence": "The second boundary was not changed."
       }
     ],
     "eligible_waivers": [
@@ -52,7 +53,23 @@
           "boundary": "subject"
         }
       }
-    ]
+    ],
+    "approval_trigger": {
+      "kind": "rule-settlement",
+      "settlement": {
+        "subject_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "config_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+        "settled_at_revision": 3
+      },
+      "conclusion": {
+        "wait": true,
+        "match": {
+          "kind": "content",
+          "paths": ["src/changed.ts"]
+        }
+      },
+      "rule_authority": "authenticated"
+    }
   },
   "allowed_decisions": [
     "approve",
@@ -68,7 +85,7 @@
     "gate_id": "gate-review-1",
     "task_id": "task-1",
     "phase_instance": "phase-impl-2",
-    "kind": "constitution-review",
+    "kind": "artifact-approval",
     "subject_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "context_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     "required_fields": [

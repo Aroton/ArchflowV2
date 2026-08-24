@@ -77,6 +77,7 @@ describe("payload input modes and error taxonomy", () => {
   it("names the command's input contract when stdin is empty and --input is absent", () => {
     const result = cliStdin(repositoryRoot, "validate", "");
     expect(result.status).toBe(1);
+    expect(result.value).toMatchObject({ schema_version: "1", ok: false, error: { code: "CONTRACT_INVALID" } });
     expect(result.stderr).toContain("validate requires an input payload (--input <json-file> or stdin)");
     expect(result.stderr).toContain(`expected: ${LOCAL_COMMAND_CONTRACTS.validate.payload}`);
   });
@@ -84,6 +85,7 @@ describe("payload input modes and error taxonomy", () => {
   it("names render's expected payload shape when called without input", () => {
     const result = cliStdin(repositoryRoot, "render", "");
     expect(result.status).toBe(1);
+    expect(result.value).toMatchObject({ schema_version: "1", ok: false, error: { code: "CONTRACT_INVALID" } });
     expect(result.stderr).toContain("render requires an input payload (--input <json-file> or stdin)");
     expect(result.stderr).toContain('expected: {"kind":"review"|"adjudication"');
   });
@@ -107,12 +109,14 @@ describe("payload input modes and error taxonomy", () => {
   it("reports invalid JSON with its source for stdin payloads", () => {
     const result = cliStdin(repositoryRoot, "hash", "{");
     expect(result.status).toBe(1);
+    expect(result.value).toMatchObject({ schema_version: "1", ok: false, error: { code: "CONTRACT_INVALID" } });
     expect(result.stderr).toContain("invalid JSON payload from stdin");
   });
 
   it("reports invalid JSON with its source for --input payloads", () => {
     const result = cliFile(repositoryRoot, "hash", "{");
     expect(result.status).toBe(1);
+    expect(result.value).toMatchObject({ schema_version: "1", ok: false, error: { code: "CONTRACT_INVALID" } });
     expect(result.stderr).toContain(`invalid JSON payload from ${result.path}`);
   });
 });

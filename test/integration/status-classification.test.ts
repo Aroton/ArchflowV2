@@ -81,7 +81,9 @@ describe("status classification", () => {
     mkdirSync(stageRoot, { recursive: true });
     writeFileSync(join(stageRoot, "stage.json"), JSON.stringify({
       schema_version: "1", task_id: workspace.taskId, import_digest: digest,
-      preview_digest: "b".repeat(64), manifest_path: "manifest.json", resume_phase: "phase-impl-2",
+      preview_digest: "b".repeat(64),
+      manifest_path: `.archflow/runtime/tasks/${workspace.taskId}/cache/imports/${digest}/manifest.json`,
+      resume_phase: "phase-impl-2",
     }));
     expect(await classify(workspace)).toMatchObject({
       ok: true,
@@ -94,6 +96,71 @@ describe("status classification", () => {
       value: {
         mode: "upgrade-restart-required",
         next_action: { code: "discard-incompatible-upgrade-stage", input: { import_digests: [digest] } },
+      },
+    });
+  });
+
+  it("treats every malformed matching stage descriptor as restart-required without reflecting its fields", async () => {
+    const workspace = await createTaskWorkspace({ taskId: "status-malformed-stage", label: "status-malformed-stage" });
+    workspaces.push(workspace);
+    rmSync(workspace.services.authority.state.absolute);
+    const digest = "c".repeat(64);
+    const stageRoot = join(workspace.root, ".archflow", "runtime", "tasks", workspace.taskId, "cache", "imports", digest);
+    const stagePath = join(stageRoot, "stage.json");
+    const manifestPath = `.archflow/runtime/tasks/${workspace.taskId}/cache/imports/${digest}/manifest.json`;
+    mkdirSync(stageRoot, { recursive: true });
+    const base = {
+      schema_version: "1",
+      task_id: workspace.taskId,
+      import_digest: digest,
+      preview_digest: "d".repeat(64),
+      manifest_path: manifestPath,
+      resume_phase: "phase-design-2",
+    } as const;
+    const injection = `phase-impl-2-${"INJECTED".repeat(2_000)}`;
+    const malformed = [
+      { task_id: workspace.taskId, import_digest: digest },
+      { ...base, schema_version: "2" },
+      { ...base, preview_digest: "not-a-digest" },
+      { ...base, manifest_path: "manifest.json" },
+      { ...base, resume_phase: injection },
+      { ...base, unexpected: "field" },
+    ];
+
+    for (const descriptor of malformed) {
+      writeFileSync(stagePath, JSON.stringify(descriptor));
+      const result = await classify(workspace);
+      expect(result).toMatchObject({
+        ok: true,
+        value: {
+          mode: "upgrade-restart-required",
+          next_action: {
+            code: "discard-incompatible-upgrade-stage",
+            input: { import_digests: [digest] },
+          },
+        },
+      });
+      expect(JSON.stringify(result)).not.toContain("INJECTED");
+      expect(result.value.next_action.detail.length).toBeLessThan(512);
+    }
+
+    const secondDigest = "e".repeat(64);
+    const secondRoot = join(workspace.root, ".archflow", "runtime", "tasks", workspace.taskId, "cache", "imports", secondDigest);
+    mkdirSync(secondRoot, { recursive: true });
+    writeFileSync(stagePath, JSON.stringify(base));
+    writeFileSync(join(secondRoot, "stage.json"), JSON.stringify({
+      ...base,
+      import_digest: secondDigest,
+      manifest_path: `.archflow/runtime/tasks/${workspace.taskId}/cache/imports/${secondDigest}/manifest.json`,
+    }));
+    expect(await classify(workspace)).toMatchObject({
+      ok: true,
+      value: {
+        mode: "upgrade-restart-required",
+        next_action: {
+          code: "discard-incompatible-upgrade-stage",
+          input: { import_digests: [digest, secondDigest] },
+        },
       },
     });
   });

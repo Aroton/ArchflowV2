@@ -218,6 +218,23 @@ describe("canonical skill contracts", () => {
     }
   });
 
+  it("normalizes optional review routes once and preserves the exact invocation", () => {
+    for (const name of producerSkills) {
+      const source = skill(name);
+      expect(source).toContain("--counter-reviewer <model>:<effort>[@<provider>]");
+      expect(source).toContain("--adjudicator <model>:<effort>[@<provider>]");
+      expect(source).toContain("order-independent");
+      expect(source).toContain("at most once");
+      expect(source).toContain("split once at the first `:`");
+      expect(source).toContain("split the remainder once at the first `@`");
+      expect(source).toContain("`invocation.review_routes`");
+      expect(source).toContain("An omitted role independently uses its live phase/base configured route");
+      expect(source).toContain("repeat it identically on every status/apply call in this run");
+      expect(source).toContain("significant-revision reviews");
+      expect(source).toMatch(/Never add, drop, or change (?:normalized )?routes between status and apply/u);
+    }
+  });
+
   it("keeps the implementation producer on semantic commit observation and successor boundaries", () => {
     const source = skill("archflow-phase-impl");
     expect(source).toContain('`{"kind":"work-result","outcome":"succeeded","implementation":{...}}`');
@@ -231,10 +248,9 @@ describe("canonical skill contracts", () => {
     expect(source).toContain('`{"kind":"gate-summary","summary":<summary>}`');
     expect(source).toContain("selected presentation option token");
     expect(source).toContain("separate no-submission `open-waiver`");
-    expect(source).toContain("`requires_human_confirmation: true`");
-    expect(source).toContain("`requires_human_confirmation: false`");
-    expect(source).toContain("authenticated rule authority permits direct execution");
-    expect(source).toContain("must not invent or request human confirmation");
+    expect(source).not.toContain("requires_human_confirmation");
+    expect(source).toContain("execute only its authenticated commit facts");
+    expect(source).toContain("never invent or request a second human confirmation");
     expect(source).toContain("`commit.paths`");
     expect(source).toContain(":(top,literal)<path>");
     expect(source).toContain("create the commit yourself");
@@ -259,7 +275,19 @@ describe("canonical skill contracts", () => {
     expect(implementation).toContain("Never synthesize a commit-authorization gate");
     expect(implementation).toContain("When a `presentation` is returned, stop");
     expect(implementation).toContain("If no presentation is returned, do not stop for a human decision; follow the fresh server-returned action directly.");
-    expect(implementation).toContain("branch only on its authenticated `commit.requires_human_confirmation` fact");
+    expect(implementation).toContain("execute only its authenticated commit facts");
+  });
+
+  it("presents the authenticated classified reason envelope consistently", () => {
+    for (const name of [...semanticDocumentSkills, "archflow-phase-impl", "archflow-status"] as const) {
+      const source = skill(name);
+      expect(source).toContain("`presentation.reasons`");
+      expect(source).toContain('`presentation.class:"exception"`');
+    }
+    for (const name of [...semanticDocumentSkills, "archflow-phase-impl"] as const) {
+      expect(skill(name)).toMatch(/authenticated archived (?:request bindings|facts|request)/u);
+    }
+    expect(skill("archflow-status")).toContain("exceptional reason dominates the aggregate class");
   });
 
   it("makes document skills observe and report semantic successors without starting them", () => {
@@ -274,10 +302,10 @@ describe("canonical skill contracts", () => {
   });
 
   it("pins document entry, reopen, semantic submission, revision, gate, waiver, and Git ownership", () => {
-    expect(skill("archflow-prd")).toContain('{"skill":"archflow-prd","intent":"resume"}');
-    expect(skill("archflow-design")).toContain('{"skill":"archflow-design","intent":"resume"}');
-    expect(skill("archflow-phase-design")).toContain('{"skill":"archflow-phase-design","phase":<phase-number>,"intent":"resume"}');
-    expect(skill("archflow-phase-impl")).toContain('{"skill":"archflow-phase-impl","phase":<phase-number>,"intent":"resume"}');
+    expect(skill("archflow-prd")).toContain('{"skill":"archflow-prd","intent":"resume",<optional review_routes>}');
+    expect(skill("archflow-design")).toContain('{"skill":"archflow-design","intent":"resume",<optional review_routes>}');
+    expect(skill("archflow-phase-design")).toContain('{"skill":"archflow-phase-design","phase":<phase-number>,"intent":"resume",<optional review_routes>}');
+    expect(skill("archflow-phase-impl")).toContain('{"skill":"archflow-phase-impl","phase":<phase-number>,"intent":"resume",<optional review_routes>}');
     for (const name of semanticDocumentSkills) {
       const source = skill(name);
       expect(source).toContain('`intent:"reopen"`');
@@ -332,8 +360,8 @@ describe("canonical skill contracts", () => {
     expect(source).toContain("no invocation");
     expect(source).toContain("no mutation offer");
     expect(source).toContain("never calls `archflow_apply`");
-    expect(source).toContain("`true` means a human-authorized commit");
-    expect(source).toContain("`false` means authenticated rule authority");
+    expect(source).not.toContain("requires_human_confirmation");
+    expect(source).toContain("no second human confirmation remains");
     expect(source).toContain("`archflow-local manual-status --task <task>`");
   });
 

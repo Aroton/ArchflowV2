@@ -6,6 +6,7 @@ import { taskStateV1Schema } from "../../src/contracts/durable-state.js";
 import {
   archFlowApplyInputV1Schema,
   parseArchFlowApplyInputV1,
+  parseArchFlowStatusInputV1,
   parseSemanticResultV1,
   parseWorkflowInvocationV1,
 } from "../../src/contracts/semantic-workflow.js";
@@ -36,6 +37,46 @@ describe("semantic workflow contracts", () => {
     const accessor = Object.defineProperty({}, "schema_version", { enumerable: true, get: () => "1" });
     expect(() => parseSemanticResultV1(accessor)).toThrow(/accessor/u);
   });
+
+  it("requires structured boundary reasons and exposes commit facts without a confirmation flag", () => {
+    const value = {
+      schema_version: "1",
+      task_id: "task-1",
+      condition: "awaiting-human",
+      headline: "Approval required",
+      detail: "Review the exact result.",
+      resources: [],
+      next_action: {
+        kind: "commit",
+        instruction: "Commit the authenticated bytes.",
+        commit: { paths: ["src/a.ts"], message: "Implement the phase", target_ref: "refs/heads/main", baseline: "1".repeat(40) },
+      },
+      presentation: {
+        class: "exception",
+        title: "Approval required",
+        summary: "A policy finding requires judgment.",
+        question: "Do you approve?",
+        reasons: [{ class: "exception", text: "The pinned rule reported an uncertain result." }],
+        options: [{ token: "choice-1", label: "Approve", consequence: "Commit and continue." }],
+      },
+    } as const;
+    expect(parseSemanticResultV1({ schema_version: "1", ok: true, value })).toMatchObject({ ok: true, value });
+    expect(() => parseSemanticResultV1({
+      schema_version: "1",
+      ok: true,
+      value: { ...value, next_action: { ...value.next_action, commit: { ...value.next_action.commit, requires_human_confirmation: false } } },
+    })).toThrow();
+    expect(() => parseSemanticResultV1({
+      schema_version: "1",
+      ok: true,
+      value: { ...value, presentation: { ...value.presentation, reasons: [] } },
+    })).toThrow();
+    expect(() => parseSemanticResultV1({
+      schema_version: "1",
+      ok: true,
+      value: { ...value, presentation: { ...value.presentation, class: "configured-approval" } },
+    })).toThrow(/presentation class/u);
+  });
   it("keeps the public apply schema root a plain object and nests its variants", () => {
     const apply = (semanticWorkflowSchema.$defs as Record<string, Record<string, unknown>>).applyInput;
     expect(apply?.type).toBe("object");
@@ -45,14 +86,25 @@ describe("semantic workflow contracts", () => {
     expect(archFlowApplyInputV1Schema.safeParse(baseApply()).success).toBe(true);
   });
 
-  it("accepts every invocation shape and refuses phase-implementation reopen", () => {
+  it("round-trips strict optional review routes on every invocation shape and refuses phase-implementation reopen", () => {
+    const review_routes = {
+      "counter-reviewer": { model: "claude-fable-5", effort: "high", provider: "zai" },
+      adjudicator: { model: "gpt-5.6", effort: "max" },
+    } as const;
     for (const invocation of [
-      { skill: "archflow-prd", intent: "resume" },
-      { skill: "archflow-design", intent: "reopen" },
-      { skill: "archflow-phase-design", phase: 2, intent: "resume" },
-      { skill: "archflow-phase-impl", phase: 2, intent: "resume" },
-    ]) expect(() => parseWorkflowInvocationV1(invocation)).not.toThrow();
+      { skill: "archflow-prd", intent: "resume", review_routes },
+      { skill: "archflow-design", intent: "reopen", review_routes },
+      { skill: "archflow-phase-design", phase: 2, intent: "resume", review_routes },
+      { skill: "archflow-phase-impl", phase: 2, intent: "resume", review_routes },
+    ]) {
+      expect(parseWorkflowInvocationV1(invocation)).toEqual(invocation);
+      expect(parseArchFlowStatusInputV1({ schema_version: "1", task_id: "api-refactor", invocation }).invocation).toEqual(invocation);
+      expect(parseArchFlowApplyInputV1({ schema_version: "1", task_id: "api-refactor", invocation, action: { offer } }).invocation).toEqual(invocation);
+    }
     expect(() => parseWorkflowInvocationV1({ skill: "archflow-phase-impl", phase: 2, intent: "reopen" })).toThrow();
+    expect(() => parseWorkflowInvocationV1({ skill: "archflow-prd", intent: "resume", review_routes: {} })).toThrow(/review_routes/u);
+    expect(() => parseWorkflowInvocationV1({ skill: "archflow-prd", intent: "resume", review_routes: { reviewer: review_routes["counter-reviewer"] } })).toThrow();
+    expect(() => parseWorkflowInvocationV1({ skill: "archflow-prd", intent: "resume", review_routes: { adjudicator: { model: "gpt-5.6", effort: "extreme" } } })).toThrow();
   });
 
   it("preserves authored request bytes and rejects unstable caller-owned objects", () => {

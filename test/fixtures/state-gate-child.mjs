@@ -59,9 +59,7 @@ try {
     phase_instance: phaseInstance, declared_inputs: [],
   };
   const inputFingerprint = fingerprints.computeInputFingerprint(subject);
-  const reentryKind = action.startsWith("reentry")
-    ? "constitution-review"
-    : action.startsWith("exhaustion")
+  const reentryKind = action.startsWith("exhaustion")
       ? "attempts-exhausted"
       : undefined;
   const input = {
@@ -74,19 +72,7 @@ try {
         { role: "counter-review", evidence_digest: evidence.parseSha256Digest("c".repeat(64)), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" },
       ],
     },
-    ...(reentryKind === "constitution-review"
-      ? {
-          kind: reentryKind,
-          context: {
-            constitution: "pass",
-            failed_rules: [],
-            uncertain_rules: [],
-            matched_trigger_rules: [{ rule_id: "review-required", rule_version: 1 }],
-            uncertain_trigger_rules: [],
-            eligible_waivers: [],
-          },
-        }
-      : reentryKind === "attempts-exhausted"
+    ...(reentryKind === "attempts-exhausted"
         ? {
             kind: reentryKind,
             context: {
@@ -95,7 +81,25 @@ try {
               maximum_attempts: state.document.value.attempt,
             },
           }
-        : { kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } }),
+        : {
+            kind: "artifact-approval",
+            context: {
+              artifact_kind: "phase-implementation",
+              constitution: "pass",
+              policy_findings: [],
+              eligible_waivers: [],
+              approval_trigger: {
+                kind: "rule-settlement",
+                settlement: {
+                  subject_digest: evidence.parseSha256Digest("9".repeat(64)),
+                  config_digest: state.document.value.config_digest,
+                  settled_at_revision: state.document.value.revision,
+                },
+                conclusion: { wait: true, match: { kind: "subject", subject: "phase-impl" } },
+                rule_authority: "authenticated",
+              },
+            },
+          }),
   };
   const realAtomic = atomicModule.createAtomicWriter();
   let stateReplacements = 0;

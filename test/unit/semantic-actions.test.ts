@@ -83,6 +83,18 @@ describe("semantic one-action planning", () => {
     expect(parseSemanticSubstepIntentId(first.intent_id)).toEqual({ operation_digest: first.operation_digest, substep: "begin-work" });
   });
 
+  it("maps approval-trigger compatibility recovery to its payload-free authority operation", () => {
+    const durable = state("triage", "succeeded");
+    const current = snapshot(durable, {
+      code: "recover-approval-trigger-authority", detail: "Refresh the pre-trigger fixed point.",
+      human_required: false, phase_instance: durable.phase_instance,
+    });
+    expect(apply(current, invocation)).toMatchObject({
+      action_kind: "begin-work", substeps: ["begin-work"], execution: "compose-request",
+      request_facts: { kind: "recover-approval-trigger-authority" },
+    });
+  });
+
   it("strictly matches submissions and binds changed work facts to a different operation", () => {
     const current = snapshot(state("produce", "running"), {
       code: "run-step", detail: "Submit produce.", human_required: false, phase_instance: "phase-design-1" as TaskStateV1["phase_instance"], step: "produce",
@@ -180,6 +192,62 @@ describe("semantic one-action planning", () => {
     // Any other submission kind is still refused on the review action.
     expect(() => apply(pending, invocation, { kind: "gate-summary", summary: "Wrong." }))
       .toThrowError(expect.objectContaining({ code: "SEMANTIC_SUBMISSION_MISMATCH" }));
+  });
+
+  it("keeps route changes inside offer identity without changing invocation ownership", () => {
+    const pending = snapshot(state("produce", "succeeded"), {
+      code: "run-step", detail: "Run review.", human_required: false, phase_instance: "phase-design-1" as TaskStateV1["phase_instance"], step: "counter_review",
+    });
+    const first: WorkflowInvocationV1 = {
+      ...invocation,
+      review_routes: { "counter-reviewer": { model: "claude-fable-5", effort: "high" } },
+    };
+    const changed: WorkflowInvocationV1 = {
+      ...invocation,
+      review_routes: { "counter-reviewer": { model: "claude-fable-5", effort: "max" } },
+    };
+    const firstProjection = projectSemanticStatus(pending, first);
+    const changedProjection = projectSemanticStatus(pending, changed);
+    expect(firstProjection.internal_offer).toBeDefined();
+    expect(changedProjection.internal_offer).toBeDefined();
+    expect(firstProjection.view.next_action.offer).not.toBe(changedProjection.view.next_action.offer);
+    expect(changedProjection.view.detail).not.toMatch(/does not own/u);
+    expect(() => planSemanticAction(pending, {
+      schema_version: "1", task_id: "api-refactor", invocation: changed,
+      action: { offer: firstProjection.view.next_action.offer! },
+    })).toThrowError(expect.objectContaining({ code: "SEMANTIC_OFFER_STALE" }));
+  });
+
+  it("carries invocation routes into initial and authenticated recovered review-run plans", () => {
+    const routed: WorkflowInvocationV1 = {
+      ...invocation,
+      review_routes: {
+        "counter-reviewer": { model: "claude-fable-5", effort: "high", provider: "zai" },
+        adjudicator: { model: "gpt-5.6", effort: "max" },
+      },
+    };
+    const freshRunning = snapshot(state("counter_review", "running"), {
+      code: "run-step", detail: "Run review.", human_required: false, phase_instance: "phase-design-1" as TaskStateV1["phase_instance"], step: "counter_review",
+    });
+    const initial = apply(freshRunning, routed);
+    expect(initial).toMatchObject({
+      next_substep: "review-run",
+      request_facts: { kind: "counter-review", invocation_routes: routed.review_routes },
+    });
+
+    const enteredBase = { ...state("counter_review", "running"), revision: 8 as TaskStateV1["revision"], input_fingerprint: digest("7") };
+    const enteredState = { ...enteredBase, last_transition: {
+      schema_version: "1", tool: "archflow_state", operation: "record-state-boundary",
+      intent_id: semanticSubstepIntentId(initial.operation_digest, "review-enter"),
+      request_digest: digest("b"), input_fingerprint: digest("7"), result_id: "result-1", outcome: { ok: true }, outcome_digest: digest("c"),
+      prior_revision: 7, resulting_revision: 8,
+    } } as unknown as TaskStateV1;
+    const recovered = apply(snapshot(enteredState, {
+      code: "run-step", detail: "Continue review.", human_required: false, phase_instance: enteredState.phase_instance, step: "counter_review",
+    }), routed);
+    expect(recovered.operation_digest).toBe(initial.operation_digest);
+    expect(recovered.operation_key).toBeUndefined();
+    expect(recovered.request_facts).toMatchObject({ kind: "counter-review", invocation_routes: routed.review_routes });
   });
 
   it("refuses a reviewer-substitution dispatch at non-review actions and every submission where none is expected", () => {
@@ -380,7 +448,14 @@ describe("semantic one-action planning", () => {
     const decision = snapshot(open, {
       code: "resolve-open-gate", detail: "Choose.", human_required: true, phase_instance: open.phase_instance, gate_id: "gate-1" as never, gate_kind: "artifact-approval",
     });
-    (decision.status as unknown as Record<string, unknown>).open_gate = { presentation: { title: "Approve", summary: "Summary", question: "Choose?", options: [{ token: "approve", label: "Approve", consequence: "Advances" }] } };
+    (decision.status as unknown as Record<string, unknown>).open_gate = { presentation: {
+      class: "configured-approval",
+      title: "Approve",
+      summary: "Summary",
+      question: "Choose?",
+      reasons: [{ class: "configured-approval", text: "This project requires approval for the reviewed subject." }],
+      options: [{ token: "approve", label: "Approve", consequence: "Advances" }],
+    } };
     const deferred = apply(decision, invocation, { kind: "decision", choice: "approve", reason: "Approved." });
     expect(deferred).toMatchObject({
       substeps: ["decision-archive", "decision-settle"], next_substep: "decision-archive",
@@ -667,7 +742,14 @@ describe("semantic one-action planning", () => {
       gate_id: "gate-1" as never, gate_kind: "artifact-approval",
     });
     (open.status as unknown as Record<string, unknown>).open_gate = {
-      presentation: { title: "Approve", summary: "Summary", question: "Choose?", options: [{ token: "approve", label: "Approve", consequence: "Advances" }] },
+      presentation: {
+        class: "configured-approval",
+        title: "Approve",
+        summary: "Summary",
+        question: "Choose?",
+        reasons: [{ class: "configured-approval", text: "This project requires approval for the reviewed subject." }],
+        options: [{ token: "approve", label: "Approve", consequence: "Advances" }],
+      },
     };
     const offer = projectSemanticStatus(open, invocation).view.next_action.offer!;
     const input = { schema_version: "1", task_id: "api-refactor", invocation, action: {

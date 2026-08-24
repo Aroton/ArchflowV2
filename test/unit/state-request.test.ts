@@ -14,6 +14,7 @@ import { createGitRunner, preflightGit, type RepositoryOperationContext } from "
 import { discoverWorktree } from "../../src/repository/identity.js";
 import { createInternalTransactionAuthority, type TransactionAuthority } from "../../src/state/authority.js";
 import { identifyTransactionRequest } from "../../src/state/request.js";
+import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
@@ -61,11 +62,25 @@ const waiverOrigin = {
   rule: { rule_id: "Rule:1", rule_version: 1 },
   scope: { operation: "review-trigger", boundary: "subject" },
 } as const;
+const artifactApprovalContext = {
+  artifact_kind: "phase-implementation" as const,
+  ...ordinaryApprovalFacts("phase-impl", parseSha256Digest("7".repeat(64))),
+};
 
 const rawInputs = () => ({
   archflow_state: { ...common, phase_instance: phase, step: "produce", status: "succeeded" },
+  archflow_approval_trigger_recovery: {
+    ...common,
+    phase_instance: phase,
+    step: "triage",
+    status: "succeeded",
+    operation: "recover_approval_trigger_authority",
+  },
+  archflow_milestone_refresh: { ...common, phase_instance: phase, step: "triage", status: "succeeded", operation: "refresh_milestone_baseline" },
+  archflow_milestone_recovery: { ...common, phase_instance: phase, step: "produce", status: "running", operation: "recover_milestone_authority" },
+  archflow_stale_refresh: { ...common, phase_instance: phase, step: "triage", status: "succeeded", operation: "refresh_stale_baseline" },
   archflow_counter_review: { ...common, artifact_path: "phases/9/result.md" },
-  archflow_gate: { ...common, phase_instance: phase, summary: "Approve implementation", subject_digest: "7".repeat(64), current_evidence: currentEvidence, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, preview_digest: previewDigest, decision: gateDecision },
+  archflow_gate: { ...common, phase_instance: phase, summary: "Approve implementation", subject_digest: "7".repeat(64), current_evidence: currentEvidence, kind: "artifact-approval", context: artifactApprovalContext, preview_digest: previewDigest, decision: gateDecision },
   archflow_waiver: { ...common, origin: waiverOrigin, rationale: "A bounded exception is required", preview_digest: previewDigest, decision: waiverDecision },
 } as const);
 
@@ -84,8 +99,12 @@ function selectorFixtures(): readonly SelectorFixture[] {
   const raw = rawInputs();
   return [
     { call: parseToolCall("archflow_state", raw.archflow_state), operation: "record-state-boundary", operation_fields: { phase_instance: phase, step: "produce", status: "succeeded" } },
+    { call: parseToolCall("archflow_state", raw.archflow_approval_trigger_recovery), operation: "recover-approval-trigger-authority", operation_fields: { phase_instance: phase, step: "triage", status: "succeeded" } },
+    { call: parseToolCall("archflow_state", raw.archflow_milestone_refresh), operation: "refresh-milestone-baseline", operation_fields: { phase_instance: phase, step: "triage", status: "succeeded" } },
+    { call: parseToolCall("archflow_state", raw.archflow_milestone_recovery), operation: "recover-milestone-authority", operation_fields: { phase_instance: phase, step: "produce", status: "running" } },
+    { call: parseToolCall("archflow_state", raw.archflow_stale_refresh), operation: "refresh-stale-baseline", operation_fields: { phase_instance: phase, step: "triage", status: "succeeded" } },
     { call: parseToolCall("archflow_counter_review", raw.archflow_counter_review), operation: "counter-review", operation_fields: { artifact_path: "phases/9/result.md" } },
-    { call: parseToolCall("archflow_gate", raw.archflow_gate), operation: "gate", operation_fields: { phase_instance: phase, summary: "Approve implementation", subject_digest: "7".repeat(64), current_evidence: currentEvidence, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, preview_digest: previewDigest, decision: gateDecision } },
+    { call: parseToolCall("archflow_gate", raw.archflow_gate), operation: "gate", operation_fields: { phase_instance: phase, summary: "Approve implementation", subject_digest: "7".repeat(64), current_evidence: currentEvidence, kind: "artifact-approval", context: artifactApprovalContext, preview_digest: previewDigest, decision: gateDecision } },
     { call: parseToolCall("archflow_waiver", raw.archflow_waiver), operation: "waiver", operation_fields: { origin: waiverOrigin, rationale: "A bounded exception is required", preview_digest: previewDigest, decision: waiverDecision } },
   ] as readonly SelectorFixture[];
 }
@@ -135,24 +154,35 @@ describe("internal transaction request identity", () => {
   // that `subjectFor` actually projects each field. An omitted optional field is silently absent
   // from the digest, which would let a staged request be edited after it was composed and still
   // authenticate. This drives the real builder, not a hand-written subject.
-  it("carries a counter-review route override into the request digest", () => {
+  it("carries invocation routes and a counter-review route override into the request digest", () => {
     const raw = rawInputs();
-    const digestFor = (route_override?: unknown) => identifyTransactionRequest(
-      parseToolCall("archflow_counter_review", route_override === undefined
-        ? raw.archflow_counter_review
-        : { ...raw.archflow_counter_review, route_override }),
+    const digestFor = (invocation_routes?: unknown, route_override?: unknown) => identifyTransactionRequest(
+      parseToolCall("archflow_counter_review", {
+        ...raw.archflow_counter_review,
+        ...(invocation_routes === undefined ? {} : { invocation_routes }),
+        ...(route_override === undefined ? {} : { route_override }),
+      }),
       authority,
       fingerprint,
     ).request_digest;
 
     const digests = [
       digestFor(),
-      digestFor({ reason: "pinned reviewer is rate-limited", "counter-reviewer": { model: "claude-opus-4-6", effort: "max" } }),
-      digestFor({ reason: "pinned reviewer is rate-limited", "counter-reviewer": { model: "claude-opus-4-6", effort: "low" } }),
-      digestFor({ reason: "pinned reviewer is rate-limited", adjudicator: { model: "claude-opus-4-6", effort: "max" } }),
-      digestFor({ reason: "a reason the human did not write", "counter-reviewer": { model: "claude-opus-4-6", effort: "max" } }),
+      digestFor({ "counter-reviewer": { model: "claude-fable-5", effort: "high" } }),
+      digestFor({ adjudicator: { model: "gpt-5.6", effort: "max" } }),
+      digestFor(undefined, { reason: "pinned reviewer is rate-limited", "counter-reviewer": { model: "claude-opus-4-6", effort: "max" } }),
+      digestFor({ "counter-reviewer": { model: "claude-fable-5", effort: "high" } }, { reason: "pinned reviewer is rate-limited", "counter-reviewer": { model: "claude-opus-4-6", effort: "max" } }),
     ];
-    expect(new Set(digests).size, "each distinct override must identify a distinct request").toBe(digests.length);
+    expect(new Set(digests).size, "each distinct routing request must identify a distinct request").toBe(digests.length);
+  });
+
+  it("binds each explicit payload-free state operation to a distinct request identity", () => {
+    const raw = rawInputs();
+    const calls = [raw.archflow_approval_trigger_recovery, raw.archflow_milestone_refresh, raw.archflow_stale_refresh];
+    const digests = calls.map((value) => identifyTransactionRequest(
+      parseToolCall("archflow_state", value), authority, fingerprint,
+    ).request_digest);
+    expect(new Set(digests).size).toBe(digests.length);
   });
 
   it("selects every artifact operation and binds the exact canonical artifact digest", () => {

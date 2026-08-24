@@ -21,6 +21,7 @@ export type NextActionCode =
   | "commit-phase"
   | "refresh-milestone-baseline"
   | "recover-milestone-authority"
+  | "recover-approval-trigger-authority"
   | "refresh-stale-baseline"
   | "advance-phase"
   | "complete-task"
@@ -47,8 +48,6 @@ export type NextAction = Readonly<{
   commit_message?: string;
   commit_target_ref?: string;
   commit_baseline?: string;
-  /** Autonomous rule authority needs no second human confirmation; gate authority always does. */
-  commit_requires_human_confirmation?: boolean;
   /**
    * Every constitution gate this review still demands, in the order they will open, including the
    * one named by `gate_kind`. Present only when more than one remains, so a human can be told the
@@ -104,6 +103,8 @@ export type NextActionInput = Readonly<{
   commit_blocked_reason?: string;
   /** Server-proved same-position recovery after a milestone is missing from target history. */
   milestone_recovery_required?: boolean;
+  /** One-shot re-entry for a pre-trigger adjudication fixed point. */
+  approval_trigger_recovery_required?: boolean;
   /** Changed governing planning bytes are owned by the current design position and must re-enter review before any other drift is adopted. */
   governing_document_recovery_required?: boolean;
   /** Git/object/identity failures are inspection-only and never treated as missing authority. */
@@ -231,7 +232,11 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
       : undefined;
   const legacyDesignApproval = designPhase && hasLegacyDesignApproval(input);
   const migrationApproval = designPhase && matchingApproval(input, "migration-audit");
-  const autonomous = hasAcceptedNoWait(input, state);
+  const ordinaryApproved = requiredKind !== undefined && matchingApproval(input, requiredKind);
+  // An exact ordinary approval is the stronger authority for this subject. A coexisting no-wait
+  // settlement may explain why no gate was originally required, but it must never replace the
+  // human-bound Git facts after the human has approved this exact subject.
+  const autonomous = hasAcceptedNoWait(input, state) && !ordinaryApproved;
   // The imported design exits through its one migration audit, never a design-approval gate —
   // the same rule the adjudication branch applies when constitution gates are pending.
   if (designPhase && input.migration_audit_required === true) {
@@ -239,7 +244,7 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
       gate_kind: "migration-audit",
     });
   }
-  if (requiredKind !== undefined && !matchingApproval(input, requiredKind) && !legacyDesignApproval && !migrationApproval && !autonomous) {
+  if (requiredKind !== undefined && !ordinaryApproved && !legacyDesignApproval && !migrationApproval && !autonomous) {
     return action("open-gate", `Open the required ${requiredKind} gate.`, true, state, {
       gate_kind: requiredKind,
     });
@@ -293,19 +298,15 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
       commit_message: input.design_commit.message,
       commit_target_ref: input.design_commit.target_ref,
       commit_baseline: input.design_commit.baseline_commit,
-      commit_requires_human_confirmation: false,
     });
   }
   if (phase.kind === "phase-impl" && input.commit_observed !== true) {
     if (input.implementation_commit === undefined) {
       return action("inspect-state", "Inspect why the approved implementation commit authority is unavailable.", true, state);
     }
-    const requiresHumanConfirmation = !autonomous;
     return action(
       "commit-phase",
-      requiresHumanConfirmation
-        ? "Commit the exact phase outputs authorized by the human's commit decision."
-        : "Commit the exact phase outputs authorized by the authenticated approval rule.",
+      "Commit the exact phase outputs authorized by the authenticated workflow authority.",
       false,
       state,
       {
@@ -313,7 +314,6 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
         commit_message: input.implementation_commit.message,
         commit_target_ref: input.implementation_commit.target_ref,
         commit_baseline: input.implementation_commit.baseline_commit,
-        commit_requires_human_confirmation: requiresHumanConfirmation,
       },
     );
   }
@@ -552,6 +552,14 @@ export function deriveNextAction(input: NextActionInput): NextAction {
   if ((input.upstream_document_drift ?? []).length > 0) {
     return upstreamDocumentDriftAction(state, input.upstream_document_drift!);
   }
+  if (input.approval_trigger_recovery_required === true && input.migration_audit_required !== true) {
+    return action(
+      "recover-approval-trigger-authority",
+      "Retire the pre-trigger review fixed point and re-enter production so unchanged bytes receive fresh review and an authenticated approval trigger.",
+      false,
+      state,
+    );
+  }
   const next = input.assessment?.next;
   if (next !== undefined) {
     if (next === "advance") return advanceAction(input, state);
@@ -572,13 +580,35 @@ export function deriveNextAction(input: NextActionInput): NextAction {
         } else if (hasLegacyDesignApproval(input) && !matchingApproval(input, "design-approval")) {
           // A legacy document approval does not erase any separately recorded constitution gate.
           // Let the old adjudication contract finish instead of opening the new combined gate.
-        } else {
+        } else if (input.adjudication_gate_kind === "constitution-review") {
           return matchingApproval(input, "design-approval")
           ? advanceAction(input, state)
           : action("open-gate", "Open the single design approval with its policy findings and commit authority.", true, state, {
               gate_kind: "design-approval",
             });
         }
+      }
+      if (
+        input.adjudication_gate_kind === "constitution-review" &&
+        phase.kind !== "design" && phase.kind !== "phase-design"
+      ) {
+        const ordinaryKind = phase.kind === "prd"
+          ? "artifact-approval"
+          : phase.kind === "phase-impl"
+            ? "commit-authorization"
+            : undefined;
+        if (ordinaryKind === undefined) {
+          return action("inspect-state", "Inspect the unresolved adjudication gate obligation.", true, state);
+        }
+        return matchingApproval(input, ordinaryKind)
+          ? advanceAction(input, state)
+          : action(
+            "open-gate",
+            `Open the single ${ordinaryKind} boundary with its policy findings and authority.`,
+            true,
+            state,
+            { gate_kind: ordinaryKind },
+          );
       }
       if (input.adjudication_gate_kind === undefined) {
         return action("inspect-state", "Inspect the unresolved adjudication gate obligation.", true, state);

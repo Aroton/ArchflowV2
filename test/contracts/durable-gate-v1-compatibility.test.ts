@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { canonicalJsonDigest } from "../../src/contracts/canonical.js";
 import {
   exactCommitAuthorizationContext,
+  parseActiveGate,
   parseArchivedGateDecisionRecord,
   parseArchivedGateRequest,
   parseGateDecisionRecord,
@@ -31,6 +32,29 @@ const currentCommitRequest = (): Record<string, unknown> => {
   const request = archivedCommitRequest();
   return {
     ...request,
+    allowed_decisions: ["authorize-commit", "revise", "abort", "waiver-requested", "cancel"],
+    context: {
+      ...request.context as Record<string, unknown>,
+      constitution: "pass",
+      policy_findings: [],
+      eligible_waivers: [],
+      approval_trigger: {
+        kind: "rule-settlement",
+        settlement: { subject_digest: request.subject_digest, config_digest: "7".repeat(64), settled_at_revision: 127 },
+        conclusion: { wait: true, match: { kind: "content", paths: ["src/a.ts", "src/b.ts"] } },
+        rule_authority: "authenticated",
+      },
+      baseline_commit: "1".repeat(40),
+      commit_message: "ArchFlow: Implement task-1 phase 1",
+      paths: ["src/a.ts", "src/b.ts"],
+    },
+  };
+};
+
+const legacyExactCommitRequest = (): Record<string, unknown> => {
+  const request = archivedCommitRequest();
+  return {
+    ...request,
     context: {
       ...request.context as Record<string, unknown>,
       baseline_commit: "1".repeat(40),
@@ -39,6 +63,74 @@ const currentCommitRequest = (): Record<string, unknown> => {
     },
   };
 };
+
+const legacyArtifactRequest = (): Record<string, unknown> => {
+  const request = archivedCommitRequest();
+  return {
+    ...request,
+    gate_id: "gate-legacy-artifact-1",
+    kind: "artifact-approval",
+    phase_instance: "prd",
+    context: { artifact_kind: "prd" },
+    allowed_decisions: ["approve", "revise", "reject", "cancel"],
+  };
+};
+
+const legacyDesignRequest = (): Record<string, unknown> => {
+  const request = archivedCommitRequest();
+  return {
+    ...request,
+    gate_id: "gate-legacy-design-1",
+    kind: "design-approval",
+    phase_instance: "design",
+    context: {
+      artifact_kind: "design",
+      constitution: "pass",
+      policy_findings: [],
+      eligible_waivers: [],
+      target_ref: "refs/heads/feature/quest-upsell",
+      baseline_commit: "1".repeat(40),
+      commit_message: "ArchFlow: Approve task-1 design",
+    },
+    allowed_decisions: ["approve", "revise", "reject", "waiver-requested", "cancel"],
+  };
+};
+
+const legacyPolicyReviewRequest = (): Record<string, unknown> => {
+  const request = archivedCommitRequest();
+  const rule = { rule_id: "human-review", rule_version: 1 };
+  return {
+    ...request,
+    gate_id: "gate-legacy-policy-review-1",
+    kind: "constitution-review",
+    phase_instance: "prd",
+    context: {
+      constitution: "fail",
+      failed_rules: [rule],
+      uncertain_rules: [],
+      matched_trigger_rules: [],
+      uncertain_trigger_rules: [],
+      eligible_waivers: [{ rule, scope: { operation: "adjudication-failure", boundary: "subject" } }],
+    },
+    allowed_decisions: ["approve", "revise", "reject", "waiver-requested", "cancel"],
+  };
+};
+
+const activeProjection = (request: Record<string, unknown>): Record<string, unknown> => ({
+  ...request,
+  status: "awaiting-human",
+  decision_template: {
+    schema_version: "1",
+    gate_id: request.gate_id,
+    task_id: request.task_id,
+    phase_instance: request.phase_instance,
+    kind: request.kind,
+    subject_digest: request.subject_digest,
+    context_digest: request.context_digest,
+    required_fields: ["payload", "human_provenance"],
+    cancellation_fields: ["cancelled", "reason", "human_provenance"],
+  },
+});
 
 /** A baseline-adoption request as the writer composes it today, with the five-decision tuple. */
 const currentBaselineRequest = (): Record<string, unknown> => ({
@@ -148,10 +240,9 @@ describe("durable gate V1 archive compatibility", () => {
     });
 
     it("relaxes nothing for any other gate kind", () => {
-      // Property 3: the shim is scoped to the one context 1624fb4 changed. `design-approval`
-      // carries the same three field names and must keep requiring them.
-      const designApproval = read("durable/gate-request.valid");
-      expect(parseArchivedGateRequest(designApproval)).toEqual(parseGateRequest(designApproval));
+      const designApproval = legacyDesignRequest();
+      expect(parseArchivedGateRequest(designApproval)).toEqual(designApproval);
+      expect(() => parseGateRequest(designApproval)).toThrow();
 
       const { constitution: _c, ...withoutConstitution } = designApproval.context as Record<string, unknown>;
       expect(() => parseArchivedGateRequest({ ...designApproval, context: withoutConstitution })).toThrow();
@@ -197,6 +288,72 @@ describe("durable gate V1 archive compatibility", () => {
       expect(() => parseGateRequest({ ...bytes, context })).toThrow();
       // It matches neither the current arm (empty `paths`) nor the archived arm (`paths` present).
       expect(() => parseArchivedGateRequest({ ...bytes, context })).toThrow();
+    });
+  });
+
+  describe("ordinary gates archived before approval-trigger provenance", () => {
+    it.each([
+      ["artifact approval", legacyArtifactRequest],
+      ["design approval", legacyDesignRequest],
+      ["exact commit authorization", legacyExactCommitRequest],
+    ])("reads the strict pre-trigger %s shape without admitting it to fresh writers", (_label, build) => {
+      const bytes = build();
+      expect(parseArchivedGateRequest(bytes)).toEqual(bytes);
+      expect(parsePersistedGateRequest(bytes)).toEqual(bytes);
+      expect(() => parseGateRequest(bytes)).toThrow();
+    });
+
+    it.each([
+      ["artifact approval", legacyArtifactRequest],
+      ["design approval", legacyDesignRequest],
+      ["exact commit authorization", legacyExactCommitRequest],
+      ["pre-exact commit authorization", archivedCommitRequest],
+    ])("reconstructs an old open %s projection after its disposable cache is absent", (_label, build) => {
+      const request = build();
+      expect(parseActiveGate(activeProjection(request))).toMatchObject({
+        gate_id: request.gate_id,
+        kind: request.kind,
+        status: "awaiting-human",
+      });
+    });
+
+    it("keeps retired supersession bindings compatible on the exact old ordinary shape", () => {
+      const request = legacyArtifactRequest();
+      const supersedes = {
+        superseded_gate_id: "gate-older-1",
+        accepted_triage_digest: "8".repeat(64),
+        old_subject_digest: "9".repeat(64),
+      };
+      const bytes = { ...request, supersedes };
+      expect(parseArchivedGateRequest(bytes)).toEqual(bytes);
+      expect(parseActiveGate(activeProjection(bytes))).toMatchObject({ supersedes });
+      expect(() => parseGateRequest(bytes)).toThrow();
+    });
+
+    it("rejects hybrids that add only some fresh provenance fields to an old context", () => {
+      const request = legacyArtifactRequest();
+      expect(() => parseArchivedGateRequest({
+        ...request,
+        context: { ...request.context as Record<string, unknown>, constitution: "pass" },
+      })).toThrow();
+      expect(() => parseArchivedGateRequest({
+        ...request,
+        allowed_decisions: ["approve", "revise", "reject", "waiver-requested", "cancel"],
+      })).toThrow();
+    });
+  });
+
+  describe("policy-context constitution review after writer retirement", () => {
+    it("keeps decided and open historical requests usable without admitting new writes", () => {
+      const request = legacyPolicyReviewRequest();
+      expect(parseArchivedGateRequest(request)).toEqual(request);
+      expect(parsePersistedGateRequest(request)).toEqual(request);
+      expect(parseActiveGate(activeProjection(request))).toMatchObject({
+        gate_id: request.gate_id,
+        kind: "constitution-review",
+        status: "awaiting-human",
+      });
+      expect(() => parseGateRequest(request)).toThrow();
     });
   });
 

@@ -4,6 +4,7 @@ import { adjudicationDocumentDefs, adjudicationEvidenceSchema, rawAdjudicationSc
 import { gitOidV1Schema } from "../canonical.js";
 import { configOverridesSchema, configRolesSchema, configRouteSchema, configV1Schema } from "../config.js";
 import { constitutionRuleV1Schema } from "../constitution.js";
+import { dispatchFailureObservationV1Schema } from "../dispatch-failure.js";
 import {
   pathSafeIdV1Schema,
   safeCodeV1Schema,
@@ -198,6 +199,12 @@ export const leafSchemaGroup: SchemaGenerationGroup = {
       file: "result-expectation",
       id: SCHEMA_IDS.resultExpectation,
       root: resultExpectationDataSchema,
+      migrated: true,
+    },
+    {
+      file: "dispatch-failure",
+      id: SCHEMA_IDS.dispatchFailure,
+      root: dispatchFailureObservationV1Schema,
       migrated: true,
     },
   ],

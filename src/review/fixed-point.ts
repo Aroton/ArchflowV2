@@ -334,31 +334,41 @@ function adjudicationGateSatisfied(
   subject: EvidenceSubject,
   gate: AdjudicationGate,
 ): boolean {
-  const phaseKind = state.phase_instance === "design" || state.phase_instance.startsWith("phase-design-");
-  if (phaseKind && gate.kind === "constitution-review") {
-    const designApproval = (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
+  const designPhase = state.phase_instance === "design" || state.phase_instance.startsWith("phase-design-");
+  if (gate.kind === "constitution-review") {
+    const ordinaryKind = state.phase_instance === "prd"
+      ? "artifact-approval"
+      : designPhase
+        ? "design-approval"
+        : state.phase_instance.startsWith("phase-impl-")
+          ? "commit-authorization"
+          : undefined;
+    const evidenceSetDigest = deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest;
+    const ordinaryApproval = ordinaryKind !== undefined &&
+      (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
       assertAuthenticatedGateApproval(authenticated);
-      return authenticated.approval.gate_kind === "design-approval" &&
+      const decision = authenticated.decision.envelope.payload.decision;
+      return authenticated.approval.gate_kind === ordinaryKind &&
         authenticated.approval.subject_digest === subject.subject_digest &&
-        authenticated.request.kind === "design-approval" &&
+        authenticated.request.kind === ordinaryKind &&
         authenticated.request.phase_instance === state.phase_instance &&
         authenticated.request.subject_digest === subject.subject_digest &&
-        authenticated.request.current_evidence.set_digest === deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest &&
-        authenticated.decision.envelope.payload.decision === "approve";
+        authenticated.request.current_evidence.set_digest === evidenceSetDigest &&
+        (decision === "approve" || decision === "authorize-commit");
     });
     // A migration-audit acceptance is the combined approval for imported design phases:
     // it replaces the separate PRD and design-approval gates and satisfies this gate alike.
-    const migrationApproval = (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
+    const migrationApproval = designPhase && (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
       assertAuthenticatedGateApproval(authenticated);
       return authenticated.approval.gate_kind === "migration-audit" &&
         authenticated.approval.subject_digest === subject.subject_digest &&
         authenticated.request.kind === "migration-audit" &&
         authenticated.request.phase_instance === state.phase_instance &&
         authenticated.request.subject_digest === subject.subject_digest &&
-        authenticated.request.current_evidence.set_digest === deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest &&
+        authenticated.request.current_evidence.set_digest === evidenceSetDigest &&
         authenticated.decision.envelope.payload.decision === "accept-import-audit";
     });
-    if (designApproval || migrationApproval) return true;
+    if (ordinaryApproval || migrationApproval) return true;
   }
   const contextDigest = computeGateContextDigest(gate.kind, gate.context);
   const evidence: RetainedGateEvidence = Object.freeze({

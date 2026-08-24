@@ -26,6 +26,7 @@ import { resolvePinnedConstitution } from "../../src/state/constitution.js";
 import { buildDocumentArtifact } from "../../src/state/document-artifact.js";
 import { buildImplementationOutput } from "../../src/state/implementation-manifest.js";
 import { createProductionServices, type ProductionServices } from "../../src/state/production.js";
+import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
 import { openDurableGate } from "../../src/state/gates.js";
 import { resolveInterfaceGateDecision } from "../helpers/resolve-interface-gate.js";
 import { ensurePayloadParent, ensureResultDirectory } from "../../src/state/layout.js";
@@ -249,6 +250,7 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
           { role: "counter-review" as const, evidence_digest: sha256Bytes(new TextEncoder().encode(`counter-${subjectDigest}`)), assurance: "server-attested" as const, producer_family: "claude" as const, reviewer_family: "codex" as const },
       ]);
       const context = {
+        ...ordinaryApprovalFacts("phase-impl", subjectDigest),
         target_ref: "refs/heads/main",
         baseline_commit: parseGitOid(execFileSync("git", ["rev-parse", "HEAD"], { cwd: currentServices.authority.workspace_root, env: environment, encoding: "utf8" }).trim()),
         commit_message: `ArchFlow: Implement ${task} phase ${subjectPhase}`,
@@ -484,7 +486,10 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
         input_fingerprint: services.value.state!.value.input_fingerprint,
         phase_instance: phase, summary: `Approve ${spec.artifact_kind} upstream`, subject_digest: subject,
         current_evidence: approvalEvidence, kind: "artifact-approval" as const,
-        context: { artifact_kind: spec.artifact_kind },
+        context: {
+          artifact_kind: spec.artifact_kind,
+          ...ordinaryApprovalFacts(spec.artifact_kind, subject),
+        },
       };
       const opened = await openDurableGate(services.value.dependencies, gateInput);
       if (!opened.ok) throw new Error(JSON.stringify(opened));

@@ -140,6 +140,7 @@ describe("task workspace cleanup", () => {
       [join(runtimeRoot, "cache", "phases", "2", "verification.txt"), "current verify"],
       [join(runtimeRoot, "diagnostics", "attempts", "phase-impl-1", "old.json"), "{}"],
       [join(runtimeRoot, "diagnostics", "attempts", "phase-impl-2", "current.json"), "{}"],
+      [join(runtimeRoot, "diagnostics", "attempts", "phase-impl-2", "dispatch-counter-review-1.json"), "{}"],
       [join(runtimeRoot, "cache", "scratch", "stale.tmp"), "scratch"],
       [join(taskRoot, "authority", "results", `${liveDigest}.json`), "{}"],
       [join(taskRoot, "authority", "results", `${staleDigest}.json`), staleManifest.bytes],
@@ -199,6 +200,8 @@ describe("task workspace cleanup", () => {
     expect(existsSync(join(runtimeRoot, "cache", "results", staleDigest))).toBe(false);
     expect(existsSync(join(runtimeRoot, "cache", "phases", "1"))).toBe(false);
     expect(existsSync(join(runtimeRoot, "cache", "phases", "2", "verification.txt"))).toBe(true);
+    expect(existsSync(join(runtimeRoot, "diagnostics", "attempts", "phase-impl-2", "dispatch-counter-review-1.json"))).toBe(true);
+    expect(existsSync(join(runtimeRoot, "diagnostics", "attempts", "phase-impl-1"))).toBe(false);
     expect(existsSync(join(taskRoot, "authority", "results", `${liveDigest}.json`))).toBe(true);
     expect(existsSync(join(taskRoot, "authority", "results", `${staleDigest}.json`))).toBe(false);
     expect(existsSync(join(taskRoot, "authority", "decisions", "live-gate", "request.json"))).toBe(true);

@@ -191,6 +191,33 @@ describe("review observation attestation mint", () => {
     });
     expect(observed.evidence.model_family).toBe("claude");
     expect(observed.evidence.producer_family).toBe("claude");
+    expect(observed.evidence.route_source).toEqual({ provenance: "configured" });
+  });
+
+  it("binds provider and invocation provenance through the capability into fresh evidence", () => {
+    const dispatchSubject = subject("codex");
+    const route: DispatchRoute = {
+      adapter: "claude-cli",
+      family: "claude",
+      model: "glm-5-3",
+      effort: "high",
+      provider: "zai",
+    };
+    const routeSource = {
+      provenance: "invocation-declared" as const,
+      displaced: { source: "configured" as const, model: "gpt-configured", effort: "xhigh" as const },
+    };
+    const observed = mintReviewObservation({
+      subject: dispatchSubject,
+      adapter: route.adapter,
+      cli_version: "2.1.220",
+      route,
+      route_source: routeSource,
+      envelope_input_digest: digest("d"),
+      extracted_output_bytes: bytes(rawReview(dispatchSubject)),
+    });
+    expect(observed.observation).toMatchObject({ provider: "zai", route_source: routeSource });
+    expect(observed.evidence).toMatchObject({ provider: "zai", route_source: routeSource });
   });
 
   it.each(["not JSON", JSON.stringify({ schema_version: "1" })])("rejects malformed output without returning evidence", (output) => {
@@ -235,6 +262,7 @@ describe("adjudication observation attestation mint", () => {
       matched_rule_versions: [],
       uncertain_rule_versions: [],
       observed_output_digest: createHash("sha256").update(output).digest("hex"),
+      route_source: { provenance: "configured" },
     });
 
     expect(() => mintAdjudicationObservation({

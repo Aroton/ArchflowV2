@@ -128,19 +128,11 @@
         "approve",
         "revise",
         "reject",
-        "cancel"
-      ]
-    },
-    "designApprovalDecisions": {
-      "const": [
-        "approve",
-        "revise",
-        "reject",
         "waiver-requested",
         "cancel"
       ]
     },
-    "constitutionReviewDecisions": {
+    "designApprovalDecisions": {
       "const": [
         "approve",
         "revise",
@@ -178,6 +170,7 @@
         "authorize-commit",
         "revise",
         "abort",
+        "waiver-requested",
         "cancel"
       ]
     },
@@ -343,81 +336,6 @@
         },
         "allowed_decisions": {
           "$ref": "#/$defs/designApprovalDecisions"
-        }
-      },
-      "required": [
-        "schema_version",
-        "gate_id",
-        "intent_id",
-        "request_digest",
-        "task_id",
-        "phase_instance",
-        "summary",
-        "subject_digest",
-        "context_digest",
-        "current_evidence",
-        "opened_at_revision",
-        "kind",
-        "context",
-        "allowed_decisions"
-      ],
-      "additionalProperties": false
-    },
-    "constitutionReview": {
-      "type": "object",
-      "properties": {
-        "schema_version": {
-          "type": "string",
-          "const": "1"
-        },
-        "gate_id": {
-          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
-        },
-        "intent_id": {
-          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
-        },
-        "request_digest": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "task_id": {
-          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
-        },
-        "phase_instance": {
-          "type": "string",
-          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
-        },
-        "summary": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 4096,
-          "pattern": "\\S"
-        },
-        "subject_digest": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "context_digest": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "current_evidence": {
-          "$ref": "#/$defs/currentEvidence"
-        },
-        "opened_at_revision": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 9007199254740991
-        },
-        "kind": {
-          "type": "string",
-          "const": "constitution-review"
-        },
-        "context": {
-          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/constitutionReviewContext"
-        },
-        "allowed_decisions": {
-          "$ref": "#/$defs/constitutionReviewDecisions"
         }
       },
       "required": [
@@ -1045,9 +963,6 @@
     },
     {
       "$ref": "#/$defs/designApproval"
-    },
-    {
-      "$ref": "#/$defs/constitutionReview"
     },
     {
       "$ref": "#/$defs/materialDrift"

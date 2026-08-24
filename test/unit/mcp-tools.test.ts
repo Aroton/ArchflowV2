@@ -8,6 +8,7 @@ import type { GateDecisionEnvelopeBase } from "../../src/contracts/gates.js";
 import type { PathSafeId, TaskSlug } from "../../src/contracts/evidence.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { TOOL_NAMES } from "../../src/contracts/tool-names.js";
+import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
 
 const digest = parseSha256Digest("a".repeat(64));
 const gateDecisionInput = { preview_digest: digest, decision: { choice: "approve", reason: "Reviewed." } } as const;
@@ -20,7 +21,7 @@ const taskInitialization = JSON.parse(readFileSync(
 
 describe("correlated MCP tool contracts", () => {
   it("accepts only payload-free milestone recovery operations", () => {
-    for (const operation of ["recover_milestone_authority", "refresh_stale_baseline"] as const) {
+    for (const operation of ["recover_milestone_authority", "recover_approval_trigger_authority", "refresh_stale_baseline"] as const) {
       const parsed = parseToolCall("archflow_state", { ...stateInput, operation });
       expect(parsed.input.operation).toBe(operation);
       expect(() => parseToolCall("archflow_state", { ...stateInput, operation, reason: "invented provenance" })).toThrow(/carries no/);
@@ -53,6 +54,19 @@ describe("correlated MCP tool contracts", () => {
     expect(() => withOverride({ reason: "outage", reviewer: { model: "claude-opus-4-6", effort: "max" } })).toThrow();
   });
 
+  it("accepts strict invocation routes independently of a human route override", () => {
+    const base = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, artifact_path: "phases/2/result.md" };
+    const invocation_routes = {
+      "counter-reviewer": { model: "claude-fable-5", effort: "high", provider: "zai" },
+      adjudicator: { model: "gpt-5.6", effort: "max" },
+    } as const;
+    const parsed = parseToolCall("archflow_counter_review", { ...base, invocation_routes });
+    expect(parsed.input.invocation_routes).toEqual(invocation_routes);
+    expect(Object.isFrozen(parsed.input.invocation_routes?.["counter-reviewer"])).toBe(true);
+    expect(() => parseToolCall("archflow_counter_review", { ...base, invocation_routes: {} })).toThrow(/review routes/u);
+    expect(() => parseToolCall("archflow_counter_review", { ...base, invocation_routes: { reviewer: invocation_routes["counter-reviewer"] } })).toThrow();
+  });
+
   it("detaches and recursively freezes every nested parsed-call semantic", () => {
     const counterSource = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, artifact_path: "phases/2/result.md" };
     const counter = parseToolCall("archflow_counter_review", counterSource);
@@ -66,7 +80,7 @@ describe("correlated MCP tool contracts", () => {
     expect(Object.isFrozen(waiver.input.origin.scope)).toBe(true);
 
     const counterSlot = { role: "counter-review", evidence_digest: "6".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" };
-    const gate = parseToolCall("archflow_gate", { schema_version: "1", task_id: "task-1", intent_id: "intent-4", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: "7".repeat(64), current_evidence: { set_digest: "8".repeat(64), slots: [counterSlot] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, ...gateDecisionInput });
+    const gate = parseToolCall("archflow_gate", { schema_version: "1", task_id: "task-1", intent_id: "intent-4", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: "7".repeat(64), current_evidence: { set_digest: "8".repeat(64), slots: [counterSlot] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation", ...ordinaryApprovalFacts("phase-impl") }, ...gateDecisionInput });
     if (gate.input.kind !== "artifact-approval") throw new TypeError("expected artifact-approval gate input");
     expect(Object.isFrozen(gate.input.current_evidence.slots)).toBe(true);
     expect(Object.isFrozen(gate.input.current_evidence.slots[0])).toBe(true);
@@ -283,7 +297,7 @@ describe("correlated MCP tool contracts", () => {
   it("uses the authoritative exact current-evidence tuple parser for gates", () => {
     const counter = { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" };
     const gateCounter = { role: "gate-counter-review", evidence_digest: "1".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", gate_id: "gate-1" };
-    const base = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: digest, current_evidence: { set_digest: "3".repeat(64), slots: [counter] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, ...gateDecisionInput };
+    const base = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: digest, current_evidence: { set_digest: "3".repeat(64), slots: [counter] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation", ...ordinaryApprovalFacts("phase-impl", digest) }, ...gateDecisionInput };
     expect(parseToolCall("archflow_gate", base).input.task_id).toBe("task-1");
     expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [counter, gateCounter] } })).toThrow();
     expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [gateCounter] } })).toThrow();

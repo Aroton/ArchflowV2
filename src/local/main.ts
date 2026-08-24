@@ -3,6 +3,7 @@ import process from "node:process";
 import { parseArgs } from "node:util";
 
 import { canonicalJsonBytes } from "../contracts/canonical.js";
+import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { INPUT_FREE_COMMANDS, LOCAL_COMMAND_CONTRACTS, LOCAL_COMMANDS, runLocalCommand, type LocalCommand } from "./commands.js";
 
@@ -62,16 +63,43 @@ async function main(): Promise<void> {
   if (LOCAL_COMMAND_CONTRACTS[command].task === "required" && parsed.values.task === undefined) {
     throw new TypeError(`${command} requires --task <task>`);
   }
+  if (INPUT_FREE_COMMANDS.has(command) && parsed.values.input !== undefined) {
+    throw new TypeError(`${command} accepts no input payload; omit --input`);
+  }
   const value = INPUT_FREE_COMMANDS.has(command) ? undefined : await readInput(command, parsed.values.input);
   const result = await runLocalCommand({ command, working_directory: process.cwd(), ...(parsed.values.task === undefined ? {} : { task_id: parsed.values.task }), ...(value === undefined ? {} : { value }) });
   assertPlainJson(result, "local command result");
   if (result !== null && typeof result === "object" && !Array.isArray(result) && (result as Record<string, unknown>).ok === false) {
     process.exitCode = 1;
+    const error = (result as Record<string, unknown>).error;
+    const code = error !== null && typeof error === "object" && !Array.isArray(error) && typeof (error as Record<string, unknown>).code === "string"
+      ? (error as Record<string, unknown>).code
+      : "PROJECT_ERROR";
+    process.stderr.write(`${command} failed: ${code}\n`);
   }
   process.stdout.write(canonicalJsonBytes(result as PlainJsonValue));
 }
 
+function failureMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.trim() === "" ? "local command failed" : message;
+}
+
+function commandFailure(error: unknown): ProjectResult<never> {
+  const message = failureMessage(error);
+  return Object.freeze({
+    schema_version: "1" as const,
+    ok: false as const,
+    error: createProjectError("CONTRACT_INVALID", {
+      issue_code: "local-command-invalid",
+      issues: [message.slice(0, 256)],
+    }),
+  });
+}
+
 main().catch((error) => {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  const message = failureMessage(error);
+  process.stdout.write(canonicalJsonBytes(commandFailure(error) as unknown as PlainJsonValue));
+  process.stderr.write(`${message.replace(/\s+/gu, " ").slice(0, 512)}\n`);
   process.exitCode = 1;
 });

@@ -797,8 +797,8 @@ const stripComments = (node: unknown): unknown => {
   );
 };
 
-describe("absence is omission, never null", () => {
-  it("declares null only for PlainJson data and the explicit autonomous settlement match", () => {
+describe("absence is omission except in contracts that explicitly classify absence", () => {
+  it("declares null only for automation observations, PlainJson data, and the autonomous settlement match", () => {
     const offenders: string[] = [];
     for (const file of readdirSync(schemaDirectory).filter((name) => name.endsWith(".schema.json"))) {
       const parsed = JSON.parse(readFileSync(new URL(file, schemaDirectory), "utf8")) as unknown;
@@ -819,6 +819,16 @@ describe("absence is omission, never null", () => {
       walk(parsed, "");
     }
     expect(offenders).toStrictEqual([
+      "automation-status.schema.json",
+      "automation-status.schema.json/oneOf/0/properties/state_revision/anyOf/1/type",
+      "automation-status.schema.json/oneOf/1/properties/state_revision/anyOf/1/type",
+      "automation-status.schema.json/oneOf/2/properties/state_revision/anyOf/1/type",
+      "automation-status.schema.json/oneOf/3/properties/state_revision/anyOf/1/type",
+      "automation-status.schema.json/oneOf/4/properties/state_revision/anyOf/1/type",
+      "automation-status.schema.json/oneOf/4/properties/position/type",
+      "automation-status.schema.json/oneOf/5/properties/state_revision/anyOf/1/type",
+      "gate-contract.schema.json",
+      "gate-contract.schema.json/$defs/approvalTrigger/oneOf/0/properties/conclusion/oneOf/0/properties/match/type",
       "intent-receipt.schema.json",
       "intent-receipt.schema.json/$defs/plainJson/anyOf/0/type",
       "semantic-workflow.schema.json",

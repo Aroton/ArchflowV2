@@ -1,8 +1,9 @@
 import { isDeepStrictEqual } from "node:util";
 
 import type { ApprovalRef, RuleSettlementV1, TaskStateV1 } from "../contracts/durable-state.js";
+import type { GateKind } from "../contracts/gates.js";
 import { comparePhaseInstances, decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
-import type { AuthenticatedGateApproval } from "./gate-approvals.js";
+import { assertAuthenticatedGateApproval, type AuthenticatedGateApproval } from "./gate-approvals.js";
 import {
   assertAuthenticatedRuleAcceptancePolicy,
   type AuthenticatedRuleAcceptancePolicy,
@@ -98,6 +99,57 @@ export function acceptedNoWaitSettlement(
   ) return undefined;
   const settlement = latestEligibleRuleSettlement(state, subjectDigest, producerPhase);
   return settlement?.conclusion.wait === false ? settlement : undefined;
+}
+
+/** The ordinary human boundary owned by each producer position. */
+export function ordinaryApprovalKindForPhase(phase: PhaseInstanceId):
+  | "artifact-approval"
+  | "design-approval"
+  | "commit-authorization" {
+  const kind = decodePhaseInstance(phase).kind;
+  if (kind === "prd") return "artifact-approval";
+  if (kind === "design" || kind === "phase-design") return "design-approval";
+  return "commit-authorization";
+}
+
+/** Exact advancing ordinary approval for one producer subject, after restart eligibility. */
+export function matchingOrdinaryApproval(
+  state: TaskStateV1,
+  authenticated: readonly AuthenticatedGateApproval[],
+  subjectDigest: RuleSettlementV1["subject_digest"],
+  producerPhase: PhaseInstanceId,
+): AuthenticatedGateApproval | undefined {
+  const requiredKind: GateKind = ordinaryApprovalKindForPhase(producerPhase);
+  return [...authenticated]
+    .filter((item) => {
+      assertAuthenticatedGateApproval(item);
+      const decision = item.decision.envelope.payload.decision;
+      return item.approval.gate_kind === requiredKind &&
+        item.approval.subject_digest === subjectDigest &&
+        item.request.kind === requiredKind &&
+        item.request.phase_instance === producerPhase &&
+        item.request.subject_digest === subjectDigest &&
+        authenticatedApprovalIsEligibleAfterLatestRestart(state, item, producerPhase) &&
+        (decision === "approve" || decision === "authorize-commit");
+    })
+    .sort((left, right) => right.approval.resolved_at_revision - left.approval.resolved_at_revision)[0];
+}
+
+/**
+ * Human-first autonomous selector. Once exact human authority exists, every consumer must use its
+ * archived request facts and must not fall back to a coexisting settlement.
+ */
+export function acceptedNoWaitSettlementWithoutOrdinaryApproval(
+  policy: AuthenticatedRuleAcceptancePolicy,
+  state: TaskStateV1,
+  subjectDigest: RuleSettlementV1["subject_digest"],
+  producerPhase: PhaseInstanceId,
+  authenticated: readonly AuthenticatedGateApproval[],
+): RuleSettlementV1 | undefined {
+  if (matchingOrdinaryApproval(state, authenticated, subjectDigest, producerPhase) !== undefined) {
+    return undefined;
+  }
+  return acceptedNoWaitSettlement(policy, state, subjectDigest, producerPhase);
 }
 
 /**

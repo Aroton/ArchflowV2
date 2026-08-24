@@ -44,25 +44,40 @@ describe("anti-spoofing renderers", () => {
     expect(() => renderReviewEvidence({ evidence_digest: digest("2"), evidence: value.evidence, authority: value.authority } as never)).toThrow(/authenticated review/);
   });
 
-  it("renders and round-trips a route override on server-attested review evidence", () => {
+  it("reads archived provenance and renders fresh provider, route source, and human override separately", () => {
     const evidenceDigest = digest("3");
     const { reason: _degradedReason, ...base } = reviewEvidence(evidenceDigest);
-    const evidence = {
+    const archivedEvidence = {
       ...base,
       assurance: "server-attested", adapter: "claude-cli", cli_version: "2.0.0", model_family: "claude",
       model: "claude-opus-4-6", effort: "max", invocation_id: "inv-1", envelope_input_digest: digest("d"),
       observed_output_digest: digest("e"), result_id: "res-1",
       route_override: { reason: "codex auth outage\nsecond line", pinned_model: "gpt-fixture", pinned_effort: "high" },
     };
-    // The parse is the durable round-trip: an override survives the strict server-attested arm.
-    expect(parseReviewEvidence(structuredClone(evidence))).toMatchObject({
+    // Archived evidence predating provider/source remains readable.
+    expect(parseReviewEvidence(structuredClone(archivedEvidence))).toMatchObject({
       route_override: { reason: "codex auth outage\nsecond line", pinned_model: "gpt-fixture", pinned_effort: "high" },
     });
+    const evidence = {
+      ...archivedEvidence,
+      provider: "zai",
+      route_source: {
+        provenance: "route-override",
+        displaced: { source: "invocation-declared", model: "gpt-invocation", effort: "xhigh", provider: "openai" },
+      },
+      route_override: { ...archivedEvidence.route_override, pinned_provider: "configured-provider" },
+    };
 
     const rendered = new TextDecoder().decode(renderReviewEvidence(createVerifiedEvidenceReference(parseReviewEvidence(structuredClone(evidence)))));
+    expect(rendered).toContain('provider: "zai"');
+    expect(rendered).toContain("## Route Source");
+    expect(rendered).toContain('provenance: "route-override"');
+    expect(rendered).toContain('displaced_source: "invocation-declared"');
+    expect(rendered).toContain('displaced_provider: "openai"');
     expect(rendered).toContain("## Route Override");
     expect(rendered).toContain('pinned_model: "gpt-fixture"');
     expect(rendered).toContain('pinned_effort: "high"');
+    expect(rendered).toContain('pinned_provider: "configured-provider"');
     // Prose escaping applies to the human's reason exactly as it does to every other rendered field.
     expect(rendered).toContain("\\u000a");
   });

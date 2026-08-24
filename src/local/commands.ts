@@ -20,17 +20,26 @@ import {
 } from "../repository/paths.js";
 import { ensurePayloadParent, ensureResultDirectory } from "../state/layout.js";
 import { createProductionServices } from "../state/production.js";
+import { computeAuthoritativeSemanticStatus } from "../state/semantic-status.js";
+import { projectSemanticStatus } from "../state/semantic-view.js";
 import { installSnapshot, prepareSnapshot, restoreSnapshotOutput } from "../state/snapshots.js";
 import { reconcileCurrentAuthority } from "../state/reconciliation.js";
 import type { ProjectResult } from "../contracts/errors.js";
 import { runInit } from "../init/index.js";
 import { adoptLegacyUpgrade, discardLegacyUpgrade, stageLegacyUpgrade } from "../init/legacy-upgrade.js";
-import { classifyWorkflowStatus } from "./status-classification.js";
+import { classifyDurableStateReadability } from "../state/status.js";
+import { projectAutomationStatus } from "./automation-status.js";
+import {
+  newTaskAutomationStatus,
+  stagedTaskAutomationStatus,
+  unreadableTaskAutomationStatus,
+} from "./automation-status-edges.js";
+import { classifyWorkflowStatus, stagedUpgradeStatus } from "./status-classification.js";
 import { cleanTaskWorkspace, cleanTerminalTaskWorkspace } from "../state/workspace-cleanup.js";
 
 export const LOCAL_COMMANDS = Object.freeze([
   "validate", "hash", "render", "snapshot", "restore", "clean", "reconcile",
-  "init", "manual-status", "upgrade", "upgrade-adopt",
+  "init", "manual-status", "automation-status", "upgrade", "upgrade-adopt",
 ] as const);
 export type LocalCommand = typeof LOCAL_COMMANDS[number];
 
@@ -49,6 +58,7 @@ export const LOCAL_COMMAND_CONTRACTS: Readonly<Record<LocalCommand, LocalCommand
   reconcile: { payload: '{"recorded_projections":[...],"current_projections":[...],"active_heads":{...}}', task: "required" },
   init: { payload: null, task: "ignored" },
   "manual-status": { payload: null, task: "required" },
+  "automation-status": { payload: null, task: "required" },
   upgrade: { payload: '{"operation":"preview"|"stage"|"discard-stage",...legacy import facts}', task: "optional" },
   "upgrade-adopt": { payload: null, task: "required" },
 });
@@ -186,6 +196,44 @@ async function manualStatus(input: CommandInput): Promise<PlainJsonValue | Proje
   });
 }
 
+async function automationStatus(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
+  const taskId = parseTaskSlug(input.task_id);
+  const created = await createProductionServices({
+    working_directory: input.working_directory,
+    task_id: taskId,
+    operation: "automation-status" as SafeCode,
+  });
+
+  if (created.ok) {
+    const snapshot = await computeAuthoritativeSemanticStatus(created.value.dependencies, created.value.authority);
+    if (!snapshot.ok) return snapshot;
+    if (created.value.state === undefined) {
+      const staged = await stagedUpgradeStatus({ working_directory: input.working_directory, task_id: taskId });
+      const edgeAuthority = Object.freeze({
+        repository_identity_digest: snapshot.value.repository_identity_digest,
+        live_config_digest: snapshot.value.live_config_digest ?? null,
+      });
+      return (staged === undefined
+        ? newTaskAutomationStatus(taskId, edgeAuthority)
+        : stagedTaskAutomationStatus(taskId, staged, edgeAuthority)) as unknown as PlainJsonValue;
+    }
+    const semantic = projectSemanticStatus(snapshot.value);
+    return projectAutomationStatus(snapshot.value, semantic.view) as unknown as PlainJsonValue;
+  }
+
+  // Production services are authoritative on the ordinary path. This second read exists only to
+  // classify malformed state bytes that prevented those services from opening; repository,
+  // identity, config, and other authority failures preserve the original structured failure.
+  const readability = await classifyDurableStateReadability({
+    working_directory: input.working_directory,
+    task_id: taskId,
+  });
+  if (readability.readability === "unreadable" && readability.details.reason !== "status-authority-invalid") {
+    return unreadableTaskAutomationStatus(taskId, readability) as unknown as PlainJsonValue;
+  }
+  return created;
+}
+
 async function snapshot(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
   const created = await services(input);
   if (!created.ok) return created;
@@ -244,7 +292,8 @@ async function reconcile(input: CommandInput): Promise<PlainJsonValue | ProjectR
 
 const LOCAL_COMMAND_HANDLERS: Readonly<Record<LocalCommand, (input: CommandInput) => Promise<PlainJsonValue | ProjectResult<unknown>>>> = Object.freeze({
   validate, hash, render, snapshot, restore, clean, reconcile,
-  init, "manual-status": manualStatus, upgrade, "upgrade-adopt": upgradeAdopt,
+  init, "manual-status": manualStatus, "automation-status": automationStatus,
+  upgrade, "upgrade-adopt": upgradeAdopt,
 });
 
 export async function runLocalCommand(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {

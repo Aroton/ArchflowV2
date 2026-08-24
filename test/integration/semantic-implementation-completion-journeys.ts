@@ -312,8 +312,8 @@ export function registerSemanticImplementationCompletionJourney(selected: string
       message: `ArchFlow: Implement ${workspace.taskId} phase 1`,
       target_ref: gitAt(workspace, "symbolic-ref", "-q", "HEAD"),
       baseline: headAt(workspace),
-      requires_human_confirmation: true,
     });
+    expect(commit).not.toHaveProperty("requires_human_confirmation");
     expect(commit.paths).toEqual([...work.outputs]);
 
     // No server actor committed, edited, or re-dispatched anything for the authorization.
@@ -491,6 +491,13 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     );
     expect(view.presentation?.summary).toContain("- db/c-modified.sql");
     expect(view.presentation?.summary).not.toContain("src/journey-feature.ts");
+    expect(view.presentation).toMatchObject({
+      class: "configured-approval",
+      reasons: [{
+        class: "configured-approval",
+        text: "Configured content approval rules matched 3 reviewed paths: db/a-added.sql, db/b-deleted.sql, db/c-modified.sql.",
+      }],
+    });
     expect(view.presentation?.details).toEqual([
       "db/a-added.sql: added (0 → 12 bytes (+12 bytes))",
       "db/b-deleted.sql: deleted (9 → 0 bytes (-9 bytes))",
@@ -516,7 +523,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
       "authority", "decisions", gateId, "request.json",
     ), "utf8"));
     expect(archivedRequest.summary).toBe(presentedSummary);
-    expect(view.next_action.commit).toMatchObject({ requires_human_confirmation: true });
+    expect(view.next_action.commit).not.toHaveProperty("requires_human_confirmation");
   });
 
   scenario("keeps a TypeScript-only wait:false implementation behind explicit commit authorization without content details", async () => {
@@ -541,6 +548,10 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     });
     expect(view.presentation?.summary).toBe("The TypeScript-only implementation is ready for authorization.");
     expect(view.presentation?.details).toBeUndefined();
+    expect(view.presentation?.class).toBe("exception");
+    expect(view.presentation?.reasons).toEqual(expect.arrayContaining([
+      expect.objectContaining({ class: "exception" }),
+    ]));
     expect(view.presentation?.options.map((option) => option.token)).toEqual([
       "authorize-commit", "request-changes", "stop-work", "cancel",
     ]);
@@ -548,7 +559,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     view = await applied(h, invocation, view, {
       kind: "decision", choice: "authorize-commit", reason: "The reviewed TypeScript-only change may be committed.",
     });
-    expect(view.next_action.commit).toMatchObject({ requires_human_confirmation: true });
+    expect(view.next_action.commit).not.toHaveProperty("requires_human_confirmation");
   });
 
   scenario("advances a shipped-v2 TypeScript-only implementation after exact autonomous commit proof", async () => {
@@ -574,8 +585,8 @@ export function registerSemanticImplementationCompletionJourney(selected: string
       message: `ArchFlow: Implement ${workspace.taskId} phase 1`,
       target_ref: gitAt(workspace, "symbolic-ref", "-q", "HEAD"),
       baseline: headAt(workspace),
-      requires_human_confirmation: false,
     });
+    expect(view.next_action.commit).not.toHaveProperty("requires_human_confirmation");
     const settledState = JSON.parse(readFileSync(workspace.services.authority.state.absolute, "utf8"));
     const implementationSettlement = [...(settledState.rule_settlements ?? [])]
       .filter((entry: { phase_instance?: string }) => entry.phase_instance === "phase-impl-1")
@@ -821,7 +832,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     expect(reviewCountAt(workspace)).toBe(reviewsBeforeRevision);
     view = await applied(h, invocation, view);
     expect(view.next_action).toMatchObject({ kind: "commit" });
-    expect(view.next_action.commit?.requires_human_confirmation).toBe(false);
+    expect(view.next_action.commit).not.toHaveProperty("requires_human_confirmation");
     expect(view.findings).toBeUndefined();
     expect(reviewCountAt(workspace)).toBe(reviewsBeforeRevision + 1);
   });
@@ -935,12 +946,16 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     view = await applied(h, invocation, view);
     expect(view.findings).toEqual([]);
 
-    // The failed constitution rule surfaces as the constitution-review human gate.
+    // The failed constitution rule is folded into the ordinary commit-authorization boundary.
     view = await applied(h, invocation, view, {
       kind: "gate-summary", summary: "The constitution review failed one rule for this implementation subject.",
     });
+    expect(view.presentation?.class).toBe("exception");
+    expect(view.presentation?.reasons).toEqual(expect.arrayContaining([
+      expect.objectContaining({ class: "exception" }),
+    ]));
     const tokens = view.presentation?.options.map((option) => option.token) ?? [];
-    expect(tokens).toContain("approve");
+    expect(tokens).toContain("authorize-commit");
     expect(tokens).toContain("request-changes");
     const waiverToken = tokens.find((token) => token.startsWith("request-exception-"));
     expect(waiverToken).toBeDefined();
@@ -955,6 +970,13 @@ export function registerSemanticImplementationCompletionJourney(selected: string
 
     view = await applied(h, invocation, view);
     expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "decision" });
+    expect(view.presentation).toMatchObject({
+      class: "exception",
+      reasons: [{
+        class: "exception",
+        text: "A separate human decision must grant, deny, or cancel the requested policy exception.",
+      }],
+    });
     const waiverTokens = view.presentation?.options.map((option) => option.token) ?? [];
     expect(waiverTokens).toContain("grant-exception");
     expect(waiverTokens).toContain("deny-exception");

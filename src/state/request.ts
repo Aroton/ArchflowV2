@@ -1,5 +1,5 @@
 import { canonicalJsonDigest } from "../contracts/canonical.js";
-import { computeRequestDigest, type RequestDigestSubject, type StateArtifactOperation } from "../contracts/fingerprints.js";
+import { computeRequestDigest, type RequestDigestSubject, type StateArtifactOperation, type StateControlOperation } from "../contracts/fingerprints.js";
 import {
   bindParsedToolCallRequest,
   type ParsedToolCall,
@@ -31,6 +31,18 @@ function subjectFor(call: ParsedToolCall, authority: TransactionAuthority, input
           },
         };
       }
+      if (call.input.operation !== undefined) {
+        const operation = ({
+          refresh_milestone_baseline: "refresh-milestone-baseline",
+          recover_milestone_authority: "recover-milestone-authority",
+          recover_approval_trigger_authority: "recover-approval-trigger-authority",
+          refresh_stale_baseline: "refresh-stale-baseline",
+        } satisfies Readonly<Record<Exclude<typeof call.input.operation, "planning_restart">, StateControlOperation>>)[call.input.operation];
+        return {
+          ...common, tool: call.name, operation,
+          operation_fields: { phase_instance: call.input.phase_instance, step: call.input.step, status: call.input.status },
+        };
+      }
       if (call.input.artifact === undefined) {
         return { ...common, tool: call.name, operation: "record-state-boundary", operation_fields: { phase_instance: call.input.phase_instance, step: call.input.step, status: call.input.status } };
       }
@@ -60,6 +72,7 @@ function subjectFor(call: ParsedToolCall, authority: TransactionAuthority, input
       // than present-and-undefined because `materialize` rejects an undefined member outright.
       return { ...common, tool: call.name, operation: "counter-review", operation_fields: {
         artifact_path: call.input.artifact_path,
+        ...(call.input.invocation_routes === undefined ? {} : { invocation_routes: call.input.invocation_routes }),
         ...(call.input.route_override === undefined ? {} : { route_override: call.input.route_override }),
       } };
     case "archflow_gate": {

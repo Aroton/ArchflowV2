@@ -22,7 +22,7 @@ import {
 } from "./internal/trust-brands.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
 import { decodePhaseInstance, encodePhaseInstance } from "./phase-instance.js";
-import type { AdapterId, DegradedReview, ModelFamily, ReviewEvidence, ReviewRole, RouteOverrideRecord, ServerAttestedReview } from "./review.js";
+import type { AdapterId, DegradedReview, ModelFamily, ReviewEvidence, ReviewRole, RouteOverrideRecord, RouteSourceRecord, ServerAttestedReview } from "./review.js";
 import { EFFORT_VALUES, parseAndDeriveReview, parseReferencedReviewEvidence, reviewEvidenceSchema } from "./review.js";
 import { assertPlainJson } from "./plain-json.js";
 
@@ -50,6 +50,8 @@ export interface ObservationBindingBase<K extends EvidenceKind> {
   readonly family: ModelFamily;
   readonly model: string;
   readonly effort: (typeof EFFORT_VALUES)[number];
+  readonly provider?: string;
+  readonly route_source: RouteSourceRecord;
   // Present only when a human substituted this dispatch's route for the pinned one; carried into
   // the evidence so the deviation is legible at the gate that reads it.
   readonly route_override?: RouteOverrideRecord;
@@ -103,7 +105,7 @@ export const observationSource: ObservationSource = Object.freeze({
     for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["role", binding.role], ["step", "counter_review"], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["rubric_digest", binding.rubric_digest], ["producer_family", binding.producer_family]] as const) assertEqual(derived[key], expected, key);
     const raw_output_digest = digestBytes(bytes);
     const observation = createObservation<"review">(binding, bytes, raw_output_digest);
-    const evidence: ServerAttestedReview = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...(binding.route_override === undefined ? {} : { route_override: binding.route_override }) });
+    const evidence: ServerAttestedReview = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...(binding.provider === undefined ? {} : { provider: binding.provider }), route_source: binding.route_source, ...(binding.route_override === undefined ? {} : { route_override: binding.route_override }) });
     return Object.freeze({ observation, evidence });
   },
   observeAdjudication(capability: ObservationCapability<"adjudication">, observedOutputBytes: Uint8Array) {
@@ -116,7 +118,7 @@ export const observationSource: ObservationSource = Object.freeze({
     if (!sameArray(derived.approved_upstream_digests, binding.approved_upstream_digests)) throw new TypeError("approved_upstream_digests do not match observation capability");
     const raw_output_digest = digestBytes(bytes);
     const observation = createObservation<"adjudication">(binding, bytes, raw_output_digest);
-    const evidence: ServerAttestedAdjudication = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...(binding.route_override === undefined ? {} : { route_override: binding.route_override }) });
+    const evidence: ServerAttestedAdjudication = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...(binding.provider === undefined ? {} : { provider: binding.provider }), route_source: binding.route_source, ...(binding.route_override === undefined ? {} : { route_override: binding.route_override }) });
     return Object.freeze({ observation, evidence });
   },
 });

@@ -36304,26 +36304,74 @@ var designPolicyFinding = rule.extend({
 var canonicalDesignPolicyFindings = external_exports.array(designPolicyFinding).superRefine((items, context2) => {
   if (!sortedUnique(items, (a, b) => compareRules(a, b))) context2.addIssue({ code: "custom", message: "policy findings must be sorted and unique by rule" });
 });
+var ruleSettlementMatch = external_exports.union([
+  external_exports.object({ kind: external_exports.literal("subject"), subject: external_exports.enum(["prd", "design", "phase-design", "phase-impl"]) }).strict(),
+  external_exports.object({ kind: external_exports.literal("content"), paths: external_exports.array(external_exports.string()).min(1).superRefine((items, context2) => {
+    if (!sortedUnique(items, (left, right) => left.localeCompare(right))) context2.addIssue({ code: "custom", message: "content match paths must be sorted with no duplicates" });
+  }) }).strict()
+]);
+var approvalRuleConclusion = external_exports.discriminatedUnion("wait", [
+  external_exports.object({ wait: external_exports.literal(false), match: external_exports.null() }).strict(),
+  external_exports.object({ wait: external_exports.literal(true), match: ruleSettlementMatch }).strict()
+]);
+var approvalTrigger = external_exports.discriminatedUnion("kind", [
+  external_exports.object({
+    kind: external_exports.literal("rule-settlement"),
+    settlement: external_exports.object({ subject_digest: digest, config_digest: digest, settled_at_revision: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER) }).strict(),
+    conclusion: approvalRuleConclusion,
+    rule_authority: external_exports.enum(["authenticated", "unavailable"])
+  }).strict(),
+  external_exports.object({
+    kind: external_exports.literal("human-revision-reapproval"),
+    prior_gate: external_exports.object({ gate_id: pathSafeIdV1Schema, decision_digest: digest, class: external_exports.enum(["configured-approval", "exception"]) }).strict(),
+    revision_checkpoint: external_exports.object({ classification: external_exports.literal("simple"), predecessor_subject_digest: digest, subject_digest: digest }).strict()
+  }).strict()
+]);
+var ordinaryPolicyFields = {
+  constitution: external_exports.enum(["pass", "fail", "uncertain"]),
+  policy_findings: canonicalDesignPolicyFindings,
+  eligible_waivers: canonicalEligibleWaivers,
+  approval_trigger: approvalTrigger
+};
+function validateOrdinaryPolicyContext(value, context2) {
+  const compliance = new Set(value.policy_findings.filter((item) => item.compliance !== "pass").map(ruleKey));
+  const trigger = new Set(value.policy_findings.filter((item) => item.trigger !== "not-matched").map(ruleKey));
+  const expected = value.policy_findings.some((item) => item.compliance === "fail") ? "fail" : value.policy_findings.some((item) => item.compliance === "uncertain") ? "uncertain" : "pass";
+  if (value.constitution !== expected) context2.addIssue({ code: "custom", message: `constitution must be ${expected}` });
+  for (const item of value.eligible_waivers) {
+    const available = item.scope.operation === "adjudication-failure" ? compliance : trigger;
+    if (!available.has(ruleKey(item.rule))) context2.addIssue({ code: "custom", message: "eligible waiver must name a policy finding on the selected axis" });
+  }
+}
+var legacyArtifactApprovalContextSchema = external_exports.object({ artifact_kind: external_exports.enum(["prd", "design", "phase-design", "phase-implementation"]) }).strict();
+var legacyDesignApprovalContextSchema = external_exports.object({
+  artifact_kind: external_exports.enum(["design", "phase-design"]),
+  constitution: external_exports.enum(["pass", "fail", "uncertain"]),
+  policy_findings: canonicalDesignPolicyFindings,
+  eligible_waivers: canonicalEligibleWaivers,
+  target_ref: boundedText,
+  baseline_commit: gitOidV1Schema,
+  commit_message: boundedText
+}).strict().superRefine(validateOrdinaryPolicyContext);
+var legacyExactCommitAuthorizationContextSchema = external_exports.object({
+  target_ref: boundedText,
+  baseline_commit: gitOidV1Schema,
+  commit_message: boundedText,
+  paths: external_exports.array(repositoryPathClaimV1Schema).min(1).refine((items) => sortedUnique(items, (a, b) => a < b ? -1 : a > b ? 1 : 0) || sortedUnique(items, (a, b) => a.localeCompare(b)), "paths must be sorted with no duplicates"),
+  diff_digest: digest,
+  current_artifact_digests: canonicalDigests.min(1),
+  parent_document_digests: canonicalDigests.min(1)
+}).strict();
+var archivedPreExactCommitAuthorizationContextSchema = legacyExactCommitAuthorizationContextSchema.omit({ baseline_commit: true, commit_message: true, paths: true });
 var contexts = {
-  "artifact-approval": external_exports.object({ artifact_kind: external_exports.enum(["prd", "design", "phase-design", "phase-implementation"]) }).strict(),
+  "artifact-approval": external_exports.object({ artifact_kind: external_exports.enum(["prd", "design", "phase-design", "phase-implementation"]), ...ordinaryPolicyFields }).strict().superRefine(validateOrdinaryPolicyContext),
   "design-approval": external_exports.object({
     artifact_kind: external_exports.enum(["design", "phase-design"]),
-    constitution: external_exports.enum(["pass", "fail", "uncertain"]),
-    policy_findings: canonicalDesignPolicyFindings,
-    eligible_waivers: canonicalEligibleWaivers,
+    ...ordinaryPolicyFields,
     target_ref: boundedText,
     baseline_commit: gitOidV1Schema,
     commit_message: boundedText
-  }).strict().superRefine((value, context2) => {
-    const compliance = new Set(value.policy_findings.filter((item) => item.compliance !== "pass").map(ruleKey));
-    const trigger = new Set(value.policy_findings.filter((item) => item.trigger !== "not-matched").map(ruleKey));
-    const expected = value.policy_findings.some((item) => item.compliance === "fail") ? "fail" : value.policy_findings.some((item) => item.compliance === "uncertain") ? "uncertain" : "pass";
-    if (value.constitution !== expected) context2.addIssue({ code: "custom", message: `constitution must be ${expected}` });
-    for (const item of value.eligible_waivers) {
-      const available = item.scope.operation === "adjudication-failure" ? compliance : trigger;
-      if (!available.has(ruleKey(item.rule))) context2.addIssue({ code: "custom", message: "eligible waiver must name a design policy finding on the selected axis" });
-    }
-  }),
+  }).strict().superRefine(validateOrdinaryPolicyContext),
   "constitution-review": external_exports.object({ constitution: external_exports.enum(["pass", "fail", "uncertain"]), failed_rules: canonicalRules, uncertain_rules: canonicalRules, matched_trigger_rules: canonicalRules, uncertain_trigger_rules: canonicalRules, eligible_waivers: canonicalEligibleWaivers }).strict().superRefine((value, context2) => {
     const compliance = new Set([...value.failed_rules, ...value.uncertain_rules].map(ruleKey));
     const trigger = new Set([...value.matched_trigger_rules, ...value.uncertain_trigger_rules].map(ruleKey));
@@ -36338,6 +36386,7 @@ var contexts = {
   "attempts-exhausted": external_exports.object({ step: external_exports.enum(PIPELINE_STEPS), attempts: safeInteger, maximum_attempts: safeInteger }).strict().refine((value) => value.attempts >= value.maximum_attempts, "attempts must be at least maximum_attempts"),
   "constitution-edit": external_exports.object({ pinned_constitution_digest: digest, current_constitution_digest: digest, changed_path_class: external_exports.literal("task-branch-constitution") }).strict(),
   "commit-authorization": external_exports.object({
+    ...ordinaryPolicyFields,
     target_ref: boundedText,
     baseline_commit: gitOidV1Schema,
     commit_message: boundedText,
@@ -36345,7 +36394,7 @@ var contexts = {
     diff_digest: digest,
     current_artifact_digests: canonicalDigests.min(1),
     parent_document_digests: canonicalDigests.min(1)
-  }).strict(),
+  }).strict().superRefine(validateOrdinaryPolicyContext),
   "restore-collision": external_exports.object({ path: taskPathClaimV1Schema, recorded_generation_digest: digest, current_generation_digest: digest, adoption_candidate: authorityLink.optional() }).strict(),
   "baseline-adoption": external_exports.object({
     drifted_projections: external_exports.array(
@@ -36394,17 +36443,23 @@ var contexts = {
 };
 var archivedCommitAuthorizationContextSchema = external_exports.union([
   contexts["commit-authorization"],
-  contexts["commit-authorization"].omit({ baseline_commit: true, commit_message: true, paths: true })
+  legacyExactCommitAuthorizationContextSchema,
+  archivedPreExactCommitAuthorizationContextSchema
 ]);
-var archivedContexts = { ...contexts, "commit-authorization": archivedCommitAuthorizationContextSchema };
+var archivedContexts = {
+  ...contexts,
+  "artifact-approval": external_exports.union([contexts["artifact-approval"], legacyArtifactApprovalContextSchema]),
+  "design-approval": external_exports.union([contexts["design-approval"], legacyDesignApprovalContextSchema]),
+  "commit-authorization": archivedCommitAuthorizationContextSchema
+};
 var decisions = {
-  "artifact-approval": decision(["approve", "revise", "reject"]),
+  "artifact-approval": external_exports.union([decision(["approve", "revise", "reject"]), external_exports.object({ decision: external_exports.literal("waiver-requested"), reason, rule, operation: external_exports.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
   "design-approval": external_exports.union([decision(["approve", "revise", "reject"]), external_exports.object({ decision: external_exports.literal("waiver-requested"), reason, rule, operation: external_exports.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
   "constitution-review": external_exports.union([decision(["approve", "revise", "reject"]), external_exports.object({ decision: external_exports.literal("waiver-requested"), reason, rule, operation: external_exports.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
   "material-drift": decision(["amend-upstream", "revise-current", "reject"]),
   "attempts-exhausted": decision(["retry-once", "revise", "abort"]),
   "constitution-edit": decision(["revert-edit", "start-base-amendment", "abort"]),
-  "commit-authorization": decision(["authorize-commit", "revise", "abort"]),
+  "commit-authorization": external_exports.union([decision(["authorize-commit", "revise", "abort"]), external_exports.object({ decision: external_exports.literal("waiver-requested"), reason, rule, operation: external_exports.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
   "restore-collision": external_exports.union([decision(["discard-and-restore", "abort"]), external_exports.object({ decision: external_exports.literal("adopt-as-new-generation"), reason, adoption_authority: authorityLink, rationale: boundedText }).strict()]),
   "baseline-adoption": decision(["adopt-current-bytes", "restore-recorded-bytes", "adopt-committed-deletions", "abort"]),
   "migration-audit": decision(["accept-import-audit", "revise", "abort"])
@@ -36473,6 +36528,7 @@ var gateContractSchemaDefs = Object.freeze({
   eligibleWaiver,
   eligibleWaivers: canonicalEligibleWaivers,
   authorityLink,
+  approvalTrigger,
   artifactApprovalContext: contexts["artifact-approval"],
   designApprovalContext: contexts["design-approval"],
   constitutionReviewContext: contexts["constitution-review"],
@@ -36536,7 +36592,7 @@ function validateDecisionAgainst(contextSchemas, kind, context2, payload) {
   contextSchemas[kind].parse(context2);
   assertPlainJson(payload, `${kind} gate decision`);
   const parsed = decisions[kind].parse(payload);
-  if ((kind === "constitution-review" || kind === "design-approval") && parsed.decision === "waiver-requested") {
+  if ((kind === "artifact-approval" || kind === "design-approval" || kind === "constitution-review" || kind === "commit-authorization") && parsed.decision === "waiver-requested") {
     const eligible = context2.eligible_waivers;
     if (!eligible.some((item) => ruleKey(item.rule) === ruleKey(parsed.rule) && item.scope.operation === parsed.operation)) throw new TypeError("waiver-requested rule and operation must be eligible");
   }
@@ -37239,6 +37295,51 @@ function parseConfigYaml(source, label = "config.yaml") {
   return parseConfigV1(parseSingleYamlDocument(source, label));
 }
 
+// src/contracts/dispatch-failure.ts
+var DISPATCH_FAILURE_CODES = [
+  "CONFIG_INVALID",
+  "CONFIG_MODEL_UNSUPPORTED",
+  "CLI_MISSING",
+  "AUTH_UNAVAILABLE",
+  "RATE_LIMITED",
+  "UNSUPPORTED_MODEL",
+  "CLI_VERSION_UNSUPPORTED",
+  "PROCESS_FAILED"
+];
+var boundedMessage = external_exports.string().min(1).max(256);
+var route = external_exports.object({
+  model: external_exports.string().min(1).regex(/\S/u),
+  effort: external_exports.enum(REASONING_EFFORTS),
+  provider: external_exports.string().trim().min(1).regex(/\S/u).optional(),
+  source: external_exports.enum(["configured", "invocation-declared", "route-override"])
+}).strict();
+var dispatchFailureObservationV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: external_exports.literal("counter_review"),
+  attempt: safeIntegerV1Schema,
+  role: external_exports.enum(["counter-reviewer", "adjudicator"]),
+  code: external_exports.enum(DISPATCH_FAILURE_CODES),
+  message: boundedMessage,
+  route: route.optional(),
+  observed_at_revision: safeIntegerV1Schema
+}).strict();
+var publicDispatchFailureV1Schema = external_exports.object({
+  role: external_exports.enum(["counter-reviewer", "adjudicator"]),
+  code: external_exports.enum(DISPATCH_FAILURE_CODES),
+  message: boundedMessage,
+  route: route.optional()
+}).strict();
+function projectDispatchFailureObservation(observation) {
+  return Object.freeze({
+    role: observation.role,
+    code: observation.code,
+    message: observation.message,
+    ...observation.route === void 0 ? {} : { route: Object.freeze({ ...observation.route }) }
+  });
+}
+
 // src/contracts/review.ts
 var REVIEW_VERDICTS = ["pass", "advisory", "fail"];
 var REVIEW_ROLES = ["counter-review"];
@@ -37310,6 +37411,8 @@ function parseAndDeriveReview(value) {
   validateReviewClaims(parsed);
   return parsed;
 }
+var ROUTE_SOURCE_PROVENANCES = ["configured", "invocation-declared", "route-override"];
+var DISPLACED_ROUTE_SOURCES = ["configured", "invocation-declared"];
 var provenanceBase = rawReviewSchema.safeExtend({
   model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]),
   model: nonBlank,
@@ -37318,7 +37421,18 @@ var provenanceBase = rawReviewSchema.safeExtend({
 var routeOverrideRecordSchema = external_exports.object({
   reason: nonBlank,
   pinned_model: nonBlank.optional(),
-  pinned_effort: external_exports.enum(EFFORT_VALUES).optional()
+  pinned_effort: external_exports.enum(EFFORT_VALUES).optional(),
+  pinned_provider: nonBlank.optional()
+}).strict();
+var displacedRouteRecordSchema = external_exports.object({
+  source: external_exports.enum(DISPLACED_ROUTE_SOURCES),
+  model: nonBlank,
+  effort: external_exports.enum(EFFORT_VALUES),
+  provider: nonBlank.optional()
+}).strict();
+var routeSourceRecordSchema = external_exports.object({
+  provenance: external_exports.enum(ROUTE_SOURCE_PROVENANCES),
+  displaced: displacedRouteRecordSchema.optional()
 }).strict();
 var serverAttestedReviewSchema = provenanceBase.safeExtend({
   assurance: external_exports.literal("server-attested"),
@@ -37330,6 +37444,8 @@ var serverAttestedReviewSchema = provenanceBase.safeExtend({
   envelope_input_digest: digest3,
   observed_output_digest: digest3,
   result_id: id3,
+  provider: nonBlank.optional(),
+  route_source: routeSourceRecordSchema.optional(),
   route_override: routeOverrideRecordSchema.optional()
 }).strict();
 var degradedReviewSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank }).strict();
@@ -37410,18 +37526,31 @@ var publicConstitutionRuleV1Schema = external_exports.object({ id: nonBlank2, ve
 var rubricCriterionV1Schema = external_exports.object({ id: nonBlank2, text: nonBlank2, blocking: external_exports.boolean() }).strict();
 var publicRubricV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), kind: external_exports.enum(["artifact", "implementation"]), mode: external_exports.literal("adversarial"), criteria: external_exports.array(rubricCriterionV1Schema).min(1) }).strict();
 var publicReviewContextV1Schema = external_exports.object({ rubric: publicRubricV1Schema, active_rules: external_exports.array(publicConstitutionRuleV1Schema) }).strict();
-var humanPresentationV1Schema = external_exports.object({ title: nonBlank2, summary: nonBlank2, details: external_exports.array(nonBlank2).optional(), question: nonBlank2, options: external_exports.array(external_exports.object({ token: nonBlank2, label: nonBlank2, consequence: nonBlank2 }).strict()).min(1) }).strict();
+var presentationClass = external_exports.enum(["configured-approval", "exception"]);
+var humanPresentationV1Schema = external_exports.object({ class: presentationClass, title: nonBlank2, summary: nonBlank2, details: external_exports.array(nonBlank2).optional(), question: nonBlank2, reasons: external_exports.array(external_exports.object({ class: presentationClass, text: nonBlank2 }).strict()).min(1), options: external_exports.array(external_exports.object({ token: nonBlank2, label: nonBlank2, consequence: nonBlank2 }).strict()).min(1) }).strict().superRefine((presentation, context2) => {
+  const expected = presentation.reasons.some((reason2) => reason2.class === "exception") ? "exception" : "configured-approval";
+  if (presentation.class !== expected) context2.addIssue({ code: "custom", path: ["class"], message: `presentation class must be ${expected}` });
+});
 var workflowPositionV1Schema = external_exports.discriminatedUnion("kind", [
   external_exports.object({ kind: external_exports.literal("prd") }).strict(),
   external_exports.object({ kind: external_exports.literal("design") }).strict(),
   external_exports.object({ kind: external_exports.literal("phase-design"), phase: positiveSafePhaseNumberV1Schema }).strict(),
   external_exports.object({ kind: external_exports.literal("phase-impl"), phase: positiveSafePhaseNumberV1Schema }).strict()
 ]);
+var workflowReviewModelRouteV1Schema = configRouteSchema.clone(configRouteSchema.def);
+var workflowReviewRoutesV1Schema = external_exports.object({
+  "counter-reviewer": workflowReviewModelRouteV1Schema.optional(),
+  adjudicator: workflowReviewModelRouteV1Schema.optional()
+}).strict().superRefine((routes, context2) => {
+  if (routes["counter-reviewer"] === void 0 && routes.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "review_routes must name counter-reviewer, adjudicator, or both" });
+  }
+});
 var workflowInvocationV1Schema = external_exports.discriminatedUnion("skill", [
-  external_exports.object({ skill: external_exports.literal("archflow-prd"), intent: external_exports.enum(["resume", "reopen"]) }).strict(),
-  external_exports.object({ skill: external_exports.literal("archflow-design"), intent: external_exports.enum(["resume", "reopen"]) }).strict(),
-  external_exports.object({ skill: external_exports.literal("archflow-phase-design"), phase: positiveSafePhaseNumberV1Schema, intent: external_exports.enum(["resume", "reopen"]) }).strict(),
-  external_exports.object({ skill: external_exports.literal("archflow-phase-impl"), phase: positiveSafePhaseNumberV1Schema, intent: external_exports.literal("resume") }).strict()
+  external_exports.object({ skill: external_exports.literal("archflow-prd"), intent: external_exports.enum(["resume", "reopen"]), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
+  external_exports.object({ skill: external_exports.literal("archflow-design"), intent: external_exports.enum(["resume", "reopen"]), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
+  external_exports.object({ skill: external_exports.literal("archflow-phase-design"), phase: positiveSafePhaseNumberV1Schema, intent: external_exports.enum(["resume", "reopen"]), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
+  external_exports.object({ skill: external_exports.literal("archflow-phase-impl"), phase: positiveSafePhaseNumberV1Schema, intent: external_exports.literal("resume"), review_routes: workflowReviewRoutesV1Schema.optional() }).strict()
 ]);
 var reopenImpactV1Schema = external_exports.object({
   target: workflowPositionV1Schema,
@@ -37432,7 +37561,7 @@ var reopenImpactV1Schema = external_exports.object({
   appends_prd_ask_history: external_exports.boolean(),
   requires_fresh_review_and_approval: external_exports.literal(true)
 }).strict();
-var commitInstructionV1Schema = external_exports.object({ paths: external_exports.array(nonBlank2).min(1), message: nonBlank2, target_ref: nonBlank2, baseline: nonBlank2, requires_human_confirmation: external_exports.boolean() }).strict().superRefine((commit, context2) => {
+var commitInstructionV1Schema = external_exports.object({ paths: external_exports.array(nonBlank2).min(1), message: nonBlank2, target_ref: nonBlank2, baseline: nonBlank2 }).strict().superRefine((commit, context2) => {
   if (commit.paths.some((path2, index) => index > 0 && commit.paths[index - 1] > path2)) {
     context2.addIssue({ code: "custom", path: ["paths"], message: "commit paths must be sorted ascending" });
   }
@@ -37444,7 +37573,7 @@ var configChangeEntryV1Schema = external_exports.object({
   before: configChangeValueV1Schema.optional(),
   after: configChangeValueV1Schema.optional()
 }).strict();
-var workflowViewV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, condition: external_exports.enum(WORKFLOW_CONDITIONS), headline: nonBlank2, detail: nonBlank2, position: workflowPositionV1Schema.optional(), resources: external_exports.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: external_exports.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), presentation: humanPresentationV1Schema.optional(), config_change: external_exports.array(configChangeEntryV1Schema).optional() }).strict();
+var workflowViewV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, condition: external_exports.enum(WORKFLOW_CONDITIONS), headline: nonBlank2, detail: nonBlank2, position: workflowPositionV1Schema.optional(), resources: external_exports.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: external_exports.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), presentation: humanPresentationV1Schema.optional(), dispatch_failure: publicDispatchFailureV1Schema.optional(), config_change: external_exports.array(configChangeEntryV1Schema).optional() }).strict();
 var semanticErrorSummaryV1Schema = external_exports.object({
   code: nonBlank2.max(128),
   message: nonBlank2.max(4096),
@@ -38787,6 +38916,198 @@ var gate_contract_schema_default = {
       ],
       additionalProperties: false
     },
+    approvalTrigger: {
+      oneOf: [
+        {
+          type: "object",
+          properties: {
+            kind: {
+              type: "string",
+              const: "rule-settlement"
+            },
+            settlement: {
+              type: "object",
+              properties: {
+                subject_digest: {
+                  $ref: "#/$defs/digest"
+                },
+                config_digest: {
+                  $ref: "#/$defs/digest"
+                },
+                settled_at_revision: {
+                  type: "integer",
+                  minimum: 1,
+                  maximum: 9007199254740991
+                }
+              },
+              required: [
+                "subject_digest",
+                "config_digest",
+                "settled_at_revision"
+              ],
+              additionalProperties: false
+            },
+            conclusion: {
+              oneOf: [
+                {
+                  type: "object",
+                  properties: {
+                    wait: {
+                      type: "boolean",
+                      const: false
+                    },
+                    match: {
+                      type: "null"
+                    }
+                  },
+                  required: [
+                    "wait",
+                    "match"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    wait: {
+                      type: "boolean",
+                      const: true
+                    },
+                    match: {
+                      anyOf: [
+                        {
+                          type: "object",
+                          properties: {
+                            kind: {
+                              type: "string",
+                              const: "subject"
+                            },
+                            subject: {
+                              type: "string",
+                              enum: [
+                                "prd",
+                                "design",
+                                "phase-design",
+                                "phase-impl"
+                              ]
+                            }
+                          },
+                          required: [
+                            "kind",
+                            "subject"
+                          ],
+                          additionalProperties: false
+                        },
+                        {
+                          type: "object",
+                          properties: {
+                            kind: {
+                              type: "string",
+                              const: "content"
+                            },
+                            paths: {
+                              minItems: 1,
+                              type: "array",
+                              items: {
+                                type: "string"
+                              }
+                            }
+                          },
+                          required: [
+                            "kind",
+                            "paths"
+                          ],
+                          additionalProperties: false
+                        }
+                      ]
+                    }
+                  },
+                  required: [
+                    "wait",
+                    "match"
+                  ],
+                  additionalProperties: false
+                }
+              ]
+            },
+            rule_authority: {
+              type: "string",
+              enum: [
+                "authenticated",
+                "unavailable"
+              ]
+            }
+          },
+          required: [
+            "kind",
+            "settlement",
+            "conclusion",
+            "rule_authority"
+          ],
+          additionalProperties: false
+        },
+        {
+          type: "object",
+          properties: {
+            kind: {
+              type: "string",
+              const: "human-revision-reapproval"
+            },
+            prior_gate: {
+              type: "object",
+              properties: {
+                gate_id: {
+                  $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+                },
+                decision_digest: {
+                  $ref: "#/$defs/digest"
+                },
+                class: {
+                  type: "string",
+                  enum: [
+                    "configured-approval",
+                    "exception"
+                  ]
+                }
+              },
+              required: [
+                "gate_id",
+                "decision_digest",
+                "class"
+              ],
+              additionalProperties: false
+            },
+            revision_checkpoint: {
+              type: "object",
+              properties: {
+                classification: {
+                  type: "string",
+                  const: "simple"
+                },
+                predecessor_subject_digest: {
+                  $ref: "#/$defs/digest"
+                },
+                subject_digest: {
+                  $ref: "#/$defs/digest"
+                }
+              },
+              required: [
+                "classification",
+                "predecessor_subject_digest",
+                "subject_digest"
+              ],
+              additionalProperties: false
+            }
+          },
+          required: [
+            "kind",
+            "prior_gate",
+            "revision_checkpoint"
+          ],
+          additionalProperties: false
+        }
+      ]
+    },
     artifactApprovalContext: {
       type: "object",
       properties: {
@@ -38798,10 +39119,75 @@ var gate_contract_schema_default = {
             "phase-design",
             "phase-implementation"
           ]
+        },
+        constitution: {
+          type: "string",
+          enum: [
+            "pass",
+            "fail",
+            "uncertain"
+          ]
+        },
+        policy_findings: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              rule_id: {
+                $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId"
+              },
+              rule_version: {
+                type: "integer",
+                exclusiveMinimum: 0,
+                maximum: 9007199254740991
+              },
+              compliance: {
+                type: "string",
+                enum: [
+                  "pass",
+                  "fail",
+                  "uncertain"
+                ]
+              },
+              rationale: {
+                $ref: "#/$defs/text"
+              },
+              trigger: {
+                type: "string",
+                enum: [
+                  "not-matched",
+                  "matched",
+                  "uncertain"
+                ]
+              },
+              trigger_evidence: {
+                $ref: "#/$defs/text"
+              }
+            },
+            required: [
+              "rule_id",
+              "rule_version",
+              "compliance",
+              "rationale",
+              "trigger",
+              "trigger_evidence"
+            ],
+            additionalProperties: false
+          }
+        },
+        eligible_waivers: {
+          $ref: "#/$defs/eligibleWaivers"
+        },
+        approval_trigger: {
+          $ref: "#/$defs/approvalTrigger"
         }
       },
       required: [
-        "artifact_kind"
+        "artifact_kind",
+        "constitution",
+        "policy_findings",
+        "eligible_waivers",
+        "approval_trigger"
       ],
       additionalProperties: false
     },
@@ -38873,6 +39259,9 @@ var gate_contract_schema_default = {
         eligible_waivers: {
           $ref: "#/$defs/eligibleWaivers"
         },
+        approval_trigger: {
+          $ref: "#/$defs/approvalTrigger"
+        },
         target_ref: {
           $ref: "#/$defs/text"
         },
@@ -38888,6 +39277,7 @@ var gate_contract_schema_default = {
         "constitution",
         "policy_findings",
         "eligible_waivers",
+        "approval_trigger",
         "target_ref",
         "baseline_commit",
         "commit_message"
@@ -39030,6 +39420,67 @@ var gate_contract_schema_default = {
     commitAuthorizationContext: {
       type: "object",
       properties: {
+        constitution: {
+          type: "string",
+          enum: [
+            "pass",
+            "fail",
+            "uncertain"
+          ]
+        },
+        policy_findings: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              rule_id: {
+                $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId"
+              },
+              rule_version: {
+                type: "integer",
+                exclusiveMinimum: 0,
+                maximum: 9007199254740991
+              },
+              compliance: {
+                type: "string",
+                enum: [
+                  "pass",
+                  "fail",
+                  "uncertain"
+                ]
+              },
+              rationale: {
+                $ref: "#/$defs/text"
+              },
+              trigger: {
+                type: "string",
+                enum: [
+                  "not-matched",
+                  "matched",
+                  "uncertain"
+                ]
+              },
+              trigger_evidence: {
+                $ref: "#/$defs/text"
+              }
+            },
+            required: [
+              "rule_id",
+              "rule_version",
+              "compliance",
+              "rationale",
+              "trigger",
+              "trigger_evidence"
+            ],
+            additionalProperties: false
+          }
+        },
+        eligible_waivers: {
+          $ref: "#/$defs/eligibleWaivers"
+        },
+        approval_trigger: {
+          $ref: "#/$defs/approvalTrigger"
+        },
         target_ref: {
           $ref: "#/$defs/text"
         },
@@ -39065,6 +39516,10 @@ var gate_contract_schema_default = {
         }
       },
       required: [
+        "constitution",
+        "policy_findings",
+        "eligible_waivers",
+        "approval_trigger",
         "target_ref",
         "baseline_commit",
         "commit_message",
@@ -39224,25 +39679,62 @@ var gate_contract_schema_default = {
       additionalProperties: false
     },
     artifactApprovalDecision: {
-      type: "object",
-      properties: {
-        decision: {
-          type: "string",
-          enum: [
-            "approve",
-            "revise",
-            "reject"
-          ]
+      anyOf: [
+        {
+          type: "object",
+          properties: {
+            decision: {
+              type: "string",
+              enum: [
+                "approve",
+                "revise",
+                "reject"
+              ]
+            },
+            reason: {
+              $ref: "#/$defs/text"
+            }
+          },
+          required: [
+            "decision",
+            "reason"
+          ],
+          additionalProperties: false
         },
-        reason: {
-          $ref: "#/$defs/text"
+        {
+          type: "object",
+          properties: {
+            decision: {
+              type: "string",
+              const: "waiver-requested"
+            },
+            reason: {
+              $ref: "#/$defs/text"
+            },
+            rule: {
+              $ref: "#/$defs/rule"
+            },
+            operation: {
+              type: "string",
+              enum: [
+                "review-trigger",
+                "adjudication-failure"
+              ]
+            },
+            rationale: {
+              $ref: "#/$defs/text"
+            }
+          },
+          required: [
+            "decision",
+            "reason",
+            "rule",
+            "operation",
+            "rationale"
+          ],
+          additionalProperties: false
         }
-      },
-      required: [
-        "decision",
-        "reason"
-      ],
-      additionalProperties: false
+      ]
     },
     designApprovalDecision: {
       anyOf: [
@@ -39424,25 +39916,62 @@ var gate_contract_schema_default = {
       additionalProperties: false
     },
     commitAuthorizationDecision: {
-      type: "object",
-      properties: {
-        decision: {
-          type: "string",
-          enum: [
-            "authorize-commit",
-            "revise",
-            "abort"
-          ]
+      anyOf: [
+        {
+          type: "object",
+          properties: {
+            decision: {
+              type: "string",
+              enum: [
+                "authorize-commit",
+                "revise",
+                "abort"
+              ]
+            },
+            reason: {
+              $ref: "#/$defs/text"
+            }
+          },
+          required: [
+            "decision",
+            "reason"
+          ],
+          additionalProperties: false
         },
-        reason: {
-          $ref: "#/$defs/text"
+        {
+          type: "object",
+          properties: {
+            decision: {
+              type: "string",
+              const: "waiver-requested"
+            },
+            reason: {
+              $ref: "#/$defs/text"
+            },
+            rule: {
+              $ref: "#/$defs/rule"
+            },
+            operation: {
+              type: "string",
+              enum: [
+                "review-trigger",
+                "adjudication-failure"
+              ]
+            },
+            rationale: {
+              $ref: "#/$defs/text"
+            }
+          },
+          required: [
+            "decision",
+            "reason",
+            "rule",
+            "operation",
+            "rationale"
+          ],
+          additionalProperties: false
         }
-      },
-      required: [
-        "decision",
-        "reason"
-      ],
-      additionalProperties: false
+      ]
     },
     restoreCollisionDecision: {
       anyOf: [
@@ -40660,6 +41189,7 @@ var mcp_tools_schema_default = {
               "planning_restart",
               "refresh_milestone_baseline",
               "recover_milestone_authority",
+              "recover_approval_trigger_authority",
               "refresh_stale_baseline"
             ]
           },
@@ -40765,6 +41295,74 @@ var mcp_tools_schema_default = {
           },
           artifact_path: {
             $ref: "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
+          },
+          invocation_routes: {
+            type: "object",
+            properties: {
+              "counter-reviewer": {
+                type: "object",
+                properties: {
+                  model: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  effort: {
+                    type: "string",
+                    enum: [
+                      "low",
+                      "medium",
+                      "high",
+                      "xhigh",
+                      "max",
+                      "ultra"
+                    ]
+                  },
+                  provider: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  }
+                },
+                required: [
+                  "model",
+                  "effort"
+                ],
+                additionalProperties: false
+              },
+              adjudicator: {
+                type: "object",
+                properties: {
+                  model: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  effort: {
+                    type: "string",
+                    enum: [
+                      "low",
+                      "medium",
+                      "high",
+                      "xhigh",
+                      "max",
+                      "ultra"
+                    ]
+                  },
+                  provider: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  }
+                },
+                required: [
+                  "model",
+                  "effort"
+                ],
+                additionalProperties: false
+              }
+            },
+            additionalProperties: false
           },
           route_override: {
             type: "object",
@@ -47215,96 +47813,122 @@ var semantic_workflow_schema_default = {
         }
       ]
     },
+    reviewModelRoute: {
+      type: "object",
+      properties: {
+        model: {
+          type: "string",
+          pattern: "\\S"
+        },
+        effort: {
+          enum: [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ]
+        },
+        provider: {
+          type: "string",
+          pattern: "\\S"
+        }
+      },
+      required: [
+        "model",
+        "effort"
+      ],
+      additionalProperties: false
+    },
+    reviewRouteSet: {
+      type: "object",
+      minProperties: 1,
+      properties: {
+        "counter-reviewer": {
+          $ref: "#/$defs/reviewModelRoute"
+        },
+        adjudicator: {
+          $ref: "#/$defs/reviewModelRoute"
+        }
+      },
+      additionalProperties: false
+    },
     workflowInvocation: {
-      oneOf: [
+      type: "object",
+      properties: {
+        skill: {
+          enum: [
+            "archflow-prd",
+            "archflow-design",
+            "archflow-phase-design",
+            "archflow-phase-impl"
+          ]
+        },
+        phase: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber"
+        },
+        intent: {
+          enum: [
+            "resume",
+            "reopen"
+          ]
+        },
+        review_routes: {
+          $ref: "#/$defs/reviewRouteSet"
+        }
+      },
+      required: [
+        "skill",
+        "intent"
+      ],
+      additionalProperties: false,
+      allOf: [
         {
-          type: "object",
-          properties: {
-            skill: {
-              type: "string",
-              const: "archflow-prd"
+          if: {
+            properties: {
+              skill: {
+                enum: [
+                  "archflow-phase-design",
+                  "archflow-phase-impl"
+                ]
+              }
+            }
+          },
+          then: {
+            properties: {
+              phase: {}
             },
-            intent: {
-              type: "string",
-              enum: [
-                "resume",
-                "reopen"
+            required: [
+              "phase"
+            ]
+          },
+          else: {
+            not: {
+              properties: {
+                phase: {}
+              },
+              required: [
+                "phase"
               ]
             }
-          },
-          required: [
-            "skill",
-            "intent"
-          ],
-          additionalProperties: false
+          }
         },
         {
-          type: "object",
-          properties: {
-            skill: {
-              type: "string",
-              const: "archflow-design"
-            },
-            intent: {
-              type: "string",
-              enum: [
-                "resume",
-                "reopen"
-              ]
+          if: {
+            properties: {
+              skill: {
+                const: "archflow-phase-impl"
+              }
             }
           },
-          required: [
-            "skill",
-            "intent"
-          ],
-          additionalProperties: false
-        },
-        {
-          type: "object",
-          properties: {
-            skill: {
-              type: "string",
-              const: "archflow-phase-design"
-            },
-            phase: {
-              $ref: "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber"
-            },
-            intent: {
-              type: "string",
-              enum: [
-                "resume",
-                "reopen"
-              ]
+          then: {
+            properties: {
+              intent: {
+                const: "resume"
+              }
             }
-          },
-          required: [
-            "skill",
-            "phase",
-            "intent"
-          ],
-          additionalProperties: false
-        },
-        {
-          type: "object",
-          properties: {
-            skill: {
-              type: "string",
-              const: "archflow-phase-impl"
-            },
-            phase: {
-              $ref: "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber"
-            },
-            intent: {
-              type: "string",
-              const: "resume"
-            }
-          },
-          required: [
-            "skill",
-            "phase",
-            "intent"
-          ],
-          additionalProperties: false
+          }
         }
       ]
     },
@@ -47392,17 +48016,13 @@ var semantic_workflow_schema_default = {
               type: "string",
               minLength: 1,
               pattern: "\\S"
-            },
-            requires_human_confirmation: {
-              type: "boolean"
             }
           },
           required: [
             "paths",
             "message",
             "target_ref",
-            "baseline",
-            "requires_human_confirmation"
+            "baseline"
           ],
           additionalProperties: false
         },
@@ -47624,6 +48244,13 @@ var semantic_workflow_schema_default = {
         presentation: {
           type: "object",
           properties: {
+            class: {
+              type: "string",
+              enum: [
+                "configured-approval",
+                "exception"
+              ]
+            },
             title: {
               type: "string",
               minLength: 1,
@@ -47646,6 +48273,32 @@ var semantic_workflow_schema_default = {
               type: "string",
               minLength: 1,
               pattern: "\\S"
+            },
+            reasons: {
+              minItems: 1,
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  class: {
+                    type: "string",
+                    enum: [
+                      "configured-approval",
+                      "exception"
+                    ]
+                  },
+                  text: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  }
+                },
+                required: [
+                  "class",
+                  "text"
+                ],
+                additionalProperties: false
+              }
             },
             options: {
               minItems: 1,
@@ -47679,12 +48332,17 @@ var semantic_workflow_schema_default = {
             }
           },
           required: [
+            "class",
             "title",
             "summary",
             "question",
+            "reasons",
             "options"
           ],
           additionalProperties: false
+        },
+        dispatch_failure: {
+          $ref: "#/$defs/publicDispatchFailure"
         },
         config_change: {
           type: "array",
@@ -47701,6 +48359,76 @@ var semantic_workflow_schema_default = {
         "detail",
         "resources",
         "next_action"
+      ],
+      additionalProperties: false
+    },
+    publicDispatchFailure: {
+      type: "object",
+      properties: {
+        role: {
+          enum: [
+            "counter-reviewer",
+            "adjudicator"
+          ]
+        },
+        code: {
+          enum: [
+            "CONFIG_INVALID",
+            "CONFIG_MODEL_UNSUPPORTED",
+            "CLI_MISSING",
+            "AUTH_UNAVAILABLE",
+            "RATE_LIMITED",
+            "UNSUPPORTED_MODEL",
+            "CLI_VERSION_UNSUPPORTED",
+            "PROCESS_FAILED"
+          ]
+        },
+        message: {
+          type: "string",
+          minLength: 1,
+          maxLength: 256
+        },
+        route: {
+          type: "object",
+          properties: {
+            model: {
+              type: "string",
+              pattern: "\\S"
+            },
+            effort: {
+              enum: [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+                "ultra"
+              ]
+            },
+            provider: {
+              type: "string",
+              pattern: "\\S"
+            },
+            source: {
+              enum: [
+                "configured",
+                "invocation-declared",
+                "route-override"
+              ]
+            }
+          },
+          required: [
+            "model",
+            "effort",
+            "source"
+          ],
+          additionalProperties: false
+        }
+      },
+      required: [
+        "role",
+        "code",
+        "message"
       ],
       additionalProperties: false
     },
@@ -48470,6 +49198,13 @@ var semantic_workflow_schema_default = {
     presentation: {
       type: "object",
       properties: {
+        class: {
+          type: "string",
+          enum: [
+            "configured-approval",
+            "exception"
+          ]
+        },
         title: {
           type: "string",
           minLength: 1,
@@ -48492,6 +49227,32 @@ var semantic_workflow_schema_default = {
           type: "string",
           minLength: 1,
           pattern: "\\S"
+        },
+        reasons: {
+          minItems: 1,
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              class: {
+                type: "string",
+                enum: [
+                  "configured-approval",
+                  "exception"
+                ]
+              },
+              text: {
+                type: "string",
+                minLength: 1,
+                pattern: "\\S"
+              }
+            },
+            required: [
+              "class",
+              "text"
+            ],
+            additionalProperties: false
+          }
         },
         options: {
           minItems: 1,
@@ -48525,12 +49286,17 @@ var semantic_workflow_schema_default = {
         }
       },
       required: [
+        "class",
         "title",
         "summary",
         "question",
+        "reasons",
         "options"
       ],
       additionalProperties: false
+    },
+    dispatch_failure: {
+      $ref: "#/$defs/publicDispatchFailure"
     },
     config_change: {
       type: "array",
@@ -49067,7 +49833,7 @@ function parseAndDeriveAdjudication(value) {
 }
 var provenanceBase2 = derivedAdjudicationSchema.safeExtend({ model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]), model: nonBlank3, effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")]) });
 var agentSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("agent-declared") }).strict();
-var serverSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("server-attested"), adapter: external_exports.enum(ADAPTER_IDS), cli_version: nonBlank3, model_family: external_exports.enum(MODEL_FAMILIES), effort: external_exports.enum(EFFORT_VALUES), invocation_id: id4, envelope_input_digest: digest4, observed_output_digest: digest4, result_id: id4, route_override: routeOverrideRecordSchema.optional() }).strict();
+var serverSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("server-attested"), adapter: external_exports.enum(ADAPTER_IDS), cli_version: nonBlank3, model_family: external_exports.enum(MODEL_FAMILIES), effort: external_exports.enum(EFFORT_VALUES), invocation_id: id4, envelope_input_digest: digest4, observed_output_digest: digest4, result_id: id4, provider: nonBlank3.optional(), route_source: routeSourceRecordSchema.optional(), route_override: routeOverrideRecordSchema.optional() }).strict();
 var degradedSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank3 }).strict();
 var adjudicationEvidenceSchema = external_exports.discriminatedUnion("assurance", [agentSchema, serverSchema, degradedSchema]);
 function parseAdjudicationEvidence(value) {
@@ -49163,7 +49929,7 @@ var observationSource = Object.freeze({
     for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["role", binding.role], ["step", "counter_review"], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["rubric_digest", binding.rubric_digest], ["producer_family", binding.producer_family]]) assertEqual2(derived[key], expected, key);
     const raw_output_digest = digestBytes(bytes);
     const observation = createObservation(binding, bytes, raw_output_digest);
-    const evidence = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...binding.route_override === void 0 ? {} : { route_override: binding.route_override } });
+    const evidence = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...binding.provider === void 0 ? {} : { provider: binding.provider }, route_source: binding.route_source, ...binding.route_override === void 0 ? {} : { route_override: binding.route_override } });
     return Object.freeze({ observation, evidence });
   },
   observeAdjudication(capability, observedOutputBytes) {
@@ -49176,7 +49942,7 @@ var observationSource = Object.freeze({
     if (!sameArray(derived.approved_upstream_digests, binding.approved_upstream_digests)) throw new TypeError("approved_upstream_digests do not match observation capability");
     const raw_output_digest = digestBytes(bytes);
     const observation = createObservation(binding, bytes, raw_output_digest);
-    const evidence = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...binding.route_override === void 0 ? {} : { route_override: binding.route_override } });
+    const evidence = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...binding.provider === void 0 ? {} : { provider: binding.provider }, route_source: binding.route_source, ...binding.route_override === void 0 ? {} : { route_override: binding.route_override } });
     return Object.freeze({ observation, evidence });
   }
 });
@@ -49352,18 +50118,21 @@ var legacyDecisionRecordV1Schema = external_exports.discriminatedUnion("outcome"
   external_exports.object({ ...legacyDecisionBase, outcome: external_exports.literal("superseded"), supersession: legacySupersession }).strict()
 ]);
 var GATE_REQUEST_DECISIONS = {
-  "artifact-approval": ["approve", "revise", "reject", "cancel"],
+  "artifact-approval": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "design-approval": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "constitution-review": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
   "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
   "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
-  "commit-authorization": ["authorize-commit", "revise", "abort", "cancel"],
+  "commit-authorization": ["authorize-commit", "revise", "abort", "waiver-requested", "cancel"],
   "restore-collision": ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"],
   "baseline-adoption": ["adopt-current-bytes", "restore-recorded-bytes", "adopt-committed-deletions", "abort", "cancel"],
   "migration-audit": ["accept-import-audit", "revise", "abort", "cancel"]
 };
 var WAIVER_DECISIONS = ["grant", "deny", "cancel"];
+var LEGACY_ARTIFACT_APPROVAL_DECISIONS = ["approve", "revise", "reject", "cancel"];
+var LEGACY_DESIGN_APPROVAL_DECISIONS = ["approve", "revise", "reject", "waiver-requested", "cancel"];
+var LEGACY_COMMIT_AUTHORIZATION_DECISIONS = ["authorize-commit", "revise", "abort", "cancel"];
 var literalTuple = (values) => external_exports.tuple(values.map((value) => external_exports.literal(value)));
 var allowedDecisionTuples = Object.fromEntries(
   GATE_KINDS.map((kind) => [kind, literalTuple(GATE_REQUEST_DECISIONS[kind])])
@@ -49387,7 +50156,6 @@ var gateArm = (kind, context2, decisions2, extra) => external_exports.object({ .
 var gateArms = (extra) => ({
   artifactApproval: gateArm("artifact-approval", GATE_CONTRACTS["artifact-approval"].context, allowedDecisionTuples["artifact-approval"], extra),
   designApproval: gateArm("design-approval", GATE_CONTRACTS["design-approval"].context, allowedDecisionTuples["design-approval"], extra),
-  constitutionReview: gateArm("constitution-review", GATE_CONTRACTS["constitution-review"].context, allowedDecisionTuples["constitution-review"], extra),
   materialDrift: gateArm("material-drift", GATE_CONTRACTS["material-drift"].context, allowedDecisionTuples["material-drift"], extra),
   attemptsExhausted: gateArm("attempts-exhausted", GATE_CONTRACTS["attempts-exhausted"].context, allowedDecisionTuples["attempts-exhausted"], extra),
   constitutionEdit: gateArm("constitution-edit", GATE_CONTRACTS["constitution-edit"].context, allowedDecisionTuples["constitution-edit"], extra),
@@ -49397,18 +50165,37 @@ var gateArms = (extra) => ({
   migrationAudit: gateArm("migration-audit", GATE_CONTRACTS["migration-audit"].context, allowedDecisionTuples["migration-audit"], extra),
   constitutionWaiver: gateArm("constitution-review", waiverGateContextSchema, waiverDecisionsTuple, extra)
 });
+var archivedPolicyGateArm = (extra) => ({
+  constitutionReview: gateArm("constitution-review", GATE_CONTRACTS["constitution-review"].context, allowedDecisionTuples["constitution-review"], extra)
+});
+var archivedGateArms = (extra) => ({
+  ...gateArms(extra),
+  ...archivedPolicyGateArm(extra)
+});
 var armUnion = (arms) => external_exports.union(Object.values(arms));
 var gateRequestArms = gateArms({});
 var gateRequestV1Schema = armUnion(gateRequestArms);
-var legacyGateRequestV1Schema = armUnion(gateArms({ supersedes: legacySupersession }));
-var archivedCommitAuthorizationArm = (extra) => gateArm("commit-authorization", archivedCommitAuthorizationContextSchema, allowedDecisionTuples["commit-authorization"], extra);
-var archivedCommitAuthorizationRequestV1Schema = archivedCommitAuthorizationArm({});
-var archivedLegacyCommitAuthorizationRequestV1Schema = archivedCommitAuthorizationArm({ supersedes: legacySupersession });
+var archivedPolicyGateRequestV1Schema = armUnion(archivedPolicyGateArm({}));
+var legacyGateRequestV1Schema = armUnion(archivedGateArms({ supersedes: legacySupersession }));
+var archivedOrdinaryGateArms = (extra) => ({
+  artifactApproval: gateArm("artifact-approval", legacyArtifactApprovalContextSchema, literalTuple(LEGACY_ARTIFACT_APPROVAL_DECISIONS), extra),
+  designApproval: gateArm("design-approval", legacyDesignApprovalContextSchema, literalTuple(LEGACY_DESIGN_APPROVAL_DECISIONS), extra),
+  exactCommitAuthorization: gateArm("commit-authorization", legacyExactCommitAuthorizationContextSchema, literalTuple(LEGACY_COMMIT_AUTHORIZATION_DECISIONS), extra),
+  preExactCommitAuthorization: gateArm("commit-authorization", archivedPreExactCommitAuthorizationContextSchema, literalTuple(LEGACY_COMMIT_AUTHORIZATION_DECISIONS), extra)
+});
+var archivedOrdinaryGateRequestV1Schema = armUnion(archivedOrdinaryGateArms({}));
+var archivedSupersededOrdinaryGateRequestV1Schema = armUnion(archivedOrdinaryGateArms({ supersedes: legacySupersession }));
 var archivedBaselineAdoptionRequestV1Schema = gateArm(
   "baseline-adoption",
   GATE_CONTRACTS["baseline-adoption"].context,
   literalTuple(["adopt-current-bytes", "restore-recorded-bytes", "abort", "cancel"]),
   { current_evidence: baselineObservationRefV1Schema }
+);
+var archivedSupersededBaselineAdoptionRequestV1Schema = gateArm(
+  "baseline-adoption",
+  GATE_CONTRACTS["baseline-adoption"].context,
+  literalTuple(["adopt-current-bytes", "restore-recorded-bytes", "abort", "cancel"]),
+  { current_evidence: baselineObservationRefV1Schema, supersedes: legacySupersession }
 );
 var PAYLOAD_REQUIRED_FIELDS = ["payload", "human_provenance"];
 var WAIVER_REQUIRED_FIELDS = ["granted", "scope", "origin", "notes", "human_provenance"];
@@ -49431,6 +50218,26 @@ var activeGateV1Schema = armUnion(gateArms({
   status: external_exports.literal("awaiting-human"),
   decision_template: gateDecisionTemplateV1Schema
 }));
+var archivedActiveGateExtra = {
+  status: external_exports.literal("awaiting-human"),
+  decision_template: gateDecisionTemplateV1Schema
+};
+var archivedOrdinaryActiveGateV1Schema = armUnion(archivedOrdinaryGateArms(archivedActiveGateExtra));
+var archivedPolicyActiveGateV1Schema = armUnion(archivedPolicyGateArm(archivedActiveGateExtra));
+var archivedSupersededActiveGateV1Schema = armUnion(archivedGateArms({ ...archivedActiveGateExtra, supersedes: legacySupersession }));
+var archivedSupersededOrdinaryActiveGateV1Schema = armUnion(archivedOrdinaryGateArms({ ...archivedActiveGateExtra, supersedes: legacySupersession }));
+var archivedBaselineActiveGateV1Schema = gateArm(
+  "baseline-adoption",
+  GATE_CONTRACTS["baseline-adoption"].context,
+  literalTuple(["adopt-current-bytes", "restore-recorded-bytes", "abort", "cancel"]),
+  { ...archivedActiveGateExtra, current_evidence: baselineObservationRefV1Schema }
+);
+var archivedSupersededBaselineActiveGateV1Schema = gateArm(
+  "baseline-adoption",
+  GATE_CONTRACTS["baseline-adoption"].context,
+  literalTuple(["adopt-current-bytes", "restore-recorded-bytes", "abort", "cancel"]),
+  { ...archivedActiveGateExtra, current_evidence: baselineObservationRefV1Schema, supersedes: legacySupersession }
+);
 var gateRequestSchemaDefs = Object.freeze({
   currentEvidence: currentEvidenceSetRefSchema,
   baselineObservation: baselineObservationRefV1Schema,
@@ -49438,7 +50245,6 @@ var gateRequestSchemaDefs = Object.freeze({
   waiverContext: waiverGateContextSchema,
   artifactApprovalDecisions: allowedDecisionTuples["artifact-approval"],
   designApprovalDecisions: allowedDecisionTuples["design-approval"],
-  constitutionReviewDecisions: allowedDecisionTuples["constitution-review"],
   materialDriftDecisions: allowedDecisionTuples["material-drift"],
   attemptsExhaustedDecisions: allowedDecisionTuples["attempts-exhausted"],
   constitutionEditDecisions: allowedDecisionTuples["constitution-edit"],
@@ -49452,7 +50258,6 @@ var gateRequestSchemaDefs = Object.freeze({
 var gateRequestSchemaDefOverrides = Object.freeze({
   artifactApprovalDecisions: { const: GATE_REQUEST_DECISIONS["artifact-approval"] },
   designApprovalDecisions: { const: GATE_REQUEST_DECISIONS["design-approval"] },
-  constitutionReviewDecisions: { const: GATE_REQUEST_DECISIONS["constitution-review"] },
   materialDriftDecisions: { const: GATE_REQUEST_DECISIONS["material-drift"] },
   attemptsExhaustedDecisions: { const: GATE_REQUEST_DECISIONS["attempts-exhausted"] },
   constitutionEditDecisions: { const: GATE_REQUEST_DECISIONS["constitution-edit"] },
@@ -49487,11 +50292,19 @@ function parseGateDecisionRecord(value) {
 }
 function parseArchivedGateRequest(value) {
   assertPlainJson(value, "archived gate request");
-  for (const candidate of [gateRequestV1Schema, archivedCommitAuthorizationRequestV1Schema, archivedLegacyCommitAuthorizationRequestV1Schema, archivedBaselineAdoptionRequestV1Schema]) {
+  for (const candidate of [
+    gateRequestV1Schema,
+    archivedPolicyGateRequestV1Schema,
+    archivedOrdinaryGateRequestV1Schema,
+    archivedBaselineAdoptionRequestV1Schema,
+    legacyGateRequestV1Schema,
+    archivedSupersededOrdinaryGateRequestV1Schema,
+    archivedSupersededBaselineAdoptionRequestV1Schema
+  ]) {
     const parsed = candidate.safeParse(value);
     if (parsed.success) return parsed.data;
   }
-  return legacyGateRequestV1Schema.parse(value);
+  return archivedSupersededOrdinaryGateRequestV1Schema.parse(value);
 }
 function parsePersistedGateRequest(value) {
   return parseArchivedGateRequest(value);
@@ -49505,7 +50318,19 @@ function parseArchivedGateDecisionRecord(value) {
 }
 function parseActiveGate(value) {
   assertPlainJson(value, "active gate");
-  return activeGateV1Schema.parse(value);
+  for (const candidate of [
+    activeGateV1Schema,
+    archivedPolicyActiveGateV1Schema,
+    archivedOrdinaryActiveGateV1Schema,
+    archivedBaselineActiveGateV1Schema,
+    archivedSupersededBaselineActiveGateV1Schema,
+    archivedSupersededActiveGateV1Schema,
+    archivedSupersededOrdinaryActiveGateV1Schema
+  ]) {
+    const parsed = candidate.safeParse(value);
+    if (parsed.success) return parsed.data;
+  }
+  return archivedOrdinaryActiveGateV1Schema.parse(value);
 }
 
 // src/contracts/mcp-tools.ts
@@ -50253,7 +51078,7 @@ var stateInputSchema = external_exports.object({
   status: external_exports.enum(["running", "succeeded", "failed"]),
   artifact: durableArtifact.optional(),
   human_revision: humanRevisionDeclarationSchema.optional(),
-  operation: external_exports.enum(["planning_restart", "refresh_milestone_baseline", "recover_milestone_authority", "refresh_stale_baseline"]).optional(),
+  operation: external_exports.enum(["planning_restart", "refresh_milestone_baseline", "recover_milestone_authority", "recover_approval_trigger_authority", "refresh_stale_baseline"]).optional(),
   target_phase_instance: phase2.optional(),
   reason: text3.optional(),
   ask_base_digest: digest7.optional()
@@ -50274,7 +51099,7 @@ var stateInputSchema = external_exports.object({
     }
     return;
   }
-  if (input.operation === "recover_milestone_authority" || input.operation === "refresh_stale_baseline") {
+  if (input.operation === "recover_milestone_authority" || input.operation === "recover_approval_trigger_authority" || input.operation === "refresh_stale_baseline") {
     if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0) {
       context2.addIssue({ code: "custom", path: ["operation"], message: `${input.operation} carries no artifact, revision, restart target, reason, or ask digest` });
     }
@@ -50283,17 +51108,30 @@ var stateInputSchema = external_exports.object({
   if (input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "restart fields require planning_restart" });
   if (input.human_revision !== void 0 && (input.step !== "produce" || input.status !== "succeeded")) context2.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
 });
-var overrideRoute2 = configRouteSchema.clone(configRouteSchema.def);
+var reviewModelRouteV1Schema = configRouteSchema.clone(configRouteSchema.def);
+var reviewRouteSetV1Schema = external_exports.object({
+  "counter-reviewer": reviewModelRouteV1Schema.optional(),
+  adjudicator: reviewModelRouteV1Schema.optional()
+}).strict().superRefine((routes, context2) => {
+  if (routes["counter-reviewer"] === void 0 && routes.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "review routes must name counter-reviewer, adjudicator, or both" });
+  }
+});
 var routeOverrideSchema = external_exports.object({
   reason: text3,
-  "counter-reviewer": overrideRoute2.optional(),
-  adjudicator: overrideRoute2.optional()
+  "counter-reviewer": reviewModelRouteV1Schema.optional(),
+  adjudicator: reviewModelRouteV1Schema.optional()
 }).strict().superRefine((override, context2) => {
   if (override["counter-reviewer"] === void 0 && override.adjudicator === void 0) {
     context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, adjudicator, or both" });
   }
 });
-var counterReviewInputSchema = external_exports.object({ ...common2, artifact_path: taskPathClaimV1Schema, route_override: routeOverrideSchema.optional() }).strict();
+var counterReviewInputSchema = external_exports.object({
+  ...common2,
+  artifact_path: taskPathClaimV1Schema,
+  invocation_routes: reviewRouteSetV1Schema.optional(),
+  route_override: routeOverrideSchema.optional()
+}).strict();
 var humanGateChoiceSchema = external_exports.object({ choice: text3, reason: text3 }).strict();
 var gateInputSchema = external_exports.object({ ...common2, phase_instance: phase2, summary: text3, subject_digest: digest7, current_evidence: external_exports.unknown(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown(), preview_digest: digest7.optional(), decision: humanGateChoiceSchema.optional() }).strict().superRefine((input, context2) => {
   try {
@@ -50387,7 +51225,7 @@ function successFor(call, value) {
   const parsed = toolSuccessSchemas[call.name].parse(value);
   if (call.name === "archflow_state") {
     const input = call.input;
-    const expectedStatus = input.operation === "planning_restart" || input.operation === "recover_milestone_authority" ? "running" : input.status;
+    const expectedStatus = input.operation === "planning_restart" || input.operation === "recover_milestone_authority" || input.operation === "recover_approval_trigger_authority" ? "running" : input.status;
     if (parsed.status !== expectedStatus) throw new TypeError("state status mismatch");
   }
   if (call.name === "archflow_gate") {
@@ -51634,6 +52472,11 @@ function closedOperationFields(subject) {
         const boundary = fields;
         return { phase_instance: boundary.phase_instance, step: boundary.step, status: boundary.status };
       }
+      if (subject.operation === "refresh-milestone-baseline" || subject.operation === "recover-milestone-authority" || subject.operation === "recover-approval-trigger-authority" || subject.operation === "refresh-stale-baseline") {
+        exactFields(fields, ["phase_instance", "step", "status"]);
+        const control = fields;
+        return { phase_instance: control.phase_instance, step: control.step, status: control.status };
+      }
       const artifactFields = fields;
       const operationForKind = {
         "task-initialization": "adopt-task-initialization",
@@ -51661,10 +52504,12 @@ function closedOperationFields(subject) {
       const fields = subject.operation_fields;
       if (subject.operation !== "counter-review") throw new TypeError("invalid archflow_counter_review operation");
       const expected = ["artifact_path"];
+      if (fields.invocation_routes !== void 0) expected.push("invocation_routes");
       if (fields.route_override !== void 0) expected.push("route_override");
       exactFields(fields, expected);
       return {
         artifact_path: fields.artifact_path,
+        ...fields.invocation_routes === void 0 ? {} : { invocation_routes: fields.invocation_routes },
         ...fields.route_override === void 0 ? {} : { route_override: fields.route_override }
       };
     }
@@ -52070,14 +52915,20 @@ async function readGitBlobSize(runner, oid) {
   return size;
 }
 async function readGitBlobBytes(runner, oid) {
-  const size = await readGitBlobSize(runner, oid);
-  if (size > MAX_RESULT_BLOB_BYTES) throw new TypeError("Git blob exceeds the bounded result-byte limit");
-  const result = await runner.run({
-    argv: ["cat-file", "blob", oid],
-    operation: OBJECT_READ_OPERATION,
-    maxBuffer: MAX_RESULT_BLOB_BYTES
-  });
-  if (result.stdout.byteLength !== size) throw new TypeError("git cat-file blob size changed during read");
+  if (!GIT_OID.test(oid)) throw new TypeError("Git blob object id is invalid");
+  let result;
+  try {
+    result = await runner.run({
+      argv: ["cat-file", "blob", oid],
+      operation: OBJECT_READ_OPERATION,
+      maxBuffer: MAX_RESULT_BLOB_BYTES
+    });
+  } catch (error51) {
+    if (error51 instanceof GitInvocationError && error51.kind === "output-overflow") {
+      throw new TypeError("Git blob exceeds the bounded result-byte limit");
+    }
+    throw error51;
+  }
   return new Uint8Array(result.stdout);
 }
 async function readGitBlobProjectedBytes(runner, oid, path2) {
@@ -52161,14 +53012,12 @@ async function preflightGit(runner, context2) {
 
 // src/repository/identity.ts
 var LOCATION_OPERATION = "git-rev-parse-location";
-var SUPERPROJECT_OPERATION = "git-rev-parse-superproject";
-var SHALLOW_OPERATION = "git-rev-parse-shallow";
-var TOPLEVEL_OPERATION = "git-rev-parse-toplevel";
 var GIT_DIR_OPERATION = "git-rev-parse-git-dir";
 var HEAD_OPERATION = "git-rev-parse-head";
 var ROOTS_OPERATION = "git-rev-list-roots";
 var NOT_A_REPOSITORY = [
-  { code: 128, stderrIncludes: "not a git repository" }
+  { code: 128, stderrIncludes: "not a git repository" },
+  { code: 128, stderrIncludes: "must be run in a work tree" }
 ];
 var UNBORN_HEAD = [{ code: 1, stderrIncludes: "" }];
 function ok3(value) {
@@ -52209,34 +53058,23 @@ function bindToRoot(runner, location) {
 }
 async function discoverWorktree(runner, context2) {
   try {
-    const flags = (await runner.runText({
+    const lines = (await runner.runText({
       argv: [
         "rev-parse",
         "--is-inside-work-tree",
         "--is-bare-repository",
-        "--is-inside-git-dir"
+        "--is-inside-git-dir",
+        "--is-shallow-repository",
+        "--show-toplevel",
+        "--show-superproject-working-tree"
       ],
       operation: LOCATION_OPERATION,
       expectedAbsence: NOT_A_REPOSITORY
     })).split("\n");
-    if (flags[0] !== "true" || flags[1] !== "false" || flags[2] !== "false") {
+    const toplevel = lines[4];
+    if (lines.length !== 5 || lines[0] !== "true" || lines[1] !== "false" || lines[2] !== "false" || lines[3] !== "false" || toplevel === void 0 || toplevel === "") {
       return fail5(repositoryNotFound(runner));
     }
-    const superproject = await runner.runText({
-      argv: ["rev-parse", "--show-superproject-working-tree"],
-      operation: SUPERPROJECT_OPERATION
-    });
-    if (superproject !== "") return fail5(repositoryNotFound(runner));
-    const shallow = await runner.runText({
-      argv: ["rev-parse", "--is-shallow-repository"],
-      operation: SHALLOW_OPERATION
-    });
-    if (shallow !== "false") return fail5(repositoryNotFound(runner));
-    const toplevel = await runner.runText({
-      argv: ["rev-parse", "--show-toplevel"],
-      operation: TOPLEVEL_OPERATION
-    });
-    if (toplevel === "") return fail5(repositoryNotFound(runner));
     const worktreeRoot = await realpath2(toplevel);
     const directories = (await runner.runText({
       argv: ["-C", worktreeRoot, "rev-parse", "--git-dir", "--git-common-dir"],
@@ -52340,7 +53178,14 @@ async function createInternalTransactionAuthority(input) {
   assertPlainJson(input.context, "repository operation context");
   const context2 = Object.freeze(structuredClone(input.context));
   if (context2.task_id !== input.task_id) throw new TypeError("authority task_id must match context task_id");
-  const repository = await resolveRepositoryIdentity(input.runner, input.environment, context2);
+  let repository;
+  if (input.identity_source === void 0) {
+    repository = await resolveRepositoryIdentity(input.runner, input.environment, context2);
+  } else {
+    assertInternalTransactionAuthority(input.identity_source, { runner: input.runner, environment: input.environment });
+    if (input.identity_source.task_id !== input.task_id) throw new TypeError("identity source must belong to the same task");
+    repository = Object.freeze({ schema_version: "1", ok: true, value: input.identity_source.repository_identity });
+  }
   if (!repository.ok) return repository;
   const taskIdentity = computeTaskIdentity(input.task_id, repository.value);
   const taskRoot = await resolveTaskRoot({ runner: input.runner, taskId: input.task_id, context: context2 });
@@ -58783,13 +59628,13 @@ async function rollback(writer, applied, collisionPath) {
 
 // src/state/gate-core.ts
 var DECISIONS = Object.freeze({
-  "artifact-approval": ["approve", "revise", "reject", "cancel"],
+  "artifact-approval": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "design-approval": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "constitution-review": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
   "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
   "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
-  "commit-authorization": ["authorize-commit", "revise", "abort", "cancel"],
+  "commit-authorization": ["authorize-commit", "revise", "abort", "waiver-requested", "cancel"],
   "restore-collision": ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"],
   "baseline-adoption": ["adopt-current-bytes", "restore-recorded-bytes", "adopt-committed-deletions", "abort", "cancel"],
   "migration-audit": ["accept-import-audit", "revise", "abort", "cancel"]
@@ -58964,7 +59809,7 @@ function buildGateDecisionTemplates(active) {
     const context2 = request.context;
     const payloads = [];
     if (decision3 === "waiver-requested") {
-      const eligible = context2.eligible_waivers;
+      const eligible = "eligible_waivers" in context2 ? context2.eligible_waivers : [];
       for (const item of eligible) {
         payloads.push({
           decision: decision3,
@@ -58987,7 +59832,12 @@ function buildGateDecisionTemplates(active) {
       payloads.push({ decision: decision3, reason: TEMPLATE_REASON });
     }
     for (const payload of payloads) {
-      validateGateDecision(request.kind, request.context, payload);
+      const archivedOrdinary = (request.kind === "artifact-approval" || request.kind === "design-approval" || request.kind === "commit-authorization") && !("approval_trigger" in request.context);
+      if (archivedOrdinary) {
+        validateArchivedGateDecision(request.kind, request.context, payload);
+      } else {
+        validateGateDecision(request.kind, request.context, payload);
+      }
       templates.push({ ...base2, kind: request.kind, payload });
     }
   }
@@ -58995,8 +59845,8 @@ function buildGateDecisionTemplates(active) {
 }
 var PRESENTATION_COPY = Object.freeze({
   "artifact-approval": Object.freeze({
-    title: "Review the finished work",
-    question: "Does this work meet your expectations, or would you like it changed?"
+    title: "Review and approve the requirements",
+    question: "Should ArchFlow approve these requirements, advance to design, and include them in the later design milestone?"
   }),
   "design-approval": Object.freeze({
     title: "Review and approve the design",
@@ -59019,8 +59869,8 @@ var PRESENTATION_COPY = Object.freeze({
     question: "Should the policy edit be undone, moved into the project baseline, or abandoned?"
   }),
   "commit-authorization": Object.freeze({
-    title: "Authorize the commit",
-    question: "Do you authorize committing the reviewed changes, or should they be revised first?"
+    title: "Authorize, commit, and continue",
+    question: "Do you authorize ArchFlow to commit the exact reviewed changes and continue, or should they be revised first?"
   }),
   "restore-collision": Object.freeze({
     title: "Resolve a workspace conflict",
@@ -59045,7 +59895,7 @@ var OPTION_COPY = Object.freeze({
   abort: Object.freeze({ token: "stop-work", label: "Stop this work", consequence: "End this workflow path without approval." }),
   "revert-edit": Object.freeze({ token: "undo-policy-change", label: "Undo the policy edit", consequence: "Restore the policy version this task originally reviewed against." }),
   "start-base-amendment": Object.freeze({ token: "update-project-policy", label: "Update the project policy", consequence: "Move the policy change into the project baseline before continuing this task." }),
-  "authorize-commit": Object.freeze({ token: "authorize-commit", label: "Authorize the commit", consequence: "Permit ArchFlow to commit the exact reviewed changes; this is the final human confirmation." }),
+  "authorize-commit": Object.freeze({ token: "authorize-commit", label: "Authorize, commit, and continue", consequence: "Authorize ArchFlow to commit the exact reviewed changes and continue; this decision is the final human commit authorization." }),
   "discard-and-restore": Object.freeze({ token: "restore-saved-version", label: "Restore the saved version", consequence: "Discard the conflicting workspace copy and reconstruct it from durable authority." }),
   "adopt-as-new-generation": Object.freeze({ token: "keep-current-version", label: "Keep the current version", consequence: "Treat the current workspace copy as a new generation of the artifact." }),
   "adopt-current-bytes": Object.freeze({ token: "keep-current-versions", label: "Keep the current versions", consequence: "Accept the current file versions as the workflow baseline. This performs no fresh review and grants no commit authority." }),
@@ -59082,12 +59932,118 @@ function presentationBindings(active) {
   return Object.freeze(buildGateDecisionTemplates(active).flatMap((template) => {
     const decision3 = gateDecisionTemplateName(template);
     if (decision3 === "unknown") return [];
-    const option = active.kind === "design-approval" && decision3 === "approve" ? Object.freeze({
+    const option = active.kind === "artifact-approval" && decision3 === "approve" ? Object.freeze({
+      token: "approve",
+      label: "Approve and continue to design",
+      consequence: "Approve the exact reviewed requirements, advance to design, and include the requirements in the later design milestone commit."
+    }) : active.kind === "design-approval" && decision3 === "approve" ? Object.freeze({
       token: "approve",
       label: "Approve, commit, and continue",
       consequence: "Approve the exact reviewed design and policy context, authorize its recoverable task-local commit, and continue the workflow."
     }) : decision3 === "waiver-requested" ? waiverOption(template, ++waiverIndex) : OPTION_COPY[decision3];
     return [Object.freeze({ token: option.token, decision: decision3, template, option })];
+  }));
+}
+function policyFindingReasons(findings) {
+  return findings.flatMap((finding) => {
+    const identity = `Constitution rule ${finding.rule_id} version ${finding.rule_version}`;
+    return [
+      ...finding.compliance === "pass" ? [] : [Object.freeze({
+        class: "exception",
+        text: `${identity} has a ${finding.compliance} policy-compliance finding.`
+      })],
+      ...finding.trigger === "not-matched" ? [] : [Object.freeze({
+        class: "exception",
+        text: `${identity} has a ${finding.trigger} human-review trigger.`
+      })]
+    ];
+  });
+}
+function ordinaryReasons(active) {
+  if (active.kind !== "artifact-approval" && active.kind !== "design-approval" && active.kind !== "commit-authorization") return void 0;
+  const context2 = active.context;
+  if (!("approval_trigger" in context2)) {
+    return Object.freeze([Object.freeze({
+      class: "exception",
+      text: `This archived ${active.kind} decision predates authenticated approval-trigger reasons and still requires human judgment.`
+    })]);
+  }
+  const trigger = context2.approval_trigger;
+  const reasons = [];
+  if (trigger.kind === "human-revision-reapproval") {
+    reasons.push(Object.freeze({
+      class: trigger.prior_gate.class,
+      text: "The final bytes after your requested simple revision need your approval."
+    }));
+  } else {
+    if (trigger.conclusion.wait && trigger.conclusion.match.kind === "subject") {
+      reasons.push(Object.freeze({
+        class: "configured-approval",
+        text: `This project requires human approval for the ${trigger.conclusion.match.subject} subject.`
+      }));
+    } else if (trigger.conclusion.wait && trigger.conclusion.match.kind === "content") {
+      const paths = trigger.conclusion.match.paths;
+      reasons.push(Object.freeze({
+        class: "configured-approval",
+        text: `Configured content approval rules matched ${paths.length} reviewed path${paths.length === 1 ? "" : "s"}: ${paths.join(", ")}.`
+      }));
+    }
+    if (trigger.rule_authority === "unavailable") {
+      reasons.push(Object.freeze({
+        class: "exception",
+        text: "The pinned constitution does not authorize rule-based advancement, so this reviewed subject requires a human decision."
+      }));
+    }
+  }
+  reasons.push(...policyFindingReasons(context2.policy_findings));
+  if (reasons.length === 0) {
+    throw new TypeError("fresh ordinary gate has no authenticated human-boundary reason");
+  }
+  return Object.freeze(reasons);
+}
+function exceptionalReasons(active) {
+  const text4 = (() => {
+    switch (active.kind) {
+      case "constitution-review":
+        return waiverContext(active.context) === void 0 ? "This archived constitution-review policy boundary requires human judgment." : "A separate human decision must grant, deny, or cancel the requested policy exception.";
+      case "material-drift":
+        return "The reviewed work materially diverges from approved upstream work and requires a recovery decision.";
+      case "attempts-exhausted":
+        return `Automated review reached its limit after ${active.context.attempts} attempts and requires human direction.`;
+      case "constitution-edit":
+        return "The project constitution changed from the version this task reviewed and requires a policy decision.";
+      case "restore-collision":
+        return `The current workspace version of ${active.context.path} conflicts with its recorded workflow version.`;
+      case "baseline-adoption": {
+        const affected = active.context.drifted_projections.length + (active.context.deleted_projections?.length ?? 0);
+        return `${affected} recorded workflow path${affected === 1 ? " has" : "s have"} changed or been deleted and require a baseline decision.`;
+      }
+      case "migration-audit":
+        return "The imported legacy task requires a human audit before its bytes become the reviewed workflow baseline.";
+      case "artifact-approval":
+      case "design-approval":
+      case "commit-authorization":
+        throw new TypeError("ordinary gate reasons must be derived from its approval trigger");
+    }
+  })();
+  return Object.freeze([Object.freeze({ class: "exception", text: text4 })]);
+}
+function presentationReasons(active) {
+  return ordinaryReasons(active) ?? exceptionalReasons(active);
+}
+function policyDetails(active) {
+  if (active.kind !== "artifact-approval" && active.kind !== "design-approval" && active.kind !== "commit-authorization") return Object.freeze([]);
+  const context2 = active.context;
+  if (!("policy_findings" in context2)) return Object.freeze([]);
+  return Object.freeze(context2.policy_findings.flatMap((finding) => {
+    const lines = [];
+    if (finding.compliance !== "pass") {
+      lines.push(`${finding.rule_id}: policy compliance is ${finding.compliance}. ${finding.rationale}`);
+    }
+    if (finding.trigger !== "not-matched") {
+      lines.push(`${finding.rule_id}: review trigger is ${finding.trigger}. ${finding.trigger_evidence}`);
+    }
+    return lines;
   }));
 }
 function buildHumanGatePresentation(active, contentTriggerDetails2) {
@@ -59100,43 +60056,34 @@ function buildHumanGatePresentation(active, contentTriggerDetails2) {
     title: "Decide a policy exception",
     question: "Should this narrowly scoped policy exception be granted?"
   });
+  const reasons = presentationReasons(request);
+  const details = [
+    ...policyDetails(request),
+    ...request.kind === "baseline-adoption" ? [
+      ...request.context.target_ref === void 0 ? [] : [
+        `Target ${request.context.target_ref} was observed at ${request.context.target_head}.`,
+        `${request.context.uncommitted_paths.length} drifted path${request.context.uncommitted_paths.length === 1 ? " is" : "s are"} uncommitted; the remaining drift is committed on that target.`
+      ],
+      ...request.context.drifted_projections.length === 0 ? [] : [
+        `${request.context.drifted_projections.length} file${request.context.drifted_projections.length === 1 ? "" : "s"} changed, including:`,
+        ...request.context.drifted_projections.slice(0, 10).map((drifted) => drifted.path),
+        ...request.context.drifted_projections.length > 10 ? [`\u2026 and ${request.context.drifted_projections.length - 10} more`] : []
+      ],
+      ...(request.context.deleted_projections ?? []).length === 0 ? [] : [
+        `${request.context.deleted_projections.length} file${request.context.deleted_projections.length === 1 ? "" : "s"} deleted by an already-committed change:`,
+        ...request.context.deleted_projections.slice(0, 10).map((deleted) => deleted.path),
+        ...request.context.deleted_projections.length > 10 ? [`\u2026 and ${request.context.deleted_projections.length - 10} more`] : []
+      ]
+    ] : [],
+    ...request.kind === "commit-authorization" && contentTriggerDetails2 !== void 0 ? [...contentTriggerDetails2] : []
+  ];
   return Object.freeze({
+    class: reasons.some((reason2) => reason2.class === "exception") ? "exception" : "configured-approval",
     title: copy2.title,
     summary: request.summary,
-    ...request.kind === "design-approval" ? {
-      details: Object.freeze(request.context.policy_findings.flatMap((finding) => {
-        const lines = [];
-        if (finding.compliance !== "pass") {
-          lines.push(`${finding.rule_id}: policy compliance is ${finding.compliance}. ${finding.rationale}`);
-        }
-        if (finding.trigger !== "not-matched") {
-          lines.push(`${finding.rule_id}: review trigger is ${finding.trigger}. ${finding.trigger_evidence}`);
-        }
-        return lines;
-      }))
-    } : {},
-    ...request.kind === "baseline-adoption" ? {
-      details: Object.freeze([
-        ...request.context.target_ref === void 0 ? [] : [
-          `Target ${request.context.target_ref} was observed at ${request.context.target_head}.`,
-          `${request.context.uncommitted_paths.length} drifted path${request.context.uncommitted_paths.length === 1 ? " is" : "s are"} uncommitted; the remaining drift is committed on that target.`
-        ],
-        ...request.context.drifted_projections.length === 0 ? [] : [
-          `${request.context.drifted_projections.length} file${request.context.drifted_projections.length === 1 ? "" : "s"} changed, including:`,
-          ...request.context.drifted_projections.slice(0, 10).map((drifted) => drifted.path),
-          ...request.context.drifted_projections.length > 10 ? [`\u2026 and ${request.context.drifted_projections.length - 10} more`] : []
-        ],
-        ...(request.context.deleted_projections ?? []).length === 0 ? [] : [
-          `${request.context.deleted_projections.length} file${request.context.deleted_projections.length === 1 ? "" : "s"} deleted by an already-committed change:`,
-          ...request.context.deleted_projections.slice(0, 10).map((deleted) => deleted.path),
-          ...request.context.deleted_projections.length > 10 ? [`\u2026 and ${request.context.deleted_projections.length - 10} more`] : []
-        ]
-      ])
-    } : {},
-    ...request.kind === "commit-authorization" && contentTriggerDetails2 !== void 0 ? {
-      details: Object.freeze([...contentTriggerDetails2])
-    } : {},
+    ...details.length === 0 ? {} : { details: Object.freeze(details) },
     question: `${copy2.question} Choose an option and briefly explain why.`,
+    reasons,
     options: Object.freeze(presentationBindings(request).map((binding) => binding.option))
   });
 }
@@ -59637,6 +60584,13 @@ function parseWorkflowYaml(source, label = "workflow.yaml") {
 import { isDeepStrictEqual as isDeepStrictEqual9 } from "node:util";
 var authenticatedGateApprovals = /* @__PURE__ */ new WeakSet();
 var authenticatedGateApprovalBrand = /* @__PURE__ */ Symbol("AuthenticatedGateApproval");
+var authenticatedGateDecisionArchives = /* @__PURE__ */ new WeakSet();
+var authenticatedGateDecisionArchiveBrand = /* @__PURE__ */ Symbol("AuthenticatedGateDecisionArchive");
+function assertAuthenticatedGateDecisionArchive(value) {
+  if (!authenticatedGateDecisionArchives.has(value)) {
+    throw new TypeError("an authenticated gate decision archive is required");
+  }
+}
 function assertAuthenticatedGateApproval(value) {
   if (!authenticatedGateApprovals.has(value)) {
     throw new TypeError("an authenticated gate approval is required");
@@ -59702,6 +60656,57 @@ async function loadAuthenticatedGateApproval(dependencies, authority, approval) 
   });
   Object.freeze(authenticated);
   authenticatedGateApprovals.add(authenticated);
+  return ok6(authenticated);
+}
+async function loadAuthenticatedGateDecisionArchive(dependencies, authority, gateId) {
+  assertInternalTransactionAuthority(authority, {
+    runner: dependencies.runner,
+    environment: dependencies.environment
+  });
+  assertPlainJson(gateId, "gate decision archive id");
+  const current = await stateOrFailure(dependencies, authority);
+  if (!current.ok) return current;
+  if (current.value.value.task_id !== authority.task_id || !verifyRepositoryIdentity(
+    current.value.value.repository_identity_digest,
+    authority.repository_identity
+  ).ok) return issue2("STATE_INVALID", current.value.value, "gate-decision-archive-state-authority-mismatch");
+  const requestPath = await resolvePath6(
+    dependencies,
+    authority,
+    gateRequestClaim(gateId),
+    "authority-decision"
+  );
+  const decisionPath = await resolvePath6(
+    dependencies,
+    authority,
+    gateDecisionClaim(gateId),
+    "authority-decision"
+  );
+  if (!requestPath.ok) return requestPath;
+  if (!decisionPath.ok) return decisionPath;
+  const request = await readCanonical(requestPath.value, "gate request", parseArchivedGateRequest);
+  const decision3 = await readCanonical(
+    decisionPath.value,
+    "gate decision record",
+    parseArchivedGateDecisionRecord
+  );
+  if (request === "missing" || request === "invalid" || decision3 === "missing" || decision3 === "invalid") {
+    return issue2("STATE_INVALID", current.value.value, "gate-decision-archive-invalid");
+  }
+  if (!validateDurableSemantics({ gate_request: request, gate_decision: decision3 }).ok || request.value.task_id !== authority.task_id || request.value.gate_id !== gateId || decision3.value.outcome !== "decided" || decision3.value.task_id !== authority.task_id || decision3.value.gate_id !== gateId || decision3.value.kind !== request.value.kind || decision3.value.phase_instance !== request.value.phase_instance || decision3.value.subject_digest !== request.value.subject_digest || decision3.value.context_digest !== request.value.context_digest) return issue2("STATE_INVALID", current.value.value, "gate-decision-archive-binding-invalid");
+  const authenticated = {
+    request: deepFreezeGateJson(structuredClone(request.value)),
+    decision: deepFreezeGateJson(structuredClone(decision3.value)),
+    decision_digest: decision3.digest
+  };
+  Object.defineProperty(authenticated, authenticatedGateDecisionArchiveBrand, {
+    value: true,
+    enumerable: false,
+    writable: false,
+    configurable: false
+  });
+  Object.freeze(authenticated);
+  authenticatedGateDecisionArchives.add(authenticated);
   return ok6(authenticated);
 }
 
@@ -59771,6 +60776,8 @@ var SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2 = Object.freeze([
   })
 ]);
 var authenticResolvedConstitutions = /* @__PURE__ */ new WeakSet();
+var resolvedConstitutionCache = /* @__PURE__ */ new Map();
+var MAX_CACHED_CONSTITUTIONS = 32;
 var authenticRuleAcceptancePolicies = /* @__PURE__ */ new WeakSet();
 function assertResolvedConstitution(value) {
   if (value === null || typeof value !== "object" || !authenticResolvedConstitutions.has(value)) {
@@ -59854,7 +60861,11 @@ function invalidPolicyBase(policyBaseCommit, observed) {
   });
 }
 async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
+  let cacheKey;
   try {
+    cacheKey = `${runner.location.worktreeRoot}\0${policyBaseCommit}`;
+    const cached2 = resolvedConstitutionCache.get(cacheKey);
+    if (cached2 !== void 0) return ok7(cached2);
     const selected = await readConstitutionTreeFiles(runner, policyBaseCommit);
     if (selected.length === 0) return fail9(invalidPolicyBase(policyBaseCommit));
     const sources = {};
@@ -59875,6 +60886,10 @@ async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
       files: Object.freeze(selected.map((file2) => Object.freeze({ ...file2 })))
     });
     authenticResolvedConstitutions.add(resolved);
+    if (resolvedConstitutionCache.size >= MAX_CACHED_CONSTITUTIONS) {
+      resolvedConstitutionCache.delete(resolvedConstitutionCache.keys().next().value);
+    }
+    resolvedConstitutionCache.set(cacheKey, resolved);
     return ok7(resolved);
   } catch (error51) {
     if (error51 instanceof GitInvocationError) {
@@ -59927,6 +60942,26 @@ function acceptedNoWaitSettlement(policy, state, subjectDigest, producerPhase) {
   if (policy.task_id !== state.task_id || policy.policy_base_commit !== state.policy_base_commit || policy.constitution_digest !== state.constitution_digest) return void 0;
   const settlement = latestEligibleRuleSettlement(state, subjectDigest, producerPhase);
   return settlement?.conclusion.wait === false ? settlement : void 0;
+}
+function ordinaryApprovalKindForPhase(phase3) {
+  const kind = decodePhaseInstance(phase3).kind;
+  if (kind === "prd") return "artifact-approval";
+  if (kind === "design" || kind === "phase-design") return "design-approval";
+  return "commit-authorization";
+}
+function matchingOrdinaryApproval(state, authenticated, subjectDigest, producerPhase) {
+  const requiredKind = ordinaryApprovalKindForPhase(producerPhase);
+  return [...authenticated].filter((item) => {
+    assertAuthenticatedGateApproval(item);
+    const decision3 = item.decision.envelope.payload.decision;
+    return item.approval.gate_kind === requiredKind && item.approval.subject_digest === subjectDigest && item.request.kind === requiredKind && item.request.phase_instance === producerPhase && item.request.subject_digest === subjectDigest && authenticatedApprovalIsEligibleAfterLatestRestart(state, item, producerPhase) && (decision3 === "approve" || decision3 === "authorize-commit");
+  }).sort((left, right) => right.approval.resolved_at_revision - left.approval.resolved_at_revision)[0];
+}
+function acceptedNoWaitSettlementWithoutOrdinaryApproval(policy, state, subjectDigest, producerPhase, authenticated) {
+  if (matchingOrdinaryApproval(state, authenticated, subjectDigest, producerPhase) !== void 0) {
+    return void 0;
+  }
+  return acceptedNoWaitSettlement(policy, state, subjectDigest, producerPhase);
 }
 function approvalRequestAuthorityPhase(authenticated) {
   return authenticated.request.phase_instance;
@@ -60119,6 +61154,36 @@ function planMilestoneRecovery(value) {
     milestone_recovery_history: history
   }));
 }
+function planApprovalTriggerAuthorityRecovery(value) {
+  assertPlainJson(value, "approval trigger authority recovery input");
+  const input = structuredClone(value);
+  const current = input.current;
+  const invalidRecovery = () => Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("TRANSITION_INVALID", {
+      phase_instance: current.phase_instance,
+      from: `${current.step}-${current.status}`,
+      to: "approval-trigger-authority-recovery"
+    })
+  });
+  if (current.terminal !== void 0 || current.open_gate !== void 0 || current.pending_human_revision !== void 0 || current.step !== "triage" || current.status !== "succeeded") return invalidRecovery();
+  const retained = current.authoritative_results.filter((reference) => reference.phase_instance !== current.phase_instance || reference.step === "produce");
+  if (retained.length === current.authoritative_results.length) return invalidRecovery();
+  const {
+    revision: _revision,
+    last_transition: _lastTransition,
+    ...preserved
+  } = current;
+  return ok8(Object.freeze({
+    ...preserved,
+    step: "produce",
+    status: "running",
+    attempt: parseSafeInteger(1),
+    input_fingerprint: input.recomputed_input_fingerprint,
+    authoritative_results: Object.freeze(retained)
+  }));
+}
 function invalid(input, from, to) {
   return Object.freeze({
     schema_version: "1",
@@ -60300,11 +61365,12 @@ function hasAuthenticatedRuleAcceptance(input) {
   const digest9 = input.completion_subject_digest;
   if (accepted === void 0 || digest9 === void 0) return false;
   assertAuthenticatedRuleAcceptancePolicy(accepted.policy);
-  const settlement = acceptedNoWaitSettlement(
+  const settlement = acceptedNoWaitSettlementWithoutOrdinaryApproval(
     accepted.policy,
     input.current,
     digest9,
-    input.current.phase_instance
+    input.current.phase_instance,
+    input.authenticated_gate_approvals ?? []
   );
   return settlement !== void 0 && isDeepStrictEqual11(settlement, accepted.settlement);
 }
@@ -60405,6 +61471,11 @@ function planStateTransition(value) {
     throw new TypeError("transition planning changed authoritative results");
   }
   return ok8(draft);
+}
+
+// src/state/waiver-origin.ts
+function isWaiverOriginRequest(request) {
+  return "eligible_waivers" in request.context && (request.kind === "artifact-approval" || request.kind === "design-approval" || request.kind === "commit-authorization" || request.kind === "constitution-review");
 }
 
 // src/state/produce-subject.ts
@@ -61519,6 +62590,7 @@ function provenanceMetadata(evidence) {
     ["model_family", evidence.model_family],
     ["model", evidence.model],
     ["effort", evidence.effort],
+    ["provider", evidence.assurance === "server-attested" ? evidence.provider : void 0],
     ["invocation_id", evidence.assurance === "server-attested" ? evidence.invocation_id : void 0],
     ["result_id", evidence.assurance === "server-attested" ? evidence.result_id : void 0]
   ];
@@ -61527,8 +62599,19 @@ function renderReviewFinding(finding) {
   return [`### Finding ${visibleJsonString(finding.finding_id)}`, `severity: ${canonical(finding.severity)}`, `blocking: ${canonical(finding.blocking)}`, prose("summary", finding.summary), prose("evidence", finding.evidence), prose("suggested_resolution", finding.suggested_resolution)];
 }
 function renderRouteOverride(override) {
-  const displaced = override.pinned_model === void 0 ? ["pinned_route: none configured for this role"] : [`pinned_model: ${canonical(override.pinned_model)}`, `pinned_effort: ${canonical(override.pinned_effort)}`];
+  const displaced = override.pinned_model === void 0 ? ["pinned_route: none configured for this role"] : [`pinned_model: ${canonical(override.pinned_model)}`, `pinned_effort: ${canonical(override.pinned_effort)}`, `pinned_provider: ${optional2(override.pinned_provider)}`];
   return ["", "## Route Override", ...displaced, prose("reason", override.reason)];
+}
+function renderRouteSource(source) {
+  const lines = ["", "## Route Source", `provenance: ${canonical(source.provenance)}`];
+  if (source.displaced === void 0) return lines;
+  return [
+    ...lines,
+    `displaced_source: ${canonical(source.displaced.source)}`,
+    `displaced_model: ${canonical(source.displaced.model)}`,
+    `displaced_effort: ${canonical(source.displaced.effort)}`,
+    `displaced_provider: ${optional2(source.displaced.provider)}`
+  ];
 }
 function renderReviewEvidence(value) {
   const evidence = value.evidence;
@@ -61550,6 +62633,7 @@ function renderReviewEvidence(value) {
   ]), "", "## Findings"];
   for (const finding of evidence.findings) lines.push("", ...renderReviewFinding(finding));
   if (evidence.assurance === "degraded") lines.push("", "## Degraded Assurance", prose("reason", evidence.reason));
+  if (evidence.assurance === "server-attested" && evidence.route_source !== void 0) lines.push(...renderRouteSource(evidence.route_source));
   if (evidence.assurance === "server-attested" && evidence.route_override !== void 0) lines.push(...renderRouteOverride(evidence.route_override));
   return linesToBytes(lines);
 }
@@ -61604,6 +62688,7 @@ function renderAdjudicationEvidence(value) {
   lines.push("", "## Drift Findings");
   for (const finding of evidence.drift_findings) lines.push("", `### Upstream ${visibleJsonString(finding.upstream_digest)}`, `drift: ${canonical(finding.drift)}`, `affected_claim_ids: ${canonical(finding.affected_claim_ids)}`, prose("rationale", finding.rationale));
   if (evidence.assurance === "degraded") lines.push("", "## Degraded Assurance", prose("reason", evidence.reason));
+  if (evidence.assurance === "server-attested" && evidence.route_source !== void 0) lines.push(...renderRouteSource(evidence.route_source));
   if (evidence.assurance === "server-attested" && evidence.route_override !== void 0) lines.push(...renderRouteOverride(evidence.route_override));
   return linesToBytes(lines);
 }
@@ -62189,17 +63274,20 @@ function waiverPathSatisfiesGate(state, gate) {
   ) !== void 0);
 }
 function adjudicationGateSatisfied(state, retained, subject, gate) {
-  const phaseKind2 = state.phase_instance === "design" || state.phase_instance.startsWith("phase-design-");
-  if (phaseKind2 && gate.kind === "constitution-review") {
-    const designApproval = (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
+  const designPhase = state.phase_instance === "design" || state.phase_instance.startsWith("phase-design-");
+  if (gate.kind === "constitution-review") {
+    const ordinaryKind = state.phase_instance === "prd" ? "artifact-approval" : designPhase ? "design-approval" : state.phase_instance.startsWith("phase-impl-") ? "commit-authorization" : void 0;
+    const evidenceSetDigest = deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest;
+    const ordinaryApproval = ordinaryKind !== void 0 && (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
       assertAuthenticatedGateApproval(authenticated);
-      return authenticated.approval.gate_kind === "design-approval" && authenticated.approval.subject_digest === subject.subject_digest && authenticated.request.kind === "design-approval" && authenticated.request.phase_instance === state.phase_instance && authenticated.request.subject_digest === subject.subject_digest && authenticated.request.current_evidence.set_digest === deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest && authenticated.decision.envelope.payload.decision === "approve";
+      const decision3 = authenticated.decision.envelope.payload.decision;
+      return authenticated.approval.gate_kind === ordinaryKind && authenticated.approval.subject_digest === subject.subject_digest && authenticated.request.kind === ordinaryKind && authenticated.request.phase_instance === state.phase_instance && authenticated.request.subject_digest === subject.subject_digest && authenticated.request.current_evidence.set_digest === evidenceSetDigest && (decision3 === "approve" || decision3 === "authorize-commit");
     });
-    const migrationApproval = (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
+    const migrationApproval = designPhase && (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
       assertAuthenticatedGateApproval(authenticated);
-      return authenticated.approval.gate_kind === "migration-audit" && authenticated.approval.subject_digest === subject.subject_digest && authenticated.request.kind === "migration-audit" && authenticated.request.phase_instance === state.phase_instance && authenticated.request.subject_digest === subject.subject_digest && authenticated.request.current_evidence.set_digest === deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest && authenticated.decision.envelope.payload.decision === "accept-import-audit";
+      return authenticated.approval.gate_kind === "migration-audit" && authenticated.approval.subject_digest === subject.subject_digest && authenticated.request.kind === "migration-audit" && authenticated.request.phase_instance === state.phase_instance && authenticated.request.subject_digest === subject.subject_digest && authenticated.request.current_evidence.set_digest === evidenceSetDigest && authenticated.decision.envelope.payload.decision === "accept-import-audit";
     });
-    if (designApproval || migrationApproval) return true;
+    if (ordinaryApproval || migrationApproval) return true;
   }
   const contextDigest = computeGateContextDigest(gate.kind, gate.context);
   const evidence = Object.freeze({
@@ -62513,7 +63601,7 @@ async function authenticateWaiverOrigin(dependencies, authority, context2) {
   const request = await readCanonical(requestPath.value, "waiver origin request", parseArchivedGateRequest);
   const decision3 = await readCanonical(decisionPath.value, "waiver origin decision", parseArchivedGateDecisionRecord);
   if (request === "missing" || request === "invalid" || decision3 === "missing" || decision3 === "invalid") return issue2("CONTRACT_INVALID", void 0, "waiver-origin-archive-invalid");
-  if (request.value.kind !== "constitution-review" && request.value.kind !== "design-approval") return issue2("CONTRACT_INVALID", void 0, "waiver-origin-decision-invalid");
+  if (!isWaiverOriginRequest(request.value)) return issue2("CONTRACT_INVALID", void 0, "waiver-origin-decision-invalid");
   if (!validateDurableSemantics({ gate_request: request, gate_decision: decision3 }).ok || decision3.digest !== context2.origin.origin_decision_digest || decision3.value.outcome !== "decided" || decision3.value.envelope.payload.decision !== "waiver-requested") return issue2("CONTRACT_INVALID", void 0, "waiver-origin-decision-invalid");
   const payload = decision3.value.envelope.payload;
   const requestContext = request.value.context;
@@ -64050,6 +65138,7 @@ async function resolveAdvancingGate(dependencies, authority, gateId, inputFinger
 }
 
 // src/state/production.ts
+import { resolve as resolveDirectory } from "node:path";
 import { lstat as lstat9, readFile as readFile5, readlink as readlink4 } from "node:fs/promises";
 
 // src/state/atomic.ts
@@ -64435,8 +65524,13 @@ function stateIssue(input, issueCode) {
     issue_code: issueCode
   });
 }
+var workflowDigestCache = /* @__PURE__ */ new Map();
+var MAX_CACHED_WORKFLOW_DIGESTS = 32;
 var readCanonicalWorkflowDigest = async (input) => {
   try {
+    const cacheKey = `${input.runner.location.worktreeRoot}\0${input.state.value.policy_base_commit}`;
+    const cached2 = workflowDigestCache.get(cacheKey);
+    if (cached2 !== void 0) return ok12(cached2);
     const entry = await readCommitTreeBlob(
       input.runner,
       input.state.value.policy_base_commit,
@@ -64451,7 +65545,12 @@ var readCanonicalWorkflowDigest = async (input) => {
       argv: ["cat-file", "blob", entry.oid],
       operation: "git-workflow-read"
     });
-    return ok12(sha256Bytes(bytes.stdout));
+    const digest9 = sha256Bytes(bytes.stdout);
+    if (workflowDigestCache.size >= MAX_CACHED_WORKFLOW_DIGESTS) {
+      workflowDigestCache.delete(workflowDigestCache.keys().next().value);
+    }
+    workflowDigestCache.set(cacheKey, digest9);
+    return ok12(digest9);
   } catch (error51) {
     if (error51 instanceof GitInvocationError) {
       return fail11(projectErrorForGitFailure(error51, input.runner, input.context));
@@ -64788,15 +65887,32 @@ async function readRetainedResult(runner, authority, reference) {
     worktree_root: runner.location.worktreeRoot
   }));
 }
+var repositoryBindings = /* @__PURE__ */ new Map();
+var MAX_REPOSITORY_BINDINGS = 16;
+async function openRepository(workingDirectory, operationContext) {
+  const key = resolveDirectory(workingDirectory);
+  const cached2 = repositoryBindings.get(key);
+  if (cached2 !== void 0) return Object.freeze({ schema_version: "1", ok: true, value: cached2 });
+  const discovered = await discoverWorktree(createGitRunner({ cwd: workingDirectory }), operationContext);
+  if (!discovered.ok) return discovered;
+  const environment = await preflightGit(discovered.value, operationContext);
+  if (!environment.ok) return environment;
+  const binding = Object.freeze({ runner: discovered.value, environment: environment.value });
+  if (repositoryBindings.size >= MAX_REPOSITORY_BINDINGS) {
+    repositoryBindings.delete(repositoryBindings.keys().next().value);
+  }
+  repositoryBindings.set(key, binding);
+  return Object.freeze({ schema_version: "1", ok: true, value: binding });
+}
 async function createProductionServices(input) {
   const atomic = input.atomic ?? createAtomicWriter();
   const gateSecretScanner = input.gate_secret_scanner ?? createSecretlintScanner();
   const provisionalPhase = input.phase_instance ?? "prd";
   const provisionalContext = context(input, provisionalPhase, parseSafeInteger(1));
-  const discovered = await discoverWorktree(createGitRunner({ cwd: input.working_directory }), provisionalContext);
-  if (!discovered.ok) return discovered;
-  const environment = await preflightGit(discovered.value, provisionalContext);
-  if (!environment.ok) return environment;
+  const repository = await openRepository(input.working_directory, provisionalContext);
+  if (!repository.ok) return repository;
+  const discovered = Object.freeze({ value: repository.value.runner });
+  const environment = Object.freeze({ value: repository.value.environment });
   const provisionalAuthority = await createInternalTransactionAuthority({
     runner: discovered.value,
     environment: environment.value,
@@ -64814,7 +65930,8 @@ async function createProductionServices(input) {
     runner: discovered.value,
     environment: environment.value,
     task_id: input.task_id,
-    context: resolvedContext
+    context: resolvedContext,
+    identity_source: provisionalAuthority.value
   }) : provisionalAuthority;
   if (!authorityResult.ok) return authorityResult;
   const authority = authorityResult.value;
@@ -64917,6 +66034,20 @@ function subjectFor(call, authority, inputFingerprint) {
           }
         };
       }
+      if (call.input.operation !== void 0) {
+        const operation = {
+          refresh_milestone_baseline: "refresh-milestone-baseline",
+          recover_milestone_authority: "recover-milestone-authority",
+          recover_approval_trigger_authority: "recover-approval-trigger-authority",
+          refresh_stale_baseline: "refresh-stale-baseline"
+        }[call.input.operation];
+        return {
+          ...common3,
+          tool: call.name,
+          operation,
+          operation_fields: { phase_instance: call.input.phase_instance, step: call.input.step, status: call.input.status }
+        };
+      }
       if (call.input.artifact === void 0) {
         return { ...common3, tool: call.name, operation: "record-state-boundary", operation_fields: { phase_instance: call.input.phase_instance, step: call.input.step, status: call.input.status } };
       }
@@ -64942,6 +66073,7 @@ function subjectFor(call, authority, inputFingerprint) {
     case "archflow_counter_review":
       return { ...common3, tool: call.name, operation: "counter-review", operation_fields: {
         artifact_path: call.input.artifact_path,
+        ...call.input.invocation_routes === void 0 ? {} : { invocation_routes: call.input.invocation_routes },
         ...call.input.route_override === void 0 ? {} : { route_override: call.input.route_override }
       } };
     case "archflow_gate": {
@@ -64983,7 +66115,7 @@ function identifyTransactionRequest(call, authority, recomputedInputFingerprint)
 
 // src/state/request-composition.ts
 import { randomUUID as randomUUID2 } from "node:crypto";
-import { readFile as readFile11 } from "node:fs/promises";
+import { readFile as readFile12 } from "node:fs/promises";
 
 // src/init/task-initialization.ts
 import { mkdir as mkdir3, open as open4, readFile as readFile6 } from "node:fs/promises";
@@ -65495,7 +66627,7 @@ async function installPlanningRestartAskAppend(writer, input) {
 }
 
 // src/state/status.ts
-import { readFile as readFile8 } from "node:fs/promises";
+import { readFile as readFile9 } from "node:fs/promises";
 
 // src/dispatch/routing.ts
 var DispatchRoutingError = class extends Error {
@@ -65549,12 +66681,59 @@ function routeFromConfiguredRoute(configured) {
 function configuredRoute(config2, phaseKind2, role) {
   return config2.overrides?.[phaseKind2]?.[role] ?? config2.roles[role];
 }
-function resolveDispatchRoute(config2, phaseKind2, role) {
+var displacedRoute = (source, route2) => Object.freeze({
+  source,
+  model: route2.model,
+  effort: route2.effort,
+  ...route2.provider === void 0 ? {} : { provider: route2.provider }
+});
+function selectDispatchRouteCandidate(config2, phaseKind2, role, invocationRoute, humanOverride) {
   const configured = configuredRoute(config2, phaseKind2, role);
+  const normallySelected = invocationRoute ?? configured;
+  if (humanOverride !== void 0) {
+    return Object.freeze({
+      raw_route: humanOverride,
+      source: Object.freeze({
+        provenance: "route-override",
+        ...normallySelected === void 0 ? {} : { displaced: displacedRoute(invocationRoute === void 0 ? "configured" : "invocation-declared", normallySelected) }
+      })
+    });
+  }
+  if (invocationRoute !== void 0) {
+    return Object.freeze({
+      raw_route: invocationRoute,
+      source: Object.freeze({
+        provenance: "invocation-declared",
+        ...configured === void 0 ? {} : { displaced: displacedRoute("configured", configured) }
+      })
+    });
+  }
   if (configured === void 0) {
     return fail15(createProjectError("CONFIG_INVALID", { issue_code: "route-missing" }));
   }
-  return routeFromConfiguredRoute(configured);
+  return Object.freeze({
+    raw_route: configured,
+    source: Object.freeze({ provenance: "configured" })
+  });
+}
+function validateSelectedDispatchRoute(selected) {
+  return Object.freeze({
+    selected,
+    route: routeFromConfiguredRoute(selected.raw_route),
+    source: selected.source
+  });
+}
+function selectDispatchRoute(config2, phaseKind2, role, invocationRoute, humanOverride) {
+  return validateSelectedDispatchRoute(selectDispatchRouteCandidate(
+    config2,
+    phaseKind2,
+    role,
+    invocationRoute,
+    humanOverride
+  ));
+}
+function resolveDispatchRoute(config2, phaseKind2, role) {
+  return selectDispatchRoute(config2, phaseKind2, role).route;
 }
 
 // src/state/next-action.ts
@@ -65616,13 +66795,14 @@ function advanceAction(input, state) {
   const requiredKind = designPhase ? "design-approval" : phase3.kind === "prd" ? "artifact-approval" : phase3.kind === "phase-impl" ? "commit-authorization" : void 0;
   const legacyDesignApproval = designPhase && hasLegacyDesignApproval(input);
   const migrationApproval = designPhase && matchingApproval(input, "migration-audit");
-  const autonomous = hasAcceptedNoWait(input, state);
+  const ordinaryApproved = requiredKind !== void 0 && matchingApproval(input, requiredKind);
+  const autonomous = hasAcceptedNoWait(input, state) && !ordinaryApproved;
   if (designPhase && input.migration_audit_required === true) {
     return action("open-gate", "Open the reviewed migration audit for the exact imported documents and resume point.", true, state, {
       gate_kind: "migration-audit"
     });
   }
-  if (requiredKind !== void 0 && !matchingApproval(input, requiredKind) && !legacyDesignApproval && !migrationApproval && !autonomous) {
+  if (requiredKind !== void 0 && !ordinaryApproved && !legacyDesignApproval && !migrationApproval && !autonomous) {
     return action("open-gate", `Open the required ${requiredKind} gate.`, true, state, {
       gate_kind: requiredKind
     });
@@ -65669,26 +66849,23 @@ function advanceAction(input, state) {
       commit_path: input.design_commit.path,
       commit_message: input.design_commit.message,
       commit_target_ref: input.design_commit.target_ref,
-      commit_baseline: input.design_commit.baseline_commit,
-      commit_requires_human_confirmation: false
+      commit_baseline: input.design_commit.baseline_commit
     });
   }
   if (phase3.kind === "phase-impl" && input.commit_observed !== true) {
     if (input.implementation_commit === void 0) {
       return action("inspect-state", "Inspect why the approved implementation commit authority is unavailable.", true, state);
     }
-    const requiresHumanConfirmation = !autonomous;
     return action(
       "commit-phase",
-      requiresHumanConfirmation ? "Commit the exact phase outputs authorized by the human's commit decision." : "Commit the exact phase outputs authorized by the authenticated approval rule.",
+      "Commit the exact phase outputs authorized by the authenticated workflow authority.",
       false,
       state,
       {
         commit_paths: input.implementation_commit.paths,
         commit_message: input.implementation_commit.message,
         commit_target_ref: input.implementation_commit.target_ref,
-        commit_baseline: input.implementation_commit.baseline_commit,
-        commit_requires_human_confirmation: requiresHumanConfirmation
+        commit_baseline: input.implementation_commit.baseline_commit
       }
     );
   }
@@ -65871,6 +67048,14 @@ function deriveNextAction(input) {
   if ((input.upstream_document_drift ?? []).length > 0) {
     return upstreamDocumentDriftAction(state, input.upstream_document_drift);
   }
+  if (input.approval_trigger_recovery_required === true && input.migration_audit_required !== true) {
+    return action(
+      "recover-approval-trigger-authority",
+      "Retire the pre-trigger review fixed point and re-enter production so unchanged bytes receive fresh review and an authenticated approval trigger.",
+      false,
+      state
+    );
+  }
   const next = input.assessment?.next;
   if (next !== void 0) {
     if (next === "advance") return advanceAction(input, state);
@@ -65887,11 +67072,24 @@ function deriveNextAction(input) {
         }
         if (input.adjudication_gate_kind === "material-drift") {
         } else if (hasLegacyDesignApproval(input) && !matchingApproval(input, "design-approval")) {
-        } else {
+        } else if (input.adjudication_gate_kind === "constitution-review") {
           return matchingApproval(input, "design-approval") ? advanceAction(input, state) : action("open-gate", "Open the single design approval with its policy findings and commit authority.", true, state, {
             gate_kind: "design-approval"
           });
         }
+      }
+      if (input.adjudication_gate_kind === "constitution-review" && phase3.kind !== "design" && phase3.kind !== "phase-design") {
+        const ordinaryKind = phase3.kind === "prd" ? "artifact-approval" : phase3.kind === "phase-impl" ? "commit-authorization" : void 0;
+        if (ordinaryKind === void 0) {
+          return action("inspect-state", "Inspect the unresolved adjudication gate obligation.", true, state);
+        }
+        return matchingApproval(input, ordinaryKind) ? advanceAction(input, state) : action(
+          "open-gate",
+          `Open the single ${ordinaryKind} boundary with its policy findings and authority.`,
+          true,
+          state,
+          { gate_kind: ordinaryKind }
+        );
       }
       if (input.adjudication_gate_kind === void 0) {
         return action("inspect-state", "Inspect the unresolved adjudication gate obligation.", true, state);
@@ -65915,6 +67113,107 @@ function deriveNextAction(input) {
     return action("run-step", runStepDetail(state, next), false, state, { step: next });
   }
   return input.evidence_available === false ? action("inspect-state", "Inspect why current evidence is unavailable.", true, state) : action("run-step", runStepDetail(state, state.step), false, state, { step: state.step });
+}
+
+// src/dispatch/failure-observation.ts
+import { readFile as readFile8 } from "node:fs/promises";
+var supportedCodes = new Set(DISPATCH_FAILURE_CODES);
+var SAFE_MESSAGES = Object.freeze({
+  CONFIG_INVALID: "The selected reviewer route configuration is invalid.",
+  CONFIG_MODEL_UNSUPPORTED: "The selected reviewer model is not supported by the dispatcher.",
+  CLI_MISSING: "The required reviewer CLI is not installed or is not available on PATH.",
+  AUTH_UNAVAILABLE: "The required reviewer authentication is unavailable.",
+  RATE_LIMITED: "The reviewer service rate limit prevented this dispatch.",
+  UNSUPPORTED_MODEL: "The reviewer service does not support the selected model.",
+  CLI_VERSION_UNSUPPORTED: "The installed reviewer CLI version is not supported.",
+  PROCESS_FAILED: "The reviewer process failed before producing a usable result."
+});
+function carriedProjectError(error51) {
+  if (error51 === null || typeof error51 !== "object") return void 0;
+  const descriptor = Object.getOwnPropertyDescriptor(error51, "project_error");
+  if (descriptor?.enumerable !== true || !("value" in descriptor)) return void 0;
+  try {
+    return parseProjectError(descriptor.value);
+  } catch {
+    return void 0;
+  }
+}
+function classifiedDispatchFailure(error51) {
+  const projectError = carriedProjectError(error51);
+  if (projectError === void 0 || !supportedCodes.has(projectError.code)) return void 0;
+  const code2 = projectError.code;
+  return Object.freeze({ code: code2, message: SAFE_MESSAGES[code2] });
+}
+function observationClaim(phaseInstance4, attempt) {
+  return parseWorkspacePathClaim(
+    `diagnostics/attempts/${phaseInstance4}/dispatch-counter-review-${String(attempt)}.json`
+  );
+}
+async function writeDispatchFailureObservation(context2, input) {
+  const classified = classifiedDispatchFailure(input.error);
+  const writer = context2.dependencies.projection_writer;
+  if (classified === void 0 || writer === void 0) return false;
+  await ensureAttemptDirectory(context2.authority, context2.phase_instance);
+  const target2 = await resolveTaskWorkspacePath({
+    runner: context2.dependencies.runner,
+    taskId: context2.authority.task_id,
+    claim: observationClaim(context2.phase_instance, context2.attempt),
+    expectedClass: "workspace-attempt",
+    context: context2.authority.context
+  });
+  if (!target2.ok) return false;
+  const observation = dispatchFailureObservationV1Schema.parse({
+    schema_version: "1",
+    task_id: context2.authority.task_id,
+    phase_instance: context2.phase_instance,
+    step: "counter_review",
+    attempt: context2.attempt,
+    role: input.role,
+    code: classified.code,
+    message: classified.message,
+    ...input.selected === void 0 ? {} : {
+      route: {
+        model: input.selected.raw_route.model,
+        effort: input.selected.raw_route.effort,
+        ...input.selected.raw_route.provider === void 0 ? {} : { provider: input.selected.raw_route.provider },
+        source: input.selected.source.provenance
+      }
+    },
+    observed_at_revision: context2.observed_at_revision
+  });
+  await writer.replaceRegular(target2.value, canonicalJsonBytes(observation), false);
+  return true;
+}
+function createDispatchFailureObserver(context2) {
+  return async (role, selected, error51) => {
+    try {
+      await writeDispatchFailureObservation(context2, {
+        role,
+        ...selected === void 0 ? {} : { selected },
+        error: error51
+      });
+    } catch {
+    }
+  };
+}
+async function readCurrentDispatchFailure(dependencies, authority, state) {
+  if (state.terminal !== void 0 || state.task_id !== authority.task_id || state.step !== "counter_review" || state.status !== "running") return void 0;
+  try {
+    const target2 = await resolveTaskWorkspacePath({
+      runner: dependencies.runner,
+      taskId: authority.task_id,
+      claim: observationClaim(state.phase_instance, state.attempt),
+      expectedClass: "workspace-attempt",
+      context: authority.context
+    });
+    if (!target2.ok) return void 0;
+    const parsed = dispatchFailureObservationV1Schema.parse(JSON.parse(
+      await readFile8(target2.value.absolute, "utf8")
+    ));
+    return parsed.task_id === state.task_id && parsed.phase_instance === state.phase_instance && parsed.step === state.step && parsed.attempt === state.attempt && parsed.observed_at_revision === state.revision ? Object.freeze(parsed) : void 0;
+  } catch {
+    return void 0;
+  }
 }
 
 // src/state/status.ts
@@ -66019,7 +67318,7 @@ async function readActiveGateProjection(dependencies, authority) {
       context: authority.context
     });
     if (!target2.ok) return void 0;
-    const bytes = new Uint8Array(await readFile8(target2.value.absolute));
+    const bytes = new Uint8Array(await readFile9(target2.value.absolute));
     return parseActiveGate(parseCanonicalDocument(bytes, "active gate").value);
   } catch {
     return void 0;
@@ -66035,7 +67334,7 @@ async function readArchivedGateRequest(dependencies, authority, gateId) {
       context: authority.context
     });
     if (!target2.ok) return void 0;
-    const bytes = new Uint8Array(await readFile8(target2.value.absolute));
+    const bytes = new Uint8Array(await readFile9(target2.value.absolute));
     return parsePersistedGateRequest(parseCanonicalDocument(bytes, "gate request").value);
   } catch (error51) {
     if (error51.code === "ENOENT") return void 0;
@@ -66091,11 +67390,12 @@ async function currentApprovedUpstreams(dependencies, authority, state, authenti
         settlementPolicy = resolvedConstitution.ok ? authenticateRuleAcceptancePolicy(state, resolvedConstitution.value) : void 0;
       }
     }
-    const settled = settlementPolicy === void 0 ? void 0 : acceptedNoWaitSettlement(
+    const settled = settlementPolicy === void 0 ? void 0 : acceptedNoWaitSettlementWithoutOrdinaryApproval(
       settlementPolicy,
       state,
       loaded.value.artifact_digest,
-      loaded.value.artifact.phase_instance
+      loaded.value.artifact.phase_instance,
+      authenticated
     );
     if (approval === void 0 && settled === void 0) {
       throw new TypeError("current upstream produced authority lacks approval or accepted settlement");
@@ -66128,8 +67428,15 @@ function pendingAdjudicationGates(state, constitution, retained, authenticated) 
   }
   for (const gate of selectAdjudicationGates(constitution.rules, source.evidence)) {
     const contextDigest = computeGateContextDigest(gate.kind, gate.context);
-    const approved = currentSet !== void 0 && authenticated.some((item) => item.approval.gate_kind === gate.kind && item.approval.subject_digest === gate.subject_digest && item.request.phase_instance === state.phase_instance && item.request.context_digest === contextDigest && item.request.kind !== "baseline-adoption" && // narrowed: a drift observation is not an evidence set
+    const exactGateApproved = currentSet !== void 0 && authenticated.some((item) => item.approval.gate_kind === gate.kind && item.approval.subject_digest === gate.subject_digest && item.request.phase_instance === state.phase_instance && item.request.context_digest === contextDigest && item.request.kind !== "baseline-adoption" && // narrowed: a drift observation is not an evidence set
     item.request.current_evidence.set_digest === currentSet.set_digest && source.evidence.source_evidence_set_digest === currentSet.set_digest);
+    const designPhase = state.phase_instance === "design" || state.phase_instance.startsWith("phase-design-");
+    const ordinaryKind = state.phase_instance === "prd" ? "artifact-approval" : designPhase ? "design-approval" : state.phase_instance.startsWith("phase-impl-") ? "commit-authorization" : void 0;
+    const ordinaryApproval = gate.kind === "constitution-review" && currentSet !== void 0 && ordinaryKind !== void 0 && authenticated.some((item) => {
+      const decision3 = item.decision.envelope.payload.decision;
+      return item.approval.gate_kind === ordinaryKind && item.approval.subject_digest === gate.subject_digest && item.request.kind === ordinaryKind && item.request.phase_instance === state.phase_instance && item.request.subject_digest === gate.subject_digest && item.request.current_evidence.set_digest === currentSet.set_digest && source.evidence.source_evidence_set_digest === currentSet.set_digest && (decision3 === "approve" || decision3 === "authorize-commit");
+    });
+    const approved = exactGateApproved || ordinaryApproval;
     let waived = false;
     if (gate.kind === "constitution-review" && "eligible_waivers" in gate.context) {
       const eligible = gate.context.eligible_waivers;
@@ -66315,6 +67622,13 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   }
   if (stateRead.kind !== "canonical") {
     const reason2 = stateRead.kind === "missing" ? "state-missing" : `state-${stateRead.kind}`;
+    let liveConfigDigest2;
+    try {
+      const read = await dependencies.read_config(authority.config);
+      if (read.kind === "valid") liveConfigDigest2 = read.snapshot.digest;
+      else if (read.kind === "invalid") liveConfigDigest2 = read.digest;
+    } catch {
+    }
     const next = deriveNextAction({ repository_initialized: true });
     const status2 = Object.freeze({
       task_id: authority.task_id,
@@ -66323,7 +67637,11 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       blocking_reasons: Object.freeze([reason2]),
       next_action: next
     });
-    return ok16(Object.freeze({ status: status2, retained: /* @__PURE__ */ new Map() }));
+    return ok16(Object.freeze({
+      status: status2,
+      ...liveConfigDigest2 === void 0 ? {} : { live_config_digest: liveConfigDigest2 },
+      retained: /* @__PURE__ */ new Map()
+    }));
   }
   const stateDocument = stateRead.document;
   const state = stateDocument.value;
@@ -66335,6 +67653,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     if (read.kind !== "valid") {
       config2 = unavailableConfig(`config-${read.kind}`);
       blockers.push(`config-${read.kind}`);
+      if (read.kind === "invalid") liveConfigDigest = read.digest;
     } else {
       config2 = Object.freeze({ verified: true });
       liveConfigDigest = read.snapshot.digest;
@@ -66460,11 +67779,12 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     }
   }
   const settlementPolicy = constitution === void 0 ? void 0 : authenticateRuleAcceptancePolicy(state, constitution);
-  const acceptedSettlement = settlementPolicy === void 0 || produceSubject === void 0 ? void 0 : acceptedNoWaitSettlement(
+  const acceptedSettlement = settlementPolicy === void 0 || produceSubject === void 0 ? void 0 : acceptedNoWaitSettlementWithoutOrdinaryApproval(
     settlementPolicy,
     state,
     produceSubject.artifact_digest,
-    produceSubject.artifact.phase_instance
+    produceSubject.artifact.phase_instance,
+    authenticatedApprovals
   );
   let commitObserved = false;
   let commitBlockedReason;
@@ -66823,6 +68143,9 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         model_family: counter.model_family,
         model: counter.model,
         effort: counter.effort,
+        ...counter.assurance === "server-attested" ? { adapter: counter.adapter } : {},
+        ...counter.assurance === "server-attested" && counter.provider !== void 0 ? { provider: counter.provider } : {},
+        ...counter.assurance === "server-attested" && counter.route_source !== void 0 ? { route_source: counter.route_source } : {},
         // Present only when a human substituted this review's route for the pinned one. It travels
         // with the provenance because the gate correspondence is built from this block: without it
         // the human sees which model reviewed but never that it was not the configured one.
@@ -66908,8 +68231,21 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     pendingGates = pendingAdjudicationGates(state, constitution, retained, authenticatedApprovals);
   }
   const adjudicationGateKind = pendingGates[0]?.kind;
+  const eligibleTriggerSettlement = produceSubject === void 0 ? void 0 : latestEligibleRuleSettlement(
+    state,
+    produceSubject.artifact_digest,
+    produceSubject.artifact.phase_instance
+  );
+  const currentSimpleRevision = produceSubject === void 0 ? void 0 : [...state.human_revision_history ?? []].filter((record3) => record3.phase_instance === state.phase_instance && record3.classification === "simple" && record3.resulting_subject_digest === produceSubject.artifact_digest && record3.resulting_result_digest === produceSubject.reference.result_digest).sort((left, right) => right.resulting_attempt - left.resulting_attempt)[0];
+  const currentOrdinaryApproval = produceSubject === void 0 ? void 0 : matchingOrdinaryApproval(
+    state,
+    authenticatedApprovals,
+    produceSubject.artifact_digest,
+    produceSubject.artifact.phase_instance
+  );
   const legacyInitialization = await loadLegacyImportInitialization(dependencies, authority, state);
   const migrationAuditRequired = legacyInitialization.ok && legacyInitialization.value !== void 0 && state.phase_instance === "design" && !authenticatedApprovals.some((item) => item.request.kind === "migration-audit" && item.decision.envelope.payload.decision === "accept-import-audit");
+  const approvalTriggerRecoveryRequired = !migrationAuditRequired && state.terminal === void 0 && state.open_gate === void 0 && state.pending_human_revision === void 0 && state.step === "triage" && state.status === "succeeded" && assessment?.next === "adjudication-gate" && adjudicationGateKind === "constitution-review" && eligibleTriggerSettlement === void 0 && currentSimpleRevision === void 0 && currentOrdinaryApproval === void 0;
   const migrationAuditAccepted = legacyInitialization.ok && legacyInitialization.value !== void 0 && state.phase_instance === "design" && authenticatedApprovals.some((item) => item.request.kind === "migration-audit" && item.decision.envelope.payload.decision === "accept-import-audit");
   const nextAction = deriveNextAction({
     repository_initialized: true,
@@ -66934,6 +68270,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     commit_observed: commitObserved,
     ...commitBlockedReason === void 0 ? {} : { commit_blocked_reason: commitBlockedReason },
     ...milestoneRecoveryRequired ? { milestone_recovery_required: true } : {},
+    ...approvalTriggerRecoveryRequired ? { approval_trigger_recovery_required: true } : {},
     ...governingDocumentRecoveryRequired ? { governing_document_recovery_required: true } : {},
     ...milestoneRecoveryNoDelta ? { milestone_recovery_no_delta: true } : {},
     ...milestoneProofUnverifiableReason === void 0 ? {} : {
@@ -66986,6 +68323,12 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       cleanup_pending: true
     });
   }
+  let dispatchFailure;
+  try {
+    const observed = await readCurrentDispatchFailure(dependencies, authority, state);
+    if (observed !== void 0) dispatchFailure = projectDispatchFailureObservation(observed);
+  } catch {
+  }
   const status = Object.freeze({
     task_id: authority.task_id,
     state: state.terminal ?? "active",
@@ -67001,6 +68344,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     config: config2,
     ...configChange === void 0 ? {} : { config_change: configChange },
     ...routes === void 0 ? {} : { routes },
+    ...dispatchFailure === void 0 ? {} : { dispatch_failure: dispatchFailure },
     ...constitutionStatus === void 0 ? {} : { constitution: constitutionStatus },
     ...state.open_gate === void 0 ? {} : { open_gate_id: state.open_gate.gate_id },
     ...openGate === void 0 ? {} : { open_gate: openGate },
@@ -67015,7 +68359,14 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     blocking_reasons: Object.freeze([...new Set(blockers)]),
     next_action: nextAction
   });
-  return ok16(Object.freeze({ status, state, retained }));
+  return ok16(Object.freeze({
+    status,
+    state,
+    state_document_digest: stateDocument.digest,
+    ...liveConfigDigest === void 0 ? {} : { live_config_digest: liveConfigDigest },
+    ...legacyInitialization.ok && legacyInitialization.value !== void 0 ? { legacy_import_initialization: true } : {},
+    retained
+  }));
 }
 async function computeTaskStatusDetailed(dependencies, authority) {
   return computeTaskStatusDetailedInternal(dependencies, authority);
@@ -67030,14 +68381,14 @@ import { mkdir as mkdir4, mkdtemp, rename as rename3, rm as rm2, writeFile } fro
 import { dirname as dirname7, isAbsolute as isAbsolute3, join as join10, relative as relative4 } from "node:path";
 
 // src/state/legacy-stage.ts
-import { readFile as readFile9 } from "node:fs/promises";
+import { readFile as readFile10 } from "node:fs/promises";
 import { join as join9 } from "node:path";
 function importRoot(authority, initialization) {
   return join9(authority.workspace_root, "cache", "imports", initialization.import_digest);
 }
 async function readStagedLegacyConfig(authority, initialization) {
   try {
-    const bytes = new Uint8Array(await readFile9(join9(importRoot(authority, initialization), "config.yaml")));
+    const bytes = new Uint8Array(await readFile10(join9(importRoot(authority, initialization), "config.yaml")));
     const parsed = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(bytes), "staged task config");
     const digest9 = sha256Bytes(bytes);
     if (digest9 !== initialization.config_digest) return void 0;
@@ -67048,7 +68399,7 @@ async function readStagedLegacyConfig(authority, initialization) {
 }
 async function readStagedLegacyPayload(authority, initialization, reference) {
   try {
-    const bytes = new Uint8Array(await readFile9(join9(importRoot(authority, initialization), "payload", reference.legacy_path)));
+    const bytes = new Uint8Array(await readFile10(join9(importRoot(authority, initialization), "payload", reference.legacy_path)));
     if (bytes.byteLength !== reference.byte_count || sha256Bytes(bytes) !== reference.digest) return void 0;
     return bytes;
   } catch {
@@ -67583,7 +68934,7 @@ function completedPlanningRestartMatches(state, input) {
 
 // src/state/pending-waiver.ts
 import { isDeepStrictEqual as isDeepStrictEqual13 } from "node:util";
-import { readFile as readFile10 } from "node:fs/promises";
+import { readFile as readFile11 } from "node:fs/promises";
 var fail18 = (issue_code) => Object.freeze({
   schema_version: "1",
   ok: false,
@@ -67612,12 +68963,12 @@ async function derivePendingWaiverRequest(services) {
   });
   if (!decisionPath.ok) return decisionPath;
   try {
-    const request = parseCanonicalDocument(new Uint8Array(await readFile10(requestPath.value.absolute)), "pending waiver request");
-    const decision3 = parseCanonicalDocument(new Uint8Array(await readFile10(decisionPath.value.absolute)), "pending waiver decision");
+    const request = parseCanonicalDocument(new Uint8Array(await readFile11(requestPath.value.absolute)), "pending waiver request");
+    const decision3 = parseCanonicalDocument(new Uint8Array(await readFile11(decisionPath.value.absolute)), "pending waiver decision");
     const requestValue = parseArchivedGateRequest(request.value);
     const decisionValue = parseArchivedGateDecisionRecord(decision3.value);
     const payload = decisionValue.outcome === "decided" ? decisionValue.envelope.payload : void 0;
-    if (!validateDurableSemantics({ gate_request: { ...request, value: requestValue }, gate_decision: { ...decision3, value: decisionValue } }).ok || requestValue.gate_id !== gateId || decisionValue.gate_id !== gateId || requestValue.kind !== "constitution-review" && requestValue.kind !== "design-approval" || payload?.decision !== "waiver-requested" || !("eligible_waivers" in requestValue.context)) return fail18("pending-waiver-archive-invalid");
+    if (!validateDurableSemantics({ gate_request: { ...request, value: requestValue }, gate_decision: { ...decision3, value: decisionValue } }).ok || requestValue.gate_id !== gateId || decisionValue.gate_id !== gateId || !isWaiverOriginRequest(requestValue) || payload?.decision !== "waiver-requested" || !("eligible_waivers" in requestValue.context)) return fail18("pending-waiver-archive-invalid");
     const eligible = requestValue.context.eligible_waivers.find((item) => isDeepStrictEqual13(item.rule, payload.rule) && item.scope.operation === payload.operation);
     if (eligible === void 0) return fail18("pending-waiver-eligibility-invalid");
     return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({
@@ -67661,9 +69012,10 @@ var BUILD_REQUEST_KINDS = Object.freeze([
   "waiver",
   "refresh-milestone-baseline",
   "recover-milestone-authority",
+  "recover-approval-trigger-authority",
   "refresh-stale-baseline"
 ]);
-var PAYLOAD_SHAPE = `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},"step"?:<pipeline step for kind running>,"document"?:{...},"implementation"?:{...},"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],"summary"?:<gate summary text>,"route_override"?:{"reason":<why the pinned reviewer was substituted>,"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"adjudicator"?:{...}},"origin"?:<waiver origin>,"rationale"?:<waiver rationale>}`;
+var PAYLOAD_SHAPE = `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},"step"?:<pipeline step for kind running>,"document"?:{...},"implementation"?:{...},"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],"summary"?:<gate summary text>,"invocation_routes"?:{"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"adjudicator"?:{...}},"route_override"?:{"reason":<why the pinned reviewer was substituted>,"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"adjudicator"?:{...}},"origin"?:<waiver origin>,"rationale"?:<waiver rationale>}`;
 function record2(value, name) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${name} must be an object; expected ${PAYLOAD_SHAPE}`);
@@ -67980,6 +69332,7 @@ function composeCounterReview(services, state, intentId, snapshot) {
   if (legalRunStepStatus(state, "counter_review") !== "succeeded") {
     return transitionInvalid(state, "counter_review-succeeded");
   }
+  const invocationRoutes = snapshot.invocation_routes === void 0 ? void 0 : structuredClone(record2(snapshot.invocation_routes, "build-request counter-review invocation_routes"));
   const routeOverride = snapshot.route_override === void 0 ? void 0 : structuredClone(record2(snapshot.route_override, "build-request counter-review route_override"));
   const paths = phaseReviewPaths(state.phase_instance);
   return computeCallEnvelope(services, {
@@ -67987,8 +69340,57 @@ function composeCounterReview(services, state, intentId, snapshot) {
     input: {
       ...mechanicalInput(services, state, intentId),
       artifact_path: paths.artifact_path,
+      ...invocationRoutes === void 0 ? {} : { invocation_routes: invocationRoutes },
       ...routeOverride === void 0 ? {} : { route_override: routeOverride }
     }
+  });
+}
+function ordinaryPolicyFacts(retained) {
+  const source = retained.get("adjudicate")?.manifest.source_artifact;
+  if (source === void 0) {
+    return Object.freeze({
+      constitution: "pass",
+      policy_findings: Object.freeze([]),
+      eligible_waivers: Object.freeze([])
+    });
+  }
+  if (source.artifact_kind !== "adjudication-evidence") {
+    throw new TypeError("retained adjudication result has the wrong artifact kind");
+  }
+  return designApprovalPolicyContext(source.evidence);
+}
+function archivedPresentationClass(archive) {
+  assertAuthenticatedGateDecisionArchive(archive);
+  const context2 = archive.request.context;
+  if (!("approval_trigger" in context2) || !("policy_findings" in context2)) return "exception";
+  if (context2.policy_findings.some((finding) => finding.compliance !== "pass" || finding.trigger !== "not-matched")) return "exception";
+  const trigger = context2.approval_trigger;
+  if (trigger.kind === "human-revision-reapproval") return trigger.prior_gate.class;
+  return trigger.rule_authority === "unavailable" ? "exception" : "configured-approval";
+}
+async function simpleRevisionApprovalTrigger(services, state, subject) {
+  const revision = [...state.human_revision_history ?? []].filter((candidate) => candidate.phase_instance === state.phase_instance && candidate.classification === "simple" && candidate.resulting_subject_digest === subject.artifact_digest && candidate.resulting_result_digest === subject.reference.result_digest).sort((left, right) => right.resulting_attempt - left.resulting_attempt)[0];
+  if (revision === void 0) return void 0;
+  const archive = await loadAuthenticatedGateDecisionArchive(
+    services.dependencies,
+    services.authority,
+    revision.gate_id
+  );
+  if (!archive.ok) throw new TypeError("simple revision prior gate archive is unavailable");
+  assertAuthenticatedGateDecisionArchive(archive.value);
+  if (archive.value.request.phase_instance !== state.phase_instance || archive.value.request.kind !== revision.gate_kind || archive.value.request.subject_digest !== revision.predecessor_subject_digest || archive.value.decision.envelope.payload.decision !== "revise") throw new TypeError("simple revision prior gate archive does not bind the revision record");
+  return Object.freeze({
+    kind: "human-revision-reapproval",
+    prior_gate: Object.freeze({
+      gate_id: revision.gate_id,
+      decision_digest: archive.value.decision_digest,
+      class: archivedPresentationClass(archive.value)
+    }),
+    revision_checkpoint: Object.freeze({
+      classification: "simple",
+      predecessor_subject_digest: revision.predecessor_subject_digest,
+      subject_digest: revision.resulting_subject_digest
+    })
   });
 }
 async function composeGate(services, state, intentId, snapshot) {
@@ -68117,6 +69519,24 @@ async function composeGate(services, state, intentId, snapshot) {
     if (migrationAuditContext === void 0) return transitionInvalid(state, "migration-audit-gate");
   }
   const settlementPolicy = constitution.ok ? authenticateRuleAcceptancePolicy(state, constitution.value) : void 0;
+  const policyFacts = ordinaryPolicyFacts(loaded.value);
+  const simpleTrigger = await simpleRevisionApprovalTrigger(services, state, subject.value);
+  const approvalTrigger2 = simpleTrigger ?? (settledRule === void 0 ? void 0 : Object.freeze({
+    kind: "rule-settlement",
+    settlement: Object.freeze({
+      subject_digest: settledRule.subject_digest,
+      config_digest: settledRule.config_digest,
+      settled_at_revision: settledRule.settled_at_revision
+    }),
+    conclusion: settledRule.conclusion,
+    rule_authority: settlementPolicy === void 0 ? "unavailable" : "authenticated"
+  }));
+  const ordinaryApproved = matchingOrdinaryApproval(
+    state,
+    authenticated,
+    subject.value.artifact_digest,
+    state.phase_instance
+  ) !== void 0;
   const acceptedSettlement = settlementPolicy === void 0 ? void 0 : acceptedNoWaitSettlement(
     settlementPolicy,
     state,
@@ -68134,7 +69554,7 @@ async function composeGate(services, state, intentId, snapshot) {
       kind: "attempts-exhausted",
       context: { ...exhaustion, step: state.step }
     };
-  } else if (pendingGate !== void 0) {
+  } else if (pendingGate !== void 0 && pendingGate.kind !== "constitution-review") {
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
@@ -68154,9 +69574,10 @@ async function composeGate(services, state, intentId, snapshot) {
       kind: "migration-audit",
       context: migrationAuditContext
     };
-  } else if (acceptedSettlement !== void 0) {
+  } else if (acceptedSettlement !== void 0 && !ordinaryApproved && simpleTrigger === void 0 && pendingGate === void 0) {
     return transitionInvalid(state, `${gateKind2}-gate-not-required`);
   } else if (gateKind2 === "design-approval") {
+    if (approvalTrigger2 === void 0) return transitionInvalid(state, "approval-trigger-authority-missing");
     const target2 = await currentTargetRef(services.dependencies);
     const approval = await buildDesignApprovalInput(services.dependencies, state, loaded.value, target2);
     input = {
@@ -68166,9 +69587,10 @@ async function composeGate(services, state, intentId, snapshot) {
       subject_digest: subject.value.artifact_digest,
       current_evidence: derived.current_evidence_set,
       kind: "design-approval",
-      context: approval.context
+      context: { ...approval.context, ...policyFacts, approval_trigger: approvalTrigger2 }
     };
   } else if (gateKind2 === "commit-authorization") {
+    if (approvalTrigger2 === void 0) return transitionInvalid(state, "approval-trigger-authority-missing");
     const target2 = await currentTargetRef(services.dependencies);
     const authorization = buildCommitAuthorizationInput(
       subject.value,
@@ -68183,9 +69605,10 @@ async function composeGate(services, state, intentId, snapshot) {
       subject_digest: authorization.subject_digest,
       current_evidence: authorization.current_evidence,
       kind: "commit-authorization",
-      context: authorization.context
+      context: { ...authorization.context, ...policyFacts, approval_trigger: approvalTrigger2 }
     };
   } else {
+    if (approvalTrigger2 === void 0) return transitionInvalid(state, "approval-trigger-authority-missing");
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
@@ -68193,7 +69616,11 @@ async function composeGate(services, state, intentId, snapshot) {
       subject_digest: subject.value.artifact_digest,
       current_evidence: derived.current_evidence_set,
       kind: "artifact-approval",
-      context: { artifact_kind: APPROVAL_ARTIFACT_KINDS[phaseKind2] }
+      context: {
+        artifact_kind: APPROVAL_ARTIFACT_KINDS[phaseKind2],
+        ...policyFacts,
+        approval_trigger: approvalTrigger2
+      }
     };
   }
   return computeCallEnvelope(services, { tool: "archflow_gate", input });
@@ -68269,7 +69696,7 @@ async function composePlanningRestartRequest(services, state, intentId, snapshot
     });
     if (!ask.ok) return ask;
     try {
-      const askBytes = new Uint8Array(await readFile11(ask.value.absolute));
+      const askBytes = new Uint8Array(await readFile12(ask.value.absolute));
       const semanticRestartId = semanticPlanningRestartId(intentId);
       askBaseDigest = semanticRestartId === void 0 ? sha256Bytes(askBytes) : planningRestartAskBaseDigest(askBytes, semanticRestartId, reason2);
     } catch {
@@ -68373,6 +69800,16 @@ async function composeRequest(services, value) {
       );
       return composed.ok ? ok19(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
     }
+    case "recover-approval-trigger-authority": {
+      const composed = await composeMilestoneRecoveryAction(
+        services,
+        state,
+        intentId,
+        "recover-approval-trigger-authority",
+        "recover_approval_trigger_authority"
+      );
+      return composed.ok ? ok19(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
+    }
     case "refresh-stale-baseline": {
       const composed = await composeMilestoneRecoveryAction(
         services,
@@ -68466,10 +69903,12 @@ function publicPresentation(status) {
   const presentation = status.open_gate?.presentation;
   if (presentation === void 0) return void 0;
   return Object.freeze({
+    class: presentation.class,
     title: presentation.title,
     summary: presentation.summary,
     ...presentation.details === void 0 ? {} : { details: Object.freeze([...presentation.details]) },
     question: presentation.question,
+    reasons: Object.freeze(presentation.reasons.map((reason2) => Object.freeze({ ...reason2 }))),
     options: Object.freeze(presentation.options.map((option) => Object.freeze({ ...option })))
   });
 }
@@ -68630,6 +70069,15 @@ function mapNextAction(status, snapshot) {
     }
     case "run-step":
       return mapRunStep(status, action2, snapshot);
+    case "recover-approval-trigger-authority":
+      return Object.freeze({
+        condition: "ready",
+        headline: "Fresh approval-trigger authority is ready",
+        detail: action2.detail,
+        action_kind: "begin-work",
+        instruction: "Record the compatibility recovery, then request fresh status before editing or resubmitting bytes.",
+        expected_submission: "none"
+      });
     case "commit-artifacts":
       if (action2.commit_path === void 0 || action2.commit_message === void 0 || action2.commit_target_ref === void 0 || action2.commit_baseline === void 0) {
         return inspect2("The authorized design commit is missing authenticated commit facts.");
@@ -68644,8 +70092,7 @@ function mapNextAction(status, snapshot) {
           paths: Object.freeze([action2.commit_path]),
           message: action2.commit_message,
           target_ref: action2.commit_target_ref,
-          baseline: action2.commit_baseline,
-          requires_human_confirmation: action2.commit_requires_human_confirmation ?? false
+          baseline: action2.commit_baseline
         })
       });
     case "refresh-milestone-baseline":
@@ -68679,19 +70126,17 @@ function mapNextAction(status, snapshot) {
       if (action2.commit_paths === void 0 || action2.commit_message === void 0 || action2.commit_target_ref === void 0 || action2.commit_baseline === void 0) {
         return inspect2("Inspect why the approved implementation commit authority is unavailable.");
       }
-      const requiresHumanConfirmation = action2.commit_requires_human_confirmation ?? true;
       return Object.freeze({
         condition: "awaiting-client",
         headline: "The authorized implementation commit is ready",
         detail: action2.detail,
         action_kind: "commit",
-        instruction: requiresHumanConfirmation ? "Prior human commit authority is recorded. Separately confirm HEAD matches the authorized baseline and target ref, stage exactly the authorized paths, show the human the staged diff and exact message and obtain explicit confirmation, create the commit with those exact facts while preserving unrelated changes, then request fresh read-only status so the server observes proof." : "Authenticated rule authority permits direct client execution. Confirm HEAD matches the authorized baseline and target ref, stage and inspect exactly the authorized paths, create the commit directly with the exact returned message while preserving unrelated changes, then request fresh read-only status so the server observes proof.",
+        instruction: "Confirm HEAD matches the authorized baseline and target ref, stage and inspect exactly the authorized paths, create the commit directly with the exact returned message while preserving unrelated changes, then request fresh read-only status so the server observes proof.",
         commit: Object.freeze({
           paths: Object.freeze([...action2.commit_paths].sort()),
           message: action2.commit_message,
           target_ref: action2.commit_target_ref,
-          baseline: action2.commit_baseline,
-          requires_human_confirmation: requiresHumanConfirmation
+          baseline: action2.commit_baseline
         })
       });
     }
@@ -68814,6 +70259,7 @@ function projectSemanticStatus(snapshot, invocation) {
     ...shape.findings !== true ? {} : { findings: snapshot.full_findings },
     ...context2 === void 0 ? {} : { review_context: context2 },
     ...shape.presentation === void 0 ? {} : { presentation: shape.presentation },
+    ...status.dispatch_failure === void 0 ? {} : { dispatch_failure: status.dispatch_failure },
     ...configChange === void 0 ? {} : { config_change: configChange }
   });
   return Object.freeze({ view, ...offer === void 0 ? {} : { internal_offer: offer } });
@@ -69319,15 +70765,15 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
     managed_policy_paths: managedPolicyPaths
   });
 }
-function assertRoute(adapter2, route) {
+function assertRoute(adapter2, route2) {
   const expectedFamily = adapter2 === "claude-cli" ? "claude" : "codex";
-  if (route.adapter !== adapter2 || route.family !== expectedFamily) {
+  if (route2.adapter !== adapter2 || route2.family !== expectedFamily) {
     fail21(createProjectError("FAMILY_MISMATCH", {
       expected_family: expectedFamily,
-      observed_family: route.family
+      observed_family: route2.family
     }));
   }
-  if (!safeIdV1Schema.safeParse(route.model).success) {
+  if (!safeIdV1Schema.safeParse(route2.model).success) {
     fail21(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
   }
 }
@@ -69407,10 +70853,10 @@ var claudeAdapter = Object.freeze({
     signal,
     cancellationSource
   ),
-  async buildInvocation(envelope, route, workspace, outputSchema) {
-    assertRoute("claude-cli", route);
+  async buildInvocation(envelope, route2, workspace, outputSchema) {
+    assertRoute("claude-cli", route2);
     const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "claude-cli", envelopeSubject(envelope));
-    if (route.effort === "ultra") {
+    if (route2.effort === "ultra") {
       return fail21(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
     }
     const mcpConfigPath = join11(workspace.root, "empty-mcp.json");
@@ -69432,11 +70878,11 @@ var claudeAdapter = Object.freeze({
       "--json-schema",
       JSON.stringify(schema),
       "--model",
-      route.model,
+      route2.model,
       "--effort",
-      route.effort
+      route2.effort
     ]);
-    if (route.provider === void 0) {
+    if (route2.provider === void 0) {
       return Object.freeze({
         adapter: "claude-cli",
         command: "claude",
@@ -69449,7 +70895,7 @@ var claudeAdapter = Object.freeze({
     return Object.freeze({
       adapter: "claude-cli",
       command: "cc-switch",
-      argv: Object.freeze(["start", "claude", route.provider, "--", ...argv]),
+      argv: Object.freeze(["start", "claude", route2.provider, "--", ...argv]),
       cwd: workspace.repository_view_root ?? workspace.root,
       env: withLocalBinOnPath(workspace),
       stdin: envelope.bytes
@@ -69502,9 +70948,9 @@ var codexAdapter = Object.freeze({
     signal,
     cancellationSource
   ),
-  async buildInvocation(envelope, route, workspace, outputSchema) {
-    assertRoute("codex-cli", route);
-    if (route.provider !== void 0) {
+  async buildInvocation(envelope, route2, workspace, outputSchema) {
+    assertRoute("codex-cli", route2);
+    if (route2.provider !== void 0) {
       return fail21(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
     }
     const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "codex-cli", envelopeSubject(envelope));
@@ -69535,13 +70981,13 @@ var codexAdapter = Object.freeze({
         "-o",
         outputPath,
         "-m",
-        route.model,
+        route2.model,
         "-c",
         "skills.include_instructions=false",
         "-c",
         "project_doc_max_bytes=0",
         "-c",
-        `model_reasoning_effort=${JSON.stringify(route.effort)}`,
+        `model_reasoning_effort=${JSON.stringify(route2.effort)}`,
         ...disabled
       ]),
       cwd: workspace.root,
@@ -69565,9 +71011,9 @@ var codexAdapter = Object.freeze({
     return classifyNonzero("codex-cli", result, codexFailureMessages(result.stdout));
   }
 });
-function selectCliAdapter(host, route) {
+function selectCliAdapter(host, route2) {
   if (host === "unknown") return fail21(createProjectError("UNSUPPORTED_HOST", { host: "unknown" }));
-  if (route !== void 0) return route.adapter === "claude-cli" ? claudeAdapter : codexAdapter;
+  if (route2 !== void 0) return route2.adapter === "claude-cli" ? claudeAdapter : codexAdapter;
   return host === "claude" ? codexAdapter : claudeAdapter;
 }
 function mintReviewObservation(input) {
@@ -69587,6 +71033,8 @@ function mintReviewObservation(input) {
     family: input.route.family,
     model: input.route.model,
     effort: input.route.effort,
+    ...input.route.provider === void 0 ? {} : { provider: input.route.provider },
+    route_source: input.route_source ?? Object.freeze({ provenance: "configured" }),
     rubric_digest: input.subject.rubric_digest,
     producer_family: input.subject.producer_family,
     ...input.route_override === void 0 ? {} : { route_override: input.route_override }
@@ -69611,6 +71059,8 @@ function mintAdjudicationObservation(input) {
     family: input.route.family,
     model: input.route.model,
     effort: input.route.effort,
+    ...input.route.provider === void 0 ? {} : { provider: input.route.provider },
+    route_source: input.route_source ?? Object.freeze({ provenance: "configured" }),
     pinned_constitution_digest: input.subject.pinned_constitution_digest,
     approved_upstream_digests: input.subject.approved_upstream_digests,
     source_evidence_set_digest: input.subject.source_evidence_set_digest,
@@ -69855,12 +71305,15 @@ function fixedSubsteps(action2, snapshot, expectedSubmission) {
       throw new SemanticActionPlanError("SEMANTIC_ACTION_UNSUPPORTED", `${action2} has no semantic mutation plan`);
   }
 }
-function requestFacts(action2, substep, intentId, submission) {
+function requestFacts(action2, substep, intentId, submission, nextActionCode, invocation) {
   switch (action2) {
     case "initialize-task":
       if (submission?.kind !== "task-ask") throw new TypeError("validated task ask is unavailable");
       return { execution: "compose-request", facts: { kind: "initialize", intent_id: intentId } };
     case "begin-work":
+      if (nextActionCode === "recover-approval-trigger-authority") {
+        return { execution: "compose-request", facts: { kind: "recover-approval-trigger-authority", intent_id: intentId } };
+      }
     case "revise":
       return { execution: "compose-request", facts: { kind: "running", step: "produce", intent_id: intentId } };
     case "submit-work": {
@@ -69883,6 +71336,7 @@ function requestFacts(action2, substep, intentId, submission) {
         facts: {
           kind: "counter-review",
           intent_id: intentId,
+          ...invocation?.review_routes === void 0 ? {} : { invocation_routes: invocation.review_routes },
           // The declaration is plain-json-asserted at parse time; the cast only sheds zod's
           // inferred optional `undefined` (not a PlainJsonValue) — the composer applies the same
           // idiom to this value in composeCounterReview.
@@ -70009,7 +71463,14 @@ function planSemanticAction(snapshot, value) {
   const intentId = semanticSubstepIntentId(operationDigest, nextSubstep);
   const effectiveSubstep = isArchivedDecisionRetry ? "decision-archive" : nextSubstep;
   const effectiveIntentId = semanticSubstepIntentId(operationDigest, effectiveSubstep);
-  const request = requestFacts(offer.action_kind, effectiveSubstep, effectiveIntentId, input.action.submission);
+  const request = requestFacts(
+    offer.action_kind,
+    effectiveSubstep,
+    effectiveIntentId,
+    input.action.submission,
+    operationOffer.next_action_code,
+    input.invocation
+  );
   const requestFactsValue = offer.action_kind === "reopen" ? {
     kind: "planning-restart",
     intent_id: intentId,
@@ -70099,7 +71560,7 @@ function markerStatus2(value) {
 function substepPlan(original, substep) {
   const intentId = semanticSubstepIntentId(original.operation_digest, substep);
   const submission = original.route_override === void 0 ? void 0 : { kind: "review-dispatch", route_override: original.route_override };
-  const request = requestFacts(original.action_kind, substep, intentId, submission);
+  const request = requestFacts(original.action_kind, substep, intentId, submission, void 0, original.invocation);
   return Object.freeze({
     action_kind: original.action_kind,
     operation_digest: original.operation_digest,
@@ -70451,7 +71912,7 @@ async function deriveArchiveEnrichments(dependencies, authority, details) {
       } : {}
     }) });
   }
-  if (!commonTransitionBinding || request.value.request_digest !== transition.request_digest || request.value.intent_id !== transition.intent_id || transition.operation !== "gate" || payload.decision !== "waiver-requested" || request.value.kind !== "constitution-review" && request.value.kind !== "design-approval" || !("eligible_waivers" in request.value.context) || !request.value.context.eligible_waivers.some((eligible) => isDeepStrictEqual14(eligible.rule, payload.rule) && eligible.scope.operation === payload.operation)) {
+  if (!commonTransitionBinding || request.value.request_digest !== transition.request_digest || request.value.intent_id !== transition.intent_id || transition.operation !== "gate" || payload.decision !== "waiver-requested" || !isWaiverOriginRequest(request.value) || !("eligible_waivers" in request.value.context) || !request.value.context.eligible_waivers.some((eligible) => isDeepStrictEqual14(eligible.rule, payload.rule) && eligible.scope.operation === payload.operation)) {
     return Object.freeze({});
   }
   const scope3 = request.value.context.eligible_waivers.find((eligible) => isDeepStrictEqual14(eligible.rule, payload.rule) && eligible.scope.operation === payload.operation).scope;
@@ -70479,6 +71940,15 @@ async function computeAuthoritativeSemanticStatus(dependencies, authority) {
   return ok20(computeSemanticStatusSnapshot(status, {
     repository_identity_digest: authority.repository_identity_digest,
     ...state === void 0 ? {} : { state },
+    ...detailed.value.state_document_digest === void 0 ? {} : {
+      state_document_digest: detailed.value.state_document_digest
+    },
+    ...detailed.value.live_config_digest === void 0 ? {} : {
+      live_config_digest: detailed.value.live_config_digest
+    },
+    ...detailed.value.legacy_import_initialization !== true ? {} : {
+      legacy_import_initialization: true
+    },
     full_findings: fullFindings(detailed.value),
     ...archives,
     reopen_impacts: state === void 0 ? Object.freeze([]) : reopenImpacts(state, status)
@@ -70496,14 +71966,28 @@ function computeSemanticStatusSnapshot(status, enrichments) {
     if (status.revision !== state.revision || status.phase_instance !== state.phase_instance || status.step !== state.step || status.status !== state.status || status.attempt !== state.attempt || status.input_fingerprint !== state.input_fingerprint) {
       throw new TypeError("semantic status and durable state are not from the same canonical read");
     }
+    if (enrichments.state_document_digest === void 0) {
+      throw new TypeError("active semantic state requires its canonical document digest");
+    }
   } else if (status.state !== "missing") {
     throw new TypeError("active semantic status requires its authenticated durable state");
+  } else if (enrichments.state_document_digest !== void 0 || enrichments.legacy_import_initialization === true) {
+    throw new TypeError("missing semantic status cannot carry durable state identity");
   }
   const findings = enrichments.full_findings.map((finding) => Object.freeze(publicFindingV1Schema.parse(materializeJson(finding, "semantic review finding"))));
   const snapshot = {
     schema_version: "1",
     repository_identity_digest: repositoryIdentity,
     ...state === void 0 ? {} : { state: Object.freeze(state) },
+    ...enrichments.state_document_digest === void 0 ? {} : {
+      state_document_digest: parseSha256Digest(enrichments.state_document_digest)
+    },
+    ...enrichments.live_config_digest === void 0 ? {} : {
+      live_config_digest: parseSha256Digest(enrichments.live_config_digest)
+    },
+    ...enrichments.legacy_import_initialization !== true ? {} : {
+      legacy_import_initialization: true
+    },
     status: statusJson,
     full_findings: Object.freeze(findings),
     ...enrichments.pending_waiver_origin === void 0 ? {} : {
@@ -70686,7 +72170,7 @@ function channelTail(channel) {
   const bytes = channel.byteLength > CHANNEL_TAIL_BYTE_CAP ? channel.subarray(channel.byteLength - CHANNEL_TAIL_BYTE_CAP) : channel;
   return new TextDecoder("utf-8").decode(bytes);
 }
-async function writeAttemptRecord(input, attemptId, route, preflight2, error51, telemetry) {
+async function writeAttemptRecord(input, attemptId, route2, preflight2, error51, telemetry) {
   const writer = input.dependencies.projection_writer;
   if (writer === void 0 || error51 === void 0) return;
   await ensureAttemptDirectory(input.authority, input.phase_instance);
@@ -70709,11 +72193,11 @@ async function writeAttemptRecord(input, attemptId, route, preflight2, error51, 
     attempt_id: attemptId,
     task_id: input.authority.task_id,
     phase_instance: input.phase_instance,
-    adapter: route.adapter,
-    family: route.family,
-    model: route.model,
-    effort: route.effort,
-    ...route.provider === void 0 ? {} : { provider: route.provider },
+    adapter: route2.adapter,
+    family: route2.family,
+    model: route2.model,
+    effort: route2.effort,
+    ...route2.provider === void 0 ? {} : { provider: route2.provider },
     status: "failed",
     failure_stage: telemetry.failure_stage,
     started_at: telemetry.started_at,
@@ -70738,8 +72222,8 @@ function createDispatchCoordinator(input) {
     runner: input.dependencies.runner,
     environment: input.dependencies.environment
   });
-  return async (route, envelope, outputSchema) => {
-    const adapter2 = selectCliAdapter(input.host, route);
+  return async (route2, envelope, outputSchema) => {
+    const adapter2 = selectCliAdapter(input.host, route2);
     const attemptId = randomUUID3();
     const startedAt = /* @__PURE__ */ new Date();
     let preflight2;
@@ -70765,7 +72249,7 @@ function createDispatchCoordinator(input) {
         input.cancellation_source
       );
       failureStage = "invocation-build";
-      const invocation = await adapter2.buildInvocation(envelope, route, workspace, outputSchema);
+      const invocation = await adapter2.buildInvocation(envelope, route2, workspace, outputSchema);
       failureStage = "child-run";
       childResult = await runDispatchChild({
         ...invocation,
@@ -70786,7 +72270,7 @@ function createDispatchCoordinator(input) {
     } finally {
       await workspace?.dispose().catch(() => void 0);
       if (primaryError !== void 0) {
-        await writeAttemptRecord(input, attemptId, route, preflight2, primaryError, {
+        await writeAttemptRecord(input, attemptId, route2, preflight2, primaryError, {
           started_at: startedAt.toISOString(),
           duration_ms: Date.now() - startedAt.getTime(),
           failure_stage: failureStage,
@@ -71199,6 +72683,15 @@ function fingerprintMismatch(expected_digest, observed_digest) {
 function operationFor2(call) {
   switch (call.name) {
     case "archflow_state": {
+      if (call.input.operation !== void 0) {
+        return {
+          planning_restart: "planning-restart",
+          refresh_milestone_baseline: "refresh-milestone-baseline",
+          recover_milestone_authority: "recover-milestone-authority",
+          recover_approval_trigger_authority: "recover-approval-trigger-authority",
+          refresh_stale_baseline: "refresh-stale-baseline"
+        }[call.input.operation];
+      }
       const artifact = call.input.artifact;
       if (artifact === void 0) return "record-state-boundary";
       switch (artifact.artifact_kind) {
@@ -72302,7 +73795,7 @@ function buildAdjudicationEnvelope(value) {
 }
 
 // src/review/pinned-context.ts
-import { readFile as readFile12 } from "node:fs/promises";
+import { readFile as readFile13 } from "node:fs/promises";
 import { join as join13, posix } from "node:path";
 
 // src/contracts/utf8.ts
@@ -72497,7 +73990,7 @@ async function assembleUpstreamContext(input) {
           context: input.authority.context
         });
         if (!target2.ok) return target2;
-        const bytes = new Uint8Array(await readFile12(target2.value.absolute));
+        const bytes = new Uint8Array(await readFile13(target2.value.absolute));
         const reference = imported.value.staged_payload_refs.find((item) => item.legacy_path === mapping.legacy_path);
         if (reference === void 0 || sha256Bytes(bytes) !== reference.digest) return fail23(input.state.phase_instance, "imported-reference-changed");
         entries.push(pinnedContextEntry("imported-reference", relativePath, bytes));
@@ -72613,7 +74106,7 @@ async function verificationTranscriptEvidence(runner, authority, state, subject)
   }
   let bytes;
   try {
-    bytes = new Uint8Array(await readFile12(resolved.value.absolute));
+    bytes = new Uint8Array(await readFile13(resolved.value.absolute));
   } catch {
     return [unavailableContextEntry(
       "verification-transcript",
@@ -72750,7 +74243,7 @@ async function priorTriageEvidence(dependencies, state) {
 async function conventionsEvidence(runner) {
   let bytes;
   try {
-    bytes = new Uint8Array(await readFile12(join13(runner.location.worktreeRoot, "CLAUDE.md")));
+    bytes = new Uint8Array(await readFile13(join13(runner.location.worktreeRoot, "CLAUDE.md")));
   } catch {
     return Object.freeze([]);
   }
@@ -72854,9 +74347,25 @@ async function runCounterReview(dependencies, input) {
   if (input.producer_family !== input.envelope.subject.producer_family || input.envelope.subject.rubric_digest !== envelopeRubricDigest) {
     throw new TypeError("counter-review subject is not derived from the server-owned request");
   }
-  const routeFor = (role) => {
-    const substitute = input.call.input.route_override?.[role];
-    return substitute === void 0 ? resolveDispatchRoute(input.config, input.phase_kind, role) : routeFromConfiguredRoute(substitute);
+  const selectAndDispatch = async (role, dispatch) => {
+    let selected;
+    try {
+      selected = selectDispatchRouteCandidate(
+        input.config,
+        input.phase_kind,
+        role,
+        input.call.input.invocation_routes?.[role],
+        input.call.input.route_override?.[role]
+      );
+      const selection = validateSelectedDispatchRoute(selected);
+      return Object.freeze({ selection, result: await dispatch(selection.route) });
+    } catch (error51) {
+      try {
+        await dependencies.observe_failure?.(role, selected, error51);
+      } catch {
+      }
+      throw error51;
+    }
   };
   const overrideRecordFor = (role) => {
     const declared = input.call.input.route_override;
@@ -72864,10 +74373,13 @@ async function runCounterReview(dependencies, input) {
     const pinned = configuredRoute(input.config, input.phase_kind, role);
     return Object.freeze({
       reason: declared.reason,
-      ...pinned === void 0 ? {} : { pinned_model: pinned.model, pinned_effort: pinned.effort }
+      ...pinned === void 0 ? {} : {
+        pinned_model: pinned.model,
+        pinned_effort: pinned.effort,
+        ...pinned.provider === void 0 ? {} : { pinned_provider: pinned.provider }
+      }
     });
   };
-  const route = routeFor("counter-reviewer");
   const reviewOverride = overrideRecordFor("counter-reviewer");
   const subject = Object.freeze({
     ...input.envelope.subject,
@@ -72875,7 +74387,9 @@ async function runCounterReview(dependencies, input) {
   });
   const envelope = buildReviewEnvelopeWithCap({ ...input.envelope, subject });
   const serialize = dependencies.serialize_dispatch ?? serializeDispatch;
-  const dispatched = await serialize(() => dependencies.dispatch(route, envelope, review_schema_default));
+  const reviewDispatch = await selectAndDispatch("counter-reviewer", (route3) => serialize(() => dependencies.dispatch(route3, envelope, review_schema_default)));
+  const route2 = reviewDispatch.selection.route;
+  const dispatched = reviewDispatch.result;
   const currentProjection = await dependencies.reobserve_projection_digest();
   if (!currentProjection.ok) return currentProjection;
   if (currentProjection.value !== input.projection_digest) {
@@ -72890,9 +74404,10 @@ async function runCounterReview(dependencies, input) {
   }
   const observed = mintReviewObservation({
     subject,
-    adapter: route.adapter,
+    adapter: route2.adapter,
     cli_version: dispatched.cli_version,
-    route,
+    route: route2,
+    route_source: reviewDispatch.selection.source,
     envelope_input_digest: envelope.digest,
     extracted_output_bytes: dispatched.extracted_output_bytes,
     ...reviewOverride === void 0 ? {} : { route_override: reviewOverride }
@@ -72908,7 +74423,6 @@ async function runCounterReview(dependencies, input) {
   if (plan !== void 0) {
     const derivedSet = deriveEvidenceSetFromCounter(observed.evidence);
     const setDigest = derivedSet.current_evidence_set.set_digest;
-    const constitutionRoute = routeFor("adjudicator");
     const constitutionOverride = overrideRecordFor("adjudicator");
     const constitutionSubject = Object.freeze({
       task_id: input.envelope.subject.task_id,
@@ -72931,13 +74445,16 @@ async function runCounterReview(dependencies, input) {
       workspace: plan.workspace,
       subject: constitutionSubject
     });
-    const constitutionDispatched = await serialize(() => plan.dispatch(constitutionRoute, constitutionEnvelope, adjudication_schema_default));
+    const constitutionDispatch = await selectAndDispatch("adjudicator", (route3) => serialize(() => plan.dispatch(route3, constitutionEnvelope, adjudication_schema_default)));
+    const constitutionRoute = constitutionDispatch.selection.route;
+    const constitutionDispatched = constitutionDispatch.result;
     try {
       const observedConstitution = mintAdjudicationObservation({
         subject: constitutionSubject,
         adapter: constitutionRoute.adapter,
         cli_version: constitutionDispatched.cli_version,
         route: constitutionRoute,
+        route_source: constitutionDispatch.selection.source,
         envelope_input_digest: constitutionEnvelope.digest,
         extracted_output_bytes: constitutionDispatched.extracted_output_bytes,
         ...constitutionOverride === void 0 ? {} : { route_override: constitutionOverride }
@@ -73410,6 +74927,13 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
     const result = await runCounterReview({
       transaction: services.dependencies,
       dispatch: coordinator,
+      observe_failure: createDispatchFailureObserver({
+        authority: services.authority,
+        dependencies: services.dependencies,
+        phase_instance: state.value.phase_instance,
+        attempt: state.value.attempt,
+        observed_at_revision: state.value.revision
+      }),
       ...dispatchAlreadySerialized ? { serialize_dispatch: async (operation) => operation() } : {},
       prepare_evidence: (evidence, measuredAtRevision) => prepareDispatchEvidence(
         services,
@@ -73818,7 +75342,16 @@ async function settleApprovalRules(services, current, prospective, produce, reta
         ...config2.parsed.max_attempts === void 0 ? {} : { max_attempts: config2.parsed.max_attempts }
       }
     );
-    if (assessment.next !== "advance") return void 0;
+    if (assessment.next !== "advance") {
+      if (assessment.next !== "adjudication-gate") return void 0;
+      const pending = pendingAdjudicationGates(
+        prospective,
+        constitution.value,
+        retained,
+        authenticated
+      );
+      if (pending[0]?.kind !== "constitution-review") return void 0;
+    }
     const ruleContext = approvalRuleContext(current, produce, config2.parsed);
     const conclusion = evaluateApprovalRules(
       ruleContext.config,
@@ -73849,10 +75382,11 @@ async function handleState(call, context2) {
     const restartInput = call.input.operation === "planning_restart" ? call.input : void 0;
     const refreshInput = call.input.operation === "refresh_milestone_baseline" ? call.input : void 0;
     const recoveryInput = call.input.operation === "recover_milestone_authority" ? call.input : void 0;
+    const triggerRecoveryInput = call.input.operation === "recover_approval_trigger_authority" ? call.input : void 0;
     const staleBaselineInput = call.input.operation === "refresh_stale_baseline" ? call.input : void 0;
-    const artifact = restartInput === void 0 && refreshInput === void 0 && recoveryInput === void 0 && staleBaselineInput === void 0 ? call.input.artifact : void 0;
+    const artifact = restartInput === void 0 && refreshInput === void 0 && recoveryInput === void 0 && triggerRecoveryInput === void 0 && staleBaselineInput === void 0 ? call.input.artifact : void 0;
     if (services.state === void 0) {
-      if (restartInput !== void 0 || refreshInput !== void 0 || recoveryInput !== void 0 || staleBaselineInput !== void 0) {
+      if (restartInput !== void 0 || refreshInput !== void 0 || recoveryInput !== void 0 || triggerRecoveryInput !== void 0 || staleBaselineInput !== void 0) {
         return fail26(createProjectError("STATE_MISSING", { phase_instance: call.input.phase_instance }));
       }
       const initialized = await runStateInitialization(services.dependencies, {
@@ -74023,6 +75557,49 @@ async function handleState(call, context2) {
             value: Object.freeze({ expectation: expectation2, result: result2, next_state: planned.value })
           });
         }
+        if (triggerRecoveryInput !== void 0) {
+          const computed = await computeTaskStatus(services.dependencies, services.authority);
+          if (!computed.ok || computed.value.next_action.code !== "recover-approval-trigger-authority" || computed.value.revision !== current.value.revision || triggerRecoveryInput.phase_instance !== current.value.phase_instance || triggerRecoveryInput.step !== current.value.step || triggerRecoveryInput.status !== current.value.status) {
+            return fail26(createProjectError("TRANSITION_INVALID", {
+              phase_instance: current.value.phase_instance,
+              from: `${current.value.step}-${current.value.status}`,
+              to: "approval-trigger-authority-recovery"
+            }));
+          }
+          const planned = planApprovalTriggerAuthorityRecovery({
+            current: current.value,
+            recomputed_input_fingerprint: identified.input_fingerprint
+          });
+          if (!planned.ok) return planned;
+          const revision2 = parseSafeInteger(current.value.revision + 1);
+          const success4 = Object.freeze({
+            path: parseTaskPathClaim("state.json"),
+            revision: revision2,
+            status: "running",
+            request_digest: identified.request_digest
+          });
+          const expectation2 = createInternalResultExpectation({
+            schema_version: "1",
+            tool: "archflow_state",
+            task_id: services.authority.task_id,
+            intent_id: triggerRecoveryInput.intent_id,
+            input_fingerprint: identified.input_fingerprint,
+            request_digest: identified.request_digest,
+            result_id: stateResultId(triggerRecoveryInput.intent_id),
+            resulting_revision: revision2,
+            success: success4
+          });
+          const result2 = validateProjectResultStructure(identifiedCall, {
+            schema_version: "1",
+            ok: true,
+            value: success4
+          });
+          return Object.freeze({
+            schema_version: "1",
+            ok: true,
+            value: Object.freeze({ expectation: expectation2, result: result2, next_state: planned.value })
+          });
+        }
         if (refreshInput !== void 0) {
           const state = current.value;
           const decoded = decodePhaseInstance(state.phase_instance);
@@ -74042,7 +75619,26 @@ async function handleState(call, context2) {
           const policy = authenticateRuleAcceptancePolicy(state, constitution.value);
           const produce = await loadCurrentProduceSubject(services.dependencies, state);
           if (!produce.ok) return produce;
-          const prior = policy === void 0 ? void 0 : acceptedNoWaitSettlement(
+          const refreshApprovals = [];
+          for (const approval of state.approvals) {
+            if (approval.subject_digest !== produce.value.artifact_digest) continue;
+            const loaded = await loadAuthenticatedGateApproval(
+              services.dependencies,
+              services.authority,
+              approval
+            );
+            if (!loaded.ok) return loaded;
+            if (authenticatedApprovalIsEligibleAfterLatestRestart(state, loaded.value)) {
+              refreshApprovals.push(loaded.value);
+            }
+          }
+          const humanApproved = matchingOrdinaryApproval(
+            state,
+            refreshApprovals,
+            produce.value.artifact_digest,
+            state.phase_instance
+          ) !== void 0;
+          const prior = policy === void 0 || humanApproved ? void 0 : acceptedNoWaitSettlement(
             policy,
             state,
             produce.value.artifact_digest,
@@ -74423,6 +76019,14 @@ async function handleState(call, context2) {
             if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
             authenticatedGateApprovals2.push(loaded.value);
           }
+          if (completionSubjectDigest !== void 0 && matchingOrdinaryApproval(
+            current.value,
+            authenticatedGateApprovals2,
+            completionSubjectDigest,
+            current.value.phase_instance
+          ) !== void 0) {
+            authenticatedRuleAcceptance = void 0;
+          }
           if (designExit && currentProduce?.artifact.artifact_kind === "document") {
             for (const authenticated of authenticatedGateApprovals2) {
               if (authenticated.request.kind !== "design-approval") continue;
@@ -74485,6 +76089,14 @@ async function handleState(call, context2) {
             if (!loaded.ok) return loaded;
             if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
             authenticatedGateApprovals2.push(loaded.value);
+          }
+          if (completionSubjectDigest !== void 0 && matchingOrdinaryApproval(
+            current.value,
+            authenticatedGateApprovals2,
+            completionSubjectDigest,
+            current.value.phase_instance
+          ) !== void 0) {
+            authenticatedRuleAcceptance = void 0;
           }
           const source = currentProduce.artifact;
           if (source.artifact_kind === "implementation-output") {

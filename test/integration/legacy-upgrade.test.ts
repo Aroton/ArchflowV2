@@ -26,6 +26,7 @@ import { ensurePayloadParent, ensureResultDirectory } from "../../src/state/layo
 import { createProductionServices } from "../../src/state/production.js";
 import { installSnapshot } from "../../src/state/snapshots.js";
 import { runStateInitialization } from "../../src/state/initialization.js";
+import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
 import { resolveInterfaceGateDecision } from "../helpers/resolve-interface-gate.js";
 
 const TIMEOUT = 30_000;
@@ -252,7 +253,10 @@ describe("bundled legacy upgrade workflow", () => {
           artifact_kind: "document", phase_instance: "design", step: "produce", document_path: "design.md",
         });
       }
-      const context = { artifact_kind: index === 0 ? "prd" as const : "design" as const };
+      const context = {
+        artifact_kind: index === 0 ? "prd" as const : "design" as const,
+        ...ordinaryApprovalFacts(index === 0 ? "prd" : "design", subject),
+      };
       const gateInput = {
         authority: services.value.authority, expected_revision: services.value.state.value.revision,
         intent_id: parsePathSafeId(`legacy-approve-${index}`), request_digest: sha256Bytes(new TextEncoder().encode(`approve-request-${index}`)),

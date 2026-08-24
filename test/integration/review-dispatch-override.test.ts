@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import type { ServerAttestedReview } from "../../src/contracts/review.js";
+import type { WorkflowInvocationV1 } from "../../src/contracts/semantic-workflow.js";
 import { loadRetainedEvidence } from "../../src/state/evidence-results.js";
 import { readTaskState } from "../../src/state/read.js";
 import { parseSemanticSubstepIntentId } from "../../src/state/semantic-actions.js";
@@ -71,7 +72,13 @@ type ReviewProvenance = Readonly<{
   model_family: string;
   model: string;
   effort: string;
-  route_override?: Readonly<{ reason: string; pinned_model?: string; pinned_effort?: string }>;
+  adapter?: string;
+  provider?: string;
+  route_source?: Readonly<{
+    provenance: string;
+    displaced?: Readonly<{ source: string; model: string; effort: string; provider?: string }>;
+  }>;
+  route_override?: Readonly<{ reason: string; pinned_model?: string; pinned_effort?: string; pinned_provider?: string }>;
 }>;
 
 async function statusProvenance(workspace: TaskWorkspace): Promise<ReviewProvenance> {
@@ -98,10 +105,10 @@ function markdownFilesUnder(root: string): readonly string[] {
 async function reachReviewOffer(
   workspace: TaskWorkspace,
   h: SemanticJourneyHarness,
+  invocation: WorkflowInvocationV1 = { skill: "archflow-prd", intent: "resume" },
 ): Promise<ReturnType<SemanticJourneyHarness["status"]>> {
   writeFileSync(join(workspace.services.authority.task_root, "ask.md"), "Describe a small review-dispatch journey.\n");
   writeFileSync(join(workspace.services.authority.task_root, "prd.md"), "# Review dispatch\n\nThe client authors this document.\n");
-  const invocation = { skill: "archflow-prd", intent: "resume" } as const;
   const offered = await h.status(invocation);
   expect(offered.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
   const produced = await h.apply(invocation, offered, { kind: "work-result", outcome: "succeeded" });
@@ -193,6 +200,40 @@ approval_rules:
 }
 
 describe("reviewer route substitution through the public apply path", { timeout: TIMEOUT }, () => {
+  it("dispatches and attests an invocation-declared route without minting human override trust", async () => {
+    const workspace = await createTaskWorkspace({
+      taskId: "review-invocation-route", label: "review-invocation-route", configBytes: prdApprovalConfig(),
+    });
+    workspaces.push(workspace);
+    restorers.push(installSemanticReviewStub(workspace.root, [[]]));
+    const h = semanticJourneyHarness(workspace);
+    const invocation = {
+      skill: "archflow-prd",
+      intent: "resume",
+      review_routes: { "counter-reviewer": { model: "gpt-5.6-invocation", effort: "high" } },
+    } as const;
+    const atReview = await reachReviewOffer(workspace, h, invocation);
+
+    const reviewed = await h.apply(invocation, atReview);
+    expect(reviewed.ok, JSON.stringify(reviewed)).toBe(true);
+    if (!reviewed.ok) return;
+    const evidence = await retainedReviewEvidence(workspace, await freshState(workspace));
+    expect(evidence).toMatchObject({
+      model: "gpt-5.6-invocation",
+      effort: "high",
+      route_source: {
+        provenance: "invocation-declared",
+        displaced: { source: "configured", model: CONFIGURED_MODEL, effort: CONFIGURED_EFFORT },
+      },
+    });
+    expect(evidence.route_override).toBeUndefined();
+    expect(await statusProvenance(workspace)).toMatchObject({
+      adapter: "codex-cli",
+      model: "gpt-5.6-invocation",
+      route_source: { provenance: "invocation-declared" },
+    });
+  });
+
   it("dispatches the substituted route from a review-dispatch submission and records the override with its human reason", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "review-dispatch-clean", label: "review-dispatch-clean", configBytes: prdApprovalConfig(),
@@ -220,6 +261,14 @@ describe("reviewer route substitution through the public apply path", { timeout:
       pinned_model: CONFIGURED_MODEL,
       pinned_effort: CONFIGURED_EFFORT,
     });
+    expect(evidence.route_source).toEqual({
+      provenance: "route-override",
+      displaced: {
+        source: "configured",
+        model: CONFIGURED_MODEL,
+        effort: CONFIGURED_EFFORT,
+      },
+    });
     // The rendered retained evidence keeps the deviation legible for the human at the gate.
     const rendered = markdownFilesUnder(join(workspace.root, ".archflow", "runtime"))
       .map((path) => readFileSync(path, "utf8"))
@@ -230,6 +279,11 @@ describe("reviewer route substitution through the public apply path", { timeout:
     // Status provenance carries the same record wherever the evidence is presented.
     expect(await statusProvenance(workspace)).toMatchObject({
       model: SUBSTITUTION["counter-reviewer"].model,
+      adapter: "codex-cli",
+      route_source: {
+        provenance: "route-override",
+        displaced: { source: "configured", model: CONFIGURED_MODEL },
+      },
       route_override: { reason: SUBSTITUTION.reason, pinned_model: CONFIGURED_MODEL },
     });
   });

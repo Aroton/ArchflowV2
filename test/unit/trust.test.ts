@@ -55,7 +55,7 @@ describe("invocation-scoped observation trust", () => {
   it("hashes exact private output bytes, deep-freezes evidence, and binds attestation", async () => {
     const raw = await rawReview();
     const bytes = new TextEncoder().encode(JSON.stringify(raw));
-    const binding: ObservationBindingByKind["review"] = { kind: "review", task_id: TASK, phase_instance: phase, role: "counter-review", subject_digest: parseSha256Digest(raw.subject_digest), input_fingerprint: parseSha256Digest(raw.input_fingerprint), invocation_id: "invocation-1", envelope_input_digest: digest("d"), result_id: "result-1", adapter: "codex-cli", cli_version: "1.0.0", family: "codex", model: "gpt-5", effort: "high", rubric_digest: parseSha256Digest(raw.rubric_digest), producer_family: "claude" };
+    const binding: ObservationBindingByKind["review"] = { kind: "review", task_id: TASK, phase_instance: phase, role: "counter-review", subject_digest: parseSha256Digest(raw.subject_digest), input_fingerprint: parseSha256Digest(raw.input_fingerprint), invocation_id: "invocation-1", envelope_input_digest: digest("d"), result_id: "result-1", adapter: "codex-cli", cli_version: "1.0.0", family: "codex", model: "gpt-5", effort: "high", route_source: { provenance: "configured" }, rubric_digest: parseSha256Digest(raw.rubric_digest), producer_family: "claude" };
     const capability = createTestObservationCapability<"review">(binding);
     (binding as { model: string }).model = "changed-after-mint";
     const result = observationSource.observeReview(capability, bytes);
@@ -74,7 +74,7 @@ describe("invocation-scoped observation trust", () => {
 
   it("enforces the fixed adapter-family relation", async () => {
     const raw = await rawReview();
-    const capability = createTestObservationCapability<"review">({ kind: "review", task_id: TASK, phase_instance: phase, role: "counter-review", subject_digest: parseSha256Digest(raw.subject_digest), input_fingerprint: parseSha256Digest(raw.input_fingerprint), invocation_id: "invocation-1", envelope_input_digest: digest("d"), result_id: "result-1", adapter: "claude-cli", cli_version: "1.0.0", family: "codex", model: "gpt-5", effort: "high", rubric_digest: parseSha256Digest(raw.rubric_digest), producer_family: "claude" });
+    const capability = createTestObservationCapability<"review">({ kind: "review", task_id: TASK, phase_instance: phase, role: "counter-review", subject_digest: parseSha256Digest(raw.subject_digest), input_fingerprint: parseSha256Digest(raw.input_fingerprint), invocation_id: "invocation-1", envelope_input_digest: digest("d"), result_id: "result-1", adapter: "claude-cli", cli_version: "1.0.0", family: "codex", model: "gpt-5", effort: "high", route_source: { provenance: "configured" }, rubric_digest: parseSha256Digest(raw.rubric_digest), producer_family: "claude" });
     expect(() => observationSource.observeReview(capability, new TextEncoder().encode(JSON.stringify(raw)))).toThrow(/adapter and model family/);
   });
 });
@@ -98,7 +98,7 @@ describe("identity-backed authority", () => {
 
   it("correlates every duplicated server provenance field", async () => {
     const raw = await rawReview();
-    const capability = createTestObservationCapability<"review">({ kind: "review", task_id: TASK, phase_instance: phase, role: "counter-review", subject_digest: parseSha256Digest(raw.subject_digest), input_fingerprint: parseSha256Digest(raw.input_fingerprint), invocation_id: "invocation-1", envelope_input_digest: digest("d"), result_id: "result-1", adapter: "codex-cli", cli_version: "1.0.0", family: "codex", model: "gpt-5", effort: "high", rubric_digest: parseSha256Digest(raw.rubric_digest), producer_family: "claude" });
+    const capability = createTestObservationCapability<"review">({ kind: "review", task_id: TASK, phase_instance: phase, role: "counter-review", subject_digest: parseSha256Digest(raw.subject_digest), input_fingerprint: parseSha256Digest(raw.input_fingerprint), invocation_id: "invocation-1", envelope_input_digest: digest("d"), result_id: "result-1", adapter: "codex-cli", cli_version: "1.0.0", family: "codex", model: "gpt-5", effort: "high", route_source: { provenance: "configured" }, rubric_digest: parseSha256Digest(raw.rubric_digest), producer_family: "claude" });
     const evidence = observationSource.observeReview(capability, new TextEncoder().encode(JSON.stringify(raw))).evidence;
     const verified = createTestVerifiedReferencedEvidence<"review", "server-attested">("review", { evidence_digest: digest("9"), evidence });
     const authority = { kind: "server", invocation_id: evidence.invocation_id, result_id: evidence.result_id, receipt_id: "receipt-1", state_revision: 1, envelope_input_digest: evidence.envelope_input_digest, observed_output_digest: evidence.observed_output_digest, result_digest: digest("7") } as const;

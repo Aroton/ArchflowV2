@@ -9,6 +9,7 @@ import { parsePathSafeId } from "../contracts/evidence.js";
 import type { WaiverOriginRef } from "../contracts/gates.js";
 import { gateDecisionClaim, gateRequestClaim, resolveTaskPath } from "../repository/paths.js";
 import type { ProductionServices } from "./production.js";
+import { isWaiverOriginRequest } from "./waiver-origin.js";
 
 const fail = <T>(issue_code: string): ProjectResult<T> => Object.freeze({
   schema_version: "1", ok: false, error: createProjectError("CONTRACT_INVALID", { issue_code }),
@@ -40,7 +41,7 @@ export async function derivePendingWaiverRequest(
     if (
       !validateDurableSemantics({ gate_request: { ...request, value: requestValue }, gate_decision: { ...decision, value: decisionValue } }).ok ||
       requestValue.gate_id !== gateId || decisionValue.gate_id !== gateId ||
-      (requestValue.kind !== "constitution-review" && requestValue.kind !== "design-approval") ||
+      !isWaiverOriginRequest(requestValue) ||
       payload?.decision !== "waiver-requested" || !("eligible_waivers" in requestValue.context)
     ) return fail("pending-waiver-archive-invalid");
     const eligible = requestValue.context.eligible_waivers.find((item) =>

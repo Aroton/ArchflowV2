@@ -4,7 +4,7 @@ import { taskStateV1Schema, type RuleSettlementV1, type TaskStateV1 } from "../.
 import { parsePathSafeId, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePhaseInstanceId, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
-import { legalRunStepStatus, planMilestoneRecovery, planPlanningRestart, planStateTransition } from "../../src/state/transitions.js";
+import { legalRunStepStatus, planApprovalTriggerAuthorityRecovery, planMilestoneRecovery, planPlanningRestart, planStateTransition } from "../../src/state/transitions.js";
 
 const D = (value: string) => parseSha256Digest(value.repeat(64));
 const phase = (kind: "phase-design" | "phase-impl", number: number) => encodePhaseInstance({ kind, phase: parsePositiveSafePhaseNumber(number) });
@@ -40,6 +40,54 @@ function state(overrides: Partial<TaskStateV1> = {}): TaskStateV1 {
 }
 
 describe("planStateTransition", () => {
+  it("re-enters unchanged production once when a legacy fixed point lacks approval-trigger authority", () => {
+    const currentPhase = phase("phase-design", 2);
+    const upstreamPhase = encodePhaseInstance({ kind: "design" });
+    const upstream = {
+      phase_instance: upstreamPhase, step: "produce" as const, result_digest: D("7"),
+      result_id: parseSafeId("upstream-produce"), input_fingerprint: D("7"),
+    };
+    const produce = {
+      phase_instance: currentPhase, step: "produce" as const, result_digest: D("8"),
+      result_id: parseSafeId("current-produce"), input_fingerprint: D("8"),
+    };
+    const review = {
+      phase_instance: currentPhase, step: "counter_review" as const, result_digest: D("9"),
+      result_id: parseSafeId("current-review"), input_fingerprint: D("8"),
+    };
+    const triage = {
+      phase_instance: currentPhase, step: "triage" as const, result_digest: D("a"),
+      result_id: parseSafeId("current-triage"), input_fingerprint: D("8"),
+    };
+    const approval = {
+      gate_id: parsePathSafeId("prior-approval"), gate_kind: "design-approval" as const,
+      subject_digest: D("7"), decision_digest: D("c"), resolved_at_revision: parseSafeInteger(3),
+    };
+    const waiver = {
+      gate_id: parsePathSafeId("prior-waiver"), rule_id: parseSafeId("Rule-1"), rule_version: parseSafeInteger(1),
+      scope: { operation: "review-trigger" as const, boundary: "subject" as const },
+      subject_digest: D("7"), granted: true, expires: "task-complete" as const,
+      granted_at_revision: parseSafeInteger(3),
+    };
+    const current = state({
+      phase_instance: currentPhase, step: "triage", status: "succeeded", attempt: parseSafeInteger(3),
+      authoritative_results: [upstream, produce, review, triage], approvals: [approval], waivers: [waiver],
+    });
+
+    const result = planApprovalTriggerAuthorityRecovery({ current, recomputed_input_fingerprint: D("8") });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toMatchObject({
+      phase_instance: currentPhase, step: "produce", status: "running", attempt: 1,
+      input_fingerprint: D("8"), approvals: [approval], waivers: [waiver],
+    });
+    expect(result.value.authoritative_results).toEqual([upstream, produce]);
+    expect(planApprovalTriggerAuthorityRecovery({
+      current: taskStateV1Schema.parse({ ...result.value, revision: 5 }),
+      recomputed_input_fingerprint: D("8"),
+    })).toMatchObject({ ok: false, error: { code: "TRANSITION_INVALID" } });
+  });
+
   it("recovers missing milestone authority at the same position and archives the retired graph", () => {
     const current = state({
       step: "triage", status: "succeeded", attempt: parseSafeInteger(3),

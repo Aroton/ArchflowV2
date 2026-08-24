@@ -5,9 +5,11 @@ import type { FormatsPlugin } from "ajv-formats";
 import { describe, expect, it } from "vitest";
 
 import { parseToolCall, validateProjectFailureStructure, validateProjectResultStructure } from "../../src/contracts/mcp-tools.js";
+import { parseSha256Digest } from "../../src/contracts/evidence.js";
 import { SEMANTIC_TOOL_NAMES, TOOL_NAMES, type ToolName } from "../../src/contracts/tool-names.js";
 import { ADVERTISED_TOOL_CATALOGUE } from "../../src/mcp/tools.js";
 import { createJsonSchemaValidator } from "../helpers/json-schema.js";
+import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
 
 interface CorpusCase {
   readonly label: string;
@@ -161,7 +163,10 @@ async function corpus(): Promise<readonly CorpusCase[]> {
 function materialize(entry: CorpusCase): MaterializedCase {
   const longPath = `${"é".repeat(600)}.md`;
   const nfdPath = "re\u0301sume\u0301.md";
-  const artifactGateCall = gateCall("artifact-approval", { artifact_kind: "phase-implementation" });
+  const artifactGateCall = gateCall("artifact-approval", {
+    artifact_kind: "phase-implementation",
+    ...ordinaryApprovalFacts("phase-impl", parseSha256Digest(D("b"))),
+  });
   const artifactGateResult = gateResult("artifact-approval", { decision: "approve", reason: "Approved" });
   switch (entry.materialization) {
     case "valid-state-input": return { value: stateCall() };
@@ -183,8 +188,8 @@ function materialize(entry: CorpusCase): MaterializedCase {
     case "constitution-pass-consistency": return { value: gateCall("constitution-review", { ...constitutionContext(), constitution: "pass" }) };
     case "attempts-exhausted": return { value: gateCall("attempts-exhausted", { step: "produce", attempts: 1, maximum_attempts: 2 }) };
     case "material-drift-order": return { value: gateCall("material-drift", { affected_upstream: { kind: "architecture", digest: D("4") }, drift: "material", affected_claim_ids: ["z", "a"] }) };
-    case "commit-artifact-order": return { value: gateCall("commit-authorization", { target_ref: "HEAD", baseline_commit: "1".repeat(40), commit_message: "ArchFlow: Implement task-1 phase 3", paths: ["tracked.txt"], diff_digest: D("4"), current_artifact_digests: [D("b"), D("a")], parent_document_digests: [D("c")] }) };
-    case "commit-parent-order": return { value: gateCall("commit-authorization", { target_ref: "HEAD", baseline_commit: "1".repeat(40), commit_message: "ArchFlow: Implement task-1 phase 3", paths: ["tracked.txt"], diff_digest: D("4"), current_artifact_digests: [D("a")], parent_document_digests: [D("c"), D("b")] }) };
+    case "commit-artifact-order": return { value: gateCall("commit-authorization", { ...ordinaryApprovalFacts("phase-impl", parseSha256Digest(D("b"))), target_ref: "HEAD", baseline_commit: "1".repeat(40), commit_message: "ArchFlow: Implement task-1 phase 3", paths: ["tracked.txt"], diff_digest: D("4"), current_artifact_digests: [D("b"), D("a")], parent_document_digests: [D("c")] }) };
+    case "commit-parent-order": return { value: gateCall("commit-authorization", { ...ordinaryApprovalFacts("phase-impl", parseSha256Digest(D("b"))), target_ref: "HEAD", baseline_commit: "1".repeat(40), commit_message: "ArchFlow: Implement task-1 phase 3", paths: ["tracked.txt"], diff_digest: D("4"), current_artifact_digests: [D("a")], parent_document_digests: [D("c"), D("b")] }) };
     case "valid-state-success": return { call: stateCall(), value: result({ path: "phases/state.json", revision: 1, status: "running" }) };
     case "valid-counter-success": return { call: counterCall(), value: result({ path: "reviews/counter.md", verdict: "pass", blocking_count: 0, constitution: { status: "not-run", reason: "no-active-constitution-rules" }, revision: 1 }) };
     case "valid-gate-success": return { call: artifactGateCall, value: artifactGateResult };

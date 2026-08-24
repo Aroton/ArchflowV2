@@ -19,6 +19,7 @@ import { parseImplementationOutput } from "../../src/contracts/durable-implement
 import type { OutputEntry } from "../../src/contracts/durable-primitives.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import type { GateContext } from "../../src/contracts/gates.js";
+import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
 import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { parseRepositoryPathClaim, parseTaskPathClaim } from "../../src/contracts/path-claims.js";
@@ -117,6 +118,7 @@ describe("implementation-output builder", () => {
       constitution: "pass",
       policy_findings: [],
       eligible_waivers: [],
+      approval_trigger: ordinaryApprovalFacts("design").approval_trigger,
       target_ref: "refs/heads/main",
       baseline_commit: baseline,
       commit_message: "ArchFlow: Approve design-commit-task design",
@@ -412,6 +414,7 @@ describe("implementation-output builder", () => {
       byte_count: 20,
     });
     const approvalContext: GateContext<"commit-authorization"> = {
+      ...ordinaryApprovalFacts("phase-impl", parseSha256Digest("6".repeat(64))),
       target_ref: "refs/heads/main",
       baseline_commit: baseCommit,
       commit_message: "authorized output",

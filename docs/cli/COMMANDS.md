@@ -1,8 +1,8 @@
 # cli/COMMANDS
 
-**Explored:** 2026-08-21 · **Commit:** `869c189` · **Covers:** `src/local/`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
+**Explored:** 2026-08-24 · **Commit:** `6bccdf9` · **Covers:** `src/local/`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
 
-`archflow-local` is the agent's local adapter surface: repository bootstrap, the legacy-upgrade adapter, bounded diagnostics, and a read-only classification of where a task stands when the MCP server is unavailable. It is deliberately *not* the authority — with one narrow exception (the staged legacy import and its atomic adoption), it derives and verifies rather than writes.
+`archflow-local` is the local adapter surface: repository bootstrap, the legacy-upgrade adapter, bounded diagnostics, a degraded human classifier, and the versioned read-only automation observation used by external controllers. It is deliberately *not* the authority — with one narrow exception (the staged legacy import and its atomic adoption), it derives and verifies rather than writes.
 
 Every workflow action itself is composed server-side. PRD, design, phase design, phase implementation, status reporting, and the post-adoption half of a legacy upgrade run through `archflow_status` and `archflow_apply`; the semantic action planner calls the same transport-neutral request composer (`src/state/request-composition.ts`) that once backed a local request-building command, so the CLI and the live MCP surface never maintained parallel request builders. Hand-assembling request fields was measured as the dominant failure mode — in a full PRD loop, 8 of 10 requests were mechanical transcription — and the inversion removes that door entirely: the caller supplies only judgment, the server derives everything mechanical from durable authority. Git stays client-owned; the semantic view returns the exact authorized commit facts and the client stages and commits them itself.
 
@@ -15,8 +15,8 @@ archflow-local <command> [--task <task>] [--input <json-file>]
 ```
 
 - Payload commands read JSON from `--input <file>`, or stdin when `--input` is omitted. If stdin is a TTY and no `--input` was given, the command fails immediately rather than hanging.
-- Input-free commands (`manual-status`, `init`, `clean`, and `upgrade adopt`) never read stdin at all.
-- Output is always canonical JSON on stdout. **Failures exit nonzero**: any result carrying `{"ok": false, ...}` also exits 1, so shell-level checks and the JSON agree; the JSON body remains the authority for structured details.
+- Input-free commands (`automation-status`, `manual-status`, `init`, `clean`, and `upgrade adopt`) never read stdin at all.
+- Output is always canonical JSON on stdout. **Failures exit nonzero** and now include thrown argument/handler failures as one structured `{"ok": false, ...}` envelope on stdout plus a concise stderr reason. A classified `automation-status` document—including `blocked`—is successful and exits zero.
 - `--help` is generated from the same command table that drives dispatch (`LOCAL_COMMAND_CONTRACTS` in `src/local/commands.ts`), so help can't drift from behavior.
 
 ## The command surface
@@ -36,7 +36,10 @@ Initialization diagnostics also list generated ArchFlow assets hidden by an ance
 
 | Command | Purpose |
 |---|---|
-| `manual-status` | Read-only mode classifier: `normal`, `degraded`, `repair-required`, `upgrade-staged` (a reusable current import waits for MCP), or `upgrade-restart-required` (old/ambiguous staging must be explicitly discarded) |
+| `automation-status` | Stable controller contract: reconcile one task, classify its five-way condition, and identify exactly one skill, human, orchestrator, operator, or terminal actor without mutation |
+| `manual-status` | Read-only mode classifier: `normal`, `degraded`, `repair-required`, `upgrade-staged` (one strictly validated current import waits for MCP), or `upgrade-restart-required` (old, malformed, incompatible, or ambiguous staging must be explicitly discarded) |
+
+`automation-status --task <task>` is the supported polling surface. Its success body is the strict versioned document itself, not an `ok/value` envelope. The readable path reuses authoritative semantic status and projects it without an invocation, so no mutation offer exists. State absence becomes PRD ownership; staged or unreadable authority becomes a safe blocked category; a repository failure too early to classify remains a structured command failure. See [`../contracts/AUTOMATION.md`](../contracts/AUTOMATION.md) for the complete action union, controller loop, freshness rules, benchmark, and trust boundary.
 
 **Task-scoped, mutating:**
 
@@ -69,7 +72,7 @@ When the MCP server is unavailable, there is no offline recording path — the s
 - `degraded` — no durable state exists for the task; the single next action is to wait for the server. Once it is available, proceed through the workflow skills as usual (reinstall with `./install.sh` if the server binary is missing).
 - `repair-required` — state is present but unreadable; the result is a position summary for a human to act on.
 - `upgrade-staged` — no state exists, but one current-format import stage is reusable once the session exposes MCP.
-- `upgrade-restart-required` — no state exists and only old or ambiguous staging was found; the result reports exact import digests for safe explicit cleanup.
+- `upgrade-restart-required` — no state exists and staging is old, malformed, incompatible, or ambiguous; the shared strict descriptor inspector reports only exact import digests for safe explicit cleanup and adoption uses the same classification.
 
 Nothing in this mode advances the workflow, resolves gates, or records progress.
 

@@ -147,6 +147,24 @@ export type RouteOverrideRecord = {
   // never existed, so there is nothing it displaced.
   readonly pinned_model?: string;
   readonly pinned_effort?: (typeof EFFORT_VALUES)[number];
+  readonly pinned_provider?: string;
+};
+
+export const ROUTE_SOURCE_PROVENANCES = ["configured", "invocation-declared", "route-override"] as const;
+export const DISPLACED_ROUTE_SOURCES = ["configured", "invocation-declared"] as const;
+
+/** Raw route facts displaced by a higher-precedence selection; dispatchability is not implied. */
+export type DisplacedRouteRecord = {
+  readonly source: (typeof DISPLACED_ROUTE_SOURCES)[number];
+  readonly model: string;
+  readonly effort: (typeof EFFORT_VALUES)[number];
+  readonly provider?: string;
+};
+
+/** Truthful source of the route that produced freshly server-attested evidence. */
+export type RouteSourceRecord = {
+  readonly provenance: (typeof ROUTE_SOURCE_PROVENANCES)[number];
+  readonly displaced?: DisplacedRouteRecord;
 };
 
 type ReviewProvenanceBase = DerivedReview & {
@@ -165,6 +183,10 @@ export type ServerAttestedReview = Omit<ReviewProvenanceBase, "model_family" | "
   readonly envelope_input_digest: Sha256Digest;
   readonly observed_output_digest: Sha256Digest;
   readonly result_id: string;
+  /** Optional on read for archived evidence; every fresh server mint supplies it when used. */
+  readonly provider?: string;
+  /** Optional on read for archived evidence; every fresh server mint supplies it. */
+  readonly route_source?: RouteSourceRecord;
   readonly route_override?: RouteOverrideRecord;
 };
 export type DegradedReview = ReviewProvenanceBase & {
@@ -182,6 +204,17 @@ export const routeOverrideRecordSchema = z.object({
   reason: nonBlank,
   pinned_model: nonBlank.optional(),
   pinned_effort: z.enum(EFFORT_VALUES).optional(),
+  pinned_provider: nonBlank.optional(),
+}).strict();
+export const displacedRouteRecordSchema = z.object({
+  source: z.enum(DISPLACED_ROUTE_SOURCES),
+  model: nonBlank,
+  effort: z.enum(EFFORT_VALUES),
+  provider: nonBlank.optional(),
+}).strict();
+export const routeSourceRecordSchema = z.object({
+  provenance: z.enum(ROUTE_SOURCE_PROVENANCES),
+  displaced: displacedRouteRecordSchema.optional(),
 }).strict();
 const serverAttestedReviewSchema = provenanceBase.safeExtend({
   assurance: z.literal("server-attested"),
@@ -193,6 +226,8 @@ const serverAttestedReviewSchema = provenanceBase.safeExtend({
   envelope_input_digest: digest,
   observed_output_digest: digest,
   result_id: id,
+  provider: nonBlank.optional(),
+  route_source: routeSourceRecordSchema.optional(),
   route_override: routeOverrideRecordSchema.optional(),
 }).strict();
 const degradedReviewSchema = provenanceBase.safeExtend({ assurance: z.literal("degraded"), reason: nonBlank }).strict();

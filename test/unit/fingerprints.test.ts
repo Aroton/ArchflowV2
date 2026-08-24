@@ -179,6 +179,8 @@ describe("computeRequestDigest", () => {
       ] as unknown as RequestDigestSubject[],
       archflow_counter_review: [
         { ...requestSubjects.archflow_counter_review!, operation_fields: { artifact_path: "phases/9/other.md" } },
+        { ...requestSubjects.archflow_counter_review!, operation_fields: { artifact_path: "phases/9/result.md", invocation_routes: { "counter-reviewer": { model: "claude-fable-5", effort: "high" } } } },
+        { ...requestSubjects.archflow_counter_review!, operation_fields: { artifact_path: "phases/9/result.md", invocation_routes: { adjudicator: { model: "gpt-5.6", effort: "max" } } } },
         { ...requestSubjects.archflow_counter_review!, operation_fields: { artifact_path: "phases/9/result.md", route_override: { reason: "codex auth outage", "counter-reviewer": { model: "claude-opus-4-6", effort: "high" } } } },
         { ...requestSubjects.archflow_counter_review!, operation_fields: { artifact_path: "phases/9/result.md", route_override: { reason: "codex auth outage", "counter-reviewer": { model: "claude-opus-4-6", effort: "max" } } } },
         { ...requestSubjects.archflow_counter_review!, operation_fields: { artifact_path: "phases/9/result.md", route_override: { reason: "a different reason", "counter-reviewer": { model: "claude-opus-4-6", effort: "high" } } } },
@@ -223,6 +225,26 @@ describe("computeRequestDigest", () => {
       ...requestSubjects.archflow_counter_review!,
       operation_fields: { artifact_path: "phases/9/result.md", unexpected: "field" },
     } as unknown as RequestDigestSubject)).toThrow(TypeError);
+  });
+
+  it("binds invocation routes and human route overrides independently", () => {
+    const routed = (invocation_routes: unknown, route_override?: unknown): RequestDigestSubject => ({
+      ...requestSubjects.archflow_counter_review!,
+      operation_fields: {
+        artifact_path: "phases/9/result.md",
+        invocation_routes,
+        ...(route_override === undefined ? {} : { route_override }),
+      },
+    } as unknown as RequestDigestSubject);
+    const invocationRoutes = { "counter-reviewer": { model: "claude-fable-5", effort: "high" } };
+    const override = { reason: "temporary outage", adjudicator: { model: "gpt-5.6", effort: "max" } };
+    const digests = [
+      computeRequestDigest(requestSubjects.archflow_counter_review!),
+      computeRequestDigest(routed(invocationRoutes)),
+      computeRequestDigest(routed({ adjudicator: { model: "gpt-5.6", effort: "max" } })),
+      computeRequestDigest(routed(invocationRoutes, override)),
+    ];
+    expect(new Set(digests).size).toBe(digests.length);
   });
 
   it("binds artifact kind and recomputed digest under each pinned state operation", () => {

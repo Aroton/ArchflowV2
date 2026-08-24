@@ -128,6 +128,61 @@
         "result_id": {
           "$ref": "urn:archflow:schema:v1:review#/$defs/id"
         },
+        "provider": {
+          "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+        },
+        "route_source": {
+          "type": "object",
+          "properties": {
+            "provenance": {
+              "type": "string",
+              "enum": [
+                "configured",
+                "invocation-declared",
+                "route-override"
+              ]
+            },
+            "displaced": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "configured",
+                    "invocation-declared"
+                  ]
+                },
+                "model": {
+                  "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                },
+                "effort": {
+                  "type": "string",
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max",
+                    "ultra"
+                  ]
+                },
+                "provider": {
+                  "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                }
+              },
+              "required": [
+                "source",
+                "model",
+                "effort"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "provenance"
+          ],
+          "additionalProperties": false
+        },
         "route_override": {
           "type": "object",
           "properties": {
@@ -147,6 +202,9 @@
                 "max",
                 "ultra"
               ]
+            },
+            "pinned_provider": {
+              "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
             }
           },
           "required": [

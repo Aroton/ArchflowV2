@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { canonicalDocument, canonicalJsonDigest, parseGitOid, sha256Bytes } from "../../src/contracts/canonical.js";
 import { parseConfigYaml, type TaskConfigSnapshot } from "../../src/contracts/config.js";
-import { parseActiveGate, parseGateRequest } from "../../src/contracts/durable-gate.js";
+import { parseActiveGate, parseArchivedGateRequest } from "../../src/contracts/durable-gate.js";
 import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
 import type { ImplementationOutputV1 } from "../../src/contracts/durable-implementation-output.js";
 import type { RuleSettlementV1, TaskStateV1 } from "../../src/contracts/durable-state.js";
@@ -500,7 +500,7 @@ describe("computeTaskStatus", () => {
     const active = parseActiveGate({
       schema_version: "1", gate_id: "gate-status", intent_id: "gate-intent", request_digest: D("7"),
       task_id: TASK, phase_instance: PHASE, summary: "Approve", subject_digest: D("8"),
-      context_digest: computeGateContextDigest("artifact-approval", context),
+      context_digest: computeGateContextDigest("artifact-approval", context as never),
       current_evidence: { set_digest: D("9"), slots: [
         { role: "counter-review", evidence_digest: D("b"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" },
       ] },
@@ -508,7 +508,7 @@ describe("computeTaskStatus", () => {
       opened_at_revision: 4, status: "awaiting-human",
       decision_template: {
         schema_version: "1", gate_id: "gate-status", task_id: TASK, phase_instance: PHASE,
-        kind: "artifact-approval", subject_digest: D("8"), context_digest: computeGateContextDigest("artifact-approval", context),
+        kind: "artifact-approval", subject_digest: D("8"), context_digest: computeGateContextDigest("artifact-approval", context as never),
         required_fields: ["payload", "human_provenance"], cancellation_fields: ["cancelled", "reason", "human_provenance"],
       },
     });
@@ -595,7 +595,7 @@ describe("computeTaskStatus", () => {
     const active = parseActiveGate({
       schema_version: "1", gate_id: "gate-superseding", intent_id: "gate-superseding-intent", request_digest: D("7"),
       task_id: TASK, phase_instance: PHASE, summary: "Approve revised implementation", subject_digest: D("8"),
-      context_digest: computeGateContextDigest("artifact-approval", context),
+      context_digest: computeGateContextDigest("artifact-approval", context as never),
       current_evidence: { set_digest: D("9"), slots: [
         { role: "counter-review", evidence_digest: D("b"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" },
       ] },
@@ -603,12 +603,12 @@ describe("computeTaskStatus", () => {
       opened_at_revision: 4, status: "awaiting-human",
       decision_template: {
         schema_version: "1", gate_id: "gate-superseding", task_id: TASK, phase_instance: PHASE,
-        kind: "artifact-approval", subject_digest: D("8"), context_digest: computeGateContextDigest("artifact-approval", context),
+        kind: "artifact-approval", subject_digest: D("8"), context_digest: computeGateContextDigest("artifact-approval", context as never),
         required_fields: ["payload", "human_provenance"], cancellation_fields: ["cancelled", "reason", "human_provenance"],
       },
     });
     const { status: _status, decision_template: _template, ...requestFields } = active;
-    const request = parseGateRequest(requestFields);
+    const request = parseArchivedGateRequest(requestFields);
     writeFileSync(h.services.authority.state.absolute, canonicalDocument(h.state({
       open_gate: {
         gate_id: active.gate_id, gate_kind: active.kind, subject_digest: active.subject_digest,
@@ -643,7 +643,7 @@ describe("computeTaskStatus", () => {
     expect(status.value.open_gate.presentation).toMatchObject({
       summary: "Approve revised implementation",
       question: expect.any(String),
-      options: expect.arrayContaining([expect.objectContaining({ label: "Approve and continue" })]),
+      options: expect.arrayContaining([expect.objectContaining({ label: "Approve and continue to design" })]),
     });
 
     rmSync(activePath);

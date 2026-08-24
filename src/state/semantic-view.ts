@@ -138,10 +138,12 @@ function publicPresentation(status: TaskStatusV1): HumanPresentationV1 | undefin
   const presentation = status.open_gate?.presentation;
   if (presentation === undefined) return undefined;
   return Object.freeze({
+    class: presentation.class,
     title: presentation.title,
     summary: presentation.summary,
     ...(presentation.details === undefined ? {} : { details: Object.freeze([...presentation.details]) }),
     question: presentation.question,
+    reasons: Object.freeze(presentation.reasons.map((reason) => Object.freeze({ ...reason }))),
     options: Object.freeze(presentation.options.map((option) => Object.freeze({ ...option }))),
   });
 }
@@ -270,6 +272,15 @@ function mapNextAction(status: TaskStatusV1, snapshot: SemanticStatusSnapshotV1)
     }
     case "run-step":
       return mapRunStep(status, action, snapshot);
+    case "recover-approval-trigger-authority":
+      return Object.freeze({
+        condition: "ready",
+        headline: "Fresh approval-trigger authority is ready",
+        detail: action.detail,
+        action_kind: "begin-work",
+        instruction: "Record the compatibility recovery, then request fresh status before editing or resubmitting bytes.",
+        expected_submission: "none",
+      });
     case "commit-artifacts":
       if (action.commit_path === undefined || action.commit_message === undefined || action.commit_target_ref === undefined || action.commit_baseline === undefined) {
         return inspect("The authorized design commit is missing authenticated commit facts.");
@@ -280,7 +291,6 @@ function mapNextAction(status: TaskStatusV1, snapshot: SemanticStatusSnapshotV1)
         commit: Object.freeze({
           paths: Object.freeze([action.commit_path]), message: action.commit_message, target_ref: action.commit_target_ref,
           baseline: action.commit_baseline,
-          requires_human_confirmation: action.commit_requires_human_confirmation ?? false,
         }),
       });
     case "refresh-milestone-baseline":
@@ -308,17 +318,13 @@ function mapNextAction(status: TaskStatusV1, snapshot: SemanticStatusSnapshotV1)
       if (action.commit_paths === undefined || action.commit_message === undefined || action.commit_target_ref === undefined || action.commit_baseline === undefined) {
         return inspect("Inspect why the approved implementation commit authority is unavailable.");
       }
-      const requiresHumanConfirmation = action.commit_requires_human_confirmation ?? true;
       return Object.freeze({
         condition: "awaiting-client", headline: "The authorized implementation commit is ready", detail: action.detail,
         action_kind: "commit",
-        instruction: requiresHumanConfirmation
-          ? "Prior human commit authority is recorded. Separately confirm HEAD matches the authorized baseline and target ref, stage exactly the authorized paths, show the human the staged diff and exact message and obtain explicit confirmation, create the commit with those exact facts while preserving unrelated changes, then request fresh read-only status so the server observes proof."
-          : "Authenticated rule authority permits direct client execution. Confirm HEAD matches the authorized baseline and target ref, stage and inspect exactly the authorized paths, create the commit directly with the exact returned message while preserving unrelated changes, then request fresh read-only status so the server observes proof.",
+        instruction: "Confirm HEAD matches the authorized baseline and target ref, stage and inspect exactly the authorized paths, create the commit directly with the exact returned message while preserving unrelated changes, then request fresh read-only status so the server observes proof.",
         commit: Object.freeze({
           paths: Object.freeze([...action.commit_paths].sort()), message: action.commit_message,
           target_ref: action.commit_target_ref, baseline: action.commit_baseline,
-          requires_human_confirmation: requiresHumanConfirmation,
         }),
       });
     }
@@ -461,6 +467,7 @@ export function projectSemanticStatus(
     ...(shape.findings !== true ? {} : { findings: snapshot.full_findings }),
     ...(context === undefined ? {} : { review_context: context }),
     ...(shape.presentation === undefined ? {} : { presentation: shape.presentation }),
+    ...(status.dispatch_failure === undefined ? {} : { dispatch_failure: status.dispatch_failure }),
     ...(configChange === undefined ? {} : { config_change: configChange }),
   });
   return Object.freeze({ view, ...(offer === undefined ? {} : { internal_offer: offer }) });

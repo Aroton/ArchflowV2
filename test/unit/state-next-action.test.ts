@@ -105,13 +105,51 @@ describe("deriveNextAction", () => {
       state: state({ phase_instance: phase }), assessment: assessment("advance"),
       accepted_no_wait_settlement: receipt, implementation_commit: implementationCommit,
     }))).toMatchObject({
-      code: "commit-phase", commit_requires_human_confirmation: false,
-      detail: "Commit the exact phase outputs authorized by the authenticated approval rule.",
+      code: "commit-phase",
+      detail: "Commit the exact phase outputs authorized by the authenticated workflow authority.",
     });
     expect(deriveNextAction(input({
       state: state({ phase_instance: phase }), assessment: assessment("attempts-exhausted"),
       accepted_no_wait_settlement: receipt, implementation_commit: implementationCommit,
     }))).toMatchObject({ code: "open-gate", gate_kind: "attempts-exhausted" });
+  });
+
+  it("prefers authenticated human approval when legacy no-wait authority coexists", () => {
+    const phase = implementation(2);
+    const receipt = {
+      task_id: parseTaskSlug("task-1"), phase_instance: phase, step: "triage" as const,
+      subject_digest: D("a"), conclusion: { wait: false as const, match: null },
+      config_digest: D("4"), settled_at_revision: parseSafeInteger(4),
+    };
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: phase }), assessment: assessment("advance"),
+      authenticated_approvals: [{ gate_kind: "commit-authorization", subject_digest: D("a") }],
+      accepted_no_wait_settlement: receipt, implementation_commit: implementationCommit,
+    }))).toEqual(expect.objectContaining({
+      code: "commit-phase", human_required: false,
+      detail: "Commit the exact phase outputs authorized by the authenticated workflow authority.",
+    }));
+  });
+
+  it("recovers a pre-trigger fixed point before deriving any review or approval action", () => {
+    expect(deriveNextAction(input({
+      state: state({ step: "triage", status: "succeeded" }),
+      assessment: assessment("adjudication-gate"), adjudication_gate_kind: "constitution-review",
+      approval_trigger_recovery_required: true,
+    }))).toMatchObject({
+      code: "recover-approval-trigger-authority", human_required: false,
+    });
+  });
+
+  it("routes an imported design to migration audit before pre-trigger recovery", () => {
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: encodePhaseInstance({ kind: "design" }), step: "triage", status: "succeeded" }),
+      assessment: assessment("adjudication-gate"), adjudication_gate_kind: "constitution-review",
+      approval_trigger_recovery_required: true,
+      migration_audit_required: true,
+    }))).toMatchObject({
+      code: "open-gate", gate_kind: "migration-audit", human_required: true,
+    });
   });
 
   it("refreshes only a moved autonomous design baseline", () => {
@@ -608,6 +646,14 @@ describe("deriveNextAction", () => {
       assessment: assessment("adjudication-gate"),
       adjudication_gate_kind: "constitution-review",
     }))).toMatchObject({ code: "open-gate", gate_kind: "design-approval", human_required: true });
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: encodePhaseInstance({ kind: "prd" }) }),
+      assessment: assessment("adjudication-gate"), adjudication_gate_kind: "constitution-review",
+    }))).toMatchObject({ code: "open-gate", gate_kind: "artifact-approval", human_required: true });
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: implementation(2) }),
+      assessment: assessment("adjudication-gate"), adjudication_gate_kind: "constitution-review",
+    }))).toMatchObject({ code: "open-gate", gate_kind: "commit-authorization", human_required: true });
     // Clean adjudication still fails closed to the ordinary design gate; live config and persisted
     // settlements are not human authority.
     expect(deriveNextAction(input({
@@ -682,8 +728,7 @@ describe("deriveNextAction", () => {
       commit_message: "ArchFlow: Implement task-1 phase 2",
       commit_target_ref: "refs/heads/main",
       commit_baseline: "abcdef0123456789abcdef0123456789abcdef01",
-      commit_requires_human_confirmation: true,
-      detail: "Commit the exact phase outputs authorized by the human's commit decision.",
+      detail: "Commit the exact phase outputs authorized by the authenticated workflow authority.",
     });
     expect(deriveNextAction(input({
       state: state({ phase_instance: implementation(2), planned_final_phase: parseSafeInteger(2) }),

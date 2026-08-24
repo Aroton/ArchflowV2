@@ -5,14 +5,26 @@ import { parseActiveGate, parseGateDecisionRecord, parseGateRequest } from "../.
 import { DURABLE_ISSUE_CODES, validateDurableSemantics } from "../../src/contracts/durable.js";
 import { computeGateContextDigest, computeGateId } from "../../src/contracts/fingerprints.js";
 import { parseSha256Digest } from "../../src/contracts/evidence.js";
+import { parseGateContext } from "../../src/contracts/gates.js";
 
 const d = (character: string) => parseSha256Digest(character.repeat(64));
 const provenance = { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "decision-1", helper_invocation_id: "helper-1", recorded_at: "2026-07-30T12:00:00.000Z" } as const;
 const counter = { role: "counter-review", evidence_digest: d("2"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" } as const;
-const context = { artifact_kind: "phase-implementation" } as const;
+const context = parseGateContext("artifact-approval", {
+  artifact_kind: "phase-implementation",
+  constitution: "pass",
+  policy_findings: [],
+  eligible_waivers: [],
+  approval_trigger: {
+    kind: "rule-settlement",
+    settlement: { subject_digest: d("c"), config_digest: d("4"), settled_at_revision: 3 },
+    conclusion: { wait: true, match: { kind: "subject", subject: "phase-impl" } },
+    rule_authority: "authenticated",
+  },
+});
 const gateId = computeGateId({ task_identity_digest: d("a"), intent_id: "intent-1" as never, request_digest: d("b") });
 const contextDigest = computeGateContextDigest("artifact-approval", context);
-const request = () => parseGateRequest({ schema_version: "1", gate_id: gateId, intent_id: "intent-1", request_digest: d("b"), task_id: "task-1", phase_instance: "phase-impl-2", summary: "Approve implementation", subject_digest: d("c"), context_digest: contextDigest, current_evidence: { set_digest: d("3"), slots: [counter] }, kind: "artifact-approval", context, allowed_decisions: ["approve", "revise", "reject", "cancel"], opened_at_revision: 4 });
+const request = () => parseGateRequest({ schema_version: "1", gate_id: gateId, intent_id: "intent-1", request_digest: d("b"), task_id: "task-1", phase_instance: "phase-impl-2", summary: "Approve implementation", subject_digest: d("c"), context_digest: contextDigest, current_evidence: { set_digest: d("3"), slots: [counter] }, kind: "artifact-approval", context, allowed_decisions: ["approve", "revise", "reject", "waiver-requested", "cancel"], opened_at_revision: 4 });
 const decision = () => parseGateDecisionRecord({ schema_version: "1", gate_id: gateId, task_id: "task-1", phase_instance: "phase-impl-2", kind: "artifact-approval", subject_digest: d("c"), context_digest: contextDigest, outcome: "decided", envelope: { schema_version: "1", gate_id: gateId, task_id: "task-1", phase_instance: "phase-impl-2", kind: "artifact-approval", subject_digest: d("c"), context_digest: contextDigest, human_provenance: provenance, payload: { decision: "approve", reason: "Approved" } } });
 
 describe("durable gate roots", () => {
