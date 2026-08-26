@@ -1,6 +1,6 @@
 # contracts/AUTOMATION
 
-**Explored:** 2026-08-26 · **Commit:** `824734f` · **Covers:** `src/contracts/automation-status.ts`, `src/local/automation-status.ts`, `src/local/commands.ts`, `src/local/main.ts`, `src/state/semantic-status.ts`, `test/integration/automation-status-*.test.ts`
+**Explored:** 2026-08-26 · **Commit:** `16193ec` · **Covers:** `src/contracts/automation-status.ts`, `src/local/automation-status.ts`, `src/local/commands.ts`, `src/local/main.ts`, `src/state/semantic-status.ts`, `test/integration/automation-status-*.test.ts`
 
 `archflow-local automation-status` is the stable read-only handoff between ArchFlow and an external controller. It answers three questions from one reconciled observation: what condition is the task in, who is responsible now, and which canonical skill—if any—owns the next producer session.
 

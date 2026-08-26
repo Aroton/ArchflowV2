@@ -1,6 +1,6 @@
 # mcp/SERVER
 
-**Explored:** 2026-08-26 · **Commit:** `824734f` · **Covers:** `src/main.ts`, `src/mcp/`, `src/contracts/semantic-workflow.ts`, `src/repository/`, `src/state/status.ts`, `src/state/semantic-*.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`
+**Explored:** 2026-08-26 · **Commit:** `16193ec` · **Covers:** `src/main.ts`, `src/mcp/`, `src/contracts/semantic-workflow.ts`, `src/repository/`, `src/state/status.ts`, `src/state/semantic-*.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`
 
 `archflow-mcp` is a stdio MCP server speaking newline-delimited JSON-RPC. It is the system's sole authority: the only writer of durable state and the only judge of request validity. It takes no arguments and has no other mode — `src/main.ts` is 28 lines that either print usage or start the runtime.
 

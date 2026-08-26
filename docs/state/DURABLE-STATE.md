@@ -1,6 +1,6 @@
 # state/DURABLE-STATE
 
-**Explored:** 2026-08-26 · **Commit:** `824734f` · **Covers:** `src/state/`, `src/contracts/durable-state.ts`, `src/contracts/durable-implementation-output.ts`, `src/repository/`, `src/init/`, `src/local/`, `src/mcp/handlers/semantic.ts`, `src/dispatch/failure-observation.ts`
+**Explored:** 2026-08-26 · **Commit:** `16193ec` · **Covers:** `src/state/`, `src/contracts/durable-state.ts`, `src/contracts/durable-implementation-output.ts`, `src/repository/`, `src/init/`, `src/local/`, `src/mcp/handlers/semantic.ts`, `src/dispatch/failure-observation.ts`
 
 Durable state is ArchFlow's memory and authority, but not every file the workflow uses deserves that status. The repository now separates tracked, reviewable authority from an ignored workspace containing bytes that are transient, reconstructible, or useful only for diagnosis.
 

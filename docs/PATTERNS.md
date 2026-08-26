@@ -1,6 +1,6 @@
 # PATTERNS
 
-**Explored:** 2026-08-26 · **Commit:** `824734f` · **Covers:** `src/`, `test/`, `scripts/`, repository policy
+**Explored:** 2026-08-26 · **Commit:** `16193ec` · **Covers:** `src/`, `test/`, `scripts/`, repository policy
 
 This is a strict TypeScript/Node package whose conventions are enforced primarily by the type checker, runtime validators, and tests. There is no configured linter or formatter. Match the surrounding file: contract registries intentionally use dense declarations, while state, repository, and MCP algorithms favor expanded control flow and rationale-heavy comments.
 

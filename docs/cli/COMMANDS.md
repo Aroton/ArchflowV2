@@ -1,6 +1,6 @@
 # cli/COMMANDS
 
-**Explored:** 2026-08-26 · **Commit:** `824734f` · **Covers:** `src/local/`, `src/state/status.ts`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
+**Explored:** 2026-08-26 · **Commit:** `16193ec` · **Covers:** `src/local/`, `src/state/status.ts`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
 
 `archflow-local` is the local adapter surface: repository bootstrap, the legacy-upgrade adapter, bounded diagnostics, a degraded human classifier, and the versioned read-only automation observation used by external controllers. It is deliberately *not* the authority — with one narrow exception (the staged legacy import and its atomic adoption), it derives and verifies rather than writes.
 

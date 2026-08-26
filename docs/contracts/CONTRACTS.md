@@ -1,6 +1,6 @@
 # contracts/CONTRACTS
 
-**Explored:** 2026-08-26 · **Commit:** `824734f` · **Covers:** `src/contracts/`, `src/local/automation-status.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`, `src/state/request.ts`, `src/state/semantic-*.ts`
+**Explored:** 2026-08-26 · **Commit:** `16193ec` · **Covers:** `src/contracts/`, `src/local/automation-status.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`, `src/state/request.ts`, `src/state/semantic-*.ts`
 
 `src/contracts/` is the bottom layer: TypeScript contract modules plus generated JSON Schemas that define what a valid thing looks like and how to prove a thing is what it claims. Everything else imports from here; nothing here imports back out.
 

@@ -1,6 +1,6 @@
 # TESTING
 
-**Explored:** 2026-08-26 · **Commit:** `062707d` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/build-temp.mjs`, `scripts/smoke-release-bundle.mjs`, `scripts/test-release-integrity.mjs`
+**Explored:** 2026-08-26 · **Commit:** `16193ec` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/build-temp.mjs`, `scripts/smoke-release-bundle.mjs`, `scripts/test-release-integrity.mjs`
 
 ## The default is deliberately fast
 

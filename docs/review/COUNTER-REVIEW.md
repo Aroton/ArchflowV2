@@ -1,6 +1,6 @@
 # review/COUNTER-REVIEW
 
-**Explored:** 2026-08-26 · **Commit:** `824734f` · **Covers:** `src/review/`, `src/dispatch/`, `src/contracts/mcp-tools.ts`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
+**Explored:** 2026-08-26 · **Commit:** `16193ec` · **Covers:** `src/review/`, `src/dispatch/`, `src/contracts/mcp-tools.ts`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
 
 Counter-review is the system's adversarial check: every artifact is reviewed by a server-dispatched reviewer — the producer's *opposite model family* by default (the shipped template's choice), either family by explicit config — so the evidence is something the producer cannot author. One offered semantic `review` action reaches the direct handler seam and covers up to two dispatches: the rubric counter-review, and — only when the pinned constitution has active rules, a decision the server makes alone — the constitution review (see below). Semantic review owns the outer process FIFO across replay, dispatch, and commit; the direct inner seam never queues itself again. This page covers the review envelope, the review flow, the constitution review, and waivers.
 

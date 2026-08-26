@@ -1,6 +1,6 @@
 # mcp/DISPATCH
 
-**Explored:** 2026-08-26 · **Commit:** `824734f` · **Covers:** `src/dispatch/`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/mcp/handlers/session.ts`, `src/state/semantic-actions.ts`, `src/state/workspace-cleanup.ts`
+**Explored:** 2026-08-26 · **Commit:** `16193ec` · **Covers:** `src/dispatch/`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/mcp/handlers/session.ts`, `src/state/semantic-actions.ts`, `src/state/workspace-cleanup.ts`
 
 Dispatch is how the server turns "get an independent review" into a real child process running a reviewer CLI (the producer's opposite family by default, either family by explicit config). It exists so that counter-review and constitution-review evidence is something the producer **cannot author** — the server itself spawns the reviewer, captures its bytes, and binds the output to its provenance. A semantic `review` action reaches the direct handler seam. One review may run two child dispatches sequentially. Both receive sealed control envelopes and the same ordered set of server-materialized repository views.
 
