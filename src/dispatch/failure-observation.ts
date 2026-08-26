@@ -30,6 +30,7 @@ const SAFE_MESSAGES: Readonly<Record<DispatchFailureCodeV1, string>> = Object.fr
   UNSUPPORTED_MODEL: "The reviewer service does not support the selected model.",
   CLI_VERSION_UNSUPPORTED: "The installed reviewer CLI version is not supported.",
   PROCESS_FAILED: "The reviewer process failed before producing a usable result.",
+  REPOSITORY_VIEW_UNAVAILABLE: "A required read-only repository snapshot is unavailable. Repair repository access and resume the unchanged review.",
 });
 
 export type DispatchFailureObserver = (
@@ -66,11 +67,15 @@ function carriedProjectError(error: unknown): ProjectError | undefined {
 export function classifiedDispatchFailure(error: unknown): Readonly<{
   code: DispatchFailureCodeV1;
   message: string;
+  repository_name?: string;
 }> | undefined {
   const projectError = carriedProjectError(error);
   if (projectError === undefined || !supportedCodes.has(projectError.code)) return undefined;
   const code = projectError.code as DispatchFailureCodeV1;
-  return Object.freeze({ code, message: SAFE_MESSAGES[code] });
+  const repositoryName = code === "REPOSITORY_VIEW_UNAVAILABLE"
+    ? (projectError.diagnostic.parameters as Readonly<Record<string, unknown>>).repository_name
+    : undefined;
+  return Object.freeze({ code, message: SAFE_MESSAGES[code], ...(typeof repositoryName === "string" ? { repository_name: repositoryName } : {}) });
 }
 
 function observationClaim(phaseInstance: PhaseInstanceId, attempt: SafeInteger) {
@@ -109,6 +114,7 @@ export async function writeDispatchFailureObservation(
     role: input.role,
     code: classified.code,
     message: classified.message,
+    ...(classified.repository_name === undefined ? {} : { repository_name: classified.repository_name }),
     ...(input.selected === undefined ? {} : {
       route: {
         model: input.selected.raw_route.model,

@@ -31,6 +31,7 @@ import type { TaskConfigSnapshot } from "../contracts/config.js";
 import { parseTaskPathClaim } from "../contracts/path-claims.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { verifyRepositoryIdentity } from "../repository/identity.js";
+import { resolveRepositorySet, type RepositorySet } from "../repository/repository-set.js";
 import {
   classifyTaskPath,
   initializationAuthorityClaim,
@@ -177,6 +178,7 @@ function initialState(
   call: StateCall,
   artifact: DurableArtifact,
   parsedConfig: TaskConfigSnapshot,
+  repositorySet: RepositorySet,
 ): ProjectResult<TaskStateV1> {
   const initialization = initializationFor(artifact);
   if (initialization === undefined) return contract("initialization-artifact-required");
@@ -209,7 +211,7 @@ function initialState(
   };
   // Revision-zero seeding (pinned interface 4): the first recorded `last_seen_config`, so the
   // committed revision-1 state and the shared identification derivation agree byte for byte.
-  return ok(withLastSeenConfig(state, parsedConfig));
+  return ok(withLastSeenConfig(state, parsedConfig, repositorySet));
 }
 
 /**
@@ -249,9 +251,23 @@ export async function identifyStateInitialization(
     const staged = await readStagedLegacyConfig(request.authority, initialization);
     if (staged !== undefined) config = Object.freeze({ kind: "valid", snapshot: staged });
   }
-  if (config.kind !== "valid") return config.kind === "invalid" ? contract("task-config-invalid") : io(request, "task-config-read");
+  if (config.kind !== "valid") {
+    return config.kind === "invalid"
+      ? fail(createProjectError("CONFIG_INVALID", {
+          issue_code: "task-config-invalid",
+          ...(config.issues === undefined ? {} : { issues: config.issues }),
+        }))
+      : io(request, "task-config-read");
+  }
 
-  const stateResult = initialState(request.call, artifact, config.snapshot.parsed);
+  const repositorySet = await resolveRepositorySet(
+    { runner: dependencies.runner, environment: dependencies.environment },
+    config.snapshot.parsed,
+    request.authority.context,
+  );
+  if (!repositorySet.ok) return repositorySet;
+
+  const stateResult = initialState(request.call, artifact, config.snapshot.parsed, repositorySet.value);
   if (!stateResult.ok) return stateResult;
   const preparedState = canonicalDocument(stateResult.value);
   const initializationSemantics = validateDurableSemantics({

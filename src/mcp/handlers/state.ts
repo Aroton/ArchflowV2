@@ -11,7 +11,7 @@ import {
 } from "../../contracts/mcp-tools.js";
 import { parseTaskPathClaim } from "../../contracts/path-claims.js";
 import { resolveTaskPath } from "../../repository/paths.js";
-import { readFirstParentChildAfter, resolveCommit } from "../../repository/git.js";
+import { resolveCommit } from "../../repository/git.js";
 import {
   loadAuthenticatedGateApproval,
   type AuthenticatedGateApproval,
@@ -36,9 +36,10 @@ import { loadCurrentProduceSubject, type CurrentProduceSubject } from "../../sta
 import {
   approvedDesignWorktreeMatchesRetainedArtifact,
   designArtifactCommittedAtCurrentTarget,
-  implementationOutputCommittedAtCurrentTarget,
   resolveAutonomousDesignMilestoneProof,
   resolveAutonomousImplementationMilestoneProof,
+  resolveImplementationMilestoneProof,
+  secondaryImplementationMilestonesProven,
 } from "../../state/implementation-manifest.js";
 import { decodePhaseInstance } from "../../contracts/phase-instance.js";
 import { exactCommitAuthorizationContext } from "../../contracts/durable-gate.js";
@@ -53,6 +54,7 @@ import {
   type PreparedTransaction,
 } from "../../state/transaction.js";
 import type { ProductionServices } from "../../state/production.js";
+import type { RepositorySet } from "../../repository/repository-set.js";
 import type { LiveConfigSnapshot } from "../../state/read.js";
 import { assessCurrentEvidence } from "../../review/fixed-point.js";
 import {
@@ -67,6 +69,8 @@ import {
   currentTargetRef,
   computeTaskStatus,
   baselineAdoptionInputFromFindings,
+  baselinePresentedTargetsOnCurrentFirstParent,
+  buildSecondaryCommitAuthorizationFacts,
   pendingAdjudicationGates,
 } from "../../state/status.js";
 import {
@@ -141,6 +145,7 @@ function restartProvenance(
  */
 async function settleApprovalRules(
   services: ProductionServices,
+  repositorySet: RepositorySet,
   current: TaskStateV1,
   prospective: TaskStateV1,
   produce: CurrentProduceSubject,
@@ -202,7 +207,7 @@ async function settleApprovalRules(
     }
     const ruleContext = approvalRuleContext(current, produce, config.parsed);
     const conclusion = evaluateApprovalRules(
-      ruleContext.config, ruleContext.subject, ruleContext.changedPaths,
+      ruleContext.config, ruleContext.subject, ruleContext.changedPaths, ruleContext.secondaryChangedPaths,
     );
     const kind = decodePhaseInstance(current.phase_instance).kind;
     const milestoneTarget = !conclusion.wait && (kind === "design" || kind === "phase-design" || kind === "phase-impl")
@@ -216,9 +221,13 @@ async function settleApprovalRules(
       : produce.artifact.artifact_kind === "implementation-output"
         ? produce.artifact.base_commit
         : observedTargetHead;
+    const secondaryMilestones = !conclusion.wait && produce.artifact.artifact_kind === "implementation-output"
+      ? await buildSecondaryCommitAuthorizationFacts(produce.artifact, repositorySet)
+      : Object.freeze([]);
     return buildRuleSettlement(
       current, produce.artifact_digest, config.digest, conclusion, milestoneBaseline,
       milestoneTarget === undefined ? undefined : { ref: milestoneTarget.value, head: observedTargetHead! },
+      secondaryMilestones,
     );
   } catch {
     // The guard mirror turns these throws into gate-fixed-point-disagreement; a settle that
@@ -262,10 +271,10 @@ export async function handleState(
         services.authority,
         staleBaselineInput.expected_revision,
         async (current, request) => {
-          const discovered = await discoverReconciliationInput(services.dependencies, services.authority, current);
+          const discovered = await discoverReconciliationInput(services.dependencies, services.authority, current, session.value.repository_set);
           if (!discovered.ok) return discovered;
           const reconciliation = reconcileCurrentAuthority(discovered.value);
-          const target = await currentBaselineTargetFacts(services.dependencies, reconciliation.findings);
+          const target = await currentBaselineTargetFacts(services.dependencies, reconciliation.findings, session.value.repository_set);
           const live = baselineAdoptionInputFromFindings(
             services.authority.task_id, current.value, reconciliation.findings, target,
           );
@@ -275,10 +284,8 @@ export async function handleState(
               issue_code: "stale-baseline-live-subject-unrepresentable",
             }));
           }
-          const presentedHead = request.context.target_head;
-          const continuous = presentedHead !== undefined && (
-            presentedHead === target.target_head ||
-            await readFirstParentChildAfter(services.runner, presentedHead, target.target_head) !== undefined
+          const continuous = await baselinePresentedTargetsOnCurrentFirstParent(
+            services.dependencies, request.context, target, session.value.repository_set,
           );
           return Object.freeze({
             schema_version: "1" as const,
@@ -502,7 +509,7 @@ export async function handleState(
               phase_instance: state.phase_instance, issue_code: "milestone-baseline-refresh-reviewed-bytes-changed",
             }));
           }
-          const discovered = await discoverReconciliationInput(services.dependencies, services.authority, current);
+          const discovered = await discoverReconciliationInput(services.dependencies, services.authority, current, session.value.repository_set);
           if (!discovered.ok) return discovered;
           const reconciliation = reconcileCurrentAuthority(discovered.value);
           if (reconciliation.findings.length !== 0 || (discovered.value.blocking_reasons ?? []).length !== 0) {
@@ -799,6 +806,9 @@ export async function handleState(
           manifest_target: preparedResult.manifest_target,
           projection_plan: preparedResult.projection_plan,
           worktree_root: services.runner.location.worktreeRoot as typeof services.authority.task_root,
+          ...("secondary_projection_plans" in preparedResult && preparedResult.secondary_projection_plans !== undefined
+            ? { secondary_projection_plans: preparedResult.secondary_projection_plans }
+            : {}),
         });
         const revision = parseSafeInteger(current.value.revision + 1);
         const success = Object.freeze({
@@ -969,10 +979,15 @@ export async function handleState(
               // Pre-exact-commit archives bound no baseline, message or path set to compare.
               const exact = exactCommitAuthorizationContext(authenticated.request.context);
               if (exact === undefined) continue;
-              if (await implementationOutputCommittedAtCurrentTarget(
+              const primaryProof = await resolveImplementationMilestoneProof(
                 services.runner,
                 source,
                 exact,
+              );
+              if (primaryProof.kind === "proven" && await secondaryImplementationMilestonesProven(
+                source,
+                exact.secondary_commits ?? [],
+                session.value.repository_set,
               )) {
                 commitObserved = true;
                 break;
@@ -996,7 +1011,12 @@ export async function handleState(
                   )
                 : undefined;
               commitObserved = proof?.kind === "proven" &&
-                (!legacyTarget || proof.commit === proof.target_head);
+                (!legacyTarget || proof.commit === proof.target_head) &&
+                await secondaryImplementationMilestonesProven(
+                  source,
+                  settlement.secondary_milestones ?? [],
+                  session.value.repository_set,
+                );
             }
           }
         }
@@ -1062,7 +1082,7 @@ export async function handleState(
         // caller to reproduce status's higher-level action projection.
         if (completionSignal || artifactPhaseExitSignal || legacyJumpSignal) {
           const discovered = await discoverReconciliationInput(
-            services.dependencies, services.authority, current,
+            services.dependencies, services.authority, current, session.value.repository_set,
           );
           if (!discovered.ok) return discovered;
           const reconciled = reconcileCurrentAuthority(discovered.value);
@@ -1134,7 +1154,7 @@ export async function handleState(
             revision,
           } as TaskStateV1;
           ruleSettlement = await settleApprovalRules(
-            services, current.value, prospective, settlementProduce, settlementEvidence, configRead.snapshot,
+            services, session.value.repository_set, current.value, prospective, settlementProduce, settlementEvidence, configRead.snapshot,
           );
           if (ruleSettlement !== undefined) {
             next = planStateTransition({

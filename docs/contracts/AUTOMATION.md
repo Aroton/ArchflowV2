@@ -1,6 +1,6 @@
 # contracts/AUTOMATION
 
-**Explored:** 2026-08-24 · **Commit:** `6bccdf9` · **Covers:** `src/contracts/automation-status.ts`, `src/local/automation-status.ts`, `src/local/commands.ts`, `src/local/main.ts`, `src/state/semantic-status.ts`, `test/integration/automation-status-*.test.ts`
+**Explored:** 2026-08-26 · **Commit:** `824734f` · **Covers:** `src/contracts/automation-status.ts`, `src/local/automation-status.ts`, `src/local/commands.ts`, `src/local/main.ts`, `src/state/semantic-status.ts`, `test/integration/automation-status-*.test.ts`
 
 `archflow-local automation-status` is the stable read-only handoff between ArchFlow and an external controller. It answers three questions from one reconciled observation: what condition is the task in, who is responsible now, and which canonical skill—if any—owns the next producer session.
 
@@ -12,7 +12,7 @@ The command observes authority; it never creates it. It does not acquire the tas
 archflow-local automation-status --task <task>
 ```
 
-`automation-status` is task-required, accepts no payload, and never reads stdin—even when its parent leaves stdin open. Each invocation prints exactly one canonical JSON document to stdout.
+`automation-status` is task-required, accepts no payload, and never reads stdin—even when its parent leaves stdin open. Each invocation prints exactly one canonical JSON document to stdout. (The `--repository <name>` flag that `restore` accepts for a configured writable secondary is rejected by every other command, including this one; see `../cli/COMMANDS.md`.)
 
 - A classified observation exits `0`, including `blocked` and `complete`.
 - Invalid arguments or a repository/preflight/identity failure that prevents a trustworthy classification exit nonzero, print one structured `ok:false` project-error envelope to stdout, and print a concise reason to stderr.

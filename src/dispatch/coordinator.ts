@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-import { canonicalJsonBytes, type GitOid } from "../contracts/canonical.js";
+import { canonicalJsonBytes } from "../contracts/canonical.js";
+import type { RepositoryName } from "../contracts/config.js";
+import { createProjectError, type ProjectError } from "../contracts/errors.js";
 import type { HostIdentity } from "../contracts/hosts.js";
 import type { PhaseInstanceId } from "../contracts/phase-instance.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
@@ -20,11 +22,15 @@ import {
   type DispatchFailureChannels,
 } from "./process.js";
 import type { DispatchRoute } from "./routing.js";
-import { createDispatchWorkspace, materializeRepositoryView } from "./workspace.js";
+import {
+  createDispatchWorkspace,
+  materializeRepositoryViews,
+  RepositoryViewMaterializationError,
+  type DispatchRepositoryViewPlan,
+} from "./workspace.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "../state/authority.js";
 import { ensureAttemptDirectory } from "../state/layout.js";
 import type { TransactionDependencies } from "../state/transaction.js";
-import type { ProjectionPlan } from "../state/snapshots.js";
 
 export type DispatchCoordinatorInput = Readonly<{
   authority: TransactionAuthority;
@@ -34,12 +40,8 @@ export type DispatchCoordinatorInput = Readonly<{
   phase_instance: PhaseInstanceId;
   signal: AbortSignal;
   cancellation_source: NonNullable<DispatchChildSpec["cancellation_source"]>;
-  /** When present, the child gets this sealed repository snapshot as its working directory. */
-  repository_view?: Readonly<{
-    base_commit: GitOid;
-    /** Present for an implementation subject: retained after-images are applied to the baseline. */
-    projection_plan?: ProjectionPlan;
-  }>;
+  /** Ordered, validated server-owned snapshots. When absent the child receives no repository. */
+  repository_views?: DispatchRepositoryViewPlan;
 }>;
 
 export type DispatchCoordinatorResult = Readonly<{
@@ -51,7 +53,19 @@ function failureCode(error: unknown): string | undefined {
   if (error instanceof CliAdapterError || error instanceof DispatchProcessError) {
     return error.project_error.code;
   }
+  if (error instanceof RepositoryViewUnavailableError) return error.project_error.code;
   return undefined;
+}
+
+/** Safe classified carrier: the source exception and live root never cross this boundary. */
+export class RepositoryViewUnavailableError extends Error {
+  readonly project_error: ProjectError;
+
+  constructor(repositoryName: "primary" | RepositoryName) {
+    super(`The read-only snapshot for repository ${repositoryName} is unavailable. Repair repository access and resume the unchanged review.`);
+    this.name = "RepositoryViewUnavailableError";
+    this.project_error = createProjectError("REPOSITORY_VIEW_UNAVAILABLE", { repository_name: repositoryName });
+  }
 }
 
 const CHANNEL_TAIL_BYTE_CAP = 4096;
@@ -168,14 +182,16 @@ export function createDispatchCoordinator(input: DispatchCoordinatorInput): (
 
     try {
       workspace = await createDispatchWorkspace(adapter.id, input.repository_root);
-      if (input.repository_view !== undefined) {
+      if (input.repository_views !== undefined) {
         failureStage = "repository-view-materialization";
-        workspace = await materializeRepositoryView(
-          workspace,
-          input.repository_root,
-          input.repository_view.base_commit,
-          input.repository_view.projection_plan,
-        );
+        try {
+          workspace = await materializeRepositoryViews(workspace, input.repository_views);
+        } catch (error) {
+          if (error instanceof RepositoryViewMaterializationError) {
+            throw new RepositoryViewUnavailableError(error.repository_name);
+          }
+          throw error;
+        }
       }
       failureStage = "cli-preflight";
       preflight = await adapter.preflight(

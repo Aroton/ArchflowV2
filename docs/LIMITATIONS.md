@@ -1,10 +1,18 @@
 # LIMITATIONS
 
-**Explored:** 2026-08-24 · **Commit:** `8c532b4` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
+**Explored:** 2026-08-26 · **Commit:** `824734f` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
 
 ArchFlow is a local developer-workflow prototype, not a security sandbox. The controls below reduce accidental context leakage and constrain ordinary operation, but the listed cases are unsupported because the current implementation cannot prove the claimed boundary. A planted canary not appearing in output is evidence about that run; it is not proof that the child could not read the canary.
 
 These limitations assume a trusted developer account and a filesystem not being changed by a malicious local process. They are acceptable for the prototype's current operating envelope because ArchFlow runs locally for that developer, model output is validated before it becomes evidence, and advancement and approval remain subject to the workflow's durable evidence and human gates. They would not be acceptable as claims of isolation from hostile code, another process running as the same user, or a malicious local user.
+
+## Multi-repository writes are coordinated, not atomic
+
+**Not protected:** A phase that changes several writable repositories is installed, restored, and committed as a sequence, not as one transaction. ArchFlow prevalidates every changed member, applies primary then ordinal secondaries, and rolls back in reverse after an ordinary failure, but a process or machine crash can interrupt that sequence and leave some members applied. Commit authorization is likewise one human decision or authenticated settlement but several Git commits, one per repository.
+
+**Existing mitigation:** Every member is validated before any write, and rollback runs in reverse order on ordinary failure. Commit proof is repository-local and race-closed: a successful earlier commit is preserved, and status resumes at the first repository without proof rather than repeating or undoing one that already landed. Every adopted, restored, or committed path stays bound to its `(repository, path)` tuple, so identical relative paths in different members cannot collide.
+
+**Why accepted:** The repositories are ordinary sibling Git checkouts on one developer's machine; there is no shared transaction primitive to build on, and inventing one would be a large subsystem for a rare interruption. A paused sequence is visible in status and recoverable by repairing the named repository and continuing, which is proportional for the prototype.
 
 ## Generative review judgment
 
@@ -32,7 +40,7 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 ## Child repository reads
 
-**Not protected:** A dispatched Claude or Codex process is not prevented by the operating system from locating and reading the repository. Running it from a temporary directory outside the repository and omitting repository content from the review envelope do not revoke the child process's filesystem permissions.
+**Not protected:** A dispatched Claude or Codex process is not prevented by the operating system from locating and reading the repository. Running it from a temporary directory outside the repository and omitting repository content from the review envelope do not revoke the child process's filesystem permissions. Every configured repository is copied into a named, commit-pinned review snapshot with secondary `.archflow/` content removed, and changed writable members are reconstructed at their retained proposed trees; this improves relevance and keeps task state out of the intended view, but it remains best-effort context hygiene, and the child may still read outside its cwd.
 
 **Existing mitigation:** Dispatch uses a non-repository temporary working directory, an explicit environment allowlist, and CLI flags intended to suppress project instructions, user configuration, skills, and tools. Authentication remains in the caller's canonical CLI home and is not treated as an instruction-isolation mechanism. The envelope is versioned, size-bounded, hashed, and structurally limited to the declared review inputs. Planted-canary scans detect values that reach child output or persisted diagnostics, including a leaking negative control that proves the scanner works.
 

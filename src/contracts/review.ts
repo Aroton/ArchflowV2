@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { gitOidV1Schema, type GitOid } from "./canonical.js";
+import { REPOSITORY_NAME_MESSAGE, REPOSITORY_NAME_PATTERN } from "./config.js";
 import type { ReferencedEvidence, Sha256Digest, TaskSlug } from "./evidence.js";
 import { createTaskSlugV1Schema } from "./evidence.js";
 import { assertPlainJson } from "./plain-json.js";
@@ -17,6 +19,13 @@ export type ReviewFindingSeverity = (typeof REVIEW_FINDING_SEVERITIES)[number];
 export type ModelFamily = (typeof MODEL_FAMILIES)[number];
 export type AdapterId = (typeof ADAPTER_IDS)[number];
 export type DeclaredEffort = (typeof EFFORT_VALUES)[number] | "unknown";
+
+/** One repository snapshot whose exact identity and commit were observed by the server. */
+export type ReviewedRepositoryV1 = {
+  readonly name: string;
+  readonly repository_identity_digest: Sha256Digest;
+  readonly commit: GitOid;
+};
 
 export type RuleVersionRef = {
   readonly rule_id: string;
@@ -57,6 +66,36 @@ const digest = z.string().regex(/^[0-9a-f]{64}$/u) as unknown as z.ZodType<Sha25
 const taskSlug = createTaskSlugV1Schema();
 const phaseInstance = z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
 const safePositive = z.number().int().positive().safe();
+
+const repositoryName = z.union([
+  z.literal("primary"),
+  z.string().regex(REPOSITORY_NAME_PATTERN, REPOSITORY_NAME_MESSAGE),
+]);
+export const reviewedRepositoryV1Schema = z.object({
+  name: repositoryName,
+  repository_identity_digest: digest,
+  commit: gitOidV1Schema,
+}).strict();
+
+function validateReviewedRepositories(repositories: readonly ReviewedRepositoryV1[]): void {
+  if (repositories.length === 0 || repositories[0]?.name !== "primary") {
+    throw new TypeError("reviewed repositories must begin with primary");
+  }
+  const names = repositories.map((repository) => repository.name);
+  if (new Set(names).size !== names.length || names.some((name, index) => index > 1 && names[index - 1]! >= name)) {
+    throw new TypeError("reviewed repositories must contain unique names sorted after primary");
+  }
+}
+
+export const reviewedRepositoriesV1Schema = z.array(reviewedRepositoryV1Schema).superRefine((repositories, context) => {
+  try { validateReviewedRepositories(repositories); }
+  catch (error) { context.addIssue({ code: "custom", message: error instanceof Error ? error.message : "invalid reviewed repositories" }); }
+});
+
+export function parseReviewedRepositoriesV1(value: unknown): readonly ReviewedRepositoryV1[] {
+  assertPlainJson(value, "reviewed repositories");
+  return reviewedRepositoriesV1Schema.parse(value) as readonly ReviewedRepositoryV1[];
+}
 
 export const ruleVersionRefSchema = z.object({ rule_id: id, rule_version: safePositive }).strict();
 export const reviewFindingSchema = z.object({
@@ -188,6 +227,14 @@ export type ServerAttestedReview = Omit<ReviewProvenanceBase, "model_family" | "
   /** Optional on read for archived evidence; every fresh server mint supplies it. */
   readonly route_source?: RouteSourceRecord;
   readonly route_override?: RouteOverrideRecord;
+  /**
+   * Optional on read: evidence archived before repository sets existed (including the durable gate
+   * fixtures under `test/fixtures/contracts`) carries no pins, so the schema cannot require it
+   * without invalidating those archives. Every fresh server mint supplies it. The pins are display
+   * only — status compares them with live HEADs for the human, but a context-only member moving
+   * after review never stales the evidence or its gate.
+   */
+  readonly repositories?: readonly ReviewedRepositoryV1[];
 };
 export type DegradedReview = ReviewProvenanceBase & {
   readonly assurance: "degraded";
@@ -229,6 +276,7 @@ const serverAttestedReviewSchema = provenanceBase.safeExtend({
   provider: nonBlank.optional(),
   route_source: routeSourceRecordSchema.optional(),
   route_override: routeOverrideRecordSchema.optional(),
+  repositories: reviewedRepositoriesV1Schema.optional(),
 }).strict();
 const degradedReviewSchema = provenanceBase.safeExtend({ assurance: z.literal("degraded"), reason: nonBlank }).strict();
 export const reviewEvidenceSchema = z.discriminatedUnion("assurance", [serverAttestedReviewSchema, degradedReviewSchema]);

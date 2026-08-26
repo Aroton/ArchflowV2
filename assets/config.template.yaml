@@ -28,6 +28,34 @@ roles:
 # loop ends when triage accepts nothing, so review convergence is a triage judgment.
 # max_attempts: 3
 
+# Optional task repository set. Task creation copies this declaration into the
+# task-local config; that task remains the only source of task resources, policy,
+# and workflow authority. `primary` is reserved for the repository containing
+# `.archflow/` and is always present and writable.
+#
+# Secondary names use task-slug syntax. Paths may be absolute or relative to the
+# primary worktree root. Omitted mode means `context-only`. `writable` allows a
+# phase implementation to declare, review, restore, and commit changes there.
+# Every implementation submission includes one section for every writable
+# secondary, even when its outputs are empty so undeclared changes can be found.
+# Context-only repositories are review context and are never written.
+# Config edits are ordinary informational changes and do not themselves block or
+# reroute the workflow. Status reports primary first, then secondaries in ordinal
+# name order regardless of YAML key order.
+#
+# Reviewers receive one named, pinned view per configured repository. Changed
+# writable members use their exact proposed trees; unchanged writable and
+# context-only members remain commit-pinned context. Approval `content` globs match
+# each repository's own repository-relative path, so `**/*.sql` matches SQL in any
+# writable repository and a rule like `apis/src/**` does not address a secondary by
+# name; humans see matches displayed as `<name>/<path>`.
+# repositories:
+#   apis:
+#     path: ../apis
+#   stripe:
+#     path: /work/services/stripe
+#     mode: writable
+
 # Optional. Per-phase-kind role overrides on top of the default roles above. Each key
 # is a phase kind (explore, prd, design, phase-design, phase-impl) and its value is the
 # same roles shape, listing only the routes to override for that kind. The schema is

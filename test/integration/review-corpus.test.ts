@@ -51,6 +51,11 @@ type AdjudicationCorpus = Readonly<{
 
 const roots: string[] = [];
 const corpus = (name: string) => new URL(`../fixtures/corpus/${name}`, import.meta.url);
+const repositories = [{
+  name: "primary",
+  repository_identity_digest: parseSha256Digest("1".repeat(64)),
+  commit: "0123456789abcdef0123456789abcdef01234567" as never,
+}] as const;
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -202,6 +207,7 @@ describe("deterministic fake-CLI review corpus", () => {
         adapter: route(reviewer).adapter,
         cli_version: reviewer === "claude" ? "2.1.220" : "0.146.0",
         route: route(reviewer),
+        repositories,
         envelope_input_digest: parseSha256Digest("d".repeat(64)),
         extracted_output_bytes: extracted,
       });
@@ -235,6 +241,7 @@ describe("deterministic fake-CLI review corpus", () => {
         adapter: "codex-cli",
         cli_version: "0.146.0",
         route: route("codex"),
+        repositories,
         envelope_input_digest: parseSha256Digest("d".repeat(64)),
         extracted_output_bytes: extracted,
       });

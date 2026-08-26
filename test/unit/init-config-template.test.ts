@@ -45,4 +45,12 @@ describe("config template", () => {
     const source = await template();
     expectOrientation(parseConfigYaml(commentedCodexOrientation(source), "commented codex-host orientation"), "codex");
   });
+
+  it("documents secondary repository declarations without enabling them by default", async () => {
+    const source = await template();
+    const parsed = parseConfigYaml(source, "config.template.yaml");
+
+    expect(parsed.repositories).toBeUndefined();
+    expect(source).toContain("repositories:");
+  });
 });

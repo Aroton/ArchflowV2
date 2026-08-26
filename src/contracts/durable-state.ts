@@ -2,8 +2,8 @@ import { z } from "zod";
 
 import type { GitOid } from "./canonical.js";
 import { gitOidV1Schema } from "./canonical.js";
-import type { TaskConfigSnapshot, WorkflowSubject } from "./config.js";
-import { approvalRulesSchema, configOverridesSchema, configRolesSchema, configRouteSchema, configV1Schema, workflowSubjectV1Schema } from "./config.js";
+import type { RepositoryName, TaskConfigSnapshot, WorkflowSubject } from "./config.js";
+import { approvalRulesSchema, configOverridesSchema, configRolesSchema, configRouteSchema, configV1Schema, repositoriesV1Schema, repositoryDeclarationV1Schema, repositoryModeV1Schema, repositoryNameV1Schema, workflowSubjectV1Schema } from "./config.js";
 import type { PathSafeId, SafeCode, SafeId, SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
 import { pathSafeIdV1Schema, safeCodeV1Schema, safeIdV1Schema, safeIntegerV1Schema, sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
 import type { GateKind, WaiverScope } from "./gates.js";
@@ -18,6 +18,8 @@ import type { PipelineStep } from "./vocabulary.js";
 import { PIPELINE_STEPS } from "./vocabulary.js";
 import type { ToolName } from "./tool-names.js";
 import { TOOL_NAMES } from "./tool-names.js";
+
+const settlementRepositoryNameV1Schema = repositoryNameV1Schema.clone(repositoryNameV1Schema.def);
 
 /**
  * `state.json` — the durable state of truth for one task.
@@ -214,7 +216,13 @@ export type BaselineAdoptionRecord = {
    * an authorized milestone commit), so the record retires the recorded presence instead of
    * binding replacement bytes. Discovery overlays these as absence observations newest-per-path.
    */
-  readonly adopted_absences?: readonly ProjectionDigestRef["path"][];
+  readonly adopted_absences?: readonly (ProjectionDigestRef["path"] | RepositoryProjectionPathRefV1)[];
+};
+
+export type RepositoryProjectionPathRefV1 = {
+  /** Omission denotes primary; fresh secondary records always carry it. */
+  readonly repository?: RepositoryName;
+  readonly path: ProjectionDigestRef["path"];
 };
 
 export type RuleSettlementConclusionV1 =
@@ -223,8 +231,25 @@ export type RuleSettlementConclusionV1 =
     readonly wait: true;
     readonly match:
       | { readonly kind: "subject"; readonly subject: WorkflowSubject }
-      | { readonly kind: "content"; readonly paths: readonly string[] };
+      | { readonly kind: "content"; readonly paths: readonly string[]; readonly secondary_paths?: readonly SecondaryMatchedPathsV1[] };
   };
+
+export type SecondaryMatchedPathsV1 = {
+  readonly repository: RepositoryName;
+  readonly paths: readonly string[];
+};
+
+export type RepositoryCommitMilestoneV1 = {
+  readonly repository: RepositoryName;
+  readonly repository_identity_digest: Sha256Digest;
+  readonly baseline_commit: GitOid;
+  readonly target_ref: string;
+  readonly target_head: GitOid;
+  readonly paths: readonly string[];
+  readonly commit_message: string;
+  readonly diff_digest: Sha256Digest;
+  readonly snapshot_digest: Sha256Digest;
+};
 
 /**
  * The rule decision frozen by the transaction that first establishes a clean final-review fixed
@@ -247,6 +272,7 @@ export type RuleSettlementV1 = {
   /** Written as a pair for new no-wait design milestones; legacy settlements omit both. */
   readonly milestone_target_ref?: string;
   readonly milestone_target_head?: GitOid;
+  readonly secondary_milestones?: readonly RepositoryCommitMilestoneV1[];
   /** `>= 1` (D8), and no later than the containing state's revision. */
   readonly settled_at_revision: SafeInteger;
 };
@@ -384,6 +410,8 @@ export type TaskStateV1 = {
    * (pre-cutover tasks) records nothing and notices nothing.
    */
   readonly last_seen_config?: TaskConfigSnapshot;
+  /** Derived continuity checkpoint corresponding exactly to `last_seen_config.repositories`. */
+  readonly last_seen_repository_bindings?: readonly LastSeenRepositoryBindingV1[];
   readonly last_transition?: LastTransition;
   readonly terminal?: TerminalState;
 };
@@ -397,6 +425,12 @@ export type ConfigChangeEntry = {
   readonly path: string;
   readonly before?: PlainJsonValue;
   readonly after?: PlainJsonValue;
+};
+
+export type LastSeenRepositoryBindingV1 = {
+  readonly name: "primary" | RepositoryName;
+  readonly declared_path?: string;
+  readonly repository_identity_digest: Sha256Digest;
 };
 
 const sha256Digest = sha256DigestV1Schema as unknown as z.ZodType<Sha256Digest>;
@@ -559,27 +593,59 @@ export const planningRestartHumanProvenanceV1Schema = z.union([
 // Task-state owns its own projection-ref mirror rather than $ref-ing result-manifest's def: this
 // schema catalogue stays self-contained, exactly like the shared reference shapes above.
 const adoptedProjectionRefV1Schema = z.object({
+  repository: settlementRepositoryNameV1Schema.optional(),
   path: repositoryPathClaimV1Schema,
   content_digest: sha256Digest,
 }).strict();
+
+const repositoryProjectionKey = (value: unknown): string => {
+  const item = value as { readonly repository?: string; readonly path: string };
+  return `${item.repository ?? ""}\u0000${item.path}`;
+};
+const adoptedAbsenceKey = (value: unknown): string =>
+  typeof value === "string" ? `\u0000${value}` : repositoryProjectionKey(value);
 
 export const baselineAdoptionRecordV1Schema = z.object({
   gate_id: pathSafeIdV1Schema,
   adopted_at_revision: positiveSafeInteger,
   adopted_projections: z.array(adoptedProjectionRefV1Schema)
-    .refine((items) => isSortedUniqueBy(items, tupleKey("path")), "adopted projections must be sorted by path with no duplicates"),
-  adopted_absences: z.array(repositoryPathClaimV1Schema).optional()
-    .refine((items) => isSortedUniqueBy(items), "adopted absences must be sorted with no duplicates"),
+    .refine((items) => isSortedUniqueBy(items as readonly { readonly repository?: string; readonly path: string }[], repositoryProjectionKey), "adopted projections must be sorted by repository and path with no duplicates"),
+  adopted_absences: z.array(z.union([
+    repositoryPathClaimV1Schema,
+    z.object({ repository: settlementRepositoryNameV1Schema, path: repositoryPathClaimV1Schema }).strict(),
+  ])).optional().refine((items) => isSortedUniqueBy(items as readonly (string | { readonly repository?: string; readonly path: string })[], adoptedAbsenceKey), "adopted absences must be sorted by repository and path with no duplicates"),
 }).strict() as unknown as z.ZodType<BaselineAdoptionRecord>;
 
 const ruleSettlementMatchV1Schema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("subject"), subject: workflowSubjectV1Schema }).strict(),
   z.object({
     kind: z.literal("content"),
-    paths: z.array(z.string()).min(1)
+    paths: z.array(z.string())
       .refine((items) => isSortedUniqueBy(items), "content match paths must be sorted with no duplicates"),
-  }).strict(),
+    secondary_paths: z.array(z.object({
+      repository: settlementRepositoryNameV1Schema,
+      paths: z.array(z.string()).min(1)
+        .refine((items) => isSortedUniqueBy(items), "secondary content paths must be sorted with no duplicates"),
+    }).strict()).refine((items) => isSortedUniqueBy(items, tupleKey("repository")), "secondary_paths must be sorted by repository with no duplicates").optional(),
+  }).strict().superRefine((match, context) => {
+    if (match.paths.length === 0 && (match.secondary_paths?.length ?? 0) === 0) {
+      context.addIssue({ code: "custom", message: "content match must contain at least one primary or secondary path" });
+    }
+  }),
 ]);
+
+export const repositoryCommitMilestoneV1Schema = z.object({
+  repository: settlementRepositoryNameV1Schema,
+  repository_identity_digest: sha256Digest,
+  baseline_commit: gitOidV1Schema,
+  target_ref: z.string().min(1).max(4096).regex(/\S/u),
+  target_head: gitOidV1Schema,
+  paths: z.array(repositoryPathClaimV1Schema).min(1)
+    .refine((items) => isSortedUniqueBy(items), "paths must be sorted with no duplicates"),
+  commit_message: z.string().min(1).max(4096).regex(/\S/u),
+  diff_digest: sha256Digest,
+  snapshot_digest: sha256Digest,
+}).strict() as unknown as z.ZodType<RepositoryCommitMilestoneV1>;
 
 export const ruleSettlementConclusionV1Schema = z.discriminatedUnion("wait", [
   z.object({ wait: z.literal(false), match: z.literal(null) }).strict(),
@@ -596,6 +662,9 @@ export const ruleSettlementV1Schema = z.object({
   milestone_baseline_commit: gitOidV1Schema.optional(),
   milestone_target_ref: z.string().min(1).max(4096).regex(/\S/u).optional(),
   milestone_target_head: gitOidV1Schema.optional(),
+  secondary_milestones: z.array(repositoryCommitMilestoneV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("repository")), "secondary_milestones must be sorted by repository with no duplicates")
+    .optional(),
   settled_at_revision: positiveSafeInteger,
 }).strict().superRefine((settlement, context) => {
   if ((settlement.milestone_target_ref === undefined) !== (settlement.milestone_target_head === undefined)) {
@@ -604,9 +673,12 @@ export const ruleSettlementV1Schema = z.object({
   if (settlement.milestone_target_ref !== undefined && settlement.milestone_baseline_commit === undefined) {
     context.addIssue({ code: "custom", path: ["milestone_target_ref"], message: "milestone target facts require a milestone baseline" });
   }
-  if (settlement.milestone_baseline_commit === undefined) return;
   const kind = decodePhaseInstance(settlement.phase_instance).kind;
-  if (settlement.conclusion.wait || (kind !== "design" && kind !== "phase-design" && kind !== "phase-impl")) {
+  if (settlement.secondary_milestones !== undefined && (kind !== "phase-impl" || settlement.conclusion.wait)) {
+    context.addIssue({ code: "custom", path: ["secondary_milestones"], message: "secondary milestones are allowed only on a phase-implementation wait:false settlement" });
+  }
+  if (settlement.milestone_baseline_commit !== undefined &&
+      (settlement.conclusion.wait || (kind !== "design" && kind !== "phase-design" && kind !== "phase-impl"))) {
     context.addIssue({
       code: "custom",
       path: ["milestone_baseline_commit"],
@@ -687,6 +759,20 @@ export const taskConfigOverridesV1Schema = configOverridesSchema.clone({
   ) as typeof configOverridesSchema.shape,
 });
 export const taskConfigApprovalRulesV1Schema = approvalRulesSchema.clone(approvalRulesSchema.def);
+export const taskConfigRepositoryModeV1Schema = repositoryModeV1Schema.clone(repositoryModeV1Schema.def);
+export const taskConfigRepositoryNameV1Schema = repositoryNameV1Schema.clone(repositoryNameV1Schema.def);
+export const taskConfigRepositoryDeclarationV1Schema = repositoryDeclarationV1Schema.clone({
+  ...repositoryDeclarationV1Schema.def,
+  shape: {
+    ...repositoryDeclarationV1Schema.shape,
+    mode: taskConfigRepositoryModeV1Schema.optional(),
+  },
+});
+export const taskConfigRepositoriesV1Schema = repositoriesV1Schema.clone({
+  ...repositoriesV1Schema.def,
+  keyType: taskConfigRepositoryNameV1Schema,
+  valueType: taskConfigRepositoryDeclarationV1Schema,
+});
 export const taskConfigSnapshotV1Schema = configV1Schema.clone({
   ...configV1Schema.def,
   shape: {
@@ -694,8 +780,22 @@ export const taskConfigSnapshotV1Schema = configV1Schema.clone({
     roles: taskConfigRolesV1Schema,
     overrides: taskConfigOverridesV1Schema.optional(),
     approval_rules: taskConfigApprovalRulesV1Schema.optional(),
+    repositories: taskConfigRepositoriesV1Schema.optional(),
   },
 });
+
+export const lastSeenRepositoryBindingV1Schema = z.object({
+  name: z.union([z.literal("primary"), taskConfigRepositoryNameV1Schema]),
+  declared_path: z.string().optional(),
+  repository_identity_digest: sha256Digest,
+}).strict() as unknown as z.ZodType<LastSeenRepositoryBindingV1>;
+
+const repositoryBindingOrderKey = (value: unknown): string => {
+  if (typeof value !== "object" || value === null) return String(value);
+  const descriptor = Object.getOwnPropertyDescriptor(value, "name");
+  const name = String(descriptor !== undefined && "value" in descriptor ? descriptor.value : undefined);
+  return name === "primary" ? "" : name;
+};
 
 /**
  * The authority. Each of the three set fields calls `isSortedUniqueBy` with `tupleKey` over its
@@ -743,6 +843,12 @@ export const taskStateV1Schema = z.object({
     .refine(isSortedUniqueRuleSettlements, "rule_settlements must be sorted by (phase_instance, subject_digest, settled_at_revision) with no duplicates")
     .optional(),
   last_seen_config: taskConfigSnapshotV1Schema.optional(),
+  last_seen_repository_bindings: z.array(lastSeenRepositoryBindingV1Schema)
+    .refine(
+      (items) => isSortedUniqueBy(items, repositoryBindingOrderKey),
+      "last_seen_repository_bindings must place primary first, followed by ordinal unique names",
+    )
+    .optional(),
   last_transition: lastTransitionV1Schema.optional(),
   terminal: z.enum(TERMINAL_STATES).optional(),
 }).strict().superRefine((state, context) => {

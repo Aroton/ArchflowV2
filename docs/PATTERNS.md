@@ -1,6 +1,6 @@
 # PATTERNS
 
-**Explored:** 2026-08-21 · **Commit:** `869c189` · **Covers:** `src/`, `test/`, `scripts/`, repository policy
+**Explored:** 2026-08-26 · **Commit:** `824734f` · **Covers:** `src/`, `test/`, `scripts/`, repository policy
 
 This is a strict TypeScript/Node package whose conventions are enforced primarily by the type checker, runtime validators, and tests. There is no configured linter or formatter. Match the surrounding file: contract registries intentionally use dense declarations, while state, repository, and MCP algorithms favor expanded control flow and rationale-heavy comments.
 
@@ -148,6 +148,7 @@ Durable objects and capability handles are commonly frozen. Authentic internal a
 - Use `:(top,literal)<claim>` by itself for worktree-root-anchored literal pathspecs. Never combine it with `--literal-pathspecs`: that disables pathspec magic and silently selects nothing. `readIndexEntries` in `src/repository/index-entries.ts` documents and implements the rule.
 - `git check-attr` accepts pathnames, not pathspecs. It therefore uses neither `:(top,literal)` nor `--literal-pathspecs`; see `src/repository/attributes.ts`.
 - Machine-readable Git output is normally NUL-delimited. Returned paths and result cardinality are validated rather than trusted (`src/repository/index-entries.ts`, `src/repository/attributes.ts`).
+- Once a task can span writable secondaries, the identity of a projection, drift observation, adoption, restore target, or commit fact is the `(repository, path)` tuple, never the relative path alone; an omitted repository means `primary`, and identical relative paths in different members must not collide (`src/state/snapshots.ts`, `src/state/gates.ts`, `src/local/commands.ts`).
 - Paths enter as branded claims and are resolved through `src/repository/paths.ts`; consumers act on `ResolvedPath` values and re-check `path_class`. Avoid ad hoc concatenation for repository or task authority.
 
 ### Durable writes and transaction ownership

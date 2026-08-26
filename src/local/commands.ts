@@ -3,9 +3,9 @@ import { parseGateDecisionRecord, parseGateRequest } from "../contracts/durable-
 import { parseResultManifest } from "../contracts/durable-result-manifest.js";
 import { parseDocumentArtifact } from "../contracts/durable-document.js";
 import { parseImplementationOutput } from "../contracts/durable-implementation-output.js";
-import { parseSafeInteger, parseSha256Digest, parseTaskSlug, type SafeCode } from "../contracts/evidence.js";
+import { parseSafeInteger, parseSha256Digest, parseTaskSlug, type SafeCode, type Sha256Digest } from "../contracts/evidence.js";
 import { createVerifiedEvidenceReference } from "../contracts/internal/trust-mints.js";
-import { parseRepositoryPathClaim } from "../contracts/path-claims.js";
+import { parseRepositoryPathClaim, type RepositoryPathClaim } from "../contracts/path-claims.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { renderReviewEvidence } from "../contracts/renderers.js";
 import { parseReviewEvidence } from "../contracts/review.js";
@@ -19,7 +19,7 @@ import {
   type ResolvedTaskPath,
 } from "../repository/paths.js";
 import { ensurePayloadParent, ensureResultDirectory } from "../state/layout.js";
-import { createProductionServices } from "../state/production.js";
+import { createProductionServices, readRetainedRepositoryOutput, type ProductionServices } from "../state/production.js";
 import { computeAuthoritativeSemanticStatus } from "../state/semantic-status.js";
 import { projectSemanticStatus } from "../state/semantic-view.js";
 import { installSnapshot, prepareSnapshot, restoreSnapshotOutput } from "../state/snapshots.js";
@@ -36,6 +36,8 @@ import {
 } from "./automation-status-edges.js";
 import { classifyWorkflowStatus, stagedUpgradeStatus } from "./status-classification.js";
 import { cleanTaskWorkspace, cleanTerminalTaskWorkspace } from "../state/workspace-cleanup.js";
+import { repositoryNameV1Schema, type RepositoryName } from "../contracts/config.js";
+import { resolveRepositorySet } from "../repository/repository-set.js";
 
 export const LOCAL_COMMANDS = Object.freeze([
   "validate", "hash", "render", "snapshot", "restore", "clean", "reconcile",
@@ -71,6 +73,7 @@ type CommandInput = Readonly<{
   command: LocalCommand;
   working_directory: string;
   task_id?: string;
+  repository_name?: string;
   value?: unknown;
 }>;
 
@@ -260,12 +263,62 @@ async function snapshot(input: CommandInput): Promise<PlainJsonValue | ProjectRe
   return installSnapshot(created.value.dependencies.atomic, prepared.value, manifestTarget.value, created.value.runner.location.worktreeRoot as never);
 }
 
+/**
+ * Reads one retained secondary-repository output back through its live writable member. The
+ * secondary path re-authenticates the member's identity and mode from current task configuration
+ * rather than trusting a filesystem path, so it needs current state and a resolved repository set.
+ */
+async function restoreSecondaryOutput(
+  created: ProductionServices,
+  resultDigest: Sha256Digest,
+  repository: RepositoryName,
+  outputPath: RepositoryPathClaim,
+): Promise<PlainJsonValue | ProjectResult<unknown>> {
+  const state = created.state?.value;
+  if (state === undefined) throw new TypeError("secondary repository restore requires current task state");
+  const reference = state.authoritative_results.find((item) => item.result_digest === resultDigest);
+  if (reference === undefined) throw new TypeError("secondary repository restore result is not current durable authority");
+  const config = await created.dependencies.read_config(created.authority.config);
+  if (config.kind !== "valid") throw new TypeError("secondary repository restore requires valid task configuration");
+  const repositorySet = await resolveRepositorySet(
+    { runner: created.runner, environment: created.environment },
+    config.snapshot.parsed,
+    created.authority.context,
+  );
+  if (!repositorySet.ok) return repositorySet;
+  const restored = await readRetainedRepositoryOutput({
+    primary_runner: created.runner,
+    authority: created.authority,
+    reference,
+    repository_set: repositorySet.value,
+    repository,
+    output_path: outputPath,
+  });
+  if (!restored.ok || restored.value.desired.state === "absent") {
+    return restored.ok
+      ? { schema_version: "1", ok: true, value: { path: outputPath, state: "absent" } }
+      : restored;
+  }
+  return {
+    schema_version: "1", ok: true,
+    value: {
+      path: outputPath,
+      state: "present",
+      file_type: restored.value.desired.file_type,
+      mode: restored.value.desired.mode,
+      bytes: Buffer.from(restored.value.desired.bytes).toString("base64"),
+    },
+  };
+}
+
 async function restore(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
   const created = await services(input);
   if (!created.ok) return created;
   const value = recordValue(input);
   const resultDigest = parseSha256Digest(value.result_digest);
   const outputPath = parseRepositoryPathClaim(value.output_path);
+  const repository = input.repository_name === undefined ? undefined : repositoryNameV1Schema.parse(input.repository_name);
+  if (repository !== undefined) return restoreSecondaryOutput(created.value, resultDigest, repository, outputPath);
   const manifestTarget = await resolveTaskPath({ runner: created.value.runner, taskId: created.value.authority.task_id, claim: resultAuthorityClaim(resultDigest), expectedClass: "authority-result", context: created.value.authority.context });
   if (!manifestTarget.ok) return manifestTarget;
   const payloadTarget = await resolveTaskWorkspacePath({ runner: created.value.runner, taskId: created.value.authority.task_id, claim: parseWorkspacePathClaim(`cache/results/${resultDigest}/payload/${outputPath}`), expectedClass: "workspace-result-payload", context: created.value.authority.context });

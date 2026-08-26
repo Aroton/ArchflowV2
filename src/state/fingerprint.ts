@@ -1,7 +1,7 @@
 import { canonicalJsonDigest, type CanonicalDocument } from "../contracts/canonical.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
-import { computeInputFingerprint, type DeclaredInputRef, type GitIdentityRef, type InputFingerprintSubject } from "../contracts/fingerprints.js";
+import { computeInputFingerprint, type DeclaredInputRef, type GitIdentityRef, type InputFingerprintSubject, type SecondaryDeclaredInputSectionV1 } from "../contracts/fingerprints.js";
 import type { Sha256Digest } from "../contracts/evidence.js";
 import type { ParsedToolCall } from "../contracts/mcp-tools.js";
 import type { ToolName } from "../contracts/tool-names.js";
@@ -22,6 +22,9 @@ export type CanonicalGitIdentityReader = <K extends ToolName>(
 export type CanonicalDeclaredInputReader = <K extends ToolName>(
   input: FingerprintReadContext<K>,
 ) => Promise<ProjectResult<readonly DeclaredInputRef[]>>;
+export type CanonicalSecondaryDeclaredInputReader = <K extends ToolName>(
+  input: FingerprintReadContext<K>,
+) => Promise<ProjectResult<readonly SecondaryDeclaredInputSectionV1[]>>;
 /**
  * The resolver's accepted value: the new-composition subject plus the fingerprint digest the
  * caller may record or compare. The digest is the new composition, except when the caller
@@ -118,6 +121,7 @@ export function createInternalInputFingerprintResolver(input: Readonly<{
   read_artifact_identities: CanonicalGitIdentityReader;
   read_upstream_identities: CanonicalGitIdentityReader;
   read_declared_inputs: CanonicalDeclaredInputReader;
+  read_secondary_declared_inputs?: CanonicalSecondaryDeclaredInputReader;
 }>): InputFingerprintResolver {
   return async <K extends ToolName>(context: FingerprintReadContext<K>): Promise<ProjectResult<ResolvedInputFingerprint>> => {
     const state = context.state.value;
@@ -133,6 +137,10 @@ export function createInternalInputFingerprintResolver(input: Readonly<{
     if (!upstream.ok) return upstream;
     const declared = await input.read_declared_inputs(context);
     if (!declared.ok) return declared;
+    const secondaryDeclared = input.read_secondary_declared_inputs === undefined
+      ? Object.freeze({ schema_version: "1" as const, ok: true as const, value: Object.freeze([] as SecondaryDeclaredInputSectionV1[]) })
+      : await input.read_secondary_declared_inputs(context);
+    if (!secondaryDeclared.ok) return secondaryDeclared;
 
     const subject: InputFingerprintSubject = {
       schema_version: "1",
@@ -143,13 +151,18 @@ export function createInternalInputFingerprintResolver(input: Readonly<{
       rubric_digest: rubricDigest(context.call, state.phase_instance),
       phase_instance: phaseInstance(context.call, context.context),
       declared_inputs: structuredClone(declared.value),
+      ...(secondaryDeclared.value.length === 0 ? {} : {
+        secondary_declared_inputs: structuredClone(secondaryDeclared.value),
+      }),
     };
     const fingerprint = computeInputFingerprint(subject);
     const expected = context.expected_input_fingerprint;
-    if (expected !== undefined && fingerprint !== expected) {
+    if (expected !== undefined && fingerprint !== expected && secondaryDeclared.value.length === 0) {
       // One bounded retry under the legacy composition; the recorded creation-time digest is
       // the config source, never live bytes. When neither matches, the new-composition value
-      // stands so the caller's existing mismatch error fires unchanged.
+      // stands so the caller's existing mismatch error fires unchanged. Secondary declared
+      // inputs have no legacy representation, so a multi-repository subject may never erase
+      // them by matching the primary-only fallback.
       const legacy = legacyInputFingerprint(subject, state.config_digest);
       if (legacy === expected) {
         return Object.freeze({ schema_version: "1", ok: true, value: { subject, fingerprint: legacy } });

@@ -1,7 +1,7 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 
 import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
 import { parsePathSafeId, parseSha256Digest } from "../../src/contracts/evidence.js";
@@ -16,13 +16,23 @@ import { identifyTransactionRequest } from "../../src/state/request.js";
 import { runStateTransaction } from "../../src/state/transaction.js";
 import { createTaskWorkspace, type TaskWorkspace } from "../helpers/task-workspace.js";
 import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
+import { cleanupTemporaryRepositories, createTempRepository, git } from "../helpers/temp-repository.js";
 
 const workspaces: TaskWorkspace[] = [];
 afterEach(() => {
   for (const workspace of workspaces.splice(0)) workspace.dispose();
 });
+afterAll(cleanupTemporaryRepositories);
 
 const D = (character: string) => parseSha256Digest(character.repeat(64));
+
+/** A committed secondary repository with no ArchFlow attributes of its own. */
+function secondaryRepository(label: string): Readonly<{ root: string; head: string }> {
+  const repository = createTempRepository({ label: `secondary-${label}`, attributes: undefined });
+  repository.write("README.md", `${label}\n`);
+  repository.commitAll("root");
+  return Object.freeze({ root: repository.path, head: repository.git("rev-parse", "HEAD") });
+}
 
 type Mutation = Readonly<{
   name: string;
@@ -113,6 +123,146 @@ async function recordTerminalResult(current: TaskWorkspace, intentId: string) {
 }
 
 describe("config as an editable input", () => {
+  it("reports the implicit primary first, then the declared repositories in name order, without changing the action", async () => {
+    const apis = secondaryRepository("apis");
+    const stripe = secondaryRepository("stripe");
+    const current = await createTaskWorkspace({
+      taskId: "config-edit-repository-order",
+      label: "repository-order",
+      configBytes: new TextEncoder().encode([
+        'schema_version: "1"',
+        "roles: {}",
+        "repositories:",
+        "  stripe:",
+        `    path: ${JSON.stringify(stripe.root)}`,
+        "    mode: writable",
+        "  apis:",
+        `    path: ${JSON.stringify(apis.root)}`,
+        "",
+      ].join("\n")),
+      rootBytes: new TextEncoder().encode("primary repository\n"),
+    });
+    workspaces.push(current);
+
+    const status = await computeTaskStatus(current.services.dependencies, current.services.authority);
+    expect(status.ok, status.ok ? undefined : JSON.stringify(status.error)).toBe(true);
+    if (!status.ok) return;
+    expect(status.value.repositories).toEqual([
+      { name: "primary", mode: "writable", location: current.root, head: git(current.root, "rev-parse", "HEAD") },
+      { name: "apis", mode: "context-only", location: apis.root, head: apis.head },
+      { name: "stripe", mode: "writable", location: stripe.root, head: stripe.head },
+    ]);
+    expect(status.value.next_action.code).toBe("run-step");
+    expect(current.services.state?.value.last_seen_config?.repositories).toEqual({
+      stripe: { path: stripe.root, mode: "writable" },
+      apis: { path: apis.root },
+    });
+    expect(current.services.state?.value.last_seen_repository_bindings?.map((entry) => ({
+      name: entry.name,
+      declared_path: entry.declared_path,
+    }))).toEqual([
+      { name: "primary", declared_path: undefined },
+      { name: "apis", declared_path: apis.root },
+      { name: "stripe", declared_path: stripe.root },
+    ]);
+  });
+
+  it("treats repository removal and same-identity relocation as informational edits and checkpoints them", async () => {
+    const apis = secondaryRepository("removed-apis");
+    const stripe = secondaryRepository("relocated-stripe");
+    const current = await createTaskWorkspace({
+      taskId: "config-edit-repository-relocation",
+      label: "repository-relocation",
+      configBytes: new TextEncoder().encode([
+        'schema_version: "1"',
+        "roles: {}",
+        "repositories:",
+        "  apis:",
+        `    path: ${JSON.stringify(apis.root)}`,
+        "  stripe:",
+        `    path: ${JSON.stringify(stripe.root)}`,
+        "",
+      ].join("\n")),
+    });
+    workspaces.push(current);
+    const before = await computeTaskStatus(current.services.dependencies, current.services.authority);
+    expect(before.ok).toBe(true);
+    if (!before.ok) return;
+
+    const relocatedDeclaration = join(stripe.root, "context");
+    mkdirSync(relocatedDeclaration);
+    writeFileSync(configPath(current), [
+      'schema_version: "1"',
+      "roles: {}",
+      "repositories:",
+      "  stripe:",
+      `    path: ${JSON.stringify(relocatedDeclaration)}`,
+      "",
+    ].join("\n"));
+    const noticed = await computeTaskStatus(current.services.dependencies, current.services.authority);
+    expect(noticed.ok, noticed.ok ? undefined : JSON.stringify(noticed.error)).toBe(true);
+    if (!noticed.ok) return;
+    expect(noticed.value.config_change).toEqual([
+      { path: "repositories.apis", before: { path: apis.root } },
+      { path: "repositories.stripe.path", before: stripe.root, after: relocatedDeclaration },
+    ]);
+    expect(noticed.value.next_action).toEqual(before.value.next_action);
+    expect(noticed.value.repositories?.map((repository) => repository.name)).toEqual(["primary", "stripe"]);
+    expect(noticed.value.repositories?.[1]?.location).toBe(stripe.root);
+
+    const advanced = await runStateTransaction(
+      current.services.dependencies,
+      { authority: current.services.authority, call: stateCall(current, "repository-relocation", "succeeded") },
+      await recordTerminalResult(current, "repository-relocation"),
+    );
+    expect(advanced.ok, advanced.ok ? undefined : JSON.stringify(advanced.error)).toBe(true);
+    if (!advanced.ok) return;
+    expect(advanced.value.state.value.last_seen_config?.repositories).toEqual({
+      stripe: { path: relocatedDeclaration },
+    });
+    expect(advanced.value.state.value.last_seen_repository_bindings?.map((entry) => ({
+      name: entry.name,
+      declared_path: entry.declared_path,
+    }))).toEqual([
+      { name: "primary", declared_path: undefined },
+      { name: "stripe", declared_path: relocatedDeclaration },
+    ]);
+  });
+
+  it("fails closed when an unchanged repository path is replaced by a different identity", async () => {
+    const apis = secondaryRepository("original-apis");
+    const current = await createTaskWorkspace({
+      taskId: "config-edit-repository-replacement",
+      label: "repository-replacement",
+      configBytes: new TextEncoder().encode([
+        'schema_version: "1"',
+        "roles: {}",
+        "repositories:",
+        "  apis:",
+        `    path: ${JSON.stringify(apis.root)}`,
+        "",
+      ].join("\n")),
+    });
+    workspaces.push(current);
+
+    rmSync(join(apis.root, ".git"), { recursive: true, force: true });
+    writeFileSync(join(apis.root, "README.md"), "replacement identity\n");
+    git(apis.root, "-c", "init.defaultBranch=main", "init", "-q");
+    git(apis.root, "add", "--", "README.md");
+    git(apis.root, "commit", "-q", "-m", "replacement root");
+
+    const status = await computeTaskStatus(current.services.dependencies, current.services.authority);
+    expect(status.ok).toBe(true);
+    if (!status.ok) return;
+    expect(status.value.config).toMatchObject({
+      verified: false,
+      issue: "config-invalid",
+      issues: ["repositories.apis.path: repository identity changed at the unchanged declared path"],
+    });
+    expect(status.value.repositories).toBeUndefined();
+    expect(status.value.next_action.code).toBe("inspect-state");
+  });
+
   it("accepts a model change during revision-zero initialization and seeds it as the baseline", async () => {
     const current = await workspace("initialization");
     mutateConfig(current, MODEL_CHANGE);
@@ -346,6 +496,50 @@ describe("config as an editable input", () => {
     expect(session.ok, session.ok ? undefined : JSON.stringify(session.error)).toBe(true);
     if (!session.ok) return;
     expect(session.value.config).toMatchObject({ schema_version: "1" });
+  });
+
+  it("rejects a named invalid repository entry before a review handler session opens", async () => {
+    const current = await workspace("invalid-repository-handler");
+    writeFileSync(configPath(current), [
+      'schema_version: "1"',
+      "roles: {}",
+      "repositories:",
+      "  Bad_Name:",
+      "    path: ../apis",
+      "",
+    ].join("\n"));
+    const state = current.services.state?.value;
+    if (state === undefined) throw new Error("initialized state unavailable");
+    const call = parseToolCall("archflow_counter_review", {
+      schema_version: "1",
+      task_id: current.taskId,
+      intent_id: "invalid-repository-handler",
+      expected_revision: state.revision,
+      input_fingerprint: state.input_fingerprint,
+      artifact_path: "prd.md",
+    });
+    const connection = connectionContextFactory.captureStartup({
+      connection_id: "config-invalid-repository-handler",
+      startup_repository_candidate: { working_directory: current.root },
+    }).initialize({
+      client: { name: "claude-code", version: "test" },
+      host: "claude",
+      protocol_version: "2025-11-25",
+    });
+    const context = createInvocationContext(connection, {
+      invocation_id: "config-invalid-repository-handler-call",
+      transport_metadata: { request_id: "config-invalid-repository-handler-request", operation: "tools/call" },
+    }, new AbortController().signal);
+
+    const session = await openHandlerSession(call, context);
+
+    expect(session.ok).toBe(false);
+    if (session.ok) return;
+    expect(session.error.code).toBe("CONFIG_INVALID");
+    if (session.error.code !== "CONFIG_INVALID") return;
+    expect(session.error.diagnostic.parameters.issues).toEqual([
+      expect.stringContaining("repositories.Bad_Name"),
+    ]);
   });
 
   it("still fails closed on an unparseable config without leaking its content", async () => {

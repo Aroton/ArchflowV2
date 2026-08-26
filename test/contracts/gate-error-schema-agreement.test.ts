@@ -51,6 +51,21 @@ describe("gate and error JSON Schema authority", () => {
     expect(protocolValidator.validate({ ...protocol, diagnostic: { ...protocol.diagnostic, parameters: { tool_name_digest: D, raw_name: "secret" } } })).toBe(false);
   });
 
+  it("publishes the bounded optional CONFIG_INVALID issue list", () => {
+    const error = createProjectError("CONFIG_INVALID", {
+      issue_code: "config-schema-invalid",
+      issues: ["repositories.apis.path: invalid declaration"],
+    });
+    expect(projectValidator.validate(error), JSON.stringify(projectValidator.validate.errors)).toBe(true);
+    expect(projectValidator.validate({
+      ...error,
+      diagnostic: {
+        ...error.diagnostic,
+        parameters: { ...error.diagnostic.parameters, issues: Array.from({ length: 6 }, () => "invalid") },
+      },
+    })).toBe(false);
+  });
+
   it("makes ENVELOPE_OVERFLOW paths lexical, sorted, and unique in both authorities", () => {
     const error = (offending_paths: string[]) => ({ schema_version: "1", code: "ENVELOPE_OVERFLOW", owner: "contracts", retryable: false, diagnostic: { template_id: "ENVELOPE_OVERFLOW", parameters: { offending_paths, current_bytes: 2_000_000, byte_cap: 1_048_576 } }, next_action: "reduce-review-subject" });
     expect(projectValidator.validate(error(["dist/archflow-mcp.mjs", "package-lock.json"]))).toBe(true);

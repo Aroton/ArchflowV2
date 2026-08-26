@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { canonicalDocument, canonicalJsonDigest, parseGitOid, sha256Bytes } from "../../src/contracts/canonical.js";
+import { canonicalDocument, canonicalJsonBytes, canonicalJsonDigest, parseGitOid, sha256Bytes } from "../../src/contracts/canonical.js";
 import type { ConfigV1 } from "../../src/contracts/config.js";
 import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
@@ -724,9 +724,24 @@ else {
     });
     const result = await runCounterReview({
       transaction: h.services.dependencies,
-      dispatch: async () => {
+      dispatch: async (_route, envelope) => {
         await writeFile(artifactPath, "after\n");
-        return { cli_version: "fixture-1", extracted_output_bytes: new Uint8Array() };
+        const dispatched = JSON.parse(new TextDecoder().decode(envelope.bytes));
+        return { cli_version: "fixture-1", extracted_output_bytes: canonicalJsonBytes({
+          schema_version: "1",
+          task_id: dispatched.subject.task_id,
+          phase_instance: dispatched.subject.phase_instance,
+          step: "counter_review",
+          role: "counter-review",
+          subject_digest: dispatched.subject.subject_digest,
+          input_fingerprint: dispatched.subject.input_fingerprint,
+          rubric_digest: dispatched.subject.rubric_digest,
+          producer_family: dispatched.subject.producer_family,
+          findings: [],
+          matched_rule_versions: [],
+          verdict: "pass",
+          blocking_count: 0,
+        }) };
       },
       reobserve_projection_digest: async () => ({
         schema_version: "1", ok: true,
@@ -740,6 +755,11 @@ else {
       phase_kind: "phase-impl",
       producer_family: "claude",
       measured_at_revision: parseSafeInteger(4),
+      repositories: Object.freeze([Object.freeze({
+        name: "primary",
+        repository_identity_digest: "a".repeat(64) as never,
+        commit: "b".repeat(40) as never,
+      })]),
       envelope: {
         artifact: "before\n",
         rubric,

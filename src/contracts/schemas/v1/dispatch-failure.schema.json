@@ -37,13 +37,26 @@
         "RATE_LIMITED",
         "UNSUPPORTED_MODEL",
         "CLI_VERSION_UNSUPPORTED",
-        "PROCESS_FAILED"
+        "PROCESS_FAILED",
+        "REPOSITORY_VIEW_UNAVAILABLE"
       ]
     },
     "message": {
       "type": "string",
       "minLength": 1,
       "maxLength": 256
+    },
+    "repository_name": {
+      "anyOf": [
+        {
+          "type": "string",
+          "const": "primary"
+        },
+        {
+          "type": "string",
+          "pattern": "^(?!primary$)(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
+        }
+      ]
     },
     "route": {
       "type": "object",
@@ -100,5 +113,37 @@
     "message",
     "observed_at_revision"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "REPOSITORY_VIEW_UNAVAILABLE"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "repository_name": {}
+        },
+        "required": [
+          "repository_name"
+        ]
+      },
+      "else": {
+        "not": {
+          "properties": {
+            "repository_name": {}
+          },
+          "required": [
+            "repository_name"
+          ]
+        }
+      }
+    }
+  ]
 }

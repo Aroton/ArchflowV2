@@ -12,7 +12,8 @@ import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parsePathSafeId, parseSafeCode, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { computeGateContextDigest } from "../../src/contracts/fingerprints.js";
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
-import { discoverReconciliationInput } from "../../src/state/reconciliation-discovery.js";
+import { discoverReconciliationInput, orderedNewestProjections, type NewestProjectionIndex } from "../../src/state/reconciliation-discovery.js";
+import { repositoryPathKey } from "../../src/state/snapshots.js";
 import { reconcileCurrentAuthority } from "../../src/state/reconciliation.js";
 import { createProductionServices } from "../../src/state/production.js";
 import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
@@ -71,6 +72,18 @@ function receipt(state: TaskStateV1, intentId: string, marker: string) {
 }
 
 describe("discoverReconciliationInput", () => {
+  it("indexes the same relative path independently for primary and secondary repositories", () => {
+    const path = parseRepositoryPathClaim("src/shared.ts");
+    const primary = { retired: true as const, path, measured_at_revision: parseSafeInteger(1), reference: undefined };
+    const secondary = { retired: true as const, repository: "apis" as never, path, measured_at_revision: parseSafeInteger(2), reference: undefined };
+    const index: NewestProjectionIndex = new Map();
+    index.set(repositoryPathKey("apis", path), secondary);
+    index.set(repositoryPathKey(undefined, path), primary);
+    expect(index.get(repositoryPathKey("primary", path))).toBe(primary);
+    expect(index.get(repositoryPathKey("apis", path))).toBe(secondary);
+    expect(orderedNewestProjections(index)).toEqual([primary, secondary]);
+  });
+
   it("ignores accumulated historical receipts on a healthy task", async () => {
     const h = await harness();
     const current = h.state();

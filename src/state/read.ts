@@ -6,6 +6,7 @@ import {
   type CanonicalDocument,
 } from "../contracts/canonical.js";
 import { parseConfigYaml, type TaskConfigSnapshot } from "../contracts/config.js";
+import { describeValidationIssues } from "../contracts/errors.js";
 import { parseIntentReceipt, type IntentReceiptV1 } from "../contracts/durable-intent.js";
 import { taskStateV1Schema, type TaskStateV1 } from "../contracts/durable-state.js";
 import type { Sha256Digest } from "../contracts/evidence.js";
@@ -44,7 +45,7 @@ export type FingerprintReadContext<K extends ToolName> = Readonly<{
 
 export type ConfigReadResult =
   | Readonly<{ kind: "valid"; snapshot: LiveConfigSnapshot }>
-  | Readonly<{ kind: "invalid"; digest: Sha256Digest }>
+  | Readonly<{ kind: "invalid"; digest: Sha256Digest; issues?: string[] }>
   | Readonly<{ kind: "missing" | "unreadable" }>;
 
 const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -121,9 +122,14 @@ export async function readTaskConfig(path: ResolvedPath): Promise<ConfigReadResu
         parsed: parsed as TaskConfigSnapshot,
       }),
     });
-  } catch {
+  } catch (error) {
     // The bytes are in hand even when they will not parse, so the digest travels with the
     // failure — a reader can tell a schema rejection of the exact pinned bytes from a change.
-    return Object.freeze({ kind: "invalid", digest: sha256Bytes(read.bytes) });
+    const issues = describeValidationIssues(error);
+    return Object.freeze({
+      kind: "invalid",
+      digest: sha256Bytes(read.bytes),
+      ...(issues === undefined ? {} : { issues }),
+    });
   }
 }

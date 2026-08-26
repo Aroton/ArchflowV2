@@ -1,6 +1,8 @@
 import { z } from "zod";
 
+import { gitOidV1Schema, type GitOid } from "./canonical.js";
 import { configRouteSchema, type ModelRouteV1 } from "./config.js";
+import { repositoryNameV1Schema, type RepositoryName } from "./config.js";
 import {
   publicDispatchFailureV1Schema,
   type PublicDispatchFailureV1,
@@ -18,6 +20,7 @@ import { REVIEW_FINDING_SEVERITIES } from "./review.js";
 const nonBlank = z.string().min(1).regex(/\S/u);
 const boundedText = nonBlank.max(4096);
 const digest = sha256DigestV1Schema as unknown as z.ZodType<Sha256Digest>;
+export const workflowRepositoryNameV1Schema = repositoryNameV1Schema.clone(repositoryNameV1Schema.def);
 
 export const WORKFLOW_CONDITIONS = ["awaiting-client", "awaiting-human", "ready", "blocked", "complete"] as const;
 export type WorkflowConditionV1 = (typeof WORKFLOW_CONDITIONS)[number];
@@ -127,8 +130,19 @@ export type SemanticNextActionV1 = {
     readonly message: string;
     readonly target_ref: string;
     readonly baseline: string;
+    /** Present for a secondary; omitted means the primary repository. */
+    readonly repository?: { readonly name: RepositoryName; readonly location: string };
   };
   readonly reopen?: WorkflowReopenImpactV1;
+};
+
+/** Live, informational repository-set member exposed by status and semantic workflow views. */
+export type RepositoryStatusV1 = {
+  readonly name: string;
+  readonly mode: "context-only" | "writable";
+  readonly location: string;
+  readonly head?: GitOid;
+  readonly last_reviewed_commit?: GitOid;
 };
 
 export type WorkflowViewV1 = {
@@ -145,6 +159,12 @@ export type WorkflowViewV1 = {
   readonly presentation?: HumanPresentationV1;
   readonly dispatch_failure?: PublicDispatchFailureV1;
   /**
+   * Live repository set, resolved from task config on every status read. It is a projection only:
+   * review authority comes from authenticated retained evidence and write authority from declared
+   * implementation sections, never from this list.
+   */
+  readonly repositories?: readonly RepositoryStatusV1[];
+  /**
    * Informational field-level config changes since the last config-observing commit, projected
    * verbatim from the status notice. Never changes the condition or the next action.
    */
@@ -157,18 +177,35 @@ export type HumanRevisionDeclarationV1 = {
   readonly user_override?: { readonly agent_classification: "simple" | "significant"; readonly rationale: string };
 };
 
+export type ImplementationDeclaredInputV1 = {
+  readonly input_id: string;
+  readonly path: string;
+};
+
+export type ImplementationRepositoryDeclarationV1 = {
+  readonly name: RepositoryName;
+  readonly base_commit: string;
+  readonly outputs: readonly string[];
+  readonly restore_targets: readonly string[];
+  readonly declared_inputs: readonly ImplementationDeclaredInputV1[];
+};
+
+export type ImplementationDeclarationV1 = {
+  readonly base_commit: string;
+  readonly outputs: readonly string[];
+  readonly restore_targets: readonly string[];
+  readonly declared_inputs: readonly ImplementationDeclaredInputV1[];
+  /** Exactly one ordinal-sorted section for every configured writable secondary. */
+  readonly repositories?: readonly ImplementationRepositoryDeclarationV1[];
+};
+
 export type ApplySubmissionV1 =
   | { readonly kind: "task-ask"; readonly text: string }
   | { readonly kind: "reopening-request"; readonly request: string }
   | {
       readonly kind: "work-result";
       readonly outcome: "succeeded";
-      readonly implementation?: {
-        readonly base_commit: string;
-        readonly outputs: readonly string[];
-        readonly restore_targets: readonly string[];
-        readonly declared_inputs: readonly { readonly input_id: string; readonly path: string }[];
-      };
+      readonly implementation?: ImplementationDeclarationV1;
       readonly human_revision?: HumanRevisionDeclarationV1;
     }
   | { readonly kind: "work-result"; readonly outcome: "failed"; readonly reason: string }
@@ -318,7 +355,7 @@ const reopenImpactV1Schema = z.object({
   appends_prd_ask_history: z.boolean(),
   requires_fresh_review_and_approval: z.literal(true),
 }).strict();
-const commitInstructionV1Schema = z.object({ paths: z.array(nonBlank).min(1), message: nonBlank, target_ref: nonBlank, baseline: nonBlank }).strict().superRefine((commit, context) => {
+const commitInstructionV1Schema = z.object({ paths: z.array(nonBlank).min(1), message: nonBlank, target_ref: nonBlank, baseline: nonBlank, repository: z.object({ name: workflowRepositoryNameV1Schema, location: nonBlank }).strict().optional() }).strict().superRefine((commit, context) => {
   if (commit.paths.some((path, index) => index > 0 && commit.paths[index - 1]! > path)) {
     context.addIssue({ code: "custom", path: ["paths"], message: "commit paths must be sorted ascending" });
   }
@@ -338,7 +375,15 @@ export const configChangeEntryV1Schema = z.object({
   after: configChangeValueV1Schema.optional(),
 }).strict() as unknown as z.ZodType<ConfigChangeEntry>;
 
-export const workflowViewV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, condition: z.enum(WORKFLOW_CONDITIONS), headline: nonBlank, detail: nonBlank, position: workflowPositionV1Schema.optional(), resources: z.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: z.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), presentation: humanPresentationV1Schema.optional(), dispatch_failure: publicDispatchFailureV1Schema.optional(), config_change: z.array(configChangeEntryV1Schema).optional() }).strict() as unknown as z.ZodType<WorkflowViewV1>;
+export const repositoryStatusV1Schema = z.object({
+  name: nonBlank,
+  mode: z.enum(["context-only", "writable"]),
+  location: nonBlank,
+  head: gitOidV1Schema.optional(),
+  last_reviewed_commit: gitOidV1Schema.optional(),
+}).strict() as unknown as z.ZodType<RepositoryStatusV1>;
+
+export const workflowViewV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, condition: z.enum(WORKFLOW_CONDITIONS), headline: nonBlank, detail: nonBlank, position: workflowPositionV1Schema.optional(), resources: z.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: z.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), presentation: humanPresentationV1Schema.optional(), dispatch_failure: publicDispatchFailureV1Schema.optional(), repositories: z.array(repositoryStatusV1Schema).optional(), config_change: z.array(configChangeEntryV1Schema).optional() }).strict() as unknown as z.ZodType<WorkflowViewV1>;
 
 export const semanticErrorSummaryV1Schema = z.object({
   code: nonBlank.max(128),
@@ -353,7 +398,21 @@ export const semanticResultV1Schema = z.union([semanticSuccessV1Schema, semantic
 const humanRevisionDeclarationV1Schema = z.object({ classification: z.enum(["simple", "significant"]), rationale: boundedText, user_override: z.object({ agent_classification: z.enum(["simple", "significant"]), rationale: boundedText }).strict().optional() }).strict().superRefine((revision, context) => {
   if (revision.user_override?.agent_classification === revision.classification) context.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
 });
-const implementationFactsV1Schema = z.object({ base_commit: nonBlank, outputs: z.array(nonBlank), restore_targets: z.array(nonBlank), declared_inputs: z.array(z.object({ input_id: nonBlank, path: nonBlank }).strict()) }).strict();
+const implementationDeclaredInputV1Schema = z.object({ input_id: nonBlank, path: nonBlank }).strict();
+const implementationRepositoryFactsV1Schema = z.object({
+  name: workflowRepositoryNameV1Schema,
+  base_commit: nonBlank,
+  outputs: z.array(nonBlank),
+  restore_targets: z.array(nonBlank),
+  declared_inputs: z.array(implementationDeclaredInputV1Schema),
+}).strict();
+const implementationFactsV1Schema = z.object({
+  base_commit: nonBlank,
+  outputs: z.array(nonBlank).min(1),
+  restore_targets: z.array(nonBlank),
+  declared_inputs: z.array(implementationDeclaredInputV1Schema),
+  repositories: z.array(implementationRepositoryFactsV1Schema).optional(),
+}).strict();
 // A parentless clone, for the same reason as mcp-tools' `overrideRoute`: the shared instance is
 // registered as `config#/$defs/route`, and the advertised catalogue carries no config document, so
 // a cross-document reference to it would be unresolvable there. The clone inlines inside this

@@ -16,6 +16,7 @@ import {
   type ProjectError,
   type ProjectResult,
 } from "../contracts/errors.js";
+import { REPOSITORY_NAME_PATTERN } from "../contracts/config.js";
 import { parseTaskSlug, type PathSafeId, type TaskSlug } from "../contracts/evidence.js";
 import type { PhaseInstanceId } from "../contracts/phase-instance.js";
 import {
@@ -237,7 +238,8 @@ const WORKSPACE_CLASS_RULES: readonly ClassRule<WorkspacePathClass>[] = [
   { path_class: "workspace-lock", pattern: anchored("transient/\\.transaction-lock") },
   {
     path_class: "workspace-result-payload",
-    pattern: anchored(`cache/results/${SHA256}/payload/.+`),
+    // The `repository` group is checked against the shared name pattern by `classifyIn`.
+    pattern: anchored(`cache/results/${SHA256}/(?:payload/.+|repositories/(?<repository>[^/]+)/payload/.+)`),
   },
   {
     path_class: "workspace-review",
@@ -363,7 +365,14 @@ function classifyIn<C extends string>(
   rules: readonly ClassRule<C>[],
   claim: string
 ): C | undefined {
-  for (const rule of rules) if (rule.pattern.test(claim)) return rule.path_class;
+  for (const rule of rules) {
+    const match = rule.pattern.exec(claim);
+    if (match === null) continue;
+    // A `repository` capture must be a declared-name segment, not merely a path-safe one.
+    const repository = match.groups?.repository;
+    if (repository !== undefined && !REPOSITORY_NAME_PATTERN.test(repository)) continue;
+    return rule.path_class;
+  }
   return undefined;
 }
 
@@ -423,11 +432,17 @@ export function classifyRepositoryPath(
   return classifyRepositoryPathFor(UNSCOPED_TASK_ID, claim, undefined);
 }
 
+/** Git's administrative directory is never repository source or a workflow-owned path. */
+export function isRepositoryControlPath(claim: string): boolean {
+  return claim === ".git" || claim.startsWith(".git/");
+}
+
 function classifyRepositoryPathFor(
   taskId: TaskSlug,
   claim: RepositoryPathClaim,
   expectedClass: RepositoryPathClass | undefined
 ): ProjectResult<RepositoryPathClass> {
+  if (isRepositoryControlPath(claim)) return fail(pathInvalid(taskId, expectedClass));
   if (!inArchflowTree(claim)) return ok("repository-source");
   const matched = classifyIn(REPOSITORY_CLASS_RULES, claim);
   if (matched === undefined) return fail(pathInvalid(taskId, expectedClass));

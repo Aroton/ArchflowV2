@@ -23,6 +23,8 @@ import { triageCandidateSchema } from "./triage.js";
 import { isSortedUniqueBy, tupleKey } from "./validators.js";
 import type { PipelineStep } from "./vocabulary.js";
 import { PIPELINE_STEPS } from "./vocabulary.js";
+import type { RepositoryName } from "./config.js";
+import { durableRepositoryNameV1Schema } from "./durable-primitives.js";
 
 /**
  * Immutable authority stored at `authority/results/<result-digest>.json`.
@@ -46,8 +48,15 @@ export type ResultManifestV1 = {
   readonly snapshot_digest: Sha256Digest;
   readonly outputs: readonly OutputEntry[];
   readonly projections: readonly ProjectionDigestRef[];
+  readonly secondary_projections?: readonly SecondaryProjectionSetV1[];
   readonly accounting: SnapshotAccountingV1;
   readonly secret_scan: SecretScanResult;
+};
+
+export type SecondaryProjectionSetV1 = {
+  readonly repository: RepositoryName;
+  readonly repository_identity_digest: Sha256Digest;
+  readonly projections: readonly ProjectionDigestRef[];
 };
 
 export type ReviewEvidenceArtifactV1 = {
@@ -109,6 +118,17 @@ export const resultSourceArtifactV1Schema = z.union([
   adjudicationEvidenceArtifactV1Schema,
 ]) as unknown as z.ZodType<ResultSourceArtifactV1>;
 
+export const secondaryProjectionSetV1Schema = z.object({
+  repository: durableRepositoryNameV1Schema,
+  repository_identity_digest: sha256DigestV1Schema,
+  projections: z.array(projectionDigestRefV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("path")), "projections must be sorted by path with no duplicates"),
+}).strict().superRefine((section, context) => {
+  if (section.projections.some((projection) => projection.repository !== section.repository)) {
+    context.addIssue({ code: "custom", path: ["projections"], message: "secondary projection repositories must match their wrapper" });
+  }
+}) as unknown as z.ZodType<SecondaryProjectionSetV1>;
+
 /**
  * The authority. Both set-ordering sites call `isSortedUniqueBy` with `tupleKey("path")` — the
  * shared exported ordering predicates — so each ordering rule is literally one predicate across
@@ -129,6 +149,9 @@ export const resultManifestV1Schema = z.object({
     .refine((items) => isSortedUniqueBy(items, tupleKey("path")), "outputs must be sorted by path with no duplicates"),
   projections: z.array(projectionDigestRefV1Schema)
     .refine((items) => isSortedUniqueBy(items, tupleKey("path")), "projections must be sorted by path with no duplicates"),
+  secondary_projections: z.array(secondaryProjectionSetV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("repository")), "secondary_projections must be sorted by repository with no duplicates")
+    .optional(),
   accounting: snapshotAccountingV1Schema,
   secret_scan: secretScanResultV1Schema,
 }).strict() as unknown as z.ZodType<ResultManifestV1>;

@@ -127,6 +127,19 @@ describe("semantic status projection", () => {
     expect(projected.view.detail).toContain("2 fields");
   });
 
+  it("projects the live repository set as informational context", () => {
+    const repositories = [
+      { name: "primary", mode: "writable" as const, location: "/work/primary", head: "1".repeat(40) as never, last_reviewed_commit: "1".repeat(40) as never },
+      { name: "apis", mode: "context-only" as const, location: "/work/apis", head: "2".repeat(40) as never, last_reviewed_commit: "3".repeat(40) as never },
+    ];
+    const status = fullStatus(action("run-step", { step: "produce" }), { repositories });
+    const projected = projectSemanticStatus(snapshot(status), invocation).view;
+    expect(projected.next_action.kind).toBe("begin-work");
+    expect(projected.repositories).toEqual(repositories);
+    expect(projected.detail).toContain("live repository set is listed in repositories");
+    expect(projected.detail).toContain("grants no review or write authority");
+  });
+
   it("projects work, review, empty triage, triage, and honest implementation commit states", () => {
     const running = fullStatus(action("run-step", { step: "produce" }), { step: "produce", status: "running" });
     expect(projectSemanticStatus(snapshot(running), invocation).view.next_action.kind).toBe("submit-work");

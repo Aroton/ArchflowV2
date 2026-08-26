@@ -9,7 +9,7 @@ import { INPUT_FREE_COMMANDS, LOCAL_COMMAND_CONTRACTS, LOCAL_COMMANDS, runLocalC
 
 function usageText(): string {
   return [
-    "usage: archflow-local <command> [--task <task>] [--input <json-file>]",
+    "usage: archflow-local <command> [--task <task>] [--repository <secondary>] [--input <json-file>]",
     "       payload commands read JSON from --input <json-file>, or from stdin when --input is omitted",
     "       input-free commands never read stdin",
     "commands (payload; --task):",
@@ -46,7 +46,7 @@ async function readInput(command: LocalCommand, path: string | undefined): Promi
 async function main(): Promise<void> {
   const parsed = parseArgs({
     args: process.argv.slice(2), allowPositionals: true, strict: true,
-    options: { task: { type: "string" }, input: { type: "string" }, help: { type: "boolean", short: "h" } },
+    options: { task: { type: "string" }, repository: { type: "string" }, input: { type: "string" }, help: { type: "boolean", short: "h" } },
   });
   if (parsed.values.help || parsed.positionals.length === 0) {
     process.stdout.write(usageText());
@@ -66,8 +66,11 @@ async function main(): Promise<void> {
   if (INPUT_FREE_COMMANDS.has(command) && parsed.values.input !== undefined) {
     throw new TypeError(`${command} accepts no input payload; omit --input`);
   }
+  if (parsed.values.repository !== undefined && command !== "restore") {
+    throw new TypeError(`--repository is supported only by restore`);
+  }
   const value = INPUT_FREE_COMMANDS.has(command) ? undefined : await readInput(command, parsed.values.input);
-  const result = await runLocalCommand({ command, working_directory: process.cwd(), ...(parsed.values.task === undefined ? {} : { task_id: parsed.values.task }), ...(value === undefined ? {} : { value }) });
+  const result = await runLocalCommand({ command, working_directory: process.cwd(), ...(parsed.values.task === undefined ? {} : { task_id: parsed.values.task }), ...(parsed.values.repository === undefined ? {} : { repository_name: parsed.values.repository }), ...(value === undefined ? {} : { value }) });
   assertPlainJson(result, "local command result");
   if (result !== null && typeof result === "object" && !Array.isArray(result) && (result as Record<string, unknown>).ok === false) {
     process.exitCode = 1;

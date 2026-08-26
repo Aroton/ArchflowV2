@@ -599,10 +599,33 @@
                       "const": "content"
                     },
                     "paths": {
-                      "minItems": 1,
                       "type": "array",
                       "items": {
                         "type": "string"
+                      }
+                    },
+                    "secondary_paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "repository": {
+                            "type": "string",
+                            "pattern": "^(?!primary$)(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
+                          },
+                          "paths": {
+                            "minItems": 1,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "repository",
+                          "paths"
+                        ],
+                        "additionalProperties": false
                       }
                     }
                   },
@@ -661,6 +684,64 @@
         },
         "milestone_target_head": {
           "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+        },
+        "secondary_milestones": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "repository": {
+                "type": "string",
+                "pattern": "^(?!primary$)(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
+              },
+              "repository_identity_digest": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+              },
+              "baseline_commit": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+              },
+              "target_ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096,
+                "pattern": "\\S"
+              },
+              "target_head": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+              },
+              "paths": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                }
+              },
+              "commit_message": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096,
+                "pattern": "\\S"
+              },
+              "diff_digest": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+              },
+              "snapshot_digest": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+              }
+            },
+            "required": [
+              "repository",
+              "repository_identity_digest",
+              "baseline_commit",
+              "target_ref",
+              "target_head",
+              "paths",
+              "commit_message",
+              "diff_digest",
+              "snapshot_digest"
+            ],
+            "additionalProperties": false
+          }
         },
         "settled_at_revision": {
           "type": "integer",
@@ -877,6 +958,43 @@
       ],
       "additionalProperties": false
     },
+    "configRepositoryMode": {
+      "type": "string",
+      "enum": [
+        "context-only",
+        "writable"
+      ]
+    },
+    "configRepositoryName": {
+      "type": "string",
+      "pattern": "^(?!primary$)(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "configRepositoryDeclaration": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "mode": {
+          "$ref": "#/$defs/configRepositoryMode"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "configRepositories": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/configRepositoryName"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/configRepositoryDeclaration"
+      }
+    },
     "configSnapshot": {
       "type": "object",
       "properties": {
@@ -897,11 +1015,41 @@
         },
         "approval_rules": {
           "$ref": "#/$defs/configApprovalRules"
+        },
+        "repositories": {
+          "$ref": "#/$defs/configRepositories"
         }
       },
       "required": [
         "schema_version",
         "roles"
+      ],
+      "additionalProperties": false
+    },
+    "lastSeenRepositoryBinding": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "primary"
+            },
+            {
+              "$ref": "#/$defs/configRepositoryName"
+            }
+          ]
+        },
+        "declared_path": {
+          "type": "string"
+        },
+        "repository_identity_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        }
+      },
+      "required": [
+        "name",
+        "repository_identity_digest"
       ],
       "additionalProperties": false
     }
@@ -1085,6 +1233,10 @@
             "items": {
               "type": "object",
               "properties": {
+                "repository": {
+                  "type": "string",
+                  "pattern": "^(?!primary$)(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
+                },
                 "path": {
                   "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
                 },
@@ -1102,7 +1254,28 @@
           "adopted_absences": {
             "type": "array",
             "items": {
-              "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+              "anyOf": [
+                {
+                  "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "repository": {
+                      "type": "string",
+                      "pattern": "^(?!primary$)(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
+                    },
+                    "path": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                    }
+                  },
+                  "required": [
+                    "repository",
+                    "path"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
             }
           }
         },
@@ -1122,6 +1295,12 @@
     },
     "last_seen_config": {
       "$ref": "#/$defs/configSnapshot"
+    },
+    "last_seen_repository_bindings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/lastSeenRepositoryBinding"
+      }
     },
     "last_transition": {
       "$ref": "#/$defs/lastTransition"

@@ -7,6 +7,7 @@ import {
   type ServerAttestedAdjudication,
 } from "../adjudication.js";
 import {
+  parseReviewedRepositoriesV1,
   parseReviewEvidence,
   type DegradedReview,
   type ReviewEvidence,
@@ -23,13 +24,19 @@ import {
 } from "./trust-brands.js";
 
 export function createReviewObservationCapability(binding: ObservationBindingByKind["review"]): ObservationCapability<"review"> {
-  const copiedBinding = deepFreeze(structuredClone(binding));
+  const copiedBinding = deepFreeze({
+    ...structuredClone(binding),
+    repositories: parseReviewedRepositoriesV1(binding.repositories),
+  });
   const capability = Object.freeze({ kind: copiedBinding.kind }) as ObservationCapability<"review">;
   registerObservationCapability(capability, copiedBinding);
   return capability;
 }
 export function createAdjudicationObservationCapability(binding: ObservationBindingByKind["adjudication"]): ObservationCapability<"adjudication"> {
-  const copiedBinding = deepFreeze(structuredClone(binding));
+  const copiedBinding = deepFreeze({
+    ...structuredClone(binding),
+    repositories: parseReviewedRepositoriesV1(binding.repositories),
+  });
   const capability = Object.freeze({ kind: copiedBinding.kind }) as ObservationCapability<"adjudication">;
   registerObservationCapability(capability, copiedBinding);
   return capability;

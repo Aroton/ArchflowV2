@@ -48,6 +48,8 @@ export type NextAction = Readonly<{
   commit_message?: string;
   commit_target_ref?: string;
   commit_baseline?: string;
+  /** Fresh execution context for a non-primary repository commit. Omission means primary. */
+  commit_repository?: Readonly<{ name: string; location: string }>;
   /**
    * Every constitution gate this review still demands, in the order they will open, including the
    * one named by `gate_kind`. Present only when more than one remains, so a human can be told the
@@ -124,6 +126,7 @@ export type NextActionInput = Readonly<{
     message: string;
     target_ref: string;
     baseline_commit: string;
+    repository?: Readonly<{ name: string; location: string }>;
   }>;
   adjudication_gate_kind?: GateKind;
   /** Every constitution gate still pending, in the order they open; the first is `adjudication_gate_kind`. */
@@ -314,6 +317,9 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
         commit_message: input.implementation_commit.message,
         commit_target_ref: input.implementation_commit.target_ref,
         commit_baseline: input.implementation_commit.baseline_commit,
+        ...(input.implementation_commit.repository === undefined
+          ? {}
+          : { commit_repository: input.implementation_commit.repository }),
       },
     );
   }

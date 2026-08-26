@@ -14,6 +14,8 @@ import {
   type WorkflowViewV1,
 } from "../../contracts/semantic-workflow.js";
 import { gateRequestClaim, openResolved, resolveTaskPath } from "../../repository/paths.js";
+import { resolveRepositorySet } from "../../repository/repository-set.js";
+import { validateRepositorySetContinuity } from "../../state/config-change.js";
 import {
   archiveDirectSemanticGateDecision,
   enterDirectSemanticRevisionCheckpoint,
@@ -67,9 +69,24 @@ async function openSemanticSession(
     operation: parseSafeCode(operation),
   });
   if (!created.ok) return created;
-  const snapshot = await computeAuthoritativeSemanticStatus(created.value.dependencies, created.value.authority);
+  let services = created.value;
+  const config = await services.dependencies.read_config(services.authority.config);
+  if (config.kind === "valid") {
+    const repositorySet = await resolveRepositorySet(
+      { runner: services.runner, environment: services.environment },
+      config.snapshot.parsed,
+      services.authority.context,
+    );
+    if (!repositorySet.ok) return repositorySet;
+    if (services.state !== undefined) {
+      const continuity = validateRepositorySetContinuity(services.state.value, repositorySet.value);
+      if (!continuity.ok) return continuity;
+    }
+    services = Object.freeze({ ...services, repository_set: repositorySet.value });
+  }
+  const snapshot = await computeAuthoritativeSemanticStatus(services.dependencies, services.authority);
   return snapshot.ok
-    ? Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ services: created.value, snapshot: snapshot.value }) })
+    ? Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ services, snapshot: snapshot.value }) })
     : snapshot;
 }
 

@@ -506,11 +506,35 @@ describe("mature state transaction kernel", () => {
       repositoryRelative: parseRepositoryPathClaim("tracked.txt"),
       path_class: "repository-source",
     };
+    const gitControlTarget: ResolvedPath = {
+      absolute: join(h.root, ".git", "config") as ResolvedTaskPath,
+      repositoryRelative: parseRepositoryPathClaim(".git/config"),
+      path_class: "repository-source",
+    };
+    const forgedGitAbsolute: ResolvedPath = {
+      absolute: join(h.root, ".git", "config") as ResolvedTaskPath,
+      repositoryRelative: parseRepositoryPathClaim("tracked.txt"),
+      path_class: "repository-source",
+    };
+    const forgedOtherAbsolute: ResolvedPath = {
+      absolute: join(h.root, "different.txt") as ResolvedTaskPath,
+      repositoryRelative: parseRepositoryPathClaim("tracked.txt"),
+      path_class: "repository-source",
+    };
     expect(resultProjectionTargetIsContained(
       "implementation-output", h.authority.task_root, h.root, repositoryTarget,
     )).toBe(true);
     expect(resultProjectionTargetIsContained(
       "implementation-output", h.authority.task_root, h.root, outsideTarget,
+    )).toBe(false);
+    expect(resultProjectionTargetIsContained(
+      "implementation-output", h.authority.task_root, h.root, gitControlTarget,
+    )).toBe(false);
+    expect(resultProjectionTargetIsContained(
+      "implementation-output", h.authority.task_root, h.root, forgedGitAbsolute,
+    )).toBe(false);
+    expect(resultProjectionTargetIsContained(
+      "implementation-output", h.authority.task_root, h.root, forgedOtherAbsolute,
     )).toBe(false);
     expect(resultProjectionTargetIsContained(
       "document", h.authority.task_root, h.root, repositoryTarget,

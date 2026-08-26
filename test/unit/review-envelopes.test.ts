@@ -5,6 +5,7 @@ import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import {
   PRIOR_TRIAGE_INSTRUCTION,
+  MULTI_REPOSITORY_VIEW_NOTE,
   PRODUCED_REPOSITORY_VIEW_NOTE,
   REPOSITORY_VIEW_NOTE,
   REVIEW_ENVELOPE_BYTE_CAP,
@@ -171,6 +172,30 @@ describe("review dispatch envelopes", () => {
     };
     expect(json(buildReviewEnvelope({ ...input(), workspace: produced }).bytes).workspace)
       .toEqual(produced);
+  });
+
+  it("binds a strict primary-first named multi-repository workspace", () => {
+    const workspace: ReviewWorkspaceBinding = {
+      kind: "read-only-multi-repository-view",
+      note: MULTI_REPOSITORY_VIEW_NOTE,
+      repositories: [
+        { name: "primary", path: "primary", repository_identity_digest: digest("1"), commit: "0123456789abcdef0123456789abcdef01234567" as never, snapshot_digest: digest("f") },
+        { name: "apis", path: "apis", repository_identity_digest: digest("2"), commit: "1123456789abcdef0123456789abcdef01234567" as never, snapshot_digest: digest("e") },
+        { name: "stripe", path: "stripe", repository_identity_digest: digest("3"), commit: "2123456789abcdef0123456789abcdef01234567" as never },
+      ],
+    };
+    expect(json(buildReviewEnvelope({ ...input(), workspace }).bytes).workspace).toEqual(workspace);
+    expect(MULTI_REPOSITORY_VIEW_NOTE).toContain("commit-pinned read-only context");
+    expect(MULTI_REPOSITORY_VIEW_NOTE).toContain("may not contain this phase's work");
+
+    for (const invalid of [
+      { ...workspace, note: "inspect everything" },
+      { ...workspace, repositories: [...workspace.repositories].reverse() },
+      { ...workspace, repositories: workspace.repositories.map((entry) => entry.name === "apis" ? { ...entry, path: "../apis" } : entry) },
+      { ...workspace, repositories: workspace.repositories.map((entry) => entry.name === "apis" ? { ...entry, snapshot_digest: "not-a-digest" } : entry) },
+      { ...workspace, repositories: [...workspace.repositories, { ...workspace.repositories[1] }] },
+      { ...workspace, repositories: workspace.repositories.map((entry) => ({ ...entry, live_root: "/secret/repo" })) },
+    ]) expect(() => buildReviewEnvelope({ ...input(), workspace: invalid as never })).toThrow();
   });
 
   it("carries the durable attempt in the subject shell and rejects an invalid one", () => {
@@ -397,6 +422,8 @@ describe("review dispatch envelopes", () => {
       .toEqualTypeOf<"kind" | "commit" | "note">();
     expectTypeOf<keyof Extract<ReviewWorkspaceBinding, { kind: "read-only-produced-repository-snapshot" }>>()
       .toEqualTypeOf<"kind" | "base_commit" | "snapshot_digest" | "note">();
+    expectTypeOf<keyof Extract<ReviewWorkspaceBinding, { kind: "read-only-multi-repository-view" }>>()
+      .toEqualTypeOf<"kind" | "note" | "repositories">();
     expectTypeOf<keyof DispatchSubject>().toEqualTypeOf<
       | "task_id"
       | "phase_instance"

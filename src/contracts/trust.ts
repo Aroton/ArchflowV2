@@ -22,7 +22,7 @@ import {
 } from "./internal/trust-brands.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
 import { decodePhaseInstance, encodePhaseInstance } from "./phase-instance.js";
-import type { AdapterId, DegradedReview, ModelFamily, ReviewEvidence, ReviewRole, RouteOverrideRecord, RouteSourceRecord, ServerAttestedReview } from "./review.js";
+import type { AdapterId, DegradedReview, ModelFamily, ReviewedRepositoryV1, ReviewEvidence, ReviewRole, RouteOverrideRecord, RouteSourceRecord, ServerAttestedReview } from "./review.js";
 import { EFFORT_VALUES, parseAndDeriveReview, parseReferencedReviewEvidence, reviewEvidenceSchema } from "./review.js";
 import { assertPlainJson } from "./plain-json.js";
 
@@ -35,7 +35,7 @@ export interface EvidenceValueByKindAndAssurance {
 export interface EvidenceRoleByKind { readonly review: ReviewRole; readonly adjudication: "adjudication" }
 export interface ObservationRoleByKind { readonly review: "counter-review"; readonly adjudication: "adjudication" }
 
-export interface ObservationBindingBase<K extends EvidenceKind> {
+export type ObservationBindingBase<K extends EvidenceKind> = {
   readonly kind: K;
   readonly task_id: TaskSlug;
   readonly phase_instance: PhaseInstanceId;
@@ -52,14 +52,16 @@ export interface ObservationBindingBase<K extends EvidenceKind> {
   readonly effort: (typeof EFFORT_VALUES)[number];
   readonly provider?: string;
   readonly route_source: RouteSourceRecord;
+  /** Trusted ordered pins projected from the server-owned repository view plan. */
+  readonly repositories: readonly ReviewedRepositoryV1[];
   // Present only when a human substituted this dispatch's route for the pinned one; carried into
   // the evidence so the deviation is legible at the gate that reads it.
   readonly route_override?: RouteOverrideRecord;
-}
-export interface ObservationBindingByKind {
+};
+export type ObservationBindingByKind = {
   readonly review: ObservationBindingBase<"review"> & { readonly role: "counter-review"; readonly rubric_digest: Sha256Digest; readonly producer_family: ModelFamily };
   readonly adjudication: ObservationBindingBase<"adjudication"> & { readonly pinned_constitution_digest: Sha256Digest; readonly approved_upstream_digests: readonly Sha256Digest[]; readonly source_evidence_set_digest: Sha256Digest };
-}
+};
 export type ObservationCapability<K extends EvidenceKind> = { readonly kind: K; readonly [observationCapabilityBrand]: ObservationBindingByKind[K] };
 export type AdapterObservation<K extends EvidenceKind = EvidenceKind> = { readonly [P in K]: ObservationBindingByKind[P] & { readonly raw_output_bytes: Uint8Array; readonly raw_output_digest: Sha256Digest } }[K];
 
@@ -87,7 +89,7 @@ function createObservation<K extends EvidenceKind>(binding: ObservationBindingBy
   const storedBytes = copiedBytes(bytes);
   const observation = { ...binding, raw_output_digest: rawOutputDigest } as ObservationBindingByKind[K] & { readonly raw_output_digest: Sha256Digest; readonly raw_output_bytes: Uint8Array };
   Object.defineProperty(observation, "raw_output_bytes", { enumerable: true, configurable: false, get: () => copiedBytes(storedBytes) });
-  return Object.freeze(observation) as AdapterObservation<K>;
+  return Object.freeze(observation) as unknown as AdapterObservation<K>;
 }
 
 export interface ObservationSource {
@@ -105,7 +107,7 @@ export const observationSource: ObservationSource = Object.freeze({
     for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["role", binding.role], ["step", "counter_review"], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["rubric_digest", binding.rubric_digest], ["producer_family", binding.producer_family]] as const) assertEqual(derived[key], expected, key);
     const raw_output_digest = digestBytes(bytes);
     const observation = createObservation<"review">(binding, bytes, raw_output_digest);
-    const evidence: ServerAttestedReview = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...(binding.provider === undefined ? {} : { provider: binding.provider }), route_source: binding.route_source, ...(binding.route_override === undefined ? {} : { route_override: binding.route_override }) });
+    const evidence: ServerAttestedReview = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...(binding.provider === undefined ? {} : { provider: binding.provider }), route_source: binding.route_source, ...(binding.route_override === undefined ? {} : { route_override: binding.route_override }), repositories: binding.repositories });
     return Object.freeze({ observation, evidence });
   },
   observeAdjudication(capability: ObservationCapability<"adjudication">, observedOutputBytes: Uint8Array) {
@@ -118,7 +120,7 @@ export const observationSource: ObservationSource = Object.freeze({
     if (!sameArray(derived.approved_upstream_digests, binding.approved_upstream_digests)) throw new TypeError("approved_upstream_digests do not match observation capability");
     const raw_output_digest = digestBytes(bytes);
     const observation = createObservation<"adjudication">(binding, bytes, raw_output_digest);
-    const evidence: ServerAttestedAdjudication = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...(binding.provider === undefined ? {} : { provider: binding.provider }), route_source: binding.route_source, ...(binding.route_override === undefined ? {} : { route_override: binding.route_override }) });
+    const evidence: ServerAttestedAdjudication = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...(binding.provider === undefined ? {} : { provider: binding.provider }), route_source: binding.route_source, ...(binding.route_override === undefined ? {} : { route_override: binding.route_override }), repositories: binding.repositories });
     return Object.freeze({ observation, evidence });
   },
 });

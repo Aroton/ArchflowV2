@@ -7,6 +7,7 @@ import type { RepositoryPathClaim } from "./path-claims.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
 import { assertPlainJson, type PlainJsonObject, type PlainJsonValue } from "./plain-json.js";
 import type { ToolName } from "./tool-names.js";
+import type { RepositoryName } from "./config.js";
 
 export type DeclaredInputRef = {
   readonly input_id: SafeId;
@@ -30,6 +31,12 @@ export type InputFingerprintSubject = {
   readonly rubric_digest: Sha256Digest;
   readonly phase_instance: PhaseInstanceId;
   /** SET — sorted by `input_id` and checked for duplicates before hashing. */
+  readonly declared_inputs: readonly DeclaredInputRef[];
+  readonly secondary_declared_inputs?: readonly SecondaryDeclaredInputSectionV1[];
+};
+
+export type SecondaryDeclaredInputSectionV1 = {
+  readonly repository: RepositoryName;
   readonly declared_inputs: readonly DeclaredInputRef[];
 };
 
@@ -177,7 +184,7 @@ const declaredInputJson = (input: DeclaredInputRef): PlainJsonObject => ({
  */
 export function computeInputFingerprint(subject: InputFingerprintSubject): Sha256Digest {
   const snapshot = materialize(subject, "input fingerprint subject");
-  return canonicalJsonDigest({
+  const primary = canonicalJsonDigest({
     schema_version: snapshot.schema_version,
     workflow_digest: snapshot.workflow_digest,
     constitution_digest: snapshot.constitution_digest,
@@ -186,6 +193,18 @@ export function computeInputFingerprint(subject: InputFingerprintSubject): Sha25
     rubric_digest: snapshot.rubric_digest,
     phase_instance: snapshot.phase_instance,
     declared_inputs: sortedSet(snapshot.declared_inputs, (item) => item.input_id, "declared_inputs").map(declaredInputJson),
+  });
+  const secondary = (snapshot.secondary_declared_inputs ?? []).filter((section) => section.declared_inputs.length > 0);
+  if (secondary.length === 0) return primary;
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "input-fingerprint-with-secondary-declared-inputs",
+    primary_input_fingerprint: primary,
+    secondary_declared_inputs: sortedSet(secondary, (section) => section.repository, "secondary_declared_inputs")
+      .map((section) => ({
+        repository: section.repository,
+        declared_inputs: sortedSet(section.declared_inputs, (input) => input.input_id, `secondary_declared_inputs.${section.repository}.declared_inputs`).map(declaredInputJson),
+      })),
   });
 }
 

@@ -5,7 +5,7 @@ import { gitOidV1Schema } from "./canonical.js";
 import type { OutputEntry, SnapshotAccountingV1 } from "./durable-primitives.js";
 import { declaredInputRefV1Schema, outputEntryV1Schema, snapshotAccountingV1Schema } from "./durable-primitives.js";
 import type { PathSafeId, SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
-import { pathSafeIdV1Schema, safeIntegerV1Schema, sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
+import { pathSafeIdV1Schema, safeIdV1Schema, safeIntegerV1Schema, sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
 import type { DeclaredInputRef } from "./fingerprints.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
 import { phaseInstanceIdV1Schema } from "./phase-instance.js";
@@ -17,6 +17,8 @@ import { secretScanResultV1Schema } from "./secret-scan.js";
 import { isSortedUniqueBy, tupleKey } from "./validators.js";
 import type { PipelineStep } from "./vocabulary.js";
 import { PIPELINE_STEPS } from "./vocabulary.js";
+import type { RepositoryName } from "./config.js";
+import { durableRepositoryNameV1Schema } from "./durable-primitives.js";
 
 /**
  * The parent document an implementation output was produced against.
@@ -56,6 +58,26 @@ export type UndeclaredChangeReport = {
 export type VerificationEvidence = {
   readonly transcript_digest: Sha256Digest;
   readonly byte_count: SafeInteger;
+};
+
+/** One durable writable-secondary section. Primary-only archives omit the containing collection. */
+export type ImplementationRepositorySectionV1 = {
+  readonly repository: RepositoryName;
+  readonly repository_identity_digest: Sha256Digest;
+  readonly base_commit: GitOid;
+  readonly index_identity_digest: Sha256Digest;
+  readonly worktree_identity_digest: Sha256Digest;
+  readonly outputs: readonly OutputEntry[];
+  readonly diff_digest: Sha256Digest;
+  readonly snapshot_digest: Sha256Digest;
+  readonly restore_targets: readonly RepositoryPathClaim[];
+  readonly accounting: SnapshotAccountingV1;
+  readonly undeclared_changes: UndeclaredChangeReport;
+  readonly declared_inputs: readonly SecondaryDeclaredInputRefV1[];
+};
+
+export type SecondaryDeclaredInputRefV1 = DeclaredInputRef & {
+  readonly path: RepositoryPathClaim;
 };
 
 /**
@@ -121,6 +143,8 @@ export type ImplementationOutputV1 = {
   readonly input_fingerprint: Sha256Digest;
   /** D14 — a structural hook only. Absence is omission, never `null`. */
   readonly constitution_edit_gate_id?: PathSafeId;
+  /** SET — sorted by repository, duplicates rejected. Fresh multi-repository results emit it. */
+  readonly secondary_repositories?: readonly ImplementationRepositorySectionV1[];
 };
 
 const sha256Digest = sha256DigestV1Schema as unknown as z.ZodType<Sha256Digest>;
@@ -152,6 +176,28 @@ export const verificationEvidenceV1Schema = z.object({
   transcript_digest: sha256Digest,
   byte_count: safeInteger,
 }).strict() as unknown as z.ZodType<VerificationEvidence>;
+
+export const implementationRepositorySectionV1Schema = z.object({
+  repository: durableRepositoryNameV1Schema,
+  repository_identity_digest: sha256Digest,
+  base_commit: gitOidV1Schema,
+  index_identity_digest: sha256Digest,
+  worktree_identity_digest: sha256Digest,
+  outputs: z.array(outputEntryV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("path")), "outputs must be sorted by path with no duplicates"),
+  diff_digest: sha256Digest,
+  snapshot_digest: sha256Digest,
+  restore_targets: z.array(repositoryPathClaimV1Schema)
+    .refine((items) => isSortedUniqueBy(items), "restore_targets must be sorted with no duplicates"),
+  accounting: snapshotAccountingV1Schema,
+  undeclared_changes: undeclaredChangeReportV1Schema,
+  declared_inputs: z.array(z.object({
+    input_id: safeIdV1Schema,
+    path: repositoryPathClaimV1Schema,
+    digest: sha256Digest,
+  }).strict())
+    .refine((items) => isSortedUniqueBy(items, tupleKey("input_id")), "declared_inputs must be sorted by input_id with no duplicates"),
+}).strict() as unknown as z.ZodType<ImplementationRepositorySectionV1>;
 
 /**
  * `.strict()` mirrors `additionalProperties: false`; absence is `.optional()` plus omission from
@@ -185,6 +231,9 @@ export const implementationOutputV1Schema = z.object({
     .refine((items) => isSortedUniqueBy(items, tupleKey("input_id")), "declared_inputs must be sorted by input_id with no duplicates"),
   input_fingerprint: sha256Digest,
   constitution_edit_gate_id: pathSafeIdV1Schema.optional(),
+  secondary_repositories: z.array(implementationRepositorySectionV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("repository")), "secondary_repositories must be sorted by repository with no duplicates")
+    .optional(),
 }).strict() as unknown as z.ZodType<ImplementationOutputV1>;
 
 /** Throws, per the contract-layer convention. */

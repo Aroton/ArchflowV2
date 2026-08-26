@@ -11,6 +11,9 @@ import { assertPlainJson } from "./plain-json.js";
 import { decodePhaseInstance, phaseInstanceIdV1Schema, type PhaseInstanceId } from "./phase-instance.js";
 import { repositoryPathClaimV1Schema, taskPathClaimV1Schema, type PathClass, type RepositoryPathClaim, type TaskPathClaim } from "./path-claims.js";
 import { PIPELINE_STEPS, type PipelineStep } from "./vocabulary.js";
+import { REPOSITORY_NAME_MESSAGE, REPOSITORY_NAME_PATTERN, type RepositoryName } from "./config.js";
+// Document-local instance of the shared repository-name vocabulary.
+export const gateRepositoryNameV1Schema = z.string().regex(REPOSITORY_NAME_PATTERN, REPOSITORY_NAME_MESSAGE);
 
 export type RuleVersionRef = { readonly rule_id: string; readonly rule_version: number };
 export type EvidenceIdentityKind = "prd" | "architecture" | "phase-design" | "implementation-result" | "review" | "adjudication" | "constitution" | "workflow" | "import";
@@ -81,6 +84,18 @@ type WaiverRequestedDecision = {
   readonly rationale: string;
 };
 
+export type SecondaryCommitAuthorizationV1 = {
+  readonly repository: RepositoryName;
+  readonly repository_identity_digest: Sha256Digest;
+  readonly target_ref: string;
+  readonly target_head: GitOid;
+  readonly baseline_commit: GitOid;
+  readonly commit_message: string;
+  readonly paths: readonly RepositoryPathClaim[];
+  readonly diff_digest: Sha256Digest;
+  readonly snapshot_digest: Sha256Digest;
+};
+
 export type LegacyArtifactApprovalContextV1 = {
   readonly artifact_kind: "prd" | "design" | "phase-design" | "phase-implementation";
 };
@@ -129,7 +144,7 @@ export type GateContractByKind = {
   readonly "material-drift": { readonly context: { readonly affected_upstream: EvidenceIdentityRef; readonly drift: "material"; readonly affected_claim_ids: readonly string[] }; readonly decision: { readonly decision: "amend-upstream" | "revise-current" | "reject"; readonly reason: string } };
   readonly "attempts-exhausted": { readonly context: { readonly step: PipelineStep; readonly attempts: number; readonly maximum_attempts: number }; readonly decision: { readonly decision: "retry-once" | "revise" | "abort"; readonly reason: string } };
   readonly "constitution-edit": { readonly context: { readonly pinned_constitution_digest: Sha256Digest; readonly current_constitution_digest: Sha256Digest; readonly changed_path_class: "task-branch-constitution" }; readonly decision: { readonly decision: "revert-edit" | "start-base-amendment" | "abort"; readonly reason: string } };
-  readonly "commit-authorization": { readonly context: OrdinaryPolicyContext & { readonly target_ref: string; readonly baseline_commit: GitOid; readonly commit_message: string; readonly paths: readonly RepositoryPathClaim[]; readonly diff_digest: Sha256Digest; readonly current_artifact_digests: readonly Sha256Digest[]; readonly parent_document_digests: readonly Sha256Digest[] }; readonly decision: { readonly decision: "authorize-commit" | "revise" | "abort"; readonly reason: string } | WaiverRequestedDecision };
+  readonly "commit-authorization": { readonly context: OrdinaryPolicyContext & { readonly target_ref: string; readonly baseline_commit: GitOid; readonly commit_message: string; readonly paths: readonly RepositoryPathClaim[]; readonly diff_digest: Sha256Digest; readonly current_artifact_digests: readonly Sha256Digest[]; readonly parent_document_digests: readonly Sha256Digest[]; readonly secondary_commits?: readonly SecondaryCommitAuthorizationV1[] }; readonly decision: { readonly decision: "authorize-commit" | "revise" | "abort"; readonly reason: string } | WaiverRequestedDecision };
   readonly "restore-collision": { readonly context: { readonly path: TaskPathClaim; readonly recorded_generation_digest: Sha256Digest; readonly current_generation_digest: Sha256Digest; readonly adoption_candidate?: AuthorityLinkRef }; readonly decision: { readonly decision: "discard-and-restore" | "abort"; readonly reason: string } | { readonly decision: "adopt-as-new-generation"; readonly reason: string; readonly adoption_authority: AuthorityLinkRef; readonly rationale: string } };
   /**
    * One projection whose recorded review bytes no longer match the worktree. Binding both digests
@@ -148,6 +163,7 @@ export type GateContractByKind = {
     readonly target_ref?: string;
     readonly target_head?: GitOid;
     readonly uncommitted_paths?: readonly RepositoryPathClaim[];
+    readonly secondary_targets?: readonly SecondaryBaselineAdoptionTargetV1[];
   }; readonly decision: { readonly decision: "adopt-current-bytes" | "restore-recorded-bytes" | "adopt-committed-deletions" | "abort"; readonly reason: string } };
   readonly "migration-audit": { readonly context: { readonly source_identity_digest: Sha256Digest; readonly destination_identity_digest: Sha256Digest; readonly import_digest: Sha256Digest; readonly code_baseline_digest: Sha256Digest; readonly policy_baseline_digest: Sha256Digest; readonly resume_phase?: PhaseInstanceId; readonly planned_final_phase?: number; readonly imported_documents?: readonly { readonly path: RepositoryPathClaim; readonly content_digest: Sha256Digest }[]; readonly target_ref?: string; readonly baseline_commit?: GitOid; readonly commit_message?: string }; readonly decision: { readonly decision: "accept-import-audit" | "revise" | "abort"; readonly reason: string } };
 }
@@ -176,6 +192,16 @@ export type BaselineDeletedProjection = {
   readonly path: RepositoryPathClaim;
   /** Digest the newest retained projection still records for this path. */
   readonly recorded_digest: Sha256Digest;
+};
+
+export type SecondaryBaselineAdoptionTargetV1 = {
+  readonly repository: RepositoryName;
+  readonly repository_identity_digest: Sha256Digest;
+  readonly target_ref: string;
+  readonly target_head: GitOid;
+  readonly drifted_projections: readonly BaselineDriftedProjection[];
+  readonly deleted_projections?: readonly BaselineDeletedProjection[];
+  readonly uncommitted_paths: readonly RepositoryPathClaim[];
 };
 
 /**
@@ -240,9 +266,22 @@ const canonicalDesignPolicyFindings = z.array(designPolicyFinding).superRefine((
 
 const ruleSettlementMatch = z.union([
   z.object({ kind: z.literal("subject"), subject: z.enum(["prd", "design", "phase-design", "phase-impl"]) }).strict(),
-  z.object({ kind: z.literal("content"), paths: z.array(z.string()).min(1).superRefine((items, context) => {
-    if (!sortedUnique(items, (left, right) => left.localeCompare(right))) context.addIssue({ code: "custom", message: "content match paths must be sorted with no duplicates" });
-  }) }).strict(),
+  z.object({
+    kind: z.literal("content"),
+    paths: z.array(z.string()).superRefine((items, context) => {
+      if (!sortedUnique(items, (left, right) => left.localeCompare(right))) context.addIssue({ code: "custom", message: "content match paths must be sorted with no duplicates" });
+    }),
+    secondary_paths: z.array(z.object({
+      repository: gateRepositoryNameV1Schema,
+      paths: z.array(z.string()).min(1).superRefine((items, context) => {
+        if (!sortedUnique(items, (left, right) => left.localeCompare(right))) context.addIssue({ code: "custom", message: "secondary content paths must be sorted with no duplicates" });
+      }),
+    }).strict()).superRefine((items, context) => {
+      if (!sortedUnique(items, (left, right) => left.repository.localeCompare(right.repository))) context.addIssue({ code: "custom", message: "secondary_paths must be sorted by repository with no duplicates" });
+    }).optional(),
+  }).strict().superRefine((match, context) => {
+    if (match.paths.length === 0 && (match.secondary_paths?.length ?? 0) === 0) context.addIssue({ code: "custom", message: "content match must contain at least one primary or secondary path" });
+  }),
 ]);
 const approvalRuleConclusion = z.discriminatedUnion("wait", [
   z.object({ wait: z.literal(false), match: z.null() }).strict(),
@@ -346,6 +385,18 @@ const contexts = {
     diff_digest: digest,
     current_artifact_digests: canonicalDigests.min(1),
     parent_document_digests: canonicalDigests.min(1),
+    secondary_commits: z.array(z.object({
+      repository: gateRepositoryNameV1Schema,
+      repository_identity_digest: digest,
+      target_ref: boundedText,
+      target_head: gitOidV1Schema,
+      baseline_commit: gitOidV1Schema,
+      commit_message: boundedText,
+      paths: z.array(repositoryPathClaimV1Schema).min(1)
+        .refine((items) => sortedUnique(items, (a, b) => a < b ? -1 : a > b ? 1 : 0), "paths must be sorted with no duplicates"),
+      diff_digest: digest,
+      snapshot_digest: digest,
+    }).strict()).refine((items) => sortedUnique(items, (a, b) => a.repository < b.repository ? -1 : a.repository > b.repository ? 1 : 0), "secondary_commits must be sorted by repository with no duplicates").optional(),
   }).strict().superRefine(validateOrdinaryPolicyContext),
   "restore-collision": z.object({ path: taskPathClaimV1Schema, recorded_generation_digest: digest, current_generation_digest: digest, adoption_candidate: authorityLink.optional() }).strict(),
   "baseline-adoption": z.object({
@@ -359,6 +410,23 @@ const contexts = {
     target_ref: boundedText.optional(),
     target_head: gitOidV1Schema.optional(),
     uncommitted_paths: z.array(repositoryPathClaimV1Schema).optional(),
+    secondary_targets: z.array(z.object({
+      repository: gateRepositoryNameV1Schema,
+      repository_identity_digest: digest,
+      target_ref: boundedText,
+      target_head: gitOidV1Schema,
+      drifted_projections: z.array(z.object({ path: repositoryPathClaimV1Schema, recorded_digest: digest, observed_digest: digest }).strict()),
+      deleted_projections: z.array(z.object({ path: repositoryPathClaimV1Schema, recorded_digest: digest }).strict()).optional(),
+      uncommitted_paths: z.array(repositoryPathClaimV1Schema),
+    }).strict().superRefine((target, targetContext) => {
+      const deleted = target.deleted_projections ?? [];
+      if (!sortedUnique(target.drifted_projections, (left, right) => left.path.localeCompare(right.path))) targetContext.addIssue({ code: "custom", path: ["drifted_projections"], message: "drifted projections must be sorted by path with no duplicates" });
+      if (target.drifted_projections.some((item) => item.recorded_digest === item.observed_digest)) targetContext.addIssue({ code: "custom", path: ["drifted_projections"], message: "a drifted projection must differ between its recorded and observed digests" });
+      if (!sortedUnique(deleted, (left, right) => left.path.localeCompare(right.path))) targetContext.addIssue({ code: "custom", path: ["deleted_projections"], message: "deleted projections must be sorted by path with no duplicates" });
+      if (!sortedUnique(target.uncommitted_paths, (left, right) => left.localeCompare(right))) targetContext.addIssue({ code: "custom", path: ["uncommitted_paths"], message: "uncommitted paths must be sorted with no duplicates" });
+      if (target.drifted_projections.length === 0 && deleted.length === 0) targetContext.addIssue({ code: "custom", message: "a secondary baseline target must name drifted or deleted projections" });
+      if (target.uncommitted_paths.some((path) => !target.drifted_projections.some((entry) => entry.path === path) && !deleted.some((entry) => entry.path === path))) targetContext.addIssue({ code: "custom", path: ["uncommitted_paths"], message: "uncommitted paths must belong to the target drift set" });
+    })).refine((items) => sortedUnique(items, (left, right) => left.repository < right.repository ? -1 : left.repository > right.repository ? 1 : 0), "secondary_targets must be sorted by repository with no duplicates").optional(),
   }).strict().superRefine((value, context) => {
     const deleted = value.deleted_projections ?? [];
     if (!sortedUnique(value.drifted_projections, (left, right) => left.path.localeCompare(right.path))) context.addIssue({ code: "custom", message: "drifted projections must be sorted by path with no duplicates" });
@@ -377,7 +445,7 @@ const contexts = {
       context.addIssue({ code: "custom", path: ["uncommitted_paths"], message: "uncommitted paths must belong to the complete drift set" });
     }
     if (!sortedUnique(deleted, (left, right) => left.path.localeCompare(right.path))) context.addIssue({ code: "custom", message: "deleted projections must be sorted by path with no duplicates" });
-    if (value.drifted_projections.length === 0 && deleted.length === 0) context.addIssue({ code: "custom", message: "a baseline adoption must name at least one drifted or deleted projection" });
+    if (value.drifted_projections.length === 0 && deleted.length === 0 && (value.secondary_targets?.length ?? 0) === 0) context.addIssue({ code: "custom", message: "a baseline adoption must name at least one drifted or deleted projection" });
     const driftedPaths = new Set(value.drifted_projections.map((item) => item.path));
     if (deleted.some((item) => driftedPaths.has(item.path))) context.addIssue({ code: "custom", message: "a projection cannot be both drifted and deleted" });
   }),
@@ -482,6 +550,7 @@ export const gateContractSchemaDefs: Readonly<Record<string, z.ZodType>> = Objec
   // `canonicalDigests` stays unregistered: both uses derive `.min(1)` from it, and a derivation of
   // a registered def emits as a bare `$ref` plus `minItems`, which Ajv strict mode rejects.
   digest, text: boundedText, safeInteger, rule, rules: canonicalRules,
+  repositoryName: gateRepositoryNameV1Schema,
   waiverScope, eligibleWaiver, eligibleWaivers: canonicalEligibleWaivers, authorityLink,
   approvalTrigger,
   artifactApprovalContext: contexts["artifact-approval"],

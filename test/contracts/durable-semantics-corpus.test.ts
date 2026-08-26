@@ -899,6 +899,9 @@ describe("the pinned issue_code literals", () => {
       openGateFrozenStateMismatch: "open-gate-frozen-state-mismatch",
       phaseInstanceUndecodable: "phase-instance-undecodable",
       implementationOutputPhaseKind: "implementation-output-phase-kind",
+      implementationSecondaryPathInvalid: "implementation-secondary-path-invalid",
+      implementationInputIdDuplicate: "implementation-input-id-duplicate",
+      implementationAggregateAccountingInvalid: "implementation-aggregate-accounting-invalid",
       renamePreviousPathEqualsPath: "rename-previous-path-equals-path",
       restoreTargetNotDeclared: "restore-target-not-declared",
       accountingResultBytesSum: "accounting-result-bytes-sum",
@@ -912,6 +915,7 @@ describe("the pinned issue_code literals", () => {
       baselineAdoptionApprovalMissing: "baseline-adoption-approval-missing",
       lastTransitionOutcomeDigestMismatch: "last-transition-outcome-digest-mismatch",
       lastTransitionRevisionMismatch: "last-transition-revision-mismatch",
+      repositoryCheckpointMismatch: "repository-checkpoint-mismatch",
       repositoryIdentityDigestMismatch: "repository-identity-digest-mismatch",
       configDigestMismatch: "config-digest-mismatch",
       workflowDigestMismatch: "workflow-digest-mismatch",
@@ -962,7 +966,7 @@ describe("the pinned issue_code literals", () => {
 
   it("are all SafeCode, and rank 8 has none", () => {
     for (const code of Object.values(DURABLE_ISSUE_CODES)) expect(code).toMatch(SAFE_CODE);
-    expect(Object.values(DURABLE_ISSUE_CODES)).toHaveLength(63);
+    expect(Object.values(DURABLE_ISSUE_CODES)).toHaveLength(67);
     expect(Object.values(DURABLE_ISSUE_CODES)).not.toContain("input-fingerprint-mismatch");
   });
 });

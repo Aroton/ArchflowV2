@@ -71,6 +71,9 @@
     "projectionDigestRef": {
       "type": "object",
       "properties": {
+        "repository": {
+          "$ref": "urn:archflow:schema:v1:durable-primitives#/$defs/repositoryName"
+        },
         "path": {
           "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
         },
@@ -81,6 +84,29 @@
       "required": [
         "path",
         "content_digest"
+      ],
+      "additionalProperties": false
+    },
+    "secondaryProjectionSet": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "$ref": "urn:archflow:schema:v1:durable-primitives#/$defs/repositoryName"
+        },
+        "repository_identity_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "projections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/projectionDigestRef"
+          }
+        }
+      },
+      "required": [
+        "repository",
+        "repository_identity_digest",
+        "projections"
       ],
       "additionalProperties": false
     }
@@ -150,6 +176,12 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/projectionDigestRef"
+      }
+    },
+    "secondary_projections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/secondaryProjectionSet"
       }
     },
     "accounting": {

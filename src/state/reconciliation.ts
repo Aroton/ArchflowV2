@@ -47,18 +47,21 @@ export type ReconciliationInput = Readonly<{
    * baseline adoption records digests only. Discovery-only, like blocking_reasons: it annotates
    * findings so routing can distinguish an unrecoverable-by-restore mismatch from a restorable one.
    */
-  unrestorable_paths?: readonly ProjectionDigestRef["path"][];
+  unrestorable_paths?: readonly (ProjectionIdentity | ProjectionDigestRef["path"])[];
   /**
    * Unrestorable paths that are also absent from git HEAD: the deletion is already committed
    * (typically by an authorized milestone commit), so the produce window cannot re-declare it
    * either — there is no before-image in the base. Discovery-only, like unrestorable_paths: it
    * annotates findings so routing can offer the human the deletion-adoption decision.
    */
-  committed_absent_paths?: readonly ProjectionDigestRef["path"][];
+  committed_absent_paths?: readonly (ProjectionIdentity | ProjectionDigestRef["path"])[];
 }>;
 
+/** A projection is identified by repository and path; omission denotes primary. */
+export type ProjectionIdentity = Readonly<Pick<ProjectionDigestRef, "repository" | "path">>;
+
 export type ReconciliationFinding =
-  | Readonly<{ kind: "projection-mismatch"; path: ProjectionDigestRef["path"]; recorded_digest: Sha256Digest; observed_digest?: Sha256Digest; restore_unavailable?: true; committed_absent?: true; next_action: "open-baseline-adoption-gate" }>
+  | Readonly<{ kind: "projection-mismatch"; repository?: ProjectionDigestRef["repository"]; path: ProjectionDigestRef["path"]; recorded_digest: Sha256Digest; observed_digest?: Sha256Digest; restore_unavailable?: true; committed_absent?: true; next_action: "open-baseline-adoption-gate" }>
   | Readonly<{ kind: "receipt-only"; request_digest: Sha256Digest; receipt_digest: Sha256Digest; next_action: "resume-exact-intent" }>
   | Readonly<{ kind: "receipt-invalid"; receipt_digest: Sha256Digest; next_action: "inspect-retained-receipt" }>
   | Readonly<{ kind: "intent-mismatch"; requested_digest: Sha256Digest; receipt_request_digest: Sha256Digest; next_action: "create-fresh-intent" }>
@@ -76,6 +79,24 @@ export type BaselineSubjectFreshness = Readonly<{
   live_context_digest: Sha256Digest;
 }>;
 
+export type BaselinePresentedTarget = Readonly<{
+  repository: "primary" | NonNullable<ProjectionDigestRef["repository"]>;
+  target_head: NonNullable<Extract<GateRequestV1, { readonly kind: "baseline-adoption" }>["context"]["target_head"]>;
+}>;
+
+/** Lists every repository whose authenticated presented head must retain first-parent continuity. */
+export function baselinePresentedTargets(
+  context: Extract<GateRequestV1, { readonly kind: "baseline-adoption" }>["context"],
+): readonly BaselinePresentedTarget[] {
+  return Object.freeze([
+    ...(context.target_head === undefined ? [] : [Object.freeze({ repository: "primary" as const, target_head: context.target_head })]),
+    ...(context.secondary_targets ?? []).map((target) => Object.freeze({
+      repository: target.repository,
+      target_head: target.target_head,
+    })),
+  ]);
+}
+
 /**
  * Revalidates the complete baseline subject without making ordinary descendant movement stale.
  * The presented head remains the digest/disclosure anchor when it is still on the current target's
@@ -89,9 +110,20 @@ export function assessBaselineSubjectFreshness(
 ): BaselineSubjectFreshness {
   assertPlainJson(request, "baseline adoption request");
   assertPlainJson(liveContext, "live baseline adoption context");
-  const context = request.context.target_head === undefined || !presentedHeadOnCurrentFirstParent
-    ? structuredClone(liveContext)
-    : { ...structuredClone(liveContext), target_head: request.context.target_head };
+  const live = structuredClone(liveContext);
+  const presented = new Map((request.context.secondary_targets ?? []).map((target) => [target.repository, target.target_head]));
+  const context = presentedHeadOnCurrentFirstParent
+    ? {
+        ...live,
+        ...(request.context.target_head === undefined ? {} : { target_head: request.context.target_head }),
+        ...(live.secondary_targets === undefined ? {} : {
+          secondary_targets: live.secondary_targets.map((target) => {
+            const targetHead = presented.get(target.repository);
+            return targetHead === undefined ? target : { ...target, target_head: targetHead };
+          }),
+        }),
+      }
+    : live;
   const liveSubjectDigest = baselineAdoptionDriftDigest(context);
   const liveContextDigest = computeGateContextDigest("baseline-adoption", context);
   if (!presentedHeadOnCurrentFirstParent) {
@@ -156,23 +188,75 @@ function ownData(value: object, field: string, label: string): unknown {
   return descriptor.value;
 }
 
+function repositoryOf(value: ProjectionIdentity): string {
+  return value.repository ?? "primary";
+}
+
+function indexProjectionDigests(
+  projections: readonly ProjectionDigestRef[],
+): ReadonlyMap<string, ReadonlyMap<ProjectionDigestRef["path"], Sha256Digest>> {
+  const repositories = new Map<string, Map<ProjectionDigestRef["path"], Sha256Digest>>();
+  for (const projection of projections) {
+    const repository = repositoryOf(projection);
+    let paths = repositories.get(repository);
+    if (paths === undefined) {
+      paths = new Map();
+      repositories.set(repository, paths);
+    }
+    paths.set(projection.path, projection.content_digest);
+  }
+  return repositories;
+}
+
+function indexProjectionIdentities(
+  projections: readonly (ProjectionIdentity | ProjectionDigestRef["path"])[],
+): ReadonlyMap<string, ReadonlySet<ProjectionDigestRef["path"]>> {
+  const repositories = new Map<string, Set<ProjectionDigestRef["path"]>>();
+  for (const candidate of projections) {
+    const projection: ProjectionIdentity = typeof candidate === "string" ? { path: candidate } : candidate;
+    const repository = repositoryOf(projection);
+    let paths = repositories.get(repository);
+    if (paths === undefined) {
+      paths = new Set();
+      repositories.set(repository, paths);
+    }
+    paths.add(projection.path);
+  }
+  return repositories;
+}
+
+function indexedDigest(
+  index: ReadonlyMap<string, ReadonlyMap<ProjectionDigestRef["path"], Sha256Digest>>,
+  projection: ProjectionIdentity,
+): Sha256Digest | undefined {
+  return index.get(repositoryOf(projection))?.get(projection.path);
+}
+
+function indexedIdentity(
+  index: ReadonlyMap<string, ReadonlySet<ProjectionDigestRef["path"]>>,
+  projection: ProjectionIdentity,
+): boolean {
+  return index.get(repositoryOf(projection))?.has(projection.path) ?? false;
+}
+
 /** Classifies only the supplied current working set. It performs no discovery or promotion. */
 export function reconcileCurrentAuthority(value: ReconciliationInput): ReconciliationResult {
   const input = materialize(value);
   const findings: ReconciliationFinding[] = [];
-  const observed = new Map(input.current_projections.map((projection) => [projection.path, projection.content_digest]));
-  const unrestorable = new Set(input.unrestorable_paths ?? []);
-  const committedAbsent = new Set(input.committed_absent_paths ?? []);
+  const observed = indexProjectionDigests(input.current_projections);
+  const unrestorable = indexProjectionIdentities(input.unrestorable_paths ?? []);
+  const committedAbsent = indexProjectionIdentities(input.committed_absent_paths ?? []);
   for (const recorded of input.recorded_projections) {
-    const digest = observed.get(recorded.path);
+    const digest = indexedDigest(observed, recorded);
     if (digest !== recorded.content_digest) {
       findings.push(Object.freeze({
         kind: "projection-mismatch",
+        ...(recorded.repository === undefined ? {} : { repository: recorded.repository }),
         path: recorded.path,
         recorded_digest: recorded.content_digest,
         ...(digest === undefined ? {} : { observed_digest: digest }),
-        ...(digest === undefined && unrestorable.has(recorded.path) ? { restore_unavailable: true } : {}),
-        ...(digest === undefined && unrestorable.has(recorded.path) && committedAbsent.has(recorded.path) ? { committed_absent: true } : {}),
+        ...(digest === undefined && indexedIdentity(unrestorable, recorded) ? { restore_unavailable: true } : {}),
+        ...(digest === undefined && indexedIdentity(unrestorable, recorded) && indexedIdentity(committedAbsent, recorded) ? { committed_absent: true } : {}),
         next_action: "open-baseline-adoption-gate",
       }));
     }

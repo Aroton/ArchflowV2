@@ -66,6 +66,88 @@
         "byte_count"
       ],
       "additionalProperties": false
+    },
+    "implementationRepositorySection": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "$ref": "urn:archflow:schema:v1:durable-primitives#/$defs/repositoryName"
+        },
+        "repository_identity_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "base_commit": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+        },
+        "index_identity_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "worktree_identity_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:durable-primitives#/$defs/outputEntry"
+          }
+        },
+        "diff_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "snapshot_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "restore_targets": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+          }
+        },
+        "accounting": {
+          "$ref": "urn:archflow:schema:v1:durable-primitives#/$defs/snapshotAccounting"
+        },
+        "undeclared_changes": {
+          "$ref": "#/$defs/undeclaredChangeReport"
+        },
+        "declared_inputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "input_id": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+              },
+              "path": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+              },
+              "digest": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+              }
+            },
+            "required": [
+              "input_id",
+              "path",
+              "digest"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "repository",
+        "repository_identity_digest",
+        "base_commit",
+        "index_identity_digest",
+        "worktree_identity_digest",
+        "outputs",
+        "diff_digest",
+        "snapshot_digest",
+        "restore_targets",
+        "accounting",
+        "undeclared_changes",
+        "declared_inputs"
+      ],
+      "additionalProperties": false
     }
   },
   "type": "object",
@@ -150,6 +232,12 @@
     },
     "constitution_edit_gate_id": {
       "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+    },
+    "secondary_repositories": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/implementationRepositorySection"
+      }
     }
   },
   "required": [

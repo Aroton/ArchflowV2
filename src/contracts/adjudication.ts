@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { ReferencedEvidence, Sha256Digest, TaskSlug } from "./evidence.js";
 import { createTaskSlugV1Schema } from "./evidence.js";
 import { assertPlainJson } from "./plain-json.js";
-import { ADAPTER_IDS, EFFORT_VALUES, MODEL_FAMILIES, routeOverrideRecordSchema, routeSourceRecordSchema, type AdapterId, type ModelFamily, type RouteOverrideRecord, type RouteSourceRecord, type RuleVersionRef } from "./review.js";
+import { ADAPTER_IDS, EFFORT_VALUES, MODEL_FAMILIES, reviewedRepositoriesV1Schema, routeOverrideRecordSchema, routeSourceRecordSchema, type AdapterId, type ModelFamily, type ReviewedRepositoryV1, type RouteOverrideRecord, type RouteSourceRecord, type RuleVersionRef } from "./review.js";
 
 export const CONSTITUTION_RESULTS = ["pass", "fail", "uncertain"] as const;
 export const DRIFT_RESULTS = ["aligned", "incidental", "material"] as const;
@@ -150,13 +150,13 @@ export function parseAndDeriveAdjudication(value: unknown): DerivedAdjudication 
 
 type AdjudicationProvenanceBase = DerivedAdjudication & { readonly model_family: ModelFamily | "unknown"; readonly model: string; readonly effort: (typeof EFFORT_VALUES)[number] | "unknown" };
 export type AgentDeclaredAdjudication = AdjudicationProvenanceBase & { readonly assurance: "agent-declared" };
-export type ServerAttestedAdjudication = Omit<AdjudicationProvenanceBase, "model_family" | "effort"> & { readonly assurance: "server-attested"; readonly adapter: AdapterId; readonly cli_version: string; readonly model_family: ModelFamily; readonly effort: (typeof EFFORT_VALUES)[number]; readonly invocation_id: string; readonly envelope_input_digest: Sha256Digest; readonly observed_output_digest: Sha256Digest; readonly result_id: string; readonly provider?: string; readonly route_source?: RouteSourceRecord; readonly route_override?: RouteOverrideRecord };
+export type ServerAttestedAdjudication = Omit<AdjudicationProvenanceBase, "model_family" | "effort"> & { readonly assurance: "server-attested"; readonly adapter: AdapterId; readonly cli_version: string; readonly model_family: ModelFamily; readonly effort: (typeof EFFORT_VALUES)[number]; readonly invocation_id: string; readonly envelope_input_digest: Sha256Digest; readonly observed_output_digest: Sha256Digest; readonly result_id: string; readonly provider?: string; readonly route_source?: RouteSourceRecord; readonly route_override?: RouteOverrideRecord; /** Optional on read for archived evidence; every fresh server mint supplies it. */ readonly repositories?: readonly ReviewedRepositoryV1[] };
 export type DegradedAdjudication = AdjudicationProvenanceBase & { readonly assurance: "degraded"; readonly reason: string };
 export type AdjudicationEvidence = AgentDeclaredAdjudication | ServerAttestedAdjudication | DegradedAdjudication;
 
 const provenanceBase = derivedAdjudicationSchema.safeExtend({ model_family: z.union([z.enum(MODEL_FAMILIES), z.literal("unknown")]), model: nonBlank, effort: z.union([z.enum(EFFORT_VALUES), z.literal("unknown")]) });
 const agentSchema = provenanceBase.safeExtend({ assurance: z.literal("agent-declared") }).strict();
-const serverSchema = provenanceBase.safeExtend({ assurance: z.literal("server-attested"), adapter: z.enum(ADAPTER_IDS), cli_version: nonBlank, model_family: z.enum(MODEL_FAMILIES), effort: z.enum(EFFORT_VALUES), invocation_id: id, envelope_input_digest: digest, observed_output_digest: digest, result_id: id, provider: nonBlank.optional(), route_source: routeSourceRecordSchema.optional(), route_override: routeOverrideRecordSchema.optional() }).strict();
+const serverSchema = provenanceBase.safeExtend({ assurance: z.literal("server-attested"), adapter: z.enum(ADAPTER_IDS), cli_version: nonBlank, model_family: z.enum(MODEL_FAMILIES), effort: z.enum(EFFORT_VALUES), invocation_id: id, envelope_input_digest: digest, observed_output_digest: digest, result_id: id, provider: nonBlank.optional(), route_source: routeSourceRecordSchema.optional(), route_override: routeOverrideRecordSchema.optional(), repositories: reviewedRepositoriesV1Schema.optional() }).strict();
 const degradedSchema = provenanceBase.safeExtend({ assurance: z.literal("degraded"), reason: nonBlank }).strict();
 export const adjudicationEvidenceSchema = z.discriminatedUnion("assurance", [agentSchema, serverSchema, degradedSchema]);
 // See parseReviewEvidence: the assertion narrows zod's `| undefined` inference on the optional

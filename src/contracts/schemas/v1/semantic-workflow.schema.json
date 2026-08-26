@@ -137,6 +137,40 @@
       ],
       "additionalProperties": false
     },
+    "repositoryStatus": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "context-only",
+            "writable"
+          ]
+        },
+        "location": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "head": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+        },
+        "last_reviewed_commit": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+        }
+      },
+      "required": [
+        "name",
+        "mode",
+        "location"
+      ],
+      "additionalProperties": false
+    },
     "workflowPosition": {
       "oneOf": [
         {
@@ -404,6 +438,24 @@
               "type": "string",
               "minLength": 1,
               "pattern": "\\S"
+            },
+            "repository": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "$ref": "#/$defs/repositoryName"
+                },
+                "location": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "name",
+                "location"
+              ],
+              "additionalProperties": false
             }
           },
           "required": [
@@ -732,6 +784,12 @@
         "dispatch_failure": {
           "$ref": "#/$defs/publicDispatchFailure"
         },
+        "repositories": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/repositoryStatus"
+          }
+        },
         "config_change": {
           "type": "array",
           "items": {
@@ -768,13 +826,26 @@
             "RATE_LIMITED",
             "UNSUPPORTED_MODEL",
             "CLI_VERSION_UNSUPPORTED",
-            "PROCESS_FAILED"
+            "PROCESS_FAILED",
+            "REPOSITORY_VIEW_UNAVAILABLE"
           ]
         },
         "message": {
           "type": "string",
           "minLength": 1,
           "maxLength": 256
+        },
+        "repository_name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "primary"
+            },
+            {
+              "type": "string",
+              "pattern": "^(?!primary$)(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
+            }
+          ]
         },
         "route": {
           "type": "object",
@@ -866,6 +937,10 @@
         }
       ]
     },
+    "repositoryName": {
+      "type": "string",
+      "pattern": "^(?!primary$)(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
+    },
     "applySubmission": {
       "anyOf": [
         {
@@ -928,6 +1003,7 @@
                   "pattern": "\\S"
                 },
                 "outputs": {
+                  "minItems": 1,
                   "type": "array",
                   "items": {
                     "type": "string",
@@ -962,6 +1038,69 @@
                     "required": [
                       "input_id",
                       "path"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "repositories": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "$ref": "#/$defs/repositoryName"
+                      },
+                      "base_commit": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "outputs": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "restore_targets": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "declared_inputs": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "input_id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "pattern": "\\S"
+                            },
+                            "path": {
+                              "type": "string",
+                              "minLength": 1,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": [
+                            "input_id",
+                            "path"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "base_commit",
+                      "outputs",
+                      "restore_targets",
+                      "declared_inputs"
                     ],
                     "additionalProperties": false
                   }
@@ -1685,6 +1824,12 @@
     },
     "dispatch_failure": {
       "$ref": "#/$defs/publicDispatchFailure"
+    },
+    "repositories": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/repositoryStatus"
+      }
     },
     "config_change": {
       "type": "array",

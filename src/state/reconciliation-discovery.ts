@@ -11,7 +11,7 @@ import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
 import { parsePersistedGateRequest } from "../contracts/durable-gate.js";
 import { parseIntentReceipt, type IntentReceiptV1 } from "../contracts/durable-intent.js";
 import type { ResultManifestV1 } from "../contracts/durable-result-manifest.js";
-import type { TaskStateV1 } from "../contracts/durable-state.js";
+import type { AuthoritativeResultRef, TaskStateV1 } from "../contracts/durable-state.js";
 import {
   createPreparedIntentSubject,
   validateDurableSemantics,
@@ -30,8 +30,11 @@ import {
   type ResolvedWorkspacePath,
 } from "../repository/paths.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
-import type { ReconciliationInput } from "./reconciliation.js";
+import { repositoryPathKey } from "./snapshots.js";
+import type { ProjectionIdentity, ReconciliationInput } from "./reconciliation.js";
 import type { GateLifecycleDependencies } from "./gates.js";
+import type { RepositoryMember, RepositorySet } from "../repository/repository-set.js";
+import type { RootBoundGitRunner } from "../repository/identity.js";
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 const stateInvalid = (authority: TransactionAuthority, issueCode: string): ProjectResult<never> =>
@@ -109,33 +112,62 @@ function outputClassFor(
  * worktree and git, never in a manifest — which is exactly what a restore needs to know before
  * promising to rewrite them.
  */
+type ProjectionLookup = Readonly<Pick<ProjectionDigestRef, "repository" | "path">>;
+
 export type NewestProjection = Readonly<
   | {
     retired: false;
+    repository?: ProjectionDigestRef["repository"];
     path: ProjectionDigestRef["path"];
     projection: ProjectionDigestRef;
     measured_at_revision: number;
     target: ResolvedPath;
-    reference: import("../contracts/durable-state.js").AuthoritativeResultRef | undefined;
+    reference: AuthoritativeResultRef | undefined;
+    runner: RootBoundGitRunner;
   }
   | {
     retired: true;
+    repository?: ProjectionDigestRef["repository"];
     path: ProjectionDigestRef["path"];
     measured_at_revision: number;
     reference: undefined;
   }
 >;
 
+/**
+ * Newest projection per repository-qualified path, keyed by `repositoryPathKey`. A bare path
+ * intentionally addresses only the primary repository.
+ */
+export type NewestProjectionIndex = Map<string, NewestProjection>;
+
+/** Index entries in canonical order: primary first, then repositories by name, then paths. */
+export function orderedNewestProjections(index: NewestProjectionIndex): readonly NewestProjection[] {
+  return [...index.values()].sort((left, right) => {
+    const leftRepository = left.repository ?? "primary";
+    const rightRepository = right.repository ?? "primary";
+    if (leftRepository !== rightRepository) {
+      return leftRepository === "primary" ? -1 : rightRepository === "primary" ? 1 : leftRepository.localeCompare(rightRepository);
+    }
+    return left.path.localeCompare(right.path);
+  });
+}
+
 export async function discoverNewestProjections(
   dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
   state: CanonicalDocument<TaskStateV1>,
-): Promise<ProjectResult<ReadonlyMap<ProjectionDigestRef["path"], NewestProjection>>> {
+  repositorySet?: Pick<RepositorySet, "members">,
+): Promise<ProjectResult<NewestProjectionIndex>> {
   const loadManifest = dependencies.load_retained_manifest;
   if (loadManifest === undefined) {
     return stateInvalid(authority, "reconciliation-result-loader-unavailable");
   }
-  const newest = new Map<ProjectionDigestRef["path"], NewestProjection>();
+  const newest: NewestProjectionIndex = new Map();
+  const members = new Map<string, RepositoryMember>(
+    (repositorySet?.members ?? []).map((member) => [member.name, member]),
+  );
+  const primaryMember = members.get("primary");
+  const primaryRunner = primaryMember?.binding.runner ?? dependencies.runner;
   try {
     for (const reference of state.value.authoritative_results) {
       const loaded = await loadManifest(reference);
@@ -144,7 +176,7 @@ export async function discoverNewestProjections(
       for (const output of manifest.outputs) {
         if (output.operation !== "delete" && output.operation !== "rename") continue;
         const retiredPath = output.operation === "delete" ? output.path : output.previous_path;
-        const prior = newest.get(retiredPath);
+        const prior = newest.get(repositoryPathKey(undefined, retiredPath));
         if (prior === undefined || manifest.accounting.measured_at_revision > prior.measured_at_revision) {
           const retirement: NewestProjection = Object.freeze({
             retired: true,
@@ -152,14 +184,14 @@ export async function discoverNewestProjections(
             measured_at_revision: manifest.accounting.measured_at_revision,
             reference: undefined,
           });
-          newest.set(retiredPath, retirement);
+          newest.set(repositoryPathKey(undefined, retiredPath), retirement);
         }
       }
       for (const projection of manifest.projections) {
         const pathClass = outputClassFor(manifest, projection.path);
         if (pathClass === undefined) return stateInvalid(authority, "reconciliation-projection-unbound");
         const target = await resolveDeclaredOutputPath({
-          runner: dependencies.runner,
+          runner: primaryRunner,
           taskId: authority.task_id,
           claim: projection.path,
           pathClass,
@@ -167,7 +199,7 @@ export async function discoverNewestProjections(
         });
         if (!target.ok) return target;
         const measuredAtRevision = manifest.accounting.measured_at_revision;
-        const prior = newest.get(projection.path);
+        const prior = newest.get(repositoryPathKey(undefined, projection.path));
         if (prior === undefined || measuredAtRevision > prior.measured_at_revision) {
           const candidate: NewestProjection = Object.freeze({
             retired: false,
@@ -176,8 +208,58 @@ export async function discoverNewestProjections(
             measured_at_revision: measuredAtRevision,
             target: target.value,
             reference,
+            runner: primaryRunner,
           });
-          newest.set(projection.path, candidate);
+          newest.set(repositoryPathKey(undefined, projection.path), candidate);
+        }
+      }
+      const implementation = manifest.source_artifact?.artifact_kind === "implementation-output"
+        ? manifest.source_artifact
+        : undefined;
+      for (const section of manifest.secondary_projections ?? []) {
+        const member = members.get(section.repository);
+        if (member === undefined || member.mode !== "writable" ||
+            member.identity.digest !== section.repository_identity_digest) {
+          return stateInvalid(authority, "reconciliation-secondary-repository-unavailable");
+        }
+        const outputSection = implementation?.secondary_repositories?.find(
+          (candidate) => candidate.repository === section.repository,
+        );
+        if (outputSection === undefined) return stateInvalid(authority, "reconciliation-projection-unbound");
+        for (const output of outputSection.outputs) {
+          if (output.operation !== "delete" && output.operation !== "rename") continue;
+          const path = output.operation === "delete" ? output.path : output.previous_path;
+          const identity = { repository: section.repository, path } as const;
+          const prior = newest.get(repositoryPathKey(identity.repository, identity.path));
+          if (prior === undefined || manifest.accounting.measured_at_revision > prior.measured_at_revision) {
+            newest.set(repositoryPathKey(identity.repository, identity.path), Object.freeze({
+              retired: true, repository: section.repository, path,
+              measured_at_revision: manifest.accounting.measured_at_revision,
+              reference: undefined,
+            }));
+          }
+        }
+        for (const projection of section.projections) {
+          const output = outputSection.outputs.find((candidate) =>
+            candidate.path === projection.path ||
+            (candidate.operation === "rename" && candidate.previous_path === projection.path));
+          if (output === undefined) return stateInvalid(authority, "reconciliation-projection-unbound");
+          const target = await resolveDeclaredOutputPath({
+            runner: member.binding.runner,
+            taskId: authority.task_id,
+            claim: projection.path,
+            pathClass: output.path_class,
+            context: authority.context,
+          });
+          if (!target.ok) return target;
+          const prior = newest.get(repositoryPathKey(projection.repository, projection.path));
+          if (prior === undefined || manifest.accounting.measured_at_revision > prior.measured_at_revision) {
+            newest.set(repositoryPathKey(projection.repository, projection.path), Object.freeze({
+              retired: false, repository: section.repository, path: projection.path,
+              projection, measured_at_revision: manifest.accounting.measured_at_revision,
+              target: target.value, reference, runner: member.binding.runner,
+            }));
+          }
         }
       }
     }
@@ -186,7 +268,7 @@ export async function discoverNewestProjections(
     // manifest measures later still and supersedes the adoption for the paths it re-projects.
     for (const adoption of state.value.baseline_adoptions ?? []) {
       for (const projection of adoption.adopted_projections) {
-        const prior = newest.get(projection.path);
+        const prior = newest.get(repositoryPathKey(projection.repository, projection.path));
         if (prior === undefined) return stateInvalid(authority, "reconciliation-projection-unbound");
         // An adopted path is never retirement-newest from a bytes adoption: adoption gates open
         // only over recorded projections, and a retirement that measured later supersedes the
@@ -195,26 +277,33 @@ export async function discoverNewestProjections(
         if (adoption.adopted_at_revision > prior.measured_at_revision) {
           const adopted: NewestProjection = Object.freeze({
             retired: false,
+            ...(projection.repository === undefined ? {} : { repository: projection.repository }),
             path: projection.path,
             projection,
             measured_at_revision: adoption.adopted_at_revision,
             target: prior.target,
             reference: undefined,
+            runner: prior.runner,
           });
-          newest.set(projection.path, adopted);
+          newest.set(repositoryPathKey(projection.repository, projection.path), adopted);
         }
       }
       // A deletion adoption records absence, not bytes: the human accepted that an authorized
       // commit already removed these paths, so the record retires the stale presence exactly like
       // a declared deletion output would. Newest-per-path applies for the same reason.
-      for (const path of adoption.adopted_absences ?? []) {
-        const prior = newest.get(path);
+      for (const adoptedAbsence of adoption.adopted_absences ?? []) {
+        const identity: ProjectionLookup = typeof adoptedAbsence === "string"
+          ? { path: adoptedAbsence }
+          : adoptedAbsence;
+        const prior = newest.get(repositoryPathKey(identity.repository, identity.path));
         if (prior === undefined) return stateInvalid(authority, "reconciliation-projection-unbound");
         if (prior.retired) continue;
         if (adoption.adopted_at_revision > prior.measured_at_revision) {
-          newest.set(path, Object.freeze({
+          const repository = identity.repository;
+          newest.set(repositoryPathKey(identity.repository, identity.path), Object.freeze({
             retired: true,
-            path,
+            ...(repository === undefined ? {} : { repository }),
+            path: identity.path,
             measured_at_revision: adoption.adopted_at_revision,
             reference: undefined,
           }));
@@ -231,34 +320,41 @@ async function discoverProjections(
   dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
   state: CanonicalDocument<TaskStateV1>,
+  repositorySet?: Pick<RepositorySet, "members">,
 ): Promise<ProjectResult<Readonly<{
   recorded: readonly ProjectionDigestRef[];
   current: readonly ProjectionDigestRef[];
-  unrestorable: readonly ProjectionDigestRef["path"][];
-  committed_absent: readonly ProjectionDigestRef["path"][];
+  unrestorable: readonly (ProjectionIdentity | ProjectionDigestRef["path"])[];
+  committed_absent: readonly (ProjectionIdentity | ProjectionDigestRef["path"])[];
 }>>> {
-  const newest = await discoverNewestProjections(dependencies, authority, state);
+  const newest = await discoverNewestProjections(dependencies, authority, state, repositorySet);
   if (!newest.ok) return newest;
   try {
     const recorded: ProjectionDigestRef[] = [];
     const current: ProjectionDigestRef[] = [];
-    const unrestorable: ProjectionDigestRef["path"][] = [];
-    const committedAbsent: ProjectionDigestRef["path"][] = [];
-    for (const observation of [...newest.value.values()]
-      .sort((left, right) => left.path.localeCompare(right.path))) {
+    const unrestorable: (ProjectionIdentity | ProjectionDigestRef["path"])[] = [];
+    const committedAbsent: (ProjectionIdentity | ProjectionDigestRef["path"])[] = [];
+    for (const observation of orderedNewestProjections(newest.value)) {
       if (observation.retired) continue;
       recorded.push(observation.projection);
       // An adoption-sourced projection (no retained manifest reference) recorded only a digest;
       // there are no retained bytes to restore if the worktree copy goes missing.
-      if (observation.reference === undefined) unrestorable.push(observation.projection.path);
+      const identity = observation.repository === undefined
+        ? observation.projection.path
+        : Object.freeze({ repository: observation.repository, path: observation.projection.path });
+      if (observation.reference === undefined) unrestorable.push(identity);
       const digest = await currentProjectionDigest(observation.target);
       if (digest !== "missing") {
-        current.push(Object.freeze({ path: observation.projection.path, content_digest: digest }));
-      } else if (observation.reference === undefined && !(await committedAtHead(dependencies, authority, observation.projection.path))) {
+        current.push(Object.freeze({
+          ...(observation.repository === undefined ? {} : { repository: observation.repository }),
+          path: observation.projection.path,
+          content_digest: digest,
+        }));
+      } else if (observation.reference === undefined && !(await committedAtHead(observation.runner, authority, observation.projection.path))) {
         // Unrestorable and gone from HEAD too: the deletion is already committed (typically by an
         // authorized milestone commit), so no produce can re-declare it either — the base commit
         // holds no before-image. Routing offers the human a deletion adoption for exactly this.
-        committedAbsent.push(observation.projection.path);
+        committedAbsent.push(identity);
       }
     }
     return ok(Object.freeze({
@@ -279,11 +375,11 @@ async function discoverProjections(
  * the same empty string.
  */
 async function committedAtHead(
-  dependencies: GateLifecycleDependencies,
+  runner: RootBoundGitRunner,
   authority: TransactionAuthority,
   path: ProjectionDigestRef["path"],
 ): Promise<boolean> {
-  const result = await dependencies.runner.run({
+  const result = await runner.run({
     argv: ["cat-file", "-e", `HEAD:${path}`],
     operation: parseSafeCode("git-committed-absence-probe"),
     expectedAbsence: [{ code: 128, stderrIncludes: "does not exist in" }],
@@ -379,9 +475,10 @@ export async function discoverReconciliationInput(
   dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
   state: CanonicalDocument<TaskStateV1>,
+  repositorySet?: Pick<RepositorySet, "members">,
 ): Promise<ProjectResult<ReconciliationInput>> {
   assertInternalTransactionAuthority(authority, dependencies);
-  const projections = await discoverProjections(dependencies, authority, state);
+  const projections = await discoverProjections(dependencies, authority, state, repositorySet);
   if (!projections.ok) return projections;
   const gate = await discoverGateHead(dependencies, authority, state);
   if (!gate.ok) return gate;

@@ -111,6 +111,9 @@ export const DURABLE_ISSUE_CODES = Object.freeze({
   /** 6d */ accountingOutputUnmatched: "accounting-output-unmatched",
   /** 6e */ accountingStorageMismatch: "accounting-storage-mismatch",
   /** 6f */ accountingStoredBytesMismatch: "accounting-stored-bytes-mismatch",
+  /** implementation */ implementationInputIdDuplicate: "implementation-input-id-duplicate",
+  /** implementation */ implementationSecondaryPathInvalid: "implementation-secondary-path-invalid",
+  /** implementation */ implementationAggregateAccountingInvalid: "implementation-aggregate-accounting-invalid",
   /** 7a */ initializationDigestMismatch: "initialization-digest-mismatch",
   /** 7b */ artifactTaskIdMismatch: "artifact-task-id-mismatch",
   /** 7d */ repositoryIdentityDigestMismatch: "repository-identity-digest-mismatch",
@@ -122,6 +125,7 @@ export const DURABLE_ISSUE_CODES = Object.freeze({
   /** 3 */ intentReceiptSelfDigestMismatch: "intent-receipt-self-digest-mismatch",
   /** state */ lastTransitionOutcomeDigestMismatch: "last-transition-outcome-digest-mismatch",
   /** state */ lastTransitionRevisionMismatch: "last-transition-revision-mismatch",
+  /** state */ repositoryCheckpointMismatch: "repository-checkpoint-mismatch",
   /** 4b */ intentReceiptOutcomeDigestMismatch: "intent-receipt-outcome-digest-mismatch",
   /** 4b */ intentReceiptPreparedStateDigestMismatch: "intent-receipt-prepared-state-digest-mismatch",
   /** 4b */ intentReceiptRevisionNotSuccessor: "intent-receipt-revision-not-successor",
@@ -272,6 +276,23 @@ function decodable(value: PhaseInstanceId): boolean {
   } catch {
     return false;
   }
+}
+
+/** A checkpoint is continuity evidence only when it exactly mirrors the last-seen membership. */
+function repositoryCheckpointCorresponds(state: TaskStateV1): boolean {
+  const repositories = state.last_seen_config?.repositories;
+  const secondaryNames = repositories === undefined ? [] : Object.keys(repositories).sort();
+  const checkpoint = state.last_seen_repository_bindings;
+
+  if (checkpoint === undefined) return secondaryNames.length === 0;
+  if (state.last_seen_config === undefined || checkpoint.length !== secondaryNames.length + 1) return false;
+
+  const primary = checkpoint[0];
+  if (primary === undefined || primary.name !== "primary" || primary.declared_path !== undefined) return false;
+  return secondaryNames.every((name, index) => {
+    const binding = checkpoint[index + 1];
+    return binding?.name === name && binding.declared_path === repositories?.[name]?.path;
+  });
 }
 
 type InitializationArtifact = TaskInitializationV1 | LegacyImportInitializationV1;
@@ -433,6 +454,12 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   ) {
     return fail(stateInvalid(state, DURABLE_ISSUE_CODES.lastTransitionRevisionMismatch));
   }
+  if (state !== undefined && !repositoryCheckpointCorresponds(state)) {
+    return fail(stateInvalid(state, DURABLE_ISSUE_CODES.repositoryCheckpointMismatch));
+  }
+  if (intentState !== undefined && !repositoryCheckpointCorresponds(intentState)) {
+    return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.repositoryCheckpointMismatch));
+  }
   if (receipt !== undefined && canonicalJsonDigest(receipt) !== relation?.receipt.digest) {
     return fail(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptSelfDigestMismatch));
   }
@@ -536,6 +563,9 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
       if (!isDeepStrictEqual(resultManifest.secret_scan, source.secret_scan)) {
         return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestSecretScanMismatch));
       }
+      if (resultManifest.projections.some((projection) => projection.repository !== undefined)) {
+        return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
+      }
       const expectedProjectionPaths = source.outputs
         .filter((output) => output.operation !== "delete")
         .map((output) => output.path);
@@ -550,7 +580,29 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
           return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
         }
       }
+      const changedSecondaries = (source.secondary_repositories ?? []).filter((section) => section.outputs.length > 0);
+      const secondaryProjections = resultManifest.secondary_projections ?? [];
+      if (
+        changedSecondaries.length !== secondaryProjections.length ||
+        changedSecondaries.some((section, index) => {
+          const wrapper = secondaryProjections[index];
+          if (
+            wrapper === undefined || wrapper.repository !== section.repository ||
+            wrapper.repository_identity_digest !== section.repository_identity_digest
+          ) return true;
+          const expectedOutputs = section.outputs.filter((output) => output.operation !== "delete");
+          if (wrapper.projections.length !== expectedOutputs.length) return true;
+          return expectedOutputs.some((output, outputIndex) => {
+            const projection = wrapper.projections[outputIndex];
+            return projection === undefined || projection.repository !== section.repository || projection.path !== output.path ||
+              (output.storage === "raw-payload" && projection.content_digest !== output.payload_digest);
+          });
+        })
+      ) return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
     } else if (source.artifact_kind === "document") {
+      if (resultManifest.secondary_projections !== undefined) {
+        return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
+      }
       const declaredDocuments = [{
         projection_target: source.projection_target,
         byte_count: source.byte_count,
@@ -591,6 +643,9 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
       if (resultManifest.projections.length !== 0) {
         return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
       }
+      if (resultManifest.secondary_projections !== undefined) {
+        return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
+      }
     }
   }
 
@@ -614,21 +669,48 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   }
 
   if (artifact !== undefined && artifact.artifact_kind === "implementation-output") {
+    const sections = [
+      { outputs: artifact.outputs, restore_targets: artifact.restore_targets, accounting: artifact.accounting },
+      ...(artifact.secondary_repositories ?? []),
+    ];
+    const inputIds = new Set<string>();
+    for (const input of artifact.declared_inputs) {
+      if (inputIds.has(input.input_id)) return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.implementationInputIdDuplicate));
+      inputIds.add(input.input_id);
+    }
+    for (const section of artifact.secondary_repositories ?? []) {
+      for (const input of section.declared_inputs) {
+        if (inputIds.has(input.input_id)) return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.implementationInputIdDuplicate));
+        inputIds.add(input.input_id);
+      }
+      const secondaryPaths = [
+        ...section.outputs.flatMap((output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]),
+        ...section.restore_targets,
+        ...section.declared_inputs.map((input) => input.path),
+      ];
+      if (
+        section.outputs.some((output) => output.path_class !== "repository-source") ||
+        secondaryPaths.some((path) => path === ".archflow" || path.startsWith(".archflow/"))
+      ) return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.implementationSecondaryPathInvalid));
+    }
+
     /*
      * Rank 5a — the one rename clause this phase can evaluate. Verifying that the two endpoints
      * belong to the same path class needs the template tables and is Phase 11's (D4).
      */
-    for (const output of artifact.outputs) {
-      if (output.operation === "rename" && output.previous_path === output.path) {
-        return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.renamePreviousPathEqualsPath));
+    for (const section of sections) {
+      for (const output of section.outputs) {
+        if (output.operation === "rename" && output.previous_path === output.path) {
+          return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.renamePreviousPathEqualsPath));
+        }
       }
-    }
 
-    /* Rank 5b — a restore target must be one of the outputs the manifest declares. */
-    const declaredPaths = new Set<string>(artifact.outputs.map((output) => output.path));
-    for (const target of artifact.restore_targets) {
-      if (!declaredPaths.has(target)) {
-        return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.restoreTargetNotDeclared));
+      /* Rank 5b — a restore target must be one of the outputs its section declares. */
+      const declaredPaths = new Set<string>(section.outputs.map((output) => output.path));
+      for (const target of section.restore_targets) {
+        if (!declaredPaths.has(target)) {
+          return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.restoreTargetNotDeclared));
+        }
       }
     }
 
@@ -645,6 +727,10 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
     }
     if (accounting.task_bytes < accounting.result_bytes) {
       return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingTaskBytesBelowResult));
+    }
+    const aggregateResultBytes = sections.reduce((sum, section) => sum + section.accounting.result_bytes, 0);
+    if (aggregateResultBytes > accounting.result_byte_cap || accounting.task_bytes < aggregateResultBytes) {
+      return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.implementationAggregateAccountingInvalid));
     }
 
     const outputsByPath = new Map<string, (typeof artifact.outputs)[number][]>();
@@ -680,6 +766,25 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
       const output = outputsByPath.get(entry.path)![0]!;
       if (entry.storage === "raw-payload" && output.storage === "raw-payload") {
         if (entry.stored_bytes !== output.payload_bytes) {
+          return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingStoredBytesMismatch));
+        }
+      }
+    }
+    for (const section of artifact.secondary_repositories ?? []) {
+      const localTotal = section.accounting.counted_entries.reduce((sum, entry) => sum + entry.stored_bytes, 0);
+      if (section.accounting.result_bytes !== localTotal) {
+        return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingResultBytesSum));
+      }
+      const outputByPath = new Map(section.outputs.map((output) => [output.path, output] as const));
+      const entryByPath = new Map(section.accounting.counted_entries.map((entry) => [entry.path, entry] as const));
+      if (
+        section.accounting.counted_entries.some((entry) => !outputByPath.has(entry.path)) ||
+        section.outputs.some((output) => !entryByPath.has(output.path))
+      ) return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingEntryUnmatched));
+      for (const entry of section.accounting.counted_entries) {
+        const output = outputByPath.get(entry.path)!;
+        if (output.storage !== entry.storage) return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingStorageMismatch));
+        if (entry.storage === "raw-payload" && output.storage === "raw-payload" && entry.stored_bytes !== output.payload_bytes) {
           return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingStoredBytesMismatch));
         }
       }

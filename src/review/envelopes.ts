@@ -1,4 +1,5 @@
 import { canonicalJsonDigest, parseGitOid, type GitOid } from "../contracts/canonical.js";
+import { REPOSITORY_NAME_PATTERN } from "../contracts/config.js";
 import { createProjectError, type ProjectError } from "../contracts/errors.js";
 import {
   parseSafeInteger,
@@ -103,6 +104,24 @@ export const REPOSITORY_VIEW_NOTE =
 export const PRODUCED_REPOSITORY_VIEW_NOTE =
   "Your working directory is a sealed read-only post-change repository snapshot reconstructed from the authenticated implementation output, excluding .archflow/tasks. The artifact names the changed paths and baseline; inspect the files in this snapshot as the review subject.";
 
+/** Fixed child-visible navigation and authority boundary for a named repository set. */
+export const MULTI_REPOSITORY_VIEW_NOTE =
+  "Your working directory contains read-only repository snapshots at `./<name>`; cite files as `<name>/<path>`. A repository entry with `snapshot_digest` is a sealed post-change tree reconstructed from authenticated implementation output and is part of the review subject. An entry without `snapshot_digest` is commit-pinned read-only context and may not contain this phase's work; the artifact and pinned context remain the review subject and take precedence on conflict.";
+
+export type MultiRepositoryWorkspaceEntry = {
+  readonly name: string;
+  readonly path: string;
+  readonly repository_identity_digest: Sha256Digest;
+  readonly commit: GitOid;
+  readonly snapshot_digest?: Sha256Digest;
+};
+
+export type MultiRepositoryWorkspaceBinding = {
+  readonly kind: "read-only-multi-repository-view";
+  readonly note: typeof MULTI_REPOSITORY_VIEW_NOTE;
+  readonly repositories: readonly MultiRepositoryWorkspaceEntry[];
+};
+
 /**
  * Declares the read-only repository view offered to either review child. A plain checkout binds
  * one commit; an implementation snapshot binds its baseline plus the retained declared-output
@@ -119,7 +138,8 @@ export type ReviewWorkspaceBinding =
       readonly base_commit: GitOid;
       readonly snapshot_digest: Sha256Digest;
       readonly note: typeof PRODUCED_REPOSITORY_VIEW_NOTE;
-    };
+    }
+  | MultiRepositoryWorkspaceBinding;
 
 export type ReviewEnvelopeInput = {
   readonly artifact: string;
@@ -310,6 +330,42 @@ function validateWorkspace(value: ReviewWorkspaceBinding): ReviewWorkspaceBindin
       commit: parseGitOid(value.commit),
       note: value.note,
     };
+  }
+  if (value.kind === "read-only-multi-repository-view") {
+    exactFields(value, ["kind", "note", "repositories"], "review workspace binding");
+    if (value.note !== MULTI_REPOSITORY_VIEW_NOTE) {
+      throw new TypeError("review workspace note must be the fixed multi-repository literal");
+    }
+    if (!Array.isArray(value.repositories) || value.repositories.length < 2) {
+      throw new TypeError("multi-repository workspace must contain at least two repositories");
+    }
+    const repositories = value.repositories.map((repository, index): MultiRepositoryWorkspaceEntry => {
+      exactFields(
+        repository,
+        repository.snapshot_digest === undefined
+          ? ["name", "path", "repository_identity_digest", "commit"]
+          : ["name", "path", "repository_identity_digest", "commit", "snapshot_digest"],
+        "multi-repository workspace entry",
+      );
+      if (repository.name !== "primary" && !(typeof repository.name === "string" && REPOSITORY_NAME_PATTERN.test(repository.name))) {
+        throw new TypeError("multi-repository workspace name is invalid");
+      }
+      const name = repository.name as MultiRepositoryWorkspaceEntry["name"];
+      if (repository.path !== name) throw new TypeError("multi-repository workspace path must equal name");
+      return {
+        name,
+        path: name,
+        repository_identity_digest: parseSha256Digest(repository.repository_identity_digest),
+        commit: parseGitOid(repository.commit),
+        ...(repository.snapshot_digest === undefined ? {} : { snapshot_digest: parseSha256Digest(repository.snapshot_digest) }),
+      };
+    });
+    const names = repositories.map((repository) => repository.name);
+    if (names[0] !== "primary" || new Set(names).size !== names.length ||
+        names.some((name, index) => index > 1 && names[index - 1]! >= name)) {
+      throw new TypeError("multi-repository workspace names must be primary-first, sorted, and unique");
+    }
+    return { kind: value.kind, note: value.note, repositories };
   }
   exactFields(value, ["kind", "base_commit", "snapshot_digest", "note"], "review workspace binding");
   if (value.kind !== "read-only-produced-repository-snapshot") {

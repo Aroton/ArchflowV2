@@ -6,7 +6,7 @@ import { createProjectError, type ProjectError } from "../contracts/errors.js";
 import type { HostIdentity } from "../contracts/hosts.js";
 import { safeIdV1Schema } from "../contracts/evidence.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
-import type { AdapterId, ModelFamily, RouteOverrideRecord, RouteSourceRecord } from "../contracts/review.js";
+import type { AdapterId, ModelFamily, ReviewedRepositoryV1, RouteOverrideRecord, RouteSourceRecord } from "../contracts/review.js";
 import {
   createAdjudicationObservationCapability,
   createReviewObservationCapability,
@@ -299,6 +299,7 @@ export type ReviewObservationMint = Readonly<{
   cli_version: string;
   route: DispatchRoute;
   envelope_input_digest: ObservationBindingByKind["review"]["envelope_input_digest"];
+  repositories: readonly ReviewedRepositoryV1[];
   extracted_output_bytes: Uint8Array;
   route_source?: RouteSourceRecord;
   route_override?: RouteOverrideRecord;
@@ -310,6 +311,7 @@ export type AdjudicationObservationMint = Readonly<{
   cli_version: string;
   route: DispatchRoute;
   envelope_input_digest: ObservationBindingByKind["adjudication"]["envelope_input_digest"];
+  repositories: readonly ReviewedRepositoryV1[];
   extracted_output_bytes: Uint8Array;
   route_source?: RouteSourceRecord;
   route_override?: RouteOverrideRecord;
@@ -754,6 +756,7 @@ export function mintReviewObservation(input: ReviewObservationMint): ReturnType<
     effort: input.route.effort,
     ...(input.route.provider === undefined ? {} : { provider: input.route.provider }),
     route_source: input.route_source ?? Object.freeze({ provenance: "configured" as const }),
+    repositories: input.repositories,
     rubric_digest: input.subject.rubric_digest,
     producer_family: input.subject.producer_family,
     ...(input.route_override === undefined ? {} : { route_override: input.route_override }),
@@ -784,6 +787,7 @@ export function mintAdjudicationObservation(
     effort: input.route.effort,
     ...(input.route.provider === undefined ? {} : { provider: input.route.provider }),
     route_source: input.route_source ?? Object.freeze({ provenance: "configured" as const }),
+    repositories: input.repositories,
     pinned_constitution_digest: input.subject.pinned_constitution_digest,
     approved_upstream_digests: input.subject.approved_upstream_digests,
     source_evidence_set_digest: input.subject.source_evidence_set_digest,

@@ -1,10 +1,8 @@
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 
 import { parseCanonicalDocument, sha256Bytes, type CanonicalDocument } from "../../src/contracts/canonical.js";
 import { parseConfigYaml, type TaskConfigSnapshot } from "../../src/contracts/config.js";
@@ -20,28 +18,20 @@ import type { AtomicWriter } from "../../src/state/atomic.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
 import { runStateInitialization } from "../../src/state/initialization.js";
 import type { TransactionDependencies } from "../../src/state/transaction.js";
+import { cleanupTemporaryRepositories, createTempRepository } from "../helpers/temp-repository.js";
 
-const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
-
-const env: NodeJS.ProcessEnv = {
-  ...process.env,
-  GIT_CONFIG_GLOBAL: "/dev/null",
-  GIT_CONFIG_SYSTEM: "/dev/null",
-  GIT_AUTHOR_NAME: "ArchFlow Test",
-  GIT_AUTHOR_EMAIL: "test@example.invalid",
-  GIT_COMMITTER_NAME: "ArchFlow Test",
-  GIT_COMMITTER_EMAIL: "test@example.invalid",
-};
+afterAll(cleanupTemporaryRepositories);
 
 describe("revision-0 state initialization", () => {
   it("installs one receipt before revision 1 and exact-replays it", async () => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), "archflow-initialization-")));
-    roots.push(root);
-    execFileSync("git", ["-c", "init.defaultBranch=main", "init", "-q"], { cwd: root, env });
-    writeFileSync(join(root, "tracked.txt"), "root\n");
-    execFileSync("git", ["add", "--", "tracked.txt"], { cwd: root, env });
-    execFileSync("git", ["commit", "-q", "-m", "root"], { cwd: root, env });
+    const primary = createTempRepository({ label: "initialization", attributes: undefined });
+    primary.write("tracked.txt", "root\n");
+    primary.commitAll("root");
+    const root = primary.path;
+    const secondary = createTempRepository({ label: "initialization-secondary", attributes: undefined });
+    secondary.write("tracked.txt", "secondary root\n");
+    secondary.commitAll("secondary root");
+    const secondaryRoot = secondary.path;
     const taskId = "initialization-task" as TaskStateV1["task_id"];
     mkdirSync(join(root, ".archflow", "tasks", taskId), { recursive: true });
     const context: RepositoryOperationContext = {
@@ -60,7 +50,14 @@ describe("revision-0 state initialization", () => {
     });
     if (!authorityResult.ok) throw new Error("authority failed");
     const authority = authorityResult.value;
-    const configBytes = new TextEncoder().encode('schema_version: "1"\nroles: {}\n');
+    let configBytes = new TextEncoder().encode([
+      'schema_version: "1"',
+      "roles: {}",
+      "repositories:",
+      "  apis:",
+      `    path: ${JSON.stringify(secondaryRoot)}`,
+      "",
+    ].join("\n"));
     const configDigest = sha256Bytes(configBytes);
     const subject: InputFingerprintSubject = {
       schema_version: "1",
@@ -73,7 +70,7 @@ describe("revision-0 state initialization", () => {
     const template = JSON.parse(await readFile(
       new URL("../fixtures/contracts/durable/task-initialization.valid.json", import.meta.url), "utf8",
     )) as TaskInitializationV1;
-    const headCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, env, encoding: "utf8" }).trim() as never;
+    const headCommit = primary.git("rev-parse", "HEAD") as never;
     const artifact: TaskInitializationV1 = {
       ...template,
       task_id: taskId,
@@ -138,6 +135,16 @@ describe("revision-0 state initialization", () => {
     if (!first.ok) return;
     expect(first.value.state.value.revision).toBe(1);
     expect(first.value.replayed).toBe(false);
+    expect(first.value.state.value.last_seen_config?.repositories).toEqual({
+      apis: { path: secondaryRoot },
+    });
+    expect(first.value.state.value.last_seen_repository_bindings?.map((entry) => ({
+      name: entry.name,
+      declared_path: entry.declared_path,
+    }))).toEqual([
+      { name: "primary", declared_path: undefined },
+      { name: "apis", declared_path: secondaryRoot },
+    ]);
     expect(events).toEqual(["initialization", "receipt", "state"]);
 
     const replayed = await runStateInitialization(dependencies, { authority, call });
@@ -171,5 +178,36 @@ describe("revision-0 state initialization", () => {
       }
     }
     expect(events).toEqual([]);
+
+    configBytes = new TextEncoder().encode([
+      'schema_version: "1"',
+      "roles: {}",
+      "repositories:",
+      "  missing-member:",
+      `    path: ${JSON.stringify(join(secondaryRoot, "does-not-exist"))}`,
+      "",
+    ].join("\n"));
+    const invalidCall = parseToolCall("archflow_state", {
+      schema_version: "1",
+      task_id: taskId,
+      intent_id: "invalid-initial-secondary",
+      expected_revision: 0,
+      input_fingerprint: fingerprint,
+      phase_instance: "prd",
+      step: "produce",
+      status: "running",
+      artifact,
+    });
+    const invalid = await runStateInitialization(dependencies, { authority, call: invalidCall });
+    expect(invalid).toMatchObject({
+      ok: false,
+      error: {
+        code: "CONFIG_INVALID",
+        diagnostic: { parameters: { issues: [expect.stringContaining("repositories.missing-member.path")] } },
+      },
+    });
+    expect(events).toEqual([]);
+    expect(state).toBeUndefined();
+    expect(receipt).toBeUndefined();
   });
 });

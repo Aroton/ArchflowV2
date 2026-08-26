@@ -1,5 +1,6 @@
-import type { WorkflowSubject } from "../contracts/config.js";
+import type { RepositoryName, WorkflowSubject } from "../contracts/config.js";
 import type {
+  RepositoryCommitMilestoneV1,
   RuleSettlementConclusionV1,
   RuleSettlementV1,
   TaskStateV1,
@@ -28,19 +29,32 @@ import type { CurrentProduceSubject } from "./produce-subject.js";
 /** Which rule made the step wait; `null` when nothing did. */
 export type ApprovalRuleMatch =
   | Readonly<{ kind: "subject"; subject: WorkflowSubject }>
-  | Readonly<{ kind: "content"; paths: readonly string[] }>;
+  | Readonly<{
+      kind: "content";
+      paths: readonly string[];
+      secondary_paths?: readonly Readonly<{ repository: RepositoryName; paths: readonly string[] }>[];
+    }>;
 
 export type ApprovalRuleConclusion = RuleSettlementConclusionV1;
 
 const GATE_SUMMARY_MAX_LENGTH = 4096;
 const RULE_MATCH_SUMMARY_MAX_LENGTH = 1536;
 
+/** Matched paths as shown to humans: primary paths bare, secondary paths prefixed by repository name. */
+export function displayMatchPaths(match: Extract<ApprovalRuleMatch, { kind: "content" }>): readonly string[] {
+  return [
+    ...match.paths,
+    ...(match.secondary_paths ?? []).flatMap((section) =>
+      section.paths.map((path) => `${section.repository}/${path}`)),
+  ];
+}
+
 /** Plain-language evidence carried into a waiting gate's durable human summary. */
 export function approvalRuleMatchSummary(match: ApprovalRuleMatch): string {
   if (match.kind === "subject") {
     return `Approval rule trigger: this project requires human approval for the "${match.subject}" subject.`;
   }
-  const paths = match.paths.map((path) => `- ${path}`).join("\n");
+  const paths = displayMatchPaths(match).map((path) => `- ${path}`).join("\n");
   return `Approval rule trigger: these changed paths matched the project's content rules:\n${paths}`;
 }
 
@@ -51,9 +65,10 @@ function boundedApprovalRuleMatchSummary(match: ApprovalRuleMatch): string {
   const header = "Approval rule trigger: these changed paths matched the project's content rules:";
   let shown = header;
   let shownCount = 0;
-  for (const path of match.paths) {
+  const displayPaths = displayMatchPaths(match);
+  for (const path of displayPaths) {
     const line = `\n- ${path}`;
-    const remaining = match.paths.length - shownCount - 1;
+    const remaining = displayPaths.length - shownCount - 1;
     const notice = remaining === 0
       ? ""
       : `\n- … ${remaining} additional matched path${remaining === 1 ? "" : "s"} omitted; exact paths remain in durable settlement evidence.`;
@@ -61,7 +76,7 @@ function boundedApprovalRuleMatchSummary(match: ApprovalRuleMatch): string {
     shown += line;
     shownCount += 1;
   }
-  const omitted = match.paths.length - shownCount;
+  const omitted = displayPaths.length - shownCount;
   return omitted === 0
     ? shown
     : `${shown}\n- … ${omitted} additional matched path${omitted === 1 ? "" : "s"} omitted; exact paths remain in durable settlement evidence.`;
@@ -152,6 +167,7 @@ export function evaluateApprovalRules(
   config: ApprovalRulesConfig | undefined,
   subject: WorkflowSubject,
   changedPaths: readonly string[],
+  secondaryChangedPaths: readonly Readonly<{ repository: RepositoryName; paths: readonly string[] }>[] = [],
 ): ApprovalRuleConclusion {
   const rules = config?.approval_rules;
   if (rules !== undefined && rules.subjects.includes(subject)) {
@@ -160,8 +176,16 @@ export function evaluateApprovalRules(
   if (subject === "phase-impl" && rules !== undefined) {
     const matched = [...new Set(changedPaths.filter((path) =>
       rules.content.some((rule) => rule.paths.some((pattern) => globPatternMatches(pattern, path)))))].sort();
-    if (matched.length > 0) {
-      return Object.freeze({ wait: true, match: Object.freeze({ kind: "content", paths: Object.freeze(matched) }) });
+    const secondaryMatched = secondaryChangedPaths.flatMap((section) => {
+      const paths = [...new Set(section.paths.filter((path) =>
+        rules.content.some((rule) => rule.paths.some((pattern) => globPatternMatches(pattern, path)))))].sort();
+      return paths.length === 0 ? [] : [Object.freeze({ repository: section.repository, paths: Object.freeze(paths) })];
+    }).sort((left, right) => left.repository < right.repository ? -1 : left.repository > right.repository ? 1 : 0);
+    if (matched.length > 0 || secondaryMatched.length > 0) {
+      return Object.freeze({ wait: true, match: Object.freeze({
+        kind: "content", paths: Object.freeze(matched),
+        ...(secondaryMatched.length === 0 ? {} : { secondary_paths: Object.freeze(secondaryMatched) }),
+      }) });
     }
   }
   return Object.freeze({ wait: false, match: null });
@@ -194,6 +218,7 @@ export type ApprovalRuleContext = Readonly<{
    * previous path, deduplicated and sorted.
    */
   changedPaths: readonly string[];
+  secondaryChangedPaths: readonly Readonly<{ repository: RepositoryName; paths: readonly string[] }>[];
   config: ApprovalRulesConfig | undefined;
 }>;
 
@@ -208,9 +233,18 @@ export function approvalRuleContext(
         output.operation === "rename" ? [output.path, output.previous_path] : [output.path],
       ))].sort()
     : [];
+  const secondaryChangedPaths = artifact?.artifact_kind === "implementation-output"
+    ? (artifact.secondary_repositories ?? []).flatMap((section) => {
+        const paths = [...new Set(section.outputs.flatMap((output) =>
+          output.operation === "rename" ? [output.path, output.previous_path] : [output.path],
+        ))].sort();
+        return paths.length === 0 ? [] : [Object.freeze({ repository: section.repository, paths: Object.freeze(paths) })];
+      })
+    : [];
   return Object.freeze({
     subject: decodePhaseInstance(state.phase_instance).kind,
     changedPaths: Object.freeze(changedPaths),
+    secondaryChangedPaths: Object.freeze(secondaryChangedPaths),
     config,
   });
 }
@@ -227,6 +261,7 @@ export function buildRuleSettlement(
   conclusion: RuleSettlementConclusionV1,
   milestoneBaselineCommit?: GitOid,
   milestoneTarget?: Readonly<{ ref: string; head: GitOid }>,
+  secondaryMilestones: readonly RepositoryCommitMilestoneV1[] = [],
 ): RuleSettlementV1 {
   const kind = decodePhaseInstance(state.phase_instance).kind;
   const baselineAllowed = !conclusion.wait && (kind === "design" || kind === "phase-design" || kind === "phase-impl");
@@ -235,6 +270,9 @@ export function buildRuleSettlement(
   }
   if ((milestoneTarget !== undefined) !== baselineAllowed) {
     throw new TypeError("milestone target facts are required exactly for milestone-bearing wait:false settlements");
+  }
+  if (!baselineAllowed && secondaryMilestones.length !== 0) {
+    throw new TypeError("secondary milestones are allowed only for milestone-bearing wait:false settlements");
   }
   return Object.freeze({
     task_id: state.task_id,
@@ -248,6 +286,7 @@ export function buildRuleSettlement(
       milestone_target_ref: milestoneTarget.ref,
       milestone_target_head: milestoneTarget.head,
     }),
+    ...(secondaryMilestones.length === 0 ? {} : { secondary_milestones: Object.freeze([...secondaryMilestones]) }),
     settled_at_revision: parseSafeInteger(state.revision + 1),
   });
 }

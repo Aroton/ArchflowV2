@@ -100,9 +100,17 @@ function expectOk(result: SemanticResultV1): void {
 export function installSemanticReviewStub(
   root: string,
   findingsByReview: readonly (readonly Record<string, unknown>[])[],
-  options: Readonly<{ adjudicationCompliance?: "pass" | "fail" }> = {},
+  options: Readonly<{
+    adjudicationCompliance?: "pass" | "fail";
+    /**
+     * Matches only the first rule's review trigger (compliance still passes), and only for
+     * implementation subjects: one waivable exception that, once granted, leaves a clean review.
+     */
+    implementationFailingRule?: boolean;
+  }> = {},
 ): () => void {
   const adjudicationCompliance = options.adjudicationCompliance ?? "pass";
+  const implementationFailingRule = options.implementationFailingRule === true;
   const bin = join(root, "semantic-stub-bin");
   const stubHome = join(root, "semantic-stub-home");
   const countPath = join(root, "semantic-review-count");
@@ -134,11 +142,16 @@ else {
       pinned_constitution_digest: subject.pinned_constitution_digest,
       approved_upstream_digests: subject.approved_upstream_digests,
       source_evidence_set_digest: subject.source_evidence_set_digest,
-      rule_findings: envelope.rules.map((rule) => ({ rule_id: rule.id, rule_version: rule.version,
+      rule_findings: envelope.rules.map((rule, index) => ${JSON.stringify(implementationFailingRule)} && index === 0 &&
+        subject.phase_instance.indexOf("phase-impl-") === 0
+        ? { rule_id: rule.id, rule_version: rule.version, compliance: "pass",
+            rationale: "The implementation respects this rule.", trigger: "matched",
+            trigger_evidence: "The approved phase design requires an update before this work advances." }
+        : { rule_id: rule.id, rule_version: rule.version,
         compliance: ${JSON.stringify(adjudicationCompliance)},
         rationale: ${JSON.stringify(adjudicationCompliance === "pass" ? "The document respects this rule." : "The document violates this rule.")},
         trigger: ${JSON.stringify(adjudicationCompliance === "pass" ? "not-matched" : "matched")},
-        trigger_evidence: ${JSON.stringify(adjudicationCompliance === "pass" ? "No review trigger matched." : "The review trigger matched this document.")} })),
+        trigger_evidence: ${JSON.stringify(adjudicationCompliance === "pass" ? "No review trigger matched." : "The review trigger matched this document.")} }),
       drift_findings: subject.approved_upstream_digests.map((digest) => ({ upstream_digest: digest,
         drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift." })) };
   }

@@ -1,6 +1,9 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import {
+  REPOSITORY_NAME_PRESENCE_RULE,
   dispatchFailureObservationV1Schema,
   projectDispatchFailureObservation,
 } from "../../src/contracts/dispatch-failure.js";
@@ -48,5 +51,27 @@ describe("dispatch-failure contract", () => {
     expect(projected).not.toHaveProperty("phase_instance");
     expect(projected).not.toHaveProperty("attempt");
     expect(projected).not.toHaveProperty("observed_at_revision");
+  });
+
+  it("names only the safe configured member for a repository view failure", () => {
+    const unavailable = dispatchFailureObservationV1Schema.parse({
+      ...observation,
+      code: "REPOSITORY_VIEW_UNAVAILABLE",
+      message: "A required read-only repository snapshot is unavailable.",
+      repository_name: "apis",
+    });
+    expect(projectDispatchFailureObservation(unavailable)).toMatchObject({
+      code: "REPOSITORY_VIEW_UNAVAILABLE",
+      repository_name: "apis",
+    });
+    expect(dispatchFailureObservationV1Schema.safeParse({ ...unavailable, repository_name: "/private/apis" }).success).toBe(false);
+    expect(dispatchFailureObservationV1Schema.safeParse({ ...unavailable, repository_name: undefined }).success).toBe(false);
+    expect(dispatchFailureObservationV1Schema.safeParse({ ...observation, repository_name: "apis" }).success).toBe(false);
+  });
+
+  it("publishes the repository_name presence rule below the leaf document's plain object root", () => {
+    const leaf = JSON.parse(readFileSync(new URL("../../src/contracts/schemas/v1/dispatch-failure.schema.json", import.meta.url), "utf8")) as Record<string, unknown>;
+    expect(leaf.type).toBe("object");
+    expect(leaf.allOf).toEqual(REPOSITORY_NAME_PRESENCE_RULE.allOf);
   });
 });

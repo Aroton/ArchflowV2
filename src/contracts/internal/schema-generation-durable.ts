@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { additionalDocumentArtifactV1Schema, documentArtifactV1Schema } from "../durable-document.js";
-import { implementationOutputV1Schema, parentDocumentRefV1Schema, undeclaredChangeReportV1Schema, verificationEvidenceV1Schema } from "../durable-implementation-output.js";
+import { implementationOutputV1Schema, implementationRepositorySectionV1Schema, parentDocumentRefV1Schema, undeclaredChangeReportV1Schema, verificationEvidenceV1Schema } from "../durable-implementation-output.js";
 import { intentReceiptV1Schema, plainJsonV1Schema } from "../durable-intent.js";
 import { legacyImportInitializationV1Schema, legacyMappingEntryV1Schema, stagedPayloadRefV1Schema } from "../durable-legacy-import.js";
 import {
@@ -10,6 +10,7 @@ import {
   canonicalTaskPathsV1Schema,
   claimableOutputPathClassV1Schema,
   declaredInputRefV1Schema,
+  durableRepositoryNameV1Schema,
   outputEntryV1Schema,
   projectionDigestRefV1Schema,
   regularBlobIdentityV1Schema,
@@ -21,6 +22,7 @@ import {
   adjudicationEvidenceArtifactV1Schema,
   resultManifestV1Schema,
   reviewEvidenceArtifactV1Schema,
+  secondaryProjectionSetV1Schema,
   triageArtifactV1Schema,
 } from "../durable-result-manifest.js";
 import {
@@ -30,6 +32,7 @@ import {
   humanRevisionClassificationV1Schema,
   humanRevisionOverrideV1Schema,
   humanRevisionRecordV1Schema,
+  lastSeenRepositoryBindingV1Schema,
   lastTransitionOutcomeV1Schema,
   lastTransitionV1Schema,
   openGateRefV1Schema,
@@ -40,6 +43,10 @@ import {
   ruleSettlementV1Schema,
   stepStatusV1Schema,
   taskConfigApprovalRulesV1Schema,
+  taskConfigRepositoriesV1Schema,
+  taskConfigRepositoryDeclarationV1Schema,
+  taskConfigRepositoryModeV1Schema,
+  taskConfigRepositoryNameV1Schema,
   taskConfigOverridesV1Schema,
   taskConfigRolesV1Schema,
   taskConfigRouteV1Schema,
@@ -90,6 +97,7 @@ export const durableSchemaGroup: SchemaGenerationGroup = {
         snapshotAccountingEntry: snapshotAccountingEntryV1Schema,
         snapshotAccounting: snapshotAccountingV1Schema,
         outputEntry: outputEntryV1Schema,
+        repositoryName: durableRepositoryNameV1Schema,
       },
       migrated: true,
     },
@@ -120,7 +128,12 @@ export const durableSchemaGroup: SchemaGenerationGroup = {
         configRoles: taskConfigRolesV1Schema,
         configOverrides: taskConfigOverridesV1Schema,
         configApprovalRules: taskConfigApprovalRulesV1Schema,
+        configRepositoryMode: taskConfigRepositoryModeV1Schema,
+        configRepositoryName: taskConfigRepositoryNameV1Schema,
+        configRepositoryDeclaration: taskConfigRepositoryDeclarationV1Schema,
+        configRepositories: taskConfigRepositoriesV1Schema,
         configSnapshot: taskConfigSnapshotV1Schema,
+        lastSeenRepositoryBinding: lastSeenRepositoryBindingV1Schema,
       },
       overrides: { plainJson: PLAIN_JSON_FRAGMENT },
       migrated: true,
@@ -164,6 +177,7 @@ export const durableSchemaGroup: SchemaGenerationGroup = {
         parentDocumentRef: parentDocumentRefV1Schema,
         undeclaredChangeReport: undeclaredChangeReportV1Schema,
         verificationEvidence: verificationEvidenceV1Schema,
+        implementationRepositorySection: implementationRepositorySectionV1Schema,
       },
       migrated: true,
     },
@@ -176,6 +190,7 @@ export const durableSchemaGroup: SchemaGenerationGroup = {
         triageArtifact: triageArtifactV1Schema,
         adjudicationEvidenceArtifact: adjudicationEvidenceArtifactV1Schema,
         projectionDigestRef: projectionDigestRefV1Schema,
+        secondaryProjectionSet: secondaryProjectionSetV1Schema,
       },
       migrated: true,
     },

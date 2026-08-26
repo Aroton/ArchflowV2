@@ -1,7 +1,7 @@
-import { resolve as resolveDirectory } from "node:path";
 import { sha256Bytes, type CanonicalDocument } from "../contracts/canonical.js";
 import { lstat, readFile, readlink } from "node:fs/promises";
 import type { BlobIdentity, OutputEntry } from "../contracts/durable-primitives.js";
+import type { ResultManifestV1 } from "../contracts/durable-result-manifest.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parseSafeInteger, type SafeCode, type SafeInteger, type TaskSlug } from "../contracts/evidence.js";
@@ -10,8 +10,11 @@ import { parseRepositoryPathClaim, parseTaskPathClaim, type RepositoryPathClaim 
 import type { PhaseInstanceId } from "../contracts/phase-instance.js";
 import type { SecretScanner } from "../contracts/secret-scan.js";
 import type { GitEnvironment, RepositoryOperationContext } from "../repository/git.js";
-import { createGitRunner, preflightGit, readGitBlobBytes, readGitBlobProjectedBytes } from "../repository/git.js";
-import { discoverWorktree, type RootBoundGitRunner } from "../repository/identity.js";
+import { readGitBlobBytes, readGitBlobProjectedBytes } from "../repository/git.js";
+import { type RootBoundGitRunner } from "../repository/identity.js";
+import { openRepository, resolveRepositorySet } from "../repository/repository-set.js";
+import type { RepositorySet } from "../repository/repository-set.js";
+import type { RepositoryName } from "../contracts/config.js";
 import {
   parseWorkspacePathClaim,
   resolveDeclaredOutputPath,
@@ -32,6 +35,7 @@ import { readIntentReceipt, readTaskConfig, readTaskState } from "./read.js";
 import { createSecretlintScanner } from "./secret-scan.js";
 import {
   prepareProjectionPlan,
+  captureProjectionTarget,
   readSnapshot,
   readSnapshotPayload,
   restoreSnapshotOutput,
@@ -49,6 +53,8 @@ export type ProductionServices = Readonly<{
   authority: TransactionAuthority;
   state?: CanonicalDocument<TaskStateV1>;
   dependencies: GateLifecycleDependencies;
+  /** Present on authenticated handler sessions after task config repository-set resolution. */
+  repository_set?: RepositorySet;
 }>;
 
 export type ProductionInput = Readonly<{
@@ -59,6 +65,16 @@ export type ProductionInput = Readonly<{
   atomic?: AtomicWriter;
   gate_secret_scanner?: SecretScanner;
 }>;
+
+/** Exact retained payload contribution of one authenticated result manifest. */
+export function retainedManifestStoredBytes(manifest: ResultManifestV1): SafeInteger {
+  let total: number = manifest.accounting.result_bytes;
+  if (manifest.source_artifact.artifact_kind === "implementation-output") {
+    total += (manifest.source_artifact.secondary_repositories ?? [])
+      .reduce((sum, section) => sum + section.accounting.result_bytes, 0);
+  }
+  return parseSafeInteger(total);
+}
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 const fail = <T>(error: ProjectError): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: false, error });
@@ -124,10 +140,30 @@ export async function readRetainedManifest(
   return ok(Object.freeze({ manifest: read.value, manifest_target: manifestTarget.value }));
 }
 
+async function beforeImageForRunner(
+  runner: RootBoundGitRunner,
+  identity: BlobIdentity,
+  path: RepositoryPathClaim,
+): Promise<Readonly<{ observation: ProjectionObservation; desired: ProjectionDesired }>> {
+  const symlink = identity.mode === "120000";
+  const bytes = symlink
+    ? await readGitBlobBytes(runner, identity.oid)
+    : await readGitBlobProjectedBytes(runner, identity.oid, path);
+  const observation: ProjectionObservation = Object.freeze({
+    state: "present", file_type: symlink ? "symlink" : "regular", mode: identity.mode,
+    size_bytes: bytes.byteLength, content_digest: sha256Bytes(bytes),
+  });
+  const desired: ProjectionDesired = symlink
+    ? Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes })
+    : Object.freeze({ state: "present", file_type: "regular", mode: identity.mode, bytes });
+  return Object.freeze({ observation, desired });
+}
+
 export async function readRetainedResult(
   runner: RootBoundGitRunner,
   authority: TransactionAuthority,
   reference: TaskStateV1["authoritative_results"][number],
+  repositorySet?: RepositorySet,
 ): Promise<ProjectResult<RetainedResultInstallation>> {
   const loaded = await readRetainedManifest(runner, authority, reference);
   if (!loaded.ok) return loaded;
@@ -215,20 +251,7 @@ export async function readRetainedResult(
   const beforeImage = async (
     identity: BlobIdentity,
     path: RepositoryPathClaim,
-  ): Promise<Readonly<{ observation: ProjectionObservation; desired: ProjectionDesired }>> => {
-    const symlink = identity.mode === "120000";
-    const bytes = symlink
-      ? await readGitBlobBytes(runner, identity.oid)
-      : await readGitBlobProjectedBytes(runner, identity.oid, path);
-    const observation: ProjectionObservation = Object.freeze({
-      state: "present", file_type: symlink ? "symlink" : "regular", mode: identity.mode,
-      size_bytes: bytes.byteLength, content_digest: sha256Bytes(bytes),
-    });
-    const desired: ProjectionDesired = symlink
-      ? Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes })
-      : Object.freeze({ state: "present", file_type: "regular", mode: identity.mode, bytes });
-    return Object.freeze({ observation, desired });
-  };
+  ) => beforeImageForRunner(runner, identity, path);
   const sources: ProjectionSource[] = [];
   for (const output of manifest.outputs) {
     const target = await resolveOutput(output.path, output);
@@ -279,44 +302,151 @@ export async function readRetainedResult(
     runner.location.worktreeRoot as ResolvedTaskPath,
   );
   if (!projectionPlan.ok) return projectionPlan;
+  const secondaryProjectionPlans: NonNullable<RetainedResultInstallation["secondary_projection_plans"]>[number][] = [];
+  const secondarySections = manifest.source_artifact.artifact_kind === "implementation-output"
+    ? manifest.source_artifact.secondary_repositories ?? []
+    : [];
+  if (secondarySections.length > 0 && repositorySet === undefined) {
+    return stateFailure(authority.context.phase_instance, "retained-secondary-repository-set-unavailable");
+  }
+  for (const section of secondarySections) {
+    const member = repositorySet!.members.find((candidate) => candidate.name === section.repository);
+    if (member === undefined || member.mode !== "writable" || member.identity.digest !== section.repository_identity_digest) {
+      return stateFailure(authority.context.phase_instance, "retained-secondary-repository-mismatch");
+    }
+    if (section.outputs.length === 0) continue;
+    const secondarySources: ProjectionSource[] = [];
+    for (const output of section.outputs) {
+      const source = await readRetainedRepositoryOutput({
+        primary_runner: runner, authority, reference, repository_set: repositorySet!,
+        repository: section.repository, output_path: output.path,
+      });
+      if (!source.ok) return source;
+      secondarySources.push(source.value);
+      if (output.storage === "raw-payload" && source.value.desired.state === "present") {
+        const payloadTarget = await resolveTaskWorkspacePath({
+          runner, taskId: authority.task_id,
+          claim: parseWorkspacePathClaim(`cache/results/${reference.result_digest}/repositories/${section.repository}/payload/${output.path}`),
+          expectedClass: "workspace-result-payload", context: authority.context,
+        });
+        if (!payloadTarget.ok) return payloadTarget;
+        payloads.push(Object.freeze({ repository: section.repository, path: output.path, bytes: source.value.desired.bytes, target: payloadTarget.value }));
+      }
+      if (output.operation === "rename") {
+        const previousTarget = await resolveRepositoryPath({
+          runner: member.binding.runner, claim: output.previous_path, context: authority.context,
+        });
+        if (!previousTarget.ok) return previousTarget;
+        const before = await beforeImageForRunner(member.binding.runner, output.before, output.previous_path);
+        secondarySources.push(Object.freeze({
+          path: output.previous_path, target: previousTarget.value, desired: Object.freeze({ state: "absent" as const }),
+          authenticated_before: before.observation, rollback: before.desired, git_tracked: true,
+          rename_pair: Object.freeze({ role: "source" as const, peer_path: output.path }),
+        }));
+      }
+    }
+    const preparedSecondary = await prepareProjectionPlan(
+      secondarySources, createSecretlintScanner(), member.binding.runner.location.worktreeRoot as ResolvedTaskPath,
+    );
+    if (!preparedSecondary.ok) return preparedSecondary;
+    secondaryProjectionPlans.push(Object.freeze({
+      repository: section.repository, repository_identity_digest: section.repository_identity_digest,
+      base_commit: section.base_commit, snapshot_digest: section.snapshot_digest,
+      projection_plan: preparedSecondary.value,
+      worktree_root: member.binding.runner.location.worktreeRoot as ResolvedTaskPath,
+    }));
+  }
   return ok(Object.freeze({
     prepared: Object.freeze({ manifest: manifestDocument, result_digest: manifestDocument.digest, payloads: Object.freeze(payloads) }),
     manifest_target: manifestTarget,
     projection_plan: projectionPlan.value,
     worktree_root: runner.location.worktreeRoot as ResolvedTaskPath,
+    ...(secondaryProjectionPlans.length === 0 ? {} : { secondary_projection_plans: Object.freeze(secondaryProjectionPlans) }),
   }));
 }
 
-type RepositoryBinding = Readonly<{ runner: RootBoundGitRunner; environment: GitEnvironment }>;
-
 /**
- * Worktree location, Git version, and object format are constant for a working directory over a
- * process lifetime, yet every handler call (and every substep refresh inside an apply) opens fresh
- * services. Successful discovery + preflight is therefore reused per resolved directory; failures
- * are never stored, and repository identity is still observed live by each services instance.
- * A repository deleted and re-created at the same path keeps the stale binding until restart — a
- * documented limitation, not a trust boundary.
+ * Re-authenticates one retained secondary output through its current bound repository member.
+ * The returned projection source is ready for collision preparation; live locations never enter
+ * durable authority and raw payloads use the repository-qualified collision-free cache path.
  */
-const repositoryBindings = new Map<string, RepositoryBinding>();
-const MAX_REPOSITORY_BINDINGS = 16;
-
-async function openRepository(
-  workingDirectory: string,
-  operationContext: RepositoryOperationContext,
-): Promise<ProjectResult<RepositoryBinding>> {
-  const key = resolveDirectory(workingDirectory);
-  const cached = repositoryBindings.get(key);
-  if (cached !== undefined) return Object.freeze({ schema_version: "1", ok: true, value: cached });
-  const discovered = await discoverWorktree(createGitRunner({ cwd: workingDirectory }), operationContext);
-  if (!discovered.ok) return discovered;
-  const environment = await preflightGit(discovered.value, operationContext);
-  if (!environment.ok) return environment;
-  const binding: RepositoryBinding = Object.freeze({ runner: discovered.value, environment: environment.value });
-  if (repositoryBindings.size >= MAX_REPOSITORY_BINDINGS) {
-    repositoryBindings.delete(repositoryBindings.keys().next().value as string);
+export async function readRetainedRepositoryOutput(input: Readonly<{
+  primary_runner: RootBoundGitRunner;
+  authority: TransactionAuthority;
+  reference: TaskStateV1["authoritative_results"][number];
+  repository_set: RepositorySet;
+  repository: RepositoryName;
+  output_path: RepositoryPathClaim;
+}>): Promise<ProjectResult<ProjectionSource>> {
+  const loaded = await readRetainedManifest(input.primary_runner, input.authority, input.reference);
+  if (!loaded.ok) return loaded;
+  const manifest = loaded.value.manifest.value;
+  if (manifest.source_artifact.artifact_kind !== "implementation-output") {
+    return stateFailure(input.authority.context.phase_instance, "retained-secondary-output-not-implementation");
   }
-  repositoryBindings.set(key, binding);
-  return Object.freeze({ schema_version: "1", ok: true, value: binding });
+  const section = manifest.source_artifact.secondary_repositories?.find((item) => item.repository === input.repository);
+  const projectionSet = manifest.secondary_projections?.find((item) => item.repository === input.repository);
+  const member = input.repository_set.members.find((item) => item.name === input.repository);
+  if (section === undefined || projectionSet === undefined || member === undefined || member.mode !== "writable" ||
+      member.identity.digest !== section.repository_identity_digest ||
+      projectionSet.repository_identity_digest !== section.repository_identity_digest) {
+    return stateFailure(input.authority.context.phase_instance, "retained-secondary-repository-mismatch");
+  }
+  const output = section.outputs.find((item) => item.path === input.output_path);
+  if (output === undefined) return stateFailure(input.authority.context.phase_instance, "retained-secondary-output-not-declared");
+  const target = await resolveRepositoryPath({
+    runner: member.binding.runner, claim: input.output_path, context: input.authority.context,
+  });
+  if (!target.ok) return target;
+  let desired: ProjectionDesired;
+  if (output.operation === "delete") {
+    desired = Object.freeze({ state: "absent" });
+  } else {
+    let bytes: Uint8Array;
+    if (output.storage === "raw-payload") {
+      const payloadTarget = await resolveTaskWorkspacePath({
+        runner: input.primary_runner,
+        taskId: input.authority.task_id,
+        claim: parseWorkspacePathClaim(`cache/results/${input.reference.result_digest}/repositories/${input.repository}/payload/${output.path}`),
+        expectedClass: "workspace-result-payload",
+        context: input.authority.context,
+      });
+      if (!payloadTarget.ok) return payloadTarget;
+      const payload = await readSnapshotPayload({
+        target: payloadTarget.value, expected_digest: output.payload_digest,
+        expected_bytes: output.payload_bytes, snapshot_digest: section.snapshot_digest,
+        worktree_root: input.primary_runner.location.worktreeRoot as ResolvedTaskPath,
+      });
+      if (!payload.ok) return payload;
+      bytes = payload.value;
+    } else {
+      try {
+        bytes = output.file_type === "symlink"
+          ? await readGitBlobBytes(member.binding.runner, output.after.oid)
+          : await readGitBlobProjectedBytes(member.binding.runner, output.after.oid, output.path);
+      } catch {
+        return stateFailure(input.authority.context.phase_instance, "retained-secondary-git-object-unavailable");
+      }
+    }
+    const projection = projectionSet.projections.find((item) => item.path === output.path);
+    if (projection === undefined || sha256Bytes(bytes) !== projection.content_digest) {
+      return stateFailure(input.authority.context.phase_instance, "retained-secondary-projection-mismatch");
+    }
+    desired = output.file_type === "symlink"
+      ? Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes })
+      : Object.freeze({ state: "present", file_type: "regular", mode: output.after.mode, bytes });
+  }
+  const before = output.operation === "add" || output.operation === "rename"
+    ? Object.freeze({ observation: Object.freeze({ state: "absent" as const }), desired: Object.freeze({ state: "absent" as const }) })
+    : await beforeImageForRunner(member.binding.runner, output.before, output.path);
+  return ok(Object.freeze({
+    path: output.path,
+    target: target.value,
+    desired,
+    authenticated_before: before.observation,
+    rollback: before.desired,
+    git_tracked: output.operation !== "add",
+  }));
 }
 
 /** Resolves repository authority and binds every production state/gate dependency. */
@@ -356,8 +486,6 @@ export async function createProductionServices(input: ProductionInput): Promise<
     : provisionalAuthority;
   if (!authorityResult.ok) return authorityResult;
   const authority = authorityResult.value;
-  const resolver = createProductionInputFingerprintResolver();
-
   // Manifests are immutable and content-addressed, and every consumer below walks the same
   // `authoritative_results` list, so one services instance reloads each at most once. The key spans
   // every field `readRetainedManifest` cross-checks, not just the digest: two references can carry
@@ -374,13 +502,24 @@ export async function createProductionServices(input: ProductionInput): Promise<
       reference.phase_instance,
       reference.step,
       reference.input_fingerprint,
-    ].join(" ");
+    ].join("\u0000");
     const cached = manifestCache.get(key);
     if (cached !== undefined) return cached;
     const loaded = await readRetainedManifest(discovered.value, authority, reference);
     manifestCache.set(key, loaded);
     return loaded;
   };
+  const resolver = createProductionInputFingerprintResolver(async ({ state }) => {
+    const reference = [...state.value.authoritative_results].reverse().find((candidate) =>
+      candidate.phase_instance === state.value.phase_instance && candidate.step === "produce");
+    if (reference === undefined) return ok(undefined);
+    const retained = await loadRetainedManifest(reference);
+    if (!retained.ok) return retained;
+    const artifact = retained.value.manifest.value.source_artifact;
+    return artifact.artifact_kind === "document" || artifact.artifact_kind === "implementation-output"
+      ? ok(artifact)
+      : ok(undefined);
+  });
 
   const dependencies: GateLifecycleDependencies = Object.freeze({
     runner: discovered.value,
@@ -402,11 +541,25 @@ export async function createProductionServices(input: ProductionInput): Promise<
         if (reference.result_digest === excluded?.result_digest) continue;
         const retained = await loadRetainedManifest(reference);
         if (!retained.ok) throw new TypeError("retained result accounting is unavailable");
-        total += retained.value.manifest.value.accounting.result_bytes;
+        total += retainedManifestStoredBytes(retained.value.manifest.value);
+        parseSafeInteger(total);
       }
       return parseSafeInteger(total);
     },
-    load_retained_result: (reference) => readRetainedResult(discovered.value, authority, reference),
+    load_retained_result: async (reference) => {
+      const retained = await loadRetainedManifest(reference);
+      if (!retained.ok) return retained;
+      const needsRepositorySet = retained.value.manifest.value.source_artifact.artifact_kind === "implementation-output" &&
+        (retained.value.manifest.value.source_artifact.secondary_repositories?.length ?? 0) > 0;
+      if (!needsRepositorySet) return readRetainedResult(discovered.value, authority, reference);
+      const liveConfig = await readTaskConfig(authority.config);
+      if (liveConfig.kind !== "valid") return stateFailure(authority.context.phase_instance, "task-config-invalid");
+      const repositorySet = await resolveRepositorySet(
+        { runner: discovered.value, environment: environment.value }, liveConfig.snapshot.parsed, authority.context,
+      );
+      if (!repositorySet.ok) return repositorySet;
+      return readRetainedResult(discovered.value, authority, reference, repositorySet.value);
+    },
     load_retained_manifest: loadRetainedManifest,
     resolve_gate_reentry_fingerprint: async ({ request, current, target_phase_instance, expected_input_fingerprint }) => {
       const liveConfig = await readTaskConfig(authority.config);

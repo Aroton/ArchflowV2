@@ -13,3 +13,4 @@ export * from "./paths.js";
 export * from "./attributes.js";
 export * from "./index-entries.js";
 export * from "./history.js";
+export * from "./repository-set.js";

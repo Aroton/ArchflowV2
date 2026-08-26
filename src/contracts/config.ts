@@ -51,15 +51,36 @@ export const approvalRulesSchema = z.object({
   }).strict()),
 }).strict();
 
+export const REPOSITORY_MODES = ["context-only", "writable"] as const;
+export const repositoryModeV1Schema = z.enum(REPOSITORY_MODES);
+/**
+ * The task-slug lexical vocabulary with `primary` additionally reserved for the implicit member.
+ * This is the single source for every repository-name check: each contract document builds its
+ * own schema instance from this pattern (so no document emits cross-document refs), and runtime
+ * segment checks test it directly. Never restate the regex elsewhere.
+ */
+export const REPOSITORY_NAME_PATTERN = /^(?!primary$)(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$/u;
+export const REPOSITORY_NAME_MESSAGE = "must use the task-slug vocabulary and must not be the reserved name primary";
+export const repositoryNameV1Schema = z.string().regex(REPOSITORY_NAME_PATTERN, REPOSITORY_NAME_MESSAGE);
+export const repositoryDeclarationV1Schema = z.object({
+  path: z.string().min(1).regex(/\S/u, "path must contain a non-whitespace character"),
+  mode: repositoryModeV1Schema.optional(),
+}).strict();
+export const repositoriesV1Schema = z.record(repositoryNameV1Schema, repositoryDeclarationV1Schema);
+
 export const configV1Schema = z.object({
   schema_version: z.literal("1"),
   roles: configRolesSchema,
   overrides: configOverridesSchema.optional(),
   max_attempts: z.number().int().positive().safe().optional(),
   approval_rules: approvalRulesSchema.optional(),
+  repositories: repositoriesV1Schema.optional(),
 }).strict();
 
 export type ModelRouteV1 = z.infer<typeof configRouteSchema>;
+export type RepositoryModeV1 = z.infer<typeof repositoryModeV1Schema>;
+export type RepositoryName = z.infer<typeof repositoryNameV1Schema>;
+export type RepositoryDeclarationV1 = z.infer<typeof repositoryDeclarationV1Schema>;
 export type ConfigV1 = z.infer<typeof configV1Schema>;
 
 /**

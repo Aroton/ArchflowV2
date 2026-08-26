@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { adjudicationDocumentDefs, adjudicationEvidenceSchema, rawAdjudicationSchema } from "../adjudication.js";
 import { gitOidV1Schema } from "../canonical.js";
-import { configOverridesSchema, configRolesSchema, configRouteSchema, configV1Schema } from "../config.js";
+import { configOverridesSchema, configRolesSchema, configRouteSchema, configV1Schema, repositoriesV1Schema, repositoryDeclarationV1Schema, repositoryModeV1Schema, repositoryNameV1Schema } from "../config.js";
 import { constitutionRuleV1Schema } from "../constitution.js";
 import { dispatchFailureObservationV1Schema } from "../dispatch-failure.js";
 import {
@@ -128,6 +128,10 @@ export const leafSchemaGroup: SchemaGenerationGroup = {
         route: configRouteSchema,
         roles: configRolesSchema,
         overrides: configOverridesSchema,
+        repositoryMode: repositoryModeV1Schema,
+        repositoryName: repositoryNameV1Schema,
+        repositoryDeclaration: repositoryDeclarationV1Schema,
+        repositories: repositoriesV1Schema,
       },
       migrated: true,
     },

@@ -1,6 +1,9 @@
+import { isDeepStrictEqual } from "node:util";
 import type { TaskConfigSnapshot } from "../contracts/config.js";
-import type { ConfigChangeEntry } from "../contracts/durable-state.js";
+import type { ConfigChangeEntry, LastSeenRepositoryBindingV1, TaskStateV1 } from "../contracts/durable-state.js";
+import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
+import type { RepositorySet } from "../repository/repository-set.js";
 
 /**
  * Drops the retired `producer` routing role before any change detection, so a config whose only
@@ -81,12 +84,66 @@ export function computeConfigChange(
  * and any crash replay all agree. The stored snapshot is the normalized form, so a cosmetic
  * retired-role retire never rewrites committed bytes.
  */
-export function withLastSeenConfig<Draft extends { readonly last_seen_config?: TaskConfigSnapshot }>(
+export function repositoryBindingsCheckpoint(
+  repositorySet: RepositorySet,
+): readonly LastSeenRepositoryBindingV1[] {
+  return Object.freeze(repositorySet.members.map((member) => Object.freeze({
+    name: member.name,
+    ...(member.declared_path === undefined ? {} : { declared_path: member.declared_path }),
+    repository_identity_digest: member.identity.digest,
+  })));
+}
+
+/**
+ * Refuses silent replacement of a repository whose name and exact declaration path have not
+ * changed since the last successful config-observing transaction. Membership itself remains
+ * entirely live-config-owned: removed members are ignored and an explicit path edit is accepted.
+ */
+export function validateRepositorySetContinuity(
+  state: TaskStateV1,
+  repositorySet: RepositorySet,
+): ProjectResult<void> {
+  const prior = state.last_seen_repository_bindings;
+  if (prior === undefined) return Object.freeze({ schema_version: "1", ok: true, value: undefined });
+  const priorByName = new Map(prior.map((entry) => [entry.name, entry]));
+  for (const member of repositorySet.members) {
+    if (member.name === "primary") continue;
+    const checkpoint = priorByName.get(member.name);
+    if (checkpoint === undefined || checkpoint.declared_path !== member.declared_path) continue;
+    if (checkpoint.repository_identity_digest !== member.identity.digest) {
+      return Object.freeze({
+        schema_version: "1",
+        ok: false,
+        error: createProjectError("CONFIG_INVALID", {
+          issue_code: "repository-identity-changed",
+          issues: [`repositories.${member.name}.path: repository identity changed at the unchanged declared path`],
+        }),
+      });
+    }
+  }
+  return Object.freeze({ schema_version: "1", ok: true, value: undefined });
+}
+
+export function withLastSeenConfig<Draft extends {
+  readonly last_seen_config?: TaskConfigSnapshot;
+  readonly last_seen_repository_bindings?: readonly LastSeenRepositoryBindingV1[];
+}>(
   draft: Draft,
   parsedLiveConfig: TaskConfigSnapshot,
+  repositorySet: RepositorySet,
 ): Draft {
   const normalized = normalizeForChangeDetection(parsedLiveConfig);
   const seen = draft.last_seen_config;
-  if (seen !== undefined && computeConfigChange(seen, normalized).length === 0) return draft;
-  return { ...draft, last_seen_config: normalized } as Draft;
+  const checkpoint = repositoryBindingsCheckpoint(repositorySet);
+  const priorCheckpoint = draft.last_seen_repository_bindings;
+  const configUnchanged = seen !== undefined && computeConfigChange(seen, normalized).length === 0;
+  // Structural equality: a checkpoint read back from canonical JSON carries a different key order
+  // than one freshly built, and a string comparison would rewrite the state on every transaction.
+  const checkpointUnchanged = priorCheckpoint !== undefined && isDeepStrictEqual(priorCheckpoint, checkpoint);
+  if (configUnchanged && checkpointUnchanged) return draft;
+  return {
+    ...draft,
+    last_seen_config: normalized,
+    last_seen_repository_bindings: checkpoint,
+  } as Draft;
 }

@@ -1,9 +1,7 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 
 import { canonicalDocument, canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
 import { computeGateContextDigest, computeGateId, type InputFingerprintSubject } from "../../src/contracts/fingerprints.js";
@@ -26,6 +24,7 @@ import { planStateTransition } from "../../src/state/transitions.js";
 import { resolveInterfaceGateDecision } from "../helpers/resolve-interface-gate.js";
 import { resolvedConstitutionFixture } from "../helpers/resolved-constitution.js";
 import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
+import { cleanupTemporaryRepositories, createTempRepository, git as runGit } from "../helpers/temp-repository.js";
 
 const D = (value: string) => parseSha256Digest(value.repeat(64));
 const constitution = await resolvedConstitutionFixture({
@@ -42,8 +41,15 @@ const RULE = { rule_id: "trust-boundary", rule_version: 1 } as const;
 const counter = { role: "counter-review", evidence_digest: D("8"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex" } as const;
 const state = (): TaskStateV1 => ({ schema_version: "1", task_id: parseTaskSlug("task-1"), repository_identity_digest: D("1"), revision: parseSafeInteger(4), phase_instance: "phase-impl-2" as TaskStateV1["phase_instance"], step: "produce", status: "running", attempt: parseSafeInteger(1), input_fingerprint: D("2"), initialization_digest: D("3"), config_digest: D("4"), workflow_digest: D("5"), constitution_digest: constitution.digest, policy_base_commit: "abcdef0123456789abcdef0123456789abcdef01" as TaskStateV1["policy_base_commit"], authoritative_results: [], approvals: [], waivers: [] });
 
-const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
+afterAll(cleanupTemporaryRepositories);
+
+/** A committed repository holding one tracked file, with no ArchFlow attributes of its own. */
+function committedRepository(label: string, content: string): string {
+  const repository = createTempRepository({ label, attributes: undefined });
+  repository.write("tracked.txt", content);
+  repository.commitAll(`${label} root`);
+  return repository.path;
+}
 const withoutLastTransition = (value: TaskStateV1): Omit<TaskStateV1, "last_transition"> => {
   const { last_transition: _transition, ...rest } = value;
   return rest;
@@ -86,12 +92,23 @@ describe("durable gate decisions", () => {
   });
 
   it("resolves an opened gate through archive, receipt, state, and cleanup", async () => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), "archflow-gate-service-"))); roots.push(root);
-    const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null", GIT_AUTHOR_NAME: "ArchFlow Test", GIT_AUTHOR_EMAIL: "test@example.invalid", GIT_COMMITTER_NAME: "ArchFlow Test", GIT_COMMITTER_EMAIL: "test@example.invalid" };
-    execFileSync("git", ["-c", "init.defaultBranch=main", "init", "-q"], { cwd: root, env });
-    writeFileSync(join(root, "tracked.txt"), "root\n"); execFileSync("git", ["add", "tracked.txt"], { cwd: root, env }); execFileSync("git", ["commit", "-q", "-m", "root"], { cwd: root, env });
+    const root = committedRepository("gate-service", "root\n");
+    const secondary = committedRepository("gate-secondary", "secondary\n");
+    const declarationA = join(secondary, "context-a");
+    const declarationB = join(secondary, "context-b");
+    mkdirSync(declarationA);
+    mkdirSync(declarationB);
     const taskRoot = join(root, ".archflow", "tasks", "task-1"); mkdirSync(taskRoot, { recursive: true });
-    const configBytes = Buffer.from('schema_version: "1"\nroles:\n  counter-reviewer: {model: gpt-example, effort: high}\n  adjudicator: {model: claude-example, effort: high}\n');
+    const configBytes = Buffer.from([
+      'schema_version: "1"',
+      "roles:",
+      "  counter-reviewer: {model: gpt-example, effort: high}",
+      "  adjudicator: {model: claude-example, effort: high}",
+      "repositories:",
+      "  services:",
+      `    path: ${JSON.stringify(declarationA)}`,
+      "",
+    ].join("\n"));
     writeFileSync(join(taskRoot, "config.yaml"), configBytes);
     const operation: RepositoryOperationContext = { task_id: parseTaskSlug("task-1"), phase_instance: "phase-impl-2" as never, operation: parseSafeCode("gate-test"), attempt: parseSafeInteger(1) };
     const runnerResult = await discoverWorktree(createGitRunner({ cwd: root }), operation); if (!runnerResult.ok) throw new Error("discovery failed");
@@ -148,6 +165,16 @@ describe("durable gate decisions", () => {
     const opened = await openDurableGate(dependencies, lifecycle);
     expect(opened.ok, opened.ok ? undefined : JSON.stringify(opened.error)).toBe(true);
     const pending = await readTaskState(authority.state); expect(pending).toMatchObject({ kind: "canonical", document: { value: { revision: 5, open_gate: { gate_id: lifecycleGate } } } });
+    writeFileSync(join(taskRoot, "config.yaml"), new TextEncoder().encode([
+      'schema_version: "1"',
+      "roles:",
+      "  counter-reviewer: {model: gpt-example, effort: high}",
+      "  adjudicator: {model: claude-example, effort: high}",
+      "repositories:",
+      "  services:",
+      `    path: ${JSON.stringify(declarationB)}`,
+      "",
+    ].join("\n")));
     const lifecycleContextDigest = computeGateContextDigest("artifact-approval", reviewContext);
     const gateWorkspace = join(authority.workspace_root, "cache", "gates");
     writeFileSync(join(gateWorkspace, "gate.decision"), canonicalDocument({
@@ -159,11 +186,36 @@ describe("durable gate decisions", () => {
     }).bytes);
     const resumed = await resolveInterfaceGateDecision(dependencies, authority, lifecycleGate, inputFingerprint);
     expect(resumed).toMatchObject({ ok: true, value: { replayed: false, effect: "advance", state: { value: { revision: 6, approvals: [{ gate_id: lifecycleGate }] } } } });
+    expect(resumed).toMatchObject({
+      ok: true,
+      value: { state: { value: {
+        last_seen_config: { repositories: { services: { path: declarationB } } },
+        last_seen_repository_bindings: [
+          { name: "primary" },
+          { name: "services", declared_path: declarationB },
+        ],
+      } } },
+    });
     expect(existsSync(join(taskRoot, "authority", "decisions", lifecycleGate, "decision.json"))).toBe(true);
     expect(existsSync(join(authority.workspace_root, "transient", "intents", "intent-1.json"))).toBe(false);
     expect(existsSync(join(gateWorkspace, "gate.json"))).toBe(false);
     expect(existsSync(join(gateWorkspace, "gate.decision"))).toBe(false);
     expect(readFileSync(join(taskRoot, "state.json"), "utf8")).toContain('"last_transition"');
+
+    // The resolved gate made B the durable checkpoint. Replacing the repository at unchanged B
+    // must now fail closed, including when B was previously only an interior path of its parent.
+    runGit(declarationB, "-c", "init.defaultBranch=main", "init", "-q");
+    writeFileSync(join(declarationB, "nested.txt"), "replacement\n");
+    runGit(declarationB, "add", "nested.txt");
+    runGit(declarationB, "commit", "-q", "-m", "replacement root");
+    const replacement = await resolveDurableGate(dependencies, authority, lifecycleGate, inputFingerprint);
+    expect(replacement).toMatchObject({
+      ok: false,
+      error: {
+        code: "CONFIG_INVALID",
+        diagnostic: { parameters: { issues: [expect.stringContaining("repositories.services.path")] } },
+      },
+    });
 
     const resolvedState = (await readTaskState(authority.state));
     if (resolvedState.kind !== "canonical") throw new Error("resolved state missing");
@@ -276,10 +328,7 @@ describe("durable gate decisions", () => {
     // imported design phase, so its acceptance must satisfy a matched-trigger constitution-review
     // gate too — otherwise status derivation offers a redundant design approval forever and
     // never reaches the import milestone commit.
-    const root = realpathSync(mkdtempSync(join(tmpdir(), "archflow-migration-approval-"))); roots.push(root);
-    const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null", GIT_AUTHOR_NAME: "ArchFlow Test", GIT_AUTHOR_EMAIL: "test@example.invalid", GIT_COMMITTER_NAME: "ArchFlow Test", GIT_COMMITTER_EMAIL: "test@example.invalid" };
-    execFileSync("git", ["-c", "init.defaultBranch=main", "init", "-q"], { cwd: root, env });
-    writeFileSync(join(root, "tracked.txt"), "root\n"); execFileSync("git", ["add", "tracked.txt"], { cwd: root, env }); execFileSync("git", ["commit", "-q", "-m", "root"], { cwd: root, env });
+    const root = committedRepository("migration-approval", "root\n");
     const taskRoot = join(root, ".archflow", "tasks", "task-1"); mkdirSync(taskRoot, { recursive: true });
     const configBytes = Buffer.from('schema_version: "1"\nroles:\n  counter-reviewer: {model: gpt-example, effort: high}\n  adjudicator: {model: claude-example, effort: high}\n');
     writeFileSync(join(taskRoot, "config.yaml"), configBytes);
@@ -376,10 +425,7 @@ describe("durable gate decisions", () => {
   }, 5_000);
 
   it("records the retained approved design plan and authenticates final completion", async () => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), "archflow-final-phase-"))); roots.push(root);
-    const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null", GIT_AUTHOR_NAME: "ArchFlow Test", GIT_AUTHOR_EMAIL: "test@example.invalid", GIT_COMMITTER_NAME: "ArchFlow Test", GIT_COMMITTER_EMAIL: "test@example.invalid" };
-    execFileSync("git", ["-c", "init.defaultBranch=main", "init", "-q"], { cwd: root, env });
-    writeFileSync(join(root, "tracked.txt"), "root\n"); execFileSync("git", ["add", "tracked.txt"], { cwd: root, env }); execFileSync("git", ["commit", "-q", "-m", "root"], { cwd: root, env });
+    const root = committedRepository("final-phase", "root\n");
     const taskRoot = join(root, ".archflow", "tasks", "task-1"); mkdirSync(taskRoot, { recursive: true });
     const configBytes = Buffer.from('schema_version: "1"\nroles:\n  counter-reviewer: {model: gpt-example, effort: high}\n  adjudicator: {model: claude-example, effort: high}\n');
     writeFileSync(join(taskRoot, "config.yaml"), configBytes);

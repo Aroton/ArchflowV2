@@ -34,7 +34,7 @@ import { baselineAdoptionDriftDigest, computeGateContextDigest, computeGateId } 
 import { gateDecisionEffect, type BaselineObservationRef } from "../contracts/gates.js";
 import type { HumanDecisionProvenance } from "../contracts/gates.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
-import type { TaskConfigSnapshot } from "../contracts/config.js";
+import type { RepositoryName, TaskConfigSnapshot } from "../contracts/config.js";
 import {
   gateDecisionClaim,
   gateRequestClaim,
@@ -44,9 +44,10 @@ import {
   type ResolvedTaskWorkspacePath,
 } from "../repository/paths.js";
 import { verifyRepositoryIdentity } from "../repository/identity.js";
+import { resolveRepositorySet, type RepositorySet } from "../repository/repository-set.js";
 import { resolveCommit } from "../repository/git.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
-import { withLastSeenConfig } from "./config-change.js";
+import { validateRepositorySetContinuity, withLastSeenConfig } from "./config-change.js";
 import {
   DECISIONS,
   activeProjection,
@@ -83,7 +84,8 @@ import {
 } from "./produce-subject.js";
 import { assessBaselineSubjectFreshness, reconcileCurrentAuthority, type ReconciliationFinding } from "./reconciliation.js";
 import { currentProjectionDigest, discoverNewestProjections, discoverReconciliationInput } from "./reconciliation-discovery.js";
-import { applyProjectionPlan, captureProjectionTarget, prepareProjectionPlan, projectionGenerationDigest, type ProjectionSource } from "./snapshots.js";
+import { applyProjectionPlan, applyRepositoryProjectionPlans, captureProjectionTarget, prepareProjectionPlan, projectionGenerationDigest, repositoryPathKey, type ProjectionSource } from "./snapshots.js";
+import { readRetainedRepositoryOutput } from "./production.js";
 import { cleanTaskWorkspace } from "./workspace-cleanup.js";
 import { assessCurrentEvidence } from "../review/fixed-point.js";
 import { resolvePinnedConstitution } from "./constitution.js";
@@ -93,6 +95,7 @@ import {
   evaluateApprovalRules,
   approvalRuleContext,
 } from "./approval-rules.js";
+import { buildSecondaryCommitAuthorizationFacts, SecondaryCommitObservationError } from "./status.js";
 import {
   approvalIsEligibleAfterLatestRestart,
   authenticatedApprovalIsEligibleAfterLatestRestart,
@@ -155,16 +158,31 @@ async function validateLiveGateState(
   authority: TransactionAuthority,
   current: CanonicalDocument<TaskStateV1>,
   inputFingerprint: Sha256Digest,
-): Promise<ProjectResult<TaskConfigSnapshot>> {
+): Promise<ProjectResult<Readonly<{ config: TaskConfigSnapshot; repository_set: RepositorySet }>>> {
   const identity = verifyRepositoryIdentity(current.value.repository_identity_digest, authority.repository_identity);
   if (!identity.ok) return identity;
   if (!validateDurableSemantics({ state: current }).ok) return issue("STATE_INVALID", current.value, "gate-state-semantics-invalid");
   const config = await dependencies.read_config(authority.config);
-  if (config.kind !== "valid") return config.kind === "invalid" ? issue("CONTRACT_INVALID", undefined, "task-config-invalid") : io(authority, "gate-config-read");
+  if (config.kind !== "valid") {
+    return config.kind === "invalid"
+      ? fail(createProjectError("CONFIG_INVALID", {
+          issue_code: "task-config-invalid",
+          ...(config.issues === undefined ? {} : { issues: config.issues }),
+        }))
+      : io(authority, "gate-config-read");
+  }
+  const repositorySet = await resolveRepositorySet(
+    { runner: dependencies.runner, environment: dependencies.environment },
+    config.snapshot.parsed,
+    authority.context,
+  );
+  if (!repositorySet.ok) return repositorySet;
+  const continuity = validateRepositorySetContinuity(current.value, repositorySet.value);
+  if (!continuity.ok) return continuity;
   if (inputFingerprint !== current.value.input_fingerprint) return fail(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest: current.value.input_fingerprint, observed_digest: inputFingerprint }));
   // The parsed live config rides back to the one caller that commits state in the same operation
   // (gate open); the settlement callers validated with it and deliberately change nothing.
-  return ok(config.snapshot.parsed);
+  return ok(Object.freeze({ config: config.snapshot.parsed, repository_set: repositorySet.value }));
 }
 
 async function authenticateWaiverOrigin(
@@ -340,26 +358,51 @@ export async function openDurableGate(
         // live set splits into drifted (live bytes observed) and committed-deleted findings; a
         // missing projection that is restorable, or deleted only in the worktree, is not
         // representable and refuses the open.
-        const discovered = await discoverReconciliationInput(dependencies, input.authority, current);
+        const liveConfig = await dependencies.read_config(input.authority.config);
+        if (liveConfig.kind !== "valid") return issue("STATE_INVALID", current.value, "baseline-adoption-config-unavailable");
+        const liveRepositories = await resolveRepositorySet(
+          { runner: dependencies.runner, environment: dependencies.environment },
+          liveConfig.snapshot.parsed,
+          input.authority.context,
+        );
+        if (!liveRepositories.ok) return liveRepositories;
+        const repositoryContinuity = validateRepositorySetContinuity(current.value, liveRepositories.value);
+        if (!repositoryContinuity.ok) return repositoryContinuity;
+        const discovered = await discoverReconciliationInput(dependencies, input.authority, current, liveRepositories.value);
         if (!discovered.ok) return discovered;
         const drift = reconcileCurrentAuthority(discovered.value).findings
           .filter((finding): finding is Extract<ReconciliationFinding, { kind: "projection-mismatch" }> => finding.kind === "projection-mismatch")
-          .sort((left, right) => left.path.localeCompare(right.path));
+          .sort((left, right) => (left.repository ?? "primary").localeCompare(right.repository ?? "primary") || left.path.localeCompare(right.path));
         const context = input.context as Extract<GateRequestV1, { kind: "baseline-adoption" }>["context"];
-        const liveDrifted = drift.filter((finding) => finding.observed_digest !== undefined);
-        const liveDeleted = drift.filter((finding) =>
-          finding.observed_digest === undefined && finding.restore_unavailable === true && finding.committed_absent === true);
-        const exact = liveDrifted.length === context.drifted_projections.length &&
-          liveDeleted.length === (context.deleted_projections ?? []).length &&
-          liveDrifted.every((finding, index) => {
-            const declared = context.drifted_projections[index];
-            return declared !== undefined && declared.path === finding.path &&
-              declared.recorded_digest === finding.recorded_digest && declared.observed_digest === finding.observed_digest;
-          }) &&
-          liveDeleted.every((finding, index) => {
-            const declared = (context.deleted_projections ?? [])[index];
-            return declared !== undefined && declared.path === finding.path &&
-              declared.recorded_digest === finding.recorded_digest;
+        const contextTargets = baselineRepositoryTargets(context);
+        const liveRepositoriesWithDrift = [...new Set(drift.map((finding) => finding.repository ?? "primary"))].sort();
+        const declaredRepositories = contextTargets
+          .filter((target) => target.drifted_projections.length + target.deleted_projections.length !== 0)
+          .map((target) => target.repository).sort();
+        const exact = isDeepStrictEqual(liveRepositoriesWithDrift, declaredRepositories) &&
+          contextTargets.every((target) => {
+            const member = liveRepositories.value.members.find((candidate) => candidate.name === target.repository);
+            if (member === undefined || member.mode !== "writable") return false;
+            const secondary = target.repository === "primary" ? undefined : context.secondary_targets?.find((item) => item.repository === target.repository);
+            if (secondary !== undefined && (secondary.repository_identity_digest !== member.identity.digest || secondary.target_head !== member.head)) return false;
+            if (target.repository === "primary" && context.target_head !== undefined && context.target_head !== member.head) return false;
+            const repositoryDrift = drift.filter((finding) => (finding.repository ?? "primary") === target.repository);
+            const liveDrifted = repositoryDrift.filter((finding) => finding.observed_digest !== undefined);
+            const liveDeleted = repositoryDrift.filter((finding) =>
+              finding.observed_digest === undefined && finding.restore_unavailable === true && finding.committed_absent === true);
+            return liveDrifted.length + liveDeleted.length === repositoryDrift.length &&
+              liveDrifted.length === target.drifted_projections.length &&
+              liveDeleted.length === target.deleted_projections.length &&
+              liveDrifted.every((finding, index) => {
+                const declared = target.drifted_projections[index];
+                return declared !== undefined && declared.path === finding.path &&
+                  declared.recorded_digest === finding.recorded_digest && declared.observed_digest === finding.observed_digest;
+              }) &&
+              liveDeleted.every((finding, index) => {
+                const declared = target.deleted_projections[index];
+                return declared !== undefined && declared.path === finding.path &&
+                  declared.recorded_digest === finding.recorded_digest;
+              });
           });
         if (!exact) return issue("STATE_INVALID", current.value, drift.length === 0 ? "baseline-adoption-no-drift" : "baseline-adoption-context-mismatch");
         if (input.subject_digest !== baselineAdoptionDriftDigest(context)) {
@@ -455,7 +498,10 @@ export async function openDurableGate(
       const contextDigest = waiver === undefined
         ? computeGateContextDigest(input.kind, input.context as never)
         : computeGateContextDigest("waiver", waiver);
-      const openState = stateWithOpen(withLastSeenConfig(current.value, live.value), { gate_id: gateId, kind: input.kind, subject_digest: input.subject_digest, context_digest: contextDigest, context: input.context } as Pick<GateRequestV1, "gate_id" | "kind" | "subject_digest" | "context_digest" | "context">);
+      const openState = stateWithOpen(
+        withLastSeenConfig(current.value, live.value.config, live.value.repository_set),
+        { gate_id: gateId, kind: input.kind, subject_digest: input.subject_digest, context_digest: contextDigest, context: input.context } as Pick<GateRequestV1, "gate_id" | "kind" | "subject_digest" | "context_digest" | "context">,
+      );
       let request = parseGateRequest({
         schema_version: "1", gate_id: gateId, intent_id: input.intent_id, request_digest: input.request_digest,
         task_id: input.authority.task_id, phase_instance: input.phase_instance, summary: input.summary,
@@ -654,7 +700,7 @@ async function stateAfterPolicyWaiverSettlement(
 
   const ruleContext = approvalRuleContext(current.value, produce.value, config.snapshot.parsed);
   const conclusion = evaluateApprovalRules(
-    ruleContext.config, ruleContext.subject, ruleContext.changedPaths,
+    ruleContext.config, ruleContext.subject, ruleContext.changedPaths, ruleContext.secondaryChangedPaths,
   );
   const kind = decodePhaseInstance(current.value.phase_instance).kind;
   const milestoneBearing = !conclusion.wait &&
@@ -676,11 +722,36 @@ async function stateAfterPolicyWaiverSettlement(
       ? produce.value.artifact.base_commit
       : milestoneTargetHead;
   const settled = nextStateForRecord(current.value, record, digest);
+  let secondaryMilestones = Object.freeze([]) as Awaited<ReturnType<typeof buildSecondaryCommitAuthorizationFacts>>;
+  // Secondary commit facts exist only on milestone-bearing wait:false settlements; a content-rule
+  // wait settles nothing about commits, so no secondary observation happens for it.
+  if (!conclusion.wait && produce.value.artifact.artifact_kind === "implementation-output") {
+    const resolvedRepositories = await resolveRepositorySet(
+      { runner: dependencies.runner, environment: dependencies.environment },
+      config.snapshot.parsed,
+      authority.context,
+    );
+    if (!resolvedRepositories.ok) return resolvedRepositories;
+    const continuity = validateRepositorySetContinuity(current.value, resolvedRepositories.value);
+    if (!continuity.ok) return continuity;
+    try {
+      secondaryMilestones = await buildSecondaryCommitAuthorizationFacts(
+        produce.value.artifact,
+        resolvedRepositories.value,
+      );
+    } catch (error) {
+      if (!(error instanceof SecondaryCommitObservationError)) throw error;
+      return issue(
+        "STATE_INVALID", current.value, `policy-waiver-settlement-secondary-${error.repository}-${error.reason}`,
+      );
+    }
+  }
   const settlement = buildRuleSettlement(
     current.value, produce.value.artifact_digest, config.snapshot.digest, conclusion, milestoneBaseline,
     milestoneTargetRef === undefined || milestoneTargetHead === undefined
       ? undefined
       : { ref: milestoneTargetRef, head: milestoneTargetHead },
+    secondaryMilestones,
   );
   const ruleSettlements = Object.freeze([
     ...(settled.value.rule_settlements ?? []),
@@ -978,6 +1049,7 @@ async function closedStateForRecord(
   request: GateRequestV1,
   record: GateDecisionRecordV1,
   digest: Sha256Digest,
+  repositorySet?: RepositorySet,
 ): Promise<ProjectResult<CanonicalDocument<TaskStateV1>>> {
   if (
     record.outcome === "decided" && record.kind === "material-drift" &&
@@ -1010,6 +1082,14 @@ async function closedStateForRecord(
     const restartPredecessor = predecessor as TaskStateV1;
     const liveConfig = await dependencies.read_config(authority.config);
     if (liveConfig.kind !== "valid") return issue("STATE_INVALID", current.value, "material-drift-restart-config-unavailable");
+    const repositorySet = await resolveRepositorySet(
+      { runner: dependencies.runner, environment: dependencies.environment },
+      liveConfig.snapshot.parsed,
+      authority.context,
+    );
+    if (!repositorySet.ok) return repositorySet;
+    const continuity = validateRepositorySetContinuity(current.value, repositorySet.value);
+    if (!continuity.ok) return continuity;
     const targetCall = parseToolCall("archflow_state", {
       schema_version: "1",
       task_id: authority.task_id,
@@ -1042,6 +1122,7 @@ async function closedStateForRecord(
       ? ok(canonicalDocument(withLastSeenConfig(
           { ...planned.value, revision: parseSafeInteger(current.value.revision + 1) } as TaskStateV1,
           liveConfig.snapshot.parsed,
+          repositorySet.value,
         )))
       : planned;
   }
@@ -1100,21 +1181,25 @@ async function closedStateForRecord(
   ) {
     // The decision is bound to exact bytes observed at gate open; any change between the human's
     // choice and this commit voids it. Replay is naturally idempotent: the adopted bytes remain.
-    const targets = await discoverNewestProjections(dependencies, authority, current);
+    if (repositorySet === undefined) return issue("STATE_INVALID", current.value, "baseline-adoption-repository-set-unavailable");
+    const targets = await discoverNewestProjections(dependencies, authority, current, repositorySet);
     if (!targets.ok) return targets;
-    for (const drifted of request.context.drifted_projections) {
-      const entry = targets.value.get(drifted.path);
-      if (entry === undefined || entry.retired || entry.projection.content_digest !== drifted.recorded_digest) {
-        return issue("STATE_INVALID", current.value, "baseline-adoption-current-stale");
-      }
-      if (await currentProjectionDigest(entry.target) !== drifted.observed_digest) {
-        return issue("STATE_INVALID", current.value, "baseline-adoption-current-stale");
+    for (const target of baselineRepositoryTargets(request.context)) {
+      for (const drifted of target.drifted_projections) {
+        const entry = targets.value.get(projectionLookup(target.repository, drifted.path));
+        if (entry === undefined || entry.retired || entry.projection.content_digest !== drifted.recorded_digest) {
+          return issue("STATE_INVALID", current.value, "baseline-adoption-current-stale");
+        }
+        if (await currentProjectionDigest(entry.target) !== drifted.observed_digest) {
+          return issue("STATE_INVALID", current.value, "baseline-adoption-current-stale");
+        }
       }
     }
     const plannedFinalPhase = await loadApprovedDesignFinalPhase(dependencies, current.value, record);
     if (!plannedFinalPhase.ok) return plannedFinalPhase;
     const next = nextStateForRecord(current.value, record, digest, plannedFinalPhase.value);
-    const baseline_adoptions = [...(next.value.baseline_adoptions ?? []), baselineAdoptionRecord(record.gate_id, next.value.revision, request.context.drifted_projections)]
+    const adoptedSecondaryBytes = (request.context.secondary_targets ?? []).map(({ deleted_projections: _deleted, ...target }) => target);
+    const baseline_adoptions = [...(next.value.baseline_adoptions ?? []), baselineAdoptionRecord(record.gate_id, next.value.revision, request.context.drifted_projections, [], adoptedSecondaryBytes)]
       .sort((left, right) => left.gate_id.localeCompare(right.gate_id));
     return ok(canonicalDocument({ ...next.value, baseline_adoptions: Object.freeze(baseline_adoptions) } as TaskStateV1));
   }
@@ -1126,21 +1211,24 @@ async function closedStateForRecord(
     // still be the newest recorded projection for its path and still be absent from the worktree
     // at commit time, or the decision is stale. Replay is naturally idempotent: the retirement
     // of an already-retired path changes nothing.
-    const targets = await discoverNewestProjections(dependencies, authority, current);
+    if (repositorySet === undefined) return issue("STATE_INVALID", current.value, "baseline-adoption-repository-set-unavailable");
+    const targets = await discoverNewestProjections(dependencies, authority, current, repositorySet);
     if (!targets.ok) return targets;
-    for (const deleted of request.context.deleted_projections ?? []) {
-      const entry = targets.value.get(deleted.path);
-      if (entry === undefined || entry.retired || entry.projection.content_digest !== deleted.recorded_digest) {
-        return issue("STATE_INVALID", current.value, "baseline-adoption-deletion-stale");
-      }
-      if (await currentProjectionDigest(entry.target) !== "missing") {
-        return issue("STATE_INVALID", current.value, "baseline-adoption-deletion-stale");
+    for (const target of baselineRepositoryTargets(request.context)) {
+      for (const deleted of target.deleted_projections) {
+        const entry = targets.value.get(projectionLookup(target.repository, deleted.path));
+        if (entry === undefined || entry.retired || entry.projection.content_digest !== deleted.recorded_digest) {
+          return issue("STATE_INVALID", current.value, "baseline-adoption-deletion-stale");
+        }
+        if (await currentProjectionDigest(entry.target) !== "missing") {
+          return issue("STATE_INVALID", current.value, "baseline-adoption-deletion-stale");
+        }
       }
     }
     const plannedFinalPhase = await loadApprovedDesignFinalPhase(dependencies, current.value, record);
     if (!plannedFinalPhase.ok) return plannedFinalPhase;
     const next = nextStateForRecord(current.value, record, digest, plannedFinalPhase.value);
-    const baseline_adoptions = [...(next.value.baseline_adoptions ?? []), baselineAdoptionRecord(record.gate_id, next.value.revision, request.context.drifted_projections, request.context.deleted_projections ?? [])]
+    const baseline_adoptions = [...(next.value.baseline_adoptions ?? []), baselineAdoptionRecord(record.gate_id, next.value.revision, request.context.drifted_projections, request.context.deleted_projections ?? [], request.context.secondary_targets ?? [])]
       .sort((left, right) => left.gate_id.localeCompare(right.gate_id));
     return ok(canonicalDocument({ ...next.value, baseline_adoptions: Object.freeze(baseline_adoptions) } as TaskStateV1));
   }
@@ -1155,15 +1243,26 @@ async function closedStateForRecord(
     if (dependencies.load_retained_result === undefined) {
       return issue("STATE_INVALID", current.value, "baseline-adoption-restore-unavailable");
     }
-    const owners = await baselineRestoreOwners(dependencies, authority, current, request.context.drifted_projections);
+    if (repositorySet === undefined) return issue("STATE_INVALID", current.value, "baseline-adoption-repository-set-unavailable");
+    const owners = await baselineRestoreOwners(dependencies, authority, current, request.context, repositorySet);
     if (!owners.ok) return owners;
     for (const owner of owners.value) {
-      const retained = await dependencies.load_retained_result(owner.reference);
-      if (!retained.ok) return retained;
-      for (const drifted of owner.drifted) {
-        const entry = retained.value.projection_plan.entries.find((item) => item.path === drifted.path);
-        if (entry === undefined || entry.git_tracked === undefined) {
-          return issue("STATE_INVALID", current.value, "baseline-adoption-restore-path-missing");
+      if (owner.repository === "primary") {
+        const retained = await dependencies.load_retained_result(owner.reference);
+        if (!retained.ok) return retained;
+        for (const drifted of owner.drifted) {
+          const entry = retained.value.projection_plan.entries.find((item) => item.path === drifted.path);
+          if (entry === undefined || entry.git_tracked === undefined) {
+            return issue("STATE_INVALID", current.value, "baseline-adoption-restore-path-missing");
+          }
+        }
+      } else {
+        for (const drifted of owner.drifted) {
+          const source = await readRetainedRepositoryOutput({
+            primary_runner: dependencies.runner, authority, reference: owner.reference,
+            repository_set: repositorySet, repository: owner.repository, output_path: drifted.path,
+          });
+          if (!source.ok) return source;
         }
       }
     }
@@ -1499,7 +1598,7 @@ export async function archiveDirectSemanticGateDecision(
       const selectedDecision = (selected as Readonly<{ payload?: Readonly<{ decision?: PlainJsonValue }> }>).payload?.decision;
       if (request.value.kind === "baseline-adoption" &&
           selectedDecision === "restore-recorded-bytes" &&
-          !(await baselineRestoreOffered(dependencies, input.authority, current, request.value.context.drifted_projections))) {
+          !(await baselineRestoreOffered(dependencies, input.authority, current, request.value.context, live.value.repository_set))) {
         return issue("STATE_INVALID", current.value, "baseline-adoption-restore-source-unavailable");
       }
       const provenance: HumanDecisionProvenance = {
@@ -1562,6 +1661,13 @@ async function settleDirectReentryCheckpoint(
       const stateResult = await stateOrFailure(dependencies, input.authority);
       if (!stateResult.ok) return stateResult;
       const current = stateResult.value;
+      const live = await validateLiveGateState(
+        dependencies,
+        input.authority,
+        current,
+        current.value.input_fingerprint,
+      );
+      if (!live.ok) return live;
       const open = current.value.open_gate;
       if (open === undefined) return issue("STATE_INVALID", current.value, "direct-decision-open-gate-missing");
       const requestPath = await resolvePath(dependencies, input.authority, gateRequestClaim(open.gate_id), "authority-decision");
@@ -1586,8 +1692,13 @@ async function settleDirectReentryCheckpoint(
       const outcome = receiptOutcome(record.value, revision);
       const requestDigest = directSemanticDecisionRequestDigest(input.operation_digest, request, record);
       const { open_gate: _open, last_transition: _transition, ...base } = current.value;
+      const checkpointBase = withLastSeenConfig(
+        { ...base, revision } as TaskStateV1,
+        live.value.config,
+        live.value.repository_set,
+      );
       const checkpoint = canonicalDocument({
-        ...base,
+        ...checkpointBase,
         revision,
         last_transition: {
           schema_version: "1",
@@ -1680,6 +1791,13 @@ export async function enterDirectSemanticRevisionCheckpoint(
       const stateResult = await stateOrFailure(dependencies, input.authority);
       if (!stateResult.ok) return stateResult;
       const current = stateResult.value;
+      const live = await validateLiveGateState(
+        dependencies,
+        input.authority,
+        current,
+        current.value.input_fingerprint,
+      );
+      if (!live.ok) return live;
       const transition = current.value.last_transition;
       if (current.value.open_gate === undefined && current.value.step === "produce" && current.value.status === "running" &&
           transition !== undefined &&
@@ -1782,8 +1900,13 @@ export async function enterDirectSemanticRevisionCheckpoint(
         checkpoint_request_digest: transition.request_digest,
         predecessor_attempt: current.value.attempt,
       } as const;
+      const enteredBase = withLastSeenConfig(
+        { ...planned.value, revision } as TaskStateV1,
+        live.value.config,
+        live.value.repository_set,
+      );
       const entered = canonicalDocument({
-        ...planned.value,
+        ...enteredBase,
         revision,
         ...(beginsHumanRevision(record.value) ? {
           pending_human_revision: {
@@ -1862,10 +1985,14 @@ export async function resolveDurableGate(
           return ok({ state: current, record: archived, effect, replayed: true });
         }
         const closure = await closedStateForRecord(
-          dependencies, authority, current, request.value, archived.value, archived.digest,
+          dependencies, authority, current, request.value, archived.value, archived.digest, live.value.repository_set,
         );
         if (!closure.ok) return closure;
-        const prepared = closure.value;
+        const prepared = canonicalDocument(withLastSeenConfig(
+          closure.value.value,
+          live.value.config,
+          live.value.repository_set,
+        ));
         // A closure-before-receipt crash resumes through the same ordering. The archived request
         // carries no fingerprint field, so only non-success closures can be resumed here; success
         // receipt recovery is driven by the direct semantic settlement, which supplies the
@@ -1905,14 +2032,19 @@ export async function resolveDurableGate(
       const document = canonicalDocument(record);
       if (!validateDurableSemantics({ gate_request: request, gate_decision: document }).ok) return issue("STATE_INVALID", current.value, "gate-archive-binding-invalid");
       const closure = await closedStateForRecord(
-        dependencies, authority, current, request.value, record, document.digest,
+        dependencies, authority, current, request.value, record, document.digest, live.value.repository_set,
       );
       if (!closure.ok) return closure;
       const created = await dependencies.atomic.createExclusive(archivePath.value, document.bytes);
       if (created !== "created") return issue("STATE_INVALID", current.value, "gate-resolution-race");
       const effect = record.outcome === "decided" ? gateDecisionEffect(record.envelope.payload) : "non-advancing";
+      const prepared = canonicalDocument(withLastSeenConfig(
+        closure.value.value,
+        live.value.config,
+        live.value.repository_set,
+      ));
       const transitioned = withGateTransition(
-        authority, request.value, document.value, current, closure.value,
+        authority, request.value, document.value, current, prepared,
         inputFingerprint ?? current.value.input_fingerprint,
       );
       if (!transitioned.ok) return transitioned;
@@ -1933,6 +2065,53 @@ export async function resolveDurableGate(
 
 export type BaselineDriftedProjection = Extract<GateRequestV1, { kind: "baseline-adoption" }>["context"]["drifted_projections"][number];
 export type BaselineDeletedProjection = NonNullable<Extract<GateRequestV1, { kind: "baseline-adoption" }>["context"]["deleted_projections"]>[number];
+type BaselineContext = Extract<GateRequestV1, { kind: "baseline-adoption" }>["context"];
+type BaselineRepositoryName = "primary" | RepositoryName;
+type BaselineRepositoryTarget = Readonly<{
+  repository: BaselineRepositoryName;
+  drifted_projections: readonly BaselineDriftedProjection[];
+  deleted_projections: readonly BaselineDeletedProjection[];
+}>;
+
+function baselineRepositoryTargets(context: BaselineContext): readonly BaselineRepositoryTarget[] {
+  return Object.freeze([
+    Object.freeze({
+      repository: "primary" as const,
+      drifted_projections: context.drifted_projections,
+      deleted_projections: context.deleted_projections ?? [],
+    }),
+    ...(context.secondary_targets ?? []).map((target) => Object.freeze({
+      repository: target.repository,
+      drifted_projections: target.drifted_projections,
+      deleted_projections: target.deleted_projections ?? [],
+    })),
+  ]);
+}
+
+function projectionLookup(repository: BaselineRepositoryName, path: BaselineDriftedProjection["path"]): string {
+  return repositoryPathKey(repository, path);
+}
+
+/** Re-reads the target so a retained/cached before-image can never stand in for human-observed live bytes. */
+export async function assessBaselineRestoreSourceFreshness(
+  source: ProjectionSource,
+  humanObservedDigest: Sha256Digest,
+): Promise<Readonly<{ classification: "observed" | "restored" | "stale"; source: ProjectionSource }>> {
+  const measuredLive = await captureProjectionTarget(source.target);
+  const liveDigest = measuredLive.observation.state === "present"
+    ? measuredLive.observation.content_digest
+    : undefined;
+  const desiredDigest = source.desired.state === "present" ? sha256Bytes(source.desired.bytes) : undefined;
+  const refreshed = Object.freeze({
+    ...source,
+    authenticated_before: measuredLive.observation,
+    rollback: measuredLive.rollback,
+  });
+  return Object.freeze({
+    classification: liveDigest === humanObservedDigest ? "observed" : liveDigest === desiredDigest ? "restored" : "stale",
+    source: refreshed,
+  });
+}
 
 /**
  * Builds one durable adoption record from the gate's drifted set. The projection sort is plain
@@ -1945,20 +2124,35 @@ export function baselineAdoptionRecord(
   adoptedAtRevision: TaskStateV1["revision"],
   driftedProjections: readonly BaselineDriftedProjection[],
   deletedProjections: readonly BaselineDeletedProjection[] = [],
+  secondaryTargets: readonly NonNullable<BaselineContext["secondary_targets"]>[number][] = [],
 ): BaselineAdoptionRecord {
   const ordinal = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
+  const adoptedProjections: BaselineAdoptionRecord["adopted_projections"][number][] = [
+    ...driftedProjections.map((drifted) => Object.freeze({ path: drifted.path, content_digest: drifted.observed_digest })),
+    ...secondaryTargets.flatMap((target) => target.drifted_projections.map((drifted) => Object.freeze({
+      repository: target.repository, path: drifted.path, content_digest: drifted.observed_digest,
+    }))),
+  ];
   return Object.freeze({
     gate_id: gateId,
     adopted_at_revision: adoptedAtRevision,
-    adopted_projections: Object.freeze(driftedProjections
-      .map((drifted) => Object.freeze({ path: drifted.path, content_digest: drifted.observed_digest }))
-      .sort((left, right) => ordinal(left.path, right.path))),
+    adopted_projections: Object.freeze(adoptedProjections.sort((left, right) =>
+      ordinal(left.repository ?? "", right.repository ?? "") || ordinal(left.path, right.path))),
     // Absence is recorded only when the decision adopted deletions; a bytes-only archive from
     // before that decision exists must keep its exact historical shape.
-    ...(deletedProjections.length === 0 ? {} : {
-      adopted_absences: Object.freeze(deletedProjections
-        .map((deleted) => deleted.path)
-        .sort(ordinal)),
+    ...(deletedProjections.length === 0 && secondaryTargets.every((target) => (target.deleted_projections ?? []).length === 0) ? {} : {
+      adopted_absences: Object.freeze([
+        ...deletedProjections.map((deleted) => deleted.path),
+        ...secondaryTargets.flatMap((target) => (target.deleted_projections ?? []).map((deleted) => Object.freeze({
+          repository: target.repository, path: deleted.path,
+        }))),
+      ].sort((left, right) => {
+        const leftRepository = typeof left === "string" ? "" : left.repository ?? "";
+        const rightRepository = typeof right === "string" ? "" : right.repository ?? "";
+        const leftPath = typeof left === "string" ? left : left.path;
+        const rightPath = typeof right === "string" ? right : right.path;
+        return ordinal(leftRepository, rightRepository) || ordinal(leftPath, rightPath);
+      })),
     }),
   });
 }
@@ -1974,28 +2168,39 @@ async function baselineRestoreOwners(
   dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
   current: CanonicalDocument<TaskStateV1>,
-  driftedProjections: readonly BaselineDriftedProjection[],
+  context: BaselineContext,
+  repositorySet: RepositorySet,
 ): Promise<ProjectResult<readonly Readonly<{
   reference: AuthoritativeResultRef;
+  repository: BaselineRepositoryName;
   drifted: readonly BaselineDriftedProjection[];
 }>[]>> {
-  const targets = await discoverNewestProjections(dependencies, authority, current);
+  const targets = await discoverNewestProjections(dependencies, authority, current, repositorySet);
   if (!targets.ok) return targets;
-  const owners = new Map<string, { reference: AuthoritativeResultRef; drifted: BaselineDriftedProjection[] }>();
-  for (const drifted of driftedProjections) {
-    const entry = targets.value.get(drifted.path);
-    if (entry === undefined || entry.retired || entry.projection.content_digest !== drifted.recorded_digest) {
-      return issue("STATE_INVALID", current.value, "baseline-adoption-current-stale");
+  const owners = new Map<string, Map<BaselineRepositoryName, { reference: AuthoritativeResultRef; repository: BaselineRepositoryName; drifted: BaselineDriftedProjection[] }>>();
+  for (const target of baselineRepositoryTargets(context)) {
+    for (const drifted of target.drifted_projections) {
+      const entry = targets.value.get(projectionLookup(target.repository, drifted.path));
+      if (entry === undefined || entry.retired || entry.projection.content_digest !== drifted.recorded_digest) {
+        return issue("STATE_INVALID", current.value, "baseline-adoption-current-stale");
+      }
+      if (entry.reference === undefined) {
+        return issue("STATE_INVALID", current.value, "baseline-adoption-restore-source-unavailable");
+      }
+      let repositories = owners.get(entry.reference.result_digest);
+      if (repositories === undefined) {
+        repositories = new Map();
+        owners.set(entry.reference.result_digest, repositories);
+      }
+      const group = repositories.get(target.repository);
+      if (group === undefined) repositories.set(target.repository, {
+        reference: entry.reference, repository: target.repository, drifted: [drifted],
+      });
+      else group.drifted.push(drifted);
     }
-    if (entry.reference === undefined) {
-      return issue("STATE_INVALID", current.value, "baseline-adoption-restore-source-unavailable");
-    }
-    const group = owners.get(entry.reference.result_digest);
-    if (group === undefined) owners.set(entry.reference.result_digest, { reference: entry.reference, drifted: [drifted] });
-    else group.drifted.push(drifted);
   }
-  return ok(Object.freeze([...owners.values()].map((owner) =>
-    Object.freeze({ reference: owner.reference, drifted: Object.freeze(owner.drifted) }))));
+  return ok(Object.freeze([...owners.values()].flatMap((repositories) => [...repositories.values()]).map((owner) =>
+    Object.freeze({ reference: owner.reference, repository: owner.repository, drifted: Object.freeze(owner.drifted) }))));
 }
 
 /**
@@ -2009,11 +2214,13 @@ export async function baselineRestoreOffered(
   dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
   state: CanonicalDocument<TaskStateV1>,
-  driftedProjections: readonly BaselineDriftedProjection[],
+  context: BaselineContext,
+  repositorySet: RepositorySet,
 ): Promise<boolean> {
-  const newest = await discoverNewestProjections(dependencies, authority, state);
+  const newest = await discoverNewestProjections(dependencies, authority, state, repositorySet);
   if (!newest.ok) return false;
-  return driftedProjections.every((drifted) => newest.value.get(drifted.path)?.reference !== undefined);
+  return baselineRepositoryTargets(context).every((target) => target.drifted_projections.every((drifted) =>
+    newest.value.get(projectionLookup(target.repository, drifted.path))?.reference !== undefined));
 }
 
 async function resolveAdvancingGate(
@@ -2050,7 +2257,7 @@ async function resolveAdvancingGate(
         // malformed approved design phase plans must leave no server-owned archive behind so the
         // still-open human interface can be corrected to revise, reject, or cancel.
         const closure = await closedStateForRecord(
-          dependencies, authority, current, request.value, record, document.digest,
+          dependencies, authority, current, request.value, record, document.digest, live.value.repository_set,
         );
         if (!closure.ok) return closure;
         if (await dependencies.atomic.createExclusive(archivePath.value, document.bytes) !== "created") return issue("STATE_INVALID", current.value, "gate-resolution-race");
@@ -2112,53 +2319,76 @@ async function resolveAdvancingGate(
           return issue("STATE_INVALID", current.value, "baseline-adoption-restore-unavailable");
         }
         const context = request.value.context as Extract<GateRequestV1, { kind: "baseline-adoption" }>["context"];
-        const owners = await baselineRestoreOwners(dependencies, authority, current, context.drifted_projections);
+        const owners = await baselineRestoreOwners(dependencies, authority, current, context, live.value.repository_set);
         if (!owners.ok) return owners;
-        const sources: ProjectionSource[] = [];
-        let worktreeRoot: ResolvedTaskPath | undefined;
+        const sources = new Map<BaselineRepositoryName, ProjectionSource[]>();
         for (const owner of owners.value) {
-          const retained = await dependencies.load_retained_result(owner.reference);
-          if (!retained.ok) return retained;
-          if (worktreeRoot === undefined) worktreeRoot = retained.value.worktree_root;
           for (const drifted of owner.drifted) {
-            const entry = retained.value.projection_plan.entries.find((item) => item.path === drifted.path);
-            if (entry === undefined || entry.git_tracked === undefined) return issue("STATE_INVALID", current.value, "baseline-adoption-restore-path-missing");
-            const captured = await captureProjectionTarget(entry.target);
-            const desiredDigest = entry.desired.state === "present" ? sha256Bytes(entry.desired.bytes) : undefined;
-            const liveDigest = captured.observation.state === "present" ? captured.observation.content_digest : undefined;
-            // Stale unless the bytes are still the ones the human judged — or already the restored
-            // generation, which makes an archive replay a no-op.
-            if (liveDigest !== drifted.observed_digest && liveDigest !== desiredDigest) {
+            let source: ProjectionSource;
+            if (owner.repository === "primary") {
+              const retained = await dependencies.load_retained_result(owner.reference);
+              if (!retained.ok) return retained;
+              const entry = retained.value.projection_plan.entries.find((item) => item.path === drifted.path);
+              if (entry === undefined || entry.git_tracked === undefined) return issue("STATE_INVALID", current.value, "baseline-adoption-restore-path-missing");
+              const captured = await captureProjectionTarget(entry.target);
+              source = Object.freeze({
+                path: entry.path, target: entry.target, desired: entry.desired,
+                authenticated_before: captured.observation, rollback: captured.rollback,
+                git_tracked: entry.git_tracked,
+                ...(entry.rename_pair === undefined ? {} : { rename_pair: entry.rename_pair }),
+              });
+            } else {
+              const selected = await readRetainedRepositoryOutput({
+                primary_runner: dependencies.runner, authority, reference: owner.reference,
+                repository_set: live.value.repository_set, repository: owner.repository,
+                output_path: drifted.path,
+              });
+              if (!selected.ok) return selected;
+              source = selected.value;
+            }
+            const freshness = await assessBaselineRestoreSourceFreshness(source, drifted.observed_digest);
+            if (freshness.classification === "stale") {
               return issue("STATE_INVALID", current.value, "baseline-adoption-current-stale");
             }
-            if (liveDigest === desiredDigest) continue;
-            sources.push(Object.freeze({
-              path: entry.path,
-              target: entry.target,
-              desired: entry.desired,
-              authenticated_before: captured.observation,
-              rollback: captured.rollback,
-              git_tracked: entry.git_tracked,
-              ...(entry.rename_pair === undefined ? {} : { rename_pair: entry.rename_pair }),
-            }));
+            if (freshness.classification === "restored") continue;
+            source = freshness.source;
+            const group = sources.get(owner.repository);
+            if (group === undefined) sources.set(owner.repository, [source]);
+            else group.push(source);
           }
         }
-        if (sources.length !== 0) {
-          if (worktreeRoot === undefined) return issue("STATE_INVALID", current.value, "baseline-adoption-restore-unavailable");
-          const plan = await prepareProjectionPlan(sources, dependencies.gate_secret_scanner, worktreeRoot);
-          if (!plan.ok) return plan;
-          if (plan.value.collisions.length !== 0) return issue("STATE_INVALID", current.value, "baseline-adoption-restore-collision");
-          const applied = await applyProjectionPlan(dependencies.projection_writer, plan.value);
+        if (sources.size !== 0) {
+          const repositoryPlans = [];
+          const orderedRepositories = [...sources.keys()].sort((left, right) =>
+            left === "primary" ? -1 : right === "primary" ? 1 : left < right ? -1 : left > right ? 1 : 0);
+          for (const repository of orderedRepositories) {
+            const member = live.value.repository_set.members.find((candidate) => candidate.name === repository);
+            if (member === undefined || member.mode !== "writable") {
+              return issue("STATE_INVALID", current.value, "baseline-adoption-restore-repository-unavailable");
+            }
+            const plan = await prepareProjectionPlan(
+              sources.get(repository)!, dependencies.gate_secret_scanner,
+              member.binding.runner.location.worktreeRoot as ResolvedTaskPath,
+            );
+            if (!plan.ok) return plan;
+            if (plan.value.collisions.length !== 0) return issue("STATE_INVALID", current.value, "baseline-adoption-restore-collision");
+            repositoryPlans.push(Object.freeze({ repository, plan: plan.value }));
+          }
+          const applied = await applyRepositoryProjectionPlans(dependencies.projection_writer, repositoryPlans);
           if (applied.outcome !== "applied") return issue("STATE_INVALID", current.value, `baseline-adoption-restore-${applied.outcome}`);
         }
       }
       const closure = preparedClosure === undefined
         ? await closedStateForRecord(
-          dependencies, authority, current, request.value, archived.value, archived.digest,
+          dependencies, authority, current, request.value, archived.value, archived.digest, live.value.repository_set,
         )
         : ok(preparedClosure);
       if (!closure.ok) return closure;
-      const prepared = closure.value;
+      const prepared = canonicalDocument(withLastSeenConfig(
+        closure.value.value,
+        live.value.config,
+        live.value.repository_set,
+      ));
       const installed = await installReceipt(dependencies, authority, request.value, archived.value, current, prepared, inputFingerprint);
       if (!installed.ok) return installed;
       await dependencies.atomic.replace(authority.state, installed.value.final.bytes);

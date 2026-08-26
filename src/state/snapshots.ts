@@ -10,6 +10,7 @@ import {
   type CanonicalDocument,
 } from "../contracts/canonical.js";
 import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
+import type { RepositoryName } from "../contracts/config.js";
 import type { ResultManifestV1 } from "../contracts/durable-result-manifest.js";
 import { parseResultManifest } from "../contracts/durable-result-manifest.js";
 import type { OutputEntry, SnapshotAccountingV1 } from "../contracts/durable-primitives.js";
@@ -30,8 +31,17 @@ import {
   type GitRunner,
 } from "../repository/git.js";
 import type { AtomicWriter, ProjectionWriter } from "./atomic.js";
-import { deriveSnapshotDigest, type SnapshotObservation as DurableSnapshotObservation } from "./implementation-manifest.js";
+import { deriveOverallImplementationSnapshotDigest, deriveSnapshotDigest, type SnapshotObservation as DurableSnapshotObservation } from "./implementation-manifest.js";
 import { secretScanCandidateFromBytes } from "./secret-scan.js";
+
+
+/**
+ * One flat map key for a repository-qualified path. `undefined` and `"primary"` address the primary
+ * repository; the NUL separator cannot occur in either a repository name or a path claim.
+ */
+export function repositoryPathKey(repository: string | undefined, path: string): string {
+  return `${repository ?? "primary"}\0${path}`;
+}
 
 export const RESULT_BYTE_CAP = 25 * 1024 * 1024;
 export const TASK_BYTE_CAP = 250 * 1024 * 1024;
@@ -40,6 +50,7 @@ export type SnapshotManifest = ResultManifestV1;
 export type SnapshotStoragePath = ResolvedPath | ResolvedWorkspacePath;
 
 export type SnapshotPayloadInput = Readonly<{
+  repository?: RepositoryName;
   path: RepositoryPathClaim;
   bytes: Uint8Array;
   target: SnapshotStoragePath;
@@ -48,7 +59,7 @@ export type SnapshotPayloadInput = Readonly<{
 export type PreparedSnapshot<M extends SnapshotManifest = SnapshotManifest> = Readonly<{
   manifest: CanonicalDocument<M>;
   result_digest: Sha256Digest;
-  payloads: readonly Readonly<{ path: RepositoryPathClaim; bytes: Uint8Array; target: SnapshotStoragePath }>[];
+  payloads: readonly Readonly<{ repository?: RepositoryName; path: RepositoryPathClaim; bytes: Uint8Array; target: SnapshotStoragePath }>[];
 }>;
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
@@ -118,7 +129,11 @@ export function prepareSnapshot<M extends SnapshotManifest>(input: Readonly<{
   assertPlainJson(rawManifest, "result manifest");
   const manifest = structuredClone(rawManifest) as M;
   input.validate_manifest(manifest);
-  if (deriveDeclaredSnapshotDigest(manifest.outputs, manifest.projections) !== manifest.snapshot_digest) {
+  const primarySnapshotDigest = deriveDeclaredSnapshotDigest(manifest.outputs, manifest.projections);
+  const expectedSnapshotDigest = manifest.source_artifact?.artifact_kind === "implementation-output"
+    ? deriveOverallImplementationSnapshotDigest(primarySnapshotDigest, manifest.source_artifact.secondary_repositories ?? [])
+    : primarySnapshotDigest;
+  if (expectedSnapshotDigest !== manifest.snapshot_digest) {
     return snapshotInvalid(manifest.snapshot_digest, "snapshot-digest-mismatch");
   }
   const document = canonicalDocument(manifest);
@@ -133,15 +148,29 @@ export function prepareSnapshot<M extends SnapshotManifest>(input: Readonly<{
     if (typeof path !== "string" || target === null || typeof target !== "object") {
       throw new TypeError(`payloads[${index}] has invalid path or target`);
     }
-    return Object.freeze({ path: path as RepositoryPathClaim, target: target as SnapshotStoragePath, bytes });
+    const repositoryDescriptor = Object.getOwnPropertyDescriptor(item, "repository");
+    if (repositoryDescriptor !== undefined && (!("value" in repositoryDescriptor) || !repositoryDescriptor.enumerable || typeof repositoryDescriptor.value !== "string")) {
+      throw new TypeError(`payloads[${index}].repository must be an own enumerable string data property`);
+    }
+    return Object.freeze({
+      ...(repositoryDescriptor?.value === undefined ? {} : { repository: repositoryDescriptor.value as RepositoryName }),
+      path: path as RepositoryPathClaim, target: target as SnapshotStoragePath, bytes,
+    });
   });
 
-  const byPath = new Map(payloads.map((payload) => [payload.path, payload]));
+  const byPath = new Map(payloads.map((payload) => [repositoryPathKey(payload.repository, payload.path), payload]));
   if (byPath.size !== payloads.length) return snapshotInvalid(manifest.snapshot_digest, "duplicate-payload-path");
   let resultBytes = 0;
-  for (const output of manifest.outputs) {
+  const outputSections = [
+    { repository: undefined, outputs: manifest.outputs },
+    ...(manifest.source_artifact?.artifact_kind === "implementation-output"
+      ? (manifest.source_artifact.secondary_repositories ?? []).map((section) => ({ repository: section.repository, outputs: section.outputs }))
+      : []),
+  ];
+  for (const section of outputSections) for (const output of section.outputs) {
+    const key = repositoryPathKey(section.repository, output.path);
     if (output.storage === "raw-payload") {
-      const payload = byPath.get(output.path);
+      const payload = byPath.get(key);
       if (payload === undefined || payload.target.path_class !== "workspace-result-payload") {
         return snapshotInvalid(manifest.snapshot_digest, "missing-payload");
       }
@@ -149,22 +178,26 @@ export function prepareSnapshot<M extends SnapshotManifest>(input: Readonly<{
         return snapshotInvalid(manifest.snapshot_digest, "payload-identity-mismatch");
       }
       resultBytes += payload.bytes.byteLength;
-    } else if (byPath.has(output.path)) {
+    } else if (byPath.has(key)) {
       return snapshotInvalid(manifest.snapshot_digest, "unexpected-payload");
     }
   }
   if (resultBytes > RESULT_BYTE_CAP) {
     return fail(createProjectError("SNAPSHOT_LIMIT", {
-      limit_scope: "result", offending_paths: [...byPath.keys()].sort(), current_bytes: resultBytes, byte_cap: RESULT_BYTE_CAP,
+      limit_scope: "result", offending_paths: payloads.map((payload) => `${payload.repository === undefined ? "" : `${payload.repository}/`}${payload.path}`).sort(), current_bytes: resultBytes, byte_cap: RESULT_BYTE_CAP,
     }));
   }
   const taskBytes = input.retained_task_bytes + resultBytes;
   if (taskBytes > TASK_BYTE_CAP) {
     return fail(createProjectError("SNAPSHOT_LIMIT", {
-      limit_scope: "task", offending_paths: [...byPath.keys()].sort(), current_bytes: taskBytes, byte_cap: TASK_BYTE_CAP,
+      limit_scope: "task", offending_paths: payloads.map((payload) => `${payload.repository === undefined ? "" : `${payload.repository}/`}${payload.path}`).sort(), current_bytes: taskBytes, byte_cap: TASK_BYTE_CAP,
     }));
   }
-  if (manifest.accounting.result_bytes !== resultBytes || manifest.accounting.task_bytes !== taskBytes) {
+  const accountedResultBytes = manifest.source_artifact?.artifact_kind === "implementation-output"
+    ? manifest.accounting.result_bytes + (manifest.source_artifact.secondary_repositories ?? [])
+      .reduce((sum, section) => sum + section.accounting.result_bytes, 0)
+    : manifest.accounting.result_bytes;
+  if (accountedResultBytes !== resultBytes || manifest.accounting.task_bytes !== taskBytes) {
     return snapshotInvalid(manifest.snapshot_digest, "accounting-mismatch");
   }
   return ok(Object.freeze({ manifest: document, result_digest: document.digest, payloads: Object.freeze(payloads) }));
@@ -264,7 +297,14 @@ export async function readSnapshot(input: Readonly<{
   }
   const semantics = validateDurableSemantics({ result_manifest: document });
   if (!semantics.ok) return snapshotInvalid(document.value.snapshot_digest, "manifest-semantics-invalid");
-  if (deriveDeclaredSnapshotDigest(document.value.outputs, document.value.projections) !== document.value.snapshot_digest) {
+  const primarySnapshotDigest = deriveDeclaredSnapshotDigest(document.value.outputs, document.value.projections);
+  const expectedSnapshotDigest = document.value.source_artifact.artifact_kind === "implementation-output"
+    ? deriveOverallImplementationSnapshotDigest(
+      primarySnapshotDigest,
+      document.value.source_artifact.secondary_repositories ?? [],
+    )
+    : primarySnapshotDigest;
+  if (expectedSnapshotDigest !== document.value.snapshot_digest) {
     return snapshotInvalid(document.value.snapshot_digest, "snapshot-digest-mismatch");
   }
   const source = document.value.source_artifact;
@@ -663,6 +703,15 @@ export async function applyProjectionPlan(writer: ProjectionWriter, plan: Projec
 }
 
 async function rollback(writer: ProjectionWriter, applied: readonly ProjectionPlanEntry[], collisionPath: RepositoryPathClaim): Promise<ProjectionApplyResult> {
+  const repair = await rollbackEntries(writer, applied);
+  return repair ?? Object.freeze({ outcome: "rolled-back", path: collisionPath });
+}
+
+/** Restores applied entries in reverse; returns the first entry that could not be restored. */
+async function rollbackEntries(
+  writer: ProjectionWriter,
+  applied: readonly ProjectionPlanEntry[],
+): Promise<Extract<ProjectionApplyResult, { outcome: "repair-required" }> | undefined> {
   for (const entry of [...applied].reverse()) {
     if (!isDeepStrictEqual(await observe(entry.target), desiredObservation(entry.desired))) {
       return Object.freeze({ outcome: "repair-required", path: entry.path });
@@ -671,5 +720,63 @@ async function rollback(writer: ProjectionWriter, applied: readonly ProjectionPl
     else if (entry.rollback !== undefined) await applyDesired(writer, { ...entry, desired: entry.rollback });
     else return Object.freeze({ outcome: "repair-required", path: entry.path });
   }
-  return Object.freeze({ outcome: "rolled-back", path: collisionPath });
+  return undefined;
+}
+
+export type RepositoryProjectionPlan = Readonly<{
+  repository: "primary" | RepositoryName;
+  plan: ProjectionPlan;
+}>;
+
+export type RepositoryProjectionApplyResult =
+  | Readonly<{ outcome: "applied" }>
+  | Readonly<{
+      outcome: "collision" | "rolled-back" | "repair-required";
+      repository: RepositoryProjectionPlan["repository"];
+      path: RepositoryPathClaim;
+    }>;
+
+/**
+ * Applies already-prepared repository plans only after every root has passed its collision and
+ * generation checks. Repositories are installed in caller order and completed roots are rolled
+ * back in reverse order if a later root loses its generation.
+ */
+export async function applyRepositoryProjectionPlans(
+  writer: ProjectionWriter,
+  plans: readonly RepositoryProjectionPlan[],
+): Promise<RepositoryProjectionApplyResult> {
+  for (const repositoryPlan of plans) {
+    const collision = repositoryPlan.plan.collisions[0];
+    if (collision !== undefined) {
+      return Object.freeze({ outcome: "collision", repository: repositoryPlan.repository, path: collision.path });
+    }
+    for (const entry of repositoryPlan.plan.entries) {
+      if (!isDeepStrictEqual(await observe(entry.target), entry.observed_before)) {
+        return Object.freeze({ outcome: "collision", repository: repositoryPlan.repository, path: entry.path });
+      }
+    }
+  }
+
+  const completed: RepositoryProjectionPlan[] = [];
+  for (const repositoryPlan of plans) {
+    const result = await applyProjectionPlan(writer, repositoryPlan.plan);
+    if (result.outcome === "applied") {
+      completed.push(repositoryPlan);
+      continue;
+    }
+    // The failure belongs to another repository, so a prior member's rollback has no collision
+    // path of its own; only a restore that cannot complete is reported, at its own tuple.
+    for (const prior of [...completed].reverse()) {
+      const repair = await rollbackEntries(writer, prior.plan.entries.filter((entry) => entry.disposition !== "exact"));
+      if (repair !== undefined) {
+        return Object.freeze({ outcome: "repair-required", repository: prior.repository, path: repair.path });
+      }
+    }
+    return Object.freeze({
+      outcome: result.outcome === "collision" ? "rolled-back" : result.outcome,
+      repository: repositoryPlan.repository,
+      path: result.path,
+    });
+  }
+  return Object.freeze({ outcome: "applied" });
 }

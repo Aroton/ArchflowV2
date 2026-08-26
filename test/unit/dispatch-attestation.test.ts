@@ -12,6 +12,11 @@ import type { AdjudicationSubject, DispatchSubject } from "../../src/review/enve
 
 const digest = (character: string) => parseSha256Digest(character.repeat(64));
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
+const repositories = [{
+  name: "primary",
+  repository_identity_digest: digest("1"),
+  commit: "0123456789abcdef0123456789abcdef01234567" as never,
+}] as const;
 
 const subject = (producer_family: "claude" | "codex"): DispatchSubject => ({
   task_id: parseTaskSlug("mcp-integration"),
@@ -95,6 +100,7 @@ function mint(producerFamily: "claude" | "codex", output: Uint8Array = bytes(raw
     adapter: route.adapter,
     cli_version: route.family === "codex" ? "0.146.0" : "2.1.220",
     route,
+    repositories,
     envelope_input_digest: digest("d"),
     extracted_output_bytes: output,
   });
@@ -186,6 +192,7 @@ describe("review observation attestation mint", () => {
       adapter: route.adapter,
       cli_version: "2.1.220",
       route,
+      repositories,
       envelope_input_digest: digest("d"),
       extracted_output_bytes: bytes(rawReview(dispatchSubject)),
     });
@@ -213,6 +220,7 @@ describe("review observation attestation mint", () => {
       cli_version: "2.1.220",
       route,
       route_source: routeSource,
+      repositories,
       envelope_input_digest: digest("d"),
       extracted_output_bytes: bytes(rawReview(dispatchSubject)),
     });
@@ -235,6 +243,7 @@ describe("adjudication observation attestation mint", () => {
       adapter: route.adapter,
       cli_version: "0.146.0",
       route,
+      repositories,
       envelope_input_digest: digest("0"),
       extracted_output_bytes: output,
     });
@@ -270,6 +279,7 @@ describe("adjudication observation attestation mint", () => {
       adapter: route.adapter,
       cli_version: "0.146.0",
       route,
+      repositories,
       envelope_input_digest: digest("0"),
       extracted_output_bytes: output,
     })).toThrow(/subject_digest/u);

@@ -126,6 +126,25 @@ describe("evaluateApprovalRules — content rules apply to the phase-impl subjec
       .toEqual(autonomous);
   });
 
+  it("matches repository-relative secondary paths and retains structured attribution", () => {
+    expect(evaluateApprovalRules(content, "phase-impl", ["src/index.ts"], [{
+      repository: "api" as never,
+      paths: ["db/migrate.sql", "src/index.ts"],
+    }])).toEqual({
+      wait: true,
+      match: {
+        kind: "content",
+        paths: [],
+        secondary_paths: [{ repository: "api", paths: ["db/migrate.sql"] }],
+      },
+    });
+    expect(approvalRuleMatchSummary({
+      kind: "content",
+      paths: [],
+      secondary_paths: [{ repository: "api" as never, paths: ["db/migrate.sql"] }],
+    })).toContain("- api/db/migrate.sql");
+  });
+
   it("a phase-impl subject trigger forces its wait regardless of content rules", () => {
     const forced = configWithRules({ subjects: ["phase-impl"], content: [{ paths: ["**/*.sql"] }] });
     // No content rule matches, yet the subject trigger still waits — and reports itself as the
@@ -222,6 +241,24 @@ describe("approvalRuleContext — the shared assembly", () => {
     ]);
   });
 
+  it("collects changed secondary paths as repository-attributed sections", () => {
+    const subject = ({ artifact: {
+      artifact_kind: "implementation-output",
+      outputs: [],
+      secondary_repositories: [{
+        repository: "api",
+        outputs: [
+          { path: "src/moved.ts", operation: "rename", previous_path: "src/old.ts" },
+          { path: "db/migrate.sql", operation: "add" },
+        ],
+      }],
+    } }) as unknown as CurrentProduceSubject;
+    expect(approvalRuleContext(state("phase-impl-1"), subject, undefined).secondaryChangedPaths).toEqual([{
+      repository: "api",
+      paths: ["db/migrate.sql", "src/moved.ts", "src/old.ts"],
+    }]);
+  });
+
   it("carries no changed paths for document subjects or an unloaded produce subject", () => {
     expect(approvalRuleContext(state("design"), documentSubject(), noRules()).changedPaths).toEqual([]);
     expect(approvalRuleContext(state("design"), undefined, noRules()).changedPaths).toEqual([]);
@@ -239,7 +276,7 @@ describe("approvalRuleContext — the shared assembly", () => {
       implementationSubject({ path: "db/a.sql", operation: "modify" }),
       configWithRules({ subjects: [], content: [{ paths: ["**/*.sql"] }] }),
     );
-    expect(evaluateApprovalRules(context.config, context.subject, context.changedPaths))
+    expect(evaluateApprovalRules(context.config, context.subject, context.changedPaths, context.secondaryChangedPaths))
       .toEqual(contentMatch("db/a.sql"));
   });
 });
@@ -285,5 +322,31 @@ describe("planning milestone settlement baseline", () => {
       state("phase-impl-2"), digest, configDigest, { wait: false, match: null }, baseline, target,
     );
     expect(ruleSettlementV1Schema.parse(implementation)).toEqual(implementation);
+  });
+
+  it("refuses secondary no-wait milestones on a waiting implementation conclusion", () => {
+    const secondaryMilestone = [{
+      repository: "api",
+      repository_identity_digest: digest,
+      baseline_commit: baseline,
+      target_ref: target.ref,
+      target_head: target.head,
+      paths: ["src/api.ts"],
+      commit_message: "ArchFlow: Implement api",
+      diff_digest: digest,
+      snapshot_digest: digest,
+    }] as never;
+    expect(() => buildRuleSettlement(
+      state("phase-impl-2"), digest, configDigest,
+      { wait: true, match: { kind: "content", paths: [], secondary_paths: [{ repository: "api", paths: ["src/api.ts"] }] } },
+      undefined, undefined, secondaryMilestone,
+    )).toThrow(/secondary milestones are allowed only/u);
+
+    const waiting = buildRuleSettlement(
+      state("phase-impl-2"), digest, configDigest,
+      { wait: true, match: { kind: "content", paths: [], secondary_paths: [{ repository: "api", paths: ["src/api.ts"] }] } },
+    );
+    expect(waiting).not.toHaveProperty("secondary_milestones");
+    expect(ruleSettlementV1Schema.parse(waiting)).toEqual(waiting);
   });
 });

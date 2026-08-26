@@ -56,7 +56,7 @@ export const APPROVAL_ARTIFACT_KINDS = {
   "phase-design": "phase-design",
   "phase-impl": "phase-implementation",
 } as const;
-import { baselineAdoptionInputFromFindings, buildCommitAuthorizationInput, buildDesignApprovalInput, computeTaskStatus, currentApprovedUpstreams, currentBaselineTargetFacts, currentReviewPredecessor, currentTargetRef, pendingAdjudicationGate } from "./status.js";
+import { baselineAdoptionInputFromFindings, buildCommitAuthorizationInput, buildDesignApprovalInput, buildSecondaryCommitAuthorizationFacts, computeTaskStatus, currentApprovedUpstreams, currentBaselineTargetFacts, currentReviewPredecessor, currentTargetRef, pendingAdjudicationGate } from "./status.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { legalRunStepStatus } from "./transitions.js";
 import {
@@ -72,6 +72,7 @@ import { planningRestartTarget, semanticPlanningRestartId } from "./planning-res
 import { resolveTaskPath } from "../repository/paths.js";
 import { derivePendingWaiverRequest } from "./pending-waiver.js";
 import { approvalRuleGateSummary } from "./approval-rules.js";
+import type { ConfigV1, RepositoryName } from "../contracts/config.js";
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 const fail = <T = never>(error: ProjectError): ProjectResult<T> =>
@@ -149,6 +150,87 @@ export function includeChangedImplementationDocuments(input: {
 function implementationPathList(value: unknown, name: string): readonly RepositoryPathClaim[] {
   if (!Array.isArray(value)) throw new TypeError(`implementation ${name} must be an array`);
   return value.map((path) => parseRepositoryPathClaim(path));
+}
+
+type ComposedImplementationRepository = Readonly<{
+  name: RepositoryName;
+  base_commit: string;
+  outputs: readonly RepositoryPathClaim[];
+  restore_targets: readonly RepositoryPathClaim[];
+  declared_inputs: readonly Readonly<{ input_id: string; path: RepositoryPathClaim }>[];
+}>;
+
+function refusesSecondaryArchflow(path: RepositoryPathClaim): boolean {
+  return path === ".archflow" || path.startsWith(".archflow/");
+}
+
+function parseImplementationDeclaredInputs(
+  value: unknown,
+  label: string,
+): readonly Readonly<{ input_id: string; path: RepositoryPathClaim }>[] {
+  if (!Array.isArray(value)) throw new TypeError(`${label} must be an array`);
+  return value.map((candidate, index) => {
+    const input = record(candidate, `${label} ${index}`);
+    const inputId = String(input.input_id ?? "");
+    if (inputId.trim() === "") throw new TypeError(`${label} ${index} input_id must be non-empty`);
+    return Object.freeze({ input_id: inputId, path: parseRepositoryPathClaim(input.path) });
+  });
+}
+
+function parseImplementationRepositories(
+  value: unknown,
+  config: ConfigV1,
+  primaryInputs: readonly Readonly<{ input_id: string }>[] ,
+): readonly ComposedImplementationRepository[] {
+  const configured = config.repositories ?? {};
+  const writableNames = Object.entries(configured)
+    .filter(([, declaration]) => declaration.mode === "writable")
+    .map(([name]) => name)
+    .sort(ordinal);
+  const candidates = value === undefined ? [] : value;
+  if (!Array.isArray(candidates)) throw new TypeError("implementation repositories must be an array");
+  const seenIds = new Set<string>();
+  for (const input of primaryInputs) {
+    if (seenIds.has(input.input_id)) throw new TypeError(`implementation declared input_id ${input.input_id} must be unique across repositories`);
+    seenIds.add(input.input_id);
+  }
+  const sections = candidates.map((candidate, index): ComposedImplementationRepository => {
+    const section = record(candidate, `implementation repository ${index}`);
+    const name = String(section.name ?? "") as RepositoryName;
+    const declaration = configured[name];
+    if (declaration === undefined) throw new TypeError(`implementation repository ${name || "(empty)"} is not configured`);
+    if (declaration.mode !== "writable") throw new TypeError(`implementation repository ${name} is context-only, not writable`);
+    const outputs = implementationPathList(section.outputs, `repositories.${name}.outputs`);
+    const restoreTargets = implementationPathList(section.restore_targets, `repositories.${name}.restore_targets`);
+    const declaredInputs = parseImplementationDeclaredInputs(section.declared_inputs, `implementation repositories.${name}.declared_inputs`);
+    for (const path of [...outputs, ...restoreTargets, ...declaredInputs.map((input) => input.path)]) {
+      if (refusesSecondaryArchflow(path)) throw new TypeError(`implementation repository ${name} may not claim .archflow paths`);
+    }
+    for (const input of declaredInputs) {
+      if (seenIds.has(input.input_id)) throw new TypeError(`implementation declared input_id ${input.input_id} must be unique across repositories`);
+      seenIds.add(input.input_id);
+    }
+    return Object.freeze({
+      name,
+      base_commit: String(section.base_commit ?? ""),
+      outputs: Object.freeze(outputs),
+      restore_targets: Object.freeze(restoreTargets),
+      declared_inputs: Object.freeze(declaredInputs),
+    });
+  });
+  if (sections.some((section) => section.base_commit.trim() === "")) {
+    throw new TypeError("implementation repository base_commit must be non-empty");
+  }
+  const actualNames = sections.map((section) => section.name);
+  if (actualNames.some((name, index) => index > 0 && actualNames[index - 1]! >= name)) {
+    throw new TypeError("implementation repositories must be sorted by name with no duplicates");
+  }
+  if (actualNames.length !== writableNames.length || actualNames.some((name, index) => name !== writableNames[index])) {
+    const missing = writableNames.filter((name) => !actualNames.includes(name));
+    const extra = actualNames.filter((name) => !writableNames.includes(name));
+    throw new TypeError(`implementation repositories must cover every writable secondary exactly (missing: ${missing.join(", ") || "none"}; extra: ${extra.join(", ") || "none"})`);
+  }
+  return Object.freeze(sections);
 }
 
 function implementationParentDocuments(
@@ -254,6 +336,11 @@ async function composeProduce(
     );
     const parentDefaults = phaseImplParentDocumentDefaults(state.phase_instance);
     if (parentDefaults === undefined) throw new TypeError("phase-impl parent document defaults are unavailable");
+    const configRead = await services.dependencies.read_config(services.authority.config);
+    if (configRead.kind !== "valid") throw new TypeError("task config is unavailable for implementation repository validation");
+    const liveConfig = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(configRead.snapshot.bytes), "task config");
+    const primaryDeclaredInputs = parseImplementationDeclaredInputs(implementation.declared_inputs ?? [], "implementation declared_inputs");
+    const repositories = parseImplementationRepositories(implementation.repositories, liveConfig, primaryDeclaredInputs);
     const changed = await readChangedGitPaths(services.runner);
     const captured = includeChangedImplementationDocuments({
       task_id: services.authority.task_id,
@@ -272,9 +359,11 @@ async function composeProduce(
         ...captured,
         phase_instance: state.phase_instance,
         step: "produce",
-        declared_inputs: implementation.declared_inputs ?? [],
+        declared_inputs: primaryDeclaredInputs,
+        repositories,
         input_fingerprint: state.input_fingerprint,
       } as unknown as ImplementationOutputInput,
+      services.repository_set,
     );
     if (!built.ok) return built;
     artifact = built.value as unknown as PlainJsonValue;
@@ -614,11 +703,11 @@ async function composeGate(
   // ahead of them in status routing too, so an approval composed past unresolved drift could never
   // resolve honestly. Mid-produce drift is expected producer work and never composes this gate.
   if (state.step !== "produce" || state.status === "succeeded") {
-    const discovered = await discoverReconciliationInput(services.dependencies, services.authority, canonicalDocument(state));
+    const discovered = await discoverReconciliationInput(services.dependencies, services.authority, canonicalDocument(state), services.repository_set);
     if (!discovered.ok) return discovered;
     const drift = reconcileCurrentAuthority(discovered.value);
     if (drift.classification === "reconciliation-required") {
-      const target = await currentBaselineTargetFacts(services.dependencies, drift.findings);
+      const target = await currentBaselineTargetFacts(services.dependencies, drift.findings, services.repository_set);
       const adoption = baselineAdoptionInputFromFindings(
         services.authority.task_id, state, drift.findings, target,
       );
@@ -841,11 +930,21 @@ async function composeGate(
   } else if (gateKind === "commit-authorization") {
     if (approvalTrigger === undefined) return transitionInvalid(state, "approval-trigger-authority-missing");
     const target = await currentTargetRef(services.dependencies);
+    const secondarySections = subject.value.artifact.artifact_kind === "implementation-output"
+      ? subject.value.artifact.secondary_repositories ?? []
+      : [];
+    if (secondarySections.some((section) => section.outputs.length > 0) && services.repository_set === undefined) {
+      throw new TypeError("commit authorization requires the authenticated repository set");
+    }
+    const secondaryCommits = services.repository_set === undefined || subject.value.artifact.artifact_kind !== "implementation-output"
+      ? Object.freeze([])
+      : await buildSecondaryCommitAuthorizationFacts(subject.value.artifact, services.repository_set);
     const authorization = buildCommitAuthorizationInput(
       subject.value,
       derived.current_evidence_set,
       target,
       await resolveCommit(services.runner, "HEAD"),
+      secondaryCommits,
     );
     input = {
       ...mechanicalInput(services, state, intentId),

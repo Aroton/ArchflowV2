@@ -1,13 +1,37 @@
-import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { lstat, mkdir, mkdtemp, readFile, readlink, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createDispatchWorkspace, materializeRepositoryView } from "../../src/dispatch/workspace.js";
+import {
+  createDispatchWorkspace,
+  materializeRepositoryViews,
+  projectRepositoryWorkspaceBinding,
+  projectReviewedRepositories,
+  type DispatchRepositoryView,
+  type DispatchRepositoryViewPlan,
+} from "../../src/dispatch/workspace.js";
+import type { ProjectionPlan } from "../../src/state/snapshots.js";
+import { buildReviewEnvelope } from "../../src/review/envelopes.js";
+import { cleanupTemporaryRepositories, createTempRepository, type TempRepository } from "../helpers/temp-repository.js";
 
 const roots: string[] = [];
+
+const sha256 = (value: string): string => createHash("sha256").update(value).digest("hex");
+
+/** A real single-member plan for the historical primary-only layout. */
+function primaryPlan(repository: string, commit: string, projectionPlan?: ProjectionPlan): DispatchRepositoryViewPlan {
+  return [{
+    name: "primary",
+    member_kind: "primary",
+    repository_root: repository,
+    repository_identity_digest: sha256(repository) as never,
+    commit: commit as never,
+    ...(projectionPlan === undefined ? {} : { projection_plan: projectionPlan, snapshot_digest: sha256(`${commit}:snapshot`) as never }),
+  }];
+}
 
 async function temporaryRoot(label: string): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), `archflow-workspace-test-${label}-`));
@@ -17,8 +41,17 @@ async function temporaryRoot(label: string): Promise<string> {
 
 afterEach(async () => {
   vi.unstubAllEnvs();
+  cleanupTemporaryRepositories();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
+
+/** A committed repository whose worktree the dispatch views are built from; returns it with its HEAD. */
+function seededRepository(label: string, files: Readonly<Record<string, string>>): { repository: TempRepository; commit: string } {
+  const repository = createTempRepository({ label, attributes: undefined });
+  for (const [path, content] of Object.entries(files)) repository.write(path, content);
+  repository.commitAll("seed");
+  return { repository, commit: repository.git("rev-parse", "HEAD") };
+}
 
 describe("dispatch workspace", () => {
   it("builds the exact allowlisted environment", async () => {
@@ -128,30 +161,15 @@ describe("dispatch workspace", () => {
 
   it("materializes a git-free repository view without task state and disposes it whole", async () => {
     const sourceHome = await temporaryRoot("view-home");
-    const repository = await temporaryRoot("view-repository");
     vi.stubEnv("HOME", sourceHome);
-    const env = {
-      ...process.env,
-      GIT_CONFIG_GLOBAL: "/dev/null",
-      GIT_CONFIG_SYSTEM: "/dev/null",
-      GIT_AUTHOR_NAME: "ArchFlow Test",
-      GIT_AUTHOR_EMAIL: "test@example.invalid",
-      GIT_COMMITTER_NAME: "ArchFlow Test",
-      GIT_COMMITTER_EMAIL: "test@example.invalid",
-    };
-    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repository, env });
-    await mkdir(join(repository, "src"), { recursive: true });
-    await mkdir(join(repository, ".archflow", "context"), { recursive: true });
-    await mkdir(join(repository, ".archflow", "tasks", "example"), { recursive: true });
-    await writeFile(join(repository, "src", "index.ts"), "export {};\n");
-    await writeFile(join(repository, ".archflow", "context", "map.md"), "# context\n");
-    await writeFile(join(repository, ".archflow", "tasks", "example", "state.json"), "{}\n");
-    execFileSync("git", ["add", "."], { cwd: repository, env });
-    execFileSync("git", ["commit", "-qm", "seed"], { cwd: repository, env });
-    const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repository, env, encoding: "utf8" }).trim();
+    const { repository: { path: repository }, commit } = seededRepository("view-repository", {
+      "src/index.ts": "export {};\n",
+      ".archflow/context/map.md": "# context\n",
+      ".archflow/tasks/example/state.json": "{}\n",
+    });
 
     const base = await createDispatchWorkspace("codex-cli", repository);
-    const workspace = await materializeRepositoryView(base, repository, commit);
+    const workspace = await materializeRepositoryViews(base, primaryPlan(repository, commit));
     const view = workspace.repository_view_root!;
     expect(view).toBe(join(workspace.root, "repo"));
     await expect(readFile(join(view, "src", "index.ts"), "utf8")).resolves.toBe("export {};\n");
@@ -164,19 +182,115 @@ describe("dispatch workspace", () => {
     await expect(lstat(base.root)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("materializes ordered named repositories and removes all secondary ArchFlow authority", async () => {
+    const sourceHome = await temporaryRoot("multi-view-home");
+    vi.stubEnv("HOME", sourceHome);
+    const seeded = new Map(["primary", "api"].map((name) => [name, seededRepository(`multi-view-${name}`, {
+      "tracked.txt": `${name}\n`,
+      ".archflow/tasks/foreign/state.json": "{}\n",
+      ".archflow/constitution/rule.md": "rule\n",
+    })]));
+    const primary = seeded.get("primary")!.repository.path;
+    const api = seeded.get("api")!.repository.path;
+    const secondaryProjection = {
+      entries: [{
+        path: "tracked.txt",
+        desired: { state: "present", file_type: "regular", mode: "100644", bytes: new TextEncoder().encode("api proposed\n") },
+      }],
+      collisions: [],
+      collision_choices: ["discard-and-restore", "adopt-as-new-generation", "abort"],
+    } as unknown as NonNullable<DispatchRepositoryView["projection_plan"]>;
+    const view = (name: "primary" | "api", member_kind: "primary" | "secondary", root: string): DispatchRepositoryView => ({
+      name,
+      member_kind,
+      repository_root: root,
+      repository_identity_digest: "a".repeat(64) as never,
+      commit: seeded.get(name)!.commit as never,
+      ...(name === "api" ? { projection_plan: secondaryProjection, snapshot_digest: "b".repeat(64) as never } : {}),
+    });
+    const plan = [view("primary", "primary", primary), view("api", "secondary", api)] as const;
+    const binding = projectRepositoryWorkspaceBinding(plan);
+    expect(binding).toMatchObject({
+      kind: "read-only-multi-repository-view",
+      repositories: [
+        { name: "primary", path: "primary" },
+        { name: "api", path: "api", snapshot_digest: "b".repeat(64) },
+      ],
+    });
+    const envelope = buildReviewEnvelope({
+      artifact: "# Implementation\n\nReview both proposed trees.\n",
+      rubric: { schema_version: "1", kind: "implementation", mode: "adversarial", criteria: [
+        { id: "repository-views", text: "Review every authenticated proposed tree.", blocking: true },
+      ] },
+      context: [],
+      workspace: binding,
+      subject: {
+        task_id: "multi-repository-review" as never,
+        phase_instance: "phase-impl-3" as never,
+        role: "counter-review",
+        step: "counter_review",
+        attempt: 1 as never,
+        subject_digest: "c".repeat(64) as never,
+        input_fingerprint: "d".repeat(64) as never,
+        rubric_digest: "e".repeat(64) as never,
+        producer_family: "claude",
+        invocation_id: "multi-repository-envelope",
+        result_id: "multi-repository-envelope-result",
+      },
+    });
+    const childVisible = JSON.parse(new TextDecoder().decode(envelope.bytes)) as {
+      workspace: { repositories: Array<{ name: string; snapshot_digest?: string }> };
+    };
+    expect(childVisible.workspace.repositories).toEqual([
+      expect.objectContaining({ name: "primary" }),
+      expect.objectContaining({ name: "api", snapshot_digest: "b".repeat(64) }),
+    ]);
+    expect(projectReviewedRepositories(plan)).toEqual(plan.map(({ name, repository_identity_digest, commit }) => ({
+      name, repository_identity_digest, commit,
+    })));
+    const workspace = await materializeRepositoryViews(
+      await createDispatchWorkspace("codex-cli", primary),
+      plan,
+    );
+
+    expect(workspace.repository_view_root).toBe(join(workspace.root, "repos"));
+    await expect(readFile(join(workspace.repository_view_root!, "primary", "tracked.txt"), "utf8")).resolves.toBe("primary\n");
+    await expect(readFile(join(workspace.repository_view_root!, "primary", ".archflow", "constitution", "rule.md"), "utf8")).resolves.toBe("rule\n");
+    await expect(lstat(join(workspace.repository_view_root!, "primary", ".archflow", "tasks"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(join(workspace.repository_view_root!, "api", "tracked.txt"), "utf8")).resolves.toBe("api proposed\n");
+    await expect(lstat(join(workspace.repository_view_root!, "api", ".archflow"))).rejects.toMatchObject({ code: "ENOENT" });
+    await workspace.dispose();
+  });
+
+  it("rejects unsafe, duplicate, and out-of-order repository plans before materializing", async () => {
+    const sourceHome = await temporaryRoot("invalid-plan-home");
+    const repository = await temporaryRoot("invalid-plan-repository");
+    vi.stubEnv("HOME", sourceHome);
+    const workspace = await createDispatchWorkspace("codex-cli", repository);
+    const member = (name: string): DispatchRepositoryView => ({
+      name: name as DispatchRepositoryView["name"],
+      member_kind: name === "primary" ? "primary" : "secondary",
+      repository_root: repository,
+      repository_identity_digest: "a".repeat(64) as never,
+      commit: "b".repeat(40) as never,
+    });
+    await expect(materializeRepositoryViews(workspace, [member("primary"), member("zeta"), member("alpha")]))
+      .rejects.toThrow(/sorted and unique/u);
+    await expect(materializeRepositoryViews(workspace, [member("primary"), member("../escape")]))
+      .rejects.toThrow();
+    expect(await readdir(workspace.root)).toEqual([]);
+    await workspace.dispose();
+  });
+
   it("refuses malformed view commits and fails closed on unresolvable ones", async () => {
     const sourceHome = await temporaryRoot("view-failure-home");
-    const repository = await temporaryRoot("view-failure-repository");
     vi.stubEnv("HOME", sourceHome);
-    execFileSync("git", ["init", "-q", "-b", "main"], {
-      cwd: repository,
-      env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" },
-    });
+    const repository = createTempRepository({ label: "view-failure-repository", attributes: undefined }).path;
     const workspace = await createDispatchWorkspace("codex-cli", repository);
     try {
-      await expect(materializeRepositoryView(workspace, repository, "HEAD"))
+      await expect(materializeRepositoryViews(workspace, primaryPlan(repository, "HEAD")))
         .rejects.toThrow(/full lowercase git object id/u);
-      await expect(materializeRepositoryView(workspace, repository, "f".repeat(40)))
+      await expect(materializeRepositoryViews(workspace, primaryPlan(repository, "f".repeat(40))))
         .rejects.toThrow(/repository view materialization failed/u);
     } finally {
       await workspace.dispose();
@@ -185,24 +299,11 @@ describe("dispatch workspace", () => {
 
   it("reconstructs a post-change repository view from retained after-images", async () => {
     const sourceHome = await temporaryRoot("produced-view-home");
-    const repository = await temporaryRoot("produced-view-repository");
     vi.stubEnv("HOME", sourceHome);
-    const env = {
-      ...process.env,
-      GIT_CONFIG_GLOBAL: "/dev/null",
-      GIT_CONFIG_SYSTEM: "/dev/null",
-      GIT_AUTHOR_NAME: "Test",
-      GIT_AUTHOR_EMAIL: "test@example.invalid",
-      GIT_COMMITTER_NAME: "Test",
-      GIT_COMMITTER_EMAIL: "test@example.invalid",
-    };
-    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repository, env });
-    await mkdir(join(repository, "src"), { recursive: true });
-    await writeFile(join(repository, "src", "modify.ts"), "before\n");
-    await writeFile(join(repository, "src", "delete.ts"), "remove me\n");
-    execFileSync("git", ["add", "."], { cwd: repository, env });
-    execFileSync("git", ["commit", "-qm", "seed"], { cwd: repository, env });
-    const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repository, env, encoding: "utf8" }).trim();
+    const { repository: { path: repository }, commit } = seededRepository("produced-view-repository", {
+      "src/modify.ts": "before\n",
+      "src/delete.ts": "remove me\n",
+    });
 
     const plan = {
       entries: [
@@ -213,9 +314,9 @@ describe("dispatch workspace", () => {
       ],
       collisions: [],
       collision_choices: ["discard-and-restore", "adopt-as-new-generation", "abort"],
-    } as unknown as NonNullable<Parameters<typeof materializeRepositoryView>[3]>;
+    } as unknown as ProjectionPlan;
     const base = await createDispatchWorkspace("codex-cli", repository);
-    const workspace = await materializeRepositoryView(base, repository, commit, plan);
+    const workspace = await materializeRepositoryViews(base, primaryPlan(repository, commit, plan));
     const view = workspace.repository_view_root!;
 
     await expect(readFile(join(view, "src", "modify.ts"), "utf8")).resolves.toBe("after\n");
@@ -228,13 +329,10 @@ describe("dispatch workspace", () => {
 
   it("omits retained task authority while applying repository outputs", async () => {
     const sourceHome = await temporaryRoot("produced-authority-home");
-    const repository = await temporaryRoot("produced-authority-repository");
     vi.stubEnv("HOME", sourceHome);
-    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repository });
-    await writeFile(join(repository, "tracked.txt"), "base\n");
-    execFileSync("git", ["add", "."], { cwd: repository });
-    execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "seed"], { cwd: repository });
-    const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repository, encoding: "utf8" }).trim();
+    const { repository: { path: repository }, commit } = seededRepository("produced-authority-repository", {
+      "tracked.txt": "base\n",
+    });
     const plan = {
       entries: [{
         path: ".archflow/tasks/demo/state.json",
@@ -245,9 +343,9 @@ describe("dispatch workspace", () => {
       }],
       collisions: [],
       collision_choices: ["discard-and-restore", "adopt-as-new-generation", "abort"],
-    } as unknown as NonNullable<Parameters<typeof materializeRepositoryView>[3]>;
-    const workspace = await materializeRepositoryView(
-      await createDispatchWorkspace("codex-cli", repository), repository, commit, plan,
+    } as unknown as ProjectionPlan;
+    const workspace = await materializeRepositoryViews(
+      await createDispatchWorkspace("codex-cli", repository), primaryPlan(repository, commit, plan),
     );
     await expect(readFile(join(workspace.repository_view_root!, "tracked.txt"), "utf8"))
       .resolves.toBe("after\n");

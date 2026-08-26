@@ -54,6 +54,9 @@ describe("normative foundational JSON Schemas agree with Zod mirrors", () => {
       .toEqual({ ...valid, approval_rules: rules });
     expect(assertZodAgreement({ ...valid, approval_rules: { subjects: [], content: [] } }, validator, configV1Schema))
       .toEqual({ ...valid, approval_rules: { subjects: [], content: [] } });
+    const repositories = { apis: { path: "../apis" }, stripe: { path: "/srv/stripe", mode: "writable" } };
+    expect(assertZodAgreement({ ...valid, repositories }, validator, configV1Schema))
+      .toEqual({ ...valid, repositories });
     for (const invalid of [
       { ...valid, repository: "/tmp/repo" },
       { ...valid, roles: { producer: { model: "x", effort: "high", family: "codex" } } },
@@ -68,6 +71,11 @@ describe("normative foundational JSON Schemas agree with Zod mirrors", () => {
       { ...valid, approval_rules: { subjects: [], content: [{ paths: ["   "] }] } },
       { ...valid, approval_rules: { subjects: [] } },
       { ...valid, approval_rules: { content: [], subjects: [], extra: true } },
+      { ...valid, repositories: { primary: { path: "../other" } } },
+      { ...valid, repositories: { "Not-Lowercase": { path: "../other" } } },
+      { ...valid, repositories: { apis: { path: "   " } } },
+      { ...valid, repositories: { apis: { path: "../apis", mode: "read-only" } } },
+      { ...valid, repositories: { apis: { path: "../apis", extra: true } } },
     ]) expect(() => assertZodAgreement(invalid, validator, configV1Schema)).toThrow(/schema validation failed|additional properties/);
     // A repeated subject is the one rule the generated document cannot see: uniqueness keywords
     // are retired from generation, so Ajv accepts and only the Zod authority rejects.

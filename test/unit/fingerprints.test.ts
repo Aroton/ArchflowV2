@@ -24,6 +24,7 @@ import type { RootBoundGitRunner } from "../../src/repository/identity.js";
 import { canonicalRubricForPhaseKind } from "../../src/review/rubrics.js";
 import type { TransactionAuthority } from "../../src/state/authority.js";
 import { createInternalInputFingerprintResolver } from "../../src/state/fingerprint.js";
+import { readCanonicalDeclaredInputs, readCanonicalSecondaryDeclaredInputs } from "../../src/state/fingerprint-readers.js";
 import type { FingerprintReadContext } from "../../src/state/read.js";
 
 const digest = (seed: string): ReturnType<typeof parseSha256Digest> => parseSha256Digest(seed.repeat(64).slice(0, 64));
@@ -109,6 +110,35 @@ const configUrl = new URL("../fixtures/contracts/fingerprints/config.yaml", impo
 const reorderedConfigUrl = new URL("../fixtures/contracts/fingerprints/config-reordered.yaml", import.meta.url);
 
 describe("computeInputFingerprint", () => {
+  it("preserves primary-only bytes and domain-separates secondary declared inputs", () => {
+    const primaryOnly = computeInputFingerprint(subject);
+    expect(computeInputFingerprint({ ...subject, secondary_declared_inputs: [] })).toBe(primaryOnly);
+    const secondary = [{ repository: "api", declared_inputs: [declaredInput("api-contract", "7")] }] as const;
+    const withSecondary = computeInputFingerprint({ ...subject, secondary_declared_inputs: secondary });
+    expect(withSecondary).not.toBe(primaryOnly);
+    expect(computeInputFingerprint({ ...subject, secondary_declared_inputs: [{ ...secondary[0], repository: "worker" }] })).not.toBe(withSecondary);
+    expect(computeInputFingerprint({ ...subject, secondary_declared_inputs: [{ ...secondary[0], declared_inputs: [declaredInput("api-contract", "8")] }] })).not.toBe(withSecondary);
+  });
+
+  it("orders repository-qualified secondary input identities deterministically", () => {
+    const api = {
+      repository: "api" as const,
+      declared_inputs: [declaredInput("api-schema", "1"), declaredInput("api-types", "2")],
+    };
+    const worker = {
+      repository: "worker" as const,
+      declared_inputs: [declaredInput("worker-schema", "3")],
+    };
+    const expected = computeInputFingerprint({
+      ...subject,
+      secondary_declared_inputs: [api, worker],
+    });
+    expect(computeInputFingerprint({
+      ...subject,
+      secondary_declared_inputs: [worker, { ...api, declared_inputs: [...api.declared_inputs].reverse() }],
+    })).toBe(expected);
+  });
+
   it("is invariant under permutation of all three set-valued collections", () => {
     const expected = computeInputFingerprint(subject);
     expect(computeInputFingerprint({ ...subject, artifact_identities: rotate(artifacts) })).toBe(expected);
@@ -144,6 +174,86 @@ describe("computeInputFingerprint", () => {
       ...subject,
       declared_inputs: [...declaredInputs, declaredInput("rubric", "9")],
     })).toThrow(/declared_inputs is a set/u);
+  });
+});
+
+describe("durable secondary declared-input fingerprint binding", () => {
+  it("does not consult retained declarations for a PRD counter-review", async () => {
+    const result = await readCanonicalSecondaryDeclaredInputs({
+      call: { name: "archflow_counter_review", input: {} },
+      state: { value: { phase_instance: "prd" } },
+    } as never, async () => { throw new Error("PRD fingerprint/error ordering must not read retained declarations"); });
+    expect(result).toEqual({ schema_version: "1", ok: true, value: [] });
+  });
+
+  it("reproduces the secondary addendum through review and triage boundaries while primary inputs stay caller-supplied", async () => {
+    const primary = [declaredInput("primary-contract", "6")];
+    const secondary = [{
+      repository: "api",
+      declared_inputs: [{ input_id: parseSafeId("api-contract"), digest: digest("7"), path: claim("schema.json") }],
+    }];
+    const artifact = {
+      artifact_kind: "implementation-output",
+      declared_inputs: primary,
+      secondary_repositories: secondary,
+    } as never;
+    const readRetained = async () => ({ schema_version: "1" as const, ok: true as const, value: artifact });
+    const calls = [
+      { name: "archflow_state", input: { step: "counter_review", status: "running" } },
+      { name: "archflow_counter_review", input: {} },
+      { name: "archflow_state", input: { step: "triage", status: "running" } },
+      { name: "archflow_state", input: { step: "triage", status: "succeeded", artifact: { artifact_kind: "triage" } } },
+    ];
+    const rubric_digest = canonicalRubricForPhaseKind("phase-impl").rubric_digest;
+    // Follow-up steps never carried primary declared inputs before repository sets existed; only
+    // the secondary addendum is folded in, so a primary-only task keeps its pre-existing bytes.
+    const followupFingerprint = computeInputFingerprint({
+      ...subject,
+      rubric_digest,
+      declared_inputs: [],
+      secondary_declared_inputs: [{
+        repository: "api" as const,
+        declared_inputs: [declaredInput("api-contract", "7")],
+      }],
+    });
+    const primaryOnlyFollowup = computeInputFingerprint({ ...subject, rubric_digest, declared_inputs: [] });
+    const fingerprints = [];
+    const primaryOnlyFingerprints = [];
+    for (const call of calls) {
+      const context = { call, state: { value: { phase_instance: phaseInstance } } } as never;
+      const declared = await readCanonicalDeclaredInputs(context);
+      const retainedSecondary = await readCanonicalSecondaryDeclaredInputs(context, readRetained);
+      const primaryOnlySecondary = await readCanonicalSecondaryDeclaredInputs(context, async () => ({
+        schema_version: "1" as const, ok: true as const,
+        value: { artifact_kind: "implementation-output", declared_inputs: primary } as never,
+      }));
+      expect(declared.ok && retainedSecondary.ok && primaryOnlySecondary.ok).toBe(true);
+      if (!declared.ok || !retainedSecondary.ok || !primaryOnlySecondary.ok) continue;
+      expect(declared.value).toEqual([]);
+      fingerprints.push(computeInputFingerprint({
+        ...subject, rubric_digest, declared_inputs: declared.value, secondary_declared_inputs: retainedSecondary.value,
+      }));
+      primaryOnlyFingerprints.push(computeInputFingerprint({
+        ...subject, rubric_digest, declared_inputs: declared.value, secondary_declared_inputs: primaryOnlySecondary.value,
+      }));
+    }
+    expect(fingerprints).toEqual(Array(4).fill(followupFingerprint));
+    expect(primaryOnlyFingerprints).toEqual(Array(4).fill(primaryOnlyFollowup));
+  });
+
+  it("prefers the caller-supplied implementation declaration for the initial result request", async () => {
+    const result = await readCanonicalSecondaryDeclaredInputs({
+      call: {
+        name: "archflow_state",
+        input: {
+          artifact: {
+            artifact_kind: "implementation-output", declared_inputs: [],
+            secondary_repositories: [{ repository: "api", declared_inputs: [{ input_id: parseSafeId("fresh"), digest: digest("8") }] }],
+          },
+        },
+      },
+    } as never, async () => { throw new Error("retained authority must not replace the initial artifact"); });
+    expect(result.ok && result.value[0]?.declared_inputs[0]?.input_id).toBe("fresh");
   });
 });
 
@@ -522,6 +632,31 @@ describe("internal input fingerprint resolver", () => {
     expect(result.value.fingerprint).not.toBe(computeInputFingerprint({
       ...subject,
       rubric_digest: canonicalRubricForPhaseKind("phase-impl").rubric_digest,
+    }));
+  });
+
+  it("never drops secondary declared inputs through the primary-only legacy fallback", async () => {
+    const secondary = [{
+      repository: "api" as const,
+      declared_inputs: [declaredInput("api-contract", "7")],
+    }];
+    const secondaryResolver = createInternalInputFingerprintResolver({
+      read_workflow_digest: async () => ok(recordedState.value.workflow_digest),
+      read_constitution_digest: async () => ok(recordedState.value.constitution_digest),
+      read_artifact_identities: async () => ok(structuredClone(artifacts)),
+      read_upstream_identities: async () => ok(structuredClone(upstream)),
+      read_declared_inputs: async () => ok(structuredClone(declaredInputs)),
+      read_secondary_declared_inputs: async () => ok(structuredClone(secondary)),
+    });
+    const primaryLegacy = legacyComposition();
+    const result = await secondaryResolver(context(counterReviewCall(primaryLegacy), primaryLegacy));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.fingerprint).not.toBe(primaryLegacy);
+    expect(result.value.fingerprint).toBe(computeInputFingerprint({
+      ...subject,
+      rubric_digest: canonicalRubricForPhaseKind("phase-impl").rubric_digest,
+      secondary_declared_inputs: secondary,
     }));
   });
 

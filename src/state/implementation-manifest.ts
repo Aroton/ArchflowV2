@@ -13,11 +13,15 @@ import {
 } from "../contracts/canonical.js";
 import type {
   ImplementationOutputV1,
+  ImplementationRepositorySectionV1,
   ParentDocumentRef,
+  SecondaryDeclaredInputRefV1,
   UndeclaredChangeReport,
 } from "../contracts/durable-implementation-output.js";
 import type { DocumentArtifactV1 } from "../contracts/durable-document.js";
-import type { GateContext, LegacyExactCommitAuthorizationContextV1 } from "../contracts/gates.js";
+import type { GateContext, LegacyExactCommitAuthorizationContextV1, SecondaryCommitAuthorizationV1 } from "../contracts/gates.js";
+import type { RepositoryName } from "../contracts/config.js";
+import type { RepositoryCommitMilestoneV1 } from "../contracts/durable-state.js";
 import type {
   BlobIdentity,
   ClaimableOutputPathClass,
@@ -27,7 +31,7 @@ import type {
 import { taskStateV1Schema, type TaskStateV1 } from "../contracts/durable-state.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import type { DeclaredInputRef } from "../contracts/fingerprints.js";
-import { parseSafeInteger, type PathSafeId, type SafeCode, type SafeId, type Sha256Digest } from "../contracts/evidence.js";
+import { parseSafeInteger, type PathSafeId, type SafeCode, type SafeId, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
 import { parseRepositoryPathClaim, parseTaskPathClaim, rawGitPath, type PathClass, type RepositoryPathClaim, type TaskPathClaim } from "../contracts/path-claims.js";
 import { assertPlainJson } from "../contracts/plain-json.js";
@@ -47,6 +51,7 @@ import {
   type RepositoryOperationContext,
 } from "../repository/git.js";
 import type { RootBoundGitRunner } from "../repository/identity.js";
+import type { RepositoryMember, RepositorySet } from "../repository/repository-set.js";
 import { readIndexEntries } from "../repository/index-entries.js";
 import {
   classifyRepositoryPath,
@@ -77,8 +82,25 @@ export type ImplementationOutputInput = Readonly<{
     role: "prd" | "design" | "phase-design" | "impl-notes";
   }>[];
   declared_inputs: readonly Readonly<{ input_id: SafeId; path: RepositoryPathClaim }>[];
+  repositories?: readonly Readonly<{
+    name: RepositoryName;
+    base_commit: GitOid;
+    outputs: readonly RepositoryPathClaim[];
+    restore_targets: readonly RepositoryPathClaim[];
+    declared_inputs: readonly Readonly<{ input_id: SafeId; path: RepositoryPathClaim }>[];
+  }>[];
   input_fingerprint: Sha256Digest;
   constitution_edit_gate_id?: PathSafeId;
+}>;
+
+type BuiltSecondarySection = Readonly<{
+  section: ImplementationRepositorySectionV1;
+  observations: ReadonlyMap<RepositoryPathClaim, Awaited<ReturnType<typeof observePath>>>;
+}>;
+
+export type ImplementationRepositoryManifestFacts = Readonly<{
+  snapshot_entries: readonly SnapshotObservation[];
+  raw_payloads: ReadonlyMap<RepositoryPathClaim, Uint8Array>;
 }>;
 
 export type SnapshotObservation =
@@ -224,47 +246,62 @@ async function candidateStillPinned(
   return await readFirstParentChildAfter(runner, baseline, pin.target_head) === pin.candidate;
 }
 
-/** Resolves and proves the exact implementation milestone on the target's first-parent history. */
-export async function resolveImplementationMilestoneProof(
+type MilestoneCommitFacts = Readonly<{
+  target_ref: string;
+  baseline_commit: GitOid;
+  commit_message: string;
+  paths: readonly string[];
+}>;
+
+/**
+ * Shared proof of one exact authorized implementation commit on a target's first-parent history.
+ * Primary and secondary repositories differ only in which authenticated facts must agree with the
+ * durable output before inspection, whether a moved target without a candidate is itself a miss,
+ * and the Git operation vocabulary reported on failure.
+ */
+async function proveImplementationCommit(
   runner: RootBoundGitRunner,
-  output: ImplementationOutputV1,
-  context: GateContext<"commit-authorization"> | LegacyExactCommitAuthorizationContextV1,
+  subject: ImplementationCommitSection,
+  facts: MilestoneCommitFacts,
+  options: Readonly<{ facts_match_output: boolean; expected_target_head?: GitOid; operation_prefix: "git" | "git-secondary" }>,
 ): Promise<MilestoneProof> {
-  if (context.baseline_commit !== output.base_commit) {
+  if (!options.facts_match_output) {
     try {
-      const targetHead = await resolveCommit(runner, context.target_ref);
-      return missing(context.target_ref, targetHead, "base-commit-mismatch");
+      return missing(facts.target_ref, await resolveCommit(runner, facts.target_ref), "base-commit-mismatch");
     } catch (error) {
       return Object.freeze({ kind: "unverifiable", reason: error instanceof GitInvocationError ? "git-unavailable" : "repository-observation-failed" });
     }
   }
-  const pinned = await pinMilestoneTarget(runner, context.target_ref, context.baseline_commit);
+  const pinned = await pinMilestoneTarget(runner, facts.target_ref, facts.baseline_commit);
   if (isMilestoneProof(pinned)) return pinned;
   if (pinned.candidate === undefined) {
+    if (options.expected_target_head !== undefined && pinned.target_head !== options.expected_target_head) {
+      return missing(pinned.target_ref, pinned.target_head, "target-moved");
+    }
     return Object.freeze({ kind: "not-created", target_ref: pinned.target_ref, target_head: pinned.target_head });
   }
   const pin = pinned as Required<PinnedMilestoneTarget>;
   try {
-    if (await resolveCommit(runner, `${pin.candidate}^`) !== context.baseline_commit) {
+    if (await resolveCommit(runner, `${pin.candidate}^`) !== facts.baseline_commit) {
       return missing(pin.target_ref, pin.target_head, "parent-not-baseline");
     }
     const message = await runner.runText({
       argv: ["log", "-1", "--format=%s", pin.candidate],
-      operation: "git-implementation-commit-message" as SafeCode,
+      operation: `${options.operation_prefix}-implementation-commit-message` as SafeCode,
     });
-    if (message !== context.commit_message) return missing(pin.target_ref, pin.target_head, "message-mismatch");
-    const authorizedPaths = [...context.paths].sort(ordinal);
-    if (JSON.stringify(authorizedPaths) !== JSON.stringify(sortedUniquePaths(output))) {
+    if (message !== facts.commit_message) return missing(pin.target_ref, pin.target_head, "message-mismatch");
+    const authorizedPaths = [...facts.paths].sort(ordinal);
+    if (JSON.stringify(authorizedPaths) !== JSON.stringify(sortedUniqueImplementationPaths(subject))) {
       return missing(pin.target_ref, pin.target_head, "paths-mismatch");
     }
     const changedPaths = [...new Set(await runner.runNulFields({
-      argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", context.baseline_commit, pin.candidate, "--"],
-      operation: "git-implementation-commit-paths" as SafeCode,
+      argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", facts.baseline_commit, pin.candidate, "--"],
+      operation: `${options.operation_prefix}-implementation-commit-paths` as SafeCode,
     }))].sort(ordinal);
     if (JSON.stringify(changedPaths) !== JSON.stringify(authorizedPaths)) {
       return missing(pin.target_ref, pin.target_head, "paths-mismatch", changedPaths);
     }
-    for (const entry of output.outputs) {
+    for (const entry of subject.outputs) {
       const committed = await readCommitTreeBlob(runner, pin.candidate, entry.path);
       if (entry.operation === "delete") {
         if (committed !== undefined) return missing(pin.target_ref, pin.target_head, "tree-mismatch", [entry.path]);
@@ -278,13 +315,114 @@ export async function resolveImplementationMilestoneProof(
         return missing(pin.target_ref, pin.target_head, "tree-mismatch", [entry.previous_path]);
       }
     }
-    if (!await candidateStillPinned(runner, pin, context.baseline_commit)) {
+    if (!await candidateStillPinned(runner, pin, facts.baseline_commit)) {
       return missing(pin.target_ref, pin.target_head, "target-moved");
     }
     return Object.freeze({ kind: "proven", commit: pin.candidate, target_ref: pin.target_ref, target_head: pin.target_head });
   } catch (error) {
     return Object.freeze({ kind: "unverifiable", reason: error instanceof GitInvocationError ? "git-unavailable" : "repository-observation-failed" });
   }
+}
+
+/** Resolves and proves the exact implementation milestone on the target's first-parent history. */
+export async function resolveImplementationMilestoneProof(
+  runner: RootBoundGitRunner,
+  output: ImplementationOutputV1,
+  context: GateContext<"commit-authorization"> | LegacyExactCommitAuthorizationContextV1,
+): Promise<MilestoneProof> {
+  return proveImplementationCommit(runner, output, context, {
+    facts_match_output: context.baseline_commit === output.base_commit,
+    operation_prefix: "git",
+  });
+}
+
+/** Proves one secondary repository's exact authorized implementation commit. */
+export async function resolveImplementationRepositoryMilestoneProof(
+  runner: RootBoundGitRunner,
+  section: ImplementationRepositorySectionV1,
+  facts: SecondaryCommitAuthorizationV1 | RepositoryCommitMilestoneV1,
+): Promise<MilestoneProof> {
+  return proveImplementationCommit(runner, section, facts, {
+    facts_match_output: facts.repository === section.repository &&
+      facts.repository_identity_digest === section.repository_identity_digest &&
+      facts.baseline_commit === section.base_commit &&
+      facts.diff_digest === section.diff_digest &&
+      facts.snapshot_digest === section.snapshot_digest,
+    expected_target_head: facts.target_head,
+    operation_prefix: "git-secondary",
+  });
+}
+
+export type ImplementationCommitAction = Readonly<{
+  paths: readonly string[];
+  message: string;
+  target_ref: string;
+  baseline_commit: string;
+  repository?: Readonly<{ name: string; location: string }>;
+}>;
+
+export type SecondaryCommitProgress =
+  | Readonly<{ kind: "proven" }>
+  | Readonly<{ kind: "not-created"; action: ImplementationCommitAction }>
+  | Readonly<{ kind: "missing-from-history"; repository: string; proof: Extract<MilestoneProof, { kind: "missing-from-history" }> }>
+  | Readonly<{ kind: "unverifiable"; repository: string; reason: Extract<MilestoneProof, { kind: "unverifiable" }>["reason"] }>;
+
+/**
+ * Observes the ordered set of changed secondary repository milestones. The durable output and
+ * authenticated authority must name the same repositories in the same canonical order; an omitted,
+ * extra, reordered, unavailable, or identity-mismatched repository therefore cannot be mistaken for
+ * completed work. Stops at the first repository that is not proven.
+ */
+export async function observeSecondaryCommitProgress(
+  output: ImplementationOutputV1,
+  facts: readonly (SecondaryCommitAuthorizationV1 | RepositoryCommitMilestoneV1)[],
+  repositories: RepositorySet | undefined,
+): Promise<SecondaryCommitProgress> {
+  const sections = (output.secondary_repositories ?? []).filter((section) => section.outputs.length > 0);
+  if (sections.length === 0) return Object.freeze({ kind: "proven" });
+  if (repositories === undefined || facts.length !== sections.length) {
+    return Object.freeze({ kind: "unverifiable", repository: sections[0]!.repository, reason: "repository-observation-failed" });
+  }
+  const members = new Map(repositories.members.map((member) => [member.name, member]));
+  for (let index = 0; index < sections.length; index += 1) {
+    const section = sections[index]!;
+    const fact = facts[index];
+    const member = members.get(section.repository);
+    if (fact === undefined || fact.repository !== section.repository || member === undefined ||
+        member.mode !== "writable" || member.identity.digest !== section.repository_identity_digest) {
+      return Object.freeze({ kind: "unverifiable", repository: section.repository, reason: "repository-observation-failed" });
+    }
+    const proof = await resolveImplementationRepositoryMilestoneProof(member.binding.runner, section, fact);
+    if (proof.kind === "proven") continue;
+    if (proof.kind === "not-created") {
+      return Object.freeze({
+        kind: "not-created",
+        action: Object.freeze({
+          paths: fact.paths,
+          message: fact.commit_message,
+          target_ref: fact.target_ref,
+          baseline_commit: fact.baseline_commit,
+          repository: Object.freeze({ name: section.repository, location: member.binding.runner.location.worktreeRoot }),
+        }),
+      });
+    }
+    if (proof.kind === "missing-from-history") {
+      return Object.freeze({ kind: "missing-from-history", repository: section.repository, proof });
+    }
+    return Object.freeze({ kind: "unverifiable", repository: section.repository, reason: proof.reason });
+  }
+  return Object.freeze({ kind: "proven" });
+}
+
+/** Whether every changed secondary repository milestone is proven (see `observeSecondaryCommitProgress`). */
+export async function secondaryImplementationMilestonesProven(
+  output: ImplementationOutputV1,
+  facts: readonly (SecondaryCommitAuthorizationV1 | RepositoryCommitMilestoneV1)[],
+  repositories: RepositorySet,
+): Promise<boolean> {
+  const sections = (output.secondary_repositories ?? []).filter((section) => section.outputs.length > 0);
+  if (facts.length !== sections.length) return false;
+  return (await observeSecondaryCommitProgress(output, facts, repositories)).kind === "proven";
 }
 
 export async function resolveAutonomousImplementationMilestoneProof(
@@ -297,7 +435,7 @@ export async function resolveAutonomousImplementationMilestoneProof(
     target_ref: targetRef,
     baseline_commit: output.base_commit,
     commit_message: commitMessage,
-    paths: sortedUniquePaths(output),
+    paths: sortedUniqueImplementationPaths(output),
     diff_digest: output.diff_digest,
     current_artifact_digests: Object.freeze([]),
     parent_document_digests: Object.freeze(output.parent_documents.map((entry) => entry.content_digest).sort()),
@@ -632,7 +770,11 @@ function ownEnumerableData(value: object, key: string): unknown {
   return descriptor.value;
 }
 
-function sortedUniquePaths(output: ImplementationOutputV1): readonly RepositoryPathClaim[] {
+export type ImplementationCommitSection = Pick<ImplementationOutputV1, "outputs"> |
+  Pick<ImplementationRepositorySectionV1, "outputs">;
+
+/** Exact sorted commit scope for either the primary output or one secondary section. */
+export function sortedUniqueImplementationPaths(output: ImplementationCommitSection): readonly RepositoryPathClaim[] {
   const paths = new Set<RepositoryPathClaim>();
   for (const entry of output.outputs) {
     if (paths.has(entry.path)) throw new TypeError("duplicate declared output path");
@@ -678,6 +820,42 @@ export function deriveImplementationDiffDigest(
     digest_kind: "implementation-diff",
     base_commit: baseCommit,
     entries: entries.sort((left, right) => ordinal(left.path, right.path)),
+  });
+}
+
+export function deriveOverallImplementationDiffDigest(
+  primaryDigest: Sha256Digest,
+  sections: readonly ImplementationRepositorySectionV1[],
+): Sha256Digest {
+  if (sections.length === 0) return primaryDigest;
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "multi-repository-implementation-diff",
+    primary_diff_digest: primaryDigest,
+    secondary_repositories: [...sections].sort((a, b) => ordinal(a.repository, b.repository)).map((section) => ({
+      repository: section.repository,
+      repository_identity_digest: section.repository_identity_digest,
+      base_commit: section.base_commit,
+      diff_digest: section.diff_digest,
+    })),
+  });
+}
+
+export function deriveOverallImplementationSnapshotDigest(
+  primaryDigest: Sha256Digest,
+  sections: readonly ImplementationRepositorySectionV1[],
+): Sha256Digest {
+  if (sections.length === 0) return primaryDigest;
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "multi-repository-implementation-snapshot",
+    primary_snapshot_digest: primaryDigest,
+    secondary_repositories: [...sections].sort((a, b) => ordinal(a.repository, b.repository)).map((section) => ({
+      repository: section.repository,
+      repository_identity_digest: section.repository_identity_digest,
+      base_commit: section.base_commit,
+      snapshot_digest: section.snapshot_digest,
+    })),
   });
 }
 
@@ -925,6 +1103,165 @@ async function resolveBaseCommit(
   }
 }
 
+async function buildSecondaryRepositorySection(
+  authority: TransactionAuthority,
+  member: RepositoryMember,
+  declaration: NonNullable<ImplementationOutputInput["repositories"]>[number],
+  measuredAtRevision: SafeInteger,
+): Promise<ProjectResult<BuiltSecondarySection>> {
+  const runner = member.binding.runner;
+  const base = await resolveBaseCommit(runner, declaration.base_commit);
+  if (!base.ok) return base;
+  if (base.value !== member.head) {
+    return Object.freeze({
+      schema_version: "1",
+      ok: false,
+      error: createProjectError("CONTRACT_INVALID", { issue_code: "secondary-base-commit-mismatch" }),
+    });
+  }
+  const outputPaths = [...declaration.outputs].sort(ordinal);
+  if (new Set(outputPaths).size !== outputPaths.length) throw new TypeError(`secondary repository ${member.name} outputs must be unique`);
+  const renameChanges = await readRenameSources(runner, base.value);
+  const observations = new Map<RepositoryPathClaim, Awaited<ReturnType<typeof observePath>>>();
+  const resolvedPaths = new Map<RepositoryPathClaim, ResolvedPath>();
+  const resolveOutput = async (path: RepositoryPathClaim): Promise<ProjectResult<ResolvedPath>> => {
+    const classified = classifyRepositoryPath(path);
+    if (!classified.ok) return classified;
+    if (classified.value !== "repository-source" || path === ".archflow" || path.startsWith(".archflow/")) {
+      throw new TypeError(`secondary repository ${member.name} path is not repository source`);
+    }
+    const resolved = await resolveRepositoryPath({ runner, claim: path, context: authority.context });
+    if (!resolved.ok) return resolved;
+    resolvedPaths.set(path, resolved.value);
+    observations.set(path, await observePath(runner, resolved.value));
+    return resolved;
+  };
+  const outputs: OutputEntry[] = [];
+  for (const path of outputPaths) {
+    const resolved = await resolveOutput(path);
+    if (!resolved.ok) return resolved;
+    const after = observations.get(path)!;
+    const before = await baseIdentity(runner, base.value, path);
+    let previousPath = before === undefined && after.observation.state === "present" ? renameChanges.renames.get(path) : undefined;
+    if (previousPath === undefined && before === undefined && after.observation.state === "present") {
+      const candidates: RepositoryPathClaim[] = [];
+      for (const deletedPath of renameChanges.deleted) {
+        const deletedIdentity = await baseIdentity(runner, base.value, deletedPath);
+        if (deletedIdentity !== undefined && isDeepStrictEqual(deletedIdentity, identityOf(after.observation))) candidates.push(deletedPath);
+      }
+      if (candidates.length === 1) previousPath = candidates[0];
+    }
+    if (previousPath !== undefined) {
+      const previous = await resolveOutput(previousPath);
+      if (!previous.ok) return previous;
+      const previousIdentity = await baseIdentity(runner, base.value, previousPath);
+      if (previousIdentity === undefined || after.observation.state !== "present") throw new TypeError("secondary rename does not match base/worktree state");
+      const afterIdentity = identityOf(after.observation);
+      const retainedByGit = isDeepStrictEqual(previousIdentity, afterIdentity) && await isCommitAncestorOfHead(runner, base.value);
+      outputs.push(Object.freeze(retainedByGit ? {
+        path, path_class: "repository-source", operation: "rename", storage: "git-object",
+        file_type: after.observation.file_type, before: previousIdentity, after: afterIdentity, previous_path: previousPath,
+      } : {
+        path, path_class: "repository-source", operation: "rename", storage: "raw-payload",
+        payload_bytes: parseSafeInteger(after.bytes!.byteLength), payload_digest: sha256Bytes(after.bytes!),
+        file_type: after.observation.file_type, before: previousIdentity, after: afterIdentity, previous_path: previousPath,
+      }) as OutputEntry);
+    } else if (before === undefined && after.observation.state === "present") {
+      outputs.push(Object.freeze({ path, path_class: "repository-source", operation: "add", storage: "raw-payload",
+        payload_bytes: parseSafeInteger(after.bytes!.byteLength), payload_digest: sha256Bytes(after.bytes!),
+        file_type: after.observation.file_type, after: identityOf(after.observation) }) as OutputEntry);
+    } else if (before !== undefined && after.observation.state === "absent") {
+      outputs.push(Object.freeze({ path, path_class: "repository-source", operation: "delete", storage: "git-object",
+        file_type: before.mode === "120000" ? "symlink" : "regular", before }) as OutputEntry);
+    } else if (before !== undefined && after.observation.state === "present") {
+      outputs.push(Object.freeze({ path, path_class: "repository-source", operation: "modify", storage: "raw-payload",
+        payload_bytes: parseSafeInteger(after.bytes!.byteLength), payload_digest: sha256Bytes(after.bytes!),
+        file_type: after.observation.file_type, before, after: identityOf(after.observation) }) as OutputEntry);
+    } else throw new TypeError("secondary declared output is absent from both base and worktree");
+  }
+  outputs.sort((a, b) => ordinal(a.path, b.path));
+  const restoreTargets = [...declaration.restore_targets].sort(ordinal);
+  if (new Set(restoreTargets).size !== restoreTargets.length || restoreTargets.some((path) => !outputPaths.includes(path))) {
+    throw new TypeError(`secondary repository ${member.name} restore targets must be unique declared outputs`);
+  }
+  const scope = [...new Set(outputs.flatMap((output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]))].sort(ordinal) as RepositoryPathClaim[];
+  const changed = await readChangedGitPaths(runner);
+  const scopeSet = new Set<string>(scope);
+  // Parity with the primary scan: undeclared dirt is recorded in the section's report (attributed
+  // to the repository by the section itself) and surfaces through review, never rejected here.
+  const callerChanges = changed.paths.filter((path) => !path.startsWith(".archflow/runtime/"));
+  const undeclaredChanges: UndeclaredChangeReport = Object.freeze({
+    scanned: true,
+    undeclared_paths: Object.freeze(callerChanges.filter((path) => !scopeSet.has(path)).map(rawGitPath)),
+    unrepresentable_count: parseSafeInteger(changed.unrepresentable_count),
+  });
+  const snapshotEntries = Object.freeze(scope.map((path) => observations.get(path)!.observation));
+  const indexResult = await readIndexEntries(runner, scope, authority.context);
+  if (!indexResult.ok) return indexResult;
+  const indexByPath = new Map(indexResult.value.map((entry) => [entry.path, entry]));
+  const indexEntries: IndexObservation[] = scope.map((path) => {
+    const entry = indexByPath.get(path);
+    if (entry === undefined) return Object.freeze({ path, state: "absent" });
+    if (entry.stage !== 0) throw new TypeError("secondary declared index path is unmerged");
+    return Object.freeze({ path, state: "present", stage: 0, mode: entry.mode, oid: entry.oid });
+  });
+  const declaredInputs: SecondaryDeclaredInputRefV1[] = [];
+  for (const declared of [...declaration.declared_inputs].sort((a, b) => ordinal(a.input_id, b.input_id))) {
+    if (declared.path === ".archflow" || declared.path.startsWith(".archflow/")) throw new TypeError(`secondary repository ${member.name} input is not repository source`);
+    const resolved = await resolveRepositoryPath({ runner, claim: declared.path, context: authority.context });
+    if (!resolved.ok) return resolved;
+    declaredInputs.push(Object.freeze({ input_id: declared.input_id, path: declared.path, digest: sha256Bytes(await readRegularBytes(resolved.value, "secondary declared input")) }));
+  }
+  const countedEntries: SnapshotAccountingEntry[] = outputs.map((output) => Object.freeze(output.storage === "raw-payload"
+    ? { path: output.path, storage: "raw-payload", stored_bytes: output.payload_bytes }
+    : { path: output.path, storage: "git-object", stored_bytes: 0 }));
+  const resultBytes = parseSafeInteger(countedEntries.reduce((sum, entry) => sum + entry.stored_bytes, 0));
+  return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({
+    section: Object.freeze({
+      repository: declaration.name,
+      repository_identity_digest: member.identity.digest,
+      base_commit: base.value,
+      index_identity_digest: deriveIndexIdentityDigest(indexEntries, undeclaredChanges),
+      worktree_identity_digest: deriveWorktreeIdentityDigest(snapshotEntries, undeclaredChanges),
+      outputs: Object.freeze(outputs), diff_digest: deriveImplementationDiffDigest(base.value, outputs),
+      snapshot_digest: deriveSnapshotDigest(snapshotEntries), restore_targets: Object.freeze(restoreTargets),
+      accounting: Object.freeze({ schema_version: "1", result_bytes: resultBytes, task_bytes: resultBytes,
+        result_byte_cap: 26_214_400, task_byte_cap: 262_144_000, counted_entries: Object.freeze(countedEntries), measured_at_revision: measuredAtRevision }),
+      undeclared_changes: undeclaredChanges, declared_inputs: Object.freeze(declaredInputs),
+    }),
+    observations,
+  }) });
+}
+
+/** Rebuilds one durable secondary section through its bound member and compares every fact. */
+export async function verifyImplementationRepositorySection(
+  authority: TransactionAuthority,
+  member: RepositoryMember,
+  section: ImplementationRepositorySectionV1,
+): Promise<ImplementationRepositoryManifestFacts> {
+  const built = await buildSecondaryRepositorySection(authority, member, {
+    name: section.repository,
+    base_commit: section.base_commit,
+    outputs: section.outputs.map((output) => output.path),
+    restore_targets: section.restore_targets,
+    declared_inputs: section.declared_inputs.map((input) => ({ input_id: input.input_id, path: input.path })),
+  }, section.accounting.measured_at_revision);
+  if (!built.ok) throw built.error;
+  if (!isDeepStrictEqual(built.value.section, section)) {
+    throw new TypeError(`secondary repository ${section.repository} manifest disagrees with authenticated observations`);
+  }
+  const snapshotEntries = sortedUniqueImplementationPaths(section).map((path) =>
+    built.value.observations.get(path)?.observation as SnapshotObservation);
+  const rawPayloads = new Map<RepositoryPathClaim, Uint8Array>();
+  for (const output of section.outputs) {
+    if (output.storage !== "raw-payload") continue;
+    const bytes = built.value.observations.get(output.path)?.bytes;
+    if (bytes === undefined) throw new TypeError("secondary raw payload bytes unavailable");
+    rawPayloads.set(output.path, new Uint8Array(bytes));
+  }
+  return Object.freeze({ snapshot_entries: Object.freeze(snapshotEntries), raw_payloads: rawPayloads });
+}
+
 /**
  * Builds the exact caller-supplied implementation artifact from live repository observations.
  * Every identity and digest checked by the server is derived here rather than accepted as input.
@@ -934,6 +1271,7 @@ export async function buildImplementationOutput(
   authority: TransactionAuthority,
   state: CanonicalDocument<TaskStateV1>,
   suppliedInput: ImplementationOutputInput,
+  repositorySet?: RepositorySet,
 ): Promise<ProjectResult<ImplementationOutputV1>> {
   assertInternalTransactionAuthority(authority, {
     runner: dependencies.runner,
@@ -1101,6 +1439,26 @@ export async function buildImplementationOutput(
     throw new TypeError("declared input ids must be unique");
   }
 
+  const writableSecondaries = repositorySet?.members.filter((member, index) => index > 0 && member.mode === "writable") ?? [];
+  const declarations = input.repositories ?? [];
+  if (declarations.length !== writableSecondaries.length ||
+      declarations.some((declaration, index) => declaration.name !== writableSecondaries[index]?.name)) {
+    throw new TypeError("implementation secondary sections must exactly match writable repositories in ordinal order");
+  }
+  const builtSecondaries: BuiltSecondarySection[] = [];
+  for (let index = 0; index < declarations.length; index += 1) {
+    const built = await buildSecondaryRepositorySection(
+      authority, writableSecondaries[index]!, declarations[index]!, state.value.revision,
+    );
+    if (!built.ok) return built;
+    builtSecondaries.push(built.value);
+  }
+  const allInputIds = [
+    ...declaredInputs.map((entry) => entry.input_id),
+    ...builtSecondaries.flatMap((entry) => entry.section.declared_inputs.map((declared) => declared.input_id)),
+  ];
+  if (new Set(allInputIds).size !== allInputIds.length) throw new TypeError("declared input ids must be task-wide unique");
+
   const scanCandidates = outputs.flatMap((output) => {
     if (output.operation === "delete") return [];
     const observed = observations.get(output.path)!;
@@ -1113,6 +1471,23 @@ export async function buildImplementationOutput(
       bytes: observed.bytes,
     })];
   });
+  for (const built of builtSecondaries) {
+    for (const output of built.section.outputs) {
+      if (output.operation === "delete") continue;
+      const observed = built.observations.get(output.path);
+      if (observed?.observation.state !== "present" || observed.bytes === undefined) {
+        throw new TypeError("secondary present output bytes are unavailable");
+      }
+      // The scanner keys candidates by virtual path. A plain `<name>/<path>` join can collide with
+      // a primary path (`api/src/x.ts` vs. secondary `api` at `src/x.ts`), so secondaries are
+      // keyed under a `.archflow/repositories/` prefix, which primary source outputs never use.
+      scanCandidates.push(secretScanCandidateFromBytes({
+        virtual_path: parseRepositoryPathClaim(`.archflow/repositories/${built.section.repository}/${output.path}`),
+        path_class: "repository-source",
+        bytes: observed.bytes,
+      }));
+    }
+  }
   const secretScan = await createSecretlintScanner().scan(scanCandidates);
   const decodedPhase = decodePhaseInstance(input.phase_instance);
   if (decodedPhase.kind !== "phase-impl") throw new TypeError("implementation output phase must be phase-impl");
@@ -1129,6 +1504,9 @@ export async function buildImplementationOutput(
     ? { path: output.path, storage: "raw-payload", stored_bytes: output.payload_bytes }
     : { path: output.path, storage: "git-object", stored_bytes: 0 }));
   const resultBytes = parseSafeInteger(countedEntries.reduce((total, entry) => total + entry.stored_bytes, 0));
+  const aggregateResultBytes = parseSafeInteger(resultBytes + builtSecondaries.reduce(
+    (total, entry) => total + entry.section.accounting.result_bytes, 0,
+  ));
   const retainedBytes = await dependencies.read_retained_task_bytes();
   const artifact: ImplementationOutputV1 = Object.freeze({
     schema_version: "1",
@@ -1141,13 +1519,17 @@ export async function buildImplementationOutput(
     worktree_identity_digest: deriveWorktreeIdentityDigest(snapshotEntries, undeclaredChanges),
     outputs: Object.freeze(outputs),
     parent_documents: Object.freeze(parentDocuments),
-    diff_digest: deriveImplementationDiffDigest(input.base_commit, outputs),
-    snapshot_digest: deriveSnapshotDigest(snapshotEntries),
+    diff_digest: deriveOverallImplementationDiffDigest(
+      deriveImplementationDiffDigest(input.base_commit, outputs), builtSecondaries.map((entry) => entry.section),
+    ),
+    snapshot_digest: deriveOverallImplementationSnapshotDigest(
+      deriveSnapshotDigest(snapshotEntries), builtSecondaries.map((entry) => entry.section),
+    ),
     restore_targets: Object.freeze(restoreTargets),
     accounting: Object.freeze({
       schema_version: "1",
       result_bytes: resultBytes,
-      task_bytes: parseSafeInteger(retainedBytes + resultBytes),
+      task_bytes: parseSafeInteger(retainedBytes + aggregateResultBytes),
       result_byte_cap: 26_214_400,
       task_byte_cap: 262_144_000,
       counted_entries: Object.freeze(countedEntries),
@@ -1160,6 +1542,9 @@ export async function buildImplementationOutput(
       byte_count: parseSafeInteger(transcriptBytes.byteLength),
     }),
     declared_inputs: Object.freeze(declaredInputs),
+    ...(builtSecondaries.length === 0 ? {} : {
+      secondary_repositories: Object.freeze(builtSecondaries.map((entry) => entry.section)),
+    }),
     input_fingerprint: input.input_fingerprint,
     ...(input.constitution_edit_gate_id === undefined ? {} : {
       constitution_edit_gate_id: input.constitution_edit_gate_id,
@@ -1233,7 +1618,7 @@ export async function verifyImplementationManifest(
     }
     currentSources.set(source.path, source);
   }
-  const scope = sortedUniquePaths(output);
+  const scope = sortedUniqueImplementationPaths(output);
   const changed = await readChangedGitPaths(runner);
   const scopeSet = new Set<string>(scope);
   const callerChanges = changed.paths.filter((path) => !path.startsWith(".archflow/runtime/"));
@@ -1331,8 +1716,12 @@ export async function verifyImplementationManifest(
   });
 
   const facts: ImplementationManifestFacts = Object.freeze({
-    snapshot_digest: deriveSnapshotDigest(snapshotEntries),
-    diff_digest: deriveImplementationDiffDigest(output.base_commit, output.outputs),
+    snapshot_digest: deriveOverallImplementationSnapshotDigest(
+      deriveSnapshotDigest(snapshotEntries), output.secondary_repositories ?? [],
+    ),
+    diff_digest: deriveOverallImplementationDiffDigest(
+      deriveImplementationDiffDigest(output.base_commit, output.outputs), output.secondary_repositories ?? [],
+    ),
     index_identity_digest: deriveIndexIdentityDigest(indexEntries, undeclaredChanges),
     worktree_identity_digest: deriveWorktreeIdentityDigest(worktreeEntries, undeclaredChanges),
     snapshot_entries: snapshotEntries,

@@ -6,13 +6,20 @@ import { parsePathSafeId, parseSha256Digest, parseTaskSlug } from "../../src/con
 import { computeGateContextDigest } from "../../src/contracts/fingerprints.js";
 import { parseGateDecisionEnvelope, type GateContext, type GateKind, type HumanDecisionProvenance, type WaiverOriginRef } from "../../src/contracts/gates.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
+import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
+import type { ReviewEvidence } from "../../src/contracts/review.js";
 import { currentEvidenceSetRef } from "../../src/contracts/trust.js";
 import {
   buildGateDecisionTemplates,
   buildHumanGatePresentation,
   selectGateDecisionTemplate,
 } from "../../src/state/gates.js";
+import {
+  currentReviewedRepositoryPins,
+  projectReviewedRepositoryStatus,
+  reviewedRepositoryGateDetails,
+} from "../../src/state/status.js";
 
 const D = (value: string) => parseSha256Digest(value.repeat(64));
 const RULE_A = { rule_id: "rule-a", rule_version: 1 } as const;
@@ -98,6 +105,43 @@ function withProvenance(template: PlainJsonValue): PlainJsonValue {
 // resolved through: the conversational options, their server-issued tokens, and the templates the
 // direct semantic decision archive derives its records from.
 describe("gate decision presentation", () => {
+  it("offers live-byte choices for a secondary-only baseline adoption", () => {
+    const context = {
+        drifted_projections: [], deleted_projections: [],
+        secondary_targets: [{
+          repository: "apis", repository_identity_digest: D("1"),
+          target_ref: "refs/heads/main", target_head: parseGitOid("2".repeat(40)),
+          drifted_projections: [{ path: "src/api.ts", recorded_digest: D("3"), observed_digest: D("4") }],
+          deleted_projections: [], uncommitted_paths: ["src/api.ts"],
+        }],
+    } as const;
+    const contextDigest = computeGateContextDigest("baseline-adoption", context as never);
+    const active = parseActiveGate({
+      schema_version: "1", gate_id: "gate-secondary-baseline", intent_id: "intent-secondary-baseline",
+      request_digest: D("f"), task_id: "task-1", phase_instance: "phase-impl-2", summary: "Human decision",
+      subject_digest: D("c"), context_digest: contextDigest,
+      current_evidence: {
+        schema_version: "1", observation_kind: "projection-drift", task_id: "task-1",
+        phase_instance: "phase-impl-2", observed_at_revision: 5, drift_digest: D("c"),
+      },
+      kind: "baseline-adoption", context,
+      allowed_decisions: ["adopt-current-bytes", "restore-recorded-bytes", "adopt-committed-deletions", "abort", "cancel"],
+      opened_at_revision: 5, status: "awaiting-human", decision_template: {
+        schema_version: "1", gate_id: "gate-secondary-baseline", task_id: "task-1", phase_instance: "phase-impl-2",
+        kind: "baseline-adoption", subject_digest: D("c"), context_digest: contextDigest,
+        required_fields: ["payload", "human_provenance"], cancellation_fields: ["cancelled", "reason", "human_provenance"],
+      },
+    });
+    const templates = buildGateDecisionTemplates(active);
+    expect(templates.map((template) => JSON.stringify(template))).toEqual(expect.arrayContaining([
+      expect.stringContaining('"decision":"adopt-current-bytes"'),
+      expect.stringContaining('"decision":"restore-recorded-bytes"'),
+    ]));
+    expect(templates.map((template) => JSON.stringify(template))).not.toEqual(expect.arrayContaining([
+      expect.stringContaining('"decision":"adopt-committed-deletions"'),
+    ]));
+  });
+
   it("presents every gate as a conversational choice while keeping bindings internal", () => {
     for (const [index, entry] of CASES.entries()) {
       const active = activeGate(entry, `presentation-${index}`);
@@ -168,7 +212,7 @@ describe("gate decision presentation", () => {
       "db/schema.sql: modified; 120 → 148 bytes (+28 bytes).",
       "db/archive.sql: deleted; 42 → 0 bytes (-42 bytes).",
     ];
-    const presentation = buildHumanGatePresentation(commit, details);
+    const presentation = buildHumanGatePresentation(commit, { content_trigger: details });
 
     expect(presentation.details).toEqual([
       "rule-a: policy compliance is fail. The reviewed subject crosses the required boundary.",
@@ -182,8 +226,77 @@ describe("gate decision presentation", () => {
 
     expect(() => buildHumanGatePresentation(
       activeGate(CASES[4], "misplaced-content-trigger-details"),
-      details,
+      { content_trigger: details },
     )).toThrow("internal invariant: content-trigger details require a commit-authorization gate");
+  });
+
+  it("appends authenticated reviewed repository details and excludes baseline adoption", () => {
+    const reviewed = [
+      "primary was reviewed at aaaaaaaa.",
+      "apis was reviewed at bbbbbbbb; current commit cccccccc differs.",
+    ];
+    expect(buildHumanGatePresentation(activeGate(CASES[0], "repository-details"), {
+      reviewed_repositories: reviewed,
+    }).details).toEqual(expect.arrayContaining(reviewed));
+  });
+
+  it("projects only current-position server-attested reviewed commits", () => {
+    const primaryCommit = parseGitOid("a".repeat(40));
+    const apisCommit = parseGitOid("b".repeat(40));
+    const review = {
+      assurance: "server-attested",
+      task_id: parseTaskSlug("task"),
+      phase_instance: "prd",
+      repositories: [
+        { name: "primary", repository_identity_digest: D("1"), commit: primaryCommit },
+        { name: "apis", repository_identity_digest: D("2"), commit: apisCommit },
+      ],
+    } as unknown as ReviewEvidence;
+    const prd = parsePhaseInstanceId("prd");
+    const design = parsePhaseInstanceId("design");
+    const pins = currentReviewedRepositoryPins(review, parseTaskSlug("task"), prd);
+    expect(pins).toEqual([
+      { name: "primary", commit: primaryCommit },
+      { name: "apis", commit: apisCommit },
+    ]);
+    expect(currentReviewedRepositoryPins(review, parseTaskSlug("task"), design)).toBeUndefined();
+    expect(currentReviewedRepositoryPins({ ...review, assurance: "degraded" } as ReviewEvidence, parseTaskSlug("task"), prd)).toBeUndefined();
+
+    expect(projectReviewedRepositoryStatus([
+      { name: "primary", mode: "writable", location: "/primary", head: primaryCommit },
+      { name: "apis", mode: "context-only", location: "/apis", head: parseGitOid("c".repeat(40)) },
+    ], pins)).toEqual([
+      { name: "primary", mode: "writable", location: "/primary", head: primaryCommit, last_reviewed_commit: primaryCommit },
+      { name: "apis", mode: "context-only", location: "/apis", head: parseGitOid("c".repeat(40)), last_reviewed_commit: apisCommit },
+    ]);
+  });
+
+  it("derives moved-HEAD lines only for the exact review-backed gate", () => {
+    const active = activeGate(CASES[0], "review-binding");
+    const primaryCommit = parseGitOid("a".repeat(40));
+    const apisCommit = parseGitOid("b".repeat(40));
+    const pins = [
+      { name: "primary", commit: primaryCommit },
+      { name: "apis", commit: apisCommit },
+    ];
+    const repositories = [
+      { name: "primary", mode: "writable" as const, location: "/primary", head: primaryCommit },
+      { name: "apis", mode: "context-only" as const, location: "/apis", head: parseGitOid("c".repeat(40)) },
+    ];
+    expect(reviewedRepositoryGateDetails(active, evidence, pins, repositories)).toEqual([
+      "Repository primary was reviewed at aaaaaaaaaaaa.",
+      "Repository apis was reviewed at bbbbbbbbbbbb; current commit cccccccccccc differs.",
+    ]);
+    expect(reviewedRepositoryGateDetails(active, currentEvidenceSetRef([{ ...counter, evidence_digest: D("7") }]), pins, repositories)).toBeUndefined();
+    // A single-repository task pins only `primary`; its presentation carries no repository lines.
+    expect(reviewedRepositoryGateDetails(active, evidence, [pins[0]!], [repositories[0]!])).toBeUndefined();
+    expect(reviewedRepositoryGateDetails(active, evidence, [pins[0]!], [])).toBeUndefined();
+    expect(reviewedRepositoryGateDetails(
+      { ...active, kind: "baseline-adoption" } as unknown as ActiveGateV1,
+      evidence,
+      pins,
+      repositories,
+    )).toBeUndefined();
   });
 
   it("binds judgment-only choices to server-owned gate state", () => {

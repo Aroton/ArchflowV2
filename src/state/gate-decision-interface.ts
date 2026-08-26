@@ -9,6 +9,7 @@ import {
 } from "../contracts/gates.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import type { HumanPresentationReasonV1 } from "../contracts/semantic-workflow.js";
+import { displayMatchPaths } from "./approval-rules.js";
 import {
   deepFreezeGateJson,
   waiverContext,
@@ -65,6 +66,14 @@ export function buildGateDecisionTemplates(active: ActiveGateV1): readonly Plain
   }
 
   const templates: PlainJsonValue[] = [];
+  const baselineLiveCount = request.kind === "baseline-adoption"
+    ? request.context.drifted_projections.length + (request.context.secondary_targets ?? [])
+      .reduce((count, target) => count + target.drifted_projections.length, 0)
+    : 0;
+  const baselineDeletedCount = request.kind === "baseline-adoption"
+    ? (request.context.deleted_projections?.length ?? 0) + (request.context.secondary_targets ?? [])
+      .reduce((count, target) => count + (target.deleted_projections?.length ?? 0), 0)
+    : 0;
   for (const decision of request.allowed_decisions) {
     if (decision === "cancel") {
       templates.push(cancellation);
@@ -74,8 +83,8 @@ export function buildGateDecisionTemplates(active: ActiveGateV1): readonly Plain
     // live drifted files, the deletion choice needs committed deletions. Offering an inapplicable
     // choice would archive a decision that can never settle.
     if (request.kind === "baseline-adoption" &&
-        ((decision === "adopt-current-bytes" || decision === "restore-recorded-bytes") && request.context.drifted_projections.length === 0 ||
-         decision === "adopt-committed-deletions" && (request.context.deleted_projections?.length ?? 0) === 0)) {
+        ((decision === "adopt-current-bytes" || decision === "restore-recorded-bytes") && baselineLiveCount === 0 ||
+         decision === "adopt-committed-deletions" && baselineDeletedCount === 0)) {
       continue;
     }
 
@@ -139,6 +148,14 @@ export type HumanGatePresentation = Readonly<{
   question: string;
   reasons: readonly HumanPresentationReasonV1[];
   options: readonly HumanGateDecisionOption[];
+}>;
+
+/** Authenticated, server-derived detail lines added to the durable gate's own presentation. */
+export type HumanGatePresentationDetails = Readonly<{
+  /** Content-rule matches derived from the retained implementation output and settlement. */
+  content_trigger?: readonly string[];
+  /** Repository commits derived from the exact review evidence bound by the gate request. */
+  reviewed_repositories?: readonly string[];
 }>;
 
 type PresentedDecision =
@@ -324,7 +341,7 @@ function ordinaryReasons(active: ActiveGateV1): readonly HumanPresentationReason
         text: `This project requires human approval for the ${trigger.conclusion.match.subject} subject.`,
       }));
     } else if (trigger.conclusion.wait && trigger.conclusion.match.kind === "content") {
-      const paths = trigger.conclusion.match.paths;
+      const paths = displayMatchPaths(trigger.conclusion.match);
       reasons.push(Object.freeze({
         class: "configured-approval",
         text: `Configured content approval rules matched ${paths.length} reviewed path${paths.length === 1 ? "" : "s"}: ${paths.join(", ")}.`,
@@ -344,6 +361,49 @@ function ordinaryReasons(active: ActiveGateV1): readonly HumanPresentationReason
   return Object.freeze(reasons);
 }
 
+type BaselineContext = Extract<ActiveGateV1, { readonly kind: "baseline-adoption" }>["context"];
+
+function baselineAffectedCount(context: BaselineContext): number {
+  return context.drifted_projections.length + (context.deleted_projections?.length ?? 0) +
+    (context.secondary_targets ?? []).reduce((count, target) =>
+      count + target.drifted_projections.length + (target.deleted_projections?.length ?? 0), 0);
+}
+
+function baselineProjectionDetails(context: BaselineContext): readonly string[] {
+  const projectionLines = (
+    repository: string | undefined,
+    drifted: BaselineContext["drifted_projections"],
+    deleted: NonNullable<BaselineContext["deleted_projections"]>,
+  ): string[] => {
+    const owner = repository === undefined ? "" : ` in repository ${repository}`;
+    const qualify = (path: string) => repository === undefined ? path : `${repository}/${path}`;
+    return [
+      ...(drifted.length === 0 ? [] : [
+        `${drifted.length} file${drifted.length === 1 ? "" : "s"} changed${owner}, including:`,
+        ...drifted.slice(0, 10).map((item) => qualify(item.path)),
+        ...(drifted.length > 10 ? [`… and ${drifted.length - 10} more`] : []),
+      ]),
+      ...(deleted.length === 0 ? [] : [
+        `${deleted.length} file${deleted.length === 1 ? "" : "s"} deleted by an already-committed change${owner}:`,
+        ...deleted.slice(0, 10).map((item) => qualify(item.path)),
+        ...(deleted.length > 10 ? [`… and ${deleted.length - 10} more`] : []),
+      ]),
+    ];
+  };
+  return Object.freeze([
+    ...(context.target_ref === undefined ? [] : [
+      `Target ${context.target_ref} was observed at ${context.target_head}.`,
+      `${context.uncommitted_paths!.length} drifted path${context.uncommitted_paths!.length === 1 ? " is" : "s are"} uncommitted; the remaining drift is committed on that target.`,
+    ]),
+    ...projectionLines(undefined, context.drifted_projections, context.deleted_projections ?? []),
+    ...(context.secondary_targets ?? []).flatMap((target) => [
+      `Repository ${target.repository} target ${target.target_ref} was observed at ${target.target_head}.`,
+      `${target.uncommitted_paths.length} drifted path${target.uncommitted_paths.length === 1 ? " is" : "s are"} uncommitted in repository ${target.repository}; the remaining drift there is committed.`,
+      ...projectionLines(target.repository, target.drifted_projections, target.deleted_projections ?? []),
+    ]),
+  ]);
+}
+
 function exceptionalReasons(active: ActiveGateV1): readonly HumanPresentationReasonV1[] {
   const text = (() => {
     switch (active.kind) {
@@ -360,7 +420,7 @@ function exceptionalReasons(active: ActiveGateV1): readonly HumanPresentationRea
       case "restore-collision":
         return `The current workspace version of ${active.context.path} conflicts with its recorded workflow version.`;
       case "baseline-adoption": {
-        const affected = active.context.drifted_projections.length + (active.context.deleted_projections?.length ?? 0);
+        const affected = baselineAffectedCount(active.context);
         return `${affected} recorded workflow path${affected === 1 ? " has" : "s have"} changed or been deleted and require a baseline decision.`;
       }
       case "migration-audit":
@@ -398,11 +458,14 @@ function policyDetails(active: ActiveGateV1): readonly string[] {
 /** Renders the live gate as a conversational human decision without exposing binding material. */
 export function buildHumanGatePresentation(
   active: ActiveGateV1,
-  contentTriggerDetails?: readonly string[],
+  authenticatedDetails: HumanGatePresentationDetails = {},
 ): HumanGatePresentation {
   const request = parseActiveGate(structuredClone(active));
-  if (contentTriggerDetails !== undefined && request.kind !== "commit-authorization") {
+  if (authenticatedDetails.content_trigger !== undefined && request.kind !== "commit-authorization") {
     throw new TypeError("internal invariant: content-trigger details require a commit-authorization gate");
+  }
+  if (authenticatedDetails.reviewed_repositories !== undefined && request.kind === "baseline-adoption") {
+    throw new TypeError("internal invariant: baseline adoption has no reviewed repository details");
   }
   const waiver = waiverContext(request.context);
   const copy = waiver === undefined
@@ -414,25 +477,11 @@ export function buildHumanGatePresentation(
   const reasons = presentationReasons(request);
   const details = [
     ...policyDetails(request),
-    ...(request.kind === "baseline-adoption" ? [
-      ...(request.context.target_ref === undefined ? [] : [
-        `Target ${request.context.target_ref} was observed at ${request.context.target_head}.`,
-        `${request.context.uncommitted_paths!.length} drifted path${request.context.uncommitted_paths!.length === 1 ? " is" : "s are"} uncommitted; the remaining drift is committed on that target.`,
-      ]),
-      ...(request.context.drifted_projections.length === 0 ? [] : [
-        `${request.context.drifted_projections.length} file${request.context.drifted_projections.length === 1 ? "" : "s"} changed, including:`,
-        ...request.context.drifted_projections.slice(0, 10).map((drifted) => drifted.path),
-        ...(request.context.drifted_projections.length > 10 ? [`… and ${request.context.drifted_projections.length - 10} more`] : []),
-      ]),
-      ...((request.context.deleted_projections ?? []).length === 0 ? [] : [
-        `${request.context.deleted_projections!.length} file${request.context.deleted_projections!.length === 1 ? "" : "s"} deleted by an already-committed change:`,
-        ...request.context.deleted_projections!.slice(0, 10).map((deleted) => deleted.path),
-        ...(request.context.deleted_projections!.length > 10 ? [`… and ${request.context.deleted_projections!.length - 10} more`] : []),
-      ]),
-    ] : []),
-    ...(request.kind === "commit-authorization" && contentTriggerDetails !== undefined
-      ? [...contentTriggerDetails]
+    ...(request.kind === "baseline-adoption" ? baselineProjectionDetails(request.context) : []),
+    ...(request.kind === "commit-authorization" && authenticatedDetails.content_trigger !== undefined
+      ? [...authenticatedDetails.content_trigger]
       : []),
+    ...(authenticatedDetails.reviewed_repositories ?? []),
   ];
   return Object.freeze({
     class: reasons.some((reason) => reason.class === "exception") ? "exception" : "configured-approval",

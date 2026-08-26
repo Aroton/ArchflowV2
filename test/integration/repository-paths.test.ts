@@ -274,6 +274,24 @@ describe.skipIf(!hasGit)("the durable path-class table", () => {
     }
   });
 
+  it("reserves Git control data while retaining ordinary dotfiles as repository source", async () => {
+    const { runner } = await freshWorktree();
+    for (const value of [".git/config", ".git/HEAD", ".git/hooks/x"]) {
+      const claim = parseRepositoryPathClaim(value);
+      expect(classifyRepositoryPath(claim).ok).toBe(false);
+      await expect(resolveRepositoryPath({ runner, claim, context })).resolves.toMatchObject({
+        ok: false,
+        error: { code: "PATH_INVALID" },
+      });
+    }
+    for (const value of [".env", ".github/workflows/check.yml", ".editorconfig"]) {
+      expect(classifyRepositoryPath(parseRepositoryPathClaim(value))).toMatchObject({
+        ok: true,
+        value: "repository-source",
+      });
+    }
+  });
+
   it("resolves every repository-scoped class through the resolver that owns it", async () => {
     const { root, runner } = await freshWorktree();
     for (const sample of REPOSITORY_SAMPLES) {

@@ -3,10 +3,10 @@ import { join } from "node:path";
 
 import { canonicalJsonDigest, parseCanonicalDocument, type CanonicalDocument, type GitOid } from "../contracts/canonical.js";
 import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
-import type { ConfigV1, TaskConfigSnapshot } from "../contracts/config.js";
+import type { ConfigV1, RepositoryName, TaskConfigSnapshot } from "../contracts/config.js";
 import type { ImplementationOutputV1 } from "../contracts/durable-implementation-output.js";
 import { exactCommitAuthorizationContext, parseActiveGate, parsePersistedGateRequest, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
-import type { ConfigChangeEntry, RuleSettlementV1, TaskStateV1 } from "../contracts/durable-state.js";
+import type { ConfigChangeEntry, RepositoryCommitMilestoneV1, RuleSettlementV1, TaskStateV1 } from "../contracts/durable-state.js";
 export type { ConfigChangeEntry } from "../contracts/durable-state.js";
 import type { AdjudicationEvidence } from "../contracts/adjudication.js";
 import {
@@ -15,25 +15,28 @@ import {
 } from "../contracts/dispatch-failure.js";
 import type { ProjectError, ProjectResult } from "../contracts/errors.js";
 import { baselineAdoptionDriftDigest, computeGateContextDigest } from "../contracts/fingerprints.js";
-import type { PathSafeId, Sha256Digest, TaskSlug } from "../contracts/evidence.js";
+import type { PathSafeId, SafeCode, SafeInteger, Sha256Digest, TaskSlug } from "../contracts/evidence.js";
 import type { RepositoryPathClaim } from "../contracts/path-claims.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
 import type {
   BaselineObservationRef,
   GateContext,
   LegacyDesignApprovalContextV1,
+  SecondaryCommitAuthorizationV1,
 } from "../contracts/gates.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
 import type { ReviewEvidence, RouteOverrideRecord, RouteSourceRecord } from "../contracts/review.js";
+import type { RepositoryStatusV1 } from "../contracts/semantic-workflow.js";
 import type { CurrentEvidenceSetRef } from "../contracts/trust.js";
 import { resolveDispatchRoute, type DispatchRoute } from "../dispatch/routing.js";
 import { designApprovalPolicyContext, selectAdjudicationGates } from "../review/adjudication.js";
 import { assessCurrentEvidence, DEFAULT_MAX_ATTEMPTS, waiverInForce, type EvidenceAssessment } from "../review/fixed-point.js";
 import { canonicalRubricForPhaseKind, type CanonicalRubric } from "../review/rubrics.js";
 import { createGitRunner, preflightGit, readChangedGitPaths, readCommitTreeBlob, readFirstParentChildAfter, resolveCommit } from "../repository/git.js";
-import { discoverWorktree } from "../repository/identity.js";
+import { discoverWorktree, type RootBoundGitRunner } from "../repository/identity.js";
+import { resolveRepositorySet, type RepositorySet } from "../repository/repository-set.js";
 import { readTaskConfig, readTaskState } from "./read.js";
-import { computeConfigChange } from "./config-change.js";
+import { computeConfigChange, validateRepositorySetContinuity } from "./config-change.js";
 import type { TransactionAuthority } from "./authority.js";
 import { assertInternalTransactionAuthority, createInternalTransactionAuthority } from "./authority.js";
 import { authenticateRuleAcceptancePolicy, resolvePinnedConstitution, type ResolvedConstitution } from "./constitution.js";
@@ -49,6 +52,7 @@ import {
   buildGateDecisionTemplates,
   buildHumanGatePresentation,
   type HumanGatePresentation,
+  type HumanGatePresentationDetails,
 } from "./gate-decision-interface.js";
 import { activeProjection, type GateLifecycleDependencies } from "./gate-core.js";
 import { deriveNextAction, type NextAction } from "./next-action.js";
@@ -58,8 +62,12 @@ import {
   resolveAutonomousDesignMilestoneProof,
   resolveAutonomousImplementationMilestoneProof,
   resolveDesignMilestoneProof,
+  observeSecondaryCommitProgress,
   resolveImplementationMilestoneProof,
+  sortedUniqueImplementationPaths,
   type DesignMilestoneMiss,
+  type ImplementationCommitAction,
+  type MilestoneProof,
 } from "./implementation-manifest.js";
 import { phaseStatusResources, type StatusResource } from "./phase-documents.js";
 import { inspectWorkspaceCleanup, type WorkspaceCleanupReport } from "./workspace-cleanup.js";
@@ -67,6 +75,7 @@ import { discoverReconciliationInput } from "./reconciliation-discovery.js";
 import {
   activeGateHead,
   assessBaselineSubjectFreshness,
+  baselinePresentedTargets,
   reconcileCurrentAuthority,
   type ReconciliationFinding,
   type ReconciliationResult,
@@ -80,6 +89,7 @@ const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1
 type ConfigVerification = Readonly<{
   verified: boolean;
   issue?: string;
+  issues?: readonly string[];
 }>;
 
 type StatusEvidence = Readonly<{
@@ -120,6 +130,82 @@ type StatusEvidence = Readonly<{
   }>;
   assessment: EvidenceAssessment;
 }>;
+
+type ReviewedRepositoryPin = Readonly<{
+  name: string;
+  commit: GitOid;
+}>;
+
+/**
+ * Projects only the repository claim made by a fresh server-attested review at the current
+ * workflow position. Archived evidence without the optional field and every weaker assurance
+ * deliberately project no reviewed commit.
+ */
+export function currentReviewedRepositoryPins(
+  review: ReviewEvidence | undefined,
+  taskId: TaskSlug,
+  phaseInstance: PhaseInstanceId,
+): readonly ReviewedRepositoryPin[] | undefined {
+  if (
+    review === undefined ||
+    review.assurance !== "server-attested" ||
+    review.task_id !== taskId ||
+    review.phase_instance !== phaseInstance ||
+    !("repositories" in review) ||
+    review.repositories === undefined
+  ) return undefined;
+  return Object.freeze(review.repositories.map((repository) => Object.freeze({
+    name: repository.name,
+    commit: repository.commit,
+  })));
+}
+
+/** Adds current-position reviewed commits to the already resolved live repository projection. */
+export function projectReviewedRepositoryStatus(
+  repositories: readonly RepositoryStatusV1[] | undefined,
+  reviewed: readonly ReviewedRepositoryPin[] | undefined,
+): readonly RepositoryStatusV1[] | undefined {
+  if (repositories === undefined || reviewed === undefined) return repositories;
+  const commits = new Map(reviewed.map((repository) => [repository.name, repository.commit]));
+  return Object.freeze(repositories.map((repository) => {
+    const commit = commits.get(repository.name);
+    return Object.freeze({
+      ...repository,
+      ...(commit === undefined ? {} : { last_reviewed_commit: commit }),
+    });
+  }));
+}
+
+/**
+ * Renders review coverage only when the gate binds the exact retained current evidence set.
+ * Live HEAD comparison is informational; it changes neither the gate nor its authority.
+ */
+export function reviewedRepositoryGateDetails(
+  active: ActiveGateV1,
+  currentEvidence: CurrentEvidenceSetRef,
+  reviewed: readonly ReviewedRepositoryPin[] | undefined,
+  repositories: readonly RepositoryStatusV1[] | undefined,
+): readonly string[] | undefined {
+  if (
+    active.kind === "baseline-adoption" ||
+    !("current_evidence" in active) ||
+    active.current_evidence.set_digest !== currentEvidence.set_digest ||
+    reviewed === undefined ||
+    // A single-repository task's evidence pins only `primary`; its gate presentation stays exactly
+    // what it was before repository sets existed, so the lines appear only with a secondary.
+    reviewed.every((repository) => repository.name === "primary")
+  ) return undefined;
+  const live = new Map((repositories ?? []).map((repository) => [repository.name, repository.head]));
+  return Object.freeze(reviewed.map((repository) => {
+    const reviewedCommit = repository.commit.slice(0, 12);
+    const currentCommit = live.get(repository.name);
+    return currentCommit === repository.commit
+      ? `Repository ${repository.name} was reviewed at ${reviewedCommit}.`
+      : currentCommit === undefined
+        ? `Repository ${repository.name} was reviewed at ${reviewedCommit}; its current commit is unavailable.`
+        : `Repository ${repository.name} was reviewed at ${reviewedCommit}; current commit ${currentCommit.slice(0, 12)} differs.`;
+  }));
+}
 
 type OpenGateStatus = Readonly<{
   gate_id: PathSafeId;
@@ -164,6 +250,7 @@ export type CommitAuthorizationInput = Readonly<{
     diff_digest: Sha256Digest;
     current_artifact_digests: readonly Sha256Digest[];
     parent_document_digests: readonly Sha256Digest[];
+    secondary_commits?: readonly SecondaryCommitAuthorizationV1[];
   }>;
   target_ref_guidance: string;
 }>;
@@ -186,12 +273,48 @@ export type BaselineAdoptionInput = Readonly<{
   context: GateContext<"baseline-adoption">;
 }>;
 
+export type BaselineAdoptionTargetFacts = Readonly<{
+  target_ref: string;
+  target_head: GitOid;
+  uncommitted_paths: readonly RepositoryPathClaim[];
+  secondary_targets?: readonly Readonly<{
+    repository: string;
+    repository_identity_digest: Sha256Digest;
+    target_ref: string;
+    target_head: GitOid;
+    uncommitted_paths: readonly RepositoryPathClaim[];
+  }>[];
+}>;
+
+/** Proves first-parent continuity for every repository head authenticated by a baseline gate. */
+export async function baselinePresentedTargetsOnCurrentFirstParent(
+  dependencies: Pick<GateLifecycleDependencies, "runner">,
+  context: GateContext<"baseline-adoption">,
+  live: BaselineAdoptionTargetFacts,
+  repositorySet: RepositorySet | undefined,
+): Promise<boolean> {
+  const presented = baselinePresentedTargets(context);
+  if (presented.length === 0) return false;
+  return (await Promise.all(presented.map(async (target) => {
+    const liveTarget = target.repository === "primary"
+      ? live
+      : live.secondary_targets?.find((candidate) => candidate.repository === target.repository);
+    const runner = target.repository === "primary"
+      ? dependencies.runner
+      : repositorySet?.members.find((member) => member.name === target.repository)?.binding.runner;
+    return liveTarget !== undefined && runner !== undefined && (
+      target.target_head === liveTarget.target_head ||
+      await readFirstParentChildAfter(runner, target.target_head, liveTarget.target_head) !== undefined
+    );
+  }))).every(Boolean);
+}
+
 /** Builds the baseline-adoption gate subject from the blocking reconciliation findings, or nothing. */
 export function baselineAdoptionInputFromFindings(
   task_id: TaskSlug,
   state: TaskStateV1,
   findings: readonly ReconciliationFinding[],
-  target?: Readonly<{ target_ref: string; target_head: GitOid; uncommitted_paths: readonly RepositoryPathClaim[] }>,
+  target?: BaselineAdoptionTargetFacts,
 ): BaselineAdoptionInput | undefined {
   const mismatches = findings.filter((finding): finding is Extract<ReconciliationFinding, { kind: "projection-mismatch" }> => finding.kind === "projection-mismatch");
   // The drift set splits into live-byte mismatches the human can adopt or restore, and committed
@@ -199,10 +322,33 @@ export function baselineAdoptionInputFromFindings(
   // produce can re-declare them either. Any other missing projection (restorable, or deleted only
   // in the worktree) routes to restore or produce re-entry instead, and its presence makes the
   // set unrepresentable here.
-  const drifted = mismatches.filter((finding) => finding.observed_digest !== undefined);
-  const deleted = mismatches.filter((finding) =>
+  const primaryMismatches = mismatches.filter((finding) => finding.repository === undefined);
+  const drifted = primaryMismatches.filter((finding) => finding.observed_digest !== undefined);
+  const deleted = primaryMismatches.filter((finding) =>
     finding.observed_digest === undefined && finding.restore_unavailable === true && finding.committed_absent === true);
-  if (drifted.length + deleted.length === 0 || drifted.length + deleted.length !== mismatches.length) return undefined;
+  const secondaryTargets = [...new Set(mismatches.flatMap((finding) => finding.repository === undefined ? [] : [finding.repository]))]
+    .sort()
+    .map((repository) => {
+      const repositoryMismatches = mismatches.filter((finding) => finding.repository === repository);
+      const repositoryDrifted = repositoryMismatches.filter((finding) => finding.observed_digest !== undefined);
+      const repositoryDeleted = repositoryMismatches.filter((finding) =>
+        finding.observed_digest === undefined && finding.restore_unavailable === true && finding.committed_absent === true);
+      const facts = target?.secondary_targets?.find((candidate) => candidate.repository === repository);
+      if (facts === undefined || repositoryDrifted.length + repositoryDeleted.length !== repositoryMismatches.length) return undefined;
+      return Object.freeze({
+        ...facts,
+        repository: repository as RepositoryName,
+        drifted_projections: Object.freeze(repositoryDrifted.map((finding) => Object.freeze({
+          path: finding.path, recorded_digest: finding.recorded_digest, observed_digest: finding.observed_digest!,
+        })).sort((left, right) => left.path.localeCompare(right.path))),
+        deleted_projections: Object.freeze(repositoryDeleted.map((finding) => Object.freeze({
+          path: finding.path, recorded_digest: finding.recorded_digest,
+        })).sort((left, right) => left.path.localeCompare(right.path))),
+      });
+    });
+  if (secondaryTargets.some((item) => item === undefined) ||
+      drifted.length + deleted.length + secondaryTargets.reduce((count, item) => count + item!.drifted_projections.length + item!.deleted_projections.length, 0) !== mismatches.length) return undefined;
+  if (drifted.length + deleted.length + secondaryTargets.length === 0) return undefined;
   const context: GateContext<"baseline-adoption"> = Object.freeze({
     drifted_projections: Object.freeze(drifted
       .map((finding) => Object.freeze({ path: finding.path, recorded_digest: finding.recorded_digest, observed_digest: finding.observed_digest! }))
@@ -210,11 +356,12 @@ export function baselineAdoptionInputFromFindings(
     deleted_projections: Object.freeze(deleted
       .map((finding) => Object.freeze({ path: finding.path, recorded_digest: finding.recorded_digest }))
       .sort((left, right) => left.path.localeCompare(right.path))),
-    ...(target === undefined ? {} : {
+    ...(target === undefined || primaryMismatches.length === 0 ? {} : {
       target_ref: target.target_ref,
       target_head: target.target_head,
       uncommitted_paths: Object.freeze([...target.uncommitted_paths].sort()),
     }),
+    ...(secondaryTargets.length === 0 ? {} : { secondary_targets: Object.freeze(secondaryTargets as NonNullable<GateContext<"baseline-adoption">["secondary_targets"]>) }),
   });
   const subjectDigest = baselineAdoptionDriftDigest(context);
   return Object.freeze({
@@ -235,19 +382,40 @@ export function baselineAdoptionInputFromFindings(
 export async function currentBaselineTargetFacts(
   dependencies: GateLifecycleDependencies,
   findings: readonly ReconciliationFinding[],
-): Promise<Readonly<{ target_ref: string; target_head: GitOid; uncommitted_paths: readonly RepositoryPathClaim[] }>> {
+  repositorySet?: RepositorySet,
+): Promise<BaselineAdoptionTargetFacts> {
   const target = await currentTargetRef(dependencies);
   const targetHead = await resolveCommit(dependencies.runner, target.value);
   const changed = await readChangedGitPaths(dependencies.runner);
   const driftPaths = findings
     .filter((finding): finding is Extract<ReconciliationFinding, { kind: "projection-mismatch" }> =>
-      finding.kind === "projection-mismatch")
+      finding.kind === "projection-mismatch" && finding.repository === undefined)
     .map((finding) => finding.path);
   const changedPaths = new Set(changed.paths);
+  const secondaryTargets = [];
+  for (const repository of [...new Set(findings.flatMap((finding) =>
+    finding.kind === "projection-mismatch" && finding.repository !== undefined ? [finding.repository] : []))].sort()) {
+    const member = repositorySet?.members.find((candidate) => candidate.name === repository);
+    if (member === undefined || member.mode !== "writable") throw new BaselineRepositoryUnavailableError(repository);
+    const memberTarget = await currentTargetRefForRunner(member.binding.runner);
+    const memberHead = await resolveCommit(member.binding.runner, memberTarget.value);
+    const memberChanged = await readChangedGitPaths(member.binding.runner);
+    const memberChangedPaths = new Set(memberChanged.paths);
+    const memberDriftPaths = findings.flatMap((finding) =>
+      finding.kind === "projection-mismatch" && finding.repository === repository ? [finding.path] : []);
+    secondaryTargets.push(Object.freeze({
+      repository,
+      repository_identity_digest: member.identity.digest,
+      target_ref: memberTarget.value,
+      target_head: memberHead,
+      uncommitted_paths: Object.freeze(memberDriftPaths.filter((path) => memberChangedPaths.has(path)).sort()),
+    }));
+  }
   return Object.freeze({
     target_ref: target.value,
     target_head: targetHead,
     uncommitted_paths: Object.freeze(driftPaths.filter((path) => changedPaths.has(path)).sort()),
+    ...(secondaryTargets.length === 0 ? {} : { secondary_targets: Object.freeze(secondaryTargets) }),
   });
 }
 
@@ -307,6 +475,12 @@ export type TaskStatusV1 = Readonly<{
    */
   subject_digest?: Sha256Digest;
   config: ConfigVerification;
+  /**
+   * Live repository set resolved from the task config, each member with its mode, location, and
+   * HEAD, plus `last_reviewed_commit` from the newest server-attested review at this position.
+   * Absent when configuration is invalid.
+   */
+  repositories?: readonly RepositoryStatusV1[];
   /**
    * Field-level changes between the live parsed config and `state.last_seen_config`. Informational
    * only — never a blocker and never an action-kind change. Absent `last_seen_config`
@@ -490,10 +664,11 @@ export function partitionExpectedReentryEdits(
   });
 }
 
-function unavailableConfig(issue?: string): ConfigVerification {
+function unavailableConfig(issue?: string, issues?: readonly string[]): ConfigVerification {
   return Object.freeze({
     verified: false,
     ...(issue === undefined ? {} : { issue }),
+    ...(issues === undefined ? {} : { issues: Object.freeze([...issues]) }),
   });
 }
 
@@ -766,42 +941,60 @@ export function contentTriggerDetails(
   }
 
   const details: string[] = [];
-  for (const matchedPath of conclusion.match.paths) {
-    const renameSources = output.outputs
-      .filter((entry): entry is Extract<ImplementationOutputV1["outputs"][number], { operation: "rename" }> =>
-        entry.operation === "rename" && entry.previous_path === matchedPath)
-      .sort((left, right) => compareCodeUnits(left.path, right.path));
-    const currentPaths = output.outputs
-      .filter((entry) => entry.path === matchedPath)
-      .sort((left, right) => compareCodeUnits(left.path, right.path));
+  const appendDetails = (
+    outputs: ImplementationOutputV1["outputs"],
+    matchedPaths: readonly string[],
+    repository?: string,
+  ): void => {
+    const displayPath = (path: string) => repository === undefined ? path : `${repository}/${path}`;
+    for (const matchedPath of matchedPaths) {
+      const renameSources = outputs
+        .filter((entry): entry is Extract<ImplementationOutputV1["outputs"][number], { operation: "rename" }> =>
+          entry.operation === "rename" && entry.previous_path === matchedPath)
+        .sort((left, right) => compareCodeUnits(left.path, right.path));
+      const currentPaths = outputs
+        .filter((entry) => entry.path === matchedPath)
+        .sort((left, right) => compareCodeUnits(left.path, right.path));
 
-    if (renameSources.length + currentPaths.length === 0) {
-      throw new TypeError(`content-trigger path has no retained implementation endpoint: ${matchedPath}`);
-    }
+      if (renameSources.length + currentPaths.length === 0) {
+        throw new TypeError(`content-trigger path has no retained implementation endpoint: ${displayPath(matchedPath)}`);
+      }
 
-    for (const entry of renameSources) {
-      details.push(
-        `${matchedPath}: renamed to ${entry.path} (${sizeChange(entry.before.size_bytes, entry.after.size_bytes)})`,
-      );
-    }
-    for (const entry of currentPaths) {
-      if (entry.operation === "add") {
-        details.push(`${matchedPath}: added (${sizeChange(0, entry.after.size_bytes)})`);
-      } else if (entry.operation === "delete") {
-        details.push(`${matchedPath}: deleted (${sizeChange(entry.before.size_bytes, 0)})`);
-      } else if (entry.operation === "modify") {
-        details.push(`${matchedPath}: modified (${sizeChange(entry.before.size_bytes, entry.after.size_bytes)})`);
-      } else {
+      for (const entry of renameSources) {
         details.push(
-          `${matchedPath}: renamed from ${entry.previous_path} (${sizeChange(entry.before.size_bytes, entry.after.size_bytes)})`,
+          `${displayPath(matchedPath)}: renamed to ${displayPath(entry.path)} (${sizeChange(entry.before.size_bytes, entry.after.size_bytes)})`,
         );
       }
+      for (const entry of currentPaths) {
+        if (entry.operation === "add") {
+          details.push(`${displayPath(matchedPath)}: added (${sizeChange(0, entry.after.size_bytes)})`);
+        } else if (entry.operation === "delete") {
+          details.push(`${displayPath(matchedPath)}: deleted (${sizeChange(entry.before.size_bytes, 0)})`);
+        } else if (entry.operation === "modify") {
+          details.push(`${displayPath(matchedPath)}: modified (${sizeChange(entry.before.size_bytes, entry.after.size_bytes)})`);
+        } else {
+          details.push(
+            `${displayPath(matchedPath)}: renamed from ${displayPath(entry.previous_path)} (${sizeChange(entry.before.size_bytes, entry.after.size_bytes)})`,
+          );
+        }
+      }
     }
+  };
+
+  appendDetails(output.outputs, conclusion.match.paths);
+  for (const matchedSection of conclusion.match.secondary_paths ?? []) {
+    const outputSection = output.secondary_repositories?.find(
+      (section) => section.repository === matchedSection.repository,
+    );
+    if (outputSection === undefined) {
+      throw new TypeError(`content-trigger repository has no retained implementation section: ${matchedSection.repository}`);
+    }
+    appendDetails(outputSection.outputs, matchedSection.paths, matchedSection.repository);
   }
   return Object.freeze(details);
 }
 
-function gateStatus(active: ActiveGateV1, triggerDetails?: readonly string[]): OpenGateStatus {
+function gateStatus(active: ActiveGateV1, details?: HumanGatePresentationDetails): OpenGateStatus {
   return Object.freeze({
     gate_id: active.gate_id,
     kind: active.kind,
@@ -809,18 +1002,18 @@ function gateStatus(active: ActiveGateV1, triggerDetails?: readonly string[]): O
     archive_decision_path: `.archflow/tasks/${active.task_id}/authority/decisions/${active.gate_id}/decision.json`,
     request_path: `.archflow/tasks/${active.task_id}/authority/decisions/${active.gate_id}/request.json`,
     decision_templates: buildGateDecisionTemplates(active),
-    presentation: buildHumanGatePresentation(active, triggerDetails),
+    presentation: buildHumanGatePresentation(active, details),
   });
 }
 
-export async function currentTargetRef(dependencies: GateLifecycleDependencies): Promise<Readonly<{
+async function currentTargetRefForRunner(runner: RootBoundGitRunner): Promise<Readonly<{
   value: string;
   guidance: string;
 }>> {
   try {
-    const branch = await dependencies.runner.runText({
+    const branch = await runner.runText({
       argv: ["symbolic-ref", "--quiet", "HEAD"],
-      operation: "status-target-ref" as import("../contracts/evidence.js").SafeCode,
+      operation: "status-target-ref" as SafeCode,
       expectedAbsence: [{ code: 1, stderrIncludes: "" }],
     });
     if (branch !== "") return Object.freeze({
@@ -834,12 +1027,78 @@ export async function currentTargetRef(dependencies: GateLifecycleDependencies):
   });
 }
 
+export async function currentTargetRef(dependencies: GateLifecycleDependencies): Promise<Readonly<{
+  value: string;
+  guidance: string;
+}>> {
+  return currentTargetRefForRunner(dependencies.runner);
+}
+
+function implementationCommitMessage(output: ImplementationOutputV1): string {
+  const phase = decodePhaseInstance(output.phase_instance);
+  return `ArchFlow: Implement ${output.task_id} phase ${phase.kind === "phase-impl" ? String(phase.phase) : output.phase_instance}`;
+}
+
+export async function buildSecondaryCommitAuthorizationFacts(
+  output: ImplementationOutputV1,
+  repositories: RepositorySet,
+): Promise<readonly SecondaryCommitAuthorizationV1[]> {
+  const members = new Map(repositories.members.map((member) => [member.name, member]));
+  const facts: SecondaryCommitAuthorizationV1[] = [];
+  for (const section of output.secondary_repositories ?? []) {
+    if (section.outputs.length === 0) continue;
+    const member = members.get(section.repository);
+    if (member === undefined || member.mode !== "writable" || member.identity.digest !== section.repository_identity_digest) {
+      throw new SecondaryCommitObservationError(section.repository, "repository-observation-failed");
+    }
+    let target: Awaited<ReturnType<typeof currentTargetRefForRunner>>;
+    let targetHead: GitOid;
+    try {
+      target = await currentTargetRefForRunner(member.binding.runner);
+      targetHead = await resolveCommit(member.binding.runner, target.value);
+    } catch (error) {
+      if (error instanceof SecondaryCommitObservationError) throw error;
+      throw new SecondaryCommitObservationError(section.repository, "repository-observation-failed");
+    }
+    if (targetHead !== section.base_commit) throw new SecondaryCommitObservationError(section.repository, "target-moved");
+    facts.push(Object.freeze({
+      repository: section.repository,
+      repository_identity_digest: section.repository_identity_digest,
+      target_ref: target.value,
+      target_head: targetHead,
+      baseline_commit: section.base_commit,
+      commit_message: implementationCommitMessage(output),
+      paths: sortedUniqueImplementationPaths(section),
+      diff_digest: section.diff_digest,
+      snapshot_digest: section.snapshot_digest,
+    }));
+  }
+  return Object.freeze(facts);
+}
+
+/** A drift finding names a repository that is no longer a live writable member. */
+export class BaselineRepositoryUnavailableError extends TypeError {
+  constructor(readonly repository: string) {
+    super(`baseline repository ${repository} is unavailable`);
+  }
+}
+
+export class SecondaryCommitObservationError extends TypeError {
+  constructor(
+    readonly repository: string,
+    readonly reason: "target-moved" | "repository-observation-failed",
+  ) {
+    super(`secondary commit repository ${repository} ${reason === "target-moved" ? "moved from its reviewed base" : "is unavailable"}`);
+  }
+}
+
 /** Materializes the checked commit-gate resume facts from authenticated retained output. */
 export function buildCommitAuthorizationInput(
   subject: CurrentProduceSubject,
   currentEvidence: CurrentEvidenceSetRef,
   target: Readonly<{ value: string; guidance: string }>,
   baselineCommit: string,
+  secondaryCommits: readonly SecondaryCommitAuthorizationV1[] = [],
 ): CommitAuthorizationInput {
   if (subject.artifact.artifact_kind !== "implementation-output") {
     throw new TypeError("commit authorization requires retained implementation output");
@@ -867,6 +1126,7 @@ export function buildCommitAuthorizationInput(
       current_artifact_digests: Object.freeze([manifest.artifact_digest]),
       parent_document_digests: Object.freeze(subject.artifact.parent_documents
         .map((item) => item.content_digest).sort()),
+      ...(secondaryCommits.length === 0 ? {} : { secondary_commits: Object.freeze([...secondaryCommits]) }),
     }),
     target_ref_guidance: target.guidance,
   });
@@ -1001,17 +1261,47 @@ async function computeTaskStatusDetailedInternal(
 
   let config: ConfigVerification;
   let parsedConfig: ConfigV1 | undefined;
+  let repositories: TaskStatusV1["repositories"];
+  let repositorySet: RepositorySet | undefined;
   let liveConfigDigest: Sha256Digest | undefined;
   try {
     const read = await dependencies.read_config(authority.config);
     if (read.kind !== "valid") {
-      config = unavailableConfig(`config-${read.kind}`);
+      config = unavailableConfig(
+        `config-${read.kind}`,
+        read.kind === "invalid" ? read.issues : undefined,
+      );
       blockers.push(`config-${read.kind}`);
       if (read.kind === "invalid") liveConfigDigest = read.digest;
     } else {
-      config = Object.freeze({ verified: true });
       liveConfigDigest = read.snapshot.digest;
-      parsedConfig = read.snapshot.parsed as unknown as ConfigV1;
+      const resolved = await resolveRepositorySet(
+        { runner: dependencies.runner, environment: dependencies.environment },
+        read.snapshot.parsed,
+        authority.context,
+      );
+      const continuity = resolved.ok
+        ? validateRepositorySetContinuity(state, resolved.value)
+        : resolved;
+      if (!continuity.ok) {
+        const issues = continuity.error.code === "CONFIG_INVALID"
+          ? continuity.error.diagnostic.parameters.issues
+          : undefined;
+        config = unavailableConfig("config-invalid", issues);
+        blockers.push("config-invalid");
+      } else if (!resolved.ok) {
+        throw new TypeError("repository-set continuity unexpectedly succeeded after resolution failed");
+      } else {
+        config = Object.freeze({ verified: true });
+        parsedConfig = read.snapshot.parsed as unknown as ConfigV1;
+        repositorySet = resolved.value;
+        repositories = Object.freeze(resolved.value.members.map((member) => Object.freeze({
+          name: member.name,
+          mode: member.mode,
+          location: member.binding.runner.location.worktreeRoot,
+          head: member.head,
+        })));
+      }
     }
   } catch {
     config = unavailableConfig("config-unresolvable");
@@ -1069,7 +1359,7 @@ async function computeTaskStatusDetailedInternal(
   let reconciliation: ReconciliationResult | undefined;
   let reconciliationBlockers: readonly string[] = Object.freeze([]);
   try {
-    const discovered = await discoverReconciliationInput(dependencies, authority, stateDocument);
+    const discovered = await discoverReconciliationInput(dependencies, authority, stateDocument, repositorySet);
     if (discovered.ok) {
       reconciliation = reconcileCurrentAuthority(discovered.value);
       reconciliationBlockers = discovered.value.blocking_reasons ?? Object.freeze([]);
@@ -1097,6 +1387,14 @@ async function computeTaskStatusDetailedInternal(
       blockers.push("retained-evidence-unavailable");
     }
   }
+
+  const retainedCounterReview = retained.get("counter_review")?.manifest.source_artifact;
+  const reviewedRepositories = currentReviewedRepositoryPins(
+    retainedCounterReview?.artifact_kind === "review-evidence" ? retainedCounterReview.evidence : undefined,
+    state.task_id,
+    state.phase_instance,
+  );
+  repositories = projectReviewedRepositoryStatus(repositories, reviewedRepositories);
 
   let subjectDigest: Sha256Digest | undefined;
   let produceSubject: CurrentProduceSubject | undefined;
@@ -1187,13 +1485,50 @@ async function computeTaskStatusDetailedInternal(
       subject_digest: subjectDigest,
     });
   };
-  let implementationCommit: Readonly<{
-    paths: readonly string[];
-    message: string;
-    target_ref: string;
-    baseline_commit: string;
-  }> | undefined;
+  let implementationCommit: ImplementationCommitAction | undefined;
   let humanImplementationCommitAuthority = false;
+  /**
+   * Folds one primary milestone proof, then the secondary repositories it fans out to, into the
+   * commit facts above. Shared by the human-authorized and no-wait-settlement arms below; only the
+   * authenticated secondary facts and the commit offered when nothing was created differ.
+   */
+  const settleImplementationProof = async (
+    output: ImplementationOutputV1,
+    proof: MilestoneProof,
+    secondaryFacts: readonly (SecondaryCommitAuthorizationV1 | RepositoryCommitMilestoneV1)[],
+    notCreatedCommit: ImplementationCommitAction | undefined,
+  ): Promise<void> => {
+    if (proof.kind === "proven") {
+      const secondary = await observeSecondaryCommitProgress(output, secondaryFacts, repositorySet);
+      if (secondary.kind === "proven") {
+        commitObserved = true;
+      } else if (secondary.kind === "not-created") {
+        implementationCommit = secondary.action;
+      } else {
+        implementationCommit = undefined;
+        milestoneProofUnverifiableReason = secondary.kind === "unverifiable"
+          ? `${secondary.repository}-${secondary.reason}`
+          : `${secondary.repository}-${secondary.proof.reason}`;
+        blockers.push(`implementation-milestone-${milestoneProofUnverifiableReason}`);
+      }
+    } else if (proof.kind === "not-created") {
+      implementationCommit = notCreatedCommit;
+    } else if (proof.kind === "missing-from-history") {
+      recordMissingMilestone(proof);
+      implementationCommit = undefined;
+      try {
+        milestoneRecoveryNoDelta = await implementationRecoveryHasNoDelta(dependencies, output, proof.target_head);
+      } catch {
+        milestoneRecoveryRequired = false;
+        milestoneRecoveryFacts = undefined;
+        milestoneProofUnverifiableReason = "repository-observation-failed";
+        blockers.push("commit-observation-unavailable");
+      }
+    } else {
+      milestoneProofUnverifiableReason = proof.reason;
+      blockers.push("commit-observation-unavailable");
+    }
+  };
   if (produceSubject?.artifact.artifact_kind === "implementation-output") {
     for (const authenticated of authenticatedApprovals) {
       if (
@@ -1219,26 +1554,8 @@ async function computeTaskStatusDetailedInternal(
           produceSubject.artifact,
           exact,
         );
-        if (proof.kind === "proven") {
-          commitObserved = true;
-          break;
-        } else if (proof.kind === "missing-from-history") {
-          recordMissingMilestone(proof);
-          implementationCommit = undefined;
-          try {
-            milestoneRecoveryNoDelta = await implementationRecoveryHasNoDelta(
-              dependencies, produceSubject.artifact, proof.target_head,
-            );
-          } catch {
-            milestoneRecoveryRequired = false;
-            milestoneRecoveryFacts = undefined;
-            milestoneProofUnverifiableReason = "repository-observation-failed";
-            blockers.push("commit-observation-unavailable");
-          }
-        } else if (proof.kind === "unverifiable") {
-          milestoneProofUnverifiableReason = proof.reason;
-          blockers.push("commit-observation-unavailable");
-        }
+        await settleImplementationProof(produceSubject.artifact, proof, exact.secondary_commits ?? [], implementationCommit);
+        if (proof.kind === "proven" || proof.kind === "not-created") break;
       } catch {
         blockers.push("commit-observation-unavailable");
       }
@@ -1264,25 +1581,8 @@ async function computeTaskStatusDetailedInternal(
               target_head: observedProof.target_head,
             })
           : observedProof;
-        commitObserved = proof.kind === "proven";
-        if (proof.kind === "not-created") {
-          implementationCommit = autonomousCommit;
-        } else if (proof.kind === "missing-from-history") {
-          recordMissingMilestone(proof);
-          try {
-            milestoneRecoveryNoDelta = await implementationRecoveryHasNoDelta(
-              dependencies, produceSubject.artifact, proof.target_head,
-            );
-          } catch {
-            milestoneRecoveryRequired = false;
-            milestoneRecoveryFacts = undefined;
-            milestoneProofUnverifiableReason = "repository-observation-failed";
-            blockers.push("commit-observation-unavailable");
-          }
-        } else if (proof.kind === "unverifiable") {
-          milestoneProofUnverifiableReason = proof.reason;
-          blockers.push("commit-observation-unavailable");
-        }
+        commitObserved = false;
+        await settleImplementationProof(produceSubject.artifact, proof, acceptedSettlement.secondary_milestones ?? [], autonomousCommit);
       } catch {
         blockers.push("commit-observation-unavailable");
       }
@@ -1659,15 +1959,13 @@ async function computeTaskStatusDetailedInternal(
         gateBindingBlocker = "active-gate-mismatch";
       } else {
         if (request?.kind === "baseline-adoption" && statusReconciliation !== undefined) {
-          const target = await currentBaselineTargetFacts(dependencies, statusReconciliation.findings);
+          const target = await currentBaselineTargetFacts(dependencies, statusReconciliation.findings, repositorySet);
           const live = baselineAdoptionInputFromFindings(
             authority.task_id, state, statusReconciliation.findings, target,
           );
           if (live !== undefined) {
-            const presented = request.context.target_head;
-            const continuous = presented !== undefined && (
-              presented === target.target_head ||
-              await readFirstParentChildAfter(dependencies.runner, presented, target.target_head) !== undefined
+            const continuous = await baselinePresentedTargetsOnCurrentFirstParent(
+              dependencies, request.context, target, repositorySet,
             );
             staleBaselineRefreshRequired = assessBaselineSubjectFreshness(
               request, live.context, continuous,
@@ -1692,7 +1990,21 @@ async function computeTaskStatusDetailedInternal(
               produceSubject.artifact,
             );
           }
-          openGate = gateStatus(activeGate, triggerDetails);
+          let reviewedRepositoryDetails: readonly string[] | undefined;
+          if (evidence.available) {
+            reviewedRepositoryDetails = reviewedRepositoryGateDetails(
+              activeGate,
+              evidence.current_evidence,
+              reviewedRepositories,
+              repositories,
+            );
+          }
+          openGate = gateStatus(activeGate, {
+            ...(triggerDetails === undefined ? {} : { content_trigger: triggerDetails }),
+            ...(reviewedRepositoryDetails === undefined
+              ? {}
+              : { reviewed_repositories: reviewedRepositoryDetails }),
+          });
         } catch {
           // A disposable decision interface must never make an incomplete authority join look
           // plausible. Keep the durable gate open, withhold its human choices, and route status
@@ -1749,7 +2061,7 @@ async function computeTaskStatusDetailedInternal(
   const migrationAuditAccepted = legacyInitialization.ok && legacyInitialization.value !== undefined &&
     state.phase_instance === "design" &&
     authenticatedApprovals.some((item) => item.request.kind === "migration-audit" && item.decision.envelope.payload.decision === "accept-import-audit");
-  const nextAction = deriveNextAction({
+  const nextActionInput = {
     repository_initialized: true,
     state,
     config_verified: config.verified,
@@ -1791,7 +2103,8 @@ async function computeTaskStatusDetailedInternal(
     ...(migrationAuditAccepted && legacyInitialization.value?.resume_phase !== undefined
       ? { legacy_resume_phase: legacyInitialization.value.resume_phase }
       : {}),
-  });
+  };
+  let nextAction = deriveNextAction(nextActionInput);
 
   let gateInput: CommitAuthorizationInput | undefined;
   let baselineAdoptionInput: BaselineAdoptionInput | undefined;
@@ -1799,22 +2112,42 @@ async function computeTaskStatusDetailedInternal(
     nextAction.code === "open-gate" && nextAction.gate_kind === "commit-authorization" &&
     produceSubject?.artifact.artifact_kind === "implementation-output" && evidence.available
   ) {
-    const target = await currentTargetRef(dependencies);
-    gateInput = buildCommitAuthorizationInput(
-      produceSubject,
-      evidence.current_evidence,
-      target,
-      await resolveCommit(dependencies.runner, "HEAD"),
-    );
+    try {
+      const target = await currentTargetRef(dependencies);
+      const secondaryCommits = repositorySet === undefined
+        ? Object.freeze([])
+        : await buildSecondaryCommitAuthorizationFacts(produceSubject.artifact, repositorySet);
+      gateInput = buildCommitAuthorizationInput(
+        produceSubject,
+        evidence.current_evidence,
+        target,
+        await resolveCommit(dependencies.runner, "HEAD"),
+        secondaryCommits,
+      );
+    } catch (error) {
+      if (!(error instanceof SecondaryCommitObservationError)) throw error;
+      milestoneProofUnverifiableReason = `${error.repository}-${error.reason}`;
+      blockers.push(`implementation-milestone-${milestoneProofUnverifiableReason}`);
+      nextAction = deriveNextAction({
+        ...nextActionInput,
+        milestone_proof_unverifiable_reason: milestoneProofUnverifiableReason,
+      });
+    }
   }
   if (
     nextAction.code === "open-gate" && nextAction.gate_kind === "baseline-adoption" &&
     statusReconciliation !== undefined
   ) {
-    const target = await currentBaselineTargetFacts(dependencies, statusReconciliation.findings);
-    baselineAdoptionInput = baselineAdoptionInputFromFindings(
-      authority.task_id, state, statusReconciliation.findings, target,
-    );
+    try {
+      const target = await currentBaselineTargetFacts(dependencies, statusReconciliation.findings, repositorySet);
+      baselineAdoptionInput = baselineAdoptionInputFromFindings(
+        authority.task_id, state, statusReconciliation.findings, target,
+      );
+    } catch (error) {
+      // Read-only status must report, not throw, when a drifted secondary left the writable set.
+      if (!(error instanceof BaselineRepositoryUnavailableError)) throw error;
+      blockers.push(`baseline-repository-${error.repository}-unavailable`);
+    }
   }
 
   let workspace: WorkspaceCleanupReport;
@@ -1860,6 +2193,7 @@ async function computeTaskStatusDetailedInternal(
     review_policy: canonicalRubricForPhaseKind(decodePhaseInstance(state.phase_instance).kind),
     ...(subjectDigest === undefined ? {} : { subject_digest: subjectDigest }),
     config,
+    ...(repositories === undefined ? {} : { repositories }),
     ...(configChange === undefined ? {} : { config_change: configChange }),
     ...(routes === undefined ? {} : { routes }),
     ...(dispatchFailure === undefined ? {} : { dispatch_failure: dispatchFailure }),
@@ -1998,8 +2332,8 @@ export async function classifyDurableStateReadability(input: Readonly<{
     const context = Object.freeze({
       task_id: input.task_id,
       phase_instance: "prd" as PhaseInstanceId,
-      operation: "status-readability" as import("../contracts/evidence.js").SafeCode,
-      attempt: 1 as import("../contracts/evidence.js").SafeInteger,
+      operation: "status-readability" as SafeCode,
+      attempt: 1 as SafeInteger,
     });
     const discovered = await discoverWorktree(createGitRunner({ cwd: input.working_directory }), context);
     if (!discovered.ok) return unreadableState(input.task_id, "status-authority-invalid");

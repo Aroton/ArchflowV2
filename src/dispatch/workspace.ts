@@ -3,6 +3,16 @@ import { chmod, lstat, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 
+import { type GitOid } from "../contracts/canonical.js";
+import { repositoryNameV1Schema, type RepositoryName } from "../contracts/config.js";
+import type { Sha256Digest } from "../contracts/evidence.js";
+import type { ReviewedRepositoryV1 } from "../contracts/review.js";
+import {
+  MULTI_REPOSITORY_VIEW_NOTE,
+  PRODUCED_REPOSITORY_VIEW_NOTE,
+  REPOSITORY_VIEW_NOTE,
+  type ReviewWorkspaceBinding,
+} from "../review/envelopes.js";
 import type { ProjectionPlan } from "../state/snapshots.js";
 
 import type { AdapterId } from "../contracts/review.js";
@@ -83,6 +93,119 @@ export async function createDispatchWorkspace(
 }
 
 const GIT_OID = /^[0-9a-f]{40}$/u;
+const SHA256_DIGEST = /^[0-9a-f]{64}$/u;
+
+export type DispatchRepositoryView = Readonly<{
+  name: "primary" | RepositoryName;
+  member_kind: "primary" | "secondary";
+  /** Server-only live location. This value is never projected into a child envelope. */
+  repository_root: string;
+  repository_identity_digest: Sha256Digest;
+  commit: GitOid;
+  /** Authenticated retained after-images for this repository's proposed tree. */
+  projection_plan?: ProjectionPlan;
+  /** Digest of the authenticated projection represented by projection_plan. */
+  snapshot_digest?: Sha256Digest;
+}>;
+
+export type DispatchRepositoryViewPlan = readonly DispatchRepositoryView[];
+
+/** Internal carrier; callers translate it before crossing a dispatch failure boundary. */
+export class RepositoryViewMaterializationError extends Error {
+  readonly repository_name: DispatchRepositoryView["name"];
+
+  constructor(repositoryName: DispatchRepositoryView["name"], cause: unknown) {
+    super(`repository view materialization failed for ${repositoryName}`, { cause });
+    this.name = "RepositoryViewMaterializationError";
+    this.repository_name = repositoryName;
+  }
+}
+
+function ordinal(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/** Validates the server-owned ordered plan before any name is used as a filesystem segment. */
+export function validateDispatchRepositoryViewPlan(
+  candidate: DispatchRepositoryViewPlan,
+): DispatchRepositoryViewPlan {
+  if (candidate.length === 0) throw new TypeError("repository view plan must contain primary");
+  let previous = "";
+  for (let index = 0; index < candidate.length; index += 1) {
+    const member = candidate[index]!;
+    if (!GIT_OID.test(member.commit)) {
+      throw new TypeError(`repository view commit for ${member.name} must be a full lowercase git object id`);
+    }
+    if (!SHA256_DIGEST.test(member.repository_identity_digest)) {
+      throw new TypeError(`repository identity for ${member.name} must be a sha256 digest`);
+    }
+    if ((member.projection_plan === undefined) !== (member.snapshot_digest === undefined)) {
+      throw new TypeError(`repository view projection and snapshot digest for ${member.name} must appear together`);
+    }
+    if (member.snapshot_digest !== undefined && !SHA256_DIGEST.test(member.snapshot_digest)) {
+      throw new TypeError(`repository snapshot for ${member.name} must be a sha256 digest`);
+    }
+    if (!isAbsolute(member.repository_root)) {
+      throw new TypeError(`repository root for ${member.name} must be absolute`);
+    }
+    if (index === 0) {
+      if (member.name !== "primary" || member.member_kind !== "primary") {
+        throw new TypeError("repository view plan must begin with the primary member");
+      }
+    } else {
+      repositoryNameV1Schema.parse(member.name);
+      if (member.member_kind !== "secondary") {
+        throw new TypeError(`repository view member ${member.name} must be secondary`);
+      }
+      if (index > 1 && ordinal(previous, member.name) >= 0) {
+        throw new TypeError("secondary repository view names must be sorted and unique");
+      }
+    }
+    previous = member.name;
+  }
+  return candidate;
+}
+
+/** Projects child-visible workspace authority from the same validated plan used to extract bytes. */
+export function projectRepositoryWorkspaceBinding(
+  candidate: DispatchRepositoryViewPlan,
+): ReviewWorkspaceBinding {
+  const plan = validateDispatchRepositoryViewPlan(candidate);
+  if (plan.length === 1) {
+    const primary = plan[0]!;
+    return primary.snapshot_digest === undefined
+      ? Object.freeze({ kind: "read-only-repository-checkout", commit: primary.commit, note: REPOSITORY_VIEW_NOTE })
+      : Object.freeze({
+          kind: "read-only-produced-repository-snapshot",
+          base_commit: primary.commit,
+          snapshot_digest: primary.snapshot_digest,
+          note: PRODUCED_REPOSITORY_VIEW_NOTE,
+        });
+  }
+  return Object.freeze({
+    kind: "read-only-multi-repository-view",
+    note: MULTI_REPOSITORY_VIEW_NOTE,
+    repositories: Object.freeze(plan.map((member) => Object.freeze({
+      name: member.name,
+      path: member.name,
+      repository_identity_digest: member.repository_identity_digest,
+      commit: member.commit,
+      ...(member.snapshot_digest === undefined ? {} : { snapshot_digest: member.snapshot_digest }),
+    }))),
+  });
+}
+
+/** Projects the ordered server-attested commit pins without exposing live repository roots. */
+export function projectReviewedRepositories(
+  candidate: DispatchRepositoryViewPlan,
+): readonly ReviewedRepositoryV1[] {
+  const plan = validateDispatchRepositoryViewPlan(candidate);
+  return Object.freeze(plan.map((member) => Object.freeze({
+    name: member.name,
+    repository_identity_digest: member.repository_identity_digest,
+    commit: member.commit,
+  })));
+}
 
 /**
  * Materializes a read-only checkout of the repository at `commit` under the workspace. When a
@@ -94,19 +217,13 @@ const GIT_OID = /^[0-9a-f]{40}$/u;
  * good behavior. Tracked documentation (`docs/**`) stays readable: it is guidance, not authority.
  * The pipeline is a plain POSIX `git archive | tar -x`, matching this module's existing posture.
  */
-export async function materializeRepositoryView(
-  workspace: DispatchWorkspace,
-  repositoryRoot: string,
-  commit: string,
-  projectionPlan?: ProjectionPlan,
-): Promise<DispatchWorkspace> {
-  if (!GIT_OID.test(commit)) {
-    throw new TypeError("repository view commit must be a full lowercase git object id");
-  }
-  const view = join(workspace.root, "repo");
-  await mkdir(view, { recursive: true });
+async function materializeRepositoryArchive(
+  view: string,
+  member: DispatchRepositoryView,
+): Promise<void> {
+  await mkdir(view);
   await new Promise<void>((resolvePipeline, reject) => {
-    const archive = spawn("git", ["-C", repositoryRoot, "archive", "--format=tar", commit], {
+    const archive = spawn("git", ["-C", member.repository_root, "archive", "--format=tar", member.commit], {
       stdio: ["ignore", "pipe", "pipe"],
     });
     const extract = spawn("tar", ["-x", "-C", view], { stdio: ["pipe", "ignore", "pipe"] });
@@ -121,8 +238,15 @@ export async function materializeRepositoryView(
     const settle = (error?: Error): void => {
       if (settled) return;
       settled = true;
-      if (error === undefined) resolvePipeline();
-      else reject(error);
+      if (error === undefined) {
+        resolvePipeline();
+        return;
+      }
+      // A spawn failure on one side leaves the other still running; stop it before rejecting so
+      // the coordinator's workspace removal never races a tar that is still writing.
+      archive.kill();
+      extract.kill();
+      reject(error);
     };
     const finish = (): void => {
       if (archiveExit === undefined || extractExit === undefined) return;
@@ -144,9 +268,34 @@ export async function materializeRepositoryView(
       finish();
     });
   });
-  await rm(join(view, ".archflow", "tasks"), { recursive: true, force: true });
-  if (projectionPlan !== undefined) await applyProducedProjection(view, projectionPlan);
-  return Object.freeze({ ...workspace, repository_view_root: view });
+  if (member.member_kind === "primary") {
+    await rm(join(view, ".archflow", "tasks"), { recursive: true, force: true });
+  } else {
+    await rm(join(view, ".archflow"), { recursive: true, force: true });
+  }
+  if (member.projection_plan !== undefined) await applyProducedProjection(view, member.projection_plan);
+}
+
+/** Materializes the complete ordered repository set and selects the child working directory. */
+export async function materializeRepositoryViews(
+  workspace: DispatchWorkspace,
+  candidate: DispatchRepositoryViewPlan,
+): Promise<DispatchWorkspace> {
+  const plan = validateDispatchRepositoryViewPlan(candidate);
+  const container = plan.length === 1 ? workspace.root : join(workspace.root, "repos");
+  if (plan.length > 1) await mkdir(container);
+  // Every name has already passed `validateDispatchRepositoryViewPlan` (index 0 is literally
+  // `primary`, every other member is a declared repository name), so `join` cannot escape the
+  // container; the view is always a direct child.
+  for (const member of plan) {
+    const view = plan.length === 1 ? join(workspace.root, "repo") : join(container, member.name);
+    try {
+      await materializeRepositoryArchive(view, member);
+    } catch (error) {
+      throw new RepositoryViewMaterializationError(member.name, error);
+    }
+  }
+  return Object.freeze({ ...workspace, repository_view_root: plan.length === 1 ? join(workspace.root, "repo") : container });
 }
 
 function errno(error: unknown): string | undefined {

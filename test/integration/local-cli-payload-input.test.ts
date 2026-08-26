@@ -96,6 +96,7 @@ describe("payload input modes and error taxonomy", () => {
     });
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("usage: archflow-local <command>");
+    expect(result.stdout).toContain("--repository <secondary>");
     const lines = result.stdout.split("\n");
     for (const command of LOCAL_COMMANDS) {
       const contract = LOCAL_COMMAND_CONTRACTS[command];
@@ -104,6 +105,14 @@ describe("payload input modes and error taxonomy", () => {
       expect(line).toContain(contract.payload === null ? "no payload" : `payload ${contract.payload}`);
       expect(line).toContain(`--task ${contract.task}`);
     }
+  });
+
+  it("rejects repository selection for commands other than restore", () => {
+    const result = spawnSync(process.execPath, [localBundle, "hash", "--repository", "apis"], {
+      cwd: repositoryRoot, env: gitEnvironment, input: "{}", encoding: "utf8", timeout: TIMEOUT,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("--repository is supported only by restore");
   });
 
   it("reports invalid JSON with its source for stdin payloads", () => {

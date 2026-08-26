@@ -25,6 +25,7 @@ import { createAtomicWriter, createProjectionWriter, type ProjectionWriter } fro
 import { deriveImplementationDiffDigest } from "../../src/state/implementation-manifest.js";
 import {
   applyProjectionPlan,
+  applyRepositoryProjectionPlans,
   deriveDeclaredSnapshotDigest,
   installSnapshot,
   prepareDocumentSnapshot,
@@ -391,6 +392,96 @@ describe("snapshot storage", () => {
     await expect(applyProjectionPlan(racing, planResult.value)).resolves.toEqual({ outcome: "rolled-back", path: P("b.txt") });
     await expect(readFile(first.absolute)).rejects.toMatchObject({ code: "ENOENT" });
     expect(await readFile(second.absolute, "utf8")).toBe("race");
+  });
+
+  it("validates all repository plans before install and rolls completed roots back in reverse", async () => {
+    const directory = await root();
+    const primary = resolved(join(directory, "primary.txt"), "repository-source", P("primary.txt"));
+    const secondary = resolved(join(directory, "secondary.txt"), "repository-source", P("secondary.txt"));
+    const primaryPlan = await prepareProjectionPlan([{
+      path: P("primary.txt"), target: primary,
+      desired: { state: "present", file_type: "regular", mode: "100644", bytes: Buffer.from("primary") },
+      authenticated_before: { state: "absent" }, git_tracked: false,
+    }], cleanScanner, directory as ResolvedTaskPath);
+    const secondaryPlan = await prepareProjectionPlan([{
+      path: P("secondary.txt"), target: secondary,
+      desired: { state: "present", file_type: "regular", mode: "100644", bytes: Buffer.from("secondary") },
+      authenticated_before: { state: "absent" }, git_tracked: false,
+    }], cleanScanner, directory as ResolvedTaskPath);
+    if (!primaryPlan.ok || !secondaryPlan.ok) throw new Error("plan failed");
+    const real = createProjectionWriter();
+    const racing: ProjectionWriter = {
+      ...real,
+      replaceRegular: async (path, bytes, executable) => {
+        await real.replaceRegular(path, bytes, executable);
+        if (path.absolute === primary.absolute) await writeFile(secondary.absolute, "race");
+      },
+    };
+    await expect(applyRepositoryProjectionPlans(racing, [
+      { repository: "primary", plan: primaryPlan.value },
+      { repository: "api" as never, plan: secondaryPlan.value },
+    ])).resolves.toEqual({ outcome: "rolled-back", repository: "api", path: P("secondary.txt") });
+    await expect(readFile(primary.absolute)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(secondary.absolute, "utf8")).toBe("race");
+  });
+
+  it("prevalidates every root and writes nothing when the later root is already stale", async () => {
+    const directory = await root();
+    const primary = resolved(join(directory, "primary.txt"), "repository-source", P("primary.txt"));
+    const secondary = resolved(join(directory, "secondary.txt"), "repository-source", P("secondary.txt"));
+    const primaryPlan = await prepareProjectionPlan([{
+      path: P("primary.txt"), target: primary,
+      desired: { state: "present", file_type: "regular", mode: "100644", bytes: Buffer.from("primary") },
+      authenticated_before: { state: "absent" }, git_tracked: false,
+    }], cleanScanner, directory as ResolvedTaskPath);
+    const secondaryPlan = await prepareProjectionPlan([{
+      path: P("secondary.txt"), target: secondary,
+      desired: { state: "present", file_type: "regular", mode: "100644", bytes: Buffer.from("secondary") },
+      authenticated_before: { state: "absent" }, git_tracked: false,
+    }], cleanScanner, directory as ResolvedTaskPath);
+    if (!primaryPlan.ok || !secondaryPlan.ok) throw new Error("plan failed");
+    // The secondary target goes stale between planning and install; the primary must never be written.
+    await writeFile(secondary.absolute, "stale before installation");
+    await expect(applyRepositoryProjectionPlans(createProjectionWriter(), [
+      { repository: "primary", plan: primaryPlan.value },
+      { repository: "api" as never, plan: secondaryPlan.value },
+    ])).resolves.toEqual({ outcome: "collision", repository: "api", path: P("secondary.txt") });
+    await expect(readFile(primary.absolute)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(secondary.absolute, "utf8")).toBe("stale before installation");
+  });
+
+  it("reports a prior root's failed rollback at that root's own tuple", async () => {
+    const directory = await root();
+    const primary = resolved(join(directory, "primary.txt"), "repository-source", P("primary.txt"));
+    const secondary = resolved(join(directory, "secondary.txt"), "repository-source", P("secondary.txt"));
+    const primaryPlan = await prepareProjectionPlan([{
+      path: P("primary.txt"), target: primary,
+      desired: { state: "present", file_type: "regular", mode: "100644", bytes: Buffer.from("primary") },
+      authenticated_before: { state: "absent" }, git_tracked: false,
+    }], cleanScanner, directory as ResolvedTaskPath);
+    const secondaryPlan = await prepareProjectionPlan([{
+      path: P("secondary.txt"), target: secondary,
+      desired: { state: "present", file_type: "regular", mode: "100644", bytes: Buffer.from("secondary") },
+      authenticated_before: { state: "absent" }, git_tracked: false,
+    }], cleanScanner, directory as ResolvedTaskPath);
+    if (!primaryPlan.ok || !secondaryPlan.ok) throw new Error("plan failed");
+    const real = createProjectionWriter();
+    const racing: ProjectionWriter = {
+      ...real,
+      replaceRegular: async (path, bytes, executable) => {
+        await real.replaceRegular(path, bytes, executable);
+        if (path.absolute === primary.absolute) {
+          // The secondary collides, and the already-written primary is tampered with before its
+          // rollback can restore it: the repair belongs to the primary tuple, not the secondary's.
+          await writeFile(secondary.absolute, "race");
+          await writeFile(primary.absolute, "tampered");
+        }
+      },
+    };
+    await expect(applyRepositoryProjectionPlans(racing, [
+      { repository: "primary", plan: primaryPlan.value },
+      { repository: "api" as never, plan: secondaryPlan.value },
+    ])).resolves.toEqual({ outcome: "repair-required", repository: "primary", path: P("primary.txt") });
   });
 
   it("observes and replaces the validated lexical symlink leaf rather than its referent", async () => {

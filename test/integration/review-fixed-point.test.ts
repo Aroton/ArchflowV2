@@ -837,6 +837,11 @@ async function commitCounter(
     phase_kind: "phase-impl",
     producer_family: "claude",
     measured_at_revision: runningState.revision,
+    repositories: Object.freeze([Object.freeze({
+      name: "primary",
+      repository_identity_digest: "a".repeat(64) as Sha256Digest,
+      commit: "b".repeat(40) as never,
+    })]),
     envelope: {
       artifact: `artifact-v${version}`,
       rubric,

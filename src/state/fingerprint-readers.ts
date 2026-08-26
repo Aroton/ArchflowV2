@@ -9,10 +9,15 @@ import {
 import type {
   DeclaredInputRef,
   GitIdentityRef,
+  SecondaryDeclaredInputSectionV1,
 } from "../contracts/fingerprints.js";
 import type { SafeCode, Sha256Digest } from "../contracts/evidence.js";
 import type { TaskPathClaim } from "../contracts/path-claims.js";
 import type { ParsedToolCall } from "../contracts/mcp-tools.js";
+import type { ToolName } from "../contracts/tool-names.js";
+import { decodePhaseInstance } from "../contracts/phase-instance.js";
+import type { DocumentArtifactV1 } from "../contracts/durable-document.js";
+import type { ImplementationOutputV1 } from "../contracts/durable-implementation-output.js";
 import {
   GitInvocationError,
   hashGitBlob,
@@ -36,7 +41,7 @@ const ok = <T>(value: T): ProjectResult<T> =>
 const fail = <T>(error: ProjectError): ProjectResult<T> =>
   Object.freeze({ schema_version: "1", ok: false, error });
 
-function stateIssue(input: FingerprintReadContext<any>, issueCode: string): ProjectError {
+function stateIssue(input: FingerprintReadContext<ToolName>, issueCode: string): ProjectError {
   return createProjectError("STATE_INVALID", {
     phase_instance: input.state.value.phase_instance,
     issue_code: issueCode as SafeCode,
@@ -94,16 +99,16 @@ export const readCanonicalConstitutionDigest: CanonicalConstitutionDigestReader 
   return resolved.ok ? ok(resolved.value.digest) : resolved;
 };
 
-function artifactPaths(_input: FingerprintReadContext<any>): readonly TaskPathClaim[] {
+function artifactPaths(_input: FingerprintReadContext<ToolName>): readonly TaskPathClaim[] {
   return Object.freeze([]);
 }
 
-function upstreamPaths(_input: FingerprintReadContext<any>): readonly TaskPathClaim[] {
+function upstreamPaths(_input: FingerprintReadContext<ToolName>): readonly TaskPathClaim[] {
   return Object.freeze([]);
 }
 
 async function identitiesFor(
-  input: FingerprintReadContext<any>,
+  input: FingerprintReadContext<ToolName>,
   claims: readonly TaskPathClaim[],
   missingIssue: string,
 ): Promise<ProjectResult<readonly GitIdentityRef[]>> {
@@ -158,27 +163,82 @@ export const readCanonicalArtifactIdentities: CanonicalGitIdentityReader = async
 export const readCanonicalUpstreamIdentities: CanonicalGitIdentityReader = async (input) =>
   identitiesFor(input, upstreamPaths(input), "fingerprint-upstream-missing");
 
-/** Declared inputs exist only on caller-supplied document and implementation artifacts. */
-export const readCanonicalDeclaredInputs: CanonicalDeclaredInputReader = async (input) => {
+type ProduceArtifact = DocumentArtifactV1 | ImplementationOutputV1;
+type ReadRetainedProduceArtifact = (
+  input: FingerprintReadContext<ToolName>,
+) => Promise<ProjectResult<ProduceArtifact | undefined>>;
+
+async function fingerprintArtifact(
+  input: FingerprintReadContext<ToolName>,
+  readRetainedProduceArtifact: ReadRetainedProduceArtifact | undefined,
+  retainForImplementationFollowup: boolean,
+): Promise<ProjectResult<ProduceArtifact | undefined>> {
   const call = input.call as ParsedToolCall;
-  if (call.name !== "archflow_state" || call.input.artifact === undefined) {
+  if (call.name === "archflow_state" &&
+      (call.input.artifact?.artifact_kind === "document" || call.input.artifact?.artifact_kind === "implementation-output")) {
+    return ok(call.input.artifact);
+  }
+  const implementationFollowup = retainForImplementationFollowup &&
+    decodePhaseInstance(input.state.value.phase_instance).kind === "phase-impl" &&
+    (call.name === "archflow_counter_review" ||
+      (call.name === "archflow_state" && call.input.operation !== "planning_restart" &&
+        (call.input.step === "counter_review" || call.input.step === "triage")));
+  if (!implementationFollowup) return ok(undefined);
+  return readRetainedProduceArtifact === undefined
+    ? ok(undefined)
+    : readRetainedProduceArtifact(input);
+}
+
+/**
+ * Primary declared inputs exist only on the caller-supplied document or implementation artifact,
+ * exactly as before repository sets existed: follow-up review and triage steps never look them up
+ * from retained authority, so a single-repository task's fingerprints are byte-identical to the
+ * pre-multi-repository composition at every step.
+ */
+export async function readCanonicalDeclaredInputs(
+  input: FingerprintReadContext<ToolName>,
+): Promise<ProjectResult<readonly DeclaredInputRef[]>> {
+  const artifact = await fingerprintArtifact(input, undefined, false);
+  if (!artifact.ok) return artifact;
+  return ok(Object.freeze(structuredClone(artifact.value?.declared_inputs ?? [])));
+}
+
+/**
+ * Secondary declarations are read from the caller-supplied implementation artifact or, at the
+ * implementation follow-up review and triage boundaries, from its retained authority — the
+ * addendum is folded in only for tasks that actually declare secondary inputs.
+ */
+export async function readCanonicalSecondaryDeclaredInputs(
+  input: FingerprintReadContext<ToolName>,
+  readRetainedProduceArtifact?: ReadRetainedProduceArtifact,
+): Promise<ProjectResult<readonly SecondaryDeclaredInputSectionV1[]>> {
+  const loaded = await fingerprintArtifact(input, readRetainedProduceArtifact, true);
+  if (!loaded.ok) return loaded;
+  const artifact = loaded.value;
+  if (artifact?.artifact_kind !== "implementation-output") {
     return ok(Object.freeze([]));
   }
-  const artifact = call.input.artifact;
-  const declared: readonly DeclaredInputRef[] =
-    artifact.artifact_kind === "document" || artifact.artifact_kind === "implementation-output"
-      ? artifact.declared_inputs
-      : [];
-  return ok(Object.freeze(structuredClone(declared)));
-};
+  return ok(Object.freeze((artifact.secondary_repositories ?? []).flatMap((section) =>
+    section.declared_inputs.length === 0 ? [] : [Object.freeze({
+      repository: section.repository,
+      declared_inputs: Object.freeze(section.declared_inputs.map((declared) => Object.freeze({
+        input_id: declared.input_id,
+        digest: declared.digest,
+      }))),
+    })],
+  )));
+}
 
 /** The production resolver assembled solely from canonical live readers. */
-export function createProductionInputFingerprintResolver(): InputFingerprintResolver {
+export function createProductionInputFingerprintResolver(
+  readRetainedProduceArtifact?: ReadRetainedProduceArtifact,
+): InputFingerprintResolver {
   return createInternalInputFingerprintResolver({
     read_workflow_digest: readCanonicalWorkflowDigest,
     read_constitution_digest: readCanonicalConstitutionDigest,
     read_artifact_identities: readCanonicalArtifactIdentities,
     read_upstream_identities: readCanonicalUpstreamIdentities,
     read_declared_inputs: readCanonicalDeclaredInputs,
+    read_secondary_declared_inputs: (input) => readCanonicalSecondaryDeclaredInputs(input, readRetainedProduceArtifact),
   });
 }

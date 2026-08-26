@@ -319,6 +319,11 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
               adapter: route.adapter,
               cli_version: dispatched.cli_version,
               route,
+              repositories: [{
+                name: "primary",
+                repository_identity_digest: workspace.initialization.repository_identity_digest,
+                commit: workspace.initialization.code_baseline_commit,
+              }],
               envelope_input_digest: envelope.digest,
               extracted_output_bytes: dispatched.extracted_output_bytes,
             });

@@ -549,7 +549,19 @@
               "const": "CONFIG_INVALID"
             },
             "parameters": {
-              "$ref": "#/$defs/issue"
+              "type": "object",
+              "properties": {
+                "issue_code": {
+                  "$ref": "#/$defs/code"
+                },
+                "issues": {
+                  "$ref": "#/$defs/validationIssues"
+                }
+              },
+              "required": [
+                "issue_code"
+              ],
+              "additionalProperties": false
             }
           },
           "required": [
@@ -856,6 +868,75 @@
         "next_action": {
           "type": "string",
           "const": "reopen-task-worktree"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_REPOSITORY_VIEW_UNAVAILABLE": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "REPOSITORY_VIEW_UNAVAILABLE"
+        },
+        "owner": {
+          "type": "string",
+          "const": "repository"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": true
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "REPOSITORY_VIEW_UNAVAILABLE"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "repository_name": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "primary"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?!primary$)(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "repository_name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-repository-view-and-resume"
         }
       },
       "required": [
@@ -1963,6 +2044,18 @@
                 },
                 "issue_code": {
                   "$ref": "#/$defs/code"
+                },
+                "repository_name": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "primary"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?!primary$)(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
+                    }
+                  ]
                 }
               },
               "required": [
@@ -3374,6 +3467,9 @@
     },
     {
       "$ref": "#/$defs/E_REPOSITORY_MISMATCH"
+    },
+    {
+      "$ref": "#/$defs/E_REPOSITORY_VIEW_UNAVAILABLE"
     },
     {
       "$ref": "#/$defs/E_TASK_INVALID"

@@ -9,6 +9,8 @@ import type { ModelFamily } from "../../contracts/review.js";
 import type { RoutingPhaseKind } from "../../dispatch/routing.js";
 import { createProductionServices, type ProductionServices } from "../../state/production.js";
 import { readStagedLegacyConfig } from "../../state/legacy-stage.js";
+import { resolveRepositorySet, type RepositorySet } from "../../repository/repository-set.js";
+import { validateRepositorySetContinuity } from "../../state/config-change.js";
 
 export type HandlerSession = Readonly<{
   services: ProductionServices;
@@ -17,6 +19,7 @@ export type HandlerSession = Readonly<{
   producer_family: ModelFamily;
   phase_kind: RoutingPhaseKind;
   measured_at_revision: ReturnType<typeof parseSafeInteger>;
+  repository_set: RepositorySet;
 }>;
 
 const fail = <T>(error: ReturnType<typeof createProjectError>): ProjectResult<T> =>
@@ -51,7 +54,12 @@ export async function openHandlerSession(
     if (staged !== undefined) configRead = Object.freeze({ kind: "valid", snapshot: staged });
   }
   if (configRead.kind !== "valid") {
-    return fail(createProjectError("CONFIG_INVALID", { issue_code: `config-${configRead.kind}` }));
+    return fail(createProjectError("CONFIG_INVALID", {
+      issue_code: `config-${configRead.kind}`,
+      ...(configRead.kind !== "invalid" || configRead.issues === undefined
+        ? {}
+        : { issues: configRead.issues }),
+    }));
   }
   const host = context.connection.initialization_candidates.host;
   if (host === "unknown") return fail(createProjectError("UNSUPPORTED_HOST", { host }));
@@ -67,16 +75,31 @@ export async function openHandlerSession(
     // unexpected staged-legacy shape), surfacing a repairable config error instead of an internal one.
     return fail(createProjectError("CONFIG_INVALID", { issue_code: "config-unparseable" }));
   }
+  const repositorySet = await resolveRepositorySet(
+    { runner: services.value.runner, environment: services.value.environment },
+    configRead.snapshot.parsed,
+    services.value.authority.context,
+  );
+  if (!repositorySet.ok) return repositorySet;
+  if (state !== undefined) {
+    const continuity = validateRepositorySetContinuity(state, repositorySet.value);
+    if (!continuity.ok) return continuity;
+  }
+  const repositoryBoundServices: ProductionServices = Object.freeze({
+    ...services.value,
+    repository_set: repositorySet.value,
+  });
   return Object.freeze({
     schema_version: "1",
     ok: true,
     value: Object.freeze({
-      services: services.value,
+      services: repositoryBoundServices,
       config,
       host,
       producer_family: host,
       phase_kind,
       measured_at_revision: parseSafeInteger(state?.revision ?? 0),
+      repository_set: repositorySet.value,
     }),
   });
 }

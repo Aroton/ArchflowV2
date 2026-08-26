@@ -1,11 +1,12 @@
 import { isDeepStrictEqual } from "node:util";
-import { isAbsolute, relative } from "node:path";
+import { isAbsolute, relative, resolve as resolvePath } from "node:path";
 
 import {
   canonicalDocument,
   canonicalJsonDigest,
   sha256Bytes,
   type CanonicalDocument,
+  type GitOid,
 } from "../contracts/canonical.js";
 import {
   createCommittedIntentSubject,
@@ -18,6 +19,7 @@ import {
   parseIntentReceipt,
   type IntentReceiptV1,
 } from "../contracts/durable-intent.js";
+import type { RepositoryName } from "../contracts/config.js";
 import type { AuthoritativeResultRef, LastTransition, TaskStateV1 } from "../contracts/durable-state.js";
 import { parseResultManifest, type ResultManifestV1 } from "../contracts/durable-result-manifest.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
@@ -38,7 +40,9 @@ import type { ToolName } from "../contracts/tool-names.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
 import type { GitEnvironment } from "../repository/git.js";
 import { verifyRepositoryIdentity, type RootBoundGitRunner } from "../repository/identity.js";
+import { resolveRepositorySet, type RepositorySet } from "../repository/repository-set.js";
 import {
+  isRepositoryControlPath,
   parseWorkspacePathClaim,
   resolveTaskPath,
   resolveTaskWorkspacePath,
@@ -48,7 +52,7 @@ import {
 } from "../repository/paths.js";
 import { AtomicReplaceError, type AtomicWriter, type ProjectionWriter } from "./atomic.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
-import { withLastSeenConfig } from "./config-change.js";
+import { validateRepositorySetContinuity, withLastSeenConfig } from "./config-change.js";
 import type { InputFingerprintResolver } from "./fingerprint.js";
 import { identifyTransactionRequest } from "./request.js";
 import {
@@ -68,9 +72,10 @@ import type {
 } from "./read.js";
 import { TaskLockError, type TaskLock } from "./lock.js";
 import {
-  applyProjectionPlan,
+  applyRepositoryProjectionPlans,
   installSnapshot,
   prepareSnapshot,
+  repositoryPathKey,
   RESULT_BYTE_CAP,
   TASK_BYTE_CAP,
   type PreparedSnapshot,
@@ -115,8 +120,17 @@ export type ResultInstallationPlan = Readonly<{
   manifest_target: ResolvedPath;
   projection_plan: ProjectionPlan;
   worktree_root: ResolvedTaskPath;
+  secondary_projection_plans?: readonly Readonly<{
+    repository: RepositoryName;
+    repository_identity_digest: Sha256Digest;
+    base_commit: GitOid;
+    snapshot_digest: Sha256Digest;
+    projection_plan: ProjectionPlan;
+    worktree_root: ResolvedTaskPath;
+  }>[];
 }>;
 
+/** A retained result is the complete installation plan minus the reference that addresses it. */
 export type RetainedResultInstallation = Readonly<Omit<ResultInstallationPlan, "reference">>;
 
 /** The authenticated half of a retained result that costs no payload bytes to reload. */
@@ -150,6 +164,13 @@ function materializeResultInstallation(plan: ResultInstallationPlan): ResultInst
   const manifestTarget = structuredClone(ownDataField(plan, "manifest_target", "result installation plan")) as ResolvedPath;
   const projectionPlan = structuredClone(ownDataField(plan, "projection_plan", "result installation plan")) as ProjectionPlan;
   const worktreeRoot = ownDataField(plan, "worktree_root", "result installation plan");
+  const secondaryDescriptor = Object.getOwnPropertyDescriptor(plan, "secondary_projection_plans");
+  if (secondaryDescriptor !== undefined && (!("value" in secondaryDescriptor) || !secondaryDescriptor.enumerable)) {
+    throw new TypeError("secondary projection plans must be an own enumerable data property");
+  }
+  const secondaryProjectionPlans = secondaryDescriptor?.value === undefined
+    ? undefined
+    : structuredClone(secondaryDescriptor.value) as ResultInstallationPlan["secondary_projection_plans"];
   assertPlainJson(reference, "result installation reference");
   assertPlainJson(manifestTarget, "result installation manifest target");
   if (typeof worktreeRoot !== "string") throw new TypeError("result installation worktree root must be a string");
@@ -167,9 +188,30 @@ function materializeResultInstallation(plan: ResultInstallationPlan): ResultInst
   if (!validateDurableSemantics({ result_manifest: prepared.manifest }).ok) {
     throw new TypeError("prepared snapshot manifest semantics are invalid");
   }
+  const source = prepared.manifest.value.source_artifact;
+  const durableSecondaries = source.artifact_kind === "implementation-output"
+    ? (source.secondary_repositories ?? []).filter((section) => section.outputs.length > 0)
+    : [];
+  if ((secondaryProjectionPlans?.length ?? 0) !== durableSecondaries.length) {
+    throw new TypeError("secondary projection plans do not match durable repository sections");
+  }
+  for (let index = 0; index < durableSecondaries.length; index += 1) {
+    const section = durableSecondaries[index]!;
+    const secondary = secondaryProjectionPlans![index]!;
+    if (secondary.repository !== section.repository ||
+        secondary.repository_identity_digest !== section.repository_identity_digest ||
+        secondary.base_commit !== section.base_commit || secondary.snapshot_digest !== section.snapshot_digest ||
+        typeof secondary.worktree_root !== "string" ||
+        secondary.projection_plan.entries.some((entry) =>
+          entry.target.path_class !== "repository-source" ||
+          !projectionTargetMatchesRepositoryRoot(secondary.worktree_root, entry))) {
+      throw new TypeError("secondary projection plan does not bind its durable repository section");
+    }
+  }
   return Object.freeze({ plan: Object.freeze({
     reference, prepared, manifest_target: manifestTarget, projection_plan: projectionPlan,
     worktree_root: worktreeRoot as ResolvedTaskPath,
+    ...(secondaryProjectionPlans === undefined ? {} : { secondary_projection_plans: secondaryProjectionPlans }),
   }) });
 }
 
@@ -411,13 +453,27 @@ async function liveIdentification<K extends ToolName>(
   dependencies: TransactionDependencies,
   request: TransactionRequest<K>,
   current: CanonicalDocument<TaskStateV1>,
-): Promise<ProjectResult<Identified<K> & Readonly<{ live_config: LiveConfigSnapshot }>>> {
+): Promise<ProjectResult<Identified<K> & Readonly<{
+  live_config: LiveConfigSnapshot;
+  repository_set: RepositorySet;
+}>>> {
   const config = await dependencies.read_config(request.authority.config);
   if (config.kind !== "valid") {
     return config.kind === "invalid"
-      ? issue("CONFIG_INVALID", "task-config-invalid")
+      ? fail(createProjectError("CONFIG_INVALID", {
+          issue_code: "task-config-invalid",
+          ...(config.issues === undefined ? {} : { issues: config.issues }),
+        }))
       : io(request.authority, "task-config-read");
   }
+  const repositorySet = await resolveRepositorySet(
+    { runner: dependencies.runner, environment: dependencies.environment },
+    config.snapshot.parsed,
+    request.authority.context,
+  );
+  if (!repositorySet.ok) return repositorySet;
+  const continuity = validateRepositorySetContinuity(current.value, repositorySet.value);
+  if (!continuity.ok) return continuity;
   const resolved = await dependencies.resolve_input_fingerprint({
     runner: dependencies.runner,
     authority: request.authority,
@@ -432,13 +488,17 @@ async function liveIdentification<K extends ToolName>(
   if (inputFingerprint !== request.call.input.input_fingerprint) {
     return fingerprintMismatch(inputFingerprint, request.call.input.input_fingerprint);
   }
-  return ok({ ...identifyTransactionRequest(request.call, request.authority, inputFingerprint), live_config: config.snapshot });
+  return ok({
+    ...identifyTransactionRequest(request.call, request.authority, inputFingerprint),
+    live_config: config.snapshot,
+    repository_set: repositorySet.value,
+  });
 }
 
 function identifyFromReceipt<K extends ToolName>(
   request: TransactionRequest<K>,
   receipt: IntentReceiptV1,
-): ProjectResult<Identified<K>> {
+): ProjectResult<Identified<K> & Readonly<{ repository_set?: RepositorySet }>> {
   if (receipt.input_fingerprint !== request.call.input.input_fingerprint) {
     return fingerprintMismatch(receipt.input_fingerprint, request.call.input.input_fingerprint);
   }
@@ -658,6 +718,45 @@ function targetIsInside(root: string, target: ResolvedPath | ResolvedWorkspacePa
   return rel !== "" && rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel);
 }
 
+function projectionTargetMatchesRepositoryRoot(
+  root: string,
+  entry: ProjectionPlan["entries"][number],
+): boolean {
+  return entry.path === entry.target.repositoryRelative &&
+    !isRepositoryControlPath(entry.path) &&
+    entry.target.absolute === resolvePath(root, entry.path) &&
+    targetIsInside(root, entry.target);
+}
+
+/** Binds every secondary plan to the live member that authenticated its repository identity. */
+export function secondaryProjectionPlansMatchRepositorySet(
+  plans: ResultInstallationPlan["secondary_projection_plans"],
+  repositorySet: RepositorySet,
+): boolean {
+  return (plans ?? []).every((secondary) => {
+    const member = repositorySet.members.find((candidate) => candidate.name === secondary.repository);
+    if (member === undefined || member.mode !== "writable" ||
+        member.identity.digest !== secondary.repository_identity_digest) return false;
+    const authenticatedRoot = member.binding.runner.location.worktreeRoot;
+    return secondary.worktree_root === authenticatedRoot &&
+      secondary.projection_plan.entries.every((entry) =>
+        projectionTargetMatchesRepositoryRoot(authenticatedRoot, entry));
+  });
+}
+
+/** Verifies the immutable cache location for one repository-qualified retained payload. */
+export function resultPayloadTargetIsContained(
+  taskId: string,
+  resultDigest: Sha256Digest,
+  workspaceRoot: string,
+  payload: PreparedSnapshot["payloads"][number],
+): boolean {
+  const root = `.archflow/runtime/tasks/${taskId}/cache/results/${resultDigest}/` +
+    (payload.repository === undefined ? "payload/" : `repositories/${payload.repository}/payload/`);
+  return payload.target.repositoryRelative === `${root}${payload.path}` &&
+    targetIsInside(workspaceRoot, payload.target);
+}
+
 /** Selects the authenticated containment boundary for a prepared result projection. */
 export function resultProjectionTargetIsContained(
   artifactKind: ResultManifestV1["source_artifact"]["artifact_kind"],
@@ -665,7 +764,10 @@ export function resultProjectionTargetIsContained(
   worktreeRoot: string,
   target: ResolvedPath | ResolvedWorkspacePath,
 ): boolean {
-  return targetIsInside(
+  if (artifactKind === "implementation-output" && isRepositoryControlPath(target.repositoryRelative)) {
+    return false;
+  }
+  return target.absolute === resolvePath(worktreeRoot, target.repositoryRelative) && targetIsInside(
     artifactKind === "implementation-output" ? worktreeRoot : taskRoot,
     target,
   );
@@ -703,6 +805,30 @@ function validateInstallationFacts<K extends ToolName>(
     manifest.step !== expectedStep ||
     manifest.input_fingerprint !== identified.input_fingerprint
   ) return stateIssue(current.value, "result-installation-state-mismatch");
+  if (manifest.source_artifact.artifact_kind === "implementation-output") {
+    const sections = [
+      {
+        outputs: manifest.source_artifact.outputs,
+        restore_targets: manifest.source_artifact.restore_targets,
+        declared_inputs: [] as readonly Readonly<{ path: string }>[],
+      },
+      ...(manifest.source_artifact.secondary_repositories ?? []),
+    ];
+    const claimedPaths = sections.flatMap((section) => [
+      ...section.outputs.flatMap((output) => output.operation === "rename"
+        ? [output.path, output.previous_path]
+        : [output.path]),
+      ...section.restore_targets,
+      ...section.declared_inputs.map((input) => input.path),
+    ]);
+    claimedPaths.push(
+      ...manifest.projections.map((projection) => projection.path),
+      ...(manifest.secondary_projections ?? []).flatMap((section) => section.projections.map((projection) => projection.path)),
+    );
+    if (claimedPaths.some(isRepositoryControlPath)) {
+      return issue("CONTRACT_INVALID", "result-installation-repository-control-path");
+    }
+  }
   const expectedManifestPath =
     `.archflow/tasks/${request.authority.task_id}/authority/results/${facts.prepared.result_digest}.json`;
   if (
@@ -710,12 +836,12 @@ function validateInstallationFacts<K extends ToolName>(
     facts.manifest_target.repositoryRelative !== expectedManifestPath ||
     !targetIsInside(request.authority.task_root, facts.manifest_target)
   ) return issue("CONTRACT_INVALID", "result-installation-target-mismatch");
-  const payloadRoot =
-    `.archflow/runtime/tasks/${request.authority.task_id}/cache/results/${facts.prepared.result_digest}/payload/`;
-  if (facts.prepared.payloads.some((payload) =>
-    !payload.target.repositoryRelative.startsWith(payloadRoot) ||
-    !targetIsInside(request.authority.workspace_root, payload.target)
-  )) return issue("CONTRACT_INVALID", "result-installation-payload-target-mismatch");
+  if (facts.prepared.payloads.some((payload) => !resultPayloadTargetIsContained(
+    request.authority.task_id,
+    facts.prepared.result_digest,
+    request.authority.workspace_root,
+    payload,
+  ))) return issue("CONTRACT_INVALID", "result-installation-payload-target-mismatch");
   const outputs = new Map(manifest.outputs.map((output) => [output.path, output.path_class]));
   const evidenceProjection = manifest.source_artifact.artifact_kind === "review-evidence" ||
     manifest.source_artifact.artifact_kind === "triage" ||
@@ -726,7 +852,7 @@ function validateInstallationFacts<K extends ToolName>(
       (evidenceProjection
         ? entry.target.path_class !== "workspace-review"
         : outputs.get(entry.path) !== entry.target.path_class) ||
-      entry.target.repositoryRelative !== entry.path ||
+      !projectionTargetMatchesRepositoryRoot(authenticatedWorktreeRoot, entry) ||
       ("workspaceRelative" in entry.target
         ? !targetIsInside(request.authority.workspace_root, entry.target)
         : !resultProjectionTargetIsContained(
@@ -748,6 +874,7 @@ function validateResultInstallationBinding<K extends ToolName>(
     constitution_installation?: ResultInstallationFacts;
   },
   authenticatedWorktreeRoot: string,
+  repositorySet: RepositorySet,
 ): ProjectResult<void> {
   const installation = plan.result_installation;
   if (installation === undefined) {
@@ -768,6 +895,9 @@ function validateResultInstallationBinding<K extends ToolName>(
     request, current, identified, plan.next_state, facts, expectedStep, authenticatedWorktreeRoot,
   );
   if (!primary.ok) return primary;
+  if (!secondaryProjectionPlansMatchRepositorySet(facts.secondary_projection_plans, repositorySet)) {
+    return issue("CONTRACT_INVALID", "result-installation-secondary-root-mismatch");
+  }
   const constitution = plan.constitution_installation;
   if (constitution === undefined) return ok(undefined);
   // The constitution-review evidence rides the counter-review transaction: its manifest is an
@@ -790,7 +920,10 @@ function validateResultInstallationBinding<K extends ToolName>(
 function buildPlan<K extends ToolName>(
   request: TransactionRequest<K>,
   current: CanonicalDocument<TaskStateV1>,
-  identified: Identified<K> & Readonly<{ live_config: LiveConfigSnapshot }>,
+  identified: Identified<K> & Readonly<{
+    live_config: LiveConfigSnapshot;
+    repository_set: RepositorySet;
+  }>,
   preparedValue: unknown,
   authenticatedWorktreeRoot: string,
 ): ProjectResult<PlannedCommit<K>> {
@@ -810,9 +943,16 @@ function buildPlan<K extends ToolName>(
   // un-normalized draft) and before the receipt's prepared state and digest are derived, so the
   // prepared state, its digest, the committed bytes, and any crash replay all carry the same
   // `last_seen_config`.
-  const plan = { ...materialized, next_state: withLastSeenConfig(materialized.next_state, identified.live_config.parsed) };
+  const plan = {
+    ...materialized,
+    next_state: withLastSeenConfig(
+      materialized.next_state,
+      identified.live_config.parsed,
+      identified.repository_set,
+    ),
+  };
   const installation = validateResultInstallationBinding(
-    request, current, identified, plan, authenticatedWorktreeRoot,
+    request, current, identified, plan, authenticatedWorktreeRoot, identified.repository_set,
   );
   if (!installation.ok) return installation;
   const preparedState: TaskStateV1 = { ...plan.next_state, revision: resultingRevision };
@@ -891,20 +1031,32 @@ async function arbitrate<K extends ToolName>(
 }
 
 function copiedResultBytes(prepared: PreparedSnapshot): number {
-  const payloads = new Map(prepared.payloads.map((payload) => [payload.path, payload]));
+  const payloads = new Map(prepared.payloads.map((payload) => [repositoryPathKey(payload.repository, payload.path), payload]));
   if (payloads.size !== prepared.payloads.length) throw new TypeError("prepared snapshot has duplicate payload paths");
   let bytes = 0;
-  for (const output of prepared.manifest.value.outputs) {
+  const sections = [
+    { repository: undefined, outputs: prepared.manifest.value.outputs },
+    ...(prepared.manifest.value.source_artifact.artifact_kind === "implementation-output"
+      ? (prepared.manifest.value.source_artifact.secondary_repositories ?? []).map((section) => ({ repository: section.repository, outputs: section.outputs }))
+      : []),
+  ];
+  for (const section of sections) for (const output of section.outputs) {
     if (output.storage !== "raw-payload") continue;
-    const payload = payloads.get(output.path);
+    const payloadKey = repositoryPathKey(section.repository, output.path);
+    const payload = payloads.get(payloadKey);
     if (
       payload === undefined || payload.target.path_class !== "workspace-result-payload" ||
       payload.bytes.byteLength !== output.payload_bytes || sha256Bytes(payload.bytes) !== output.payload_digest
     ) throw new TypeError("prepared snapshot payload facts disagree");
     bytes += payload.bytes.byteLength;
-    payloads.delete(output.path);
+    payloads.delete(payloadKey);
   }
-  if (payloads.size !== 0 || bytes !== prepared.manifest.value.accounting.result_bytes) {
+  const source = prepared.manifest.value.source_artifact;
+  const accountedBytes = prepared.manifest.value.accounting.result_bytes +
+    (source.artifact_kind === "implementation-output"
+      ? (source.secondary_repositories ?? []).reduce((sum, section) => sum + section.accounting.result_bytes, 0)
+      : 0);
+  if (payloads.size !== 0 || bytes !== accountedBytes) {
     throw new TypeError("prepared snapshot accounting disagrees");
   }
   return bytes;
@@ -916,12 +1068,18 @@ async function installResultFacts(
   current: CanonicalDocument<TaskStateV1>,
   facts: ResultInstallationFacts,
   replay: boolean,
+  repositorySet?: RepositorySet,
 ): Promise<ProjectResult<void>> {
   if (dependencies.read_retained_task_bytes === undefined || dependencies.projection_writer === undefined) {
     return stateIssue(current.value, "result-installation-unavailable");
   }
   if (facts.plan.worktree_root !== dependencies.runner.location.worktreeRoot) {
     throw new TypeError("result installation worktree root is not the authenticated repository root");
+  }
+  if ((facts.plan.secondary_projection_plans?.length ?? 0) !== 0 &&
+      (repositorySet === undefined ||
+        !secondaryProjectionPlansMatchRepositorySet(facts.plan.secondary_projection_plans, repositorySet))) {
+    return fail(createProjectError("CONTRACT_INVALID", { issue_code: "result-installation-secondary-root-mismatch" }));
   }
   const resultBytes = copiedResultBytes(facts.plan.prepared);
   const retainedBytes = parseSafeInteger(
@@ -959,11 +1117,11 @@ async function installResultFacts(
       if (payload.target.path_class !== "workspace-result-payload") {
         throw new TypeError("result payload target has the wrong storage class");
       }
-      await ensurePayloadParent(
-        authority,
-        revalidated.value.result_digest,
-        payload.target.absolute,
-      );
+      if (payload.repository === undefined) {
+        await ensurePayloadParent(authority, revalidated.value.result_digest, payload.target.absolute);
+      } else {
+        await ensureWorkspaceProjectionParent(authority, payload.target.absolute);
+      }
     }
   } catch {
     return fail(createProjectError("SNAPSHOT_INVALID", {
@@ -987,7 +1145,13 @@ async function installResultFacts(
         await ensureTaskProjectionParent(authority, entry.target.absolute);
       }
     }
-    projected = await applyProjectionPlan(dependencies.projection_writer, facts.plan.projection_plan);
+    projected = await applyRepositoryProjectionPlans(dependencies.projection_writer, [
+      { repository: "primary", plan: facts.plan.projection_plan },
+      ...(facts.plan.secondary_projection_plans ?? []).map((entry) => ({
+        repository: entry.repository,
+        plan: entry.projection_plan,
+      })),
+    ]);
   } catch (error) {
     const classified = projectionWriteFailure(error, authority, current.value.task_id);
     if (classified === undefined) throw error;
@@ -997,6 +1161,7 @@ async function installResultFacts(
     return fail(createProjectError("SNAPSHOT_INVALID", {
       snapshot_digest: facts.plan.prepared.manifest.value.snapshot_digest,
       issue_code: `projection-${projected.outcome}`,
+      repository_name: projected.repository,
     }));
   }
   return ok(undefined);
@@ -1029,6 +1194,7 @@ async function installPlan<K extends ToolName>(
   current: CanonicalDocument<TaskStateV1>,
   plan: PlannedCommit<K>,
   receiptAlreadyExists: boolean,
+  repositorySet?: RepositorySet,
 ): Promise<ProjectResult<TransactionOutcome<K>>> {
   const resumesResult = plan.receipt.value.operation === "record-document-artifact" ||
     plan.receipt.value.operation === "record-implementation-output" ||
@@ -1048,22 +1214,23 @@ async function installPlan<K extends ToolName>(
       if (dependencies.load_retained_result === undefined) return stateIssue(current.value, "result-resume-unavailable");
       const loaded = await dependencies.load_retained_result(reference);
       if (!loaded.ok) return loaded;
-      const resumed = await installResultFacts(dependencies, request.authority, current, materializeResultInstallation({
-        reference,
-        prepared: loaded.value.prepared,
-        manifest_target: loaded.value.manifest_target,
-        projection_plan: loaded.value.projection_plan,
-        worktree_root: loaded.value.worktree_root,
-      }), true);
+      const resumed = await installResultFacts(
+        dependencies,
+        request.authority,
+        current,
+        materializeResultInstallation({ reference, ...loaded.value }),
+        true,
+        repositorySet,
+      );
       if (!resumed.ok) return resumed;
     }
   } else {
     if (plan.result_installation !== undefined) {
-      const installed = await installResultFacts(dependencies, request.authority, current, plan.result_installation, false);
+      const installed = await installResultFacts(dependencies, request.authority, current, plan.result_installation, false, repositorySet);
       if (!installed.ok) return installed;
     }
     if (plan.constitution_installation !== undefined) {
-      const installed = await installResultFacts(dependencies, request.authority, current, plan.constitution_installation, false);
+      const installed = await installResultFacts(dependencies, request.authority, current, plan.constitution_installation, false, repositorySet);
       if (!installed.ok) return installed;
     }
   }
@@ -1164,14 +1331,7 @@ async function handleExisting<K extends ToolName>(
   if (!outcome.ok) return outcome;
   const plan = Object.freeze({ receipt, final, outcome: outcome.value });
   onPlan(plan);
-  return installPlan(
-    dependencies,
-    request,
-    intentPath,
-    current,
-    plan,
-    true,
-  );
+  return installPlan(dependencies, request, intentPath, current, plan, true, identified.value.repository_set);
 }
 
 async function executeLocked<K extends ToolName>(
@@ -1239,7 +1399,9 @@ async function executeLocked<K extends ToolName>(
   );
   if (!plan.ok) return plan;
   onPlan(current, plan.value);
-  return installPlan(dependencies, request, intentPath, current, plan.value, false);
+  return installPlan(
+    dependencies, request, intentPath, current, plan.value, false, identified.value.repository_set,
+  );
 }
 
 export async function runStateTransaction<K extends ToolName>(

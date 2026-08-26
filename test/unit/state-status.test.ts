@@ -22,6 +22,7 @@ import {
   buildAutonomousImplementationCommitInput,
   buildCommitAuthorizationInput,
   buildDesignApprovalInput,
+  baselinePresentedTargetsOnCurrentFirstParent,
   computeTaskStatus,
   contentTriggerDetails,
   currentApprovedUpstreams,
@@ -95,6 +96,35 @@ const settlementWith = (
   conclusion: RuleSettlementV1["conclusion"],
 ): RuleSettlementV1 => ({ conclusion } as unknown as RuleSettlementV1);
 
+describe("baseline adoption repository continuity", () => {
+  it("keeps a secondary-only current gate resolvable without a primary target head", async () => {
+    const secondaryHead = parseGitOid("a".repeat(40));
+    const context = {
+      drifted_projections: [],
+      secondary_targets: [{
+        repository: "apis", repository_identity_digest: D("b"),
+        target_ref: "refs/heads/main", target_head: secondaryHead,
+        drifted_projections: [{ path: parseRepositoryPathClaim("src/a.ts"), recorded_digest: D("c"), observed_digest: D("d") }],
+        deleted_projections: [], uncommitted_paths: [],
+      }],
+    } as never;
+    const live = {
+      target_ref: "refs/heads/main", target_head: parseGitOid("e".repeat(40)), uncommitted_paths: [],
+      secondary_targets: [{
+        repository: "apis", repository_identity_digest: D("b"),
+        target_ref: "refs/heads/main", target_head: secondaryHead, uncommitted_paths: [],
+      }],
+    } as never;
+    const repositorySet = { members: [
+      { name: "primary", mode: "writable", binding: { runner: {} } },
+      { name: "apis", mode: "writable", binding: { runner: {} } },
+    ] } as never;
+    await expect(baselinePresentedTargetsOnCurrentFirstParent(
+      { runner: {} as never }, context, live, repositorySet,
+    )).resolves.toBe(true);
+  });
+});
+
 describe("contentTriggerDetails", () => {
   it("formats every operation with exact endpoint sizes and an explicit signed delta", () => {
     const output = implementationWith([
@@ -134,6 +164,57 @@ describe("contentTriggerDetails", () => {
       "old.sql: added (0 → 8 bytes (+8 bytes))",
       "z-new.sql: renamed from old.sql (2 → 3 bytes (+1 bytes))",
     ]);
+  });
+
+  it.each([
+    ["a secondary-only content gate", {
+      outputs: [],
+      paths: [],
+      secondary: {
+        repository: "api",
+        outputs: [
+          { operation: "add", path: parseRepositoryPathClaim("db/a.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", after: blob(13) },
+          { operation: "rename", path: parseRepositoryPathClaim("db/new.sql"), previous_path: parseRepositoryPathClaim("db/old.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", before: blob(5), after: blob(8) },
+        ],
+        paths: ["db/a.sql", "db/old.sql"],
+      },
+      expected: [
+        "api/db/a.sql: added (0 → 13 bytes (+13 bytes))",
+        "api/db/old.sql: renamed to api/db/new.sql (5 → 8 bytes (+3 bytes))",
+      ],
+    }],
+    ["a mixed primary and secondary content gate", {
+      outputs: [
+        { operation: "modify", path: parseRepositoryPathClaim("db/main.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", before: blob(4), after: blob(9) },
+      ],
+      paths: ["db/main.sql"],
+      secondary: {
+        repository: "worker",
+        outputs: [
+          { operation: "delete", path: parseRepositoryPathClaim("db/job.sql"), path_class: "repository-source", storage: "git-object", file_type: "regular", before: blob(7) },
+        ],
+        paths: ["db/job.sql"],
+      },
+      expected: [
+        "db/main.sql: modified (4 → 9 bytes (+5 bytes))",
+        "worker/db/job.sql: deleted (7 → 0 bytes (-7 bytes))",
+      ],
+    }],
+  ])("renders primary then repository-qualified retained operations for %s", (_label, scenario) => {
+    const output = {
+      outputs: scenario.outputs,
+      secondary_repositories: [{ repository: scenario.secondary.repository, outputs: scenario.secondary.outputs }],
+    } as unknown as ImplementationOutputV1;
+    const settlement = settlementWith({
+      wait: true,
+      match: {
+        kind: "content",
+        paths: scenario.paths,
+        secondary_paths: [{ repository: scenario.secondary.repository, paths: scenario.secondary.paths }],
+      },
+    });
+
+    expect(contentTriggerDetails(settlement, output)).toEqual(scenario.expected);
   });
 
   it("returns no details without an eligible content match", () => {

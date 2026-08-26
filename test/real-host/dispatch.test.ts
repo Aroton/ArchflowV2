@@ -282,6 +282,11 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
           adapter: route.adapter,
           cli_version: result.succeeded.cli_version,
           route,
+          repositories: [{
+            name: "primary",
+            repository_identity_digest: workspace.initialization.repository_identity_digest,
+            commit: workspace.initialization.code_baseline_commit,
+          }],
           envelope_input_digest: envelope.digest,
           extracted_output_bytes: result.succeeded.extracted_output_bytes,
         });
@@ -411,6 +416,11 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
           adapter: route.adapter,
           cli_version: result.succeeded.cli_version,
           route,
+          repositories: [{
+            name: "primary",
+            repository_identity_digest: workspace.initialization.repository_identity_digest,
+            commit: workspace.initialization.code_baseline_commit,
+          }],
           envelope_input_digest: envelope.digest,
           extracted_output_bytes: result.succeeded.extracted_output_bytes,
         });

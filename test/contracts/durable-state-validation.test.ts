@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import pathClaimSchema from "../../src/contracts/schemas/v1/path-claim.schema.json" with { type: "json" };
 import primitivesSchema from "../../src/contracts/schemas/v1/primitives.schema.json" with { type: "json" };
 import taskStateSchema from "../../src/contracts/schemas/v1/task-state.schema.json" with { type: "json" };
-import { taskStateV1Schema } from "../../src/contracts/durable-state.js";
+import { ruleSettlementV1Schema, taskStateV1Schema } from "../../src/contracts/durable-state.js";
 import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 
 /**
@@ -139,6 +139,35 @@ describe("task-state validation under the Zod authority", () => {
         rule_settlements: [ruleSettlement(6, conclusion)],
       }).success).toBe(false);
     }
+  });
+
+  it("rejects secondary milestones on wait:true even when the primary milestone baseline is absent", () => {
+    const waiting = {
+      ...ruleSettlement(6, {
+        wait: true,
+        match: { kind: "content", paths: [], secondary_paths: [{ repository: "api", paths: ["src/api.ts"] }] },
+      }),
+      phase_instance: "phase-impl-1",
+      secondary_milestones: [{
+        repository: "api",
+        repository_identity_digest: "a".repeat(64),
+        baseline_commit: "1".repeat(40),
+        target_ref: "refs/heads/main",
+        target_head: "1".repeat(40),
+        paths: ["src/api.ts"],
+        commit_message: "ArchFlow: Implement mcp-integration phase 1",
+        diff_digest: "b".repeat(64),
+        snapshot_digest: "c".repeat(64),
+      }],
+    };
+    expect(waiting).not.toHaveProperty("milestone_baseline_commit");
+    const settlement = ruleSettlementV1Schema.safeParse(waiting);
+    expect(settlement.success).toBe(false);
+    if (!settlement.success) {
+      expect(settlement.error.issues).toContainEqual(expect.objectContaining({ path: ["secondary_milestones"] }));
+    }
+    const sample = fixture("task-state.valid");
+    expect(taskStateV1Schema.safeParse({ ...sample, rule_settlements: [waiting] }).success).toBe(false);
   });
 
   it("rejects retired state compatibility fields", () => {

@@ -84,6 +84,34 @@ describe("implementation output contract", () => {
     await rejectedBoth({ ...(await fixture()), outputs: [] });
   });
 
+  it("keeps secondary sections optional and validates their strict repository-bound shape", async () => {
+    const sample = await fixture();
+    expect(parseImplementationOutput(sample).secondary_repositories).toBeUndefined();
+    const outputs = sample.outputs as Record<string, unknown>[];
+    const accounting = sample.accounting as Record<string, unknown>;
+    const declared = sample.declared_inputs as Record<string, unknown>[];
+    const value = {
+      ...sample,
+      secondary_repositories: [{
+        repository: "api",
+        repository_identity_digest: "a".repeat(64),
+        base_commit: sample.base_commit,
+        index_identity_digest: "b".repeat(64),
+        worktree_identity_digest: "c".repeat(64),
+        outputs,
+        diff_digest: "d".repeat(64),
+        snapshot_digest: "e".repeat(64),
+        restore_targets: sample.restore_targets,
+        accounting,
+        undeclared_changes: sample.undeclared_changes,
+        declared_inputs: declared.map((input) => ({ ...input, path: "inputs/source.txt" })),
+      }],
+    };
+    const jsonValidator = await validator();
+    expect(assertZodAgreement(value, jsonValidator, implementationOutputV1Schema)).toBe(value);
+    await rejectedBoth({ ...value, secondary_repositories: [{ ...(value.secondary_repositories[0] as object), unknown: true }] });
+  });
+
   it("rejects a shuffled or duplicated member of every declared set in the Zod authority", async () => {
     const sample = await fixture();
     for (const key of ["outputs", "parent_documents", "declared_inputs", "restore_targets"]) {

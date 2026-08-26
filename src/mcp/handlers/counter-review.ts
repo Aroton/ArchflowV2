@@ -6,6 +6,7 @@ import {
   parseSafeInteger,
   type SafeId,
   type SafeInteger,
+  type Sha256Digest,
 } from "../../contracts/evidence.js";
 import type { ParsedToolCall, ToolSuccess } from "../../contracts/mcp-tools.js";
 import type { TaskPathClaim } from "../../contracts/path-claims.js";
@@ -14,15 +15,19 @@ import type { GitOid } from "../../contracts/canonical.js";
 import type { TaskStateV1 } from "../../contracts/durable-state.js";
 import { decodePhaseInstance } from "../../contracts/phase-instance.js";
 import { createDispatchCoordinator } from "../../dispatch/coordinator.js";
+import {
+  projectRepositoryWorkspaceBinding,
+  projectReviewedRepositories,
+  type DispatchRepositoryViewPlan,
+} from "../../dispatch/workspace.js";
 import { createDispatchFailureObserver } from "../../dispatch/failure-observation.js";
 import { readHeadCommit } from "../../repository/git.js";
 import type { RootBoundGitRunner } from "../../repository/identity.js";
+import { unavailableRepositoryView, type RepositorySet } from "../../repository/repository-set.js";
 import { rulesForEnvelope } from "../../review/adjudication.js";
 import { runCounterReview, type ConstitutionReviewPlan } from "../../review/counter-review.js";
 import { canonicalRubricForPhaseKind } from "../../review/rubrics.js";
 import {
-  PRODUCED_REPOSITORY_VIEW_NOTE,
-  REPOSITORY_VIEW_NOTE,
   REVIEW_ENVELOPE_BYTE_CAP,
   ReviewEnvelopeError,
   type AdjudicationUpstreamInput,
@@ -54,6 +59,7 @@ import {
 } from "../../state/produce-subject.js";
 import type { ProductionServices } from "../../state/production.js";
 import type { ProjectionPlan } from "../../state/snapshots.js";
+import type { RetainedResultInstallation } from "../../state/transaction.js";
 import { mapHandlerErrors } from "./errors.js";
 import { resolvePreDispatchReplay } from "./replay.js";
 import { openHandlerSession } from "./session.js";
@@ -289,13 +295,93 @@ async function reobserveProjectionDigest(
     : observed;
 }
 
+type RepositoryHeadPin = Readonly<{ name: string; commit: GitOid }>;
+
+/**
+ * A declared secondary the session could not open or observe is, to the review caller, a missing
+ * read-only view rather than a configuration fault: the declaration may be correct and the
+ * repository merely absent right now, so the failure is retryable and names the member. Applied
+ * wherever the handler opens its session — before dispatch and at the post-dispatch recheck — so
+ * the same loss is reported the same way whenever it happens.
+ */
+function asRepositoryViewFailure<T>(result: ProjectResult<T>): ProjectResult<T> {
+  if (result.ok) return result;
+  const unavailable = unavailableRepositoryView(result.error);
+  return unavailable === undefined
+    ? result
+    : fail(createProjectError("REPOSITORY_VIEW_UNAVAILABLE", { repository_name: unavailable.repository_name }));
+}
+
+/**
+ * Read-only freshness check for the secondary sections a retained implementation result was
+ * produced against: each section's member must still be present, writable, the same repository,
+ * and at the base commit the result was built on. The full retained-result installation (payload
+ * bytes and a fresh secret scan) was already loaded before dispatch and is not re-run here.
+ */
+function secondarySectionsAreCurrent(
+  artifact: CurrentProduceSubject["artifact"],
+  repositorySet: RepositorySet,
+): boolean {
+  if (artifact.artifact_kind !== "implementation-output") return true;
+  const members = new Map(repositorySet.members.map((member) => [member.name, member]));
+  return (artifact.secondary_repositories ?? []).every((section) => {
+    const member = members.get(section.repository);
+    return member !== undefined && member.mode === "writable" &&
+      member.identity.digest === section.repository_identity_digest && member.head === section.base_commit;
+  });
+}
+
+/**
+ * Reopens the authenticated handler session after every dispatched child has returned, then
+ * checks the location-free repository-set identity and every member whose review view was pinned
+ * to live HEAD. This extends the existing retained-artifact/projection proof without creating a
+ * second membership authority in the dispatch path.
+ */
+async function reobserveDispatchSubject(
+  call: Extract<ParsedToolCall, { name: "archflow_counter_review" }>,
+  context: InvocationContext,
+  phaseInstance: TaskStateV1["phase_instance"],
+  expectedArtifactDigest: CurrentProduceSubject["artifact_digest"],
+  artifactPath: TaskPathClaim,
+  expectedRepositorySetDigest: Sha256Digest,
+  headPins: readonly RepositoryHeadPin[],
+): Promise<ProjectResult<ProduceProjection["digest"]>> {
+  const fresh = asRepositoryViewFailure(await openHandlerSession(call, context));
+  if (!fresh.ok) return fresh;
+  if (fresh.value.repository_set.digest !== expectedRepositorySetDigest) {
+    return fail(createProjectError("STATE_INVALID", {
+      phase_instance: phaseInstance, issue_code: "counter-review-subject-not-current",
+    }));
+  }
+  const currentMembers = new Map(fresh.value.repository_set.members.map((member) => [member.name, member]));
+  if (headPins.some((pin) => currentMembers.get(pin.name)?.head !== pin.commit)) {
+    return fail(createProjectError("STATE_INVALID", {
+      phase_instance: phaseInstance, issue_code: "counter-review-subject-not-current",
+    }));
+  }
+  const current = await fresh.value.services.dependencies.read_state(fresh.value.services.authority.state);
+  if (current.kind !== "canonical") return fail(createProjectError("STATE_INVALID", {
+    phase_instance: phaseInstance, issue_code: "counter-review-state-not-current",
+  }));
+  const produce = await loadCurrentProduceSubject(fresh.value.services.dependencies, current.document.value);
+  if (!produce.ok) return produce;
+  if (!secondarySectionsAreCurrent(produce.value.artifact, fresh.value.repository_set)) {
+    return fail(createProjectError("STATE_INVALID", {
+      phase_instance: phaseInstance, issue_code: "counter-review-subject-not-current",
+    }));
+  }
+  return reobserveProjectionDigest(
+    fresh.value.services, phaseInstance, expectedArtifactDigest, artifactPath,
+  );
+}
+
 export async function handleCounterReview(
   call: Extract<ParsedToolCall, { name: "archflow_counter_review" }>,
   context: InvocationContext,
   dispatchAlreadySerialized = false,
 ): Promise<ProjectResult<ToolSuccess<"archflow_counter_review">>> {
   return mapHandlerErrors<"archflow_counter_review">(context.invocation_id, async () => {
-    const session = await openHandlerSession(call, context);
+    const session = asRepositoryViewFailure(await openHandlerSession(call, context));
     if (!session.ok) return session;
     const { services } = session.value;
     const state = services.state;
@@ -347,29 +433,50 @@ export async function handleCounterReview(
     // path that reloads the full installation — payload bytes, before-images, and the secret scan.
     // The subject itself carries a manifest, which is all every other reader needs.
     let projectionPlan: ProjectionPlan | undefined;
+    let secondaryProjectionPlans: RetainedResultInstallation["secondary_projection_plans"];
     if (produce.value.artifact.artifact_kind === "implementation-output") {
       const loadRetained = services.dependencies.load_retained_result;
       if (loadRetained === undefined) throw new TypeError("retained result loading is unavailable");
       const retained = await loadRetained(produce.value.reference);
       if (!retained.ok) return retained;
       projectionPlan = retained.value.projection_plan;
+      secondaryProjectionPlans = retained.value.secondary_projection_plans;
     }
-    const repositoryView = Object.freeze({
-      base_commit: repositoryViewCommit,
-      ...(projectionPlan === undefined ? {} : { projection_plan: projectionPlan }),
-    });
-    const workspaceBinding = produce.value.artifact.artifact_kind === "implementation-output"
-      ? Object.freeze({
-          kind: "read-only-produced-repository-snapshot" as const,
-          base_commit: repositoryViewCommit,
+    const secondaryPlans = new Map((secondaryProjectionPlans ?? []).map((entry) => [entry.repository, entry]));
+    for (const member of session.value.repository_set.members.slice(1)) {
+      const retained = secondaryPlans.get(member.name as never);
+      if (retained !== undefined &&
+          (retained.repository_identity_digest !== member.identity.digest || retained.base_commit !== member.head)) {
+        return fail(createProjectError("STATE_INVALID", {
+          phase_instance: state.value.phase_instance,
+          issue_code: "counter-review-subject-not-current",
+        }));
+      }
+    }
+    const repositoryViews: DispatchRepositoryViewPlan = Object.freeze(
+      session.value.repository_set.members.map((member, index) => Object.freeze({
+        name: member.name,
+        member_kind: index === 0 ? "primary" as const : "secondary" as const,
+        repository_root: member.binding.runner.location.worktreeRoot,
+        repository_identity_digest: member.identity.digest,
+        commit: index === 0 ? repositoryViewCommit : member.head,
+        ...(index === 0 && projectionPlan !== undefined ? {
+          projection_plan: projectionPlan,
           snapshot_digest: produce.value.artifact.snapshot_digest,
-          note: PRODUCED_REPOSITORY_VIEW_NOTE,
-        })
-      : Object.freeze({
-          kind: "read-only-repository-checkout" as const,
-          commit: repositoryViewCommit,
-          note: REPOSITORY_VIEW_NOTE,
-        });
+        } : index === 0 ? {} : (() => {
+          const retained = secondaryPlans.get(member.name as never);
+          if (retained === undefined) return {};
+          return { projection_plan: retained.projection_plan, snapshot_digest: retained.snapshot_digest };
+        })()),
+      })),
+    );
+    const headPins: readonly RepositoryHeadPin[] = Object.freeze(
+      repositoryViews
+        .filter((member) => member.projection_plan === undefined)
+        .map((member) => Object.freeze({ name: member.name, commit: member.commit })),
+    );
+    const reviewedRepositories = projectReviewedRepositories(repositoryViews);
+    const workspaceBinding = projectRepositoryWorkspaceBinding(repositoryViews);
 
     const retainedBytes = services.dependencies.read_retained_task_bytes;
     if (retainedBytes === undefined) throw new TypeError("retained byte accounting is unavailable");
@@ -391,7 +498,7 @@ export async function handleCounterReview(
         authority: services.authority, dependencies: services.dependencies, host: session.value.host,
         repository_root: services.runner.location.worktreeRoot, phase_instance: state.value.phase_instance,
         signal: context.signal, cancellation_source: "client",
-        repository_view: repositoryView,
+        repository_views: repositoryViews,
       });
       constitutionPlan = Object.freeze({
         registry: constitution.value.rules,
@@ -429,7 +536,7 @@ export async function handleCounterReview(
       phase_instance: state.value.phase_instance,
       signal: context.signal,
       cancellation_source: "client",
-      repository_view: repositoryView,
+      repository_views: repositoryViews,
     });
     const result = await runCounterReview({
       transaction: services.dependencies,
@@ -445,8 +552,14 @@ export async function handleCounterReview(
       prepare_evidence: (evidence, measuredAtRevision) => prepareDispatchEvidence(
         services, retainedBytes, resultId, { kind: "review", evidence }, measuredAtRevision,
       ),
-      reobserve_projection_digest: () => reobserveProjectionDigest(
-        services, state.value.phase_instance, produce.value.artifact_digest, call.input.artifact_path,
+      reobserve_projection_digest: () => reobserveDispatchSubject(
+        call,
+        context,
+        state.value.phase_instance,
+        produce.value.artifact_digest,
+        call.input.artifact_path,
+        session.value.repository_set.digest,
+        headPins,
       ),
     }, {
       authority: services.authority,
@@ -455,6 +568,7 @@ export async function handleCounterReview(
       phase_kind: session.value.phase_kind,
       producer_family: session.value.producer_family,
       measured_at_revision: session.value.measured_at_revision,
+      repositories: reviewedRepositories,
       envelope: {
         artifact,
         rubric: canonicalRubric.rubric,

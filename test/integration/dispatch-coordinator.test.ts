@@ -13,6 +13,7 @@ import { parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contra
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import { createDispatchCoordinator } from "../../src/dispatch/coordinator.js";
+import type { DispatchRepositoryViewPlan } from "../../src/dispatch/workspace.js";
 import { DispatchProcessError, scanDispatchOutput } from "../../src/dispatch/process.js";
 import type { DispatchRoute } from "../../src/dispatch/routing.js";
 import { createGitRunner, preflightGit, type RepositoryOperationContext } from "../../src/repository/git.js";
@@ -86,11 +87,12 @@ if (argv.length === 1 && argv[0] === "--version") {
 } else {
   ${mode === "hang-child" ? `await writeFile(${JSON.stringify("__CHILD_STARTED__")}, "started\\n"); setInterval(() => undefined, 1000);` : ""}
   ${mode === "fail-child" ? 'process.stderr.write("stream error: exceeded retry limit\\n"); process.exit(3);' : ""}
-  const { existsSync } = await import("node:fs");
+  const { existsSync, readdirSync } = await import("node:fs");
   const { join } = await import("node:path");
   const target = argv.includes("-C") ? argv[argv.indexOf("-C") + 1] : null;
   await writeFile(${JSON.stringify(join(root, "observed-invocation.json"))}, JSON.stringify({
     argv,
+    entries: target === null ? [] : readdirSync(target).sort(),
     view: target === null ? null : {
       tracked: existsSync(join(target, "tracked.txt")),
       git: existsSync(join(target, ".git")),
@@ -169,6 +171,16 @@ async function attemptsAbsent(repository: string): Promise<void> {
     .rejects.toMatchObject({ code: "ENOENT" });
 }
 
+function primaryViews(repository: string, commit: ReturnType<typeof parseGitOid>): DispatchRepositoryViewPlan {
+  return Object.freeze([Object.freeze({
+    name: "primary",
+    member_kind: "primary",
+    repository_root: repository,
+    repository_identity_digest: "0".repeat(64) as never,
+    commit,
+  })]);
+}
+
 describe("createDispatchCoordinator", () => {
   it("runs preflight and dispatch, disposes its workspace, and writes no attempt telemetry on success", async () => {
     const h = await harness("success");
@@ -226,7 +238,7 @@ describe("createDispatchCoordinator", () => {
       phase_instance: PHASE,
       signal: new AbortController().signal,
       cancellation_source: "client",
-      repository_view: { base_commit: head },
+      repository_views: primaryViews(h.repository, head),
     });
 
     const saved = { PATH: process.env.PATH, HOME: process.env.HOME };
@@ -265,7 +277,7 @@ describe("createDispatchCoordinator", () => {
       phase_instance: PHASE,
       signal: new AbortController().signal,
       cancellation_source: "client",
-      repository_view: { base_commit: head },
+      repository_views: primaryViews(h.repository, head),
     });
 
     const saved = { PATH: process.env.PATH, HOME: process.env.HOME };
@@ -302,16 +314,15 @@ describe("createDispatchCoordinator", () => {
       phase_instance: PHASE,
       signal: new AbortController().signal,
       cancellation_source: "client",
-      repository_view: { base_commit: "f".repeat(40) as never },
+      repository_views: primaryViews(h.repository, "f".repeat(40) as never),
     });
 
     await expect(coordinator(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue))
-      .rejects.toThrow(/repository view materialization failed/u);
+      .rejects.toMatchObject({ project_error: { code: "REPOSITORY_VIEW_UNAVAILABLE" } });
     expect(await attemptRecord(h.repository)).toMatchObject({
       status: "failed",
       failure_stage: "repository-view-materialization",
-      error_name: "Error",
-      error_message: expect.stringMatching(/repository view materialization failed/u),
+      failure_code: "REPOSITORY_VIEW_UNAVAILABLE",
     });
   });
 

@@ -76,6 +76,29 @@ describe("semantic workflow contracts", () => {
       ok: true,
       value: { ...value, presentation: { ...value.presentation, class: "configured-approval" } },
     })).toThrow(/presentation class/u);
+    const secondary = {
+      ...value,
+      next_action: {
+        ...value.next_action,
+        commit: { ...value.next_action.commit, repository: { name: "api", location: "/work/api" } },
+      },
+    };
+    expect(parseSemanticResultV1({ schema_version: "1", ok: true, value: secondary })).toMatchObject({
+      value: { next_action: { commit: { repository: { name: "api", location: "/work/api" } } } },
+    });
+  });
+
+  it("accepts ordered writable-secondary implementation declarations", () => {
+    const value = {
+      schema_version: "1",
+      task_id: "api-refactor",
+      invocation: { skill: "archflow-phase-impl", phase: 3, intent: "resume" },
+      action: { offer, submission: { kind: "work-result", outcome: "succeeded", implementation: {
+        base_commit: "1".repeat(40), outputs: [".archflow/tasks/api-refactor/phases/3/impl-notes.md"], restore_targets: [], declared_inputs: [],
+        repositories: [{ name: "api", base_commit: "2".repeat(40), outputs: [], restore_targets: [], declared_inputs: [] }],
+      } } },
+    } as const;
+    expect(parseArchFlowApplyInputV1(value)).toEqual(value);
   });
   it("keeps the public apply schema root a plain object and nests its variants", () => {
     const apply = (semanticWorkflowSchema.$defs as Record<string, Record<string, unknown>>).applyInput;

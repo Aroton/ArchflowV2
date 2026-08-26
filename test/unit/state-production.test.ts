@@ -15,7 +15,8 @@ import type { SecretScanner } from "../../src/contracts/secret-scan.js";
 import { createAtomicWriter } from "../../src/state/atomic.js";
 import { prepareEvidenceResult } from "../../src/state/evidence-results.js";
 import { ensureResultDirectory } from "../../src/state/layout.js";
-import { createProductionServices } from "../../src/state/production.js";
+import { createProductionServices, retainedManifestStoredBytes } from "../../src/state/production.js";
+import type { ResultManifestV1 } from "../../src/contracts/durable-result-manifest.js";
 import { installSnapshot } from "../../src/state/snapshots.js";
 import { cleanTaskWorkspace, inspectWorkspaceCleanup } from "../../src/state/workspace-cleanup.js";
 
@@ -45,6 +46,17 @@ function repository(): string {
 const D = (character: string) => character.repeat(64) as TaskStateV1["input_fingerprint"];
 
 describe("production dependency assembly", () => {
+  it("counts primary and every secondary retained byte exactly once", () => {
+    const manifest = (primary: number, ...secondary: number[]) => ({
+      accounting: { result_bytes: parseSafeInteger(primary) },
+      source_artifact: {
+        artifact_kind: "implementation-output",
+        secondary_repositories: secondary.map((result_bytes) => ({ accounting: { result_bytes: parseSafeInteger(result_bytes) } })),
+      },
+    }) as unknown as ResultManifestV1;
+    expect(retainedManifestStoredBytes(manifest(11, 13, 17))).toBe(11 + 13 + 17);
+  });
+
   it("uses caller-supplied atomic and gate secret-scanner capabilities", async () => {
     const root = repository();
     const atomic = createAtomicWriter();

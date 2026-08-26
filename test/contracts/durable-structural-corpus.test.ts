@@ -390,6 +390,19 @@ const taskStateRuleSettlementCollections: JsonObject = {
   ],
 };
 
+const taskStateRepositoryBindingCollection: JsonObject = {
+  ...taskState.sample,
+  last_seen_config: {
+    schema_version: "1",
+    roles: {},
+    repositories: { apis: { path: "../apis" } },
+  },
+  last_seen_repository_bindings: [
+    { name: "primary", repository_identity_digest: "1".repeat(64) },
+    { name: "apis", declared_path: "../apis", repository_identity_digest: "2".repeat(64) },
+  ],
+};
+
 const documentArtifactAdditionalDocuments: JsonObject = {
   ...documentArtifact.sample,
   additional_documents: [
@@ -432,6 +445,7 @@ const DECLARED_SETS: readonly { readonly shape: string; readonly path: string; r
   { shape: "task-state", path: "baseline_adoptions.0.adopted_absences", base: taskStateBaselineAdoptionCollections },
   { shape: "task-state", path: "rule_settlements", base: taskStateRuleSettlementCollections },
   { shape: "task-state", path: "rule_settlements.1.conclusion.match.paths", base: taskStateRuleSettlementCollections },
+  { shape: "task-state", path: "last_seen_repository_bindings", base: taskStateRepositoryBindingCollection },
   { shape: "legacy-import-initialization", path: "mapping" },
   { shape: "legacy-import-initialization", path: "staged_payload_refs" },
   { shape: "document-artifact", path: "declared_inputs" },
@@ -505,6 +519,30 @@ const collectArraySubschemas = (): readonly { readonly location: string; readonl
   return found;
 };
 
+/**
+ * Array subschemas deliberately absent from {@link DECLARED_SETS}. The recursive PlainJson array
+ * is value data, not a set. The three `configApprovalRules` arrays are the mirrored config
+ * document's human-authored vocabulary: `subjects` rejects repeats in the config parser itself,
+ * but none of the three demands a sorted hand the way a server-authored set does — their
+ * agreement cases live in foundational-schema-agreement. The eight repository-qualified nested
+ * sets are exercised by the focused implementation-output and durable-state contract tests; the
+ * permutation table above covers only the shapes it has complete two-member fixtures for.
+ */
+const EXEMPT_ARRAY_SUBSCHEMAS: readonly string[] = [
+  "task-state/$defs/plainJson/anyOf/4",
+  "task-state/$defs/configApprovalRules/properties/content",
+  "task-state/$defs/configApprovalRules/properties/content/items/properties/paths",
+  "task-state/$defs/configApprovalRules/properties/subjects",
+  "implementation-output/$defs/implementationRepositorySection/properties/declared_inputs",
+  "implementation-output/$defs/implementationRepositorySection/properties/outputs",
+  "implementation-output/$defs/implementationRepositorySection/properties/restore_targets",
+  "implementation-output/properties/secondary_repositories",
+  "task-state/$defs/ruleSettlement/properties/secondary_milestones",
+  "task-state/$defs/ruleSettlement/properties/secondary_milestones/items/properties/paths",
+  "task-state/$defs/ruleSettlementConclusion/oneOf/1/properties/match/oneOf/1/properties/secondary_paths",
+  "task-state/$defs/ruleSettlementConclusion/oneOf/1/properties/match/oneOf/1/properties/secondary_paths/items/properties/paths",
+];
+
 describe("no array in this phase is exempt from set ordering", () => {
   it("no array-shaped subschema carries a retired ordering keyword", () => {
     const carrying = collectArraySubschemas().filter((entry) => entry.keywords.length > 0);
@@ -518,10 +556,14 @@ describe("no array in this phase is exempt from set ordering", () => {
         "document-artifact/properties/additional_documents",
         "document-artifact/properties/declared_inputs",
         "implementation-output/$defs/undeclaredChangeReport/properties/undeclared_paths",
+        "implementation-output/$defs/implementationRepositorySection/properties/declared_inputs",
+        "implementation-output/$defs/implementationRepositorySection/properties/outputs",
+        "implementation-output/$defs/implementationRepositorySection/properties/restore_targets",
         "implementation-output/properties/declared_inputs",
         "implementation-output/properties/outputs",
         "implementation-output/properties/parent_documents",
         "implementation-output/properties/restore_targets",
+        "implementation-output/properties/secondary_repositories",
         "legacy-import-initialization/properties/mapping",
         "legacy-import-initialization/properties/staged_payload_refs",
         "task-state/$defs/configApprovalRules/properties/content",
@@ -532,26 +574,32 @@ describe("no array in this phase is exempt from set ordering", () => {
         "task-state/$defs/pendingHumanRevision/properties/evidence",
         "task-state/$defs/planningRestartRecord/properties/cleared_waivers",
         "task-state/$defs/planningRestartRecord/properties/superseded_results",
+        "task-state/$defs/ruleSettlement/properties/secondary_milestones",
+        "task-state/$defs/ruleSettlement/properties/secondary_milestones/items/properties/paths",
         "task-state/properties/approvals",
         "task-state/properties/authoritative_results",
         "task-state/properties/baseline_adoptions",
         "task-state/properties/baseline_adoptions/items/properties/adopted_absences",
         "task-state/properties/baseline_adoptions/items/properties/adopted_projections",
         "task-state/properties/human_revision_history",
+        "task-state/properties/last_seen_repository_bindings",
         "task-state/properties/milestone_recovery_history",
         "task-state/properties/milestone_recovery_history/items/properties/cleared_waivers",
         "task-state/properties/milestone_recovery_history/items/properties/superseded_results",
         "task-state/properties/restart_history",
         "task-state/$defs/ruleSettlementConclusion/oneOf/1/properties/match/oneOf/1/properties/paths",
+        "task-state/$defs/ruleSettlementConclusion/oneOf/1/properties/match/oneOf/1/properties/secondary_paths",
+        "task-state/$defs/ruleSettlementConclusion/oneOf/1/properties/match/oneOf/1/properties/secondary_paths/items/properties/paths",
         "task-state/properties/rule_settlements",
         "task-state/properties/waivers",
       ].sort()
     );
-    // The recursive PlainJson array is value data, not a set. The three `configApprovalRules`
-    // arrays are the mirrored config document's human-authored vocabulary: `subjects` rejects
-    // repeats in the config parser itself, but none of the three demands a sorted hand the way a
-    // server-authored set does — their agreement cases live in foundational-schema-agreement.
-    expect(DECLARED_SETS).toHaveLength(collectArraySubschemas().length - 4);
+    // Every array subschema is either a declared set in the permutation table above or named
+    // here with the reason it is exempt; adding an array anywhere in these schemas must extend
+    // one list or the other, so an unordered collection can never slip in unnoticed.
+    const locations = collectArraySubschemas().map((entry) => entry.location);
+    for (const exempt of EXEMPT_ARRAY_SUBSCHEMAS) expect(locations).toContain(exempt);
+    expect(locations).toHaveLength(DECLARED_SETS.length + EXEMPT_ARRAY_SUBSCHEMAS.length);
   });
 });
 

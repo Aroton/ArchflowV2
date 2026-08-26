@@ -5,6 +5,7 @@ import {
   configChangeEntryV1Schema,
   configChangeValueV1Schema,
   publicFindingV1Schema,
+  repositoryStatusV1Schema,
   semanticNextActionV1Schema,
   semanticErrorSummaryV1Schema,
   semanticFailureV1Schema,
@@ -15,6 +16,7 @@ import {
   workflowReviewModelRouteV1Schema,
   workflowReviewRoutesV1Schema,
   workflowResourceV1Schema,
+  workflowRepositoryNameV1Schema,
   workflowViewV1Schema,
 } from "../semantic-workflow.js";
 import { DISPATCH_FAILURE_CODES, publicDispatchFailureV1Schema } from "../dispatch-failure.js";
@@ -79,6 +81,12 @@ const PUBLIC_DISPATCH_FAILURE_FRAGMENT = {
     role: { enum: ["counter-reviewer", "adjudicator"] },
     code: { enum: DISPATCH_FAILURE_CODES },
     message: { type: "string", minLength: 1, maxLength: 256 },
+    repository_name: {
+      anyOf: [
+        { type: "string", const: "primary" },
+        { type: "string", pattern: "^(?!primary$)(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$" },
+      ],
+    },
     route: {
       type: "object",
       properties: {
@@ -93,6 +101,9 @@ const PUBLIC_DISPATCH_FAILURE_FRAGMENT = {
   },
   required: ["role", "code", "message"],
   additionalProperties: false,
+  // The `repository_name`-iff-`REPOSITORY_VIEW_UNAVAILABLE` rule is published on the leaf
+  // `dispatch-failure` document (`REPOSITORY_NAME_PRESENCE_RULE`); it is left off this advertised
+  // fragment to stay inside the MCP advertisement byte budget. Zod remains the runtime authority.
 } as const;
 
 /** Compact public semantic workflow contract; neither tool is advertised until Phase 2. */
@@ -105,6 +116,7 @@ export const semanticWorkflowSchemaGroup: SchemaGenerationGroup = {
     defs: {
       workflowResource: workflowResourceV1Schema,
       publicFinding: publicFindingV1Schema,
+      repositoryStatus: repositoryStatusV1Schema,
       workflowPosition: workflowPositionV1Schema,
       reviewModelRoute: workflowReviewModelRouteV1Schema,
       reviewRouteSet: workflowReviewRoutesV1Schema,
@@ -114,6 +126,7 @@ export const semanticWorkflowSchemaGroup: SchemaGenerationGroup = {
       publicDispatchFailure: publicDispatchFailureV1Schema,
       configChangeEntry: configChangeEntryV1Schema,
       plainJson: configChangeValueV1Schema,
+      repositoryName: workflowRepositoryNameV1Schema,
       applySubmission: applySubmissionV1Schema,
       statusInput: archFlowStatusInputV1Schema,
       applyInput: archFlowApplyInputV1Schema,

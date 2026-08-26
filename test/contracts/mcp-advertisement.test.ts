@@ -26,6 +26,10 @@ describe("advertised MCP tool catalogue", () => {
         expect(descriptor.inputSchema, `${descriptor.name} input root ${combinator}`).not.toHaveProperty(combinator);
       }
     }
-    expect(JSON.stringify({ tools: ADVERTISED_TOOL_CATALOGUE }).length).toBeLessThan(28_200);
+    // Measured at 31,497 bytes with the repository-set projection in both semantic tools; the
+    // ceiling sits about 3% above that so any further growth of the advertisement is a
+    // deliberate decision rather than drift. Input roots and their host-compatibility
+    // constraints remain unchanged.
+    expect(JSON.stringify({ tools: ADVERTISED_TOOL_CATALOGUE }).length).toBeLessThan(32_400);
   });
 });

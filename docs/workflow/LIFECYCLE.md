@@ -1,6 +1,6 @@
 # workflow/LIFECYCLE
 
-**Explored:** 2026-08-23 · **Commit:** `0c23ade` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/contracts/config.ts`, `src/state/approval-rules.ts`, `src/state/semantic-*.ts`, `src/mcp/handlers/semantic.ts`, `skills/`
+**Explored:** 2026-08-26 · **Commit:** `824734f` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/contracts/config.ts`, `src/state/approval-rules.ts`, `src/state/semantic-*.ts`, `src/mcp/handlers/semantic.ts`, `skills/`
 
 How a task moves from idea to committed code, and where a human must decide.
 
@@ -20,7 +20,7 @@ flowchart LR
 
 One nuance the YAML alone doesn't show: project `approval_rules` decide whether an ordinary clean fixed point waits for a human. A waiting settlement preserves the exact subject/content reason for the presentation. An exact no-wait settlement under the shipped v2 constitution can instead supply upstream, milestone-commit, phase-exit, or successor authority directly. It is evidence the server authenticates, never caller authority; legacy or divergent policy and every exception condition remain human-required.
 
-The optional config section has two lists. `subjects` accepts `prd`, `design`, `phase-design`, and `phase-impl`. `content` entries each carry repository-relative path globs and are considered only for a phase implementation. Matching is whole-path, case-sensitive, and `/`-segmented: `*` and `?` stay within one segment, while `**` spans zero or more complete segments (`**/*.sql` therefore matches both `a.sql` and `db/a.sql`). An absent or empty section records `wait:false`.
+The optional config section has two lists. `subjects` accepts `prd`, `design`, `phase-design`, and `phase-impl`. `content` entries each carry repository-relative path globs and are considered only for a phase implementation; with writable secondaries each glob is matched against every changed repository's own relative paths, so a glob cannot address a secondary by name. Matching is whole-path, case-sensitive, and `/`-segmented: `*` and `?` stay within one segment, while `**` spans zero or more complete segments (`**/*.sql` therefore matches both `a.sql` and `db/a.sql`). An absent or empty section records `wait:false`.
 
 An implementation content match is more than a path list at presentation time. The settlement freezes the complete matched-path set; the server joins those paths to the retained implementation output to reconstruct each operation and exact signed byte delta. Rename endpoints are evaluated independently: the old path, new path, or both can match, and a rename away followed by a new add at the old name keeps both operations. This evidence is sorted deterministically and survives later `approval_rules` edits unchanged. A waiting conclusion explains the reviewed diff at the human gate; a no-wait conclusion is consumed only through separately derived exact commit facts.
 
@@ -160,3 +160,7 @@ If a merge does conflict inside `.archflow/` — only possible when both branche
 ## Where this is heading
 
 The cutover is complete: the public catalogue is exactly the two semantic tools, and every workflow — document production, phase implementation, status reporting, and legacy adoption after its local staging and adoption steps — runs through the one client-orchestrated loop. The façade performs one bounded action, never producer work or Git, and returns a fresh view before any successor action can begin. For auditing which parts of the machinery earn their weight, start with `../COMPLEXITY.md`.
+
+## A phase spanning writable repositories
+
+One implementation result can cover primary plus configured writable secondaries. The declaration, retained proposed trees, review, policy settlement, and human decision form one subject. Execution is deliberately sequential: commit primary, observe proof, then commit each changed secondary in ordinal order. A failure pauses at the first unproved repository without undoing prior commits, and phase advancement waits for the complete ordered proof set. Repository-aware baseline adoption and restore address exact `(repository, path)` tuples, so identical relative paths in different members cannot collide.

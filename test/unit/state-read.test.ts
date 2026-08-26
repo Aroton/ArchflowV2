@@ -123,7 +123,7 @@ describe("task config reader", () => {
     expect(result.snapshot.digest).toBe(sha256Bytes(bytes));
   });
 
-  it("classifies missing, unreadable, malformed UTF-8, and invalid config without diagnostics", async () => {
+  it("classifies missing and unreadable config and retains bounded diagnostics for exact invalid bytes", async () => {
     const root = await temporaryRoot();
     expect(await readTaskConfig(resolved(join(root, "missing.yaml"), "task-config"))).toEqual({ kind: "missing" });
     const directory = join(root, "directory");
@@ -135,13 +135,18 @@ describe("task config reader", () => {
     // An unparseable read still carries the bytes' digest so a reader can tell a schema
     // rejection of the exact pinned bytes from a changed config.
     expect(await readTaskConfig(resolved(malformed, "task-config")))
-      .toEqual({ kind: "invalid", digest: sha256Bytes(malformedBytes) });
+      .toMatchObject({ kind: "invalid", digest: sha256Bytes(malformedBytes), issues: [expect.any(String)] });
     const invalid = join(root, "invalid.yaml");
     const invalidBytes = new TextEncoder().encode("schema_version: '1'\nroles:\n  producer:\n    model: ''\n    effort: low\n");
     await writeFile(invalid, invalidBytes);
-    // The retired producer key is accepted on read, but its shape still fails closed.
-    expect(await readTaskConfig(resolved(invalid, "task-config")))
-      .toEqual({ kind: "invalid", digest: sha256Bytes(invalidBytes) });
+    // The retired producer key is accepted on read, but its shape still fails closed. Each
+    // issue names the offending path; the validator's own wording is not part of the contract.
+    const invalidRead = await readTaskConfig(resolved(invalid, "task-config"));
+    expect(invalidRead).toMatchObject({ kind: "invalid", digest: sha256Bytes(invalidBytes) });
+    if (invalidRead.kind !== "invalid") return;
+    const issues = invalidRead.issues ?? [];
+    expect(issues.length).toBeGreaterThan(0);
+    for (const issue of issues) expect(issue).toMatch(/^roles\.producer\.model: /u);
     const retired = join(root, "retired-producer.yaml");
     const retiredBytes = new TextEncoder().encode('schema_version: "1"\nroles:\n  producer:\n    model: gpt-example\n    effort: high\n');
     await writeFile(retired, retiredBytes);

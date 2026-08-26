@@ -166,7 +166,7 @@ describe("config as an editable input", { timeout: 120_000 }, () => {
     expect(renoticed.config_change).toEqual([{ path: "max_attempts", before: 9, after: 12 }]);
   });
 
-  it("keeps an open gate and its recorded evidence valid across a config edit; the notice persists past the settlement commit until the next config-observing commit", async () => {
+  it("keeps an open gate and its recorded evidence valid across a config edit; settlement advances the paired live-config checkpoint", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "config-editing-gate", label: "config-editing-gate", configBytes: prdApprovalConfig(),
     });
@@ -207,14 +207,14 @@ describe("config as an editable input", { timeout: 120_000 }, () => {
     expect(settledState.open_gate).toBeUndefined();
     expect(settledState.approvals).toHaveLength(1);
 
-    // The settlement commit never reads config, so it deliberately leaves the baseline alone:
-    // the change notice persists until the next config-observing commit.
-    expect(settledState.last_seen_config).not.toMatchObject({ max_attempts: 7 });
+    // Gate settlement is config-observing: config and repository identity checkpoints advance
+    // together before the transition digest is constructed.
+    expect(settledState.last_seen_config).toMatchObject({ max_attempts: 7 });
+    expect(settledState.last_seen_repository_bindings).toHaveLength(1);
     const afterSettlement = await h.status(invocation);
-    expect(afterSettlement.config_change).toEqual([{ path: "max_attempts", after: 7 }]);
+    expect(afterSettlement.config_change).toBeUndefined();
 
-    // The successor hand-off at the design tier is the next config-observing commit; it clears
-    // the notice and records the edited config as the new baseline.
+    // The successor hand-off keeps the already-recorded paired baseline stable.
     const design = { skill: "archflow-design", intent: "resume" } as const;
     const successor = await h.status(design);
     expect(successor.next_action).toMatchObject({ kind: "start-next-skill", expected_submission: "none" });

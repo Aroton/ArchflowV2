@@ -593,6 +593,38 @@
             "reason"
           ],
           "additionalProperties": false
+        },
+        "repositories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "primary"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^(?!primary$)(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
+                  }
+                ]
+              },
+              "repository_identity_digest": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/digest"
+              },
+              "commit": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+              }
+            },
+            "required": [
+              "name",
+              "repository_identity_digest",
+              "commit"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "required": [

@@ -8,7 +8,7 @@ import { parsePathSafeId, parseSafeCode, parseSafeId, parseSafeInteger, parseSha
 import { baselineAdoptionDriftDigest, computeGateContextDigest } from "../../src/contracts/fingerprints.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
-import { assessBaselineSubjectFreshness, reconcileCurrentAuthority } from "../../src/state/reconciliation.js";
+import { assessBaselineSubjectFreshness, baselinePresentedTargets, reconcileCurrentAuthority } from "../../src/state/reconciliation.js";
 
 const D = (value: string) => parseSha256Digest(value.repeat(64));
 const PHASE = encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(10) });
@@ -44,6 +44,47 @@ describe("reconcileCurrentAuthority", () => {
     });
   });
 
+  it("requires continuity from a secondary target when no primary target is present", () => {
+    const context = {
+      drifted_projections: [],
+      secondary_targets: [{
+        repository: "apis" as never, repository_identity_digest: D("c"),
+        target_ref: "refs/heads/main", target_head: parseGitOid("a".repeat(40)),
+        drifted_projections: [{ path: parseRepositoryPathClaim("src/a.ts"), recorded_digest: D("a"), observed_digest: D("b") }],
+        deleted_projections: [], uncommitted_paths: [],
+      }],
+    } as const;
+    expect(baselinePresentedTargets(context)).toEqual([{ repository: "apis", target_head: parseGitOid("a".repeat(40)) }]);
+    const request = {
+      kind: "baseline-adoption", context,
+      subject_digest: baselineAdoptionDriftDigest(context),
+      context_digest: computeGateContextDigest("baseline-adoption", context),
+    } as unknown as Extract<GateRequestV1, { kind: "baseline-adoption" }>;
+    expect(assessBaselineSubjectFreshness(request, context, true).classification).toBe("current");
+  });
+
+  it("keeps a presented secondary head as the digest anchor across a permitted descendant", () => {
+    const context = {
+      drifted_projections: [],
+      secondary_targets: [{
+        repository: "apis" as never, repository_identity_digest: D("c"),
+        target_ref: "refs/heads/main", target_head: parseGitOid("a".repeat(40)),
+        drifted_projections: [{ path: parseRepositoryPathClaim("src/a.ts"), recorded_digest: D("a"), observed_digest: D("b") }],
+        deleted_projections: [], uncommitted_paths: [],
+      }],
+    } as const;
+    const request = {
+      kind: "baseline-adoption", context,
+      subject_digest: baselineAdoptionDriftDigest(context),
+      context_digest: computeGateContextDigest("baseline-adoption", context),
+    } as unknown as Extract<GateRequestV1, { kind: "baseline-adoption" }>;
+    const liveDescendant = {
+      ...context,
+      secondary_targets: [{ ...context.secondary_targets[0], target_head: parseGitOid("b".repeat(40)) }],
+    };
+    expect(assessBaselineSubjectFreshness(request, liveDescendant, true)).toMatchObject({ classification: "current" });
+  });
+
   it("classifies only supplied matching projections as consistent", () => {
     const projection = { path: parseRepositoryPathClaim("src/a.ts"), content_digest: D("a") };
     expect(reconcileCurrentAuthority({
@@ -61,6 +102,47 @@ describe("reconcileCurrentAuthority", () => {
     });
     expect(result.classification).toBe("reconciliation-required");
     expect(result.findings).toEqual([expect.objectContaining({ kind: "projection-mismatch", recorded_digest: D("a"), observed_digest: D("b") })]);
+  });
+
+  it("keeps identical relative paths distinct across repositories", () => {
+    const path = parseRepositoryPathClaim("src/shared.ts");
+    const result = reconcileCurrentAuthority({
+      state: canonicalDocument(STATE),
+      recorded_projections: [
+        { path, content_digest: D("a") },
+        { repository: "apis" as never, path, content_digest: D("b") },
+      ],
+      current_projections: [
+        { path, content_digest: D("a") },
+        { repository: "apis" as never, path, content_digest: D("c") },
+      ],
+      active_heads: {},
+      unrestorable_paths: [{ repository: "apis" as never, path }],
+    });
+    expect(result.findings).toEqual([expect.objectContaining({
+      kind: "projection-mismatch", repository: "apis", path,
+      recorded_digest: D("b"), observed_digest: D("c"),
+    })]);
+    expect(result.findings[0]).not.toHaveProperty("restore_unavailable");
+  });
+
+  it("classifies a secondary committed deletion without retiring the primary path", () => {
+    const path = parseRepositoryPathClaim("src/gone.ts");
+    const result = reconcileCurrentAuthority({
+      state: canonicalDocument(STATE),
+      recorded_projections: [
+        { path, content_digest: D("a") },
+        { repository: "apis" as never, path, content_digest: D("b") },
+      ],
+      current_projections: [{ path, content_digest: D("a") }],
+      active_heads: {},
+      unrestorable_paths: [{ repository: "apis" as never, path }],
+      committed_absent_paths: [{ repository: "apis" as never, path }],
+    });
+    expect(result.findings).toEqual([expect.objectContaining({
+      kind: "projection-mismatch", repository: "apis", path,
+      restore_unavailable: true, committed_absent: true,
+    })]);
   });
 
   it("marks a missing projection unrestorable only when discovery named it and no bytes remain", () => {

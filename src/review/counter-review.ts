@@ -17,7 +17,7 @@ import {
 } from "../contracts/mcp-tools.js";
 import { parseRepositoryPathClaim } from "../contracts/path-claims.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
-import type { ModelFamily, ReviewEvidence, RouteOverrideRecord } from "../contracts/review.js";
+import type { ModelFamily, ReviewedRepositoryV1, ReviewEvidence, RouteOverrideRecord } from "../contracts/review.js";
 import {
   mintAdjudicationObservation,
   mintReviewObservation,
@@ -150,6 +150,8 @@ export type RunCounterReviewInput = Readonly<{
   phase_kind: keyof NonNullable<ConfigV1["overrides"]>;
   producer_family: ModelFamily;
   measured_at_revision: SafeInteger;
+  /** Ordered trusted pins projected from the same repository-view plan as the child workspace. */
+  repositories: readonly ReviewedRepositoryV1[];
   envelope: ReviewEnvelopeSeed;
   projection_digest: ReviewEvidence["subject_digest"];
   /**
@@ -345,18 +347,6 @@ export async function runCounterReview(
     dependencies.dispatch(route, envelope, reviewOutputSchema as PlainJsonValue)));
   const route = reviewDispatch.selection.route;
   const dispatched = reviewDispatch.result;
-  const currentProjection = await dependencies.reobserve_projection_digest();
-  if (!currentProjection.ok) return currentProjection;
-  if (currentProjection.value !== input.projection_digest) {
-    return {
-      schema_version: "1",
-      ok: false,
-      error: createProjectError("STATE_INVALID", {
-        phase_instance: input.envelope.subject.phase_instance,
-        issue_code: "counter-review-subject-not-current",
-      }),
-    };
-  }
   const observed = mintReviewObservation({
     subject,
     adapter: route.adapter,
@@ -365,16 +355,10 @@ export async function runCounterReview(
     route_source: reviewDispatch.selection.source,
     envelope_input_digest: envelope.digest,
     extracted_output_bytes: dispatched.extracted_output_bytes,
+    repositories: input.repositories,
     ...(reviewOverride === undefined ? {} : { route_override: reviewOverride }),
   });
-  const prepared = await dependencies.prepare_evidence(
-    observed.evidence,
-    input.measured_at_revision,
-  );
-  if (!prepared.ok) return prepared;
-
   let constitutionEvidence: AdjudicationEvidence | undefined;
-  let constitutionPrepared: PreparedEvidenceResult | undefined;
   const plan = input.constitution;
   if (plan !== undefined) {
     // The constitution dispatch binds the review evidence it was dispatched with: the set digest
@@ -417,6 +401,7 @@ export async function runCounterReview(
         route_source: constitutionDispatch.selection.source,
         envelope_input_digest: constitutionEnvelope.digest,
         extracted_output_bytes: constitutionDispatched.extracted_output_bytes,
+        repositories: input.repositories,
         ...(constitutionOverride === undefined ? {} : { route_override: constitutionOverride }),
       });
       constitutionEvidence = crossCheckRuleFindings(
@@ -437,6 +422,32 @@ export async function runCounterReview(
           }),
       };
     }
+  }
+  const summarizedConstitution = constitutionEvidence;
+
+  // Re-authenticate the complete subject only after every required child has returned. In
+  // particular, a repository or artifact that moves during the sequential constitution review
+  // must prevent both sibling evidence results from becoming current.
+  const currentProjection = await dependencies.reobserve_projection_digest();
+  if (!currentProjection.ok) return currentProjection;
+  if (currentProjection.value !== input.projection_digest) {
+    return {
+      schema_version: "1",
+      ok: false,
+      error: createProjectError("STATE_INVALID", {
+        phase_instance: input.envelope.subject.phase_instance,
+        issue_code: "counter-review-subject-not-current",
+      }),
+    };
+  }
+
+  const prepared = await dependencies.prepare_evidence(
+    observed.evidence,
+    input.measured_at_revision,
+  );
+  if (!prepared.ok) return prepared;
+  let constitutionPrepared: PreparedEvidenceResult | undefined;
+  if (plan !== undefined && constitutionEvidence !== undefined) {
     const preparedConstitution = await plan.prepare_evidence(
       constitutionEvidence,
       input.measured_at_revision,
@@ -444,7 +455,6 @@ export async function runCounterReview(
     if (!preparedConstitution.ok) return preparedConstitution;
     constitutionPrepared = preparedConstitution.value;
   }
-  const summarizedConstitution = constitutionEvidence;
 
   const identified = identifyTransactionRequest(
     input.call,

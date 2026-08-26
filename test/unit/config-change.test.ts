@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { parseConfigYaml, type TaskConfigSnapshot } from "../../src/contracts/config.js";
+import type { RepositorySet } from "../../src/repository/repository-set.js";
 import { computeConfigChange, normalizeForChangeDetection, withLastSeenConfig } from "../../src/state/config-change.js";
 
 /** parseConfigYaml's zod output carries `| undefined` optionals; the snapshot type strips them. */
@@ -84,6 +85,53 @@ describe("computeConfigChange", () => {
     expect(computeConfigChange(before, after)).toEqual([]);
   });
 
+  it("reports repository removal, relocation, and mode edits at their declaring fields", () => {
+    const before = parseSnapshot([
+      'schema_version: "1"',
+      "roles: {}",
+      "repositories:",
+      "  apis:",
+      "    path: ../apis",
+      "  stripe:",
+      "    path: ../stripe-old",
+      "    mode: context-only",
+    ].join("\n"), "before repository edit");
+    const after = parseSnapshot([
+      'schema_version: "1"',
+      "roles: {}",
+      "repositories:",
+      "  stripe:",
+      "    path: ../stripe",
+      "    mode: writable",
+    ].join("\n"), "after repository edit");
+
+    expect(computeConfigChange(before, after)).toEqual([
+      { path: "repositories.apis", before: { path: "../apis" } },
+      { path: "repositories.stripe.mode", before: "context-only", after: "writable" },
+      { path: "repositories.stripe.path", before: "../stripe-old", after: "../stripe" },
+    ]);
+  });
+
+  it("treats repository map key order as non-semantic", () => {
+    const apisFirst = parseSnapshot([
+      'schema_version: "1"',
+      "roles: {}",
+      "repositories:",
+      "  apis: { path: ../apis }",
+      "  stripe: { path: ../stripe, mode: writable }",
+    ].join("\n"), "apis first");
+    const stripeFirst = parseSnapshot([
+      'schema_version: "1"',
+      "repositories:",
+      "  stripe: { mode: writable, path: ../stripe }",
+      "  apis: { path: ../apis }",
+      "roles: {}",
+    ].join("\n"), "stripe first");
+
+    expect(computeConfigChange(apisFirst, stripeFirst)).toEqual([]);
+    expect(normalizeForChangeDetection(apisFirst)).toEqual(normalizeForChangeDetection(stripeFirst));
+  });
+
   it("drops the retired producer role before diffing so a cosmetic retire reports nothing", () => {
     const withProducer = parseSnapshot([
       "schema_version: \"1\"",
@@ -114,24 +162,61 @@ describe("computeConfigChange", () => {
 });
 
 describe("withLastSeenConfig", () => {
-  type Draft = { readonly schema_version: "1"; readonly last_seen_config?: TaskConfigSnapshot };
+  type Draft = {
+    readonly schema_version: "1";
+    readonly last_seen_config?: TaskConfigSnapshot;
+    readonly last_seen_repository_bindings?: readonly [{
+      readonly name: "primary";
+      readonly repository_identity_digest: never;
+    }];
+  };
   const baseline = parseSnapshot("schema_version: \"1\"\nroles: {}\n", "baseline");
+  const identityDigest = "1".repeat(64) as never;
+  const repositorySet = {
+    members: [{ name: "primary", identity: { digest: identityDigest } }],
+    digest: "2".repeat(64),
+  } as unknown as RepositorySet;
+  const checkpoint = [{ name: "primary" as const, repository_identity_digest: identityDigest }] as const;
 
   it("returns the same draft when the recorded baseline is unchanged", () => {
-    const draft: Draft = { schema_version: "1", last_seen_config: baseline };
-    expect(withLastSeenConfig(draft, baseline)).toBe(draft);
+    const draft: Draft = {
+      schema_version: "1",
+      last_seen_config: baseline,
+      last_seen_repository_bindings: checkpoint,
+    };
+    expect(withLastSeenConfig(draft, baseline, repositorySet)).toBe(draft);
+  });
+
+  it("treats a checkpoint read back with a different key order as unchanged", () => {
+    // Canonical JSON persists keys sorted; a freshly built checkpoint lists them in construction
+    // order. Both name the same bindings and must not rewrite the draft.
+    const reordered = JSON.parse(JSON.stringify(
+      [{ repository_identity_digest: identityDigest, name: "primary" }],
+    )) as NonNullable<Draft["last_seen_repository_bindings"]>;
+    const draft: Draft = {
+      schema_version: "1",
+      last_seen_config: baseline,
+      last_seen_repository_bindings: reordered,
+    };
+    expect(Object.keys(reordered[0])).not.toEqual(Object.keys(checkpoint[0]));
+    expect(withLastSeenConfig(draft, baseline, repositorySet)).toBe(draft);
   });
 
   it("records the normalized edited config only when it differs from the baseline", () => {
     const edited = parseSnapshot("schema_version: \"1\"\nroles: {}\nmax_attempts: 4\n", "edited");
     const draft: Draft = { schema_version: "1", last_seen_config: baseline };
-    const updated = withLastSeenConfig(draft, edited);
+    const updated = withLastSeenConfig(draft, edited, repositorySet);
     expect(updated).not.toBe(draft);
     expect(updated.last_seen_config).toEqual(edited);
+    expect(updated.last_seen_repository_bindings).toEqual(checkpoint);
   });
 
-  it("seeds the baseline on a draft that has none", () => {
+  it("seeds paired config and repository checkpoints on a draft that has none", () => {
     const draft: Draft = { schema_version: "1" };
-    expect(withLastSeenConfig(draft, baseline)).toEqual({ ...draft, last_seen_config: baseline });
+    expect(withLastSeenConfig(draft, baseline, repositorySet)).toEqual({
+      ...draft,
+      last_seen_config: baseline,
+      last_seen_repository_bindings: checkpoint,
+    });
   });
 });

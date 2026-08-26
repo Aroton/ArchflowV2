@@ -325,6 +325,9 @@ function mapNextAction(status: TaskStatusV1, snapshot: SemanticStatusSnapshotV1)
         commit: Object.freeze({
           paths: Object.freeze([...action.commit_paths].sort()), message: action.commit_message,
           target_ref: action.commit_target_ref, baseline: action.commit_baseline,
+          ...(action.commit_repository === undefined
+            ? {}
+            : { repository: Object.freeze({ ...action.commit_repository }) }),
         }),
       });
     }
@@ -441,6 +444,17 @@ export function projectSemanticStatus(
   const configChangeNotice = configChange === undefined ? "" : configChange.length === 1
     ? " Task config changed since the last state transaction (1 field); see config_change."
     : ` Task config changed since the last state transaction (${configChange.length} fields); see config_change.`;
+  const repositoryNotice = status.repositories === undefined
+    ? ""
+    : " The live repository set is listed in repositories; it is informational and grants no review or write authority.";
+  // The failure's safe facts are in dispatch_failure; the prose names the role and, when the
+  // failure is a missing repository view, the configured repository so a human can go repair it.
+  const failure = status.dispatch_failure;
+  const dispatchFailureNotice = failure === undefined
+    ? ""
+    : failure.repository_name === undefined
+      ? ` The last ${failure.role} dispatch failed: ${failure.message}`
+      : ` The last ${failure.role} dispatch failed because repository "${failure.repository_name}" could not be provided as a read-only view: ${failure.message}`;
   const nextAction: SemanticNextActionV1 = Object.freeze({
     kind: shape.action_kind,
     instruction: shape.instruction,
@@ -458,7 +472,7 @@ export function projectSemanticStatus(
     task_id: status.task_id,
     condition: shape.condition,
     headline: shape.headline,
-    detail: `${shape.detail}${mismatch}${configChangeNotice}`,
+    detail: `${shape.detail}${mismatch}${configChangeNotice}${repositoryNotice}${dispatchFailureNotice}`,
     ...(position === undefined ? {} : { position }),
     // A settled re-entry decision is close-only authority. Document write slots become visible
     // only after the separately offered revision-entry transition commits.
@@ -468,6 +482,7 @@ export function projectSemanticStatus(
     ...(context === undefined ? {} : { review_context: context }),
     ...(shape.presentation === undefined ? {} : { presentation: shape.presentation }),
     ...(status.dispatch_failure === undefined ? {} : { dispatch_failure: status.dispatch_failure }),
+    ...(status.repositories === undefined ? {} : { repositories: status.repositories }),
     ...(configChange === undefined ? {} : { config_change: configChange }),
   });
   return Object.freeze({ view, ...(offer === undefined ? {} : { internal_offer: offer }) });

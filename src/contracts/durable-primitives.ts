@@ -9,6 +9,11 @@ import type { RepositoryPathClaim } from "./path-claims.js";
 import { repositoryPathClaimV1Schema } from "./path-claims.js";
 import { assertPlainJson } from "./plain-json.js";
 import { isSortedUniqueBy, tupleKey } from "./validators.js";
+import type { RepositoryName } from "./config.js";
+import { repositoryNameV1Schema } from "./config.js";
+
+/** Parentless clone so durable documents never emit an unresolvable config-document `$ref`. */
+export const durableRepositoryNameV1Schema = repositoryNameV1Schema.clone(repositoryNameV1Schema.def);
 
 /**
  * Shapes shared by more than one durable root. Every type here is a `type` alias rather than an
@@ -311,11 +316,14 @@ export const declaredInputRefV1Schema = z.object({
  * to detect drift against the recorded set.
  */
 export type ProjectionDigestRef = {
+  /** Omission denotes the primary repository for archive compatibility. */
+  readonly repository?: RepositoryName;
   readonly path: RepositoryPathClaim;
   readonly content_digest: Sha256Digest;
 };
 
 export const projectionDigestRefV1Schema = z.object({
+  repository: durableRepositoryNameV1Schema.optional(),
   path: repositoryPathClaimV1Schema,
   content_digest: sha256Digest,
 }).strict() as unknown as z.ZodType<ProjectionDigestRef>;
