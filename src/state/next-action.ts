@@ -59,6 +59,23 @@ export type NextAction = Readonly<{
   pending_gate_kinds?: readonly GateKind[];
   /** Set on the produce run-step routed by `editorial_revision_required`: the produce re-entry applies exactly the accepted editorial revision intents and preserves review evidence. */
   editorial_revision?: boolean;
+  /** Set on the produce run-step routed by `policy_reentry_required`: `detail` names the constitution findings the re-entry must resolve. */
+  policy_reentry?: boolean;
+}>;
+
+/** Agent-resolvable constitution findings, already mapped to the paths a producer can act on. */
+export type PolicyReentryFindings = Readonly<{
+  rules: readonly Readonly<{
+    rule_id: string;
+    rule_version: number;
+    compliance: "fail" | "uncertain";
+    rationale: string;
+  }>[];
+  drift: readonly Readonly<{
+    path: string;
+    affected_claim_ids: readonly string[];
+    rationale: string;
+  }>[];
 }>;
 
 export type AuthenticatedApprovalFact = Readonly<{
@@ -88,6 +105,8 @@ export type NextActionInput = Readonly<{
    * document, so the only recovery is putting the recorded bytes back.
    */
   upstream_document_drift?: readonly string[];
+  /** Present with `assessment.policy_reentry_required`: what the produce re-entry has to resolve. */
+  policy_findings?: PolicyReentryFindings;
   assessment?: EvidenceAssessment;
   evidence_available?: boolean;
   subject_digest?: Sha256Digest;
@@ -170,6 +189,26 @@ function runStepDetail(state: TaskStateV1, step: PipelineStep): string {
   if (state.step === step && state.status === "running") return `Record the terminal ${step} result.`;
   if (state.step === step && state.status === "failed") return `Retry the ${step} pipeline step.`;
   return `Run the ${step} pipeline step.`;
+}
+
+/**
+ * Names the constitution findings a produce re-entry exists to resolve. Written for the producer
+ * that reads it from the revise offer: which rule, why it failed, which document the work drifted
+ * from — never a gate or digest.
+ */
+function policyReentryDetail(findings: PolicyReentryFindings | undefined): string {
+  const lines: string[] = [];
+  for (const rule of findings?.rules ?? []) {
+    const verdict = rule.compliance === "fail" ? "is not met" : "could not be shown to be met";
+    lines.push(`Constitution rule ${rule.rule_id} (v${rule.rule_version}) ${verdict}: ${rule.rationale}`);
+  }
+  for (const drift of findings?.drift ?? []) {
+    lines.push(`The work departs materially from ${drift.path} (${drift.affected_claim_ids.join(", ")}): ${drift.rationale}`);
+  }
+  const listed = lines.length === 0
+    ? "The constitution review left findings this work must resolve."
+    : lines.join(" ");
+  return `${listed} Resolve these in the artifact — or update the governing document this result owns — then resubmit for a fresh review.`;
 }
 
 /**
@@ -636,6 +675,11 @@ export function deriveNextAction(input: NextActionInput): NextAction {
         state,
         { step: "produce", editorial_revision: true },
       );
+    }
+    if (next === "produce" && input.assessment?.policy_reentry_required === true) {
+      return action("run-step", policyReentryDetail(input.policy_findings), false, state, {
+        step: "produce", policy_reentry: true,
+      });
     }
     return action("run-step", runStepDetail(state, next), false, state, { step: next });
   }

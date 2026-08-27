@@ -3539,7 +3539,7 @@
       ]
     },
     "src/contracts/config.ts": {
-      "bytes": 5756,
+      "bytes": 5777,
       "format": "esm",
       "imports": [
         {
@@ -6282,7 +6282,7 @@
       ]
     },
     "src/mcp/handlers/state.ts": {
-      "bytes": 59893,
+      "bytes": 60105,
       "format": "esm",
       "imports": [
         {
@@ -6868,7 +6868,7 @@
       ]
     },
     "src/review/adjudication.ts": {
-      "bytes": 9450,
+      "bytes": 10317,
       "format": "esm",
       "imports": [
         {
@@ -6976,7 +6976,7 @@
       ]
     },
     "src/review/envelopes.ts": {
-      "bytes": 28672,
+      "bytes": 29256,
       "format": "esm",
       "imports": [
         {
@@ -7022,7 +7022,7 @@
       ]
     },
     "src/review/fixed-point.ts": {
-      "bytes": 27422,
+      "bytes": 28664,
       "format": "esm",
       "imports": [
         {
@@ -7135,7 +7135,7 @@
       ]
     },
     "src/state/approval-rules.ts": {
-      "bytes": 13892,
+      "bytes": 14822,
       "format": "esm",
       "imports": [
         {
@@ -7214,7 +7214,7 @@
       ]
     },
     "src/state/constitution.ts": {
-      "bytes": 12917,
+      "bytes": 15122,
       "format": "esm",
       "imports": [
         {
@@ -7586,7 +7586,7 @@
       ]
     },
     "src/state/gate-decision-interface.ts": {
-      "bytes": 30367,
+      "bytes": 30413,
       "format": "esm",
       "imports": [
         {
@@ -7622,7 +7622,7 @@
       ]
     },
     "src/state/gates.ts": {
-      "bytes": 141331,
+      "bytes": 141551,
       "format": "esm",
       "imports": [
         {
@@ -8179,7 +8179,7 @@
       ]
     },
     "src/state/next-action.ts": {
-      "bytes": 32229,
+      "bytes": 34261,
       "format": "esm",
       "imports": [
         {
@@ -8309,7 +8309,7 @@
       ]
     },
     "src/state/produce-subject.ts": {
-      "bytes": 20376,
+      "bytes": 22565,
       "format": "esm",
       "imports": [
         {
@@ -8497,7 +8497,7 @@
       ]
     },
     "src/state/reconciliation-discovery.ts": {
-      "bytes": 23451,
+      "bytes": 23620,
       "format": "esm",
       "imports": [
         {
@@ -8995,7 +8995,7 @@
       ]
     },
     "src/state/semantic-view.ts": {
-      "bytes": 24714,
+      "bytes": 24942,
       "format": "esm",
       "imports": [
         {
@@ -9077,7 +9077,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 111955,
+      "bytes": 113917,
       "format": "esm",
       "imports": [
         {
@@ -9504,7 +9504,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1836284,
+      "bytes": 1841715,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10657,19 +10657,19 @@
           "bytesInOutput": 5124
         },
         "src/review/adjudication.ts": {
-          "bytesInOutput": 2812
+          "bytesInOutput": 3069
         },
         "src/review/envelopes.ts": {
           "bytesInOutput": 31
         },
         "src/review/fixed-point.ts": {
-          "bytesInOutput": 14169
+          "bytesInOutput": 14588
         },
         "src/review/rubrics.ts": {
           "bytesInOutput": 11778
         },
         "src/state/approval-rules.ts": {
-          "bytesInOutput": 371
+          "bytesInOutput": 675
         },
         "src/state/atomic.ts": {
           "bytesInOutput": 6119
@@ -10681,7 +10681,7 @@
           "bytesInOutput": 3774
         },
         "src/state/constitution.ts": {
-          "bytesInOutput": 8595
+          "bytesInOutput": 10359
         },
         "src/state/evidence-results.ts": {
           "bytesInOutput": 4164
@@ -10699,7 +10699,7 @@
           "bytesInOutput": 3838
         },
         "src/state/gate-decision-interface.ts": {
-          "bytesInOutput": 20265
+          "bytesInOutput": 20290
         },
         "src/state/implementation-manifest.ts": {
           "bytesInOutput": 23367
@@ -10720,7 +10720,7 @@
           "bytesInOutput": 2311
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 19904
+          "bytesInOutput": 20920
         },
         "src/state/phase-documents.ts": {
           "bytesInOutput": 2363
@@ -10735,7 +10735,7 @@
           "bytesInOutput": 2665
         },
         "src/state/reconciliation-discovery.ts": {
-          "bytesInOutput": 16040
+          "bytesInOutput": 15920
         },
         "src/state/reconciliation.ts": {
           "bytesInOutput": 10038
@@ -10756,13 +10756,13 @@
           "bytesInOutput": 17836
         },
         "src/state/semantic-view.ts": {
-          "bytesInOutput": 21469
+          "bytesInOutput": 21675
         },
         "src/state/snapshots.ts": {
           "bytesInOutput": 24533
         },
         "src/state/status.ts": {
-          "bytesInOutput": 73659
+          "bytesInOutput": 75219
         },
         "src/state/waiver-origin.ts": {
           "bytesInOutput": 257
@@ -10773,7 +10773,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3199555,
+      "bytes": 3207327,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12025,7 +12025,7 @@
           "bytesInOutput": 18092
         },
         "src/mcp/handlers/state.ts": {
-          "bytesInOutput": 50730
+          "bytesInOutput": 50907
         },
         "src/mcp/process-runner.ts": {
           "bytesInOutput": 3941
@@ -12061,16 +12061,16 @@
           "bytesInOutput": 6037
         },
         "src/review/adjudication.ts": {
-          "bytesInOutput": 5541
+          "bytesInOutput": 5798
         },
         "src/review/counter-review.ts": {
           "bytesInOutput": 11411
         },
         "src/review/envelopes.ts": {
-          "bytesInOutput": 18409
+          "bytesInOutput": 18999
         },
         "src/review/fixed-point.ts": {
-          "bytesInOutput": 14970
+          "bytesInOutput": 15389
         },
         "src/review/pinned-context.ts": {
           "bytesInOutput": 18687
@@ -12079,7 +12079,7 @@
           "bytesInOutput": 11780
         },
         "src/state/approval-rules.ts": {
-          "bytesInOutput": 7652
+          "bytesInOutput": 8061
         },
         "src/state/atomic.ts": {
           "bytesInOutput": 6355
@@ -12091,7 +12091,7 @@
           "bytesInOutput": 3774
         },
         "src/state/constitution.ts": {
-          "bytesInOutput": 7164
+          "bytesInOutput": 8926
         },
         "src/state/document-artifact.ts": {
           "bytesInOutput": 5804
@@ -12112,10 +12112,10 @@
           "bytesInOutput": 7905
         },
         "src/state/gate-decision-interface.ts": {
-          "bytesInOutput": 24473
+          "bytesInOutput": 24498
         },
         "src/state/gates.ts": {
-          "bytesInOutput": 118426
+          "bytesInOutput": 118612
         },
         "src/state/implementation-manifest.ts": {
           "bytesInOutput": 65317
@@ -12136,7 +12136,7 @@
           "bytesInOutput": 2300
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 19898
+          "bytesInOutput": 20914
         },
         "src/state/pending-waiver.ts": {
           "bytesInOutput": 3062
@@ -12151,7 +12151,7 @@
           "bytesInOutput": 1605
         },
         "src/state/produce-subject.ts": {
-          "bytesInOutput": 12763
+          "bytesInOutput": 14048
         },
         "src/state/production.ts": {
           "bytesInOutput": 22616
@@ -12160,7 +12160,7 @@
           "bytesInOutput": 2665
         },
         "src/state/reconciliation-discovery.ts": {
-          "bytesInOutput": 16049
+          "bytesInOutput": 15929
         },
         "src/state/reconciliation.ts": {
           "bytesInOutput": 10042
@@ -12187,13 +12187,13 @@
           "bytesInOutput": 17849
         },
         "src/state/semantic-view.ts": {
-          "bytesInOutput": 21432
+          "bytesInOutput": 21638
         },
         "src/state/snapshots.ts": {
           "bytesInOutput": 29969
         },
         "src/state/status.ts": {
-          "bytesInOutput": 71359
+          "bytesInOutput": 72919
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 50274

@@ -246,18 +246,21 @@ export type ImplementationHandoff = Readonly<{
 export async function reachImplementationHandoff(
   workspace: TaskWorkspace,
   h: SemanticJourneyHarness,
-  options: Readonly<{ phaseCount: number; phase?: number }>,
+  options: Readonly<{ phaseCount: number; phase?: number; contentRules?: readonly string[] }>,
 ): Promise<ImplementationHandoff> {
   const phase = options.phase ?? 1;
   // The walked prd/design/phase-design tiers all retain their approval gates during the staged
   // rollout. The explicit subjects list also exercises persisted match presentation at each tier.
+  const content = options.contentRules === undefined || options.contentRules.length === 0
+    ? "[]"
+    : `[{ paths: [${options.contentRules.map((rule) => JSON.stringify(rule)).join(", ")}] }]`;
   writeFileSync(join(workspace.services.authority.task_root, "config.yaml"), `schema_version: "1"
 roles:
   counter-reviewer: { model: gpt-5.6-sol, effort: xhigh }
   adjudicator: { model: gpt-5.6-sol, effort: xhigh }
 approval_rules:
   subjects: [prd, design, phase-design]
-  content: []
+  content: ${content}
 `);
   writeFileSync(join(workspace.services.authority.task_root, "ask.md"), "Describe a small semantic journey.\n");
   writeFileSync(join(workspace.services.authority.task_root, "prd.md"), "# Semantic journey\n\nThe client authors this document.\n");

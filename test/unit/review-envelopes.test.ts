@@ -283,6 +283,15 @@ describe("review dispatch envelopes", () => {
     })).toThrow(/encoding/u);
   });
 
+  it("adjudication envelope instructs trigger judgment from observable evidence only", () => {
+    const visible = json(buildAdjudicationEnvelope(adjudicationInput()).bytes) as {
+      instructions: Record<string, string>;
+    };
+    expect(visible.instructions.trigger).toMatch(/directly evidenced by the artifact/u);
+    expect(visible.instructions.trigger).toMatch(/no review_trigger is always not-matched/u);
+    expect(visible.instructions.trigger).toMatch(/gate authority, approvals, commits, and dispatch outcomes/u);
+  });
+
   it("builds a domain-separated adjudication envelope with only child-visible instructions", () => {
     const first = buildAdjudicationEnvelope(adjudicationInput());
     const second = buildAdjudicationEnvelope(structuredClone(adjudicationInput()));

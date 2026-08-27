@@ -61,7 +61,16 @@ async function applied(
   return result.value;
 }
 
-type AdjudicationScript = Readonly<{ materialDrift?: boolean; failingRule?: boolean }>;
+type AdjudicationScript = Readonly<{
+  /** Report material drift against the first approved upstream of every implementation subject. */
+  materialDrift?: boolean;
+  /** Fail the first rule on compliance *and* match its review trigger: the repository asked for a human. */
+  failingRule?: boolean;
+  /** Fail the first rule on compliance only (trigger not matched): producer work, not a human gate. */
+  failingCompliance?: boolean;
+  /** Once this many reviews have run (counting every tier), adjudications pass clean and aligned. */
+  resolveAtReview?: number;
+}>;
 
 /**
  * Local variant of the shared review stub: the same scripted counter-review child (one findings
@@ -99,7 +108,9 @@ else {
       verdict: findings.some((finding) => finding.blocking === true) ? "fail" : findings.length === 0 ? "pass" : "advisory",
       blocking_count: findings.filter((finding) => finding.blocking === true).length };
   } else {
-    const implementation = subject.phase_instance.indexOf("phase-impl-") === 0;
+    let reviews = 0; try { reviews = Number(readFileSync(${JSON.stringify(countPath)}, "utf8")); } catch {}
+    const resolved = ${JSON.stringify(script.resolveAtReview ?? null)} !== null && reviews >= ${JSON.stringify(script.resolveAtReview ?? 0)};
+    const implementation = subject.phase_instance.indexOf("phase-impl-") === 0 && !resolved;
     const pass = (rule) => ({ rule_id: rule.id, rule_version: rule.version, compliance: "pass",
       rationale: "The work respects this rule.", trigger: "not-matched",
       trigger_evidence: "No review trigger matched." });
@@ -109,7 +120,11 @@ else {
             rationale: "The implementation departs from the approved plan.",
             trigger: "matched",
             trigger_evidence: "The approved phase design requires an update before this work advances." }
-        : pass(rule)));
+        : ${JSON.stringify(script.failingCompliance === true)} && implementation && index === 0
+          ? { rule_id: rule.id, rule_version: rule.version, compliance: "fail",
+              rationale: "The implementation records a human decision the workflow never recorded.",
+              trigger: "not-matched", trigger_evidence: "This rule declares no review trigger." }
+          : pass(rule)));
     const drift_findings = ${JSON.stringify(script.materialDrift === true)} && implementation && subject.approved_upstream_digests.length > 0
       ? [{ upstream_digest: subject.approved_upstream_digests[0], drift: "material",
           affected_claim_ids: ["claim-verified-behavior"],
@@ -837,69 +852,54 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     expect(reviewCountAt(workspace)).toBe(reviewsBeforeRevision + 1);
   });
 
-  scenario("resolves material upstream drift by moving the task to the earlier planning boundary", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-drift-upstream", label: "semantic-impl-drift-upstream" });
+  scenario("re-enters production without a human gate on material upstream drift and commits autonomously once the phase design is co-produced", async () => {
+    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-drift-reentry", label: "semantic-impl-drift-reentry" });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
-    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []], { materialDrift: true }));
+    // Reviews 1-3 walk prd/design/phase-design; the first implementation review (4) drifts, the
+    // second (5) — over the co-produced phase design — is clean.
+    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []], { materialDrift: true, resolveAtReview: 5 }));
     const h = semanticJourneyHarness(workspace);
-    const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 2 });
+    const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
 
     let view = await applied(h, invocation, handoff);
-    const work = writeClientImplementation(workspace, view, "drift-upstream-round-1");
+    const work = writeClientImplementation(workspace, view, "drift-reentry-round-1");
     view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
     view = await applied(h, invocation, view);
-    expect(view.findings).toEqual([]);
 
-    // The drift assessment opens the material-drift gate with both resolution choices.
-    view = await applied(h, invocation, view, {
-      kind: "gate-summary", summary: "The implementation review reports material drift against an approved upstream plan.",
-    });
-    const tokens = view.presentation?.options.map((option) => option.token) ?? [];
-    expect(tokens).toContain("update-earlier-work");
-    expect(tokens).toContain("change-current-work");
+    // Material drift is producer work: no presentation, no human, a revise offer that names the
+    // drifted document and why.
+    expect(view.presentation).toBeUndefined();
+    expect(view.next_action).toMatchObject({ kind: "revise", expected_submission: "none" });
+    expect(view.detail).toMatch(/departs materially from .*design\.md/u);
+    expect(view.detail).toContain("claim-verified-behavior");
+    expect(view.detail).toContain("no longer matches the implemented reality");
+    const reviewsAfterDrift = reviewCountAt(workspace);
+    const headBefore = headAt(workspace);
 
-    const implementationHead = headAt(workspace);
-    view = await applied(h, invocation, view, {
-      kind: "decision", choice: "update-earlier-work", reason: "The approved plan, not the implementation, is out of date.",
-    });
+    view = await applied(h, invocation, view);
+    expect(view.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
+    const phaseDesign = view.resources.find((resource) => resource.role === "phase-design");
+    if (phaseDesign === undefined) throw new Error("phase design resource unavailable in the re-entry window");
+    expect(phaseDesign.access).toBe("read-write");
 
-    // The task restarts at the affected upstream planning boundary; the implementation
-    // position and its downstream produce results are superseded, and Git is untouched.
-    expect(view.position).toBeDefined();
-    expect(["design", "phase-design"]).toContain(view.position!.kind);
-    expect(view.position).not.toEqual({ kind: "phase-impl", phase: 1 });
-    expect(headAt(workspace)).toBe(implementationHead);
-
-    // The superseded implementation invocation no longer owns any semantic mutation.
-    const implView = await h.status(invocation);
-    expect(implView.next_action.offer).toBeUndefined();
-
-    // The reopened upstream planning boundary is usable: the owning invocation holds its
-    // position at the production write window, not a blocked or inspect projection.
-    const upstreamPosition = view.position!;
-    const upstreamInvocation = upstreamPosition.kind === "phase-design"
-      ? { skill: "archflow-phase-design", phase: upstreamPosition.phase, intent: "resume" } as const
-      : { skill: "archflow-design", intent: "resume" } as const;
-    const upstreamView = await h.status(upstreamInvocation);
-    expect(upstreamView.condition).not.toBe("blocked");
-    expect(upstreamView.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
-    expect(upstreamView.next_action.offer).toBeDefined();
-
-    // One produce apply on the reopened tier: the client rewrites the planning document and
-    // submits it as ordinary document work.
-    const upstreamArtifact = upstreamView.resources.find((resource) => resource.role === "current-artifact");
-    if (upstreamArtifact === undefined) throw new Error("reopened planning resource unavailable");
-    writeFileSync(join(workspace.root, upstreamArtifact.path),
-      upstreamPosition.kind === "phase-design"
-        ? "# Phase 1: Implement the verified behavior\n\n## Goal\n\nBring the approved plan back in line with the implemented reality.\n"
-        : "# Design\n\nThe architecture now records the boundary the implementation discovered.\n\n### Phase 1: Implement the verified behavior 1\n\nProduce, review, approve, and commit tier 1.\n\n### Phase 2: Implement the verified behavior 2\n\nProduce, review, approve, and commit tier 2.\n");
-    const produced = await applied(h, upstreamInvocation, upstreamView, { kind: "work-result", outcome: "succeeded" });
-    expect(produced.next_action.kind).toBe("review");
+    // The producer brings its own phase design in line and submits it with the work.
+    const revised = writeClientImplementation(workspace, view, "drift-reentry-round-2");
+    writeFileSync(join(workspace.root, phaseDesign.path),
+      "# Phase 1: Implement the verified behavior\n\n## Goal\n\nThe plan now records the boundary the implementation discovered.\n");
+    view = await applied(h, invocation, view, implementationSubmission(workspace, [...revised.outputs, phaseDesign.path].sort()));
+    expect(view.next_action).toMatchObject({ kind: "review", expected_submission: "review-dispatch" });
+    view = await applied(h, invocation, view);
+    expect(view.presentation).toBeUndefined();
+    expect(view.next_action).toMatchObject({ kind: "commit" });
+    expect(view.next_action.commit).not.toHaveProperty("requires_human_confirmation");
+    expect(view.next_action.commit?.paths).toContain(phaseDesign.path);
+    expect(reviewCountAt(workspace)).toBe(reviewsAfterDrift + 1);
+    expect(headAt(workspace)).toBe(headBefore);
   });
 
-  scenario("keeps the earlier plan when material drift chooses to change the current work through the close-only checkpoint", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-drift-current", label: "semantic-impl-drift-current" });
+  scenario("opens the material-drift gate when drift is never resolved within the attempt budget", async () => {
+    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-drift-exhausted", label: "semantic-impl-drift-exhausted" });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
     restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []], { materialDrift: true }));
@@ -907,28 +907,160 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
 
     let view = await applied(h, invocation, handoff);
-    const work = writeClientImplementation(workspace, view, "drift-current-round-1");
-    view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
-    view = await applied(h, invocation, view);
-    expect(view.findings).toEqual([]);
-    view = await applied(h, invocation, view, {
-      kind: "gate-summary", summary: "The implementation review reports material drift against an approved upstream plan.",
-    });
-    const reviewsAfterReview = reviewCountAt(workspace);
+    let rounds = 0;
+    let boundary: WorkflowViewV1 | undefined;
+    for (rounds = 1; rounds <= 6 && boundary === undefined; rounds += 1) {
+      const work = writeClientImplementation(workspace, view, `drift-exhausted-round-${rounds}`);
+      view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
+      view = await applied(h, invocation, view);
+      if (view.next_action.kind === "revise") {
+        expect(view.presentation).toBeUndefined();
+        expect(view.detail).toMatch(/departs materially/u);
+        view = await applied(h, invocation, view);
+        expect(view.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
+      } else {
+        expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+        expect(view.detail).toMatch(/material-drift/u);
+        boundary = view;
+      }
+    }
+    rounds -= 1;
+    expect(boundary).toBeDefined();
+    // The default budget: the first produce plus two drift re-entries, then the human decides.
+    expect(rounds).toBe(3);
+    view = boundary!;
+    const reviewsAtGate = reviewCountAt(workspace);
 
+    view = await applied(h, invocation, view, {
+      kind: "gate-summary", summary: "The implementation still drifts materially from its approved plan after every automated round.",
+    });
+    const tokens = view.presentation?.options.map((option) => option.token) ?? [];
+    expect(tokens).toContain("update-earlier-work");
+    expect(tokens).toContain("change-current-work");
+
+    // change-current-work is the same close-only checkpoint as request-changes.
     view = await applied(h, invocation, view, {
       kind: "decision", choice: "change-current-work", reason: "The current implementation must match the approved plan.",
     });
-
-    // Like request-changes: the checkpoint is close-only and requires the separate revise.
     expect(view.position).toEqual({ kind: "phase-impl", phase: 1 });
     expect(view.next_action).toMatchObject({ kind: "revise", expected_submission: "none" });
     expect(view.resources).toEqual([]);
-    expectClientWorkIntact(workspace, work, headAt(workspace), reviewsAfterReview);
-
+    expect(reviewCountAt(workspace)).toBe(reviewsAtGate);
     view = await applied(h, invocation, view);
     expect(view.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
     expect(view.resources.length).toBeGreaterThan(0);
+  });
+
+  scenario("re-enters production with the unmet rule named when the constitution review fails and commits autonomously once it passes", async () => {
+    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-rule-reentry", label: "semantic-impl-rule-reentry" });
+    workspaces.push(workspace);
+    excludeStubArtifacts(workspace);
+    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []], { failingCompliance: true, resolveAtReview: 5 }));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
+
+    let view = await applied(h, invocation, handoff);
+    const work = writeClientImplementation(workspace, view, "rule-reentry-round-1");
+    view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
+    view = await applied(h, invocation, view);
+
+    // A failed rule is the agent's to resolve: the revise offer names the rule and the reason.
+    expect(view.presentation).toBeUndefined();
+    expect(view.next_action).toMatchObject({ kind: "revise", expected_submission: "none" });
+    const firstRule = view.review_context?.active_rules[0];
+    if (firstRule === undefined) throw new Error("active rules unavailable");
+    expect(view.detail).toContain(`Constitution rule ${firstRule.id} (v${firstRule.version}) is not met`);
+    expect(view.detail).toContain("records a human decision the workflow never recorded");
+    const reviewsAfterFailure = reviewCountAt(workspace);
+
+    view = await applied(h, invocation, view);
+    expect(view.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
+    const revised = writeClientImplementation(workspace, view, "rule-reentry-round-2");
+    view = await applied(h, invocation, view, implementationSubmission(workspace, revised.outputs));
+    view = await applied(h, invocation, view);
+    expect(view.presentation).toBeUndefined();
+    expect(view.next_action).toMatchObject({ kind: "commit" });
+    expect(view.next_action.commit).not.toHaveProperty("requires_human_confirmation");
+    expect(reviewCountAt(workspace)).toBe(reviewsAfterFailure + 1);
+  });
+
+  scenario("opens the constitution-review gate with a waiver available once a failing rule exhausts its attempts", async () => {
+    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-rule-exhausted", label: "semantic-impl-rule-exhausted" });
+    workspaces.push(workspace);
+    excludeStubArtifacts(workspace);
+    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []], { failingCompliance: true }));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
+
+    let view = await applied(h, invocation, handoff);
+    let rounds = 0;
+    let boundary: WorkflowViewV1 | undefined;
+    for (rounds = 1; rounds <= 6 && boundary === undefined; rounds += 1) {
+      const work = writeClientImplementation(workspace, view, `rule-exhausted-round-${rounds}`);
+      view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
+      view = await applied(h, invocation, view);
+      if (view.next_action.kind === "revise") {
+        expect(view.presentation).toBeUndefined();
+        expect(view.detail).toMatch(/Constitution rule .* is not met/u);
+        view = await applied(h, invocation, view);
+      } else {
+        expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+        boundary = view;
+      }
+    }
+    rounds -= 1;
+    expect(boundary).toBeDefined();
+    expect(rounds).toBe(3);
+
+    // At exhaustion the failed rule folds into the ordinary commit-authorization boundary, where
+    // a human can authorize, request changes, or waive the rule the reviewer may have misjudged.
+    view = await applied(h, invocation, boundary!, {
+      kind: "gate-summary", summary: "The constitution review failed one rule in every automated round.",
+    });
+    expect(view.presentation?.class).toBe("exception");
+    const tokens = view.presentation?.options.map((option) => option.token) ?? [];
+    expect(tokens).toContain("authorize-commit");
+    expect(tokens).toContain("request-changes");
+    expect(tokens.some((token) => token.startsWith("request-exception-"))).toBe(true);
+  });
+
+  scenario("requires human commit authorization when the implementation changes the architecture design", async () => {
+    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-architecture", label: "semantic-impl-architecture" });
+    workspaces.push(workspace);
+    excludeStubArtifacts(workspace);
+    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []]));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, handoff } = await reachImplementationHandoff(workspace, h, {
+      phaseCount: 1, contentRules: [".archflow/tasks/*/design.md", ".archflow/tasks/*/prd.md"],
+    });
+
+    let view = await applied(h, invocation, handoff);
+    const taskDesign = view.resources.find((resource) => resource.role === "task-design");
+    if (taskDesign === undefined) throw new Error("task design resource unavailable");
+    expect(taskDesign.access).toBe("read-write");
+    const work = writeClientImplementation(workspace, view, "architecture-round-1");
+    writeFileSync(join(workspace.root, taskDesign.path),
+      "# Design\n\nThe architecture now records the boundary the implementation discovered.\n\n### Phase 1: Implement the verified behavior 1\n\nProduce, review, approve, and commit tier 1.\n");
+    view = await applied(h, invocation, view, implementationSubmission(workspace, [...work.outputs, taskDesign.path].sort()));
+    view = await applied(h, invocation, view);
+
+    // A changed architecture design is exactly one configured human boundary, nothing exceptional.
+    expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    view = await applied(h, invocation, view, {
+      kind: "gate-summary", summary: "The implementation changed the architecture design while implementing phase 1.",
+    });
+    expect(view.presentation?.class).toBe("configured-approval");
+    expect(view.presentation?.reasons).toEqual([
+      expect.objectContaining({ class: "configured-approval", text: expect.stringContaining("this phase changed the architecture design") }),
+    ]);
+    const tokens = view.presentation?.options.map((option) => option.token) ?? [];
+    expect(tokens).toContain("authorize-commit");
+
+    view = await applied(h, invocation, view, {
+      kind: "decision", choice: "authorize-commit", reason: "The architecture change is correct.",
+    });
+    expect(view.next_action).toMatchObject({ kind: "commit" });
+    expect(view.next_action.commit?.paths).toContain(taskDesign.path);
   });
 
   scenario("derives a separate waiver decision from a waiver-requested constitution choice, and a denial grants nothing", async () => {

@@ -168,6 +168,11 @@ export function designApprovalPolicyContext(evidence: AdjudicationEvidence): Rea
  * inside archflow_counter_review; these gates open at the post-triage fixed point through the
  * ordinary archflow_gate flow — status and build-request compose them mechanically from this
  * same selector over retained evidence.
+ *
+ * When they open is the fixed point's call, not this selector's: a rule the artifact fails or
+ * material drift re-enters production while attempts remain, and the gate opens only once the
+ * attempt budget is spent. A rule whose own `review_trigger` matched is the repository asking
+ * for a human, so that gate opens at once (see `gateDeclaredByReviewTrigger`).
  */
 export function selectAdjudicationGates(
   registry: ConstitutionRegistry,
@@ -222,6 +227,15 @@ export function selectAdjudicationGates(
     }));
   }
   return Object.freeze(gates);
+}
+
+/**
+ * True when the repository's constitution asked for this gate itself: a rule's `review_trigger`
+ * matched (or could not be ruled out). Compliance failures and drift are producer work first.
+ */
+export function gateDeclaredByReviewTrigger(gate: AdjudicationGateRequest): boolean {
+  if (gate.kind !== "constitution-review" || !("matched_trigger_rules" in gate.context)) return false;
+  return gate.context.matched_trigger_rules.length > 0 || gate.context.uncertain_trigger_rules.length > 0;
 }
 
 /** Compatibility selector for callers that can publish only the next gate. */

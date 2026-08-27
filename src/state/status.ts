@@ -55,7 +55,7 @@ import {
   type HumanGatePresentationDetails,
 } from "./gate-decision-interface.js";
 import { activeProjection, type GateLifecycleDependencies } from "./gate-core.js";
-import { deriveNextAction, type NextAction } from "./next-action.js";
+import { deriveNextAction, type NextAction, type PolicyReentryFindings } from "./next-action.js";
 import { expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject, produceOwnedTaskDocumentPaths, produceProjectionPins, produceUpstreamBindingsForSubject, readProduceProjection, readProduceProjectionSet } from "./produce-subject.js";
 import type { CurrentProduceSubject } from "./produce-subject.js";
 import {
@@ -1794,6 +1794,43 @@ async function computeTaskStatusDetailedInternal(
     }
   }
 
+  // Agent-resolvable constitution findings travel with the produce re-entry, named by rule and
+  // by the document drifted from, so the revise offer says what to fix rather than just "revise".
+  let policyFindings: PolicyReentryFindings | undefined;
+  if (assessment?.policy_reentry_required === true) {
+    const source = retained.get("adjudicate")?.manifest.source_artifact;
+    if (source?.artifact_kind === "adjudication-evidence") {
+      const upstreamPaths = new Map<Sha256Digest, string>();
+      if (produceSubject !== undefined) {
+        try {
+          for (const binding of produceUpstreamBindingsForSubject(state, produceSubject.artifact)) {
+            const upstream = await loadProduceUpstreamSubject(dependencies, authority, state, binding);
+            if (upstream.ok) {
+              upstreamPaths.set(upstream.value.artifact_digest, `.archflow/tasks/${state.task_id}/${binding.path}`);
+            }
+          }
+        } catch { /* unmapped drift below still names the finding */ }
+      }
+      policyFindings = Object.freeze({
+        rules: Object.freeze(source.evidence.rule_findings
+          .filter((finding) => finding.compliance !== "pass")
+          .map((finding) => Object.freeze({
+            rule_id: finding.rule_id,
+            rule_version: finding.rule_version,
+            compliance: finding.compliance as "fail" | "uncertain",
+            rationale: finding.rationale,
+          }))),
+        drift: Object.freeze(source.evidence.drift_findings
+          .filter((finding) => finding.drift === "material")
+          .map((finding) => Object.freeze({
+            path: upstreamPaths.get(finding.upstream_digest) ?? "an approved upstream document",
+            affected_claim_ids: Object.freeze([...finding.affected_claim_ids]),
+            rationale: finding.rationale,
+          }))),
+      });
+    }
+  }
+
   let statusReconciliation: StatusReconciliation | undefined;
   if (reconciliation !== undefined) {
     const partitioned = partitionExpectedReentryEdits(
@@ -2078,6 +2115,7 @@ async function computeTaskStatusDetailedInternal(
     ...(upstreamDocumentDrift.length === 0
       ? {}
       : { upstream_document_drift: Object.freeze([...upstreamDocumentDrift]) }),
+    ...(policyFindings === undefined ? {} : { policy_findings: policyFindings }),
     evidence_available: evidence.available,
     ...(subjectDigest === undefined ? {} : { subject_digest: subjectDigest }),
     authenticated_approvals: approvalFacts,

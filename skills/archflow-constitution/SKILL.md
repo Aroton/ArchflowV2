@@ -5,7 +5,7 @@ description: Explain, inspect, create, revise, or deprecate ArchFlow repository 
 
 # ArchFlow Constitution
 
-Treat the constitution as repository-owned policy for human trust boundaries and durable engineering constraints. It is not a task checklist, coding-style guide, or workaround for a model limitation. During counter-review, ArchFlow judges the exact task subject against the active rules pinned from the task's immutable, human-approved policy-base commit. A matching `review_trigger` can require a human decision; a model verdict never changes policy by itself.
+Treat the constitution as repository-owned policy for human trust boundaries and durable engineering constraints. It is not a task checklist, coding-style guide, or workaround for a model limitation. During counter-review, ArchFlow judges the exact task subject against the active rules pinned from the task's immutable, human-approved policy-base commit. A rule the subject fails is the producing agent's to resolve: the workflow re-enters production with the finding named, up to the task's attempt budget, and only then does a human decide (and may waive the rule). A rule that declares a `review_trigger` is different: when that trigger is observed, the workflow asks a human at once. So `review_trigger` is how a repository opts into a human constitution gate — the shipped defaults declare none — and a model verdict never changes policy by itself.
 
 ## Explain the model
 
@@ -18,12 +18,12 @@ Each numbered Markdown file in `.archflow/constitution/` defines one rule. Only 
 id: stable-kebab-case-id
 version: 1
 status: active
-review_trigger: Describe the observable condition that warrants a human gate.
+review_trigger: Optional. The observable condition under which a human must decide before the work advances.
 ---
 State the repository-wide policy in direct, durable language.
 ```
 
-`id`, `version`, and `status` are required. `status` is `active` or `deprecated`. `review_trigger` is optional. `enforced_by` is an optional non-empty YAML list naming real mechanical checks that already enforce the rule; omit it for aspirational or review-only enforcement.
+`id`, `version`, and `status` are required. `status` is `active` or `deprecated`. `review_trigger` is optional and is the rule's own human gate: omit it when a failure should simply be fixed by the agent. `enforced_by` is an optional non-empty YAML list naming real mechanical checks that already enforce the rule; omit it for aspirational or review-only enforcement.
 
 ## Configure rules
 
@@ -35,7 +35,7 @@ Translate the requested policy into the smallest durable rule set:
 - Use a stable kebab-case ID beginning with a letter.
 - Choose an unused two-digit filename prefix and a descriptive filename.
 - Write normative prose that says what must remain true and why it matters.
-- Make a trigger concrete and observable. Describe when human attention is warranted, not a vague restatement of the rule.
+- Add a `review_trigger` only when the repository genuinely wants a human decision whenever that condition appears; without one, a failed rule is agent work first. Make it concrete and observable from the artifact, its co-produced documents, or the reviewed repository snapshot — never a restatement of the rule, and never workflow mechanics the server already enforces (gate authority, approvals, commits, dispatch outcomes), which a reviewer cannot observe and would only report as uncertain.
 - Name `enforced_by` mechanisms only when they exist and can be identified precisely.
 - Avoid repository-local formatting preferences, task-specific acceptance criteria, and instructions that compensate for current model weakness. Put those in ordinary project guidance, the PRD, or a phase design instead.
 
@@ -44,6 +44,8 @@ For an existing ID, preserve its file and identity. If its text, status, trigger
 After editing, inspect the complete rule set for duplicate IDs, invalid filenames, invalid frontmatter fields, empty prose, and evolution violations. Show the user the rule diff and explain its practical review effect in plain language.
 
 ## Preserve policy authority
+
+Two shipped rules, `explicit-human-authority` and `approved-design-before-code`, are also the policy profile that lets a task advance by rule without a human gate. Editing either one off the shipped bytes leaves rule-based advancement unavailable for tasks pinned after that commit — every subject then waits for a human until the rules match a supported profile again. Say so before changing them.
 
 Prefer constitution maintenance on the repository's policy or base branch before starting affected tasks. A task branch may also carry a constitution change as an ordinary reviewed output, but the active task remains governed by its pinned policy-base commit; changing or committing worktree policy does not silently repin it. Treat that edit as policy for future tasks after it reaches their approved base. Never claim that an existing task adopted the new rule merely because the file changed.
 

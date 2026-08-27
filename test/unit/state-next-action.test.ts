@@ -691,6 +691,22 @@ describe("deriveNextAction", () => {
     }
   });
 
+  it("routes unmet rules and material drift to a produce re-entry whose detail names them", () => {
+    const result = deriveNextAction(input({
+      state: state({ step: "triage", status: "succeeded" }),
+      assessment: { ...assessment("produce"), reentry_required: true, policy_reentry_required: true },
+      policy_findings: {
+        rules: [{ rule_id: "rust-standards", rule_version: 1, compliance: "fail", rationale: "clippy lints are suppressed" }],
+        drift: [{ path: ".archflow/tasks/task-1/phases/2/design.md", affected_claim_ids: ["storage-layout"], rationale: "the table was split" }],
+      },
+    }));
+    expect(result).toMatchObject({ code: "run-step", step: "produce", human_required: false, policy_reentry: true });
+    expect(result.detail).toContain("rust-standards");
+    expect(result.detail).toContain("clippy lints are suppressed");
+    expect(result.detail).toContain("phases/2/design.md");
+    expect(result.detail).toContain("storage-layout");
+  });
+
   it("keeps material drift as a distinct redirect decision after combined design approval", () => {
     expect(deriveNextAction(input({
       state: state({ phase_instance: encodePhaseInstance({ kind: "design" }) }),

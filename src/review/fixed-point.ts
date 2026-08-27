@@ -26,6 +26,7 @@ import {
 import {
   selectAdjudicationGate,
   selectAdjudicationGates,
+  gateDeclaredByReviewTrigger,
 } from "./adjudication.js";
 
 export const DEFAULT_MAX_ATTEMPTS = 3;
@@ -77,6 +78,13 @@ export type EvidenceAssessment = Readonly<{
    * revision intents without invalidating review evidence or requiring a full re-entry.
    */
   editorial_revision_required: boolean;
+  /**
+   * The retained constitution review left agent-resolvable findings — a rule the artifact does
+   * not demonstrably meet, or material drift from an approved upstream — and attempts remain:
+   * the next produce re-entry resolves them. Their gates open only once attempts run out, or at
+   * once when a rule's own `review_trigger` matched (the repository asked for a human).
+   */
+  policy_reentry_required?: boolean;
   exhausted: boolean;
   adjudication_gate_pending: boolean;
   next:
@@ -492,6 +500,7 @@ type NextActionDecision = Readonly<{
   next: Exclude<EvidenceAssessment["next"], "attempts-exhausted">;
   reentry_required: boolean;
   editorial_revision_required: boolean;
+  policy_reentry_required?: boolean;
   adjudication_gate_pending: boolean;
 }>;
 
@@ -503,15 +512,22 @@ function decision(
     next,
     reentry_required: flags?.reentry_required ?? false,
     editorial_revision_required: flags?.editorial_revision_required ?? false,
+    ...(flags?.policy_reentry_required === true ? { policy_reentry_required: true } : {}),
     adjudication_gate_pending: flags?.adjudication_gate_pending ?? false,
   });
 }
 
-/** Every adjudication gate satisfied advances; otherwise surface the first unmet gate. */
+/**
+ * Every adjudication gate satisfied advances. An unmet gate is a human decision only when the
+ * repository asked for one — a rule's own `review_trigger` matched — or when the agent's attempt
+ * budget is spent; otherwise the findings (a rule the artifact does not meet, material drift from
+ * an approved upstream) are producer work and the fixed point re-enters production with them.
+ */
 function resolveAdjudicationGateStep(
   state: TaskStateV1,
   retained: RetainedEvidenceSet,
   subject: EvidenceSubject,
+  maximum: number,
 ): NextActionDecision {
   const adjudication = adjudicationAt(retained);
   const gates = adjudication === undefined
@@ -522,9 +538,11 @@ function resolveAdjudicationGateStep(
   if (gate === undefined) return decision("advance");
   // The same action covers both halves of the commit/publication crash window:
   // recreate the deterministic gate when absent, or resume the exact open gate.
-  return decision("adjudication-gate", {
-    adjudication_gate_pending: adjudicationGatePending(state, gate),
-  });
+  const pending = adjudicationGatePending(state, gate);
+  if (!pending && !gateDeclaredByReviewTrigger(gate) && state.attempt < maximum) {
+    return decision("produce", { reentry_required: true, policy_reentry_required: true });
+  }
+  return decision("adjudication-gate", { adjudication_gate_pending: pending });
 }
 
 /** Walks the fixed-point decision chain in priority order; each step is named above. */
@@ -535,6 +553,7 @@ function decideNextAction(
   current: readonly PipelineStep[],
   disposition: TriageDispositionState,
   triageCurrent: TriageCandidate | undefined,
+  maximum: number,
 ): NextActionDecision {
   if (acceptedFindingsForceReentry(state, disposition)) {
     return decision("produce", { reentry_required: true });
@@ -556,7 +575,7 @@ function decideNextAction(
     // Not a re-entry: the attempt budget and the retained review evidence both survive.
     return decision("produce", { editorial_revision_required: true });
   }
-  return resolveAdjudicationGateStep(state, retained, subject);
+  return resolveAdjudicationGateStep(state, retained, subject, maximum);
 }
 
 /**
@@ -581,7 +600,7 @@ export function assessCurrentEvidence(
     retained.has(step) && !current.includes(step));
   const disposition = dispositionState(retained, reviews, triageCurrent);
   const action = decideNextAction(
-    state, retained, subject, current, disposition, triageCurrent,
+    state, retained, subject, current, disposition, triageCurrent, maximum,
   );
   const exhausted = action.reentry_required && state.attempt >= maximum;
   return Object.freeze({
@@ -591,6 +610,7 @@ export function assessCurrentEvidence(
     blocker_remains: disposition.blocker,
     reentry_required: action.reentry_required,
     editorial_revision_required: action.editorial_revision_required,
+    ...(action.policy_reentry_required === true ? { policy_reentry_required: true } : {}),
     exhausted,
     adjudication_gate_pending: action.adjudication_gate_pending,
     next: exhausted ? "attempts-exhausted" : action.next,

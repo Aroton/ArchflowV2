@@ -9,7 +9,7 @@ import {
 } from "../contracts/gates.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import type { HumanPresentationReasonV1 } from "../contracts/semantic-workflow.js";
-import { displayMatchPaths } from "./approval-rules.js";
+import { describeMatchedPath, displayMatchPaths } from "./approval-rules.js";
 import {
   deepFreezeGateJson,
   waiverContext,
@@ -344,7 +344,7 @@ function ordinaryReasons(active: ActiveGateV1): readonly HumanPresentationReason
       const paths = displayMatchPaths(trigger.conclusion.match);
       reasons.push(Object.freeze({
         class: "configured-approval",
-        text: `Configured content approval rules matched ${paths.length} reviewed path${paths.length === 1 ? "" : "s"}: ${paths.join(", ")}.`,
+        text: `Configured content approval rules matched ${paths.length} reviewed path${paths.length === 1 ? "" : "s"}: ${paths.map(describeMatchedPath).join(", ")}.`,
       }));
     }
     if (trigger.rule_authority === "unavailable") {

@@ -44,14 +44,19 @@ roles:
 
 # Optional. Approval triggers declare which completed steps wait for explicit human
 # judgment. `subjects` may contain prd, design, phase-design, or phase-impl. `content`
-# rules watch repository paths touched by a phase-impl change. Counter-review still
-# runs for every subject; when no rule matches and no safety condition opens a gate,
-# the authenticated workflow advances and commits without a human decision. The
-# shipped defaults gate the PRD, the architecture/design, and SQL changes.
+# rules watch paths a result changed: every repository path an implementation
+# touched, and the task's own governing documents when a later phase rewrites them
+# (`.archflow/tasks/<task>/design.md` is the architecture design, `prd.md` the PRD).
+# Counter-review still runs for every subject; when no rule matches and no safety
+# condition opens a gate, the authenticated workflow advances and commits without a
+# human decision. The shipped defaults gate the PRD, the architecture design, any
+# later rewrite of either, and SQL changes — a phase design or implementation that
+# changes only its own phase runs to commit on its own.
 approval_rules:
   subjects: [prd, design]
   content:
     - paths: ["**/*.sql"]
+    - paths: [".archflow/tasks/*/design.md", ".archflow/tasks/*/prd.md"]
 
 # Codex-host orientation (replace the active document above with this block):
 # schema_version: "1"

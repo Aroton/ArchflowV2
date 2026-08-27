@@ -314,6 +314,51 @@ export function produceUpstreamBindingsForSubject(
 }
 
 /**
+ * Repository-relative paths of the co-produced governing documents whose bytes this document result
+ * changed, judged against the newest earlier retained produce result that projected the same path —
+ * a document owner or an implementation that rewrote it. Approval content rules read these exactly
+ * as they read an implementation's outputs, so a later phase that rewrites the architecture design
+ * or the PRD meets the project's rules for that document. An implementation output contributes
+ * nothing here: its `outputs` already list exactly the task documents it changed. A path with no
+ * earlier retained projection is unchanged — there was nothing to depart from.
+ */
+export async function changedCoProducedDocumentPaths(
+  dependencies: Pick<TransactionDependencies, "load_retained_manifest">,
+  state: TaskStateV1,
+  subject: CurrentProduceSubject,
+): Promise<ProjectResult<readonly string[]>> {
+  const artifact = subject.artifact;
+  const loadManifest = dependencies.load_retained_manifest;
+  const documents = artifact.artifact_kind === "document" ? (artifact.additional_documents ?? []) : [];
+  const changed: string[] = [];
+  if (loadManifest !== undefined && documents.length > 0) {
+    const earlier = [...state.authoritative_results].reverse().filter((reference) =>
+      reference.step === "produce" && reference.phase_instance !== state.phase_instance);
+    for (const document of documents) {
+      let previous: Sha256Digest | undefined;
+      for (const reference of earlier) {
+        const retained = await loadManifest(reference);
+        if (!retained.ok) return retained;
+        const projection = retained.value.manifest.value.projections.find((entry) =>
+          entry.repository === undefined && entry.path === document.projection_target);
+        if (projection !== undefined) {
+          previous = projection.content_digest;
+          break;
+        }
+      }
+      if (previous !== undefined && previous !== document.content_digest) {
+        changed.push(String(document.projection_target));
+      }
+    }
+  }
+  return Object.freeze({
+    schema_version: "1",
+    ok: true,
+    value: Object.freeze([...new Set(changed)].sort()),
+  });
+}
+
+/**
  * Authenticates the caller-selected human-readable subject against retained produce authority.
  *
  * Document results retain that file as a result projection. Implementation results instead bind

@@ -12,7 +12,7 @@ import { parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } fro
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { createGitRunner } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
-import { expectedProduceUpstreamBindings, loadProduceUpstreamSubject, produceOwnedTaskDocumentPaths, produceProjectionPins, produceProjectionSetDigest, produceUpstreamBindingsForSubject, readProduceProjection, readProduceProjectionSet, renderProduceReviewMaterial, resolveProduceUpstreamBinding, type CurrentProduceSubject } from "../../src/state/produce-subject.js";
+import { changedCoProducedDocumentPaths, expectedProduceUpstreamBindings, loadProduceUpstreamSubject, produceOwnedTaskDocumentPaths, produceProjectionPins, produceProjectionSetDigest, produceUpstreamBindingsForSubject, readProduceProjection, readProduceProjectionSet, renderProduceReviewMaterial, resolveProduceUpstreamBinding, type CurrentProduceSubject } from "../../src/state/produce-subject.js";
 import type { TransactionAuthority } from "../../src/state/authority.js";
 import { cleanupTemporaryRepositories, createTempRepository } from "../helpers/temp-repository.js";
 
@@ -212,6 +212,61 @@ describe("retained produce review material", () => {
     });
 
     expect(loaded).toMatchObject({ ok: true, value: { artifact_digest: newDigest, artifact: { phase_instance: "phase-design-2" } } });
+  });
+
+  it("reports co-produced documents whose bytes differ from the newest earlier retained projection", async () => {
+    const taskId = parseTaskSlug("demo");
+    const oldDesign = new TextEncoder().encode("# Architecture\n");
+    const newDesign = new TextEncoder().encode("# Architecture, revised\n");
+    const prd = new TextEncoder().encode("# PRD\n");
+    const phase = new TextEncoder().encode("# Phase 3\n");
+    const document = (path: string, bytes: Uint8Array) => ({
+      document_path: parseTaskPathClaim(path), byte_count: parseSafeInteger(bytes.byteLength),
+      content_digest: sha256Bytes(bytes), projection_target: `.archflow/tasks/demo/${path}` as never,
+    });
+    const artifact: DocumentArtifactV1 = {
+      schema_version: "1", artifact_kind: "document", task_id: taskId,
+      phase_instance: encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(3) }),
+      step: "produce", ...document("phases/3/design.md", phase), path_class: "document",
+      declared_inputs: [], input_fingerprint: parseSha256Digest("1".repeat(64)),
+      snapshot_digest: parseSha256Digest("2".repeat(64)),
+      additional_documents: [document("design.md", newDesign), document("prd.md", prd)],
+    };
+    const reference = (phaseInstance: string, id: string) => ({
+      phase_instance: phaseInstance, step: "produce", result_id: id, result_digest: "4".repeat(64), input_fingerprint: "1".repeat(64),
+    }) as TaskStateV1["authoritative_results"][number];
+    // Newest first once reversed: the current phase's own earlier attempt (ignored), an
+    // implementation that rewrote design.md (the newest earlier projection), the design itself.
+    const projections: Record<string, readonly { path: string; content_digest: string }[]> = {
+      "self-attempt": [{ path: ".archflow/tasks/demo/phases/3/design.md", content_digest: sha256Bytes(phase) }, { path: ".archflow/tasks/demo/design.md", content_digest: sha256Bytes(newDesign) }],
+      "impl-2": [{ path: ".archflow/tasks/demo/design.md", content_digest: sha256Bytes(oldDesign) }, { path: "src/index.ts", content_digest: "5".repeat(64) }],
+      "design": [{ path: ".archflow/tasks/demo/design.md", content_digest: sha256Bytes(oldDesign) }],
+    };
+    const state = {
+      task_id: taskId, phase_instance: artifact.phase_instance,
+      authoritative_results: [reference("design", "design"), reference("phase-impl-2", "impl-2"), reference("phase-design-3", "self-attempt")],
+    } as unknown as TaskStateV1;
+    const dependencies = {
+      load_retained_manifest: async (ref: TaskStateV1["authoritative_results"][number]) => ({
+        schema_version: "1" as const, ok: true as const,
+        value: { manifest: { value: { projections: projections[ref.result_id as string] } } } as never,
+      }),
+    };
+    const subject = { artifact_digest: canonicalJsonDigest(artifact), artifact } as CurrentProduceSubject;
+
+    // design.md differs from the implementation's rewrite; prd.md has no earlier projection at all.
+    await expect(changedCoProducedDocumentPaths(dependencies, state, subject))
+      .resolves.toMatchObject({ ok: true, value: [".archflow/tasks/demo/design.md"] });
+
+    // Same bytes as the newest earlier projection: unchanged.
+    const unchanged = { ...artifact, additional_documents: [document("design.md", oldDesign), document("prd.md", prd)] };
+    await expect(changedCoProducedDocumentPaths(dependencies, state, { ...subject, artifact: unchanged }))
+      .resolves.toMatchObject({ ok: true, value: [] });
+
+    // Implementation outputs already list the task documents they changed.
+    const implementation = { artifact: { artifact_kind: "implementation-output", outputs: [] } } as unknown as CurrentProduceSubject;
+    await expect(changedCoProducedDocumentPaths(dependencies, state, implementation))
+      .resolves.toMatchObject({ ok: true, value: [] });
   });
 
   it("refuses settlement-only retained manifest ownership before and after a restart", async () => {

@@ -69,7 +69,10 @@ describe("repository asset scaffolding", () => {
     expect(repositoryConfig.approval_rules).toEqual(template.approval_rules);
     expect(repositoryConfig.approval_rules).toEqual({
       subjects: ["prd", "design"],
-      content: [{ paths: ["**/*.sql"] }],
+      content: [
+        { paths: ["**/*.sql"] },
+        { paths: [".archflow/tasks/*/design.md", ".archflow/tasks/*/prd.md"] },
+      ],
     });
   });
 

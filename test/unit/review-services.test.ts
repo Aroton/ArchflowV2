@@ -575,6 +575,82 @@ describe("review services", () => {
     expect(selectAdjudicationGates(registry, clean)).toEqual([]);
   });
 
+  it("re-enters production on a failed rule or material drift while attempts remain, and opens the gate once exhausted", () => {
+    const evidenceSet = new Map(retained());
+    const sourceEvidenceSetDigest =
+      deriveCurrentEvidenceSet(evidenceSet).current_evidence_set.set_digest;
+    const existing = evidenceSet.get("adjudicate")!;
+    const withAdjudication = (overrides: Record<string, unknown>): RetainedEvidenceSet => {
+      const copy = new Map(evidenceSet);
+      copy.set("adjudicate", {
+        ...existing,
+        manifest: {
+          ...existing.manifest,
+          source_artifact: {
+            schema_version: "1",
+            artifact_kind: "adjudication-evidence",
+            evidence: { ...adjudication(), ...overrides, source_evidence_set_digest: sourceEvidenceSetDigest },
+          },
+        },
+      } as never);
+      return copy as RetainedEvidenceSet;
+    };
+    const subject = { subject_digest: D("8"), input_fingerprint: D("2"), constitution, max_attempts: 3 };
+
+    // adjudication() fails the rule on compliance with its trigger not matched: producer work.
+    const failed = withAdjudication({});
+    const remaining = assessCurrentEvidence(state({ attempt: 1 }), failed, subject);
+    expect(remaining.next).toBe("produce");
+    expect(remaining.reentry_required).toBe(true);
+    expect(remaining.policy_reentry_required).toBe(true);
+    expect(remaining.exhausted).toBe(false);
+    const exhausted = assessCurrentEvidence(state({ attempt: 3 }), failed, subject);
+    expect(exhausted.next).toBe("adjudication-gate");
+    expect(exhausted.policy_reentry_required).toBeUndefined();
+    expect(exhausted.reentry_required).toBe(false);
+
+    // Material drift from an approved upstream is the same producer work.
+    const drifted = withAdjudication({
+      rule_findings: [{ ...adjudication().rule_findings[0]!, compliance: "pass" }],
+      constitution: "pass",
+      approved_upstream_digests: [D("a")],
+      drift_findings: [{ upstream_digest: D("a"), drift: "material", affected_claim_ids: ["claim"], rationale: "changed" }],
+      drift: "material",
+    });
+    const driftSubject = { ...subject, approved_upstream_digests: [D("a")] };
+    expect(assessCurrentEvidence(state({ attempt: 2 }), drifted, driftSubject)).toMatchObject({
+      next: "produce", policy_reentry_required: true,
+    });
+    expect(assessCurrentEvidence(state({ attempt: 3 }), drifted, driftSubject).next).toBe("adjudication-gate");
+
+    // A matched review trigger is the repository asking for a human: the gate opens at once.
+    const triggered = withAdjudication({
+      rule_findings: [{ ...adjudication().rule_findings[0]!, compliance: "pass", trigger: "matched", trigger_evidence: "observed" }],
+      constitution: "pass",
+      matched_rule_versions: [{ rule_id: "active-rule", rule_version: 2 }],
+    });
+    const immediate = assessCurrentEvidence(state({ attempt: 1 }), triggered, subject);
+    expect(immediate.next).toBe("adjudication-gate");
+    expect(immediate.policy_reentry_required).toBeUndefined();
+
+    // An already-open gate is resumed, never abandoned for a re-entry.
+    const gate = selectAdjudicationGate(constitution.rules, {
+      ...adjudication(), source_evidence_set_digest: sourceEvidenceSetDigest,
+    } as never)!;
+    const resumed = assessCurrentEvidence(state({
+      attempt: 1,
+      open_gate: {
+        gate_id: "policy-gate",
+        gate_kind: gate.kind,
+        subject_digest: gate.subject_digest,
+        context_digest: computeGateContextDigest(gate.kind, gate.context),
+        frozen_state_digest: D("f"),
+        opened_at_revision: 8,
+      },
+    }), failed, subject);
+    expect(resumed).toMatchObject({ next: "adjudication-gate", adjudication_gate_pending: true });
+  });
+
   it("requires each simultaneous adjudication obligation to be resolved exactly", () => {
     const registry: ConstitutionRegistry = new Map([
       ["active-rule", {

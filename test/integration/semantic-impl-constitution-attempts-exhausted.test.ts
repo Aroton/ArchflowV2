@@ -1,5 +1,5 @@
 import { registerSemanticImplementationCompletionJourney } from "./semantic-implementation-completion-journeys.js";
 
 registerSemanticImplementationCompletionJourney(
-  "re-enters production without a human gate on material upstream drift and commits autonomously once the phase design is co-produced",
+  "opens the constitution-review gate with a waiver available once a failing rule exhausts its attempts",
 );

@@ -27619,6 +27619,24 @@ function parseConstitutionRuleFiles(files) {
 var CONSTITUTION_DIRECTORY = ".archflow/constitution";
 var RULE_FILE = /^\.archflow\/constitution\/[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
 var decoder2 = new TextDecoder("utf-8", { fatal: true });
+var SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3 = Object.freeze([
+  Object.freeze({
+    id: "approved-design-before-code",
+    version: 3,
+    status: "active",
+    text: "Implementation starts only from a phase design that either passed its triggered human gate or advanced by rule after counter-review completed; the workflow server withholds the implementation window until then. The PRD, architecture design, and phase design stay truthful as work proceeds: a result that departs from its own phase design updates that phase design in the same reviewed result, and a result that departs from the architecture design or PRD updates those documents in the same result, where the project's approval rules decide whether a human approves the change. A departure from an approved upstream document is reported as a drift finding against that document, not as a failure of this rule.",
+    review_trigger: "",
+    enforced_by: Object.freeze([])
+  }),
+  Object.freeze({
+    id: "explicit-human-authority",
+    version: 3,
+    status: "active",
+    text: "Required human decisions are explicit and bound to the exact artifact or code subject at gates opened by an approval rule or safety condition. Silence, elapsed time, agent prose, or a model verdict never supplies approval, waives a gate, or advances the workflow. Commits are not human-gated by default. The workflow server enforces this at its gates; an artifact complies unless it asserts, records, or relies on a human decision the workflow did not record.",
+    review_trigger: "",
+    enforced_by: Object.freeze([])
+  })
+]);
 var SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2 = Object.freeze([
   Object.freeze({
     id: "approved-design-before-code",
@@ -27637,6 +27655,7 @@ var SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2 = Object.freeze([
     enforced_by: Object.freeze([])
   })
 ]);
+var SUPPORTED_RULE_ACCEPTANCE_PROFILES = Object.freeze([SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3, SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2]);
 var authenticResolvedConstitutions = /* @__PURE__ */ new WeakSet();
 var resolvedConstitutionCache = /* @__PURE__ */ new Map();
 var MAX_CACHED_CONSTITUTIONS = 32;
@@ -27659,10 +27678,11 @@ function normalizedSelectedRule(rule4) {
 function authenticateRuleAcceptancePolicy(state, constitution) {
   assertResolvedConstitution(constitution);
   if (constitution.policy_base_commit !== state.policy_base_commit || constitution.digest !== state.constitution_digest) return void 0;
-  const selected = SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2.map(({ id: id5 }) => constitution.rules.get(id5));
+  const selected = SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3.map(({ id: id5 }) => constitution.rules.get(id5));
   if (selected.some((rule4) => rule4 === void 0 || rule4.status !== "active")) return void 0;
   const normalized = selected.map((rule4) => normalizedSelectedRule(rule4)).sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
-  if (canonicalJsonDigest(normalized) !== canonicalJsonDigest(SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2)) {
+  const digest10 = canonicalJsonDigest(normalized);
+  if (!SUPPORTED_RULE_ACCEPTANCE_PROFILES.some((profile) => canonicalJsonDigest(profile) === digest10)) {
     return void 0;
   }
   const policy = Object.freeze({
@@ -35888,6 +35908,10 @@ function selectAdjudicationGates(registry2, evidence) {
   }
   return Object.freeze(gates);
 }
+function gateDeclaredByReviewTrigger(gate) {
+  if (gate.kind !== "constitution-review" || !("matched_trigger_rules" in gate.context)) return false;
+  return gate.context.matched_trigger_rules.length > 0 || gate.context.uncertain_trigger_rules.length > 0;
+}
 
 // src/review/fixed-point.ts
 var DEFAULT_MAX_ATTEMPTS = 3;
@@ -36088,19 +36112,22 @@ function decision2(next, flags) {
     next,
     reentry_required: flags?.reentry_required ?? false,
     editorial_revision_required: flags?.editorial_revision_required ?? false,
+    ...flags?.policy_reentry_required === true ? { policy_reentry_required: true } : {},
     adjudication_gate_pending: flags?.adjudication_gate_pending ?? false
   });
 }
-function resolveAdjudicationGateStep(state, retained, subject) {
+function resolveAdjudicationGateStep(state, retained, subject, maximum) {
   const adjudication = adjudicationAt(retained);
   const gates = adjudication === void 0 ? [] : selectAdjudicationGates(subject.constitution.rules, adjudication);
   const gate = gates.find((candidate) => !adjudicationGateSatisfied(state, retained, subject, candidate));
   if (gate === void 0) return decision2("advance");
-  return decision2("adjudication-gate", {
-    adjudication_gate_pending: adjudicationGatePending(state, gate)
-  });
+  const pending = adjudicationGatePending(state, gate);
+  if (!pending && !gateDeclaredByReviewTrigger(gate) && state.attempt < maximum) {
+    return decision2("produce", { reentry_required: true, policy_reentry_required: true });
+  }
+  return decision2("adjudication-gate", { adjudication_gate_pending: pending });
 }
-function decideNextAction(state, retained, subject, current, disposition, triageCurrent) {
+function decideNextAction(state, retained, subject, current, disposition, triageCurrent, maximum) {
   if (acceptedFindingsForceReentry(state, disposition)) {
     return decision2("produce", { reentry_required: true });
   }
@@ -36113,7 +36140,7 @@ function decideNextAction(state, retained, subject, current, disposition, triage
   if (editorialRevisionPending(triageCurrent, disposition, subject)) {
     return decision2("produce", { editorial_revision_required: true });
   }
-  return resolveAdjudicationGateStep(state, retained, subject);
+  return resolveAdjudicationGateStep(state, retained, subject, maximum);
 }
 function assessCurrentEvidence(state, retained, subject) {
   assertSubjectMatchesDurableState(state, retained, subject);
@@ -36135,7 +36162,8 @@ function assessCurrentEvidence(state, retained, subject) {
     subject,
     current,
     disposition,
-    triageCurrent
+    triageCurrent,
+    maximum
   );
   const exhausted = action3.reentry_required && state.attempt >= maximum;
   return Object.freeze({
@@ -36145,6 +36173,7 @@ function assessCurrentEvidence(state, retained, subject) {
     blocker_remains: disposition.blocker,
     reentry_required: action3.reentry_required,
     editorial_revision_required: action3.editorial_revision_required,
+    ...action3.policy_reentry_required === true ? { policy_reentry_required: true } : {},
     exhausted,
     adjudication_gate_pending: action3.adjudication_gate_pending,
     next: exhausted ? "attempts-exhausted" : action3.next
@@ -36250,6 +36279,11 @@ function displayMatchPaths(match) {
     ...match.paths,
     ...(match.secondary_paths ?? []).flatMap((section) => section.paths.map((path2) => `${section.repository}/${path2}`))
   ];
+}
+function describeMatchedPath(path2) {
+  const governing = /^\.archflow\/tasks\/[^/]+\/(design\.md|prd\.md)$/u.exec(path2);
+  if (governing === null) return path2;
+  return governing[1] === "design.md" ? `${path2} (this phase changed the architecture design)` : `${path2} (this phase changed the PRD)`;
 }
 var subjectGateKind = Object.freeze({
   prd: "artifact-approval",
@@ -36485,7 +36519,7 @@ function ordinaryReasons(active) {
       const paths = displayMatchPaths(trigger.conclusion.match);
       reasons.push(Object.freeze({
         class: "configured-approval",
-        text: `Configured content approval rules matched ${paths.length} reviewed path${paths.length === 1 ? "" : "s"}: ${paths.join(", ")}.`
+        text: `Configured content approval rules matched ${paths.length} reviewed path${paths.length === 1 ? "" : "s"}: ${paths.map(describeMatchedPath).join(", ")}.`
       }));
     }
     if (trigger.rule_authority === "unavailable") {
@@ -36662,6 +36696,18 @@ function runStepDetail(state, step) {
   if (state.step === step && state.status === "running") return `Record the terminal ${step} result.`;
   if (state.step === step && state.status === "failed") return `Retry the ${step} pipeline step.`;
   return `Run the ${step} pipeline step.`;
+}
+function policyReentryDetail(findings) {
+  const lines = [];
+  for (const rule4 of findings?.rules ?? []) {
+    const verdict = rule4.compliance === "fail" ? "is not met" : "could not be shown to be met";
+    lines.push(`Constitution rule ${rule4.rule_id} (v${rule4.rule_version}) ${verdict}: ${rule4.rationale}`);
+  }
+  for (const drift of findings?.drift ?? []) {
+    lines.push(`The work departs materially from ${drift.path} (${drift.affected_claim_ids.join(", ")}): ${drift.rationale}`);
+  }
+  const listed = lines.length === 0 ? "The constitution review left findings this work must resolve." : lines.join(" ");
+  return `${listed} Resolve these in the artifact \u2014 or update the governing document this result owns \u2014 then resubmit for a fresh review.`;
 }
 function produceSubjectDriftAction(state, paths) {
   const shown = paths.slice(0, 5);
@@ -37018,6 +37064,12 @@ function deriveNextAction(input) {
         state,
         { step: "produce", editorial_revision: true }
       );
+    }
+    if (next === "produce" && input.assessment?.policy_reentry_required === true) {
+      return action("run-step", policyReentryDetail(input.policy_findings), false, state, {
+        step: "produce",
+        policy_reentry: true
+      });
     }
     return action("run-step", runStepDetail(state, next), false, state, { step: next });
   }
@@ -37621,7 +37673,7 @@ async function discoverNewestProjections(dependencies, authority, state, reposit
     for (const adoption of state.value.baseline_adoptions ?? []) {
       for (const projection of adoption.adopted_projections) {
         const prior = newest.get(repositoryPathKey(projection.repository, projection.path));
-        if (prior === void 0) return stateInvalid2(authority, "reconciliation-projection-unbound");
+        if (prior === void 0) continue;
         if (prior.retired) continue;
         if (adoption.adopted_at_revision > prior.measured_at_revision) {
           const adopted = Object.freeze({
@@ -37640,7 +37692,7 @@ async function discoverNewestProjections(dependencies, authority, state, reposit
       for (const adoptedAbsence of adoption.adopted_absences ?? []) {
         const identity = typeof adoptedAbsence === "string" ? { path: adoptedAbsence } : adoptedAbsence;
         const prior = newest.get(repositoryPathKey(identity.repository, identity.path));
-        if (prior === void 0) return stateInvalid2(authority, "reconciliation-projection-unbound");
+        if (prior === void 0) continue;
         if (prior.retired) continue;
         if (adoption.adopted_at_revision > prior.measured_at_revision) {
           const repository = identity.repository;
@@ -39001,6 +39053,37 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       blockers.push("review-projection-unavailable");
     }
   }
+  let policyFindings;
+  if (assessment?.policy_reentry_required === true) {
+    const source = retained.get("adjudicate")?.manifest.source_artifact;
+    if (source?.artifact_kind === "adjudication-evidence") {
+      const upstreamPaths2 = /* @__PURE__ */ new Map();
+      if (produceSubject !== void 0) {
+        try {
+          for (const binding of produceUpstreamBindingsForSubject(state, produceSubject.artifact)) {
+            const upstream = await loadProduceUpstreamSubject(dependencies, authority, state, binding);
+            if (upstream.ok) {
+              upstreamPaths2.set(upstream.value.artifact_digest, `.archflow/tasks/${state.task_id}/${binding.path}`);
+            }
+          }
+        } catch {
+        }
+      }
+      policyFindings = Object.freeze({
+        rules: Object.freeze(source.evidence.rule_findings.filter((finding) => finding.compliance !== "pass").map((finding) => Object.freeze({
+          rule_id: finding.rule_id,
+          rule_version: finding.rule_version,
+          compliance: finding.compliance,
+          rationale: finding.rationale
+        }))),
+        drift: Object.freeze(source.evidence.drift_findings.filter((finding) => finding.drift === "material").map((finding) => Object.freeze({
+          path: upstreamPaths2.get(finding.upstream_digest) ?? "an approved upstream document",
+          affected_claim_ids: Object.freeze([...finding.affected_claim_ids]),
+          rationale: finding.rationale
+        })))
+      });
+    }
+  }
   let statusReconciliation;
   if (reconciliation !== void 0) {
     const partitioned = partitionExpectedReentryEdits(
@@ -39215,6 +39298,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     ...assessment === void 0 ? {} : { assessment },
     ...produceSubjectDrift.length === 0 ? {} : { produce_subject_drift: Object.freeze([...produceSubjectDrift]) },
     ...upstreamDocumentDrift.length === 0 ? {} : { upstream_document_drift: Object.freeze([...upstreamDocumentDrift]) },
+    ...policyFindings === void 0 ? {} : { policy_findings: policyFindings },
     evidence_available: evidence.available,
     ...subjectDigest === void 0 ? {} : { subject_digest: subjectDigest },
     authenticated_approvals: approvalFacts,
@@ -39804,7 +39888,9 @@ function mapRunStep(status, action3, snapshot2) {
         return Object.freeze({
           condition: "ready",
           headline: "Revision is ready to begin",
-          detail: "Enter the bounded production write window before changing the artifact.",
+          // A policy re-entry carries what the revision has to resolve; nothing else in the
+          // semantic view exposes the constitution findings.
+          detail: action3.policy_reentry === true ? action3.detail : "Enter the bounded production write window before changing the artifact.",
           action_kind: "revise",
           instruction: "Begin the authorized revision, then return to the client-owned work.",
           expected_submission: "none"

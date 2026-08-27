@@ -32,7 +32,7 @@ import {
 } from "../../state/evidence-results.js";
 import { runStateInitialization } from "../../state/initialization.js";
 import { identifyTransactionRequest } from "../../state/request.js";
-import { loadCurrentProduceSubject, type CurrentProduceSubject } from "../../state/produce-subject.js";
+import { changedCoProducedDocumentPaths, loadCurrentProduceSubject, type CurrentProduceSubject } from "../../state/produce-subject.js";
 import {
   approvedDesignWorktreeMatchesRetainedArtifact,
   designArtifactCommittedAtCurrentTarget,
@@ -205,7 +205,9 @@ async function settleApprovalRules(
       );
       if (pending[0]?.kind !== "constitution-review") return undefined;
     }
-    const ruleContext = approvalRuleContext(current, produce, config.parsed);
+    const changedDocuments = await changedCoProducedDocumentPaths(services.dependencies, current, produce);
+    if (!changedDocuments.ok) return undefined;
+    const ruleContext = approvalRuleContext(current, produce, config.parsed, changedDocuments.value);
     const conclusion = evaluateApprovalRules(
       ruleContext.config, ruleContext.subject, ruleContext.changedPaths, ruleContext.secondaryChangedPaths,
     );

@@ -16,10 +16,12 @@ import type { CurrentProduceSubject } from "./produce-subject.js";
  * declarative rule in the task config says so; absent or empty `approval_rules` produce a
  * `wait:false` evaluation. Authority consumption is a separate, later phase boundary.
  *
- * Subject triggers gate a workflow subject wholesale. Content rules are evaluated **only for the
- * phase-impl subject** and match when any changed path matches any rule's glob list — so a
- * Markdown content rule never fires on a design document. That is the pinned behavior, not an
- * accident: documents are gated by their subject, code by what it touches.
+ * Subject triggers gate a workflow subject wholesale. Content rules match when any path the result
+ * *changed* matches any rule's glob list. An implementation reports every repository path it
+ * touched; a document result reports only the governing task documents it co-produced with
+ * different bytes (see `changedCoProducedDocumentPaths`) — so a rule on
+ * `.archflow/tasks/*\/design.md` fires when a later phase rewrites the architecture design, and a
+ * Markdown rule still never fires on a phase design merely for existing.
  *
  * A subject match is checked first and short-circuits content evaluation. For phase-impl this is
  * the force rule: a phase-impl subject trigger waits on `commit-authorization` regardless of any
@@ -49,12 +51,24 @@ export function displayMatchPaths(match: Extract<ApprovalRuleMatch, { kind: "con
   ];
 }
 
+/**
+ * Names a matched path for a human. The task's own governing documents are the one case where the
+ * path alone undersells what happened — a later phase rewrote the plan — so they say so.
+ */
+export function describeMatchedPath(path: string): string {
+  const governing = /^\.archflow\/tasks\/[^/]+\/(design\.md|prd\.md)$/u.exec(path);
+  if (governing === null) return path;
+  return governing[1] === "design.md"
+    ? `${path} (this phase changed the architecture design)`
+    : `${path} (this phase changed the PRD)`;
+}
+
 /** Plain-language evidence carried into a waiting gate's durable human summary. */
 export function approvalRuleMatchSummary(match: ApprovalRuleMatch): string {
   if (match.kind === "subject") {
     return `Approval rule trigger: this project requires human approval for the "${match.subject}" subject.`;
   }
-  const paths = displayMatchPaths(match).map((path) => `- ${path}`).join("\n");
+  const paths = displayMatchPaths(match).map((path) => `- ${describeMatchedPath(path)}`).join("\n");
   return `Approval rule trigger: these changed paths matched the project's content rules:\n${paths}`;
 }
 
@@ -173,7 +187,7 @@ export function evaluateApprovalRules(
   if (rules !== undefined && rules.subjects.includes(subject)) {
     return Object.freeze({ wait: true, match: Object.freeze({ kind: "subject", subject }) });
   }
-  if (subject === "phase-impl" && rules !== undefined) {
+  if (rules !== undefined) {
     const matched = [...new Set(changedPaths.filter((path) =>
       rules.content.some((rule) => rule.paths.some((pattern) => globPatternMatches(pattern, path)))))].sort();
     const secondaryMatched = secondaryChangedPaths.flatMap((section) => {
@@ -212,10 +226,11 @@ export const subjectGateKind: Readonly<Record<WorkflowSubject, GateKind>> = Obje
 export type ApprovalRuleContext = Readonly<{
   subject: WorkflowSubject;
   /**
-   * Only an implementation output contributes paths — content rules apply to the phase-impl
-   * subject only, so a document subject (or no subject loaded yet) carries none. Collected the
-   * same way `buildCommitAuthorizationInput` collects them: each output's path, plus a rename's
-   * previous path, deduplicated and sorted.
+   * An implementation output contributes every path it touched, collected the same way
+   * `buildCommitAuthorizationInput` collects them: each output's path, plus a rename's previous
+   * path, deduplicated and sorted. A document subject contributes the co-produced governing
+   * documents it changed, which the caller measures (`changedCoProducedDocumentPaths`) and
+   * passes in; no subject loaded yet carries none.
    */
   changedPaths: readonly string[];
   secondaryChangedPaths: readonly Readonly<{ repository: RepositoryName; paths: readonly string[] }>[];
@@ -226,13 +241,16 @@ export function approvalRuleContext(
   state: TaskStateV1,
   produceSubject: CurrentProduceSubject | undefined,
   config: ApprovalRulesConfig | undefined,
+  changedDocumentPaths: readonly string[] = [],
 ): ApprovalRuleContext {
   const artifact = produceSubject?.artifact;
   const changedPaths = artifact?.artifact_kind === "implementation-output"
     ? [...new Set(artifact.outputs.flatMap((output) =>
         output.operation === "rename" ? [output.path, output.previous_path] : [output.path],
       ))].sort()
-    : [];
+    : artifact?.artifact_kind === "document"
+      ? [...new Set(changedDocumentPaths)].sort()
+      : [];
   const secondaryChangedPaths = artifact?.artifact_kind === "implementation-output"
     ? (artifact.secondary_repositories ?? []).flatMap((section) => {
         const paths = [...new Set(section.outputs.flatMap((output) =>

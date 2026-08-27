@@ -80,6 +80,17 @@ describe("semantic status projection", () => {
     expect(projected.view.resources).toEqual([]);
   });
 
+  it("carries the constitution findings into a policy re-entry revise offer", () => {
+    const detail = "Constitution rule rust-standards (v1) is not met: clippy lints are suppressed. Resolve these in the artifact, then resubmit for a fresh review.";
+    const status = fullStatus(action("run-step", { step: "produce", policy_reentry: true, detail }), { step: "triage", status: "succeeded" });
+    const projected = projectSemanticStatus(snapshot(status), invocation);
+    expect(projected.view.next_action.kind).toBe("revise");
+    expect(projected.view.detail).toContain(detail);
+
+    const plain = fullStatus(action("run-step", { step: "produce", detail }), { step: "triage", status: "succeeded" });
+    expect(projectSemanticStatus(snapshot(plain), invocation).view.detail).not.toContain(detail);
+  });
+
   it("maps every current NextActionCode without exposing a protocol action", () => {
     const codes = [
       "initialize-repository", "create-task", "resume-exact-intent",

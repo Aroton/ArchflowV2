@@ -136,9 +136,11 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 ## Content approval triggers are path heuristics
 
-**Not provided:** Content triggers do not inspect file bytes, language semantics, embedded SQL, generated effects, or dependency impact. They examine only the changed paths declared by a `phase-impl` implementation output; planning artifacts never run through content globs. Matching is case-sensitive over the whole repository-relative slash-separated path: `*` and `?` stay inside one segment, while `**` is recursive only as a complete segment. Path naming can therefore under-match semantically relevant work or over-match unrelated work.
+**Not provided:** Content triggers do not inspect file bytes, language semantics, embedded SQL, generated effects, or dependency impact. They examine only the paths a result changed: those declared by a `phase-impl` implementation output, and the task's governing documents (`design.md`, `prd.md`) a phase design or implementation rewrote, judged against the newest earlier retained projection of that document. Matching is case-sensitive over the whole repository-relative slash-separated path: `*` and `?` stay inside one segment, while `**` is recursive only as a complete segment. Path naming can therefore under-match semantically relevant work or over-match unrelated work.
 
 **Existing mitigation:** Subject triggers can require approval for the whole `phase-impl` subject independently of content paths. When a content rule does match, the settlement freezes the complete sorted path set; a later presentation reconstructs operations and signed byte deltas from those paths and retained outputs without re-evaluating mutable config.
+
+**Known edge:** "rewrote" is measured against retained authority, not the worktree. After a human `baseline-adoption` of `design.md` bytes, the newest retained projection is still the pre-adoption one, so the next phase design reports the document as changed and the shipped governing-document rule gates it once more.
 
 **Why accepted:** Path globs are understandable repository policy and sufficient for representative triggers such as migration-file locations. Semantic inspection would introduce a language-specific policy engine whose complexity is disproportionate to this prototype.
 

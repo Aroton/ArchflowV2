@@ -75,6 +75,7 @@ import { loadApprovedDesignFinalPhase } from "./planned-final-phase.js";
 import { planPlanningRestart, planStateTransition } from "./transitions.js";
 import { isWaiverOriginRequest } from "./waiver-origin.js";
 import {
+  changedCoProducedDocumentPaths,
   expectedProduceUpstreamBindings,
   loadCurrentProduceSubject,
   loadProduceUpstreamSubject,
@@ -698,7 +699,9 @@ async function stateAfterPolicyWaiverSettlement(
   }
   if (assessment.next !== "advance") return ok(prospective);
 
-  const ruleContext = approvalRuleContext(current.value, produce.value, config.snapshot.parsed);
+  const changedDocuments = await changedCoProducedDocumentPaths(dependencies, current.value, produce.value);
+  if (!changedDocuments.ok) return changedDocuments;
+  const ruleContext = approvalRuleContext(current.value, produce.value, config.snapshot.parsed, changedDocuments.value);
   const conclusion = evaluateApprovalRules(
     ruleContext.config, ruleContext.subject, ruleContext.changedPaths, ruleContext.secondaryChangedPaths,
   );

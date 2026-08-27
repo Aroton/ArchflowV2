@@ -163,7 +163,11 @@ function mapRunStep(status: TaskStatusV1, action: NextAction, snapshot: Semantic
       if (checkpoint === "valid" || action.editorial_revision === true || status.step === "triage") {
         return Object.freeze({
           condition: "ready", headline: "Revision is ready to begin",
-          detail: "Enter the bounded production write window before changing the artifact.",
+          // A policy re-entry carries what the revision has to resolve; nothing else in the
+          // semantic view exposes the constitution findings.
+          detail: action.policy_reentry === true
+            ? action.detail
+            : "Enter the bounded production write window before changing the artifact.",
           action_kind: "revise", instruction: "Begin the authorized revision, then return to the client-owned work.",
           expected_submission: "none",
         });

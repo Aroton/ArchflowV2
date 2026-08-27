@@ -11,6 +11,7 @@ import {
   approvalRuleContext,
   approvalRuleMatchSummary,
   buildRuleSettlement,
+  describeMatchedPath,
   evaluateApprovalRules,
   globPatternMatches,
   subjectGateKind,
@@ -74,6 +75,15 @@ describe("approvalRuleMatchSummary — human-facing trigger evidence", () => {
     );
   });
 
+  it("says what a matched governing-document path means", () => {
+    expect(approvalRuleMatchSummary({ kind: "content", paths: [".archflow/tasks/demo/design.md", ".archflow/tasks/demo/prd.md"] })).toBe(
+      "Approval rule trigger: these changed paths matched the project's content rules:\n" +
+      "- .archflow/tasks/demo/design.md (this phase changed the architecture design)\n" +
+      "- .archflow/tasks/demo/prd.md (this phase changed the PRD)",
+    );
+    expect(describeMatchedPath(".archflow/tasks/demo/phases/2/design.md")).toBe(".archflow/tasks/demo/phases/2/design.md");
+  });
+
   it("lists the exact persisted content-match paths without consulting config", () => {
     expect(approvalRuleMatchSummary({ kind: "content", paths: ["db/a.sql", "db/deep/b.sql"] })).toBe(
       "Approval rule trigger: these changed paths matched the project's content rules:\n" +
@@ -104,13 +114,25 @@ describe("approvalRuleMatchSummary — human-facing trigger evidence", () => {
   });
 });
 
-describe("evaluateApprovalRules — content rules apply to the phase-impl subject only", () => {
+describe("evaluateApprovalRules — content rules match the changed paths any subject reports", () => {
   const content = configWithRules({ subjects: [], content: [{ paths: ["**/*.md"] }, { paths: ["db/**"] }] });
 
-  it("a Markdown content rule never fires on a design document subject", () => {
-    expect(evaluateApprovalRules(content, "design", ["design.md", "docs/architecture.md"])).toEqual(autonomous);
-    expect(evaluateApprovalRules(content, "phase-design", ["phases/1/design.md"])).toEqual(autonomous);
-    expect(evaluateApprovalRules(content, "prd", ["prd.md"])).toEqual(autonomous);
+  it("a document subject that reports no changed governing document stays autonomous", () => {
+    expect(evaluateApprovalRules(content, "design", [])).toEqual(autonomous);
+    expect(evaluateApprovalRules(content, "phase-design", [])).toEqual(autonomous);
+    expect(evaluateApprovalRules(content, "prd", [])).toEqual(autonomous);
+  });
+
+  it("a document subject that changed a governing document meets the content rules for it", () => {
+    const governing = configWithRules({
+      subjects: [], content: [{ paths: [".archflow/tasks/*/design.md", ".archflow/tasks/*/prd.md"] }],
+    });
+    expect(evaluateApprovalRules(governing, "phase-design", [".archflow/tasks/demo/design.md"]))
+      .toEqual(contentMatch(".archflow/tasks/demo/design.md"));
+    expect(evaluateApprovalRules(governing, "phase-design", [".archflow/tasks/demo/phases/3/design.md"]))
+      .toEqual(autonomous);
+    expect(evaluateApprovalRules(governing, "phase-impl", [".archflow/tasks/demo/prd.md", "src/index.ts"]))
+      .toEqual(contentMatch(".archflow/tasks/demo/prd.md"));
   });
 
   it("matches the phase-impl subject when any changed path hits any rule's globs", () => {
@@ -239,6 +261,17 @@ describe("approvalRuleContext — the shared assembly", () => {
       "src/old.ts",
       "src/other.ts",
     ]);
+  });
+
+  it("carries the measured changed governing documents for a document subject only", () => {
+    const changed = [".archflow/tasks/demo/prd.md", ".archflow/tasks/demo/design.md"];
+    expect(approvalRuleContext(state("phase-design-2"), documentSubject(), undefined, changed).changedPaths)
+      .toEqual([".archflow/tasks/demo/design.md", ".archflow/tasks/demo/prd.md"]);
+    expect(approvalRuleContext(state("phase-design-2"), documentSubject(), undefined).changedPaths).toEqual([]);
+    expect(approvalRuleContext(state("phase-design-2"), undefined, undefined, changed).changedPaths).toEqual([]);
+    expect(approvalRuleContext(
+      state("phase-impl-1"), implementationSubject({ path: "src/a.ts", operation: "modify" }), undefined, changed,
+    ).changedPaths).toEqual(["src/a.ts"]);
   });
 
   it("collects changed secondary paths as repository-attributed sections", () => {

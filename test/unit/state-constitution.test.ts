@@ -17,6 +17,7 @@ import { discoverWorktree } from "../../src/repository/identity.js";
 import {
   authenticateRuleAcceptancePolicy,
   SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2,
+  SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3,
   assertResolvedConstitution,
   detectTaskLocalConstitutionEdit,
   resolvePinnedConstitution,
@@ -40,16 +41,17 @@ function supportedRuleSource(id: string, override: Partial<{
   text: string;
   review_trigger: string;
   enforced_by: readonly string[];
-}> = {}): string {
-  const profile = SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2.find((candidate) => candidate.id === id);
+}> = {}, profileEntries = SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3): string {
+  const profile = profileEntries.find((candidate) => candidate.id === id);
   if (profile === undefined) throw new Error(`unsupported test rule ${id}`);
   const enforcedBy = override.enforced_by ?? profile.enforced_by;
+  const reviewTrigger = override.review_trigger ?? profile.review_trigger;
   return [
     "---",
     `id: ${profile.id}`,
     `version: ${profile.version}`,
     `status: ${profile.status}`,
-    `review_trigger: ${override.review_trigger ?? profile.review_trigger}`,
+    ...(reviewTrigger === "" ? [] : [`review_trigger: ${reviewTrigger}`]),
     ...(enforcedBy.length === 0 ? [] : ["enforced_by:", ...enforcedBy.map((entry) => `  - ${entry}`)]),
     "---",
     override.text ?? profile.text,
@@ -83,7 +85,7 @@ afterEach(() => {
 });
 
 describe("pinned constitution", () => {
-  it("mints exact supported-v2 authority and refuses v1, divergent semantics, and plain objects", async () => {
+  it("mints exact supported-v3 authority and refuses v1, divergent semantics, and plain objects", async () => {
     const exact = await repository({
       "00-process.md": supportedRuleSource("explicit-human-authority"),
       "10-architecture.md": supportedRuleSource("approved-design-before-code"),
@@ -119,10 +121,10 @@ describe("pinned constitution", () => {
     } as TaskStateV1, v1Resolved.value)).toBeUndefined();
 
     const divergentProcessRules = [
-      supportedRuleSource("explicit-human-authority", { text: "Divergent v2 semantics." }),
-      supportedRuleSource("explicit-human-authority", { review_trigger: "Divergent trigger." }),
+      supportedRuleSource("explicit-human-authority", { text: "Divergent v3 semantics." }),
+      supportedRuleSource("explicit-human-authority", { review_trigger: "A repository-declared human gate." }),
       supportedRuleSource("explicit-human-authority", { enforced_by: ["different-enforcer"] }),
-      supportedRuleSource("explicit-human-authority").replace("version: 2", "version: 3"),
+      supportedRuleSource("explicit-human-authority").replace("version: 3", "version: 4"),
     ];
     for (const processRule of divergentProcessRules) {
       const divergent = await repository({
@@ -140,6 +142,34 @@ describe("pinned constitution", () => {
       { task_id: state.task_id, policy_base_commit: exact.base, constitution_digest: resolved.value.digest } as never,
       state, parseSha256Digest("a".repeat(64)), parsePhaseInstanceId("design"),
     )).toThrow(/authenticated rule acceptance policy/u);
+  });
+
+  it("still mints settlement authority for a task pinned to the earlier supported v2 profile", async () => {
+    const pinnedV2 = await repository({
+      "00-process.md": supportedRuleSource("explicit-human-authority", {}, SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2),
+      "10-architecture.md": supportedRuleSource("approved-design-before-code", {}, SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2),
+    });
+    const resolved = await resolvePinnedConstitution(pinnedV2.runner, pinnedV2.base, context);
+    if (!resolved.ok) throw new Error(resolved.error.code);
+    const state = {
+      task_id: parseTaskSlug("policy-task"),
+      policy_base_commit: pinnedV2.base,
+      constitution_digest: resolved.value.digest,
+    } as TaskStateV1;
+    expect(authenticateRuleAcceptancePolicy(state, resolved.value)).toMatchObject({
+      task_id: state.task_id,
+      policy_base_commit: state.policy_base_commit,
+    });
+
+    const mixed = await repository({
+      "00-process.md": supportedRuleSource("explicit-human-authority", {}, SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2),
+      "10-architecture.md": supportedRuleSource("approved-design-before-code"),
+    });
+    const mixedResolved = await resolvePinnedConstitution(mixed.runner, mixed.base, context);
+    if (!mixedResolved.ok) throw new Error(mixedResolved.error.code);
+    expect(authenticateRuleAcceptancePolicy({
+      ...state, policy_base_commit: mixed.base, constitution_digest: mixedResolved.value.digest,
+    } as TaskStateV1, mixedResolved.value)).toBeUndefined();
   });
 
   it("selects only the latest restart-eligible no-wait settlement through authenticated policy", async () => {

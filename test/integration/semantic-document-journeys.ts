@@ -971,6 +971,90 @@ The committed state carries the settlement and the successor hand-off is offered
     expect(observed.next_action.offer).toBeUndefined();
   });
 
+  register("requires human design approval when a phase design changes the architecture design", async () => {
+    // Fresh-project defaults: the phase-design subject is unlisted, but the shipped content rule
+    // watches the task's governing documents, so rewriting design.md from a phase is one
+    // configured human boundary — and only then.
+    const workspace = await createTaskWorkspace({ taskId: "semantic-phase-architecture", label: "semantic-phase-architecture" });
+    workspaces.push(workspace);
+    restorers.push(installSemanticReviewStub(workspace.root, [[]]));
+    const h = semanticJourneyHarness(workspace);
+    const invocation = { skill: "archflow-prd", intent: "resume" } as const;
+    writeFileSync(join(workspace.services.authority.task_root, "ask.md"), "Describe an architecture-change journey.\n");
+    writeFileSync(join(workspace.services.authority.task_root, "prd.md"), "# Semantic journey\n\nThe client authors this document.\n");
+
+    let result = await h.apply(invocation, await h.status(invocation), { kind: "work-result", outcome: "succeeded" });
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (!result.ok) return;
+    result = await h.apply(invocation, result.value);
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (!result.ok) return;
+    result = await h.apply(invocation, result.value, { kind: "gate-summary", summary: "The PRD is ready for approval." });
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (!result.ok) return;
+    result = await h.apply(invocation, result.value, { kind: "decision", choice: "approve", reason: "The requirements are correct." });
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (!result.ok) return;
+
+    const designInvocation = { skill: "archflow-design", intent: "resume" } as const;
+    let design = await h.apply(designInvocation, await h.status(designInvocation));
+    expect(design.ok, JSON.stringify(design)).toBe(true);
+    if (!design.ok) return;
+    const designResource = design.value.resources.find((resource) => resource.role === "current-artifact");
+    if (designResource === undefined) throw new Error("design resource unavailable");
+    writeFileSync(join(workspace.root, designResource.path), "# Design\n\n### Phase 1: Implement the verified behavior\n\n### Phase 2: Implement the follow-on behavior\n");
+    design = await h.apply(designInvocation, design.value, { kind: "work-result", outcome: "succeeded" });
+    expect(design.ok, JSON.stringify(design)).toBe(true);
+    if (!design.ok) return;
+    design = await h.apply(designInvocation, design.value);
+    expect(design.ok, JSON.stringify(design)).toBe(true);
+    if (!design.ok) return;
+    design = await h.apply(designInvocation, design.value, { kind: "gate-summary", summary: "The architecture and two-phase plan are ready." });
+    expect(design.ok, JSON.stringify(design)).toBe(true);
+    if (!design.ok) return;
+    design = await h.apply(designInvocation, design.value, { kind: "decision", choice: "approve", reason: "The design is implementable." });
+    expect(design.ok, JSON.stringify(design)).toBe(true);
+    if (!design.ok) return;
+    const designCommit = design.value.next_action.commit;
+    if (designCommit === undefined) throw new Error("design commit instructions unavailable");
+    execFileSync("git", ["add", "-A", "--", ...designCommit.paths], { cwd: workspace.root });
+    execFileSync("git", ["-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid", "commit", "-q", "-m", designCommit.message], { cwd: workspace.root });
+
+    const phaseDesignInvocation = { skill: "archflow-phase-design", phase: 1, intent: "resume" } as const;
+    let phaseDesign = await h.apply(phaseDesignInvocation, await h.status(phaseDesignInvocation));
+    expect(phaseDesign.ok, JSON.stringify(phaseDesign)).toBe(true);
+    if (!phaseDesign.ok) return;
+    const phaseDesignResource = phaseDesign.value.resources.find((resource) => resource.role === "current-artifact");
+    const taskDesignResource = phaseDesign.value.resources.find((resource) => resource.role === "task-design");
+    if (phaseDesignResource === undefined || taskDesignResource === undefined) throw new Error("phase-design resources unavailable");
+    expect(taskDesignResource.access).toBe("read-write");
+    const phaseDesignPath = join(workspace.root, phaseDesignResource.path);
+    mkdirSync(dirname(phaseDesignPath), { recursive: true });
+    writeFileSync(phaseDesignPath, "# Phase 1: Implement the verified behavior\n\n## Goal\n\nPlan the phase and correct the architecture it depends on.\n");
+    // Planning found the architecture wrong; the phase design corrects design.md in the same result.
+    writeFileSync(join(workspace.root, taskDesignResource.path),
+      "# Design\n\nThe boundary moves into the first phase.\n\n### Phase 1: Implement the verified behavior\n\n### Phase 2: Implement the follow-on behavior\n");
+    phaseDesign = await h.apply(phaseDesignInvocation, phaseDesign.value, { kind: "work-result", outcome: "succeeded" });
+    expect(phaseDesign.ok, JSON.stringify(phaseDesign)).toBe(true);
+    if (!phaseDesign.ok) return;
+    phaseDesign = await h.apply(phaseDesignInvocation, phaseDesign.value);
+    expect(phaseDesign.ok, JSON.stringify(phaseDesign)).toBe(true);
+    if (!phaseDesign.ok) return;
+    expect(phaseDesign.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+
+    phaseDesign = await h.apply(phaseDesignInvocation, phaseDesign.value, { kind: "gate-summary", summary: "Phase 1 planning changed the architecture design." });
+    expect(phaseDesign.ok, JSON.stringify(phaseDesign)).toBe(true);
+    if (!phaseDesign.ok) return;
+    expect(phaseDesign.value.presentation?.class).toBe("configured-approval");
+    expect(phaseDesign.value.presentation?.reasons).toEqual([
+      expect.objectContaining({ class: "configured-approval", text: expect.stringContaining("this phase changed the architecture design") }),
+    ]);
+    phaseDesign = await h.apply(phaseDesignInvocation, phaseDesign.value, { kind: "decision", choice: "approve", reason: "The corrected architecture is right." });
+    expect(phaseDesign.ok, JSON.stringify(phaseDesign)).toBe(true);
+    if (!phaseDesign.ok) return;
+    expect(phaseDesign.value.next_action).toMatchObject({ kind: "commit" });
+  });
+
   register("requires approvals even when every configured document rule evaluates wait:false", async () => {
     // With no matching document rules, each tier records wait:false but still creates an ordinary
     // human decision archive. This pins that settlements alone never become recovery authority.

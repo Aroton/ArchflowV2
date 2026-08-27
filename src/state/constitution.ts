@@ -56,10 +56,31 @@ type SupportedRuleAcceptanceEntry = Readonly<{
 }>;
 
 /**
- * Exact policy bytes supported by the dormant settlement-authority runtime. Phase 6 makes the
- * repository and seed rules match this profile; until then ordinary initialized tasks remain v1
- * and cannot mint the capability below.
+ * Exact policy bytes that mint settlement authority (rule-based advancement without a human
+ * gate). The shipped seed and this repository's live rules match the newest profile; a task
+ * pinned to an older policy-base commit keeps its authority through the earlier profile. Any
+ * other bytes for these two rule IDs leave `rule_authority` unavailable for that task.
  */
+export const SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3: readonly SupportedRuleAcceptanceEntry[] = Object.freeze([
+  Object.freeze({
+    id: "approved-design-before-code",
+    version: 3,
+    status: "active",
+    text: "Implementation starts only from a phase design that either passed its triggered human gate or advanced by rule after counter-review completed; the workflow server withholds the implementation window until then. The PRD, architecture design, and phase design stay truthful as work proceeds: a result that departs from its own phase design updates that phase design in the same reviewed result, and a result that departs from the architecture design or PRD updates those documents in the same result, where the project's approval rules decide whether a human approves the change. A departure from an approved upstream document is reported as a drift finding against that document, not as a failure of this rule.",
+    review_trigger: "",
+    enforced_by: Object.freeze([]),
+  }),
+  Object.freeze({
+    id: "explicit-human-authority",
+    version: 3,
+    status: "active",
+    text: "Required human decisions are explicit and bound to the exact artifact or code subject at gates opened by an approval rule or safety condition. Silence, elapsed time, agent prose, or a model verdict never supplies approval, waives a gate, or advances the workflow. Commits are not human-gated by default. The workflow server enforces this at its gates; an artifact complies unless it asserts, records, or relies on a human decision the workflow did not record.",
+    review_trigger: "",
+    enforced_by: Object.freeze([]),
+  }),
+]);
+
+/** The previous supported profile; still authenticates tasks pinned before the v3 rules. */
 export const SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2: readonly SupportedRuleAcceptanceEntry[] = Object.freeze([
   Object.freeze({
     id: "approved-design-before-code",
@@ -78,6 +99,10 @@ export const SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2: readonly SupportedRuleAccepta
     enforced_by: Object.freeze([]),
   }),
 ]);
+
+/** Newest first. Every profile pins the same two rule IDs, so selection by ID is profile-free. */
+export const SUPPORTED_RULE_ACCEPTANCE_PROFILES: readonly (readonly SupportedRuleAcceptanceEntry[])[] =
+  Object.freeze([SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3, SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2]);
 
 export type AuthenticatedRuleAcceptancePolicy = Readonly<{
   task_id: TaskStateV1["task_id"];
@@ -120,7 +145,7 @@ function normalizedSelectedRule(rule: ConstitutionRuleV1): SupportedRuleAcceptan
   });
 }
 
-/** Mints settlement authority only for the authentic, task-pinned, exact supported v2 policy. */
+/** Mints settlement authority only for an authentic, task-pinned, exactly supported policy. */
 export function authenticateRuleAcceptancePolicy(
   state: TaskStateV1,
   constitution: ResolvedConstitution,
@@ -130,11 +155,12 @@ export function authenticateRuleAcceptancePolicy(
     constitution.policy_base_commit !== state.policy_base_commit ||
     constitution.digest !== state.constitution_digest
   ) return undefined;
-  const selected = SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2.map(({ id }) => constitution.rules.get(id));
+  const selected = SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3.map(({ id }) => constitution.rules.get(id));
   if (selected.some((rule) => rule === undefined || rule.status !== "active")) return undefined;
   const normalized = selected.map((rule) => normalizedSelectedRule(rule!))
     .sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
-  if (canonicalJsonDigest(normalized) !== canonicalJsonDigest(SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2)) {
+  const digest = canonicalJsonDigest(normalized);
+  if (!SUPPORTED_RULE_ACCEPTANCE_PROFILES.some((profile) => canonicalJsonDigest(profile) === digest)) {
     return undefined;
   }
   const policy = Object.freeze({

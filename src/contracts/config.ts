@@ -38,10 +38,10 @@ export const configOverridesSchema = z.object({
 
 /**
  * Declarative approval triggers: `subjects` gates a workflow subject's steps wholesale; `content`
- * gates the implementation step on the repository paths it changed. Evaluation lives in
- * `src/state/approval-rules.ts` — content rules apply to the phase-impl subject only, so a
- * Markdown content rule never gates a design document. Both lists are human-authored config, so
- * their order is free; `subjects` rejects repeats, and nothing here demands a sorted hand.
+ * gates a step on the repository paths its result changed — every path an implementation touched,
+ * or the governing task documents (`.archflow/tasks/<task>/design.md`, `prd.md`) a later phase
+ * rewrote. Evaluation lives in `src/state/approval-rules.ts`. Both lists are human-authored
+ * config, so their order is free; `subjects` rejects repeats, and nothing here demands a sorted hand.
  */
 export const approvalRulesSchema = z.object({
   subjects: z.array(workflowSubjectV1Schema)

@@ -1,5 +1,5 @@
 import { registerSemanticImplementationCompletionJourney } from "./semantic-implementation-completion-journeys.js";
 
 registerSemanticImplementationCompletionJourney(
-  "re-enters production without a human gate on material upstream drift and commits autonomously once the phase design is co-produced",
+  "re-enters production with the unmet rule named when the constitution review fails and commits autonomously once it passes",
 );

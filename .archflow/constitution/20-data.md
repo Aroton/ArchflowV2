@@ -1,8 +1,7 @@
 ---
 id: task-and-evidence-isolation
-version: 1
+version: 2
 status: active
-review_trigger: A task reads or mutates another task's files, or an approval, waiver, review, or result is used for bytes other than the subject it identifies.
 enforced_by:
   - task-path-boundary-tests
   - subject-digest-validation
