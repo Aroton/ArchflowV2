@@ -359,6 +359,35 @@ describe("discoverReconciliationInput", () => {
     }
   });
 
+  it("leaves adoption overlays inert after their source manifests are superseded", async () => {
+    const h = await harness();
+    const adoptedPath = parseRepositoryPathClaim("tracked.txt");
+    const deletedPath = parseRepositoryPathClaim("retired.txt");
+    const current = h.state({
+      revision: parseSafeInteger(6),
+      authoritative_results: [],
+      baseline_adoptions: [{
+        gate_id: parsePathSafeId("gate-orphaned-baseline"),
+        adopted_at_revision: parseSafeInteger(5),
+        adopted_projections: [{ path: adoptedPath, content_digest: D("c") }],
+        adopted_absences: [deletedPath],
+      }],
+    });
+
+    const discovered = await discoverReconciliationInput(
+      h.services.dependencies,
+      h.services.authority,
+      canonicalDocument(current),
+    );
+    expect(discovered).toMatchObject({
+      ok: true,
+      value: { recorded_projections: [], current_projections: [] },
+    });
+    if (discovered.ok) {
+      expect(reconcileCurrentAuthority(discovered.value)).toEqual({ classification: "consistent", findings: [] });
+    }
+  });
+
   it("uses the newest manifest generation when phases record the same projection path", async () => {
     const h = await harness();
     const path = parseRepositoryPathClaim("tracked.txt");

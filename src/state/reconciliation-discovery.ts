@@ -266,10 +266,13 @@ export async function discoverNewestProjections(
     // Human-adopted baselines overlay the manifests newest-per-path: an adoption lands at a state
     // revision strictly later than every manifest measured before it, and a later phase's produce
     // manifest measures later still and supersedes the adoption for the paths it re-projects.
+    // Planning restart and milestone recovery may supersede the source manifest while retaining
+    // the adoption as audit history. Such an orphaned overlay is inert: it cannot create projection
+    // authority without a retained manifest supplying the target and repository runner.
     for (const adoption of state.value.baseline_adoptions ?? []) {
       for (const projection of adoption.adopted_projections) {
         const prior = newest.get(repositoryPathKey(projection.repository, projection.path));
-        if (prior === undefined) return stateInvalid(authority, "reconciliation-projection-unbound");
+        if (prior === undefined) continue;
         // An adopted path is never retirement-newest from a bytes adoption: adoption gates open
         // only over recorded projections, and a retirement that measured later supersedes the
         // adoption instead. A deletion adoption below may still retire it.
@@ -296,7 +299,7 @@ export async function discoverNewestProjections(
           ? { path: adoptedAbsence }
           : adoptedAbsence;
         const prior = newest.get(repositoryPathKey(identity.repository, identity.path));
-        if (prior === undefined) return stateInvalid(authority, "reconciliation-projection-unbound");
+        if (prior === undefined) continue;
         if (prior.retired) continue;
         if (adoption.adopted_at_revision > prior.measured_at_revision) {
           const repository = identity.repository;
