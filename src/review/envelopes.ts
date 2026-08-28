@@ -182,7 +182,7 @@ export type AdjudicationSubject = {
   readonly input_fingerprint: Sha256Digest;
   readonly pinned_constitution_digest: Sha256Digest;
   readonly approved_upstream_digests: readonly Sha256Digest[];
-  readonly source_evidence_set_digest: Sha256Digest;
+  readonly source_review_envelope_digest: Sha256Digest;
   readonly invocation_id: string;
   readonly result_id: string;
 };
@@ -204,7 +204,7 @@ export type AdjudicationEnvelopeInput = {
   readonly artifact: string;
   readonly rules: readonly AdjudicationRuleInput[];
   readonly approved_upstreams: readonly AdjudicationUpstreamInput[];
-  readonly source_evidence_set_digest: Sha256Digest;
+  readonly source_review_envelope_digest: Sha256Digest;
   readonly workspace?: ReviewWorkspaceBinding;
   readonly subject: AdjudicationSubject;
 };
@@ -292,7 +292,7 @@ function validateAdjudicationSubject(value: AdjudicationSubject): AdjudicationSu
     "input_fingerprint",
     "pinned_constitution_digest",
     "approved_upstream_digests",
-    "source_evidence_set_digest",
+    "source_review_envelope_digest",
     "invocation_id",
     "result_id",
   ], "adjudication subject");
@@ -313,7 +313,7 @@ function validateAdjudicationSubject(value: AdjudicationSubject): AdjudicationSu
     input_fingerprint: parseSha256Digest(value.input_fingerprint),
     pinned_constitution_digest: parseSha256Digest(value.pinned_constitution_digest),
     approved_upstream_digests: approvedUpstreamDigests,
-    source_evidence_set_digest: parseSha256Digest(value.source_evidence_set_digest),
+    source_review_envelope_digest: parseSha256Digest(value.source_review_envelope_digest),
     invocation_id: parseEvidenceId(value.invocation_id, "invocation_id"),
     result_id: parseEvidenceId(value.result_id, "result_id"),
   };
@@ -570,17 +570,17 @@ export function buildAdjudicationEnvelope(value: AdjudicationEnvelopeInput): Dis
   exactFields(
     snapshot,
     workspace === undefined
-      ? ["artifact", "rules", "approved_upstreams", "source_evidence_set_digest", "subject"]
-      : ["artifact", "rules", "approved_upstreams", "source_evidence_set_digest", "workspace", "subject"],
+      ? ["artifact", "rules", "approved_upstreams", "source_review_envelope_digest", "subject"]
+      : ["artifact", "rules", "approved_upstreams", "source_review_envelope_digest", "workspace", "subject"],
     "adjudication envelope input",
   );
   if (typeof snapshot.artifact !== "string") throw new TypeError("adjudication envelope artifact must be text");
   const rules = validateRules(snapshot.rules);
   const approvedUpstreams = validateUpstreams(snapshot.approved_upstreams);
   const subject = validateAdjudicationSubject(snapshot.subject);
-  const sourceEvidenceSetDigest = parseSha256Digest(snapshot.source_evidence_set_digest);
-  if (sourceEvidenceSetDigest !== subject.source_evidence_set_digest) {
-    throw new TypeError("source_evidence_set_digest must match the adjudication subject");
+  const sourceEvidenceSetDigest = parseSha256Digest(snapshot.source_review_envelope_digest);
+  if (sourceEvidenceSetDigest !== subject.source_review_envelope_digest) {
+    throw new TypeError("source_review_envelope_digest must match the adjudication subject");
   }
   const upstreamDigests = approvedUpstreams.map((upstream) => upstream.upstream_digest);
   if (upstreamDigests.length !== subject.approved_upstream_digests.length ||
@@ -593,7 +593,7 @@ export function buildAdjudicationEnvelope(value: AdjudicationEnvelopeInput): Dis
     artifact: snapshot.artifact,
     rules,
     approved_upstreams: approvedUpstreams,
-    source_evidence_set_digest: sourceEvidenceSetDigest,
+    source_review_envelope_digest: sourceEvidenceSetDigest,
     ...(workspace === undefined ? {} : { workspace }),
     instructions: {
       rule_coverage: "Return exactly one rule finding for every supplied rule, using its id as rule_id and version as rule_version. Do not omit, duplicate, or invent rules.",

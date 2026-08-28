@@ -37,7 +37,7 @@ const workspaces: TaskWorkspace[] = [];
 beforeAll(async () => {
   bundleRoot = await mkdtemp(join(tmpdir(), "archflow-automation-cli-bundle-"));
   localBundle = join(bundleRoot, "archflow-local.mjs");
-  buildAutomationLocalBundle(repositoryRoot, localBundle);
+  localBundle = buildAutomationLocalBundle(repositoryRoot, localBundle);
 }, TIMEOUT);
 
 afterEach(() => {

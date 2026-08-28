@@ -86,6 +86,25 @@ export function renderTriage(value: ValidatedTriage): Uint8Array {
     ["schema_version", value.schema_version], ["task_id", value.task_id], ["phase_instance", value.phase_instance], ["step", value.step], ["subject_digest", value.subject_digest], ["input_fingerprint", value.input_fingerprint], ["current_evidence_set_digest", value.current_evidence_set_digest], ["source_evidence_digests", value.source_evidence_digests], ["accepted_count", value.accepted_count], ["accepted_editorial_count", value.accepted_editorial_count], ["rejected_count", value.rejected_count],
   ]), "", "## Dispositions"];
   for (const disposition of value.dispositions) lines.push("", ...renderDisposition(disposition));
+  if (value.disposition_ledger !== undefined && value.disposition_ledger.length > 0) {
+    lines.push(
+      "",
+      "## Disposition Ledger",
+      "Carried reviewer memory: earlier rounds' dispositions of this phase instance, each embedded with its round's finding details at install time.",
+    );
+    for (const entry of value.disposition_ledger) {
+      lines.push("", `### ${canonical(entry.disposition)} ${visibleJsonString(entry.finding_id)} (attempt ${entry.attempt})`);
+      lines.push(`review_evidence_digest: ${canonical(entry.review_evidence_digest)}`);
+      if (entry.rationale !== undefined) lines.push(prose("rationale", entry.rationale));
+      if (entry.revision_intent !== undefined) lines.push(prose("revision_intent", entry.revision_intent));
+      if (entry.evidence !== undefined) lines.push(prose("evidence", entry.evidence));
+      if (entry.severity !== undefined) {
+        lines.push(`severity: ${canonical(entry.severity)}`, `blocking: ${canonical(entry.blocking ?? false)}`);
+      }
+      if (entry.summary !== undefined) lines.push(prose("summary", entry.summary));
+      if (entry.suggested_resolution !== undefined) lines.push(prose("suggested_resolution", entry.suggested_resolution));
+    }
+  }
   return linesToBytes(lines);
 }
 
@@ -98,7 +117,7 @@ export function renderAdjudicationEvidence(
     authenticVerifiedEvidence(value, { kind: "adjudication", assurance: evidence.assurance });
   if (!authenticated) throw new TypeError("authenticated adjudication evidence is required");
   const lines = ["# ArchFlow Adjudication Evidence", ...metadata([
-    ["schema_version", evidence.schema_version], ["task_id", evidence.task_id], ["phase_instance", evidence.phase_instance], ["step", evidence.step], ["subject_digest", evidence.subject_digest], ["input_fingerprint", evidence.input_fingerprint], ["evidence_digest", value.evidence_digest], ["pinned_constitution_digest", evidence.pinned_constitution_digest], ["approved_upstream_digests", evidence.approved_upstream_digests], ["source_evidence_set_digest", evidence.source_evidence_set_digest], ["constitution", evidence.constitution], ["drift", evidence.drift], ["matched_rule_versions", evidence.matched_rule_versions.map((rule) => `${rule.rule_id}@${rule.rule_version}`)], ["uncertain_rule_versions", evidence.uncertain_rule_versions.map((rule) => `${rule.rule_id}@${rule.rule_version}`)], ...provenanceMetadata(evidence),
+    ["schema_version", evidence.schema_version], ["task_id", evidence.task_id], ["phase_instance", evidence.phase_instance], ["step", evidence.step], ["subject_digest", evidence.subject_digest], ["input_fingerprint", evidence.input_fingerprint], ["evidence_digest", value.evidence_digest], ["pinned_constitution_digest", evidence.pinned_constitution_digest], ["approved_upstream_digests", evidence.approved_upstream_digests], ["source_review_envelope_digest", evidence.source_review_envelope_digest], ["constitution", evidence.constitution], ["drift", evidence.drift], ["matched_rule_versions", evidence.matched_rule_versions.map((rule) => `${rule.rule_id}@${rule.rule_version}`)], ["uncertain_rule_versions", evidence.uncertain_rule_versions.map((rule) => `${rule.rule_id}@${rule.rule_version}`)], ...provenanceMetadata(evidence),
   ]), "", "## Constitution Findings"];
   for (const finding of evidence.rule_findings) {
     lines.push("", `### Rule ${visibleJsonString(`${finding.rule_id}@${finding.rule_version}`)}`, `compliance: ${canonical(finding.compliance)}`, `trigger: ${canonical(finding.trigger)}`, prose("rationale", finding.rationale), prose("trigger_evidence", finding.trigger_evidence));

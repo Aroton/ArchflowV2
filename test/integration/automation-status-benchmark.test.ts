@@ -41,7 +41,7 @@ let restoreReviewer: (() => void) | undefined;
 beforeAll(async () => {
   temporaryRoot = await mkdtemp(join(tmpdir(), "archflow-automation-benchmark-"));
   localBundle = join(temporaryRoot, "archflow-local.mjs");
-  buildAutomationLocalBundle(repositoryRoot, localBundle);
+  localBundle = buildAutomationLocalBundle(repositoryRoot, localBundle);
 }, TIMEOUT);
 
 afterAll(async () => {

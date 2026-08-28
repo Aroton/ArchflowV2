@@ -57,7 +57,7 @@ approval_rules:
 beforeAll(async () => {
   bundleRoot = await mkdtemp(join(tmpdir(), "archflow-controller-loop-bundle-"));
   localBundle = join(bundleRoot, "archflow-local.mjs");
-  buildAutomationLocalBundle(repositoryRoot, localBundle);
+  localBundle = buildAutomationLocalBundle(repositoryRoot, localBundle);
 }, TIMEOUT);
 
 afterEach(() => {

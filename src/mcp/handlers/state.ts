@@ -775,6 +775,23 @@ export async function handleState(
           );
           if (!reviews.ok) return reviews;
           const value: EvidenceResultValue = { kind: "triage", current_reviews: reviews.value, evidence: artifact.evidence };
+          // Reviewer memory rides only on the succeeded install: the retained triage and review
+          // references still name the PREVIOUS round at this moment, which is exactly what the
+          // ledger must carry forward. Any other prepare path installs no ledger field at all.
+          const installsTriage = call.input.phase_instance === current.value.phase_instance &&
+            call.input.step === "triage" && call.input.status === "succeeded";
+          const loadRetainedResult = services.dependencies.load_retained_result;
+          if (installsTriage && loadRetainedResult === undefined) {
+            throw new TypeError("evidence preparation dependencies are unavailable");
+          }
+          const previousTriageRef = installsTriage
+            ? current.value.authoritative_results.find((candidate) =>
+                candidate.phase_instance === call.input.phase_instance && candidate.step === "triage")
+            : undefined;
+          const previousReviewRef = installsTriage
+            ? current.value.authoritative_results.find((candidate) =>
+                candidate.phase_instance === call.input.phase_instance && candidate.step === "counter_review")
+            : undefined;
           const prepared = await prepareEvidenceResult({
             authority: services.authority,
             runner: services.runner,
@@ -783,6 +800,15 @@ export async function handleState(
             measured_at_revision: current.value.revision,
             scanner,
             value,
+            ...(installsTriage ? {
+              disposition_ledger: {
+                attempt: current.value.attempt,
+                ...(previousTriageRef === undefined ? {} : { previous_triage_ref: previousTriageRef }),
+                ...(previousReviewRef === undefined ? {} : { review_ref: previousReviewRef }),
+              },
+              // The throw above proved the loader exists whenever installsTriage holds.
+              load_retained_result: loadRetainedResult!,
+            } : {}),
           });
           if (!prepared.ok) return prepared;
           preparedResult = prepared.value;

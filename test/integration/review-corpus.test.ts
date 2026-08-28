@@ -161,7 +161,7 @@ function adjudicationSubject(output: Record<string, unknown>): AdjudicationSubje
     input_fingerprint: parseSha256Digest(output.input_fingerprint),
     pinned_constitution_digest: parseSha256Digest(output.pinned_constitution_digest),
     approved_upstream_digests: (output.approved_upstream_digests as unknown[]).map(parseSha256Digest),
-    source_evidence_set_digest: parseSha256Digest(output.source_evidence_set_digest),
+    source_review_envelope_digest: parseSha256Digest(output.source_review_envelope_digest),
     invocation_id: "corpus-adjudication-invocation",
     result_id: "corpus-adjudication-result",
   };

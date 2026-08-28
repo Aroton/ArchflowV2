@@ -1,6 +1,6 @@
 # LIMITATIONS
 
-**Explored:** 2026-08-26 · **Commit:** `16193ec` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
+**Explored:** 2026-08-27 · **Commit:** `1b2602e` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
 
 ArchFlow is a local developer-workflow prototype, not a security sandbox. The controls below reduce accidental context leakage and constrain ordinary operation, but the listed cases are unsupported because the current implementation cannot prove the claimed boundary. A planted canary not appearing in output is evidence about that run; it is not proof that the child could not read the canary.
 
@@ -21,6 +21,14 @@ These limitations assume a trusted developer account and a filesystem not being 
 **Existing mitigation:** Initial rubrics ask only for defects with a concrete material downstream consequence. When prior triage exists, the sealed instruction makes verification of accepted revision intents the primary task and admits a previously undiscovered issue only when it clears the same materiality bar. Prior-triage now carries the original evidence and suggested resolution together with the producer rationale and revision intent. Non-material suggestions are suppressed rather than deferred to human approval, while the attempt budget and durable human gates remain backstops.
 
 **Why accepted:** The product needs independent semantic judgment, not identical prose from repeated model calls. ArchFlow claims deterministic inputs, provenance, evidence currency, state transitions, and approval authority; it does not claim deterministic model judgment.
+
+## Live-read rubric files can strand an in-flight task
+
+**Not protected:** The counter-review rubrics are read fresh from the installed bundle on every review and status call, like task config. A rubric edit (or a bundle reinstall carrying one) between two steps of an in-flight task changes the rubric digest, which folds into the task's input fingerprints, so the task's next review-cycle step fails closed with `INPUT_FINGERPRINT_MISMATCH` until a fresh intent is composed or the previous bytes are restored.
+
+**Existing mitigation:** A missing or invalid file fails closed with `CONFIG_INVALID` naming the file — there is no silent fallback to a previous rubric. The shipped files' exact digests are pinned by test, so an unintended byte change cannot ship unnoticed. `assets/rubrics/README.md` documents the discipline: edit rubrics between tasks.
+
+**Why accepted:** Rubrics are server review policy, deliberately live-editable without a rebuild — the same posture as task config, which reports edits informationally rather than blocking. Fail-closed fingerprint churn is the honest behavior when review policy changes under an open task; an operator who edits mid-task is changing the rules the task is judged by, and the workflow says so loudly instead of quietly mixing policies across rounds.
 
 ## Phase sizing is judgment, not calculation
 
@@ -159,3 +167,19 @@ These limitations assume a trusted developer account and a filesystem not being 
 **Existing mitigation:** Only successful discovery is memoized; repository identity (root commits) is still observed live on every call and compared against `state.json`; the pinned constitution memo is keyed by an immutable commit, so it can never serve stale policy bytes.
 
 **Why accepted:** Re-probing the repository on every handler call and every substep refresh cost more child processes than the work itself, in tests and in ordinary use. Replacing a repository underneath a running server is not a supported workflow, and the failure it produces is loud rather than silent.
+
+## Process-lifetime dispatch preflight memo
+
+**Not protected:** A successful CLI version/auth preflight is memoized per adapter for the server process lifetime. A CLI upgraded underneath a running server keeps dispatching on the memoized version until the server restarts, and the memo does not re-prove authentication on later dispatches.
+
+**Existing mitigation:** Only successful preflights are memoized — a failed or cancelled probe re-runs on the next dispatch — and auth that breaks after a memo hit still fails visibly at child launch, where the failure classifier names it (`AUTH_UNAVAILABLE`, rate limits, unsupported model).
+
+**Why accepted:** The memo removes two child spawns from every dispatch of a review, and the honest failure modes surface at the launch that actually fails rather than silently degrading evidence.
+
+## Legacy adjudication evidence fails the round binding closed
+
+**Not provided:** Adjudication evidence from tasks created before the constitution subject bound the review envelope's digest (previously the retained review set's digest) does not parse or stay current under the new strict checks. There is no shim, translation, or dual read.
+
+**Existing mitigation:** The fixed point treats an unreadable or non-current constitution slot like any other stale slot: the next action is a fresh review round, whose new adjudication carries the new binding. Retained review evidence is unaffected — its `envelope_input_digest` predates and outlives this change.
+
+**Why accepted:** Consistent with the repository's fail-closed version posture; `.archflow/` task state is removed before PR, so the affected population is in-flight local tasks across one upgrade, and the recovery is the ordinary restart-the-round path.

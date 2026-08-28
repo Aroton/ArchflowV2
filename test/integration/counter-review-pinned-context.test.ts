@@ -13,7 +13,7 @@ import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { handleCounterReview, resolveRepositoryViewCommit } from "../../src/mcp/handlers/counter-review.js";
 import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import { REPOSITORY_VIEW_NOTE } from "../../src/review/envelopes.js";
-import { canonicalRubricForPhaseKind } from "../../src/review/rubrics.js";
+import { loadTestRubric } from "../helpers/rubrics.js";
 import { createGitRunner, preflightGit } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
@@ -121,7 +121,7 @@ Preserve explicit human review gates.
     constitution_digest: constitution.value.digest,
     artifact_identities: [],
     upstream_identities: [],
-    rubric_digest: canonicalRubricForPhaseKind(options.phase).rubric_digest,
+    rubric_digest: (await loadTestRubric(options.phase)).rubric_digest,
     phase_instance: activePhase,
     declared_inputs: [],
   });
@@ -246,7 +246,7 @@ else {
       step: "adjudicate", subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
       pinned_constitution_digest: subject.pinned_constitution_digest,
       approved_upstream_digests: subject.approved_upstream_digests,
-      source_evidence_set_digest: subject.source_evidence_set_digest,
+      source_review_envelope_digest: subject.source_review_envelope_digest,
       rule_findings: envelope.rules.map((rule) => ({ rule_id: rule.id, rule_version: rule.version,
         compliance: "pass", rationale: "The document respects this rule.", trigger: "not-matched",
         trigger_evidence: "No review trigger matched." })),

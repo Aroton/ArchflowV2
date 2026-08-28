@@ -18,6 +18,7 @@ import { createDispatchCoordinator } from "../../dispatch/coordinator.js";
 import {
   projectRepositoryWorkspaceBinding,
   projectReviewedRepositories,
+  shareRepositoryViewWorkspace,
   type DispatchRepositoryViewPlan,
 } from "../../dispatch/workspace.js";
 import { createDispatchFailureObserver } from "../../dispatch/failure-observation.js";
@@ -26,7 +27,7 @@ import type { RootBoundGitRunner } from "../../repository/identity.js";
 import { unavailableRepositoryView, type RepositorySet } from "../../repository/repository-set.js";
 import { rulesForEnvelope } from "../../review/adjudication.js";
 import { runCounterReview, type ConstitutionReviewPlan } from "../../review/counter-review.js";
-import { canonicalRubricForPhaseKind } from "../../review/rubrics.js";
+import { loadCanonicalRubricForPhaseKind } from "../../review/rubrics.js";
 import {
   REVIEW_ENVELOPE_BYTE_CAP,
   ReviewEnvelopeError,
@@ -477,12 +478,20 @@ export async function handleCounterReview(
     );
     const reviewedRepositories = projectReviewedRepositories(repositoryViews);
     const workspaceBinding = projectRepositoryWorkspaceBinding(repositoryViews);
+    // The rubric and constitution children receive byte-identical repository views, so one
+    // materialization serves both; the handle is disposed after runCounterReview settles.
+    const sharedWorkspace = shareRepositoryViewWorkspace(
+      repositoryViews,
+      services.runner.location.worktreeRoot,
+    );
 
     const retainedBytes = services.dependencies.read_retained_task_bytes;
     if (retainedBytes === undefined) throw new TypeError("retained byte accounting is unavailable");
-    const canonicalRubric = canonicalRubricForPhaseKind(
+    const loadedRubric = await loadCanonicalRubricForPhaseKind(
       decodePhaseInstance(state.value.phase_instance).kind,
     );
+    if (!loadedRubric.ok) return loadedRubric;
+    const canonicalRubric = loadedRubric.value;
 
     let constitutionPlan: ConstitutionReviewPlan | undefined;
     if (activeRules) {
@@ -498,7 +507,7 @@ export async function handleCounterReview(
         authority: services.authority, dependencies: services.dependencies, host: session.value.host,
         repository_root: services.runner.location.worktreeRoot, phase_instance: state.value.phase_instance,
         signal: context.signal, cancellation_source: "client",
-        repository_views: repositoryViews,
+        shared_workspace: sharedWorkspace,
       });
       constitutionPlan = Object.freeze({
         registry: constitution.value.rules,
@@ -536,7 +545,7 @@ export async function handleCounterReview(
       phase_instance: state.value.phase_instance,
       signal: context.signal,
       cancellation_source: "client",
-      repository_views: repositoryViews,
+      shared_workspace: sharedWorkspace,
     });
     const result = await runCounterReview({
       transaction: services.dependencies,
@@ -548,7 +557,11 @@ export async function handleCounterReview(
         attempt: state.value.attempt,
         observed_at_revision: state.value.revision,
       }),
-      ...(dispatchAlreadySerialized ? { serialize_dispatch: async <T>(operation: () => Promise<T>) => operation() } : {}),
+      ...(dispatchAlreadySerialized ? {
+        serialize_dispatch: async <T>(operation: () => Promise<T>) => operation(),
+        serialize_dispatch_pair: async <A, B>(first: () => Promise<A>, second: () => Promise<B>) =>
+          Promise.all([first(), second()]),
+      } : {}),
       prepare_evidence: (evidence, measuredAtRevision) => prepareDispatchEvidence(
         services, retainedBytes, resultId, { kind: "review", evidence }, measuredAtRevision,
       ),
@@ -593,7 +606,7 @@ export async function handleCounterReview(
       const overflow = envelopeOverflowError(error, produce.value);
       if (overflow !== undefined) return fail<never>(overflow);
       throw error;
-    });
+    }).finally(() => sharedWorkspace.dispose());
     if (!result.ok) return result;
     return Object.freeze({
       schema_version: "1",

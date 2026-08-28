@@ -12,6 +12,7 @@ import type { PipelineStep } from "../contracts/vocabulary.js";
 import { computeGateContextDigest } from "../contracts/fingerprints.js";
 import {
   deriveCurrentEvidenceSet,
+  retainedReviewEnvelopeDigest,
   type DerivedCurrentEvidenceSet,
   type RetainedEvidenceSet,
 } from "../state/evidence-results.js";
@@ -179,7 +180,16 @@ function currentFor(
   }
   if (step === "adjudicate") {
     const adjudication = evidence as AdjudicationEvidence;
-    return adjudication.source_evidence_set_digest === reviews.current_evidence_set.set_digest &&
+    // The constitution review binds to the round by the review envelope it was commissioned
+    // with: the digest is stamped before either child dispatches, and the retained
+    // server-attested review evidence carries it as envelope_input_digest — the same currency
+    // proof a payload-derived set digest gave, computable before dispatch.
+    const currentReview = reviews.reviews[0]?.evidence;
+    const currentEnvelopeDigest = currentReview !== undefined && currentReview.assurance === "server-attested"
+      ? currentReview.envelope_input_digest
+      : undefined;
+    return currentEnvelopeDigest !== undefined &&
+      adjudication.source_review_envelope_digest === currentEnvelopeDigest &&
       adjudication.approved_upstream_digests.length ===
         (subject.approved_upstream_digests ?? []).length &&
       adjudication.approved_upstream_digests.every((digest, index) =>
@@ -206,6 +216,8 @@ type AdjudicationGate = NonNullable<ReturnType<typeof selectAdjudicationGate>>;
 /** The retained evidence trio an authenticated approval must bind to satisfy a gate. */
 export type RetainedGateEvidence = Readonly<{
   counter_review_digest: Sha256Digest | undefined;
+  /** Envelope digest of the retained server-attested counter review; undefined when it is absent or degraded. */
+  counter_review_envelope_digest: Sha256Digest | undefined;
   triage: TriageCandidate | undefined;
   adjudication: AdjudicationEvidence | undefined;
 }>;
@@ -286,7 +298,9 @@ function evidenceBindingFailure(
   if (!boundToSubjectOrDeclaredPredecessor(adjudication, subject)) {
     return "adjudication-not-bound-to-subject";
   }
-  if (adjudication.source_evidence_set_digest !== request.current_evidence.set_digest) {
+  // Round binding: the adjudication must belong to the exact retained review round the
+  // request's evidence set was derived from (its slots bind that set to the review digest).
+  if (adjudication.source_review_envelope_digest !== evidence.counter_review_envelope_digest) {
     return "adjudication-evidence-set-digest";
   }
   if (request.current_evidence.set_digest !== triage.current_evidence_set_digest) {
@@ -381,6 +395,7 @@ function adjudicationGateSatisfied(
   const contextDigest = computeGateContextDigest(gate.kind, gate.context);
   const evidence: RetainedGateEvidence = Object.freeze({
     counter_review_digest: retained.get("counter_review")?.manifest.artifact_digest,
+    counter_review_envelope_digest: retainedReviewEnvelopeDigest(retained),
     triage: triageAt(retained),
     adjudication: adjudicationAt(retained),
   });

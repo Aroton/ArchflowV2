@@ -349,7 +349,7 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
           input_fingerprint: canonicalJsonDigest({ adjudication: direction.name }),
           pinned_constitution_digest: canonicalJsonDigest({ constitution: "pinned-test" }),
           approved_upstream_digests: [],
-          source_evidence_set_digest: sourceEvidenceSetDigest,
+          source_review_envelope_digest: sourceEvidenceSetDigest,
           invocation_id: parseSafeId(`invocation-${taskId}`),
           result_id: parseSafeId(`result-${taskId}`),
         };
@@ -362,7 +362,7 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
             enforced_by: [],
           }],
           approved_upstreams: [],
-          source_evidence_set_digest: sourceEvidenceSetDigest,
+          source_review_envelope_digest: sourceEvidenceSetDigest,
           subject,
         });
         const dispatch = createDispatchCoordinator({

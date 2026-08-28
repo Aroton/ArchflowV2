@@ -281,7 +281,7 @@ describe("priorTriageEvidence", () => {
     expect(record.current_attempt).toBe(2);
     expect(record.dispositions).toEqual([
       {
-        finding_id: "digest-drift", severity: "blocker", blocking: true,
+        finding_id: "digest-drift", attempt: 2, severity: "blocker", blocking: true,
         summary: "Digest recomputation skips the slot check.",
         evidence: "The slot is read after hashing.",
         suggested_resolution: "Recompute after the slot check.",
@@ -289,7 +289,7 @@ describe("priorTriageEvidence", () => {
         revision_intent: "Recompute after the slot check.",
       },
       {
-        finding_id: "naming-nit", severity: "minor", blocking: false,
+        finding_id: "naming-nit", attempt: 2, severity: "minor", blocking: false,
         summary: "Rename the helper.",
         evidence: "The name differs from a convention.",
         suggested_resolution: "Rename it.",
@@ -297,14 +297,63 @@ describe("priorTriageEvidence", () => {
       },
       // An unknown disposition string renders as-is; the vocabulary can grow without breaking assembly.
       {
-        finding_id: "style-note", severity: "minor", blocking: false,
+        finding_id: "style-note", attempt: 2, severity: "minor", blocking: false,
         summary: "Editorial wording.",
         evidence: "The sentence is awkward.",
         suggested_resolution: "Reword it.",
         disposition: "accepted-editorial", rationale: "Wording only.",
       },
       // A finding outside the retained counter-review evidence renders without invented fields.
-      { finding_id: "older-extra", disposition: "rejected", rationale: "From older review evidence." },
+      { finding_id: "older-extra", attempt: 2, disposition: "rejected", rationale: "From older review evidence." },
+    ]);
+  });
+
+  it("renders the carried ledger with the current dispositions winning a finding_id collision", async () => {
+    const result = await priorTriageEvidence(
+      loader({
+        triage: installation({
+          artifact_digest: digest("f"),
+          source_artifact: {
+            artifact_kind: "triage",
+            evidence: {
+              dispositions: [
+                { review_evidence_digest: REVIEW_DIGEST, finding_id: "digest-drift", disposition: "accepted", rationale: "Round two disposition.", revision_intent: "Recompute after the slot check." },
+              ],
+              disposition_ledger: [
+                { review_evidence_digest: digest("9"), finding_id: "older-round", disposition: "rejected", rationale: "Older rejection.", evidence: "Older rejection evidence.", attempt: 1, severity: "major", blocking: false, summary: "Older summary.", suggested_resolution: "Older resolution." },
+                { review_evidence_digest: REVIEW_DIGEST, finding_id: "digest-drift", disposition: "accepted", rationale: "Carried embed.", revision_intent: "Recompute after the slot check.", attempt: 2, severity: "blocker", blocking: true, summary: "Digest recomputation skips the slot check.", evidence: "The slot is read after hashing.", suggested_resolution: "Recompute after the slot check." },
+              ],
+            },
+          },
+        }),
+      }),
+      state([reference("triage", "2".repeat(64))]),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(1);
+    const entry = result.value[0]!;
+    if (entry.status !== "pinned") return;
+    const record = JSON.parse(entry.content) as {
+      coverage: string;
+      dispositions: readonly Record<string, unknown>[];
+    };
+    expect(record.coverage).toContain("all retained rounds");
+    expect(record.dispositions).toEqual([
+      // Ledger history first, carrying the details its round embedded at install time.
+      {
+        finding_id: "older-round", attempt: 1, severity: "major", blocking: false,
+        summary: "Older summary.",
+        evidence: "Older rejection evidence.",
+        suggested_resolution: "Older resolution.",
+        disposition: "rejected", rationale: "Older rejection.",
+      },
+      // The current dispositions are the newest record of their findings and win the collision.
+      {
+        finding_id: "digest-drift", attempt: 2,
+        disposition: "accepted", rationale: "Round two disposition.",
+        revision_intent: "Recompute after the slot check.",
+      },
     ]);
   });
 

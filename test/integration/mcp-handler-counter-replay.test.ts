@@ -12,7 +12,7 @@ import { encodePhaseInstance } from "../../src/contracts/phase-instance.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { handleCounterReview } from "../../src/mcp/handlers/counter-review.js";
 import { parseToolCall } from "../../src/contracts/mcp-tools.js";
-import { canonicalRubricForPhaseKind } from "../../src/review/rubrics.js";
+import { loadTestRubric } from "../helpers/rubrics.js";
 import { createGitRunner, preflightGit } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import type { ResolvedTaskWorkspacePath } from "../../src/repository/paths.js";
@@ -106,7 +106,7 @@ Preserve explicit human review gates.
     constitution_digest: constitution.value.digest,
     artifact_identities: [],
     upstream_identities: [],
-    rubric_digest: canonicalRubricForPhaseKind("prd").rubric_digest,
+    rubric_digest: (await loadTestRubric("prd")).rubric_digest,
     phase_instance: PHASE,
     declared_inputs: [],
   });
@@ -183,7 +183,7 @@ else {
     input_fingerprint: subject.input_fingerprint,
     pinned_constitution_digest: subject.pinned_constitution_digest,
     approved_upstream_digests: subject.approved_upstream_digests,
-    source_evidence_set_digest: subject.source_evidence_set_digest,
+    source_review_envelope_digest: subject.source_review_envelope_digest,
     rule_findings: envelope.rules.map((rule) => ({ rule_id: rule.id, rule_version: rule.version,
       compliance: "pass", rationale: "Checked the sealed envelope.",
       trigger: "not-matched", trigger_evidence: "No review trigger matched." })),

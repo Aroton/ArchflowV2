@@ -698,7 +698,12 @@ function expectedInstallationSource(
       if (call.input.artifact === undefined) {
         throw new TypeError("evidence result installation requires an archflow_state artifact");
       }
-      if (canonicalJsonDigest(call.input.artifact) !== canonicalJsonDigest(source)) {
+      // The server appends its computed disposition ledger to the prepared triage evidence after
+      // validating the producer's candidate; the installed source must match the declared
+      // artifact everywhere except that one server-computed field. A declared ledger still fails
+      // the comparison — only the prepared side is stripped.
+      const { disposition_ledger: _ledger, ...preparedEvidence } = source.evidence;
+      if (canonicalJsonDigest(call.input.artifact) !== canonicalJsonDigest({ ...source, evidence: preparedEvidence })) {
         throw new TypeError("evidence result installation source does not match the archflow_state artifact");
       }
     }

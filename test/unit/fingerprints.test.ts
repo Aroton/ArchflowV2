@@ -21,7 +21,7 @@ import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import type { RepositoryOperationContext } from "../../src/repository/git.js";
 import type { RootBoundGitRunner } from "../../src/repository/identity.js";
-import { canonicalRubricForPhaseKind } from "../../src/review/rubrics.js";
+import { loadTestRubric } from "../helpers/rubrics.js";
 import type { TransactionAuthority } from "../../src/state/authority.js";
 import { createInternalInputFingerprintResolver } from "../../src/state/fingerprint.js";
 import { readCanonicalDeclaredInputs, readCanonicalSecondaryDeclaredInputs } from "../../src/state/fingerprint-readers.js";
@@ -204,7 +204,7 @@ describe("durable secondary declared-input fingerprint binding", () => {
       { name: "archflow_state", input: { step: "triage", status: "running" } },
       { name: "archflow_state", input: { step: "triage", status: "succeeded", artifact: { artifact_kind: "triage" } } },
     ];
-    const rubric_digest = canonicalRubricForPhaseKind("phase-impl").rubric_digest;
+    const rubric_digest = (await loadTestRubric("phase-impl")).rubric_digest;
     // Follow-up steps never carried primary declared inputs before repository sets existed; only
     // the secondary addendum is folded in, so a primary-only task keeps its pre-existing bytes.
     const followupFingerprint = computeInputFingerprint({
@@ -553,7 +553,7 @@ describe("internal input fingerprint resolver", () => {
   });
 
   /** The pre-cutover composition: the same fields plus the creation-time config digest. */
-  const legacyComposition = (): ReturnType<typeof parseSha256Digest> => canonicalJsonDigest({
+  const legacyComposition = async (): Promise<ReturnType<typeof parseSha256Digest>> => canonicalJsonDigest({
     schema_version: "1",
     workflow_digest: recordedState.value.workflow_digest,
     config_digest: recordedState.value.config_digest,
@@ -562,7 +562,7 @@ describe("internal input fingerprint resolver", () => {
       .map(({ path, mode, oid: identityOid }) => ({ path, mode, oid: identityOid })),
     upstream_identities: [...upstream].sort((left, right) => left.path < right.path ? -1 : 1)
       .map(({ path, mode, oid: identityOid }) => ({ path, mode, oid: identityOid })),
-    rubric_digest: canonicalRubricForPhaseKind("phase-impl").rubric_digest,
+    rubric_digest: (await loadTestRubric("phase-impl")).rubric_digest,
     phase_instance: phaseInstance,
     declared_inputs: [...declaredInputs].sort((left, right) => left.input_id < right.input_id ? -1 : 1)
       .map(({ input_id, digest: inputDigest }) => ({ input_id, digest: inputDigest })),
@@ -608,13 +608,13 @@ describe("internal input fingerprint resolver", () => {
     if (!result.ok) return;
     expect(result.value.fingerprint).toBe(computeInputFingerprint({
       ...subject,
-      rubric_digest: canonicalRubricForPhaseKind("phase-impl").rubric_digest,
+      rubric_digest: (await loadTestRubric("phase-impl")).rubric_digest,
     }));
     expect(Object.hasOwn(result.value.subject, "config_digest")).toBe(false);
   });
 
   it("accepts when the expected fingerprint equals the new composition", async () => {
-    const expected = computeInputFingerprint({ ...subject, rubric_digest: canonicalRubricForPhaseKind("phase-impl").rubric_digest });
+    const expected = computeInputFingerprint({ ...subject, rubric_digest: (await loadTestRubric("phase-impl")).rubric_digest });
     const result = await resolver(context(counterReviewCall(expected), expected));
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.fingerprint).toBe(expected);
@@ -624,14 +624,14 @@ describe("internal input fingerprint resolver", () => {
     // The recorded fingerprint was computed before config left the subject; the live bytes have
     // since changed (their digest is nothing like the creation-time record). The accepted value
     // still equals the recorded one, built from `state.config_digest`, never live bytes.
-    const recorded = legacyComposition();
+    const recorded = await legacyComposition();
     const result = await resolver(context(counterReviewCall(recorded), recorded));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.fingerprint).toBe(recorded);
     expect(result.value.fingerprint).not.toBe(computeInputFingerprint({
       ...subject,
-      rubric_digest: canonicalRubricForPhaseKind("phase-impl").rubric_digest,
+      rubric_digest: (await loadTestRubric("phase-impl")).rubric_digest,
     }));
   });
 
@@ -648,14 +648,14 @@ describe("internal input fingerprint resolver", () => {
       read_declared_inputs: async () => ok(structuredClone(declaredInputs)),
       read_secondary_declared_inputs: async () => ok(structuredClone(secondary)),
     });
-    const primaryLegacy = legacyComposition();
+    const primaryLegacy = await legacyComposition();
     const result = await secondaryResolver(context(counterReviewCall(primaryLegacy), primaryLegacy));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.fingerprint).not.toBe(primaryLegacy);
     expect(result.value.fingerprint).toBe(computeInputFingerprint({
       ...subject,
-      rubric_digest: canonicalRubricForPhaseKind("phase-impl").rubric_digest,
+      rubric_digest: (await loadTestRubric("phase-impl")).rubric_digest,
       secondary_declared_inputs: secondary,
     }));
   });
@@ -667,7 +667,7 @@ describe("internal input fingerprint resolver", () => {
     // The caller's existing mismatch error fires unchanged against this value.
     expect(result.value.fingerprint).toBe(computeInputFingerprint({
       ...subject,
-      rubric_digest: canonicalRubricForPhaseKind("phase-impl").rubric_digest,
+      rubric_digest: (await loadTestRubric("phase-impl")).rubric_digest,
     }));
   });
 });

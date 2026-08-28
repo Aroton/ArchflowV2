@@ -66,3 +66,25 @@ describe("accepted-editorial triage", () => {
     expect(() => validateTriage(blockingCurrent, mixed)).toThrow(/blocking finding/);
   });
 });
+
+describe("disposition ledger boundary", () => {
+  const ledger = [{ review_evidence_digest: digest("9"), finding_id: "older", disposition: "rejected" as const, attempt: 1, rationale: "older rejection", evidence: "older evidence" }];
+
+  it("refuses a candidate that arrives with a server-computed ledger", () => {
+    expect(() => validateTriage(current, { ...candidate, disposition_ledger: ledger as never })).toThrow(/server-computed/u);
+    // The structural parse accepts the field so retained artifacts keep loading; only the
+    // producer-facing validation refuses it.
+    expect(() => parseTriageCandidate({ ...candidate, disposition_ledger: [] })).not.toThrow();
+  });
+
+  it("freezes the server-provided ledger into the validated result", () => {
+    const validated = validateTriage(current, candidate, ledger as never);
+    expect(validated.disposition_ledger).toEqual(ledger);
+    expect(Object.isFrozen(validated.disposition_ledger)).toBe(true);
+  });
+
+  it("keeps parsing retained candidates that carry a ledger", () => {
+    const parsed = parseTriageCandidate({ ...candidate, disposition_ledger: ledger });
+    expect(parsed.disposition_ledger).toHaveLength(1);
+  });
+});

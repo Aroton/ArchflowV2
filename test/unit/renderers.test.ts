@@ -108,6 +108,12 @@ describe("anti-spoofing renderers", () => {
     const candidate = { schema_version: "1", task_id: TASK, phase_instance: phase, step: "triage", subject_digest: digest("a"), input_fingerprint: digest("b"), current_evidence_set_digest: set.current_evidence_set.set_digest, source_evidence_digests: [digest("2")], dispositions: [{ review_evidence_digest: digest("2"), finding_id: "spoof", disposition: "rejected", rationale: "not applicable", evidence: "source confirms" }], accepted_count: 0, rejected_count: 1, accepted_editorial_count: 0 };
     const validated = validateTriage(set, candidate);
     expect(new TextDecoder().decode(renderTriage(validated))).toMatch(/^# ArchFlow Review Triage/mu);
+    // A server-computed ledger renders as its own section; the producer-supplied field is refused.
+    const ledger = [{ review_evidence_digest: digest("8"), finding_id: "older", disposition: "rejected" as const, attempt: 1, rationale: "older", severity: "major" as const, blocking: false, summary: "older summary", evidence: "rejection evidence" }];
+    const ledgerRendered = new TextDecoder().decode(renderTriage(validateTriage(set, candidate, ledger as never)));
+    expect(ledgerRendered).toMatch(/^## Disposition Ledger/mu);
+    expect(ledgerRendered).toContain("(attempt 1)");
+    expect(() => validateTriage(set, { ...candidate, disposition_ledger: [] })).toThrow(/server-computed/u);
     expect(() => renderTriage({ ...validated } as never)).toThrow(/validated triage/);
     expect(() => renderTriage(candidate as never)).toThrow(/validated triage/);
   });

@@ -15,7 +15,7 @@ import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import type { SecretScanner } from "../../src/contracts/secret-scan.js";
 import { handleCounterReview } from "../../src/mcp/handlers/counter-review.js";
 import { MULTI_REPOSITORY_VIEW_NOTE, REPOSITORY_VIEW_NOTE } from "../../src/review/envelopes.js";
-import { canonicalRubricForPhaseKind } from "../../src/review/rubrics.js";
+import { loadTestRubric } from "../helpers/rubrics.js";
 import { createGitRunner, preflightGit } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import { createAtomicWriter } from "../../src/state/atomic.js";
@@ -106,7 +106,7 @@ No active rule.
   const reviewFingerprint = computeInputFingerprint({
     schema_version: "1", workflow_digest: workflowDigest, constitution_digest: constitution.value.digest,
     artifact_identities: [], upstream_identities: [],
-    rubric_digest: canonicalRubricForPhaseKind("prd").rubric_digest,
+    rubric_digest: (await loadTestRubric("prd")).rubric_digest,
     phase_instance: PHASE, declared_inputs: [],
   });
   const artifact = await buildDocumentArtifact(discovered.value, authority.value, {

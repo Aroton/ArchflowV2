@@ -155,7 +155,7 @@ const durableArtifact = z.union([
     schema_version: z.literal("1"),
     artifact_kind: z.literal("triage"),
     evidence: triageCandidateSchema,
-  }).strict() as z.ZodType<TriageArtifactV1>,
+  }).strict() as unknown as z.ZodType<TriageArtifactV1>,
 ]) as unknown as z.ZodType<DurableArtifact>;
 const humanRevisionDeclarationSchema = z.object({
   classification: z.enum(HUMAN_REVISION_CLASSIFICATIONS),

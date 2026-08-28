@@ -31,7 +31,7 @@ import type { CurrentEvidenceSetRef } from "../contracts/trust.js";
 import { resolveDispatchRoute, type DispatchRoute } from "../dispatch/routing.js";
 import { designApprovalPolicyContext, selectAdjudicationGates } from "../review/adjudication.js";
 import { assessCurrentEvidence, DEFAULT_MAX_ATTEMPTS, waiverInForce, type EvidenceAssessment } from "../review/fixed-point.js";
-import { canonicalRubricForPhaseKind, type CanonicalRubric } from "../review/rubrics.js";
+import { loadCanonicalRubricForPhaseKind, type CanonicalRubric } from "../review/rubrics.js";
 import { createGitRunner, preflightGit, readChangedGitPaths, readCommitTreeBlob, readFirstParentChildAfter, resolveCommit } from "../repository/git.js";
 import { discoverWorktree, type RootBoundGitRunner } from "../repository/identity.js";
 import { resolveRepositorySet, type RepositorySet } from "../repository/repository-set.js";
@@ -40,7 +40,7 @@ import { computeConfigChange, validateRepositorySetContinuity } from "./config-c
 import type { TransactionAuthority } from "./authority.js";
 import { assertInternalTransactionAuthority, createInternalTransactionAuthority } from "./authority.js";
 import { authenticateRuleAcceptancePolicy, resolvePinnedConstitution, type ResolvedConstitution } from "./constitution.js";
-import { deriveCurrentEvidenceSet, loadRetainedEvidence, type RetainedEvidenceSet } from "./evidence-results.js";
+import { deriveCurrentEvidenceSet, loadRetainedEvidence, retainedReviewEnvelopeDigest, type RetainedEvidenceSet } from "./evidence-results.js";
 import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "./gate-approvals.js";
 import {
   acceptedNoWaitSettlementWithoutOrdinaryApproval,
@@ -871,7 +871,7 @@ export function pendingAdjudicationGates(
       item.request.context_digest === contextDigest &&
       item.request.kind !== "baseline-adoption" && // narrowed: a drift observation is not an evidence set
       item.request.current_evidence.set_digest === currentSet.set_digest &&
-      source.evidence.source_evidence_set_digest === currentSet.set_digest);
+      source.evidence.source_review_envelope_digest === retainedReviewEnvelopeDigest(retained));
     const designPhase = state.phase_instance === "design" || state.phase_instance.startsWith("phase-design-");
     const ordinaryKind = state.phase_instance === "prd"
       ? "artifact-approval"
@@ -889,7 +889,7 @@ export function pendingAdjudicationGates(
           item.request.phase_instance === state.phase_instance &&
           item.request.subject_digest === gate.subject_digest &&
           item.request.current_evidence.set_digest === currentSet!.set_digest &&
-          source.evidence.source_evidence_set_digest === currentSet!.set_digest &&
+          source.evidence.source_review_envelope_digest === retainedReviewEnvelopeDigest(retained) &&
           (decision === "approve" || decision === "authorize-commit");
       });
     const approved = exactGateApproved || ordinaryApproval;
@@ -2218,6 +2218,10 @@ async function computeTaskStatusDetailedInternal(
     // A disposable diagnostic projection never blocks or changes canonical workflow status.
   }
 
+  const reviewPolicy = await loadCanonicalRubricForPhaseKind(
+    decodePhaseInstance(state.phase_instance).kind,
+  );
+  if (!reviewPolicy.ok) return reviewPolicy;
   const status: TaskStatusV1 = Object.freeze({
     task_id: authority.task_id,
     state: state.terminal ?? "active",
@@ -2228,7 +2232,7 @@ async function computeTaskStatusDetailedInternal(
     attempt: state.attempt,
     input_fingerprint: state.input_fingerprint,
     resources: phaseStatusResources(authority.task_id, state.phase_instance),
-    review_policy: canonicalRubricForPhaseKind(decodePhaseInstance(state.phase_instance).kind),
+    review_policy: reviewPolicy.value,
     ...(subjectDigest === undefined ? {} : { subject_digest: subjectDigest }),
     config,
     ...(repositories === undefined ? {} : { repositories }),

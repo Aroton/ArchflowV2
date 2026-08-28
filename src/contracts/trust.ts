@@ -60,7 +60,7 @@ export type ObservationBindingBase<K extends EvidenceKind> = {
 };
 export type ObservationBindingByKind = {
   readonly review: ObservationBindingBase<"review"> & { readonly role: "counter-review"; readonly rubric_digest: Sha256Digest; readonly producer_family: ModelFamily };
-  readonly adjudication: ObservationBindingBase<"adjudication"> & { readonly pinned_constitution_digest: Sha256Digest; readonly approved_upstream_digests: readonly Sha256Digest[]; readonly source_evidence_set_digest: Sha256Digest };
+  readonly adjudication: ObservationBindingBase<"adjudication"> & { readonly pinned_constitution_digest: Sha256Digest; readonly approved_upstream_digests: readonly Sha256Digest[]; readonly source_review_envelope_digest: Sha256Digest };
 };
 export type ObservationCapability<K extends EvidenceKind> = { readonly kind: K; readonly [observationCapabilityBrand]: ObservationBindingByKind[K] };
 export type AdapterObservation<K extends EvidenceKind = EvidenceKind> = { readonly [P in K]: ObservationBindingByKind[P] & { readonly raw_output_bytes: Uint8Array; readonly raw_output_digest: Sha256Digest } }[K];
@@ -116,7 +116,7 @@ export const observationSource: ObservationSource = Object.freeze({
     assertAdapterFamily(binding.adapter, binding.family);
     const bytes = copiedBytes(observedOutputBytes);
     const derived = parseAndDeriveAdjudication(decodeJson(bytes));
-    for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["pinned_constitution_digest", binding.pinned_constitution_digest], ["source_evidence_set_digest", binding.source_evidence_set_digest]] as const) assertEqual(derived[key], expected, key);
+    for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["pinned_constitution_digest", binding.pinned_constitution_digest], ["source_review_envelope_digest", binding.source_review_envelope_digest]] as const) assertEqual(derived[key], expected, key);
     if (!sameArray(derived.approved_upstream_digests, binding.approved_upstream_digests)) throw new TypeError("approved_upstream_digests do not match observation capability");
     const raw_output_digest = digestBytes(bytes);
     const observation = createObservation<"adjudication">(binding, bytes, raw_output_digest);

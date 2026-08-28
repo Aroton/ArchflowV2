@@ -13,7 +13,7 @@ import { parseRepositoryPathClaim, parseTaskPathClaim } from "../../src/contract
 import { computeInputFingerprint } from "../../src/contracts/fingerprints.js";
 import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import { handleCounterReview } from "../../src/mcp/handlers/counter-review.js";
-import { canonicalRubricForPhaseKind } from "../../src/review/rubrics.js";
+import { loadTestRubric } from "../helpers/rubrics.js";
 import { createGitRunner, preflightGit } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import { resolveRepositorySet } from "../../src/repository/repository-set.js";
@@ -389,7 +389,7 @@ describe("multi-repository retained implementation result", () => {
     const reviewFingerprint = computeInputFingerprint({
       schema_version: "1", workflow_digest: sha256Bytes(h.workflow),
       constitution_digest: h.constitution.digest, artifact_identities: [], upstream_identities: [],
-      rubric_digest: canonicalRubricForPhaseKind("phase-impl").rubric_digest,
+      rubric_digest: (await loadTestRubric("phase-impl")).rubric_digest,
       phase_instance: h.phase, declared_inputs: [],
     });
     writeFileSync(h.authority.state.absolute, canonicalDocument({

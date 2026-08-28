@@ -28,6 +28,7 @@ import {
 } from "../../src/review/fixed-point.js";
 import {
   deriveCurrentEvidenceSet,
+  retainedReviewEnvelopeDigest,
   type RetainedEvidenceSet,
 } from "../../src/state/evidence-results.js";
 import { resolvedConstitutionFixture } from "../helpers/resolved-constitution.js";
@@ -139,7 +140,7 @@ function retained(
     step: "adjudicate",
     pinned_constitution_digest: constitution.digest,
     approved_upstream_digests: approvedUpstreamDigests,
-    source_evidence_set_digest: evidenceSet.set_digest,
+    source_review_envelope_digest: D("d"),
     rule_findings: [],
     drift_findings: [],
     constitution: "pass",
@@ -182,7 +183,7 @@ function adjudication(): DerivedAdjudication {
     input_fingerprint: D("2"),
     pinned_constitution_digest: constitution.digest,
     approved_upstream_digests: [],
-    source_evidence_set_digest: D("f"),
+    source_review_envelope_digest: D("f"),
     rule_findings: [{
       rule_id: "active-rule",
       rule_version: 2,
@@ -357,7 +358,7 @@ describe("review services", () => {
     });
   });
 
-  it("requires triage and adjudication to bind the exact retained review set", () => {
+  it("requires triage to bind the exact review set and adjudication to bind its round", () => {
     const subject = {
       subject_digest: D("8"),
       input_fingerprint: D("2"),
@@ -388,12 +389,13 @@ describe("review services", () => {
       },
     });
     expect(assessCurrentEvidence(state(), replaced, subject)).toMatchObject({
-      current: ["counter_review"],
-      stale: ["triage", "adjudicate"],
-      // Stale constitution evidence beside a current review set is reachable only through
-      // repair; the backward-to-produce door is the recovery path.
-      next: "produce",
-      reentry_required: true,
+      current: ["counter_review", "adjudicate"],
+      stale: ["triage"],
+      // Triage binds the review payload's evidence set, so a replaced review stales it. The
+      // constitution review binds the ROUND — the review envelope it was commissioned with —
+      // which a payload replacement does not change; tampered review bytes still fail closed
+      // at the manifest digest and gate slot checks.
+      next: "triage",
     });
 
     const wrongTriage = new Map(retained());
@@ -431,7 +433,7 @@ describe("review services", () => {
           artifact_kind: "adjudication-evidence",
           evidence: {
             ...adjudicationSource.evidence,
-            source_evidence_set_digest: D("9"),
+            source_review_envelope_digest: D("9"),
           },
         },
       },
@@ -577,8 +579,8 @@ describe("review services", () => {
 
   it("re-enters production on a failed rule or material drift while attempts remain, and opens the gate once exhausted", () => {
     const evidenceSet = new Map(retained());
-    const sourceEvidenceSetDigest =
-      deriveCurrentEvidenceSet(evidenceSet).current_evidence_set.set_digest;
+    const sourceEvidenceSetDigest = retainedReviewEnvelopeDigest(evidenceSet);
+    if (sourceEvidenceSetDigest === undefined) throw new Error("fixture counter evidence is not server-attested");
     const existing = evidenceSet.get("adjudicate")!;
     const withAdjudication = (overrides: Record<string, unknown>): RetainedEvidenceSet => {
       const copy = new Map(evidenceSet);
@@ -589,7 +591,7 @@ describe("review services", () => {
           source_artifact: {
             schema_version: "1",
             artifact_kind: "adjudication-evidence",
-            evidence: { ...adjudication(), ...overrides, source_evidence_set_digest: sourceEvidenceSetDigest },
+            evidence: { ...adjudication(), ...overrides, source_review_envelope_digest: sourceEvidenceSetDigest },
           },
         },
       } as never);
@@ -635,7 +637,7 @@ describe("review services", () => {
 
     // An already-open gate is resumed, never abandoned for a re-entry.
     const gate = selectAdjudicationGate(constitution.rules, {
-      ...adjudication(), source_evidence_set_digest: sourceEvidenceSetDigest,
+      ...adjudication(), source_review_envelope_digest: sourceEvidenceSetDigest,
     } as never)!;
     const resumed = assessCurrentEvidence(state({
       attempt: 1,
@@ -680,8 +682,8 @@ describe("review services", () => {
     ]);
 
     const evidenceSet = new Map(retained());
-    const sourceEvidenceSetDigest =
-      deriveCurrentEvidenceSet(evidenceSet).current_evidence_set.set_digest;
+    const sourceEvidenceSetDigest = retainedReviewEnvelopeDigest(evidenceSet);
+    if (sourceEvidenceSetDigest === undefined) throw new Error("fixture counter evidence is not server-attested");
     const existing = evidenceSet.get("adjudicate")!;
     evidenceSet.set("adjudicate", {
       ...existing,
@@ -690,7 +692,7 @@ describe("review services", () => {
         source_artifact: {
           schema_version: "1",
           artifact_kind: "adjudication-evidence",
-          evidence: { ...evidence, source_evidence_set_digest: sourceEvidenceSetDigest },
+          evidence: { ...evidence, source_review_envelope_digest: sourceEvidenceSetDigest },
         },
       },
     });
@@ -792,8 +794,8 @@ describe("review services", () => {
     expect(selected?.kind).toBe("constitution-review");
     if (selected === undefined) throw new Error("expected gate");
     const gated = new Map(retained());
-    const sourceEvidenceSetDigest =
-      deriveCurrentEvidenceSet(gated).current_evidence_set.set_digest;
+    const sourceEvidenceSetDigest = retainedReviewEnvelopeDigest(gated);
+    if (sourceEvidenceSetDigest === undefined) throw new Error("fixture counter evidence is not server-attested");
     const existing = gated.get("adjudicate")!;
     gated.set("adjudicate", {
       ...existing,
@@ -802,7 +804,7 @@ describe("review services", () => {
         source_artifact: {
           schema_version: "1",
           artifact_kind: "adjudication-evidence",
-          evidence: { ...evidence, source_evidence_set_digest: sourceEvidenceSetDigest },
+          evidence: { ...evidence, source_review_envelope_digest: sourceEvidenceSetDigest },
         },
       },
     });

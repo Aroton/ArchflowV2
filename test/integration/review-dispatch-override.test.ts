@@ -160,7 +160,7 @@ else {
       step: "adjudicate", subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
       pinned_constitution_digest: subject.pinned_constitution_digest,
       approved_upstream_digests: subject.approved_upstream_digests,
-      source_evidence_set_digest: subject.source_evidence_set_digest,
+      source_review_envelope_digest: subject.source_review_envelope_digest,
       rule_findings: envelope.rules.map((rule) => ({ rule_id: rule.id, rule_version: rule.version,
         compliance: "pass", rationale: "The document respects this rule.", trigger: "not-matched",
         trigger_evidence: "No review trigger matched." })),

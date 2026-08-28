@@ -453,7 +453,7 @@ describe("computeTaskStatus", () => {
     const evidence = {
       schema_version: "1", task_id: TASK, phase_instance: "phase-design-2", step: "adjudicate",
       subject_digest: D("1"), input_fingerprint: D("2"), pinned_constitution_digest: D("3"),
-      approved_upstream_digests: [], source_evidence_set_digest: D("4"),
+      approved_upstream_digests: [], source_review_envelope_digest: D("4"),
       rule_findings: [], drift_findings: [], constitution: "pass", drift: "aligned",
       matched_rule_versions: [], uncertain_rule_versions: [], assurance: "agent-declared",
       model_family: "unknown", model: "fixture", effort: "unknown",

@@ -251,7 +251,7 @@ export function projectCliOutputSchema(
   }
   const bindingKeys = resultKind === "review"
     ? ["task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family"]
-    : ["task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "pinned_constitution_digest", "approved_upstream_digests", "source_evidence_set_digest"];
+    : ["task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "pinned_constitution_digest", "approved_upstream_digests", "source_review_envelope_digest"];
   if (subject !== undefined) {
     const properties = root.properties;
     if (properties === null || typeof properties !== "object" || Array.isArray(properties)) {
@@ -291,6 +291,51 @@ export function serializeDispatch<T>(operation: () => Promise<T>): Promise<T> {
     () => undefined,
   );
   return result;
+}
+
+/**
+ * Runs two dispatch operations as ONE process-wide FIFO link, so the rubric and constitution
+ * children of a single counter-review fly together while the queue still bounds the server
+ * process to one review in flight. The first rejection (in time) rejects the pair after both
+ * operations settle; the caller decides error precedence.
+ */
+export function serializeDispatchPair<A, B>(
+  first: () => Promise<A>,
+  second: () => Promise<B>,
+): Promise<[A, B]> {
+  const link = dispatchQueue.then(() => Promise.all([first(), second()]));
+  dispatchQueue = link.then(
+    () => undefined,
+    () => undefined,
+  );
+  return link;
+}
+
+const memoizedPreflights = new Map<AdapterId, CliPreflight>();
+
+/**
+ * Version/auth/policy preflight, memoized per adapter for the server process and consulted only
+ * at the coordinator seam, so `adapter.preflight` itself stays pure for diagnostics and direct
+ * adapter tests. Only successes are memoized — an installed CLI is a process-stable input; a
+ * failure, including cancellation, is never reused, and auth that breaks after a memoized
+ * success still fails visibly at child launch through failure classification.
+ */
+export async function memoizedCliPreflight(
+  adapter: CliAdapter,
+  workspace: DispatchWorkspace,
+  signal: AbortSignal,
+  cancellationSource: CancellationSource,
+): Promise<CliPreflight> {
+  const cached = memoizedPreflights.get(adapter.id);
+  if (cached !== undefined) return cached;
+  const preflight = await adapter.preflight(workspace, signal, cancellationSource);
+  memoizedPreflights.set(adapter.id, preflight);
+  return preflight;
+}
+
+/** Test seam: clears the process-wide preflight memo. */
+export function resetMemoizedCliPreflight(): void {
+  memoizedPreflights.clear();
 }
 
 export type ReviewObservationMint = Readonly<{
@@ -665,7 +710,9 @@ const codexAdapter: CliAdapter = Object.freeze({
     }
     const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "codex-cli", envelopeSubject(envelope));
     const schemaPath = join(workspace.root, `${envelope.result_kind}.schema.json`);
-    const outputPath = join(workspace.root, "final-output.json");
+    // Named per result kind so the two children of one review can share a workspace root
+    // without colliding on the codex final-output file.
+    const outputPath = join(workspace.root, `${envelope.result_kind}-final-output.json`);
     await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     const disabled = CODEX_DISABLED_FEATURES.flatMap((feature) => ["--disable", feature]);
     return Object.freeze({
@@ -790,7 +837,7 @@ export function mintAdjudicationObservation(
     repositories: input.repositories,
     pinned_constitution_digest: input.subject.pinned_constitution_digest,
     approved_upstream_digests: input.subject.approved_upstream_digests,
-    source_evidence_set_digest: input.subject.source_evidence_set_digest,
+    source_review_envelope_digest: input.subject.source_review_envelope_digest,
     ...(input.route_override === undefined ? {} : { route_override: input.route_override }),
   };
   const capability = createAdjudicationObservationCapability(binding);

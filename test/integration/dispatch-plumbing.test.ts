@@ -237,7 +237,7 @@ describe("dispatch plumbing proof", () => {
       await expect(dispatch(adapter, workspace, envelope(), undefined, 128)).rejects.toMatchObject({
         project_error: { code: "OUTPUT_OVERFLOW", diagnostic: { parameters: { adapter: "codex-cli", byte_cap: 128 } } },
       });
-      expect((await readFile(join(workspace.root, "final-output.json"))).byteLength).toBeGreaterThan(128);
+      expect((await readFile(join(workspace.root, "review-final-output.json"))).byteLength).toBeGreaterThan(128);
       // The fixture emits only this 26-byte event on stdout before the independently bounded file is read.
       expect(Buffer.byteLength('{"type":"turn.completed"}\n')).toBeLessThan(128);
     } finally {

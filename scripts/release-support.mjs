@@ -116,6 +116,10 @@ const DECLARED_ASSETS = Object.freeze([
   "assets/constitution/20-data.md",
   "assets/constitution/30-product.md",
   "assets/constitution/README.md",
+  "assets/rubrics/README.md",
+  "assets/rubrics/design.yaml",
+  "assets/rubrics/implementation.yaml",
+  "assets/rubrics/prd.yaml",
   "assets/workflow.yaml",
 ]);
 

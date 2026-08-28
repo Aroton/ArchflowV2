@@ -35,7 +35,7 @@
         "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "pinned_constitution_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "approved_upstream_digests": [],
-        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "source_review_envelope_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "rule_findings": [
           {
             "rule_id": "plain-rule",
@@ -70,7 +70,7 @@
         "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "pinned_constitution_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "approved_upstream_digests": [],
-        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "source_review_envelope_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "rule_findings": [
           {
             "rule_id": "plain-rule",
@@ -110,7 +110,7 @@
         "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "pinned_constitution_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "approved_upstream_digests": [],
-        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "source_review_envelope_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "rule_findings": [
           {
             "rule_id": "plain-rule",
@@ -150,7 +150,7 @@
         "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "pinned_constitution_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "approved_upstream_digests": [],
-        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "source_review_envelope_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "rule_findings": [
           {
             "rule_id": "plain-rule",
@@ -190,7 +190,7 @@
         "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "pinned_constitution_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "approved_upstream_digests": [],
-        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "source_review_envelope_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "rule_findings": [
           {
             "rule_id": "declared-rule",
@@ -227,7 +227,7 @@
         "approved_upstream_digests": [
           "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         ],
-        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "source_review_envelope_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "rule_findings": [
           {
             "rule_id": "plain-rule",
@@ -276,7 +276,7 @@
           "1111111111111111111111111111111111111111111111111111111111111111",
           "2222222222222222222222222222222222222222222222222222222222222222"
         ],
-        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "source_review_envelope_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "rule_findings": [
           {
             "rule_id": "plain-rule",
@@ -333,7 +333,7 @@
           "1111111111111111111111111111111111111111111111111111111111111111",
           "2222222222222222222222222222222222222222222222222222222222222222"
         ],
-        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "source_review_envelope_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "rule_findings": [
           {
             "rule_id": "plain-rule",
@@ -384,7 +384,7 @@
         "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "pinned_constitution_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "approved_upstream_digests": [],
-        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "source_review_envelope_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "rule_findings": [
           {
             "rule_id": "plain-rule",
@@ -419,7 +419,7 @@
         "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "pinned_constitution_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "approved_upstream_digests": [],
-        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "source_review_envelope_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "rule_findings": [
           {
             "rule_id": "plain-rule",

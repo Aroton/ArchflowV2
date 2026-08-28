@@ -56,7 +56,7 @@ const adjudicationSubject = (): AdjudicationSubject => ({
   input_fingerprint: digest("b"),
   pinned_constitution_digest: digest("c"),
   approved_upstream_digests: [digest("d")],
-  source_evidence_set_digest: digest("e"),
+  source_review_envelope_digest: digest("e"),
   invocation_id: "invocation-14",
   result_id: "result-14",
 });
@@ -74,7 +74,7 @@ const adjudicationInput = (): AdjudicationEnvelopeInput => ({
     upstream_digest: digest("d"),
     artifact: "# Approved architecture\n",
   }],
-  source_evidence_set_digest: digest("e"),
+  source_review_envelope_digest: digest("e"),
   subject: adjudicationSubject(),
 });
 
@@ -306,7 +306,7 @@ describe("review dispatch envelopes", () => {
       artifact: adjudicationInput().artifact,
       rules: [{ id: "safe-paths", version: 2, enforced_by: ["path-contract"] }],
       approved_upstreams: [{ upstream_digest: digest("d"), artifact: "# Approved architecture\n" }],
-      source_evidence_set_digest: digest("e"),
+      source_review_envelope_digest: digest("e"),
       subject: { role: "adjudication", step: "adjudicate" },
     });
     expect(text).not.toMatch(/echo.*envelope_input_digest/iu);
@@ -348,8 +348,8 @@ describe("review dispatch envelopes", () => {
     const base = adjudicationInput();
     expect(() => buildAdjudicationEnvelope({
       ...base,
-      source_evidence_set_digest: digest("f"),
-    })).toThrow(/source_evidence_set_digest/u);
+      source_review_envelope_digest: digest("f"),
+    })).toThrow(/source_review_envelope_digest/u);
     expect(() => buildAdjudicationEnvelope({
       ...base,
       artifact: "x".repeat(REVIEW_ENVELOPE_BYTE_CAP),

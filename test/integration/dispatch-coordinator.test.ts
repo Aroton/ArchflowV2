@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { chmod, copyFile, mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import adjudicationSchema from "../../src/contracts/schemas/v1/adjudication.schema.json" with { type: "json" };
 import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
@@ -13,7 +14,11 @@ import { parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contra
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import { createDispatchCoordinator } from "../../src/dispatch/coordinator.js";
-import type { DispatchRepositoryViewPlan } from "../../src/dispatch/workspace.js";
+import { resetMemoizedCliPreflight } from "../../src/dispatch/cli.js";
+import {
+  shareRepositoryViewWorkspace,
+  type DispatchRepositoryViewPlan,
+} from "../../src/dispatch/workspace.js";
 import { DispatchProcessError, scanDispatchOutput } from "../../src/dispatch/process.js";
 import type { DispatchRoute } from "../../src/dispatch/routing.js";
 import { createGitRunner, preflightGit, type RepositoryOperationContext } from "../../src/repository/git.js";
@@ -59,7 +64,9 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-async function harness(mode: "success" | "hang-version" | "hang-child" | "fail-child") {
+async function harness(
+  mode: "success" | "hang-version" | "hang-child" | "fail-child" | "fail-child-once" | "fail-auth-once",
+) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "archflow-dispatch-coordinator-")));
   roots.push(root);
   const repository = join(root, "repository");
@@ -81,12 +88,16 @@ async function harness(mode: "success" | "hang-version" | "hang-child" | "fail-c
 import { writeFile } from "node:fs/promises";
 const argv = process.argv.slice(2);
 if (argv.length === 1 && argv[0] === "--version") {
+  await writeFile(${JSON.stringify(join(root, "preflight.log"))}, "--version\\n", { flag: "a" });
   ${mode === "hang-version" ? "setInterval(() => undefined, 1000);" : 'process.stdout.write("codex-cli 0.146.0\\n");'}
 } else if (argv[0] === "login" && argv[1] === "status") {
+  await writeFile(${JSON.stringify(join(root, "preflight.log"))}, "login status\\n", { flag: "a" });
+  ${mode === "fail-auth-once" ? `const { existsSync: authDown } = await import("node:fs"); if (authDown(${JSON.stringify(join(root, "auth-down"))})) process.exit(1);` : ""}
   process.stdout.write("Logged in using ChatGPT\\n");
 } else {
   ${mode === "hang-child" ? `await writeFile(${JSON.stringify("__CHILD_STARTED__")}, "started\\n"); setInterval(() => undefined, 1000);` : ""}
   ${mode === "fail-child" ? 'process.stderr.write("stream error: exceeded retry limit\\n"); process.exit(3);' : ""}
+  ${mode === "fail-child-once" ? `const { existsSync: childDown } = await import("node:fs"); if (childDown(${JSON.stringify(join(root, "child-down"))})) { process.stderr.write("stream error: exceeded retry limit\\n"); process.exit(3); }` : ""}
   const { existsSync, readdirSync } = await import("node:fs");
   const { join } = await import("node:path");
   const target = argv.includes("-C") ? argv[argv.indexOf("-C") + 1] : null;
@@ -144,12 +155,18 @@ if (argv.length === 1 && argv[0] === "--version") {
   return { root, repository, bin, sourceHome, childStarted, authority: authority.value, dependencies };
 }
 
+/**
+ * Runs `work` with the fixture bin first on PATH and the fixture HOME. Ambient system tools
+ * (git, tar) stay reachable behind the fixtures, so workspace materialization works under the
+ * restricted environment; the real CLIs are shadowed because the fixtures come first — the
+ * workspace captures PATH at creation and children resolve against that capture.
+ */
 async function withDispatchEnvironment<T>(
   values: Readonly<{ bin: string; sourceHome: string }>,
   work: () => Promise<T>,
 ): Promise<T> {
   const saved = { PATH: process.env.PATH, HOME: process.env.HOME };
-  process.env.PATH = `${values.bin}${delimiter}${dirname(process.execPath)}`;
+  process.env.PATH = `${values.bin}${delimiter}${saved.PATH ?? dirname(process.execPath)}`;
   process.env.HOME = values.sourceHome;
   try {
     return await work();
@@ -182,6 +199,8 @@ function primaryViews(repository: string, commit: ReturnType<typeof parseGitOid>
 }
 
 describe("createDispatchCoordinator", () => {
+  beforeEach(() => resetMemoizedCliPreflight());
+
   it("runs preflight and dispatch, disposes its workspace, and writes no attempt telemetry on success", async () => {
     const h = await harness("success");
     const coordinator = createDispatchCoordinator({
@@ -200,6 +219,121 @@ describe("createDispatchCoordinator", () => {
     expect(result.cli_version).toBe("0.146.0");
     expect(JSON.parse(Buffer.from(result.extracted_output_bytes).toString("utf8"))).toEqual({ schema_version: "1" });
     await attemptsAbsent(h.repository);
+  });
+
+  it("shares one materialized repository view across the coordinators of one review", async () => {
+    const h = await harness("success");
+    const commit = parseGitOid(execFileSync("git", ["rev-parse", "HEAD"], { cwd: h.repository }).toString().trim());
+    const shared = shareRepositoryViewWorkspace(primaryViews(h.repository, commit), h.repository);
+    let view: string | undefined;
+    const coordinate = () => createDispatchCoordinator({
+      authority: h.authority,
+      dependencies: h.dependencies,
+      host: "claude",
+      repository_root: h.repository,
+      phase_instance: PHASE,
+      signal: new AbortController().signal,
+      cancellation_source: "client",
+      shared_workspace: shared,
+    });
+    const codexEnvelope: DispatchEnvelope = Object.freeze({
+      result_kind: "adjudication",
+      bytes: Buffer.from('{"schema_version":"1"}\n'),
+      digest: "e".repeat(64) as DispatchEnvelope["digest"],
+      byte_count: 23,
+    });
+    const viewOf = (invocation: { argv: string[] }): string =>
+      invocation.argv[invocation.argv.indexOf("-C") + 1] as string;
+    const outputOf = (invocation: { argv: string[] }): string =>
+      invocation.argv[invocation.argv.indexOf("-o") + 1] as string;
+    let first: { argv: string[] };
+    let second: { argv: string[] };
+    await withDispatchEnvironment(h, async () => {
+      // Acquire inside the dispatch environment: the workspace captures PATH at creation, so
+      // creating it under the ambient PATH would leak the real CLIs into child resolution.
+      view = (await shared.acquire()).repository_view_root!;
+      await coordinate()(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue);
+      first = JSON.parse(await readFile(join(h.root, "observed-invocation.json"), "utf8")) as { argv: string[] };
+      await coordinate()(ROUTE, codexEnvelope, adjudicationSchema as PlainJsonValue);
+      second = JSON.parse(await readFile(join(h.root, "observed-invocation.json"), "utf8")) as { argv: string[] };
+    });
+    // One materialized view for both children of the review, with per-kind output files.
+    expect(viewOf(second!)).toBe(viewOf(first!));
+    expect(viewOf(first!)).toBe(view);
+    expect(outputOf(second!)).not.toBe(outputOf(first!));
+    expect(existsSync(view!)).toBe(true);
+    await shared.dispose();
+    expect(existsSync(view!)).toBe(false);
+  });
+
+  it("keeps a borrowed workspace alive through one child's failure so its sibling can run", async () => {
+    const h = await harness("fail-child-once");
+    await writeFile(join(h.root, "child-down"), "down");
+    const commit = parseGitOid(execFileSync("git", ["rev-parse", "HEAD"], { cwd: h.repository }).toString().trim());
+    const shared = shareRepositoryViewWorkspace(primaryViews(h.repository, commit), h.repository);
+    const coordinate = () => createDispatchCoordinator({
+      authority: h.authority,
+      dependencies: h.dependencies,
+      host: "claude",
+      repository_root: h.repository,
+      phase_instance: PHASE,
+      signal: new AbortController().signal,
+      cancellation_source: "client",
+      shared_workspace: shared,
+    });
+    let view: string | undefined;
+    await withDispatchEnvironment(h, async () => {
+      view = (await shared.acquire()).repository_view_root!;
+      await expect(coordinate()(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue)).rejects.toThrow();
+      expect(existsSync(view!)).toBe(true);
+      await rm(join(h.root, "child-down"));
+      await coordinate()(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue);
+    });
+    await shared.dispose();
+    expect(existsSync(view!)).toBe(false);
+  });
+
+  it("memoizes the CLI preflight per adapter for the process", async () => {
+    const h = await harness("success");
+    const coordinate = () => createDispatchCoordinator({
+      authority: h.authority,
+      dependencies: h.dependencies,
+      host: "claude",
+      repository_root: h.repository,
+      phase_instance: PHASE,
+      signal: new AbortController().signal,
+      cancellation_source: "client",
+    });
+    await withDispatchEnvironment(h, async () => {
+      const first = await coordinate()(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue);
+      const second = await coordinate()(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue);
+      expect(second.cli_version).toBe(first.cli_version);
+    });
+    const preflight = await readFile(join(h.root, "preflight.log"), "utf8");
+    expect(preflight.split("\n").filter((line) => line === "--version")).toHaveLength(1);
+    expect(preflight.split("\n").filter((line) => line === "login status")).toHaveLength(1);
+  });
+
+  it("re-runs a failed preflight instead of memoizing it", async () => {
+    const h = await harness("fail-auth-once");
+    await writeFile(join(h.root, "auth-down"), "down");
+    const coordinate = () => createDispatchCoordinator({
+      authority: h.authority,
+      dependencies: h.dependencies,
+      host: "claude",
+      repository_root: h.repository,
+      phase_instance: PHASE,
+      signal: new AbortController().signal,
+      cancellation_source: "client",
+    });
+    await withDispatchEnvironment(h, async () => {
+      await expect(coordinate()(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue)).rejects.toThrow();
+      await rm(join(h.root, "auth-down"));
+      const second = await coordinate()(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue);
+      expect(second.cli_version).toBe("0.146.0");
+    });
+    const preflight = await readFile(join(h.root, "preflight.log"), "utf8");
+    expect(preflight.split("\n").filter((line) => line === "login status")).toHaveLength(2);
   });
 
   it("dispatches from a Codex host through the assembled Claude CLI coordinator", async () => {

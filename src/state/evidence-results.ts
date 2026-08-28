@@ -54,6 +54,8 @@ import {
 import {
   validateTriage,
   type TriageCandidate,
+  type TriageDisposition,
+  type TriageDispositionLedgerEntry,
 } from "../contracts/triage.js";
 import type { PhaseInstanceId } from "../contracts/phase-instance.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
@@ -112,6 +114,18 @@ export type PrepareEvidenceResultInput = Readonly<{
   measured_at_revision: SafeInteger;
   scanner: SecretScanner;
   value: EvidenceResultValue;
+  /**
+   * Reviewer-memory sources for a triage artifact: the durable attempt of the round being
+   * dispositioned plus the retained predecessor-triage and reviewed-evidence references. With
+   * a retained-result loader, prepareEvidenceResult embeds the server-computed disposition
+   * ledger after validation; producers cannot supply one.
+   */
+  readonly disposition_ledger?: Readonly<{
+    readonly attempt: SafeInteger;
+    readonly previous_triage_ref?: AuthoritativeResultRef;
+    readonly review_ref?: AuthoritativeResultRef;
+  }>;
+  readonly load_retained_result?: TransactionDependencies["load_retained_result"];
 }>;
 
 export type RetainedEvidenceSet = ReadonlyMap<
@@ -142,7 +156,10 @@ export type DerivedCurrentEvidenceSet = Readonly<{
 const ok = <T>(value: T): ProjectResult<T> =>
   Object.freeze({ schema_version: "1", ok: true, value });
 
-function qualifyAndRender(value: EvidenceResultValue): Readonly<{
+function qualifyAndRender(
+  value: EvidenceResultValue,
+  dispositionLedger?: readonly TriageDispositionLedgerEntry[],
+): Readonly<{
   artifact: EvidenceArtifactV1;
   bytes: Uint8Array;
   evidence_digest: Sha256Digest;
@@ -183,7 +200,7 @@ function qualifyAndRender(value: EvidenceResultValue): Readonly<{
       input_fingerprint: verified.evidence.input_fingerprint,
     });
   }
-  const triage = validateTriage(value.current_reviews, value.evidence);
+  const triage = validateTriage(value.current_reviews, value.evidence, dispositionLedger);
   return Object.freeze({
     artifact: Object.freeze({
       schema_version: "1",
@@ -200,6 +217,88 @@ function qualifyAndRender(value: EvidenceResultValue): Readonly<{
 }
 
 /**
+ * Builds the server-computed disposition ledger a triage artifact installs: the current round's
+ * dispositions are embedded with the reviewer-authored finding details of the round they answer
+ * — resolvable now because that evidence is still the retained counter-review result — and the
+ * predecessor's ledger is carried forward, so each entry's details survive the supersession of
+ * its round. The newest disposition of a finding_id wins. Reviewer memory is best-effort
+ * context, not authority: a predecessor installed without a ledger (before this field existed)
+ * contributes nothing — its dispositions' review evidence is already superseded, so absence is
+ * the accurate record — and an unloadable predecessor or review manifest degrades the same way
+ * rather than failing the triage.
+ */
+export async function computeDispositionLedger(
+  dispositions: readonly TriageDisposition[],
+  sources: Readonly<{
+    attempt: SafeInteger;
+    previous_triage_ref?: AuthoritativeResultRef;
+    review_ref?: AuthoritativeResultRef;
+  }>,
+  loadRetainedResult: NonNullable<TransactionDependencies["load_retained_result"]>,
+): Promise<readonly TriageDispositionLedgerEntry[]> {
+  const merged = new Map<string, TriageDispositionLedgerEntry>();
+  if (sources.previous_triage_ref !== undefined) {
+    const previous = await loadRetainedResult(sources.previous_triage_ref);
+    if (previous.ok) {
+      const source = previous.value.prepared.manifest.value.source_artifact;
+      if (source.artifact_kind === "triage" && source.evidence.disposition_ledger !== undefined) {
+        for (const entry of source.evidence.disposition_ledger) merged.set(entry.finding_id, entry);
+      }
+    }
+  }
+  const findingDetails = new Map<string, ReviewEvidence["findings"][number]>();
+  if (sources.review_ref !== undefined) {
+    const review = await loadRetainedResult(sources.review_ref);
+    if (review.ok) {
+      const manifest = review.value.prepared.manifest.value;
+      if (manifest.source_artifact.artifact_kind === "review-evidence") {
+        for (const finding of manifest.source_artifact.evidence.findings) {
+          findingDetails.set(`${manifest.artifact_digest}:${finding.finding_id}`, finding);
+        }
+      }
+    }
+  }
+  for (const disposition of dispositions) {
+    const finding = findingDetails.get(`${disposition.review_evidence_digest}:${disposition.finding_id}`);
+    merged.set(disposition.finding_id, Object.freeze({
+      review_evidence_digest: disposition.review_evidence_digest,
+      finding_id: disposition.finding_id,
+      disposition: disposition.disposition,
+      attempt: sources.attempt,
+      rationale: disposition.rationale,
+      ...(disposition.disposition === "rejected"
+        ? { evidence: disposition.evidence }
+        : {
+          revision_intent: disposition.revision_intent,
+          ...(finding === undefined ? {} : { evidence: finding.evidence }),
+        }),
+      ...(finding === undefined ? {} : {
+        severity: finding.severity,
+        blocking: finding.blocking,
+        summary: finding.summary,
+        suggested_resolution: finding.suggested_resolution,
+      }),
+    }));
+  }
+  return Object.freeze([...merged.values()]);
+}
+
+/** Resolves the ledger sources threaded by the handler; absent sources mean no ledger field. */
+async function triageLedgerFrom(
+  input: PrepareEvidenceResultInput,
+): Promise<readonly TriageDispositionLedgerEntry[] | undefined> {
+  if (input.value.kind !== "triage" || input.disposition_ledger === undefined) return undefined;
+  if (input.load_retained_result === undefined) {
+    throw new TypeError("disposition ledger sources require a retained-result loader");
+  }
+  return computeDispositionLedger(
+    input.value.evidence.dispositions,
+    input.disposition_ledger,
+    input.load_retained_result,
+  );
+}
+
+/**
  * Prepares one evidence manifest and canonical review projection. Evidence identity is the
  * canonical payload digest; rendered-byte identity is confined to snapshot/projection fields.
  */
@@ -207,7 +306,10 @@ export async function prepareEvidenceResult(
   input: PrepareEvidenceResultInput,
 ): Promise<ProjectResult<PreparedEvidenceResult>> {
   assertInternalTransactionAuthority(input.authority);
-  const qualified = qualifyAndRender(input.value);
+  const dispositionLedger = input.value.kind === "triage"
+    ? await triageLedgerFrom(input)
+    : undefined;
+  const qualified = qualifyAndRender(input.value, dispositionLedger);
   if (
     qualified.task_id !== input.authority.task_id ||
     qualified.phase_instance !== input.authority.context.phase_instance
@@ -459,6 +561,19 @@ export function deriveEvidenceSetFromCounter(counter: ReviewEvidence): DerivedCu
       verifiedCounter,
     ]) as readonly VerifiedReferencedEvidence<"review">[],
   });
+}
+
+/**
+ * The envelope digest of the retained server-attested counter review — the round identity the
+ * constitution review binds to (`source_review_envelope_digest`). A degraded counter review
+ * carries no envelope digest, so no adjudication can bind to that round; the comparisons fail
+ * closed and the workflow schedules a fresh round.
+ */
+export function retainedReviewEnvelopeDigest(retained: RetainedEvidenceSet): Sha256Digest | undefined {
+  const source = retained.get("counter_review")?.manifest.source_artifact;
+  return source?.artifact_kind === "review-evidence" && source.evidence.assurance === "server-attested"
+    ? source.evidence.envelope_input_digest
+    : undefined;
 }
 
 type RetainedEditorialTriage = Readonly<{

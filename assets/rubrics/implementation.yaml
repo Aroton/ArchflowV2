@@ -1,0 +1,42 @@
+# Server-owned counter-review rubric for the "phase-impl" phase kind.
+#
+# The MCP server reads and strictly parses this file fresh on every review and
+# status call; a missing or invalid file fails the review closed. `rubric_id` is
+# cross-checked against the phase kind that selects this file and is excluded
+# from the rubric digest. Criterion order is significant: the digest and the
+# review contract both depend on it. See README.md for the editing rules.
+rubric_id: implementation-v1
+schema_version: "1"
+kind: implementation
+mode: adversarial
+criteria:
+  - id: substantive-correctness
+    text: "Report a finding only for a material defect: merging the change unchanged is reasonably likely to alter required behavior, break verification, violate an approved boundary, or create an important reliability, security, or maintenance risk. A blocking finding must cite exact changed, pinned, or repository evidence; name the concrete consequence; and explain why it survives the phase design's non-goals and priorities. If prior-triage is present, make verification of accepted revision intents the primary task; report a previously undiscovered issue only when it clears the same materiality bar. Challenge a prior disposition only when its revision intent was not carried out or the change introduced a material defect. Do not report optional cleanup, stylistic preferences, or harmless refinements."
+    blocking: true
+  - id: design-conformance
+    text: "Report only a behavior, interface, file, or verification deviation from the pinned phase design that materially changes the approved outcome or leaves parent documents materially false. If missing phase-design evidence prevents that judgment, use unverifiable-claims."
+    blocking: true
+  - id: interface-fidelity
+    text: "Report a changed-to-unchanged interface mismatch only when it is reasonably likely to break behavior, data, compatibility, or an important contract. Use unverifiable-claims only when missing interface evidence prevents a material judgment."
+    blocking: true
+  - id: verification-evidence
+    text: "Report missing or failed verification only when the phase design requires it for an important behavior or risk. Claimed but untranscribed required verification is unverifiable, not a pass."
+    blocking: true
+  - id: simplicity
+    text: "Report complexity only when it materially harms correctness, maintainability, change cost, or the approved operating envelope; do not report a merely preferred simpler implementation."
+    blocking: true
+  - id: duplication
+    text: "Report duplication only when it creates a concrete material risk of divergence, defects, or disproportionate maintenance; do not request an abstraction for small or clearer repetition."
+    blocking: true
+  - id: dead-code
+    text: "Report unreachable code, compatibility paths, or speculative extensions only when they materially affect behavior, safety, maintenance, or the approved scope."
+    blocking: true
+  - id: error-handling
+    text: "Report an unhandled boundary failure only when it is reasonably likely and carries a material consequence under the current operating envelope."
+    blocking: true
+  - id: unverifiable-claims
+    text: "When missing envelope or read-only repository evidence prevents a material judgment, record one non-blocking finding naming exactly what is missing, with a finding_id beginning unverifiable-. Never guess. Omit gaps that cannot materially affect the review, report each material gap once, and do not re-report one already named in prior-triage."
+    blocking: false
+  - id: advisory-observations
+    text: "Do not report non-material observations, optional cleanup, completeness suggestions, stylistic preferences, or harmless refinements. A sound implementation should return no findings rather than a list of possible enhancements."
+    blocking: false

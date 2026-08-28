@@ -83,10 +83,10 @@ import {
   type TransactionAuthority,
 } from "../../src/state/authority.js";
 import {
-  deriveCurrentEvidenceSet,
   loadCurrentReviewSet,
   loadRetainedEvidence,
   prepareEvidenceResult,
+  retainedReviewEnvelopeDigest,
   type EvidenceResultValue,
   type PreparedEvidenceResult,
 } from "../../src/state/evidence-results.js";
@@ -727,7 +727,7 @@ function constitutionPlan(
           input_fingerprint: parsed.subject.input_fingerprint,
           pinned_constitution_digest: parsed.subject.pinned_constitution_digest,
           approved_upstream_digests: [],
-          source_evidence_set_digest: parsed.subject.source_evidence_set_digest,
+          source_review_envelope_digest: parsed.subject.source_review_envelope_digest,
           rule_findings: parsed.rules.map((rule) => ({
             rule_id: rule.id,
             rule_version: rule.version,
@@ -828,7 +828,11 @@ async function commitCounter(
       return prepared;
     },
     ...(dispatchAlreadySerialized
-      ? { serialize_dispatch: async <T>(operation: () => Promise<T>) => operation() }
+      ? {
+        serialize_dispatch: async <T>(operation: () => Promise<T>) => operation(),
+        serialize_dispatch_pair: async <A, B>(first: () => Promise<A>, second: () => Promise<B>) =>
+          Promise.all([first(), second()]),
+      }
       : {}),
   }, {
     authority: h.authority,
@@ -1365,8 +1369,8 @@ describe("editorial revision fixed point", () => {
       load_retained_manifest: dependencies.load_retained_manifest!,
     }, structuredClone(state), phase);
     if (!loaded.ok) throw new Error(loaded.error.code);
-    const setDigest = deriveCurrentEvidenceSet(loaded.value)
-      .current_evidence_set.set_digest;
+    const envelopeDigest = retainedReviewEnvelopeDigest(loaded.value);
+    if (envelopeDigest === undefined) throw new Error("fixture counter evidence is not server-attested");
     const adjudicationFor = (
       subject: Sha256Digest,
       fingerprint: Sha256Digest,
@@ -1379,7 +1383,7 @@ describe("editorial revision fixed point", () => {
       input_fingerprint: fingerprint,
       pinned_constitution_digest: constitution.digest,
       approved_upstream_digests: [],
-      source_evidence_set_digest: setDigest,
+      source_review_envelope_digest: envelopeDigest,
       rule_findings: [],
       drift_findings: [],
       constitution: "pass",

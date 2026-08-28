@@ -135,7 +135,7 @@ else {
       step: "adjudicate", subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
       pinned_constitution_digest: subject.pinned_constitution_digest,
       approved_upstream_digests: subject.approved_upstream_digests,
-      source_evidence_set_digest: subject.source_evidence_set_digest,
+      source_review_envelope_digest: subject.source_review_envelope_digest,
       rule_findings, drift_findings };
   }
   writeFileSync(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");

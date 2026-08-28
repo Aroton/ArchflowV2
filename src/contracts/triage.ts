@@ -1,8 +1,9 @@
 import { z } from "zod";
 
-import type { Sha256Digest, TaskSlug } from "./evidence.js";
+import type { SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
 import { taskSlugV1Schema } from "./evidence.js";
 import { assertPlainJson } from "./plain-json.js";
+import { REVIEW_FINDING_SEVERITIES, type ReviewFindingSeverity } from "./review.js";
 import type { CurrentReviewSet } from "./trust.js";
 import { authenticCurrentReviewSet, registerValidatedTriage, validatedTriageBrand } from "./internal/trust-brands.js";
 
@@ -13,6 +14,31 @@ export type AcceptedDisposition = FindingRef & { readonly disposition: "accepted
 export type AcceptedEditorialDisposition = FindingRef & { readonly disposition: "accepted-editorial"; readonly rationale: string; readonly revision_intent: string };
 export type RejectedDisposition = FindingRef & { readonly disposition: "rejected"; readonly rationale: string; readonly evidence: string };
 export type TriageDisposition = AcceptedDisposition | AcceptedEditorialDisposition | RejectedDisposition;
+/**
+ * One carried entry of the server-computed disposition ledger. At each triage install the
+ * server embeds the round's dispositions with the reviewer-authored finding details of that
+ * round — resolvable then because the reviewed evidence is still the retained counter-review
+ * result — and carries the predecessor's ledger forward, so each entry's details survive the
+ * supersession that would otherwise make earlier rounds unreconstructable. Producers cannot
+ * supply entries: {@link validateTriage} refuses a candidate that arrives with one.
+ *
+ * For rejected findings `evidence` is the rejection evidence (the disposition's own), matching
+ * how the prior-triage record renders rejections; for accepted findings it is the finding's
+ * original evidence. The finding detail fields are optional so a predecessor triage installed
+ * without resolvable details still carries its dispositions forward.
+ */
+export type TriageDispositionLedgerEntry = FindingRef & {
+  readonly disposition: "accepted" | "accepted-editorial" | "rejected";
+  /** Durable attempt counter of the round whose review this disposition answered. */
+  readonly attempt: SafeInteger;
+  readonly rationale?: string;
+  readonly revision_intent?: string;
+  readonly evidence?: string;
+  readonly severity?: ReviewFindingSeverity;
+  readonly blocking?: boolean;
+  readonly summary?: string;
+  readonly suggested_resolution?: string;
+};
 export type TriageCandidate = {
   readonly schema_version: "1";
   readonly task_id: TaskSlug;
@@ -28,6 +54,8 @@ export type TriageCandidate = {
   readonly rejected_count: number;
   /** Required in new artifacts ({@link validateTriage} refuses its absence); optional structurally so retained pre-editorial triage results keep loading. */
   readonly accepted_editorial_count?: number;
+  /** Server-computed reviewer memory; never present on a producer-supplied candidate. */
+  readonly disposition_ledger?: readonly TriageDispositionLedgerEntry[];
 };
 export type ValidatedTriage = TriageCandidate & { readonly accepted_editorial_count: number; readonly [validatedTriageBrand]: true };
 
@@ -39,6 +67,20 @@ const acceptedDispositionSchema = z.object({ ...findingRefShape, disposition: z.
 const acceptedEditorialDispositionSchema = z.object({ ...findingRefShape, disposition: z.literal("accepted-editorial"), rationale: nonBlank, revision_intent: nonBlank }).strict();
 const rejectedDispositionSchema = z.object({ ...findingRefShape, disposition: z.literal("rejected"), rationale: nonBlank, evidence: nonBlank }).strict();
 export const triageDispositionSchema = z.discriminatedUnion("disposition", [acceptedDispositionSchema, acceptedEditorialDispositionSchema, rejectedDispositionSchema]);
+export const triageDispositionLedgerEntrySchema = z.object({
+  ...findingRefShape,
+  disposition: z.enum(["accepted", "accepted-editorial", "rejected"]),
+  attempt: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+  rationale: nonBlank.optional(),
+  revision_intent: nonBlank.optional(),
+  evidence: nonBlank.optional(),
+  severity: z.enum(REVIEW_FINDING_SEVERITIES).optional(),
+  blocking: z.boolean().optional(),
+  summary: nonBlank.optional(),
+  suggested_resolution: nonBlank.optional(),
+  // The branded cast mirrors the digest schema above: zod's `.optional()` emits `T | undefined`
+  // property types, which exactOptionalPropertyTypes rejects against the ledger entry type.
+}).strict() as unknown as z.ZodType<TriageDispositionLedgerEntry>;
 export const triageCandidateSchema = z.object({
   schema_version: z.literal("1"), task_id: taskSlugV1Schema,
   phase_instance: z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
@@ -47,6 +89,7 @@ export const triageCandidateSchema = z.object({
   dispositions: z.array(triageDispositionSchema),
   accepted_count: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), rejected_count: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   accepted_editorial_count: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  disposition_ledger: z.array(triageDispositionLedgerEntrySchema).optional(),
 }).strict().superRefine((triage, context) => {
   if (new Set(triage.source_evidence_digests).size !== triage.source_evidence_digests.length) {
     context.addIssue({ code: "custom", path: ["source_evidence_digests"], message: "source evidence digests must be unique" });
@@ -57,20 +100,38 @@ export const triageCandidateSchema = z.object({
     if (seen.has(key)) context.addIssue({ code: "custom", path: ["dispositions", index], message: "duplicate disposition for a finding" });
     seen.add(key);
   });
+  const seenLedger = new Set<string>();
+  triage.disposition_ledger?.forEach((entry, index) => {
+    if (seenLedger.has(entry.finding_id)) {
+      context.addIssue({ code: "custom", path: ["disposition_ledger", index], message: "duplicate ledger finding_id" });
+    }
+    seenLedger.add(entry.finding_id);
+  });
 });
 
 /** Structural parse only; exact current-review coverage is established by {@link validateTriage}. */
 export function parseTriageCandidate(value: unknown): TriageCandidate {
   assertPlainJson(value, "review triage candidate");
-  const { accepted_editorial_count, ...rest } = triageCandidateSchema.parse(value);
-  return accepted_editorial_count === undefined ? rest : { ...rest, accepted_editorial_count };
+  const { accepted_editorial_count, disposition_ledger, ...rest } = triageCandidateSchema.parse(value);
+  return {
+    ...rest,
+    ...(accepted_editorial_count === undefined ? {} : { accepted_editorial_count }),
+    ...(disposition_ledger === undefined ? {} : { disposition_ledger }),
+  };
 }
 
 const refKey = (value: FindingRef): string => `${value.review_evidence_digest}:${value.finding_id}`;
 
-export function validateTriage(current: CurrentReviewSet, candidate: unknown): ValidatedTriage {
+export function validateTriage(
+  current: CurrentReviewSet,
+  candidate: unknown,
+  dispositionLedger?: readonly TriageDispositionLedgerEntry[],
+): ValidatedTriage {
   if (!authenticCurrentReviewSet(current)) throw new TypeError("an authenticated current review set is required");
   const parsed = parseTriageCandidate(candidate);
+  if (parsed.disposition_ledger !== undefined) {
+    throw new TypeError("disposition_ledger is server-computed; triage candidates must not carry one");
+  }
   if (parsed.task_id !== current.task_id || parsed.phase_instance !== current.phase_instance || parsed.subject_digest !== current.subject_digest || parsed.input_fingerprint !== current.input_fingerprint || parsed.current_evidence_set_digest !== current.current_evidence_set.set_digest) throw new TypeError("triage scope does not match current review set");
   const expectedDigests = current.current_evidence_set.slots.map((slot) => slot.evidence_digest);
   if (parsed.source_evidence_digests.length !== expectedDigests.length || parsed.source_evidence_digests.some((digestValue, index) => digestValue !== expectedDigests[index])) throw new TypeError("source_evidence_digests must exactly match canonical current slots");
@@ -100,7 +161,15 @@ export function validateTriage(current: CurrentReviewSet, candidate: unknown): V
   const rejected = parsed.dispositions.length - accepted - acceptedEditorial;
   if (parsed.accepted_editorial_count === undefined) throw new TypeError("triage requires accepted_editorial_count");
   if (parsed.accepted_count !== accepted || parsed.rejected_count !== rejected || parsed.accepted_editorial_count !== acceptedEditorial) throw new TypeError("triage disposition counts are contradictory");
-  const validated = Object.freeze({ ...parsed, accepted_editorial_count: parsed.accepted_editorial_count, source_evidence_digests: Object.freeze([...parsed.source_evidence_digests]), dispositions: Object.freeze(parsed.dispositions.map((value) => Object.freeze({ ...value }))) }) as ValidatedTriage;
+  const validated = Object.freeze({
+    ...parsed,
+    accepted_editorial_count: parsed.accepted_editorial_count,
+    ...(dispositionLedger === undefined
+      ? {}
+      : { disposition_ledger: Object.freeze(dispositionLedger.map((entry) => Object.freeze({ ...entry }))) }),
+    source_evidence_digests: Object.freeze([...parsed.source_evidence_digests]),
+    dispositions: Object.freeze(parsed.dispositions.map((value) => Object.freeze({ ...value }))),
+  }) as ValidatedTriage;
   registerValidatedTriage(validated);
   return validated;
 }

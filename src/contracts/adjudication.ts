@@ -36,7 +36,7 @@ export type RawAdjudication = {
   readonly input_fingerprint: Sha256Digest;
   readonly pinned_constitution_digest: Sha256Digest;
   readonly approved_upstream_digests: readonly Sha256Digest[];
-  readonly source_evidence_set_digest: Sha256Digest;
+  readonly source_review_envelope_digest: Sha256Digest;
   readonly rule_findings: readonly ConstitutionRuleFinding[];
   readonly drift_findings: readonly DriftFinding[];
 };
@@ -73,7 +73,7 @@ const rawAdjudicationTransportSchema = z.object({
   schema_version: z.literal("1"), task_id: taskSlug,
   phase_instance: z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
   step: z.literal("adjudicate"), subject_digest: digest, input_fingerprint: digest,
-  pinned_constitution_digest: digest, approved_upstream_digests: z.array(digest), source_evidence_set_digest: digest,
+  pinned_constitution_digest: digest, approved_upstream_digests: z.array(digest), source_review_envelope_digest: digest,
   rule_findings: z.array(constitutionRuleFindingSchema), drift_findings: z.array(driftFindingSchema),
 }).strict();
 

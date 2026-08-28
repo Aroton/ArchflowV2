@@ -1,6 +1,6 @@
 # DEPENDENCIES
 
-**Explored:** 2026-08-21 · **Commit:** `869c189` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, `src/init/`, `src/contracts/config.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`, `src/state/read.ts`, `src/dispatch/`, release tooling
+**Explored:** 2026-08-27 · **Commit:** `1b2602e` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, `src/init/`, `src/contracts/config.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`, `src/state/read.ts`, `src/dispatch/`, release tooling
 
 ## Runtime and package baseline
 
@@ -109,6 +109,7 @@ Runtime workflow configuration is file-backed:
 - Successful config-observing transactions record the normalized parsed shape as `TaskStateV1.last_seen_config`. Read-only status compares that snapshot with the current parsed file and reports informational leaf-level `config_change` entries; a valid edit does not by itself stale an open gate or retained evidence.
 - `assets/archflow.gitignore` is copied exactly to `.archflow/.gitignore`; its sole `/runtime/` rule owns only ArchFlow's nested workspace ignore boundary.
 - `assets/workflow.yaml` defines the workflow graph and remains digest-pinned by task state; `assets/constitution/` supplies repository-owned policy documents whose selected Git identities remain pinned to the task policy base. Live config editability does not relax either pin.
+- `assets/rubrics/` holds the three server-owned counter-review rubrics, one per phase kind (`prd.yaml`, `design.yaml`, `implementation.yaml`). They are install-bundle assets, never scaffolded into repositories: the MCP server reads and strictly parses the selected file fresh on every review and status call, a missing or invalid file fails closed with `CONFIG_INVALID`, and the parsed rubric's digest folds into review input fingerprints and evidence. Editing one takes effect on the next review after a bundle install.
 - `src/contracts/config.ts` validates `schema_version: "1"`, role routes, optional phase-kind overrides, optional positive `max_attempts` (default behavior is three attempts), and optional `approval_rules` with subject triggers plus phase-implementation changed-path triggers. The retired `producer` route is a narrow read-compatibility field; it is ignored when config-change snapshots are normalized.
 - The task state's `config_digest` remains the creation-time provenance for the copied config, and a rule settlement separately records the live config digest it evaluated. Config is not part of the current input-fingerprint subject, so valid edits do not invalidate gates or evidence through fingerprint churn.
 - `src/state/fingerprint.ts` has one bounded read-compatibility retry for pre-cutover evidence: only an exact expected old fingerprint can be matched using that task state's creation `config_digest`. It never uses live config for the retry, rewrites evidence, or migrates arbitrary old state.

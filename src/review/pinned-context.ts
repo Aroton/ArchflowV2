@@ -531,16 +531,18 @@ async function implementationMechanicalEvidence(
 }
 
 /**
- * Pins the mechanical triage record of the immediately preceding review round of this same phase
- * instance, so a fresh reviewer sees which findings were already dispositioned instead of
- * rediscovering the defect class round after round.
+ * Pins the mechanical triage record of this phase instance's review rounds, so a fresh reviewer
+ * sees which findings were already dispositioned instead of rediscovering the defect class round
+ * after round.
  *
  * Durable state retains exactly one triage result per `(phase_instance, step)` — the latest —
  * because `authoritative_results` is a replace-on-install set and superseded manifests are no
- * longer referenced by any durable authority. The entry therefore covers only the round the
- * current attempt re-entered from; earlier rounds are deliberately not reconstructed from
- * unreferenced disk remnants. No retained triage (attempt 1, or a retry that never reached
- * triage) pins nothing: absence is the accurate record, not a gap.
+ * longer referenced by any durable authority. Each installed triage therefore carries a
+ * server-computed `disposition_ledger`: at install the round's dispositions are embedded with
+ * their finding details and the predecessor's ledger is carried forward, so the rendered record
+ * spans every round of this phase instance whose triage installed since reviewer memory existed.
+ * Rounds installed before that field, or whose triage never installed, are absent: absence is
+ * the accurate record, not a gap.
  *
  * Every rendered field restates durable authority: finding severity, summary, evidence, and
  * suggested resolution come from the retained reviewer-authored evidence manifest; dispositions,
@@ -596,6 +598,7 @@ export async function priorTriageEvidence(
     const recorded = disposition as Readonly<{ revision_intent?: unknown; rationale?: unknown }>;
     return {
       finding_id: disposition.finding_id,
+      attempt: state.attempt,
       ...(finding ?? {}),
       disposition: disposition.disposition as string,
       ...(typeof recorded.rationale === "string" ? { rationale: recorded.rationale } : {}),
@@ -604,13 +607,34 @@ export async function priorTriageEvidence(
         : {}),
     };
   });
+  // The carried ledger holds every earlier round this phase instance installed since reviewer
+  // memory existed, each entry already embedded with its round's finding details. The current
+  // dispositions are the newest record of their findings and win a finding_id collision; the
+  // ledger supplies the history a replaced triage result would otherwise have superseded.
+  const merged = new Map<string, Record<string, unknown>>();
+  for (const entry of triageSource.evidence.disposition_ledger ?? []) {
+    merged.set(entry.finding_id, {
+      finding_id: entry.finding_id,
+      attempt: entry.attempt,
+      ...(entry.severity !== undefined
+        ? { severity: entry.severity, blocking: entry.blocking ?? false }
+        : {}),
+      ...(entry.summary === undefined ? {} : { summary: entry.summary }),
+      ...(entry.evidence === undefined ? {} : { evidence: entry.evidence }),
+      ...(entry.suggested_resolution === undefined ? {} : { suggested_resolution: entry.suggested_resolution }),
+      disposition: entry.disposition,
+      ...(entry.rationale === undefined ? {} : { rationale: entry.rationale }),
+      ...(entry.revision_intent === undefined ? {} : { revision_intent: entry.revision_intent }),
+    });
+  }
+  for (const disposition of dispositions) merged.set(disposition.finding_id, disposition);
   const record = {
     schema_version: "1",
     record_kind: "prior-triage",
     phase_instance: state.phase_instance,
     current_attempt: state.attempt,
-    coverage: "immediately preceding review round only; durable state retains one triage result per phase instance, so earlier rounds are superseded",
-    dispositions,
+    coverage: "all retained rounds of this phase instance: the current dispositions plus the carried ledger; rounds whose triage predates reviewer memory or never installed are absent",
+    dispositions: [...merged.values()],
   };
   const bytes = new TextEncoder().encode(`${JSON.stringify(record, null, 2)}\n`);
   return ok(Object.freeze([excerptContextEntry("prior-triage", "prior-round-triage", bytes)]));

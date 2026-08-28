@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstatSync, readFileSync, readdirSync, readlinkSync } from "node:fs";
-import { join } from "node:path";
+import { cpSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 
 import { parseAutomationStatus, type AutomationStatusV1 } from "../../src/contracts/automation-status.js";
 import type { WorkflowInvocationV1 } from "../../src/contracts/semantic-workflow.js";
@@ -16,18 +16,26 @@ export type AutomationProcessResult = Readonly<{
 }>;
 
 /** Builds the repository-local CLI entry into a caller-owned temporary path. */
-export function buildAutomationLocalBundle(repositoryRoot: string, outfile: string): void {
+export function buildAutomationLocalBundle(repositoryRoot: string, outfile: string): string {
+  // Mirror the installed layout: `dist/<entry>.mjs` with `assets/` as its SIBLING — the bundled
+  // `assetRoot()` resolves `../assets/` relative to the bundle file, and `assets/rubrics/` is
+  // strictly loaded by status.
+  const distDir = join(dirname(outfile), "dist");
+  mkdirSync(distDir, { recursive: true });
+  const bundled = join(distDir, basename(outfile));
   const program = [
     'import { build } from "esbuild";',
     'const [root, outfile] = process.argv.slice(1);',
     'await build({absWorkingDir:root,entryPoints:["src/local/main.ts"],outfile,bundle:true,platform:"node",format:"esm",target:"node24",banner:{js:\'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);\'}});',
   ].join("");
-  const built = spawnSync(process.execPath, ["--input-type=module", "--eval", program, repositoryRoot, outfile], {
+  const built = spawnSync(process.execPath, ["--input-type=module", "--eval", program, repositoryRoot, bundled], {
     cwd: repositoryRoot,
     encoding: "utf8",
     timeout: 30_000,
   });
   if (built.status !== 0) throw new Error(`local bundle failed: ${built.stderr}`);
+  cpSync(join(repositoryRoot, "assets"), join(dirname(outfile), "assets"), { recursive: true });
+  return bundled;
 }
 
 /** Runs one cold input-free automation observation and parses only successful documents. */

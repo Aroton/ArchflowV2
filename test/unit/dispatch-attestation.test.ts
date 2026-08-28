@@ -57,7 +57,7 @@ const adjudicationSubject = (): AdjudicationSubject => ({
   input_fingerprint: digest("b"),
   pinned_constitution_digest: digest("c"),
   approved_upstream_digests: [digest("d")],
-  source_evidence_set_digest: digest("e"),
+  source_review_envelope_digest: digest("e"),
   invocation_id: "invocation-14",
   result_id: "result-14",
 });
@@ -71,7 +71,7 @@ const rawAdjudication = (value: AdjudicationSubject): Record<string, unknown> =>
   input_fingerprint: value.input_fingerprint,
   pinned_constitution_digest: value.pinned_constitution_digest,
   approved_upstream_digests: value.approved_upstream_digests,
-  source_evidence_set_digest: value.source_evidence_set_digest,
+  source_review_envelope_digest: value.source_review_envelope_digest,
   rule_findings: [{
     rule_id: "safe-paths",
     rule_version: 2,
@@ -257,7 +257,7 @@ describe("adjudication observation attestation mint", () => {
       input_fingerprint: dispatchSubject.input_fingerprint,
       pinned_constitution_digest: dispatchSubject.pinned_constitution_digest,
       approved_upstream_digests: dispatchSubject.approved_upstream_digests,
-      source_evidence_set_digest: dispatchSubject.source_evidence_set_digest,
+      source_review_envelope_digest: dispatchSubject.source_review_envelope_digest,
       invocation_id: dispatchSubject.invocation_id,
       result_id: dispatchSubject.result_id,
       envelope_input_digest: digest("0"),

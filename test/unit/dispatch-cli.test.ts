@@ -56,7 +56,7 @@ function constValues(node: unknown): unknown[] {
 function adjudicationSubject(upstreamDigests: readonly string[]): Record<string, PlainJsonValue> {
   const subject = Object.fromEntries([
     "task_id", "phase_instance", "step", "subject_digest", "input_fingerprint",
-    "pinned_constitution_digest", "source_evidence_set_digest",
+    "pinned_constitution_digest", "source_review_envelope_digest",
   ].map((key) => [key, validAdjudication[key as keyof typeof validAdjudication]]));
   return { ...subject, approved_upstream_digests: [...upstreamDigests] } as Record<string, PlainJsonValue>;
 }
@@ -233,7 +233,7 @@ describe("CLI invocation construction", () => {
     expect(invocation.argv).toContain("-s");
     expect(invocation.argv[invocation.argv.indexOf("-s") + 1]).toBe("read-only");
     expect(invocation.argv[invocation.argv.indexOf("--output-schema") + 1]).toBe(join(target.root, "review.schema.json"));
-    expect(invocation.argv[invocation.argv.indexOf("-o") + 1]).toBe(join(target.root, "final-output.json"));
+    expect(invocation.argv[invocation.argv.indexOf("-o") + 1]).toBe(join(target.root, "review-final-output.json"));
     expect(invocation.argv).toContain("project_doc_max_bytes=0");
   });
 

@@ -49,7 +49,8 @@ function ioFailure(): ProjectResult<never> {
   }));
 }
 
-async function assetRoot(): Promise<string> {
+/** Resolves the installed bundle's asset directory (source-tree sibling layout in tests). */
+export async function assetRoot(): Promise<string> {
   // In the install root, `dist/archflow-local.mjs` and `assets/` are siblings. The second candidate
   // is the source-tree layout used by the test suite and disappears from the shipped bundle.
   const candidates = [

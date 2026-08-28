@@ -7,7 +7,7 @@ import type { ParsedToolCall } from "../contracts/mcp-tools.js";
 import type { ToolName } from "../contracts/tool-names.js";
 import type { RepositoryOperationContext } from "../repository/git.js";
 import { decodePhaseInstance } from "../contracts/phase-instance.js";
-import { canonicalRubricForPhaseKind } from "../review/rubrics.js";
+import { loadCanonicalRubricForPhaseKind } from "../review/rubrics.js";
 import type { FingerprintReadContext } from "./read.js";
 
 export type { FingerprintReadContext, LiveConfigSnapshot } from "./read.js";
@@ -66,13 +66,19 @@ function phaseInstance(call: ParsedToolCall, context: RepositoryOperationContext
   }
 }
 
-function rubricDigest(call: ParsedToolCall, phase: TaskStateV1["phase_instance"]): Sha256Digest {
+const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
+
+async function rubricDigest(
+  call: ParsedToolCall,
+  phase: TaskStateV1["phase_instance"],
+): Promise<ProjectResult<Sha256Digest>> {
   const reviewCycle = call.name === "archflow_counter_review" ||
     (call.name === "archflow_state" && call.input.operation !== "planning_restart" &&
       (call.input.step === "counter_review" || call.input.step === "triage"));
-  return reviewCycle
-    ? canonicalRubricForPhaseKind(decodePhaseInstance(phase).kind).rubric_digest
-    : canonicalJsonDigest({});
+  if (!reviewCycle) return ok(canonicalJsonDigest({}));
+  const loaded = await loadCanonicalRubricForPhaseKind(decodePhaseInstance(phase).kind);
+  if (!loaded.ok) return loaded;
+  return ok(loaded.value.rubric_digest);
 }
 
 const identityJson = (identity: GitIdentityRef) => ({
@@ -142,13 +148,15 @@ export function createInternalInputFingerprintResolver(input: Readonly<{
       : await input.read_secondary_declared_inputs(context);
     if (!secondaryDeclared.ok) return secondaryDeclared;
 
+    const rubric = await rubricDigest(context.call, state.phase_instance);
+    if (!rubric.ok) return rubric;
     const subject: InputFingerprintSubject = {
       schema_version: "1",
       workflow_digest: workflow.value,
       constitution_digest: constitution.value,
       artifact_identities: structuredClone(artifacts.value),
       upstream_identities: structuredClone(upstream.value),
-      rubric_digest: rubricDigest(context.call, state.phase_instance),
+      rubric_digest: rubric.value,
       phase_instance: phaseInstance(context.call, context.context),
       declared_inputs: structuredClone(declared.value),
       ...(secondaryDeclared.value.length === 0 ? {} : {

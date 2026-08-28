@@ -11,6 +11,7 @@ import { parseWorkspacePathClaim, resolveTaskWorkspacePath } from "../repository
 import {
   CliAdapterError,
   exitClass,
+  memoizedCliPreflight,
   selectCliAdapter,
   type CliPreflight,
 } from "./cli.js";
@@ -27,6 +28,7 @@ import {
   materializeRepositoryViews,
   RepositoryViewMaterializationError,
   type DispatchRepositoryViewPlan,
+  type SharedRepositoryViewWorkspace,
 } from "./workspace.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "../state/authority.js";
 import { ensureAttemptDirectory } from "../state/layout.js";
@@ -42,6 +44,12 @@ export type DispatchCoordinatorInput = Readonly<{
   cancellation_source: NonNullable<DispatchChildSpec["cancellation_source"]>;
   /** Ordered, validated server-owned snapshots. When absent the child receives no repository. */
   repository_views?: DispatchRepositoryViewPlan;
+  /**
+   * Caller-owned lazily materialized workspace lent to every dispatch of one review. When
+   * present it replaces per-dispatch creation and materialization; the coordinator borrows it
+   * and never disposes it — the owner disposes it after every child of the call has settled.
+   */
+  shared_workspace?: SharedRepositoryViewWorkspace;
 }>;
 
 export type DispatchCoordinatorResult = Readonly<{
@@ -169,6 +177,9 @@ export function createDispatchCoordinator(input: DispatchCoordinatorInput): (
     runner: input.dependencies.runner,
     environment: input.dependencies.environment,
   });
+  if (input.shared_workspace !== undefined && input.repository_views !== undefined) {
+    throw new TypeError("shared_workspace replaces repository_views; pass one, not both");
+  }
 
   return async (route, envelope, outputSchema) => {
     const adapter = selectCliAdapter(input.host, route);
@@ -178,27 +189,40 @@ export function createDispatchCoordinator(input: DispatchCoordinatorInput): (
     let primaryError: unknown;
     let childResult: DispatchChildResult | undefined;
     let workspace: Awaited<ReturnType<typeof createDispatchWorkspace>> | undefined;
+    let ownsWorkspace = true;
     let failureStage: DispatchFailureStage = "workspace-create";
 
     try {
-      workspace = await createDispatchWorkspace(adapter.id, input.repository_root);
-      if (input.repository_views !== undefined) {
+      if (input.shared_workspace !== undefined) {
+        // A borrowed workspace is materialized once per review; its owner disposes it after
+        // every child of the call has settled. Failure-stage attribution is preserved so the
+        // attempt record cannot tell the two paths apart.
+        ownsWorkspace = false;
         failureStage = "repository-view-materialization";
         try {
-          workspace = await materializeRepositoryViews(workspace, input.repository_views);
+          workspace = await input.shared_workspace.acquire();
         } catch (error) {
           if (error instanceof RepositoryViewMaterializationError) {
             throw new RepositoryViewUnavailableError(error.repository_name);
           }
           throw error;
         }
+      } else {
+        workspace = await createDispatchWorkspace(adapter.id, input.repository_root);
+        if (input.repository_views !== undefined) {
+          failureStage = "repository-view-materialization";
+          try {
+            workspace = await materializeRepositoryViews(workspace, input.repository_views);
+          } catch (error) {
+            if (error instanceof RepositoryViewMaterializationError) {
+              throw new RepositoryViewUnavailableError(error.repository_name);
+            }
+            throw error;
+          }
+        }
       }
       failureStage = "cli-preflight";
-      preflight = await adapter.preflight(
-        workspace,
-        input.signal,
-        input.cancellation_source,
-      );
+      preflight = await memoizedCliPreflight(adapter, workspace, input.signal, input.cancellation_source);
       failureStage = "invocation-build";
       const invocation = await adapter.buildInvocation(envelope, route, workspace, outputSchema);
       failureStage = "child-run";
@@ -219,7 +243,7 @@ export function createDispatchCoordinator(input: DispatchCoordinatorInput): (
       primaryError = error;
       throw error;
     } finally {
-      await workspace?.dispose().catch(() => undefined);
+      if (ownsWorkspace) await workspace?.dispose().catch(() => undefined);
       if (primaryError !== undefined) {
         await writeAttemptRecord(input, attemptId, route, preflight, primaryError, {
           started_at: startedAt.toISOString(),

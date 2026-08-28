@@ -1,18 +1,72 @@
-import { describe, expect, it } from "vitest";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, describe, expect, it } from "vitest";
 
 import { canonicalJsonDigest } from "../../src/contracts/canonical.js";
-import { canonicalRubricForPhaseKind } from "../../src/review/rubrics.js";
+import type { ProjectResult } from "../../src/contracts/errors.js";
+import { loadRubricFile, type CanonicalRubric, type CanonicalRubricId } from "../../src/review/rubrics.js";
+import { loadTestRubric } from "../helpers/rubrics.js";
+
+// Digests pinned while the rubrics were compiled TypeScript. The config files under
+// assets/rubrics/ must reproduce the exact parsed objects, so these constants prove the
+// move changed no reviewed bytes. Regenerate deliberately, never casually: a changed
+// digest is changed review policy for every installed bundle, and it fails in-flight
+// tasks' input fingerprints closed.
+const PINNED_RUBRIC_DIGESTS = Object.freeze({
+  "prd-v1": "fad1d0bc48da5d04d33147d8bc18688d85d1ae18f782fac6a7f3e5c6f51d521f",
+  "design-v2": "8de1a36847700c174c6c3698f493343bf3a80b8b90e7af9d7a193842b08240d8",
+  "implementation-v1": "68405124576f2bdca2a95003bd13548aa352ea018926faa733fad95a99f39775",
+} satisfies Record<CanonicalRubricId, string>);
+
+const roots: string[] = [];
+afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
+
+const MINIMAL_PRD = `rubric_id: prd-v1
+schema_version: "1"
+kind: artifact
+mode: adversarial
+criteria:
+  - id: substantive-correctness
+    text: "Report a material defect only."
+    blocking: true
+`;
+
+async function loadFromTmp(
+  bytes: string,
+  file = "rubrics/prd.yaml",
+  expected_id: CanonicalRubricId = "prd-v1",
+): Promise<ProjectResult<CanonicalRubric>> {
+  const root = await mkdtemp(join(tmpdir(), "archflow-rubrics-"));
+  roots.push(root);
+  await mkdir(join(root, "rubrics"), { recursive: true });
+  await writeFile(join(root, file), bytes);
+  return loadRubricFile({ root, file, expected_id });
+}
+
+function expectRubricFailure(result: ProjectResult<CanonicalRubric>): {
+  issue_code: string;
+  issues?: readonly string[];
+} {
+  expect(result.ok).toBe(false);
+  if (result.ok) throw new Error("expected the rubric load to fail");
+  expect(result.error.code).toBe("CONFIG_INVALID");
+  return result.error.diagnostic.parameters as { issue_code: string; issues?: readonly string[] };
+}
 
 describe("canonical counter-review rubrics", () => {
-  it("selects one immutable versioned rubric per workflow artifact family", () => {
-    const prd = canonicalRubricForPhaseKind("prd");
-    const design = canonicalRubricForPhaseKind("design");
-    const phaseDesign = canonicalRubricForPhaseKind("phase-design");
-    const implementation = canonicalRubricForPhaseKind("phase-impl");
+  it("loads one immutable versioned rubric per workflow artifact family", async () => {
+    const prd = await loadTestRubric("prd");
+    const design = await loadTestRubric("design");
+    const phaseDesign = await loadTestRubric("phase-design");
+    const implementation = await loadTestRubric("phase-impl");
 
     expect(prd.rubric_id).toBe("prd-v1");
     expect(design.rubric_id).toBe("design-v2");
-    expect(phaseDesign).toBe(design);
+    // design and phase-design select the same file, so the same exact bytes.
+    expect(phaseDesign.rubric_id).toBe(design.rubric_id);
+    expect(phaseDesign.rubric_digest).toBe(design.rubric_digest);
     expect(implementation.rubric_id).toBe("implementation-v1");
     expect(prd.rubric.kind).toBe("artifact");
     expect(design.rubric.kind).toBe("artifact");
@@ -27,14 +81,21 @@ describe("canonical counter-review rubrics", () => {
     }
   });
 
-  it("reviews design phase sizing structurally and only for material consequences", () => {
-    const design = canonicalRubricForPhaseKind("design");
-    const phaseDesign = canonicalRubricForPhaseKind("phase-design");
+  it("reproduces the digests pinned when the rubrics moved from code to config files", async () => {
+    expect((await loadTestRubric("prd")).rubric_digest).toBe(PINNED_RUBRIC_DIGESTS["prd-v1"]);
+    expect((await loadTestRubric("design")).rubric_digest).toBe(PINNED_RUBRIC_DIGESTS["design-v2"]);
+    expect((await loadTestRubric("phase-design")).rubric_digest).toBe(PINNED_RUBRIC_DIGESTS["design-v2"]);
+    expect((await loadTestRubric("phase-impl")).rubric_digest).toBe(PINNED_RUBRIC_DIGESTS["implementation-v1"]);
+  });
+
+  it("reviews design phase sizing structurally and only for material consequences", async () => {
+    const design = await loadTestRubric("design");
+    const phaseDesign = await loadTestRubric("phase-design");
     const phasePlan = design.rubric.criteria.find((criterion) =>
       criterion.id === "phase-plan-soundness"
     );
 
-    expect(phaseDesign).toBe(design);
+    expect(phaseDesign.rubric_digest).toBe(design.rubric_digest);
     expect(phasePlan?.blocking).toBe(true);
 
     const policy = phasePlan?.text ?? "";
@@ -62,5 +123,62 @@ describe("canonical counter-review rubrics", () => {
     expect(policy).not.toMatch(/\d/u);
     expect(policy).not.toMatch(/hand-written files/iu);
     expect(policy).not.toMatch(/(?:file|diff|layer|phase)[ -]?(?:count|size)? (?:limit|threshold|maximum)/iu);
+  });
+});
+
+describe("rubric files fail closed", () => {
+  it("refuses a missing rubric file, naming it", async () => {
+    const root = await mkdtemp(join(tmpdir(), "archflow-rubrics-"));
+    roots.push(root);
+    const result = await loadRubricFile({ root, file: "rubrics/prd.yaml", expected_id: "prd-v1" });
+    const parameters = expectRubricFailure(result);
+    expect(parameters.issue_code).toBe("rubric-file-missing");
+    expect(parameters.issues?.join("\n")).toContain("rubrics/prd.yaml");
+  });
+
+  it("refuses invalid YAML, surfacing the parser message", async () => {
+    const result = await loadFromTmp("rubric_id: prd-v1\ncriteria: [unclosed\n");
+    const parameters = expectRubricFailure(result);
+    expect(parameters.issue_code).toBe("rubric-file-invalid");
+  });
+
+  it("refuses a document that is not a YAML mapping", async () => {
+    const result = await loadFromTmp("just a bare scalar\n");
+    const parameters = expectRubricFailure(result);
+    expect(parameters.issue_code).toBe("rubric-file-invalid");
+    expect(parameters.issues?.join("\n")).toContain("mapping");
+  });
+
+  it("refuses a rubric_id that does not match the selected rubric", async () => {
+    const result = await loadFromTmp(MINIMAL_PRD.replace("rubric_id: prd-v1", "rubric_id: design-v2"));
+    const parameters = expectRubricFailure(result);
+    expect(parameters.issue_code).toBe("rubric-file-invalid");
+    expect(parameters.issues?.join("\n")).toContain("rubric_id");
+  });
+
+  it("rejects duplicate criterion ids", async () => {
+    const duplicated = MINIMAL_PRD.replace(
+      "    blocking: true\n",
+      "    blocking: true\n  - id: substantive-correctness\n    text: \"Another.\"\n    blocking: false\n",
+    );
+    const result = await loadFromTmp(duplicated);
+    const parameters = expectRubricFailure(result);
+    expect(parameters.issue_code).toBe("rubric-file-invalid");
+    expect(parameters.issues?.join("\n")).toContain("Duplicate criterion id");
+  });
+
+  it("rejects blank criterion text", async () => {
+    const result = await loadFromTmp(MINIMAL_PRD.replace("Report a material defect only.", "   "));
+    expect(expectRubricFailure(result).issue_code).toBe("rubric-file-invalid");
+  });
+
+  it("rejects unknown top-level keys", async () => {
+    const result = await loadFromTmp(`${MINIMAL_PRD}extra: true\n`);
+    expect(expectRubricFailure(result).issue_code).toBe("rubric-file-invalid");
+  });
+
+  it("rejects an unquoted schema_version, which YAML would parse as a number", async () => {
+    const result = await loadFromTmp(MINIMAL_PRD.replace('schema_version: "1"', "schema_version: 1"));
+    expect(expectRubricFailure(result).issue_code).toBe("rubric-file-invalid");
   });
 });

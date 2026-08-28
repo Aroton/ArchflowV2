@@ -43,7 +43,7 @@
         "pattern": "^[0-9a-f]{64}$"
       }
     },
-    "source_evidence_set_digest": {
+    "source_review_envelope_digest": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },
@@ -148,7 +148,7 @@
     "input_fingerprint",
     "pinned_constitution_digest",
     "approved_upstream_digests",
-    "source_evidence_set_digest",
+    "source_review_envelope_digest",
     "rule_findings",
     "drift_findings"
   ],

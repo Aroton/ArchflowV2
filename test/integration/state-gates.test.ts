@@ -256,7 +256,7 @@ describe("durable gate decisions", () => {
     };
     const adjudication = {
       ...base, step: "adjudicate", pinned_constitution_digest: constitution.digest,
-      approved_upstream_digests: [], source_evidence_set_digest: currentEvidence.set_digest,
+      approved_upstream_digests: [], source_review_envelope_digest: D("e"),
       rule_findings: [], drift_findings: [], constitution: "pass", drift: "aligned",
       matched_rule_versions: [RULE], uncertain_rule_versions: [],
       assurance: "agent-declared", model_family: "codex", model: "fixture", effort: "high",
@@ -361,7 +361,7 @@ describe("durable gate decisions", () => {
     };
     const designAdjudication = {
       ...evidenceBase, step: "adjudicate", pinned_constitution_digest: constitution.digest,
-      approved_upstream_digests: [], source_evidence_set_digest: designEvidence.set_digest,
+      approved_upstream_digests: [], source_review_envelope_digest: D("4"),
       rule_findings: [], drift_findings: [], constitution: "pass", drift: "aligned",
       matched_rule_versions: [RULE], uncertain_rule_versions: [],
       assurance: "agent-declared", model_family: "codex", model: "fixture", effort: "high",

@@ -52,9 +52,10 @@ function isInside(parent: string, candidate: string): boolean {
  * disclosed to the child — only the temporary view path is.
  */
 export async function createDispatchWorkspace(
-  adapter: AdapterId,
+  adapter: AdapterId | readonly AdapterId[],
   repositoryRoot: string = process.cwd(),
 ): Promise<DispatchWorkspace> {
+  const adapters = Array.isArray(adapter) ? adapter : [adapter];
   const [realTemporaryRoot, realRepositoryRoot] = await Promise.all([
     realpath(tmpdir()),
     realpath(repositoryRoot),
@@ -69,11 +70,14 @@ export async function createDispatchWorkspace(
     const env: NodeJS.ProcessEnv = {
       HOME: sourceHome,
       TMPDIR: root,
-      ...(adapter === "codex-cli"
+      // A shared workspace serves both adapters of one review; each CLI ignores the other's
+      // variable, and a single-adapter list produces exactly the env it produced before.
+      ...(adapters.includes("codex-cli")
         ? { CODEX_HOME: resolve(process.env.CODEX_HOME ?? join(sourceHome, ".codex")) }
-        : process.env.CLAUDE_CONFIG_DIR === undefined
-          ? {}
-          : { CLAUDE_CONFIG_DIR: resolve(process.env.CLAUDE_CONFIG_DIR) }),
+        : {}),
+      ...(adapters.includes("claude-cli") && process.env.CLAUDE_CONFIG_DIR !== undefined
+        ? { CLAUDE_CONFIG_DIR: resolve(process.env.CLAUDE_CONFIG_DIR) }
+        : {}),
     };
     for (const name of FORWARDED_ENVIRONMENT) {
       const value = process.env[name];
@@ -354,4 +358,43 @@ async function applyProducedProjection(view: string, projectionPlan: ProjectionP
     await writeFile(target, entry.desired.bytes, { mode: entry.desired.mode === "100755" ? 0o755 : 0o644 });
     await chmod(target, entry.desired.mode === "100755" ? 0o755 : 0o644);
   }
+}
+
+/**
+ * One lazily materialized workspace lent to every dispatch of a single counter-review call: the
+ * rubric and constitution children receive byte-identical repository views, so the second
+ * materialization is pure duplicated work. The first `acquire` creates and materializes exactly
+ * once; a failed acquire is never memoized, so a retry starts from a fresh workspace. A borrower
+ * never disposes — the owner disposes once, after every child of the call has settled.
+ */
+export type SharedRepositoryViewWorkspace = Readonly<{
+  /** Creates and materializes exactly once; repeats return the same workspace. */
+  acquire: () => Promise<DispatchWorkspace>;
+  /** Removes the workspace if it was ever created; never throws. */
+  dispose: () => Promise<void>;
+}>;
+
+export function shareRepositoryViewWorkspace(
+  repositoryViews: DispatchRepositoryViewPlan,
+  repositoryRoot: string,
+): SharedRepositoryViewWorkspace {
+  let ready: Promise<DispatchWorkspace> | undefined;
+  const acquire = (): Promise<DispatchWorkspace> => {
+    ready ??= (async () => {
+      const workspace = await createDispatchWorkspace(["claude-cli", "codex-cli"], repositoryRoot);
+      try {
+        return await materializeRepositoryViews(workspace, repositoryViews);
+      } catch (error) {
+        ready = undefined;
+        await workspace.dispose().catch(() => undefined);
+        throw error;
+      }
+    })();
+    return ready;
+  };
+  const dispose = (): Promise<void> =>
+    ready === undefined
+      ? Promise.resolve()
+      : ready.then((workspace) => workspace.dispose()).catch(() => undefined);
+  return Object.freeze({ acquire, dispose });
 }
