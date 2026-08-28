@@ -26,7 +26,7 @@ const ENVELOPE: DispatchEnvelope = Object.freeze({
 });
 
 async function attemptRecord(workspace: TaskWorkspace): Promise<Record<string, unknown>> {
-  const directory = join(workspace.root, ".archflow", "tasks", workspace.taskId, "attempts", "prd");
+  const directory = join(workspace.root, ".archflow", "runtime", "tasks", workspace.taskId, "diagnostics", "attempts", "prd");
   const names = await readdir(directory);
   expect(names).toHaveLength(1);
   return JSON.parse(await readFile(join(directory, names[0]!), "utf8")) as Record<string, unknown>;

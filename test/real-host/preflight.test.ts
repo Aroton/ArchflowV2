@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 
@@ -138,9 +138,15 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host preflight", () => {
   it("never persists Claude authentication PII values in attempt or diagnostic bytes", async () => {
     const rawAuth = JSON.parse(command("claude", ["auth", "status"])) as Record<string, unknown>;
     expect(rawAuth.loggedIn).toBe(true);
-    const pii = ["email", "orgId", "orgName", "subscriptionType"]
-      .map((key) => rawAuth[key])
-      .filter((value): value is string => typeof value === "string" && value !== "");
+    // The installed CLI no longer echoes account fields from `auth status`; the canaries are the
+    // long secret strings of the OAuth credential file the CLI itself authenticates with. The
+    // values are read into the scan and never printed.
+    const credentialsPath = join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"), ".credentials.json");
+    const credentials = JSON.parse(await readFile(credentialsPath, "utf8")) as {
+      claudeAiOauth?: Record<string, unknown>;
+    };
+    const pii = Object.values(credentials.claudeAiOauth ?? {})
+      .filter((value): value is string => typeof value === "string" && value.length >= 16);
     expect(pii.length).toBeGreaterThan(0);
 
     const workspace = await createTaskWorkspace({ taskId: "real-preflight-pii", label: "real-preflight-pii" });

@@ -1,67 +1,67 @@
 {
-  "benchmark_result_digest": "e39457d0ffb34e0727dd085288dc968cda9182fc9bd508d5d5a2a323745f257f",
+  "benchmark_result_digest": "fd6270d5b302afae2d2e8b78ca93c119b511153ebb930f28158113ad3a7feb56",
   "human_scoring": {
     "dispositions": [
       {
-        "disposition": "seed-detected",
+        "disposition": null,
         "run_id": "retention-contradiction-claude-to-codex-r1"
       },
       {
-        "disposition": "missed",
+        "disposition": null,
         "run_id": "unhandled-error-path-claude-to-codex-r1"
       },
       {
-        "disposition": "seed-detected",
+        "disposition": null,
         "run_id": "offline-constraint-claude-to-codex-r1"
       },
       {
-        "disposition": "clean-pass",
+        "disposition": null,
         "run_id": "atomic-profile-update-claude-to-codex-r1"
       },
       {
-        "disposition": "clean-pass",
+        "disposition": null,
         "run_id": "bounded-upload-claude-to-codex-r1"
       },
       {
-        "disposition": "clean-pass",
+        "disposition": null,
         "run_id": "offline-schema-bundle-claude-to-codex-r1"
       },
       {
-        "disposition": "seed-detected",
+        "disposition": null,
         "run_id": "retention-contradiction-codex-to-claude-r1"
       },
       {
-        "disposition": "missed",
+        "disposition": null,
         "run_id": "unhandled-error-path-codex-to-claude-r1"
       },
       {
-        "disposition": "seed-detected",
+        "disposition": null,
         "run_id": "offline-constraint-codex-to-claude-r1"
       },
       {
-        "disposition": "clean-pass",
+        "disposition": null,
         "run_id": "atomic-profile-update-codex-to-claude-r1"
       },
       {
-        "disposition": "clean-pass",
+        "disposition": null,
         "run_id": "bounded-upload-codex-to-claude-r1"
       },
       {
-        "disposition": "clean-pass",
+        "disposition": null,
         "run_id": "offline-schema-bundle-codex-to-claude-r1"
       }
     ],
-    "observation_digest": "e39457d0ffb34e0727dd085288dc968cda9182fc9bd508d5d5a2a323745f257f",
+    "observation_digest": "fd6270d5b302afae2d2e8b78ca93c119b511153ebb930f28158113ad3a7feb56",
     "primary_metrics": {
-      "approval_detection_rate": 0.6666666666666666,
+      "approval_detection_rate": null,
       "defects_found_after_pass": {
-        "status": "complete",
-        "value": 2
+        "status": "pending-human-disposition",
+        "value": null
       },
-      "false_blocker_rate": 0,
+      "false_blocker_rate": null,
       "triage_completeness": {
-        "status": "complete",
-        "value": 12
+        "status": "pending-human-disposition",
+        "value": null
       }
     }
   },
@@ -72,7 +72,7 @@
       "repeat_count_per_direction": 1,
       "sample_size_note": "Six corpus cases, two producer directions, one real model turn per case and direction; all twelve turns were serialized by the production dispatch FIFO.",
       "serialized_model_turn_count": 12,
-      "wall_clock_seconds": 469.7
+      "wall_clock_seconds": 460.3
     },
     "runs": [
       {
@@ -81,22 +81,22 @@
         "case_id": "retention-contradiction",
         "case_kind": "seeded",
         "direction": "claude-to-codex",
-        "envelope_input_sha256": "2deb7778675850382c9ad62e3c57cc0421c68e2b584926fae0578a35fd140b9c",
+        "envelope_input_sha256": "7ffde1da016236a9ee6d6eab13049aa65d898512c14deb3dc63110d9a780f576",
         "findings": [
           {
             "blocking": true,
-            "evidence": "The requirements state, “token material must never be written to durable storage” and “Never persist the token,” but the audit-record schema includes `\"raw_access_token\": \"request bearer token\"`. Encryption and 30-day expiration do not make that storage non-durable or remove the credential from the record.",
-            "finding_id": "audit-record-persists-raw-token",
+            "evidence": "The requirements state, “Never persist the token or any reversible representation of it,” but the audit-record example includes `\"raw_access_token\": \"request bearer token\"`. The design then says these audit records use an encrypted database table and expire after 30 days, confirming durable retention; encryption does not make the representation irreversible.",
+            "finding_id": "token-material-persisted",
             "severity": "blocker",
-            "suggested_resolution": "Remove `raw_access_token` from the audit schema and persist only the account identifier, outcome, provider request ID, and event timestamp. Explicitly prohibit token-derived or reversible token fields in audit persistence.",
-            "summary": "The proposed audit record durably persists the bearer token."
+            "suggested_resolution": "Remove `raw_access_token` from the audit schema and all write paths. Persist only the account identifier, outcome, provider request ID, and event timestamp, and explicitly prohibit token-derived fields in audit serialization.",
+            "summary": "The proposed audit record persists the bearer token, directly violating the credential-retention requirement."
           }
         ],
-        "observed_output_sha256": "1f8f3b986bbfa111c63d5d5c79eaaea8c96eae1e77ef5638111dd31f54a522bb",
+        "observed_output_sha256": "41f48284cc6c80b409d5603e77356547e4d9934bfb2142ed15d3e647807e2461",
         "repeat": 1,
         "reviewer": {
           "adapter": "codex-cli",
-          "cli_version": "0.146.0",
+          "cli_version": "0.150.1",
           "effort": "xhigh",
           "family": "codex",
           "model": "gpt-5.6-sol"
@@ -107,33 +107,33 @@
       },
       {
         "artifact_sha256": "e77248bbbdf48179b2aa88cfdfe58e4c51e530205e840a35d8ac392244917871",
-        "blocking_count": 0,
+        "blocking_count": 1,
         "case_id": "unhandled-error-path",
         "case_kind": "seeded",
         "direction": "claude-to-codex",
-        "envelope_input_sha256": "54250dbe5e5fae299b1f9efb5fad1a36620e150ca38fe343f3a4e36d9822ae56",
+        "envelope_input_sha256": "b948dc4e1c5f17fc3bc0d2a9f9174032771c6831604fd7f76f19284cf37446da",
         "findings": [
           {
-            "blocking": false,
-            "evidence": "The contract requires the request's “current lease revision,” and storage performs a conditional update, but the three named failures cover only a missing job, a different owner, and an expired lease. A retry after a successful renewal response is lost can therefore fail the revision condition while matching none of those cases.",
-            "finding_id": "stale-revision-outcome-undefined",
-            "severity": "minor",
-            "suggested_resolution": "Define stale-revision behavior, such as an explicit revision-conflict response or a narrowly specified idempotent replay rule. This is a completeness issue rather than a blocker because the artifact does not claim its three named failures are exhaustive.",
-            "summary": "The response for a stale revision submitted by the current lease owner is unspecified."
+            "blocking": true,
+            "evidence": "The artifact says transient transport failures are retried, a successful renewal increments the revision, and owner/revision/expiry are updated conditionally. After a committed renewal whose response is lost, the worker still holds the preceding revision, so its retry cannot satisfy the revision condition. Yet none of the three named failures applies: the job exists, the worker still owns the lease, and the lease may remain unexpired. The artifact therefore leaves its claimed retry flow without a valid response or worker action.",
+            "finding_id": "lease-retry-stale-revision",
+            "severity": "blocker",
+            "suggested_resolution": "Define ambiguous-retry semantics, such as an idempotency token that lets the server replay the committed renewal without incrementing twice, or a revision-conflict response with explicit instructions for the worker to stop or safely reconcile its lease state. Add an acceptance test for a committed renewal followed by a lost response and retry.",
+            "summary": "The protocol has no defined outcome when a renewal commits but its response is lost and the worker retries with the now-stale revision."
           }
         ],
-        "observed_output_sha256": "81deab4482556edd0b43356f75c3a207927826525dd1d55ab9a34ecbc44fcac4",
+        "observed_output_sha256": "6fd353aded723af68c5ccbefcf02bda2b19ff8730fc26634198d76e83e3ef871",
         "repeat": 1,
         "reviewer": {
           "adapter": "codex-cli",
-          "cli_version": "0.146.0",
+          "cli_version": "0.150.1",
           "effort": "xhigh",
           "family": "codex",
           "model": "gpt-5.6-sol"
         },
         "run_id": "unhandled-error-path-claude-to-codex-r1",
         "seeded_defect": "The contract requires a worker receiving LEASE_EXPIRED to stop uploading and preserve resumability, but the worker flow and error-handling design never handle that named result.",
-        "verdict": "advisory"
+        "verdict": "fail"
       },
       {
         "artifact_sha256": "24e95656898e6953d0e71a6f91e06fa5506bee44429a74e76f531a89a379a313",
@@ -141,22 +141,22 @@
         "case_id": "offline-constraint",
         "case_kind": "seeded",
         "direction": "claude-to-codex",
-        "envelope_input_sha256": "5fd13a0710391b9f79077de6db818342ff177ec3fd9e4159f6321ce92e98fd1d",
+        "envelope_input_sha256": "228541f4dea23a039a7e6bc12db8eb6a8f8f16b2cafa099b2e24f2c9e21d7329",
         "findings": [
           {
             "blocking": true,
-            "evidence": "The constraint says, “Every command must work on an air-gapped workstation with no DNS or network route,” but the design says the validator “downloads the matching JSON Schema” from an HTTPS URL. Cache reuse is only optional (“may be reused”), so a clean workstation or cache miss necessarily returns CONFIG_SCHEMA_UNAVAILABLE and cannot proceed.",
-            "finding_id": "offline-schema-download-contradiction",
+            "evidence": "The constraint says, “Every command must work on an air-gapped workstation with no DNS or network route,” but the design says the validator “downloads the matching JSON Schema from https://schemas.example.invalid/project/{version}.json.” Cache reuse is only optional and does not cover an empty cache; the stated failure handling instead returns CONFIG_SCHEMA_UNAVAILABLE without dispatch.",
+            "finding_id": "offline-schema-download",
             "severity": "blocker",
-            "suggested_resolution": "Ship supported schemas with the application or require them as locally provisioned installation assets, then select and digest-verify the schema entirely offline. Do not make successful startup depend on a prior network-populated cache.",
-            "summary": "Schema acquisition requires network access despite the air-gapped operation requirement."
+            "suggested_resolution": "Bundle the supported pinned schemas with the application or repository and select them locally by version, verifying their pinned digests without network access. Treat a cache only as an optional local optimization, not as a prerequisite for offline validation.",
+            "summary": "The startup design requires network retrieval and therefore cannot validate a first-run or uncached configuration on an air-gapped workstation."
           }
         ],
-        "observed_output_sha256": "fa919701c4063f0349a5f1e28052c42b5bd203b1a6f63ce5e753fb1b45394b34",
+        "observed_output_sha256": "acf654f13e8e03e12aef63452bd7620b1c836732b223ac6a62ab0598b0668d76",
         "repeat": 1,
         "reviewer": {
           "adapter": "codex-cli",
-          "cli_version": "0.146.0",
+          "cli_version": "0.150.1",
           "effort": "xhigh",
           "family": "codex",
           "model": "gpt-5.6-sol"
@@ -171,13 +171,13 @@
         "case_id": "atomic-profile-update",
         "case_kind": "control",
         "direction": "claude-to-codex",
-        "envelope_input_sha256": "26c8e2597d889000891d5d887b881b1471cfa2e5aaeead3c5e422daf95ef72d6",
+        "envelope_input_sha256": "cefa0afbcaa891f4d4ebf98a2ccac723e131d0f07482151cf823f8cdd6065032",
         "findings": [],
         "observed_output_sha256": "43751be0554a20c08533f88452ed15dbad378f1f50ff0aa6745b59b9c86357e5",
         "repeat": 1,
         "reviewer": {
           "adapter": "codex-cli",
-          "cli_version": "0.146.0",
+          "cli_version": "0.150.1",
           "effort": "xhigh",
           "family": "codex",
           "model": "gpt-5.6-sol"
@@ -192,13 +192,13 @@
         "case_id": "bounded-upload",
         "case_kind": "control",
         "direction": "claude-to-codex",
-        "envelope_input_sha256": "526a5db851d564e2bd6f7c745cab79ebd5a25f16b572f179fb8657dcc128ad53",
+        "envelope_input_sha256": "794d959c1df3d253ef3b2607cbc3ddcdcca9c0db726ff41bc59b3fdb30cde2c1",
         "findings": [],
         "observed_output_sha256": "a037742ba10dda6034aa73d36005c8965907874a40cf7ef5bf39f39b715914e1",
         "repeat": 1,
         "reviewer": {
           "adapter": "codex-cli",
-          "cli_version": "0.146.0",
+          "cli_version": "0.150.1",
           "effort": "xhigh",
           "family": "codex",
           "model": "gpt-5.6-sol"
@@ -213,20 +213,29 @@
         "case_id": "offline-schema-bundle",
         "case_kind": "control",
         "direction": "claude-to-codex",
-        "envelope_input_sha256": "10e2efdbbeef79492979bc2c8d9b5d5191befc57a9e1cc19a3ac8775e26b5bd4",
-        "findings": [],
-        "observed_output_sha256": "96ac951eeda1aa0df05fa5a0ac3fd7bfbf22769b65a9305b4b35ca312363cf27",
+        "envelope_input_sha256": "c132332cd42700b987d777e6d1d56f9f9ee0fcda42b9e51f2efb2e3dba548d88",
+        "findings": [
+          {
+            "blocking": false,
+            "evidence": "The acceptance criteria require that “damaged installations fail before command dispatch,” but Failure Handling assigns `INSTALLATION_INVALID` only when packaged schema bytes are missing. It does not define the outcome for present but unreadable, malformed, unresolved, or un-compilable schema bytes.",
+            "finding_id": "cr-001",
+            "severity": "minor",
+            "suggested_resolution": "State that every packaged-schema loading, parsing, local-reference resolution, or compilation failure returns `INSTALLATION_INVALID` before command dispatch or workspace writes.",
+            "summary": "Installation-failure handling is explicit only for absent schema bytes, leaving other damaged-schema failures unspecified."
+          }
+        ],
+        "observed_output_sha256": "55d8ff46e1e98f8d4e323ac7f5d3ef23520c9639a0ac6fb64a4bc23267b43ba4",
         "repeat": 1,
         "reviewer": {
           "adapter": "codex-cli",
-          "cli_version": "0.146.0",
+          "cli_version": "0.150.1",
           "effort": "xhigh",
           "family": "codex",
           "model": "gpt-5.6-sol"
         },
         "run_id": "offline-schema-bundle-claude-to-codex-r1",
         "seeded_defect": null,
-        "verdict": "pass"
+        "verdict": "advisory"
       },
       {
         "artifact_sha256": "9f57633bc7b1beb8bb6222fefc33c0d52e7c10fa273b88e67e82b0676daa1809",
@@ -234,46 +243,46 @@
         "case_id": "retention-contradiction",
         "case_kind": "seeded",
         "direction": "codex-to-claude",
-        "envelope_input_sha256": "cfc04d2a061273439fe7ef79766d69bec5345bfdce84ceaf653e57f49c04d5d3",
+        "envelope_input_sha256": "999a1090dc2df12a1c2e372f360fcc391cdd4c6b9e59fe3c2d7c69e10b9e0d31",
         "findings": [
           {
             "blocking": true,
-            "evidence": "The Goal states \"token material must never be written to durable storage, logs, metrics, or diagnostics.\" The Requirements state \"Never persist the token or any reversible representation of it. Operators correlate attempts through the provider request ID.\" The Design section then specifies the audit record as containing \"raw_access_token\": \"request bearer token\", and states \"Audit records use the existing encrypted database table\" - i.e. durable storage. Encryption at rest does not satisfy the constraint, since the requirement forbids reversible representations and an encrypted column is reversible by definition. The Design also states the handler \"keeps it in memory only for the duration of that call\", which the same paragraph's record schema then violates.",
-            "finding_id": "audit-record-persists-raw-token",
+            "evidence": "Goal: \"token material must never be written to durable storage, logs, metrics, or diagnostics.\" Requirements: \"Never persist the token or any reversible representation of it. Operators correlate attempts through the provider request ID.\" Design: \"The handler then writes this audit record:\" followed by a JSON object whose fields include `\"raw_access_token\": \"request bearer token\"`. The Design section also states the token \"is kept in memory only for the duration of that call,\" which the same record contradicts. The audit record is written to \"the existing encrypted database table\" — durable storage — so the contradiction follows from the artifact's text alone without assuming any implementation behavior.",
+            "finding_id": "audit-record-persists-bearer-token",
             "severity": "blocker",
-            "suggested_resolution": "Remove the raw_access_token field from the audit record schema so the record contains only account_id, outcome, provider_request_id, and event_time, consistent with the stated correlation mechanism. If some token-derived value is genuinely needed for correlation, replace it with an explicitly non-reversible construct (e.g. a keyed digest with a documented key lifecycle) and update the Requirements section to state that exception rather than leaving the two sections in conflict.",
-            "summary": "The specified audit record includes a raw_access_token field, contradicting the artifact's own requirement that the token never be persisted in any reversible form."
+            "suggested_resolution": "Remove the `raw_access_token` field from the audit record schema so the persisted record contains only `account_id`, `outcome`, `provider_request_id`, and `event_time`, matching the stated correlation mechanism (provider request ID). If some token-derived value is genuinely needed for correlation, state it explicitly as a non-reversible construct and reconcile it with the Requirements section rather than persisting the raw token.",
+            "summary": "The specified audit record schema persists the bearer token, contradicting the artifact's own requirement that token material never reach durable storage."
           },
           {
             "blocking": false,
-            "evidence": "Requirements: \"Persist an audit record for every validation attempt, including the account identifier, outcome, provider request ID, and event timestamp.\" Failure Handling: \"Provider timeouts produce an audit record with outcome unavailable.\" Acceptance Criteria: \"Provider request IDs let an operator correlate an attempt without consulting application logs.\" The artifact does not state whether a request ID exists for a timed-out call, nor whether the field may be null. Whether this is a true gap depends on unstated IdentityClient behavior, so it is raised as non-blocking.",
-            "finding_id": "unavailable-outcome-request-id",
+            "evidence": "The Goal and Requirements make non-persistence of token material the primary constraint (\"Never persist the token or any reversible representation of it\"), but the four Acceptance Criteria cover only record counts, operator correlation, session-creation blocking, and the retention job. None asserts a property of the record's field set.",
+            "finding_id": "acceptance-criteria-omit-no-token-persistence",
             "severity": "major",
-            "suggested_resolution": "State explicitly whether provider_request_id is nullable for the unavailable outcome, or specify a client-generated correlation ID assigned before the provider call so every record carries a usable identifier.",
-            "summary": "The artifact requires a provider request ID on every audit record but does not say what is recorded when the provider is unreachable."
+            "suggested_resolution": "Add an acceptance criterion such as: \"Audit records contain only account_id, outcome, provider_request_id, and event_time; no field contains the token or a reversible representation of it,\" so the constraint is independently verifiable.",
+            "summary": "Acceptance criteria do not include any check that persisted audit records exclude token material, despite that being the artifact's central constraint."
           },
           {
             "blocking": false,
-            "evidence": "The Goal is to \"Record enough information to investigate session creation failures\", while the Design states records \"expire after 30 days\" and the Acceptance Criteria require \"A 30-day retention job removes expired audit records.\" The artifact does not discuss whether 30 days covers typical investigation lead time or whether records under active investigation can be held.",
-            "finding_id": "retention-vs-investigation-window",
+            "evidence": "Requirements enumerate return codes: \"Return `SESSION_UNAUTHORIZED` for a rejected token and `IDENTITY_UNAVAILABLE` when the provider cannot be reached.\" Failure Handling then introduces a third code: \"If the audit write fails, the service returns `AUDIT_UNAVAILABLE`.\"",
+            "finding_id": "audit-unavailable-code-undeclared",
             "severity": "minor",
-            "suggested_resolution": "Add a sentence justifying the 30-day window against expected investigation lead time, and note whether a legal-hold or extension path exists for records tied to an open investigation.",
-            "summary": "The 30-day retention window is not reconciled with the investigation workflow the audit records exist to support."
+            "suggested_resolution": "List `AUDIT_UNAVAILABLE` in the Requirements error-code enumeration so the full response contract is stated in one place.",
+            "summary": "`AUDIT_UNAVAILABLE` appears in Failure Handling but is not declared alongside the other error codes in Requirements."
           },
           {
             "blocking": false,
-            "evidence": "Failure Handling states \"Rejected tokens produce an audit record before returning SESSION_UNAUTHORIZED\" and that \"If the audit write fails, the service returns AUDIT_UNAVAILABLE and does not create a session.\" It does not state whether AUDIT_UNAVAILABLE supersedes SESSION_UNAUTHORIZED when a rejected token's audit write also fails, which affects what the caller observes.",
-            "finding_id": "audit-write-ordering-unspecified",
+            "evidence": "Failure Handling states \"callers may retry with the same account identifier,\" while Acceptance Criteria state \"Successful, rejected, and unavailable validation attempts create one audit record apiece.\" Whether a retry sequence yields one record per validation attempt or one per logical session request is not stated; the per-attempt reading is the more natural one but the text does not settle it.",
+            "finding_id": "retry-record-count-ambiguity",
             "severity": "minor",
-            "suggested_resolution": "Specify the precedence of AUDIT_UNAVAILABLE relative to SESSION_UNAUTHORIZED and IDENTITY_UNAVAILABLE when both the validation and the audit write fail.",
-            "summary": "The ordering guarantee between the audit write and the error response is stated for the rejected case but left implicit elsewhere."
+            "suggested_resolution": "Clarify the criterion as \"each validation attempt, including retries, creates exactly one audit record\" to remove the ambiguity for implementers and for operators reading retention volumes.",
+            "summary": "The interaction between caller retries and the \"one audit record apiece\" criterion is open to two readings."
           }
         ],
-        "observed_output_sha256": "29f83920b7513dd886090207af835507b182b157adf8feb210bebd41006829b4",
+        "observed_output_sha256": "6c3f04093242344a703f88a2069fbf3c774e9b7a5c4aeb785f9c3a378d5974a5",
         "repeat": 1,
         "reviewer": {
           "adapter": "claude-cli",
-          "cli_version": "2.1.221",
+          "cli_version": "2.1.250",
           "effort": "high",
           "family": "claude",
           "model": "claude-opus-5"
@@ -288,46 +297,46 @@
         "case_id": "unhandled-error-path",
         "case_kind": "seeded",
         "direction": "codex-to-claude",
-        "envelope_input_sha256": "fe6b9e345002520995f1d08a51ee77e031770872c308a68d75575c3f8d9b8372",
+        "envelope_input_sha256": "fde8909908a62533f659d2612a6cb1b5cba41e3b1843b4b6fc95dca276ca9876",
         "findings": [
           {
             "blocking": false,
-            "evidence": "The Contract names three failures and specifies for LEASE_EXPIRED that \"the worker must stop uploading chunks and leave the job resumable.\" The Error Handling section then states scratch handling for the other two only: JOB_NOT_FOUND -> \"deletes its local scratch output and exits\"; WORKER_MISMATCH -> \"retains scratch output until its normal cleanup deadline.\" No corresponding statement exists for LEASE_EXPIRED. This is not blocking because the artifact does specify the required worker action for the condition (stop uploading, leave resumable), and Storage already guarantees \"partial scratch data never becomes visible,\" so no stated requirement is left unmet.",
-            "finding_id": "lease-expired-scratch-disposition",
+            "evidence": "\"The endpoint has three named failures\" plus \"Transient transport failures use exponential backoff\" and \"Lease owner, revision, and expiry are updated in one conditional database statement.\" If a renewal is applied server-side but the response is lost, the retry carries the now-stale revision from the still-correct owner within the still-valid expiry: not JOB_NOT_FOUND, not WORKER_MISMATCH, not LEASE_EXPIRED. The artifact does not state what the conditional statement matches on, so whether the retry is a no-op, a second renewal, or an unnamed failure is left open.",
+            "finding_id": "retry-stale-revision-response",
             "severity": "major",
-            "suggested_resolution": "Add one sentence to Error Handling stating whether a worker that receives LEASE_EXPIRED retains scratch output until its cleanup deadline (matching WORKER_MISMATCH) or deletes it, and whether it exits or attempts to reclaim.",
-            "summary": "LEASE_EXPIRED is the only named failure without scratch-output disposition in the Error Handling section."
+            "suggested_resolution": "State the predicate of the conditional statement and the response for a same-owner stale-revision request, e.g. return the current revision and expiry idempotently, or add a fourth named failure covering revision staleness.",
+            "summary": "Retried renewal after a lost response has no defined outcome under the closed set of three named failures."
           },
           {
             "blocking": false,
-            "evidence": "The Contract accepts \"the worker ID and current lease revision\" and Storage says \"Lease owner, revision, and expiry are updated in one conditional database statement,\" so the condition covers both fields. WORKER_MISMATCH is scoped narrowly to \"when another worker owns the current lease.\" Combined with \"Transient transport failures use exponential backoff,\" a retry whose first attempt already committed would present the correct owner but a stale revision, matching none of the three named failures. This stays non-blocking because it depends on an assumed commit-then-transport-failure ordering the artifact does not specify.",
-            "finding_id": "stale-revision-from-current-owner",
+            "evidence": "The Error Handling section covers JOB_NOT_FOUND (\"deletes its local scratch output and exits\") and WORKER_MISMATCH (\"retains scratch output until its normal cleanup deadline, and emits an ownership-conflict event\"). LEASE_EXPIRED is described only in Contract as \"the worker must stop uploading chunks and leave the job resumable,\" with no statement on scratch retention or whether an operator event is emitted.",
+            "finding_id": "lease-expired-worker-handling",
             "severity": "major",
-            "suggested_resolution": "Either state that a renewal from the current owner carrying a superseded revision is idempotent (returns the current expiry and revision without a second increment), or add a fourth named failure for stale revision.",
-            "summary": "A renewal retried by the rightful owner with a superseded revision maps to no named failure."
+            "suggested_resolution": "Add a LEASE_EXPIRED clause to Error Handling giving the same two details (scratch disposition and whether an operator-visible event is emitted) already given for the other two failures.",
+            "summary": "Error Handling specifies scratch disposition and operator signalling for two of the three named failures but not for LEASE_EXPIRED."
           },
           {
             "blocking": false,
-            "evidence": "Worker Flow says \"On success it stores the returned revision in memory\" and that a restarted worker may \"reload its last committed chunk index, claim a new lease, and continue.\" Since the revision does not survive restart, the claim operation must supply ownership and revision by some means this document does not define. This is an observation about a neighboring endpoint outside the stated scope of `POST /exports/{job_id}/lease`, not an unmet requirement here.",
-            "finding_id": "reclaim-path-out-of-scope",
+            "evidence": "\"On success it stores the returned revision in memory\" and \"An interrupted worker may restart, reload its last committed chunk index, claim a new lease, and continue.\" The restart loses the revision, and the documented contract covers only renewal, which requires \"the worker ID and current lease revision\"; the claim operation itself is outside the described endpoint.",
+            "finding_id": "revision-recovery-after-restart",
             "severity": "minor",
-            "suggested_resolution": "Add a pointer to the claim/acquire contract, or note explicitly that acquisition is specified elsewhere and that a restarted worker never reuses an in-memory revision.",
-            "summary": "The restart path depends on claiming a lease, but only the renewal endpoint is defined and revision is held only in memory."
+            "suggested_resolution": "Name the claim operation the restarted worker uses and how it obtains a fresh revision, or state explicitly that claim is out of scope for this document and covered elsewhere.",
+            "summary": "The revision is held only in memory, and the path by which a restarted worker obtains a lease is not described."
           },
           {
             "blocking": false,
-            "evidence": "The Contract defines LEASE_EXPIRED as applying \"when the request arrives after the current expiry\" and Worker Flow says \"The worker renews at half of the lease interval,\" while the acceptance criterion requires that \"Transport retry stops before the lease deadline.\" Whether the deadline is evaluated against the server clock, the returned expiry as interpreted by the worker, or a skew-adjusted value is unspecified. This is a completeness observation; the stated behavior is coherent under any single consistent choice.",
-            "finding_id": "expiry-clock-basis",
+            "evidence": "The four listed criteria omit any check that a request after \"the current expiry\" yields LEASE_EXPIRED and leaves the job resumable, and omit the JOB_NOT_FOUND scratch-deletion-and-exit behavior described in Error Handling.",
+            "finding_id": "acceptance-coverage-gaps",
             "severity": "minor",
-            "suggested_resolution": "State that expiry is evaluated server-side at request arrival and that the worker treats the returned expiry as its own deadline, optionally with a stated safety margin for skew.",
-            "summary": "The clock authority for expiry comparison and for the half-interval renewal timer is not stated."
+            "suggested_resolution": "Add one criterion per remaining named failure asserting the response code and the described worker-side outcome.",
+            "summary": "Acceptance criteria exercise WORKER_MISMATCH, revision increment, restart resume, and retry bounding, but not JOB_NOT_FOUND or LEASE_EXPIRED."
           }
         ],
-        "observed_output_sha256": "7a302c5a27328471ecc7f339fb7add01be9eae2cf592ffb1e88fb654991f33f5",
+        "observed_output_sha256": "26e3fcb1bb0e4d916303f2586c39cf52f9bb53fff54f3c612185e640d82b799b",
         "repeat": 1,
         "reviewer": {
           "adapter": "claude-cli",
-          "cli_version": "2.1.221",
+          "cli_version": "2.1.250",
           "effort": "high",
           "family": "claude",
           "model": "claude-opus-5"
@@ -342,54 +351,54 @@
         "case_id": "offline-constraint",
         "case_kind": "seeded",
         "direction": "codex-to-claude",
-        "envelope_input_sha256": "adc40d25a5a45f0eb93191c446a36d192f620bfbda6a5d0dcf6e1b0186f1ca8c",
+        "envelope_input_sha256": "abc55ff9364ff6e1617b3220e7e6bd69ad1fc7e6ad947e62be8cbfdaefbec588",
         "findings": [
           {
             "blocking": true,
-            "evidence": "Constraints: \"Every command must work on an air-gapped workstation with no DNS or network route.\" Design: \"At command startup, the validator reads `config_schema_version` from `.project/config.yaml`, downloads the matching JSON Schema from `https://schemas.example.invalid/project/{version}.json`, verifies its pinned SHA-256 digest, and caches it under the user's application-data directory.\" Failure Handling: \"A download failure returns `CONFIG_SCHEMA_UNAVAILABLE` without dispatching the command.\" The only offline relief the artifact offers is permissive, not guaranteed, and never states how the cache is populated without network access: \"A cached digest-matching response may be reused.\" Taken together with the stated ordering (validation runs at startup, before dispatch, for every command), the artifact's text entails that on an air-gapped workstation with an unpopulated cache no command can run, which the Constraints section forbids.",
-            "finding_id": "airgap-contradicted-by-startup-download",
+            "evidence": "Constraints state: \"Every command must work on an air-gapped workstation with no DNS or network route.\" Design states: \"At command startup, the validator reads `config_schema_version` from `.project/config.yaml`, downloads the matching JSON Schema from `https://schemas.example.invalid/project/{version}.json` ... and caches it under the user's application-data directory. A cached digest-matching response may be reused.\" Failure Handling states: \"A download failure returns `CONFIG_SCHEMA_UNAVAILABLE` without dispatching the command.\" The only stated source of cache content is a successful download, and the artifact specifies no bundled or offline-provisioned schema. On the environment the constraint mandates, the download always fails, so every command terminates with CONFIG_SCHEMA_UNAVAILABLE before dispatch. This follows from the artifact's own text without assuming unspecified behavior.",
+            "finding_id": "network-fetch-contradicts-air-gap-constraint",
             "severity": "blocker",
-            "suggested_resolution": "Remove the network dependency from the required path or make the offline path normative. Either (a) vendor the schema for each supported `config_schema_version` in the repository and treat the pinned digest as an integrity check on the vendored copy, or (b) specify a cache-first resolution order in which a digest-matching local schema satisfies validation with no network attempt, plus a stated mechanism for pre-seeding that cache on an air-gapped workstation, and restrict `CONFIG_SCHEMA_UNAVAILABLE` to environments where the constraint does not apply.",
-            "summary": "The mandatory startup schema download contradicts the artifact's own air-gap constraint: on a machine with no network route and a cold cache, every command is blocked from dispatch."
+            "suggested_resolution": "Make schema acquisition offline-first in a way the artifact states explicitly: ship the schema for each supported `config_schema_version` with the repository or application, verify it against the configuration's pinned SHA-256 digest locally, and remove network fetch from the command startup path (or specify it as an optional, separately invoked provisioning step that no command depends on). Restate CONFIG_SCHEMA_UNAVAILABLE as covering a missing/unreadable local schema rather than a failed download.",
+            "summary": "The startup schema download contradicts the stated air-gapped constraint: with no network route the cache can never be populated, so no command can run."
           },
           {
             "blocking": false,
-            "evidence": "Constraints: \"The implementation may use only existing runtime dependencies.\" The Design names one existing component explicitly — \"compiled with the existing JSON Schema validator\" — but introduces the fetch without any comparable statement: \"downloads the matching JSON Schema from `https://schemas.example.invalid/project/{version}.json`\". Whether a suitable HTTPS client is already a runtime dependency is not stated in the artifact, so this is an unverified assumption rather than a textual contradiction.",
-            "finding_id": "http-client-vs-existing-dependencies",
+            "evidence": "Constraints state: \"The implementation may use only existing runtime dependencies.\" The Design names \"the existing JSON Schema validator\" as available, but names no existing HTTP client or SHA-256 facility while requiring the validator to download a URL and verify a digest.",
+            "finding_id": "http-client-dependency-unstated",
             "severity": "major",
-            "suggested_resolution": "Name the existing dependency that performs the HTTPS fetch and TLS verification, or note that this is moot if the network path is removed per the air-gap resolution.",
-            "summary": "The design requires an HTTPS download but does not identify the HTTP client among the existing runtime dependencies, unlike the JSON Schema validator which it explicitly names as existing."
+            "suggested_resolution": "Name the existing runtime dependency that provides HTTP retrieval and SHA-256 hashing, or note that both are satisfied by the standard library, so the constraint is verifiably met.",
+            "summary": "The design requires an HTTP client and digest computation, but the artifact only identifies the JSON Schema validator as an existing dependency."
           },
           {
             "blocking": false,
-            "evidence": "Constraints: \"The configuration pins the expected SHA-256 digest for that schema version.\" Design: the validator \"reads `config_schema_version` from `.project/config.yaml`\" and then \"verifies its pinned SHA-256 digest\" — both values are drawn from a document whose validity is only established later, since \"the configuration is checked before command dispatch.\" The artifact does not state how a malformed, missing, or unparseable pin is treated.",
-            "finding_id": "digest-pin-read-before-validation",
+            "evidence": "Failure Handling states: \"An unsupported schema version returns `CONFIG_VERSION_UNSUPPORTED`,\" and Acceptance Criteria states: \"Unsupported versions fail before command dispatch.\" The artifact defines no allowlist, range, or other source for the supported set; Constraints only say \"The repository's pinned `config_schema_version` selects the accepted shape.\"",
+            "finding_id": "supported-version-set-unspecified",
             "severity": "minor",
-            "suggested_resolution": "Specify the bootstrap contract: how `.project/config.yaml` is parsed before schema validation, and which error code applies when `config_schema_version` or the digest pin is absent, malformed, or not a well-formed SHA-256 value.",
-            "summary": "The expected digest is read from the same configuration document that has not yet been validated, so the integrity pin is trusted before the shape that defines it is checked."
+            "suggested_resolution": "State where the supported version set comes from (for example, the set of schema versions shipped with the application) and that any version outside it yields CONFIG_VERSION_UNSUPPORTED before dispatch.",
+            "summary": "Nothing states what makes a `config_schema_version` supported, so the CONFIG_VERSION_UNSUPPORTED path has no defined trigger."
           },
           {
             "blocking": false,
-            "evidence": "Failure Handling: \"A digest mismatch returns `CONFIG_SCHEMA_INVALID`\" and \"Cache writes use atomic replacement; a failed cache write does not invalidate an already compiled schema for the current command.\" Design permits reuse: \"A cached digest-matching response may be reused.\" The artifact is silent on whether a non-matching cache entry is evicted or re-fetched. This is outside the conditions the artifact claims to cover and is reasonably an implementer decision.",
-            "finding_id": "cache-poisoning-not-addressed",
+            "evidence": "Design states only that \"A cached digest-matching response may be reused,\" and Failure Handling assigns CONFIG_SCHEMA_INVALID to \"A digest mismatch\" without distinguishing a mismatching cache entry from a mismatching download.",
+            "finding_id": "stale-cache-digest-mismatch-unspecified",
             "severity": "minor",
-            "suggested_resolution": "State whether a digest-mismatching cache entry is evicted and re-fetched once, or reported directly as `CONFIG_SCHEMA_INVALID`, so the failure is not silently sticky across invocations.",
-            "summary": "The artifact does not say what happens to a cached schema entry whose digest fails verification, leaving a possible repeated-failure state undescribed."
+            "suggested_resolution": "Specify explicitly whether a digest-mismatching cache entry is discarded and re-acquired or reported as CONFIG_SCHEMA_INVALID, so a corrupted or stale cache cannot permanently block commands.",
+            "summary": "Behavior is undefined when a cached schema exists but its digest does not match the configuration's pin."
           },
           {
             "blocking": false,
-            "evidence": "Failure Handling: \"An unsupported schema version returns `CONFIG_VERSION_UNSUPPORTED`.\" Acceptance Criteria: \"Unsupported versions fail before command dispatch.\" No section states where the set of accepted versions is enumerated or how it relates to \"The repository's pinned `config_schema_version` selects the accepted shape.\"",
-            "finding_id": "supported-version-set-undefined",
+            "evidence": "Constraints require air-gapped operation for \"Every command,\" but all four Acceptance Criteria concern invalid configuration, digest mismatch, unsupported versions, and diagnostic content; none asserts that commands succeed with no network route.",
+            "finding_id": "no-offline-acceptance-criterion",
             "severity": "minor",
-            "suggested_resolution": "Define the source of truth for the supported version set (for example, an in-repo manifest of versions and their pinned digests) so the unsupported-version check is decidable without a network round trip.",
-            "summary": "`CONFIG_VERSION_UNSUPPORTED` is specified as an outcome but the artifact never defines what makes a version supported."
+            "suggested_resolution": "Add an acceptance criterion such as: with no DNS or network route and a valid configuration, validation succeeds and the command dispatches.",
+            "summary": "The acceptance criteria do not test the air-gapped constraint, which is the artifact's strongest environmental requirement."
           }
         ],
-        "observed_output_sha256": "676f3ab9b1aee9ad0088e622fcd59a347d682f8ef3f88b8bc948e73a37061640",
+        "observed_output_sha256": "709780e0652795198f9f0eae873e48ef990b234c699312d2842a5f3eaae4f48d",
         "repeat": 1,
         "reviewer": {
           "adapter": "claude-cli",
-          "cli_version": "2.1.221",
+          "cli_version": "2.1.250",
           "effort": "high",
           "family": "claude",
           "model": "claude-opus-5"
@@ -404,54 +413,54 @@
         "case_id": "atomic-profile-update",
         "case_kind": "control",
         "direction": "codex-to-claude",
-        "envelope_input_sha256": "d5c8126be5bb64d5734483ab72aed37faa54c5868d6f305eb5950eeddbeafdd0",
+        "envelope_input_sha256": "65ebebe3e05f0b054acda9cddcac4be55ac6bd9ce5d34500072e539cd30149eb",
         "findings": [
           {
             "blocking": false,
-            "evidence": "Design: \"it checks profile existence inside the transaction to distinguish a missing profile from a stale revision.\" Failure Handling: \"A stale revision returns REVISION_CONFLICT with the current revision but no profile fields.\" The artifact does not state that the existence check also reads the stored revision that the response must carry.",
-            "finding_id": "conflict-current-revision-source",
-            "severity": "minor",
-            "suggested_resolution": "Reword the design sentence to say the in-transaction lookup reads the profile's current revision (and returns only that field, not the profile body), so the conflict response's payload has a stated source.",
-            "summary": "The failure path promises the current revision on conflict, but the design describes the post-miss lookup only as an existence check."
-          },
-          {
-            "blocking": false,
-            "evidence": "Design: \"Event identity is the profile ID plus revision, making publisher retries idempotent.\" Identity alone makes retries idempotent only if the consumer (search index) or the publisher's delivery path treats a repeated (profile_id, revision) as a no-op; the artifact does not state that requirement anywhere, and the acceptance criterion is scoped to \"outbox event\" count rather than deliveries.",
-            "finding_id": "index-dedupe-contract-unstated",
+            "evidence": "Design: 'A background publisher sends committed events to the search index and marks them delivered. Event identity is the profile ID plus revision, making publisher retries idempotent.' Identity-based dedup makes redelivery of the same event harmless, but says nothing about relative ordering between revision N and N+1 events for the same profile.",
+            "finding_id": "index-revision-ordering",
             "severity": "major",
-            "suggested_resolution": "State explicitly that the search index (or the publish call) discards a repeated (profile_id, revision) pair, so the idempotency claim rests on a written contract rather than on identity being present.",
-            "summary": "Idempotency of publisher retries is asserted from event identity alone; the search index's dedupe obligation is not stated."
+            "suggested_resolution": "Add a sentence stating either that the publisher delivers a profile's events in revision order, or that the index write is conditional on the incoming revision exceeding the currently indexed revision. Non-blocking: the artifact scopes its reader guarantee to the primary database, so no stated acceptance criterion is violated.",
+            "summary": "Outbox delivery is described as idempotent per (profile ID, revision) but nothing states that the search index applies revisions monotonically, so a delayed older event could overwrite a newer indexed profile."
           },
           {
             "blocking": false,
-            "evidence": "Design: \"A background publisher sends committed events to the search index and marks them delivered.\" Nothing states delivery order across revisions, so a retry of revision N after revision N+1 has landed is not excluded by the text. The acceptance criteria constrain outbox event count but say nothing about index contents.",
-            "finding_id": "retry-ordering-vs-index-state",
+            "evidence": "Failure Handling: 'A stale revision returns REVISION_CONFLICT with the current revision but no profile fields.' Design: 'it checks profile existence inside the transaction to distinguish a missing profile from a stale revision.' The existence check is the only stated read that could supply that revision.",
+            "finding_id": "conflict-response-revision-source",
             "severity": "minor",
-            "suggested_resolution": "Add a line that the index applies an event only when its revision exceeds the currently indexed revision, or that the publisher drains events per profile in revision order.",
-            "summary": "Out-of-order or late-retried event delivery could move the search index backward to an older revision; ordering is not addressed."
+            "suggested_resolution": "Reword the design to say the in-transaction lookup reads the current revision (not merely existence), so the conflict payload has a stated source.",
+            "summary": "The contract requires the conflict response to carry the current revision, but the design specifies only an existence check on the fallback path."
           },
           {
             "blocking": false,
-            "evidence": "Design: \"Readers use the same primary database and therefore observe either the prior profile or the complete new profile.\" Acceptance Criteria: \"Readers never observe a new display name paired with the previous locale.\" The second statement is unqualified while the supporting argument covers only primary readers, even though the design also introduces an asynchronously updated search index.",
-            "finding_id": "reader-scope-limited-to-primary",
+            "evidence": "Contract: 'PATCH /profiles/{user_id} accepts display_name, locale, and expected_revision. Both text fields are required and validated before storage.'",
+            "finding_id": "patch-full-field-semantics",
             "severity": "minor",
-            "suggested_resolution": "Qualify the acceptance criterion to primary-database readers, and separately note that index events carry both fields together so index readers also never see a mixed pair, only a stale one.",
-            "summary": "The no-torn-read guarantee is argued only for primary-database readers; search-index readers are left outside the stated reasoning."
+            "suggested_resolution": "State explicitly that omitting either text field yields PROFILE_INVALID, or note the deliberate choice of full-replacement semantics under the PATCH verb so implementers do not add partial-update paths.",
+            "summary": "PATCH is specified with both text fields mandatory, which is replacement rather than partial-update semantics; behavior for a request omitting one field is not stated beyond it being invalid."
           },
           {
             "blocking": false,
-            "evidence": "Contract: \"accepts display_name, locale, and expected_revision. Both text fields are required and validated before storage.\" The requiredness and validation treatment of expected_revision (missing, non-integer, negative) is unspecified, while the concurrency acceptance criterion assumes every request carries one.",
-            "finding_id": "expected-revision-requiredness",
+            "evidence": "Failure Handling enumerates PROFILE_NOT_FOUND, REVISION_CONFLICT, PROFILE_INVALID (for 'validation errors'), and PROFILE_WRITE_FAILED, while the Contract's validation sentence covers only 'both text fields'.",
+            "finding_id": "expected-revision-validation",
             "severity": "minor",
-            "suggested_resolution": "State that expected_revision is required and is validated as a non-negative integer under PROFILE_INVALID before the transaction opens, alongside the text fields.",
-            "summary": "Whether expected_revision is mandatory is not stated, unlike the two text fields."
+            "suggested_resolution": "Say that a missing or malformed expected_revision is a PROFILE_INVALID case rejected before the transaction opens, so it is never conflated with REVISION_CONFLICT.",
+            "summary": "Handling of a missing or non-integer expected_revision is not stated among the failure cases."
+          },
+          {
+            "blocking": false,
+            "evidence": "Design: 'A background publisher sends committed events to the search index and marks them delivered.' No statement covers events that repeatedly fail to deliver, nor any bound on how long the index may trail the primary database.",
+            "finding_id": "publisher-failure-path",
+            "severity": "minor",
+            "suggested_resolution": "Add a brief note on retry/backoff limits and where permanently undeliverable events land (e.g. a dead-letter state plus alerting), and state whether index staleness is bounded. This is outside the stated atomicity scope, hence non-blocking.",
+            "summary": "Terminal publisher failure and delivery lag are unaddressed; the artifact covers only the retry-idempotency aspect of publishing."
           }
         ],
-        "observed_output_sha256": "daefada6b225ae24dc63c38d55aba282dab16acb80c43c3e6e498a211de10d37",
+        "observed_output_sha256": "8c0d39bc5cf26f0663ca0547b7877bce7f6c56c9bb27297726faea46f7931f09",
         "repeat": 1,
         "reviewer": {
           "adapter": "claude-cli",
-          "cli_version": "2.1.221",
+          "cli_version": "2.1.250",
           "effort": "high",
           "family": "claude",
           "model": "claude-opus-5"
@@ -466,54 +475,46 @@
         "case_id": "bounded-upload",
         "case_kind": "control",
         "direction": "codex-to-claude",
-        "envelope_input_sha256": "b0e93bb023bfe115171f07961cb95b03531d2ecffd54fd449bcfbb56f016e558",
+        "envelope_input_sha256": "b1a1928b3b748577a5ca2a955f7c0835e063d3d9bccd368e74a04edcf608f7a1",
         "findings": [
           {
             "blocking": false,
-            "evidence": "Failure Handling names `UPLOAD_TOO_LARGE` (limit), `DOCUMENT_INVALID` (signature/parser), and `UPLOAD_STORAGE_FAILED` (storage). For the remaining branch it states only: 'If the database transaction fails after the content-addressed file is installed, a periodic sweeper removes unreferenced files after a grace period.' No response is specified for the caller on that path. This is not blocking: no acceptance criterion demands a response code per branch, and the durability invariant for that branch ('an installed file is never served without a committed owner record') is stated, so the condition the artifact claims to cover is handled.",
-            "finding_id": "db-failure-client-response-unnamed",
-            "severity": "major",
-            "suggested_resolution": "Add the client-facing outcome for a failed database transaction, e.g. reuse `UPLOAD_STORAGE_FAILED` or introduce a distinct code, so the error taxonomy is total over the described failure branches.",
-            "summary": "The Failure Handling section names a client-visible error code for every failure branch except database transaction failure, which describes only server-side cleanup."
+            "evidence": "Failure Handling states \"a periodic sweeper removes unreferenced files after a grace period\", while Design states that on a digest collision \"the storage rename is treated as idempotent and the new database record may reference the existing bytes.\" A second upload that dedupes onto an existing file whose only owner record has just been removed could observe reclamation, but the artifact specifies no ordering between sweeper scans and in-flight uploads, so no contradiction follows from the text alone.",
+            "finding_id": "sweeper-dedup-grace-window",
+            "severity": "minor",
+            "suggested_resolution": "Optionally state the grace period's lower bound relative to the maximum upload duration, or note that the sweeper must not reclaim a digest that an in-flight upload has referenced.",
+            "summary": "The sweeper's interaction with a concurrent deduplicating upload is left to the implementer; the grace period is unquantified."
           },
           {
             "blocking": false,
-            "evidence": "Cleanup is attached to handler actions ('closes and removes the staging file' for the limit, cancellation, and storage-failure paths). The only background reclamation described is scoped to installed content: 'a periodic sweeper removes unreferenced files after a grace period.' Abnormal process termination is outside the artifact's stated scope and no acceptance criterion covers it, so this is an observation rather than a defect.",
-            "finding_id": "staging-orphans-after-abnormal-termination",
+            "evidence": "Design says the handler \"atomically renames the staging file into content-addressed storage under its digest\", and the staging file lives in \"the service's staging directory\", but the artifact does not state that the staging directory and content-addressed storage share a filesystem. This is an environment property the artifact does not specify rather than a stated contradiction.",
+            "finding_id": "rename-same-filesystem-precondition",
             "severity": "minor",
-            "suggested_resolution": "Optionally state whether the existing sweeper also reclaims aged files in the staging directory, or note staging reclamation as explicitly out of scope.",
-            "summary": "Staging-file cleanup is described only for in-handler paths; no reclamation is stated for staging files left by process crash or restart mid-upload."
+            "suggested_resolution": "Record the colocation requirement as an explicit deployment precondition for the atomic install step.",
+            "summary": "Atomicity of the staging-to-storage rename presumes an unstated colocation precondition."
           },
           {
             "blocking": false,
-            "evidence": "The artifact says 'If the digest already exists, the storage rename is treated as idempotent and the new database record may reference the existing bytes,' while the sweeper 'removes unreferenced files after a grace period.' A blob that is momentarily unreferenced but is being deduplicated against by a concurrent upload is a conceivable interaction, but establishing a conflict requires assuming sweeper scheduling and commit ordering the artifact does not state, so it is not a blocking contradiction.",
-            "finding_id": "sweeper-dedup-interaction",
+            "evidence": "Design says \"the new database record may reference the existing bytes\", whereas Acceptance Criteria requires that \"Retrying identical bytes is safe and does not duplicate content storage.\" Content-addressed naming already satisfies the criterion, so this is a wording observation rather than an unmet requirement.",
+            "finding_id": "dedup-record-permissive-wording",
             "severity": "minor",
-            "suggested_resolution": "Optionally state that the sweeper's grace period and reference check are evaluated relative to committed records, or that dedup re-links are ordered against sweep eligibility.",
-            "summary": "The grace-period sweeper and the idempotent dedup path interact in ways the artifact does not describe, though the interaction depends on timing the artifact does not specify."
+            "suggested_resolution": "Replace \"may reference\" with the intended normative behavior so the dedup path reads as an invariant rather than an option.",
+            "summary": "The dedup path uses permissive wording where the acceptance criterion is stated as an invariant."
           },
           {
             "blocking": false,
-            "evidence": "'the new database record may reference the existing bytes' implies many-to-one records-to-blob. Document deletion is not part of the artifact's Goal or Acceptance Criteria, so lifecycle-on-delete is outside stated scope and correctly absent for this phase.",
-            "finding_id": "shared-bytes-lifecycle-unstated",
+            "evidence": "The Goal bounds \"memory use\" and Acceptance Criteria constrains only that \"Resident memory does not scale with uploaded document size.\" Disk consumption of up to 10 MiB per concurrent in-flight upload is never claimed to be covered, so its absence is not missing handling for a stated requirement.",
+            "finding_id": "aggregate-staging-capacity",
             "severity": "minor",
-            "suggested_resolution": "Optionally note that reference counting or delete semantics for shared content-addressed blobs is deferred to a later phase, so it is not silently assumed by implementers.",
-            "summary": "Deduplication lets multiple owner records share one stored blob; the artifact does not state lifecycle semantics when one such record is later removed."
-          },
-          {
-            "blocking": false,
-            "evidence": "'It counts bytes while writing... If the count exceeds 10 MiB, the handler closes and removes the staging file.' This satisfies the acceptance criterion 'A byte over the limit returns UPLOAD_TOO_LARGE and leaves no staging file' exactly as written; early rejection would be an efficiency refinement, not a correctness requirement, and belongs to the implementer.",
-            "finding_id": "early-rejection-not-considered",
-            "severity": "minor",
-            "suggested_resolution": "Optionally allow rejecting on a declared content length before opening a staging file, while keeping the byte counter as the authoritative check.",
-            "summary": "The size limit is enforced purely by counting bytes as they are written; declared-length-based early rejection is not mentioned."
+            "suggested_resolution": "If desired, add a concurrency or staging-capacity bound as a separate requirement, or state explicitly that aggregate staging disk usage is out of scope.",
+            "summary": "Per-request size is bounded, but aggregate staging-directory consumption across concurrent uploads is outside the artifact's stated scope."
           }
         ],
-        "observed_output_sha256": "22409f25fc903bce256cff9be03c3637217ded03628ea74cce1bbac7d561a2a2",
+        "observed_output_sha256": "e82b8c150d3428cdb15b66adac8e7bfc9ea164bde2747eb834fffdfed24ffe3e",
         "repeat": 1,
         "reviewer": {
           "adapter": "claude-cli",
-          "cli_version": "2.1.221",
+          "cli_version": "2.1.250",
           "effort": "high",
           "family": "claude",
           "model": "claude-opus-5"
@@ -528,54 +529,54 @@
         "case_id": "offline-schema-bundle",
         "case_kind": "control",
         "direction": "codex-to-claude",
-        "envelope_input_sha256": "37c8ab55ddfba844471859bf37be81c3a00d06ca48cb42c94017183ba1b937d6",
+        "envelope_input_sha256": "9c5dbc78a25df5dd7dc954bbae74121373eef9bfbdc9ad17a62a78d4ed762501",
         "findings": [
           {
             "blocking": false,
-            "evidence": "Design states the validator 'reads `config_schema_version`, resolves it through a closed in-package version map'. Failure Handling enumerates only three outcomes: 'An absent or unsupported version returns `CONFIG_VERSION_UNSUPPORTED`. Missing packaged schema bytes return `INSTALLATION_INVALID` ... An invalid document returns `CONFIG_INVALID` with all diagnostics.' A document that cannot be parsed into a value (so no version can be read and no schema check can run) matches none of these cases by its stated terms.",
-            "finding_id": "malformed-config-parse-failure",
+            "evidence": "The Constraints section states 'Validation performs no network access,' and the Design section states the validator 'loads those bytes without consulting user caches or remote services' and is 'compiled with the existing JSON Schema validator.' The text scopes the no-network guarantee to the act of loading the selected schema file; it says nothing about reference resolution performed by the validator once compilation begins. Many JSON Schema validators resolve unknown $ref URIs by retrieval unless configured otherwise. This is an unstated gap rather than a contradiction, because the artifact never asserts that the packaged schemas contain references.",
+            "finding_id": "ref-resolution-policy-unstated",
             "severity": "major",
-            "suggested_resolution": "Add an explicit outcome for unparseable configuration bytes — either a distinct code or an explicit statement that parse failure is reported as `CONFIG_INVALID` with a diagnostic at the root pointer — and confirm it also occurs before command dispatch.",
-            "summary": "Failure Handling does not state an outcome for a configuration file whose bytes are not parseable at all, although the design requires parsing it to read the version field."
+            "suggested_resolution": "Add one sentence to the Design section stating either that packaged schemas are self-contained with no external references, or that the validator is configured with a closed in-package resolver and that an unresolvable reference returns INSTALLATION_INVALID.",
+            "summary": "The artifact does not state whether packaged schemas may contain $ref values or how those references are resolved, leaving a path by which the no-network constraint could be silently violated."
           },
           {
             "blocking": false,
-            "evidence": "Diagnostics are specified as 'the repository-relative configuration path, JSON pointer, and validation keyword' and the acceptance criterion requires 'Diagnostics identify invalid fields without copying their values.' Under the `required` keyword the violation concerns a property that is absent, and whether the emitted pointer addresses the parent object or the missing property is not specified by the artifact.",
-            "finding_id": "required-keyword-field-identification",
-            "severity": "major",
-            "suggested_resolution": "State that for `required` (and similar absence-oriented keywords) the diagnostic pointer addresses the expected property location, or add a schema-derived property-name field that carries no user data.",
-            "summary": "For missing-property violations, the stated diagnostic fields may not identify the offending field, which is in tension with the acceptance criterion on field identification."
-          },
-          {
-            "blocking": false,
-            "evidence": "'Diagnostics are sorted by pointer and keyword before being returned', paired with the acceptance criterion 'Repeated validation of identical bytes returns diagnostics in stable order.' Combinator branches such as `anyOf`/`oneOf` can produce several diagnostics sharing one pointer and one keyword, and the artifact does not state that the sort is stable or that a further tie-break exists.",
-            "finding_id": "diagnostic-sort-key-ties",
+            "evidence": "The Design section says 'the validator reads config_schema_version' as its first step, and Failure Handling enumerates CONFIG_VERSION_UNSUPPORTED, INSTALLATION_INVALID, and CONFIG_INVALID. 'An absent or unsupported version returns CONFIG_VERSION_UNSUPPORTED' addresses a missing version field within a readable document, but the artifact does not claim to cover a missing or syntactically invalid configuration file, so this is a completeness gap outside stated scope rather than unmet stated scope.",
+            "finding_id": "unparseable-config-uncovered",
             "severity": "minor",
-            "suggested_resolution": "Specify a stable sort or an additional deterministic tie-break component (for example the schema pointer of the failing subschema) so the ordering guarantee does not rest on unstated sort behavior.",
-            "summary": "The stated sort key (pointer, keyword) is not guaranteed unique, so stable ordering under ties is left unspecified."
+            "suggested_resolution": "Either extend Failure Handling with an explicit outcome for a missing or unparseable configuration document, or state that document retrieval and parsing occur upstream and are outside this component's scope.",
+            "summary": "No result is defined for a configuration file that is absent or not parseable as JSON, a condition that must be reached before config_schema_version can be read."
           },
           {
             "blocking": false,
-            "evidence": "'loads those bytes without consulting user caches or remote services. The schema is compiled with the existing JSON Schema validator', alongside the constraint 'Validation performs no network access.' The artifact does not state that packaged schemas are self-contained or that external `$ref` resolution is disabled in the validator.",
-            "finding_id": "remote-ref-resolution-scope",
+            "evidence": "Failure Handling states 'Missing packaged schema bytes return INSTALLATION_INVALID; the command does not fall back to a network source.' A damaged installation in which the file exists but does not compile is a plausible sibling condition; the acceptance criterion 'Unsupported versions and damaged installations fail before command dispatch' uses the broader phrase 'damaged installations,' which suggests the intent is broader than the narrower 'missing' wording in Failure Handling. The mismatch is a wording-scope observation, not a contradiction, since 'missing' does not exclude other conditions from also mapping to INSTALLATION_INVALID.",
+            "finding_id": "corrupt-schema-bytes-uncovered",
             "severity": "minor",
-            "suggested_resolution": "State that packaged schemas contain no external references, or that the validator is configured with remote reference resolution disabled so compilation cannot initiate network access.",
-            "summary": "The no-network guarantee is stated for loading schema bytes but not for reference resolution during compilation."
+            "suggested_resolution": "Widen the Failure Handling sentence to cover packaged schema bytes that are missing, unreadable, or fail to compile, so it matches the 'damaged installations' phrasing in the acceptance criteria.",
+            "summary": "Failure Handling covers missing packaged schema bytes but not schema bytes that are present yet corrupted or fail to compile."
           },
           {
             "blocking": false,
-            "evidence": "Constraints say \"The repository's pinned `config_schema_version` selects the accepted shape\" and Design says the validator 'reads `config_schema_version`' without stating whether it lives inside the configuration document under validation or in a separate pinned repository file.",
-            "finding_id": "version-field-location-unspecified",
+            "evidence": "Diagnostics are specified as 'the repository-relative configuration path, JSON pointer, and validation keyword,' and the acceptance criterion requires that 'Diagnostics identify invalid fields without copying their values.' For a required violation the pointer conventionally addresses the containing object rather than the absent property, so whether the field is identified depends on the validator's pointer convention, which the artifact does not specify. Because this turns on unstated validator behavior, it is an observation rather than a defect in the artifact's own text.",
+            "finding_id": "field-identification-convention-unpinned",
             "severity": "minor",
-            "suggested_resolution": "Name the file and field path that holds the pinned version, and state which failure takes precedence when both the version and the document are problematic.",
-            "summary": "The artifact does not say where `config_schema_version` is read from, which affects the ordering of version and document failures."
+            "suggested_resolution": "State the pointer convention for keywords whose violation is not located at a value position, for example by requiring that the pointer address the offending property for required and additionalProperties violations.",
+            "summary": "For keywords such as required and additionalProperties, the artifact does not pin down how a diagnostic identifies the offending field, which makes one acceptance criterion harder to test unambiguously."
+          },
+          {
+            "blocking": false,
+            "evidence": "Constraints require that 'The implementation uses only existing runtime dependencies,' and the Design section relies on 'the existing JSON Schema validator' without naming the supported dialect. Since 'Supported JSON Schemas ship inside the installed package under versioned filenames,' the dialect those files must be authored against is a reasonable thing to record, though its absence does not conflict with any stated requirement.",
+            "finding_id": "schema-dialect-unnamed",
+            "severity": "minor",
+            "suggested_resolution": "Name the JSON Schema dialect the packaged schemas target and that the existing validator supports, so schema authoring and validator selection stay aligned across versions.",
+            "summary": "The JSON Schema dialect accepted by the existing validator is not named, so the versioned schema files' authoring target is left implicit."
           }
         ],
-        "observed_output_sha256": "ae7cb78e472f70caac03f04d21f04352ebc7af34f85ea2368131aee86162add0",
+        "observed_output_sha256": "c8c9342937788c73ba2db43cd24e6987cb336464db4b43a459d285182ec5e751",
         "repeat": 1,
         "reviewer": {
           "adapter": "claude-cli",
-          "cli_version": "2.1.221",
+          "cli_version": "2.1.250",
           "effort": "high",
           "family": "claude",
           "model": "claude-opus-5"
@@ -587,10 +588,10 @@
     ],
     "schema_version": "1",
     "secondary_raw_telemetry": {
-      "blocking_run_count": 4,
-      "blocking_run_rate": 0.3333333333333333,
-      "fail_verdict_count": 4,
-      "fail_verdict_rate": 0.3333333333333333
+      "blocking_run_count": 5,
+      "blocking_run_rate": 0.4166666666666667,
+      "fail_verdict_count": 5,
+      "fail_verdict_rate": 0.4166666666666667
     }
   },
   "schema_version": "1"

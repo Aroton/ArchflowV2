@@ -1,7 +1,7 @@
 {
-  "host_selection_result_digest": "ddbbebe429cc78d7335710e1f414ef612ed5bf713af17f2c878121f42a3bdb5f",
+  "host_selection_result_digest": "a215e218f03eadbf82966069209db04ee9f50c94663675ea07102fb6c6d2c907",
   "observation_payload": {
-    "bundle_manifest_sha256": "f25a3541925e12e84ad5cb3a3fd5d09e550af38cddb6d3dbdaec2e0293482108",
+    "bundle_manifest_sha256": "819fe730d8903938843aa13a34b6858c224f3d3a8dbb8fcbca1e9ad60ece657d",
     "hosts": {
       "claude": {
         "advertisement": {
@@ -11,7 +11,7 @@
             "archflow_status"
           ]
         },
-        "cli_version": "2.1.238 (Claude Code)",
+        "cli_version": "2.1.250 (Claude Code)",
         "first_call_selection": {
           "first_archflow_tool": "archflow_status",
           "prompt": "What is the current status of the ArchFlow task hostsel-claude? Answer in one sentence.",
@@ -40,7 +40,7 @@
             "archflow_status"
           ]
         },
-        "cli_version": "codex-cli 0.149.0",
+        "cli_version": "codex-cli 0.150.1",
         "first_call_selection": {
           "first_archflow_tool": "archflow_status",
           "prompt": "What is the current status of the ArchFlow task hostsel-codex? Answer in one sentence.",
