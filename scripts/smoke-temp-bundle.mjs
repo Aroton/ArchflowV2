@@ -42,7 +42,7 @@ assert.deepEqual(
     input_fingerprint: "b".repeat(64),
     pinned_constitution_digest: "d".repeat(64),
     approved_upstream_digests: [],
-    source_evidence_set_digest: "e".repeat(64),
+    source_review_envelope_digest: "e".repeat(64),
     rule_findings: [],
     drift_findings: []
   }).constitution,

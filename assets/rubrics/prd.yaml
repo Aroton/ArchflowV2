@@ -28,6 +28,9 @@ criteria:
   - id: unverifiable-claims
     text: "When missing envelope or read-only repository evidence prevents a material judgment, record one non-blocking finding naming the claim and missing evidence, with a finding_id beginning unverifiable-. Never guess. An explicit assumption is handled under stated-assumptions. Omit gaps that cannot materially affect the review, report each material gap once, and do not re-report one already named in prior-triage."
     blocking: false
+  - id: reviewer-confidence
+    text: "When a material judgment cannot be made with confidence from the artifact, the pinned ask record, and the supplied repository snapshot, record one non-blocking finding with a finding_id beginning escalate-, citing the exact judgment that could not be made and what evidence or clarification would settle it. Report escalate- only for a question that could materially change the verdict; a missing document or evidence gap belongs to unverifiable-claims, and never guess in either place."
+    blocking: false
   - id: advisory-observations
-    text: "Do not report non-material observations, optional improvements, completeness suggestions, stylistic preferences, or harmless prose refinements. A sound, decision-ready artifact should return no findings rather than a list of possible enhancements."
+    text: "Do not report non-material observations, optional improvements, completeness suggestions, stylistic preferences, or harmless prose refinements. A sound, decision-ready artifact should return no findings rather than a list of possible enhancements. Formatting, lint, type-checking, naming, and import-order findings belong to the deterministic tools that own them; never report them."
     blocking: false

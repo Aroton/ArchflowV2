@@ -125,7 +125,7 @@ const benchmarkAvailable = benchmarkEnabled() && realHostsAvailable();
 requireRealHostsAvailable(!benchmarkEnabled() || benchmarkAvailable);
 
 describe("benchmark digest contract", () => {
-  it("pins the recalibrated rubric and unchanged twelve-run matrix without real model calls", async () => {
+  it("pins the recalibrated rubric and twenty-run matrix without real model calls", async () => {
     expect(rubric.criteria).toEqual([
       {
         id: "substantive-correctness",
@@ -145,7 +145,7 @@ describe("benchmark digest contract", () => {
       { id: "codex-to-claude", producer_family: "codex", reviewer_family: "claude" },
     ]);
     expect(repeatCount).toBe(1);
-    expect(manifest.value.cases.length * directions.length * repeatCount).toBe(12);
+    expect(manifest.value.cases.length * directions.length * repeatCount).toBe(20);
   });
 
   it("keeps human dispositions and derived metrics outside the immutable observation digest", () => {
@@ -204,16 +204,16 @@ describe("benchmark digest contract", () => {
 
     expect(thresholds.benchmark_result_digest).toBe(benchmark.benchmark_result_digest);
     expect(thresholds.observed_metrics).toEqual({
-      approval_detection_rate: 2 / 3,
-      defects_found_after_pass: 2,
+      approval_detection_rate: 12 / 14,
+      defects_found_after_pass: 1,
       false_blocker_rate: 0,
-      triage_completeness: 12,
+      triage_completeness: 20,
     });
     expect(benchmark.human_scoring.primary_metrics).toEqual({
-      approval_detection_rate: 2 / 3,
-      defects_found_after_pass: { status: "complete", value: 2 },
+      approval_detection_rate: 12 / 14,
+      defects_found_after_pass: { status: "complete", value: 1 },
       false_blocker_rate: 0,
-      triage_completeness: { status: "complete", value: 12 },
+      triage_completeness: { status: "complete", value: 20 },
     });
   });
 });
@@ -226,7 +226,7 @@ async function loadManifest(): Promise<Readonly<{ bytes: Uint8Array; value: Corp
     seeded: ["seed-detected", "unrelated-blocker", "missed"],
     control: ["clean-pass", "false-blocker"],
   });
-  expect(value.cases).toHaveLength(6);
+  expect(value.cases).toHaveLength(10);
   return { bytes, value };
 }
 
@@ -234,7 +234,7 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
   it("records both opposite-family directions without asserting a quality threshold", async () => {
     const manifest = await loadManifest();
     const plannedTurns = manifest.value.cases.length * directions.length * repeatCount;
-    expect(plannedTurns).toBe(12);
+    expect(plannedTurns).toBe(20);
 
     const benchmarkInput = {
       schema_version: "1",
@@ -378,7 +378,7 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
         serialized_model_turn_count: plannedTurns,
         repeat_count_per_direction: repeatCount,
         wall_clock_seconds: elapsedSeconds,
-        sample_size_note: "Six corpus cases, two producer directions, one real model turn per case and direction; all twelve turns were serialized by the production dispatch FIFO.",
+        sample_size_note: "Ten corpus cases, two producer directions, one real model turn per case and direction; all twenty turns were serialized by the production dispatch FIFO.",
       },
       runs: observations,
       secondary_raw_telemetry: {

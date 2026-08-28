@@ -14,16 +14,22 @@ describe("constitution Markdown", () => {
     const paths = (await readdir(directory)).filter((path) => /^\d\d-.*\.md$/u.test(path));
     const files = Object.fromEntries(await Promise.all(paths.map(async (path) => [path, await readFile(new URL(path, directory), "utf8")] as const)));
     const registry = parseConstitutionRuleFiles(files);
-    expect([...registry.keys()]).toEqual(["explicit-human-authority", "approved-design-before-code", "task-and-evidence-isolation", "honest-human-centered-outcomes"]);
+    expect([...registry.keys()]).toEqual(["explicit-human-authority", "approved-design-before-code", "task-and-evidence-isolation", "honest-human-centered-outcomes", "human-approval-for-access-control", "human-approval-for-crypto-and-secrets", "human-approval-for-workflow-control-plane"]);
   });
 
-  it("ships no review trigger by default so a human constitution gate is a repository choice", async () => {
+  it("ships review triggers only on the three human-boundary seed rules", async () => {
     const directory = new URL("../../assets/constitution/", import.meta.url);
     const paths = (await readdir(directory)).filter((path) => /^\d\d-.*\.md$/u.test(path));
     const files = Object.fromEntries(await Promise.all(paths.map(async (path) => [path, await readFile(new URL(path, directory), "utf8")] as const)));
-    for (const parsed of parseConstitutionRuleFiles(files).values()) {
-      expect(parsed.review_trigger).toBeUndefined();
-    }
+    const triggered = [...parseConstitutionRuleFiles(files).entries()]
+      .filter(([, parsed]) => parsed.review_trigger !== undefined)
+      .map(([id]) => id)
+      .sort();
+    expect(triggered).toEqual([
+      "human-approval-for-access-control",
+      "human-approval-for-crypto-and-secrets",
+      "human-approval-for-workflow-control-plane",
+    ]);
   });
 
   it("ships byte-identical live and seed rules for the exact supported v3 profile", async () => {

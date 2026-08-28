@@ -9,15 +9,13 @@ import type { ProjectResult } from "../../src/contracts/errors.js";
 import { loadRubricFile, type CanonicalRubric, type CanonicalRubricId } from "../../src/review/rubrics.js";
 import { loadTestRubric } from "../helpers/rubrics.js";
 
-// Digests pinned while the rubrics were compiled TypeScript. The config files under
-// assets/rubrics/ must reproduce the exact parsed objects, so these constants prove the
-// move changed no reviewed bytes. Regenerate deliberately, never casually: a changed
-// digest is changed review policy for every installed bundle, and it fails in-flight
-// tasks' input fingerprints closed.
+// Digests pinned to the reviewed rubric policy in assets/rubrics/. Regenerate
+// deliberately, never casually: a changed digest is changed review policy for every
+// installed bundle, and it fails in-flight tasks' input fingerprints closed.
 const PINNED_RUBRIC_DIGESTS = Object.freeze({
-  "prd-v1": "fad1d0bc48da5d04d33147d8bc18688d85d1ae18f782fac6a7f3e5c6f51d521f",
-  "design-v2": "8de1a36847700c174c6c3698f493343bf3a80b8b90e7af9d7a193842b08240d8",
-  "implementation-v1": "68405124576f2bdca2a95003bd13548aa352ea018926faa733fad95a99f39775",
+  "prd-v1": "1910f0f56ebd54503658d4e5e0f1c44dcb23cc35be2ba1dabbb43f2fc866be56",
+  "design-v2": "8fdc6e87839a23da3a5e5bd8619fbb036c8d6ea520b0cb70b13c5279ef725086",
+  "implementation-v1": "defdbbd4913048a21cbd5267f19e325eed04005d72c8f06fdf7be38581da926c",
 } satisfies Record<CanonicalRubricId, string>);
 
 const roots: string[] = [];
@@ -86,6 +84,20 @@ describe("canonical counter-review rubrics", () => {
     expect((await loadTestRubric("design")).rubric_digest).toBe(PINNED_RUBRIC_DIGESTS["design-v2"]);
     expect((await loadTestRubric("phase-design")).rubric_digest).toBe(PINNED_RUBRIC_DIGESTS["design-v2"]);
     expect((await loadTestRubric("phase-impl")).rubric_digest).toBe(PINNED_RUBRIC_DIGESTS["implementation-v1"]);
+  });
+
+  it("pins the shape of the quality, shortcut, and confidence criteria", async () => {
+    const implementation = await loadTestRubric("phase-impl");
+    const byId = new Map(implementation.rubric.criteria.map((criterion) => [criterion.id, criterion]));
+    expect(byId.get("test-quality")?.blocking).toBe(true);
+    expect(byId.get("anti-shortcut")?.blocking).toBe(true);
+    for (const rubric of [await loadTestRubric("prd"), await loadTestRubric("design"), implementation]) {
+      const last = rubric.rubric.criteria[rubric.rubric.criteria.length - 1];
+      expect(last?.id).toBe("advisory-observations");
+      const confidence = rubric.rubric.criteria.find((criterion) => criterion.id === "reviewer-confidence");
+      expect(confidence?.blocking).toBe(false);
+      expect(confidence?.text).toContain("escalate-");
+    }
   });
 
   it("reviews design phase sizing structurally and only for material consequences", async () => {

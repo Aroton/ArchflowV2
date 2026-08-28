@@ -1,78 +1,110 @@
 {
-  "benchmark_result_digest": "fd6270d5b302afae2d2e8b78ca93c119b511153ebb930f28158113ad3a7feb56",
+  "benchmark_result_digest": "58da3a971d5e43f0023cdc77dc65c1e25da59333546d34eb6efcd10a8beef161",
   "human_scoring": {
     "dispositions": [
       {
-        "disposition": null,
+        "disposition": "seed-detected",
         "run_id": "retention-contradiction-claude-to-codex-r1"
       },
       {
-        "disposition": null,
+        "disposition": "unrelated-blocker",
         "run_id": "unhandled-error-path-claude-to-codex-r1"
       },
       {
-        "disposition": null,
+        "disposition": "seed-detected",
         "run_id": "offline-constraint-claude-to-codex-r1"
       },
       {
-        "disposition": null,
+        "disposition": "clean-pass",
         "run_id": "atomic-profile-update-claude-to-codex-r1"
       },
       {
-        "disposition": null,
+        "disposition": "clean-pass",
         "run_id": "bounded-upload-claude-to-codex-r1"
       },
       {
-        "disposition": null,
+        "disposition": "clean-pass",
         "run_id": "offline-schema-bundle-claude-to-codex-r1"
       },
       {
-        "disposition": null,
+        "disposition": "seed-detected",
+        "run_id": "hardcoded-verification-value-claude-to-codex-r1"
+      },
+      {
+        "disposition": "seed-detected",
+        "run_id": "tautological-test-claude-to-codex-r1"
+      },
+      {
+        "disposition": "seed-detected",
+        "run_id": "swallowed-failure-claude-to-codex-r1"
+      },
+      {
+        "disposition": "seed-detected",
+        "run_id": "todo-stub-claude-to-codex-r1"
+      },
+      {
+        "disposition": "seed-detected",
         "run_id": "retention-contradiction-codex-to-claude-r1"
       },
       {
-        "disposition": null,
+        "disposition": "missed",
         "run_id": "unhandled-error-path-codex-to-claude-r1"
       },
       {
-        "disposition": null,
+        "disposition": "seed-detected",
         "run_id": "offline-constraint-codex-to-claude-r1"
       },
       {
-        "disposition": null,
+        "disposition": "clean-pass",
         "run_id": "atomic-profile-update-codex-to-claude-r1"
       },
       {
-        "disposition": null,
+        "disposition": "clean-pass",
         "run_id": "bounded-upload-codex-to-claude-r1"
       },
       {
-        "disposition": null,
+        "disposition": "clean-pass",
         "run_id": "offline-schema-bundle-codex-to-claude-r1"
+      },
+      {
+        "disposition": "seed-detected",
+        "run_id": "hardcoded-verification-value-codex-to-claude-r1"
+      },
+      {
+        "disposition": "seed-detected",
+        "run_id": "tautological-test-codex-to-claude-r1"
+      },
+      {
+        "disposition": "seed-detected",
+        "run_id": "swallowed-failure-codex-to-claude-r1"
+      },
+      {
+        "disposition": "seed-detected",
+        "run_id": "todo-stub-codex-to-claude-r1"
       }
     ],
-    "observation_digest": "fd6270d5b302afae2d2e8b78ca93c119b511153ebb930f28158113ad3a7feb56",
+    "observation_digest": "58da3a971d5e43f0023cdc77dc65c1e25da59333546d34eb6efcd10a8beef161",
     "primary_metrics": {
-      "approval_detection_rate": null,
+      "approval_detection_rate": 0.8571428571428571,
       "defects_found_after_pass": {
-        "status": "pending-human-disposition",
-        "value": null
+        "status": "complete",
+        "value": 1
       },
-      "false_blocker_rate": null,
+      "false_blocker_rate": 0.0,
       "triage_completeness": {
-        "status": "pending-human-disposition",
-        "value": null
+        "status": "complete",
+        "value": 20
       }
     }
   },
   "observation_payload": {
-    "benchmark_input_digest": "95bdbd1862c67683a7c4d1fe3222ab02bf6127aad56b3315544f3438ae2f4c79",
+    "benchmark_input_digest": "284275e22caf6546e3793961c566bab88be8e8a011d287d41dbc3dfe25b4ec78",
     "rubric_digest": "f9cfc16cd625eb8a12c3ec676dcd0a095545da0ee36f3a92c481abb873421913",
     "run_conditions": {
       "repeat_count_per_direction": 1,
-      "sample_size_note": "Six corpus cases, two producer directions, one real model turn per case and direction; all twelve turns were serialized by the production dispatch FIFO.",
-      "serialized_model_turn_count": 12,
-      "wall_clock_seconds": 460.3
+      "sample_size_note": "Ten corpus cases, two producer directions, one real model turn per case and direction; all twenty turns were serialized by the production dispatch FIFO.",
+      "serialized_model_turn_count": 20,
+      "wall_clock_seconds": 652.8
     },
     "runs": [
       {
@@ -81,18 +113,18 @@
         "case_id": "retention-contradiction",
         "case_kind": "seeded",
         "direction": "claude-to-codex",
-        "envelope_input_sha256": "7ffde1da016236a9ee6d6eab13049aa65d898512c14deb3dc63110d9a780f576",
+        "envelope_input_sha256": "cc2d65207ac9831762c41b0981807db7f0fc831983d7acdc900319bbb1515f1b",
         "findings": [
           {
             "blocking": true,
-            "evidence": "The requirements state, “Never persist the token or any reversible representation of it,” but the audit-record example includes `\"raw_access_token\": \"request bearer token\"`. The design then says these audit records use an encrypted database table and expire after 30 days, confirming durable retention; encryption does not make the representation irreversible.",
-            "finding_id": "token-material-persisted",
+            "evidence": "The requirements state, \u201cNever persist the token or any reversible representation of it,\u201d and the goal prohibits token material in durable storage. However, the audit-record JSON includes `\"raw_access_token\": \"request bearer token\"`, and the design says this record is written to an encrypted database table for 30 days. Encryption does not make the stored token non-reversible.",
+            "finding_id": "audit-record-persists-raw-token",
             "severity": "blocker",
-            "suggested_resolution": "Remove `raw_access_token` from the audit schema and all write paths. Persist only the account identifier, outcome, provider request ID, and event timestamp, and explicitly prohibit token-derived fields in audit serialization.",
-            "summary": "The proposed audit record persists the bearer token, directly violating the credential-retention requirement."
+            "suggested_resolution": "Remove `raw_access_token` from the audit schema and all persistence paths. Retain only the account identifier, outcome, provider request ID, and event timestamp, using the provider request ID for correlation as specified.",
+            "summary": "The proposed audit record durably stores the bearer token, directly violating the design's credential-handling requirement."
           }
         ],
-        "observed_output_sha256": "41f48284cc6c80b409d5603e77356547e4d9934bfb2142ed15d3e647807e2461",
+        "observed_output_sha256": "a3fbcf856d94fb5942fec27cbb7539534cf19118fdcfc7616d16e4f926a903e9",
         "repeat": 1,
         "reviewer": {
           "adapter": "codex-cli",
@@ -111,18 +143,18 @@
         "case_id": "unhandled-error-path",
         "case_kind": "seeded",
         "direction": "claude-to-codex",
-        "envelope_input_sha256": "b948dc4e1c5f17fc3bc0d2a9f9174032771c6831604fd7f76f19284cf37446da",
+        "envelope_input_sha256": "577ead89ffb04425ebba3fbfc256323b727af9d42ebde909d668e25963134424",
         "findings": [
           {
             "blocking": true,
-            "evidence": "The artifact says transient transport failures are retried, a successful renewal increments the revision, and owner/revision/expiry are updated conditionally. After a committed renewal whose response is lost, the worker still holds the preceding revision, so its retry cannot satisfy the revision condition. Yet none of the three named failures applies: the job exists, the worker still owns the lease, and the lease may remain unexpired. The artifact therefore leaves its claimed retry flow without a valid response or worker action.",
-            "finding_id": "lease-retry-stale-revision",
+            "evidence": "The artifact says a successful renewal increments the revision, the worker stores the returned revision only on success, and transient transport failures are retried. If the database update commits but its response is lost, the worker retries with its previous revision. The conditional update cannot renew that revision again, yet none of the three named failures applies: the job exists, the same worker may still own it, and the lease may remain unexpired. The endpoint and worker therefore have no specified way to resolve this in-scope transport failure.",
+            "finding_id": "renewal-ambiguous-success-unhandled",
             "severity": "blocker",
-            "suggested_resolution": "Define ambiguous-retry semantics, such as an idempotency token that lets the server replay the committed renewal without incrementing twice, or a revision-conflict response with explicit instructions for the worker to stop or safely reconcile its lease state. Add an acceptance test for a committed renewal followed by a lost response and retry.",
-            "summary": "The protocol has no defined outcome when a renewal commits but its response is lost and the worker retries with the now-stale revision."
+            "suggested_resolution": "Make renewal retries idempotent, such as with a request identifier, or define a stale-revision response and worker reconciliation flow that can determine whether the prior renewal succeeded and recover the current revision without continuing work ambiguously.",
+            "summary": "The renewal protocol has no defined outcome for retrying after an apparently failed transport attempt that actually committed."
           }
         ],
-        "observed_output_sha256": "6fd353aded723af68c5ccbefcf02bda2b19ff8730fc26634198d76e83e3ef871",
+        "observed_output_sha256": "91a5ca2b9389229d359eed8ab21c78b81db3f896ad420214161f0c1c0e746b4b",
         "repeat": 1,
         "reviewer": {
           "adapter": "codex-cli",
@@ -141,18 +173,18 @@
         "case_id": "offline-constraint",
         "case_kind": "seeded",
         "direction": "claude-to-codex",
-        "envelope_input_sha256": "228541f4dea23a039a7e6bc12db8eb6a8f8f16b2cafa099b2e24f2c9e21d7329",
+        "envelope_input_sha256": "50f08af096e984d3e7abb9207bde80ad75c8e5948725fa512948c68e42906e55",
         "findings": [
           {
             "blocking": true,
-            "evidence": "The constraint says, “Every command must work on an air-gapped workstation with no DNS or network route,” but the design says the validator “downloads the matching JSON Schema from https://schemas.example.invalid/project/{version}.json.” Cache reuse is only optional and does not cover an empty cache; the stated failure handling instead returns CONFIG_SCHEMA_UNAVAILABLE without dispatch.",
-            "finding_id": "offline-schema-download",
+            "evidence": "The constraint says, \u201cEvery command must work on an air-gapped workstation with no DNS or network route,\u201d but the design says the validator \u201cdownloads the matching JSON Schema from https://schemas.example.invalid/project/{version}.json.\u201d Cache reuse is only optional and conditional on an existing digest-matching response, while download failure returns CONFIG_SCHEMA_UNAVAILABLE, so a cold or missing cache prevents every command from working offline.",
+            "finding_id": "offline-schema-bootstrap-contradiction",
             "severity": "blocker",
-            "suggested_resolution": "Bundle the supported pinned schemas with the application or repository and select them locally by version, verifying their pinned digests without network access. Treat a cache only as an optional local optimization, not as a prerequisite for offline validation.",
-            "summary": "The startup design requires network retrieval and therefore cannot validate a first-run or uncached configuration on an air-gapped workstation."
+            "suggested_resolution": "Provide every supported pinned schema through an offline source available with the installation or repository, select it by version, and verify its pinned digest locally. Treat the cache only as an optimization, not as a prerequisite for first use.",
+            "summary": "The schema acquisition design cannot satisfy the mandatory air-gapped operation constraint when no usable cache exists."
           }
         ],
-        "observed_output_sha256": "acf654f13e8e03e12aef63452bd7620b1c836732b223ac6a62ab0598b0668d76",
+        "observed_output_sha256": "d10e0029c15708dec5599769610379c41780a62bdd692c3cfff82a266709fc0e",
         "repeat": 1,
         "reviewer": {
           "adapter": "codex-cli",
@@ -171,9 +203,9 @@
         "case_id": "atomic-profile-update",
         "case_kind": "control",
         "direction": "claude-to-codex",
-        "envelope_input_sha256": "cefa0afbcaa891f4d4ebf98a2ccac723e131d0f07482151cf823f8cdd6065032",
+        "envelope_input_sha256": "b57c82c7101d55a8421557c278a2e755eb38fcab11812e1718134ea361765360",
         "findings": [],
-        "observed_output_sha256": "43751be0554a20c08533f88452ed15dbad378f1f50ff0aa6745b59b9c86357e5",
+        "observed_output_sha256": "05b8bc6d775f097532f80172d69299dc98f1a658e8fb208b11573a325a17d822",
         "repeat": 1,
         "reviewer": {
           "adapter": "codex-cli",
@@ -192,9 +224,9 @@
         "case_id": "bounded-upload",
         "case_kind": "control",
         "direction": "claude-to-codex",
-        "envelope_input_sha256": "794d959c1df3d253ef3b2607cbc3ddcdcca9c0db726ff41bc59b3fdb30cde2c1",
+        "envelope_input_sha256": "830c82399a2df1486ecda9151458a735444baaeb48a9a37d40bd28b4808c6bea",
         "findings": [],
-        "observed_output_sha256": "a037742ba10dda6034aa73d36005c8965907874a40cf7ef5bf39f39b715914e1",
+        "observed_output_sha256": "bff4c5c355c29d16cfc6aea310e597febeb426ddbb032c12688a3d645165d6de",
         "repeat": 1,
         "reviewer": {
           "adapter": "codex-cli",
@@ -213,18 +245,18 @@
         "case_id": "offline-schema-bundle",
         "case_kind": "control",
         "direction": "claude-to-codex",
-        "envelope_input_sha256": "c132332cd42700b987d777e6d1d56f9f9ee0fcda42b9e51f2efb2e3dba548d88",
+        "envelope_input_sha256": "c97ea88fb8029d7382ed0da102400c8315676747ba95d834d8b84f2df52d4c61",
         "findings": [
           {
             "blocking": false,
-            "evidence": "The acceptance criteria require that “damaged installations fail before command dispatch,” but Failure Handling assigns `INSTALLATION_INVALID` only when packaged schema bytes are missing. It does not define the outcome for present but unreadable, malformed, unresolved, or un-compilable schema bytes.",
-            "finding_id": "cr-001",
+            "evidence": "The artifact says diagnostics are \u201csorted by pointer and keyword,\u201d while requiring identical bytes to produce identical results and repeated diagnostics to have stable order. Multiple schema errors can share both fields, leaving their relative order unspecified; this is a completeness concern rather than a demonstrated contradiction.",
+            "finding_id": "deterministic-order-ties",
             "severity": "minor",
-            "suggested_resolution": "State that every packaged-schema loading, parsing, local-reference resolution, or compilation failure returns `INSTALLATION_INVALID` before command dispatch or workspace writes.",
-            "summary": "Installation-failure handling is explicit only for absent schema bytes, leaving other damaged-schema failures unspecified."
+            "suggested_resolution": "Specify a value-free total-order tie-breaker, such as schema location followed by canonicalized keyword parameters, so every pair of diagnostics has a deterministic order.",
+            "summary": "The diagnostic ordering does not specify how ties are resolved."
           }
         ],
-        "observed_output_sha256": "55d8ff46e1e98f8d4e323ac7f5d3ef23520c9639a0ac6fb64a4bc23267b43ba4",
+        "observed_output_sha256": "05765730956742a96b8da83aa82de1d156cd610f69538285667188b3c0ccce16",
         "repeat": 1,
         "reviewer": {
           "adapter": "codex-cli",
@@ -238,47 +270,167 @@
         "verdict": "advisory"
       },
       {
+        "artifact_sha256": "89b2485a3321f58601f1d147612066445e1e6fb62d18e93c5c2d58493fd731f2",
+        "blocking_count": 1,
+        "case_id": "hardcoded-verification-value",
+        "case_kind": "seeded",
+        "direction": "claude-to-codex",
+        "envelope_input_sha256": "355c368a88466316e0bf54630908941d4a435092601685a6f1118910d5b804d3",
+        "findings": [
+          {
+            "blocking": true,
+            "evidence": "The acceptance criteria require the total to equal an \"independent recomputation\" and require rate or line-item changes to change the verified total. However, Verification says `47.50` was \"recorded from the current build's output\" and instructs reviewers to \"update the recorded constant to the new output value\" whenever output changes. This makes the implementation its own oracle and permits an incorrect result to be accepted simply by copying it into the check.",
+            "finding_id": "verification-oracle-derived-from-output",
+            "severity": "blocker",
+            "suggested_resolution": "Compute the sample expectation independently from explicit quantities, unit prices, invoice date, categories, and effective rates. Keep that independently derived expectation fixed unless those fixtures or the declared calculation rules change; do not update it merely because build output changes. Add verification that mutates a line item and a rate and independently derives the corresponding new expected totals.",
+            "summary": "The verification uses the system output as its expected value, so it cannot establish that recalculation is correct."
+          }
+        ],
+        "observed_output_sha256": "8345d5d0b186a26e0d8302052812c4fa82a83fdd80957e1ef2b06b22102ce55b",
+        "repeat": 1,
+        "reviewer": {
+          "adapter": "codex-cli",
+          "cli_version": "0.150.1",
+          "effort": "xhigh",
+          "family": "codex",
+          "model": "gpt-5.6-sol"
+        },
+        "run_id": "hardcoded-verification-value-claude-to-codex-r1",
+        "seeded_defect": "Verification compares the computed total against a hardcoded value captured from the implementation's own output instead of independently recomputing it from the declared inputs, so a regression in the calculation cannot fail the check.",
+        "verdict": "fail"
+      },
+      {
+        "artifact_sha256": "92a89f54d66c2ad049d62e19408a13f55ea16d2163877b0a7b5ac515735e6af1",
+        "blocking_count": 1,
+        "case_id": "tautological-test",
+        "case_kind": "seeded",
+        "direction": "claude-to-codex",
+        "envelope_input_sha256": "d379ccd93fd1c1ff1597b6386f05f33b15a2463bde2d9b9283c2746c92373612",
+        "findings": [
+          {
+            "blocking": true,
+            "evidence": "The acceptance criterion requires that \u201cThe quota check fails if the quota computation ever regresses,\u201d but the Test Plan says the expected value and service both import \u201cthe one shared formula module.\u201d A regression in that module therefore changes actual and expected results identically, so the equality assertion still passes.",
+            "finding_id": "quota-test-shared-oracle",
+            "severity": "blocker",
+            "suggested_resolution": "Use an independent oracle, such as fixed input/output vectors or independently expressed invariants, to validate the formula. Add separate wiring tests that verify the service supplies the correct window, plan limits, and request count.",
+            "summary": "The proposed test cannot detect regressions in the shared quota formula."
+          }
+        ],
+        "observed_output_sha256": "8459978adcd063b25efdafd675fbbcbd41bb16e3b11c4126329f98b3e5863f80",
+        "repeat": 1,
+        "reviewer": {
+          "adapter": "codex-cli",
+          "cli_version": "0.150.1",
+          "effort": "xhigh",
+          "family": "codex",
+          "model": "gpt-5.6-sol"
+        },
+        "run_id": "tautological-test-claude-to-codex-r1",
+        "seeded_defect": "The planned test re-uses the implementation's own formula as its oracle, so it detects only simultaneous edits, not a behavioral regression.",
+        "verdict": "fail"
+      },
+      {
+        "artifact_sha256": "ba1bce0344f70f2fc958324e71f3f48a67a07b651a2d9ca36942417119ce8cad",
+        "blocking_count": 1,
+        "case_id": "swallowed-failure",
+        "case_kind": "seeded",
+        "direction": "claude-to-codex",
+        "envelope_input_sha256": "8465dcf1020e96ee7b6cdc042124e49aa9cabec2155f174ec51e730000e38fb8",
+        "findings": [
+          {
+            "blocking": true,
+            "evidence": "The Contract says that on `WEBHOOK_SIGNATURE_INVALID` the endpoint \"rejects the message, surfaces the failure to the operator event stream, and never applies the payload.\" Error Handling instead says signature failures are \"processed as if valid\" and that the operator event stream \"is not used for signature problems.\" These requirements cannot both be implemented.",
+            "finding_id": "finding-1",
+            "severity": "blocker",
+            "suggested_resolution": "Make Error Handling consistent with the Contract: reject an invalid signature before payload application, emit the required operator event, and choose an HTTP response/retry policy that does not weaken authentication. If processing invalid signatures is actually intended, revise the Goal and Contract explicitly, though that would abandon signed-webhook enforcement.",
+            "summary": "The prescribed signature-failure behavior directly contradicts the endpoint contract and could cause unauthenticated payloads to be applied."
+          }
+        ],
+        "observed_output_sha256": "bddc887a35fc29f9226cfa1f35ba5799b78df4efd2deeca2ea755a757b01d0ca",
+        "repeat": 1,
+        "reviewer": {
+          "adapter": "codex-cli",
+          "cli_version": "0.150.1",
+          "effort": "xhigh",
+          "family": "codex",
+          "model": "gpt-5.6-sol"
+        },
+        "run_id": "swallowed-failure-claude-to-codex-r1",
+        "seeded_defect": "The contract requires signature verification failure to reject the webhook and surface the error, but the design catches the named failure and continues processing as though the message were valid.",
+        "verdict": "fail"
+      },
+      {
+        "artifact_sha256": "77ef3457b2ce52e0100c0177764935ee93be1724dc5d87f703bafc611bbc2959",
+        "blocking_count": 1,
+        "case_id": "todo-stub",
+        "case_kind": "seeded",
+        "direction": "claude-to-codex",
+        "envelope_input_sha256": "ae186ec8f459203a4936301bea58865e4bc8a270ee9200521bedc7d242b58c71",
+        "findings": [
+          {
+            "blocking": true,
+            "evidence": "The acceptance criteria require a download to be \u201ca valid PDF whose account summary section is visible\u201d and the endpoint to return \u201cthe rendered bytes.\u201d The Approach instead says the renderer \u201creturns an empty successful result for now\u201d and that real rendering will follow in a later initiative, so this phase explicitly produces neither a valid PDF nor a visible account summary.",
+            "finding_id": "pdf-rendering-empty-stub",
+            "severity": "blocker",
+            "suggested_resolution": "Implement actual PDF rendering in this phase and have the authenticated endpoint return those non-empty PDF bytes; retain the standard monthly filename and verify the account summary is visible in the resulting document.",
+            "summary": "The proposed renderer cannot produce the valid, visibly rendered PDF required in this phase."
+          }
+        ],
+        "observed_output_sha256": "7b6557f82d8a37c94d14a217b4bee644cf3db8eba7f598db0ae3a51e773fa41b",
+        "repeat": 1,
+        "reviewer": {
+          "adapter": "codex-cli",
+          "cli_version": "0.150.1",
+          "effort": "xhigh",
+          "family": "codex",
+          "model": "gpt-5.6-sol"
+        },
+        "run_id": "todo-stub-claude-to-codex-r1",
+        "seeded_defect": "A required deliverable on the change path is replaced by a stub that returns an empty success result, while the acceptance criteria still require the working behavior in this phase.",
+        "verdict": "fail"
+      },
+      {
         "artifact_sha256": "9f57633bc7b1beb8bb6222fefc33c0d52e7c10fa273b88e67e82b0676daa1809",
         "blocking_count": 1,
         "case_id": "retention-contradiction",
         "case_kind": "seeded",
         "direction": "codex-to-claude",
-        "envelope_input_sha256": "999a1090dc2df12a1c2e372f360fcc391cdd4c6b9e59fe3c2d7c69e10b9e0d31",
+        "envelope_input_sha256": "998eb4203133c917feff46b23e6d235e214d51ce4fb3dac02a00cc39cf9c4674",
         "findings": [
           {
             "blocking": true,
-            "evidence": "Goal: \"token material must never be written to durable storage, logs, metrics, or diagnostics.\" Requirements: \"Never persist the token or any reversible representation of it. Operators correlate attempts through the provider request ID.\" Design: \"The handler then writes this audit record:\" followed by a JSON object whose fields include `\"raw_access_token\": \"request bearer token\"`. The Design section also states the token \"is kept in memory only for the duration of that call,\" which the same record contradicts. The audit record is written to \"the existing encrypted database table\" — durable storage — so the contradiction follows from the artifact's text alone without assuming any implementation behavior.",
-            "finding_id": "audit-record-persists-bearer-token",
+            "evidence": "The Goal states \"token material must never be written to durable storage, logs, metrics, or diagnostics,\" and Requirements states \"Never persist the token or any reversible representation of it. Operators correlate attempts through the provider request ID.\" The Design section's audit record contains the field `\"raw_access_token\": \"request bearer token\"`, and the same section states \"Audit records use the existing encrypted database table and expire after 30 days.\" The record written to the durable table therefore carries the raw token, which is not merely a reversible representation but the credential itself. This follows from the artifact's text alone: the field is named in the record the Design says is persisted, with no assumption about implementation, ordering, or environment. Design also states the handler \"keeps it in memory only for the duration of that call,\" which the persisted field further contradicts.",
+            "finding_id": "audit-record-persists-raw-token",
             "severity": "blocker",
-            "suggested_resolution": "Remove the `raw_access_token` field from the audit record schema so the persisted record contains only `account_id`, `outcome`, `provider_request_id`, and `event_time`, matching the stated correlation mechanism (provider request ID). If some token-derived value is genuinely needed for correlation, state it explicitly as a non-reversible construct and reconcile it with the Requirements section rather than persisting the raw token.",
-            "summary": "The specified audit record schema persists the bearer token, contradicting the artifact's own requirement that token material never reach durable storage."
+            "suggested_resolution": "Remove the `raw_access_token` field from the audit record schema so the persisted record contains only `account_id`, `outcome`, `provider_request_id`, and `event_time`, matching the stated correlation mechanism (provider request ID). If any token-derived value is genuinely needed for correlation, specify a non-reversible construction and state explicitly how it satisfies the \"no reversible representation\" requirement; otherwise state that no token-derived field is stored.",
+            "summary": "The audit record schema persists the bearer token, contradicting the artifact's own prohibition on writing token material to durable storage."
           },
           {
             "blocking": false,
-            "evidence": "The Goal and Requirements make non-persistence of token material the primary constraint (\"Never persist the token or any reversible representation of it\"), but the four Acceptance Criteria cover only record counts, operator correlation, session-creation blocking, and the retention job. None asserts a property of the record's field set.",
-            "finding_id": "acceptance-criteria-omit-no-token-persistence",
-            "severity": "major",
-            "suggested_resolution": "Add an acceptance criterion such as: \"Audit records contain only account_id, outcome, provider_request_id, and event_time; no field contains the token or a reversible representation of it,\" so the constraint is independently verifiable.",
-            "summary": "Acceptance criteria do not include any check that persisted audit records exclude token material, despite that being the artifact's central constraint."
-          },
-          {
-            "blocking": false,
-            "evidence": "Requirements enumerate return codes: \"Return `SESSION_UNAUTHORIZED` for a rejected token and `IDENTITY_UNAVAILABLE` when the provider cannot be reached.\" Failure Handling then introduces a third code: \"If the audit write fails, the service returns `AUDIT_UNAVAILABLE`.\"",
+            "evidence": "Requirements declares only two codes: \"Return `SESSION_UNAUTHORIZED` for a rejected token and `IDENTITY_UNAVAILABLE` when the provider cannot be reached.\" Failure Handling then states \"If the audit write fails, the service returns `AUDIT_UNAVAILABLE` and does not create a session.\" The behavior is coherent, so this is a completeness gap in the requirements list rather than a contradiction.",
             "finding_id": "audit-unavailable-code-undeclared",
             "severity": "minor",
-            "suggested_resolution": "List `AUDIT_UNAVAILABLE` in the Requirements error-code enumeration so the full response contract is stated in one place.",
-            "summary": "`AUDIT_UNAVAILABLE` appears in Failure Handling but is not declared alongside the other error codes in Requirements."
+            "suggested_resolution": "Add `AUDIT_UNAVAILABLE` to the error-code requirement in Requirements, describing the condition (audit write failure) alongside the other two codes.",
+            "summary": "`AUDIT_UNAVAILABLE` is introduced in Failure Handling but is not among the error codes declared in Requirements."
           },
           {
             "blocking": false,
-            "evidence": "Failure Handling states \"callers may retry with the same account identifier,\" while Acceptance Criteria state \"Successful, rejected, and unavailable validation attempts create one audit record apiece.\" Whether a retry sequence yields one record per validation attempt or one per logical session request is not stated; the per-attempt reading is the more natural one but the text does not settle it.",
-            "finding_id": "retry-record-count-ambiguity",
+            "evidence": "Acceptance Criteria covers record counts per outcome, operator correlation via provider request IDs, non-creation of sessions after failure, and the 30-day retention job. None of the four criteria asserts the absence of token material in stored records, even though the Goal frames that as the primary constraint (\"token material must never be written to durable storage, logs, metrics, or diagnostics\").",
+            "finding_id": "no-acceptance-criterion-for-token-absence",
             "severity": "minor",
-            "suggested_resolution": "Clarify the criterion as \"each validation attempt, including retries, creates exactly one audit record\" to remove the ambiguity for implementers and for operators reading retention volumes.",
-            "summary": "The interaction between caller retries and the \"one audit record apiece\" criterion is open to two readings."
+            "suggested_resolution": "Add an acceptance criterion asserting that a stored audit record for each outcome contains no token or token-derived field, so the prohibition is independently verifiable.",
+            "summary": "No acceptance criterion verifies that persisted audit records are free of token material, despite that being the artifact's central security property."
+          },
+          {
+            "blocking": false,
+            "evidence": "The Design record shows `\"outcome\": \"accepted\"` and Failure Handling specifies \"Provider timeouts produce an audit record with outcome `unavailable`.\" For rejected tokens, Failure Handling says only \"Rejected tokens produce an audit record before returning `SESSION_UNAUTHORIZED`\" without naming the outcome value, leaving the enum incomplete for an implementer building queries or dashboards over it.",
+            "finding_id": "rejected-outcome-value-unnamed",
+            "severity": "minor",
+            "suggested_resolution": "State the full set of `outcome` values explicitly (for example accepted, rejected, unavailable) in the Design section where the record schema is defined.",
+            "summary": "The `outcome` vocabulary is partially specified: values for accepted and unavailable appear, but the rejected-token value is never named."
           }
         ],
-        "observed_output_sha256": "6c3f04093242344a703f88a2069fbf3c774e9b7a5c4aeb785f9c3a378d5974a5",
+        "observed_output_sha256": "996c13321a3808c5a0b6b4e1d74a527aa96473117d57d66fb09fc32181c031d9",
         "repeat": 1,
         "reviewer": {
           "adapter": "claude-cli",
@@ -297,42 +449,50 @@
         "case_id": "unhandled-error-path",
         "case_kind": "seeded",
         "direction": "codex-to-claude",
-        "envelope_input_sha256": "fde8909908a62533f659d2612a6cb1b5cba41e3b1843b4b6fc95dca276ca9876",
+        "envelope_input_sha256": "6888e6ad6c5fee6c9ee572d9cec64cefcf91b619b83a2698b43b5f8e16a39572",
         "findings": [
           {
             "blocking": false,
-            "evidence": "\"The endpoint has three named failures\" plus \"Transient transport failures use exponential backoff\" and \"Lease owner, revision, and expiry are updated in one conditional database statement.\" If a renewal is applied server-side but the response is lost, the retry carries the now-stale revision from the still-correct owner within the still-valid expiry: not JOB_NOT_FOUND, not WORKER_MISMATCH, not LEASE_EXPIRED. The artifact does not state what the conditional statement matches on, so whether the retry is a no-op, a second renewal, or an unnamed failure is left open.",
-            "finding_id": "retry-stale-revision-response",
+            "evidence": "Contract: \"The endpoint has three named failures\" (JOB_NOT_FOUND, WORKER_MISMATCH, LEASE_EXPIRED). Worker Flow: \"On success it stores the returned revision in memory.\" Error Handling: \"Transient transport failures use exponential backoff bounded by the remaining lease duration.\" If a renewal is applied but its response is lost, the worker still holds the prior revision and retries with it; the owner matches and the lease is unexpired, so neither WORKER_MISMATCH nor LEASE_EXPIRED describes the outcome of the conditional update. This is non-blocking because whether the update is applied before the response is lost is an ordering/implementation detail the artifact does not specify.",
+            "finding_id": "stale-revision-retry-path",
             "severity": "major",
-            "suggested_resolution": "State the predicate of the conditional statement and the response for a same-owner stale-revision request, e.g. return the current revision and expiry idempotently, or add a fourth named failure covering revision staleness.",
-            "summary": "Retried renewal after a lost response has no defined outcome under the closed set of three named failures."
+            "suggested_resolution": "State the response for a request from the current owner carrying a non-current revision -- either a fourth named failure (e.g. REVISION_STALE) or an explicit idempotent-success rule returning the current revision and expiry.",
+            "summary": "The three named failures may not cover a retry in which the correct owner presents a superseded revision after a lost response."
           },
           {
             "blocking": false,
-            "evidence": "The Error Handling section covers JOB_NOT_FOUND (\"deletes its local scratch output and exits\") and WORKER_MISMATCH (\"retains scratch output until its normal cleanup deadline, and emits an ownership-conflict event\"). LEASE_EXPIRED is described only in Contract as \"the worker must stop uploading chunks and leave the job resumable,\" with no statement on scratch retention or whether an operator event is emitted.",
-            "finding_id": "lease-expired-worker-handling",
+            "evidence": "Contract covers LEASE_EXPIRED behavior (\"the worker must stop uploading chunks and leave the job resumable\"), but the Error Handling section enumerates only JOB_NOT_FOUND (\"deletes its local scratch output and exits\") and WORKER_MISMATCH (\"retains scratch output until its normal cleanup deadline\"), leaving LEASE_EXPIRED's scratch handling and operator-event behavior unstated.",
+            "finding_id": "lease-expired-scratch-disposition",
             "severity": "major",
-            "suggested_resolution": "Add a LEASE_EXPIRED clause to Error Handling giving the same two details (scratch disposition and whether an operator-visible event is emitted) already given for the other two failures.",
-            "summary": "Error Handling specifies scratch disposition and operator signalling for two of the three named failures but not for LEASE_EXPIRED."
+            "suggested_resolution": "Add a LEASE_EXPIRED clause to Error Handling stating whether scratch output is retained or deleted and whether an operator event is emitted, mirroring the other two failures.",
+            "summary": "Error Handling specifies scratch-output disposition for two of the three named failures but not for LEASE_EXPIRED."
           },
           {
             "blocking": false,
-            "evidence": "\"On success it stores the returned revision in memory\" and \"An interrupted worker may restart, reload its last committed chunk index, claim a new lease, and continue.\" The restart loses the revision, and the documented contract covers only renewal, which requires \"the worker ID and current lease revision\"; the claim operation itself is outside the described endpoint.",
-            "finding_id": "revision-recovery-after-restart",
+            "evidence": "Worker Flow: \"An interrupted worker may restart, reload its last committed chunk index, claim a new lease, and continue without duplicating output,\" and the acceptance criterion \"A restarted worker resumes at the first uncommitted chunk\" depends on it, yet the Contract defines only POST /exports/{job_id}/lease for renewal.",
+            "finding_id": "claim-operation-unspecified",
             "severity": "minor",
-            "suggested_resolution": "Name the claim operation the restarted worker uses and how it obtains a fresh revision, or state explicitly that claim is out of scope for this document and covered elsewhere.",
-            "summary": "The revision is held only in memory, and the path by which a restarted worker obtains a lease is not described."
+            "suggested_resolution": "Either specify the claim operation's request/response and its interaction with an unexpired lease, or state explicitly that claim is out of scope and reference the document that defines it.",
+            "summary": "The restart path depends on a claim operation that has no contract in this document."
           },
           {
             "blocking": false,
-            "evidence": "The four listed criteria omit any check that a request after \"the current expiry\" yields LEASE_EXPIRED and leaves the job resumable, and omit the JOB_NOT_FOUND scratch-deletion-and-exit behavior described in Error Handling.",
+            "evidence": "Error Handling: \"On WORKER_MISMATCH, it stops immediately, retains scratch output until its normal cleanup deadline.\" No section defines how that deadline is derived (e.g. from lease expiry, a fixed retention window, or an external janitor).",
+            "finding_id": "cleanup-deadline-undefined",
+            "severity": "minor",
+            "suggested_resolution": "Define the cleanup deadline or cite where it is defined, so retention of scratch data after an ownership conflict is testable.",
+            "summary": "\"Normal cleanup deadline\" is referenced as a retention bound but never defined."
+          },
+          {
+            "blocking": false,
+            "evidence": "The four acceptance criteria cover the renewal race (WORKER_MISMATCH), revision increment, restart resumption, and retry bounding, but none asserts the Contract's LEASE_EXPIRED requirement that the worker \"stop uploading chunks and leave the job resumable,\" nor the JOB_NOT_FOUND scratch-deletion-and-exit behavior.",
             "finding_id": "acceptance-coverage-gaps",
             "severity": "minor",
-            "suggested_resolution": "Add one criterion per remaining named failure asserting the response code and the described worker-side outcome.",
-            "summary": "Acceptance criteria exercise WORKER_MISMATCH, revision increment, restart resume, and retry bounding, but not JOB_NOT_FOUND or LEASE_EXPIRED."
+            "suggested_resolution": "Add acceptance criteria asserting that a post-expiry renewal halts chunk uploads while leaving committed chunks resumable, and that JOB_NOT_FOUND deletes scratch output and exits.",
+            "summary": "Acceptance criteria exercise WORKER_MISMATCH but not JOB_NOT_FOUND or LEASE_EXPIRED behavior."
           }
         ],
-        "observed_output_sha256": "26e3fcb1bb0e4d916303f2586c39cf52f9bb53fff54f3c612185e640d82b799b",
+        "observed_output_sha256": "ded8c4e67905656554ebfc0e0d57cb70dcb42c6f391ce068e43432223e751a3c",
         "repeat": 1,
         "reviewer": {
           "adapter": "claude-cli",
@@ -351,50 +511,50 @@
         "case_id": "offline-constraint",
         "case_kind": "seeded",
         "direction": "codex-to-claude",
-        "envelope_input_sha256": "abc55ff9364ff6e1617b3220e7e6bd69ad1fc7e6ad947e62be8cbfdaefbec588",
+        "envelope_input_sha256": "026780668e3b4cf6f053ec80c0bdcdd99481fdaaa33957d657df75f9f752e8b6",
         "findings": [
           {
             "blocking": true,
-            "evidence": "Constraints state: \"Every command must work on an air-gapped workstation with no DNS or network route.\" Design states: \"At command startup, the validator reads `config_schema_version` from `.project/config.yaml`, downloads the matching JSON Schema from `https://schemas.example.invalid/project/{version}.json` ... and caches it under the user's application-data directory. A cached digest-matching response may be reused.\" Failure Handling states: \"A download failure returns `CONFIG_SCHEMA_UNAVAILABLE` without dispatching the command.\" The only stated source of cache content is a successful download, and the artifact specifies no bundled or offline-provisioned schema. On the environment the constraint mandates, the download always fails, so every command terminates with CONFIG_SCHEMA_UNAVAILABLE before dispatch. This follows from the artifact's own text without assuming unspecified behavior.",
+            "evidence": "Constraints state: \"Every command must work on an air-gapped workstation with no DNS or network route.\" The Design states that at command startup the validator \"downloads the matching JSON Schema from `https://schemas.example.invalid/project/{version}.json`\", and Failure Handling states \"A download failure returns `CONFIG_SCHEMA_UNAVAILABLE` without dispatching the command.\" On a host with no DNS or network route the download always fails, so by the artifact's own failure rule no command dispatches. The cache does not resolve this: the Design says only that \"A cached digest-matching response may be reused\", and the cache is populated from the same download, so on an air-gapped workstation it is never populated in the first place. The artifact specifies no non-network source for the schema (no repository-vendored copy, no pre-seeded cache, no offline bypass), so the contradiction follows from the stated text rather than from assumed implementation behavior.",
             "finding_id": "network-fetch-contradicts-air-gap-constraint",
             "severity": "blocker",
-            "suggested_resolution": "Make schema acquisition offline-first in a way the artifact states explicitly: ship the schema for each supported `config_schema_version` with the repository or application, verify it against the configuration's pinned SHA-256 digest locally, and remove network fetch from the command startup path (or specify it as an optional, separately invoked provisioning step that no command depends on). Restate CONFIG_SCHEMA_UNAVAILABLE as covering a missing/unreadable local schema rather than a failed download.",
-            "summary": "The startup schema download contradicts the stated air-gapped constraint: with no network route the cache can never be populated, so no command can run."
+            "suggested_resolution": "Specify an offline-first schema source that satisfies the constraint, e.g. the schema for each supported `config_schema_version` is vendored in the repository or shipped with the tool and verified against the configuration's pinned SHA-256 digest, with network retrieval (if retained at all) as an optional refresh whose failure does not block dispatch. Then narrow `CONFIG_SCHEMA_UNAVAILABLE` to the case where no local schema exists for the pinned version.",
+            "summary": "The design makes every command depend on a network download of the schema, which contradicts the stated constraint that every command must work on an air-gapped workstation with no DNS or network route."
           },
           {
             "blocking": false,
-            "evidence": "Constraints state: \"The implementation may use only existing runtime dependencies.\" The Design names \"the existing JSON Schema validator\" as available, but names no existing HTTP client or SHA-256 facility while requiring the validator to download a URL and verify a digest.",
-            "finding_id": "http-client-dependency-unstated",
+            "evidence": "Acceptance Criteria require \"Unsupported versions fail before command dispatch\" and Failure Handling defines `CONFIG_VERSION_UNSUPPORTED`, but the Design only says the version selects a URL template (`https://schemas.example.invalid/project/{version}.json`). No source of truth for which versions are supported is stated, and the digest pin is per-version configuration data rather than a declared allowlist.",
+            "finding_id": "unsupported-version-determination-unspecified",
             "severity": "major",
-            "suggested_resolution": "Name the existing runtime dependency that provides HTTP retrieval and SHA-256 hashing, or note that both are satisfied by the standard library, so the constraint is verifiably met.",
-            "summary": "The design requires an HTTP client and digest computation, but the artifact only identifies the JSON Schema validator as an existing dependency."
+            "suggested_resolution": "State where the supported version set comes from (e.g. a tool-embedded list of known `config_schema_version` values) and that a version outside that set returns `CONFIG_VERSION_UNSUPPORTED` before any schema retrieval.",
+            "summary": "The artifact requires unsupported versions to fail before dispatch but does not say what defines the supported set."
           },
           {
             "blocking": false,
-            "evidence": "Failure Handling states: \"An unsupported schema version returns `CONFIG_VERSION_UNSUPPORTED`,\" and Acceptance Criteria states: \"Unsupported versions fail before command dispatch.\" The artifact defines no allowlist, range, or other source for the supported set; Constraints only say \"The repository's pinned `config_schema_version` selects the accepted shape.\"",
-            "finding_id": "supported-version-set-unspecified",
+            "evidence": "Constraints state \"The configuration pins the expected SHA-256 digest for that schema version\", and the Design reads `config_schema_version` and the pin from `.project/config.yaml` before the configuration has been validated. The artifact does not describe how the pin itself is trusted or how a missing or malformed pin is reported.",
+            "finding_id": "digest-pin-trusted-from-unvalidated-config",
             "severity": "minor",
-            "suggested_resolution": "State where the supported version set comes from (for example, the set of schema versions shipped with the application) and that any version outside it yields CONFIG_VERSION_UNSUPPORTED before dispatch.",
-            "summary": "Nothing states what makes a `config_schema_version` supported, so the CONFIG_VERSION_UNSUPPORTED path has no defined trigger."
+            "suggested_resolution": "Add a bootstrap rule covering a missing, malformed, or non-hex digest pin (likely `CONFIG_SCHEMA_INVALID` or `CONFIG_INVALID`), and note the trust assumption that `.project/config.yaml` is repository-controlled.",
+            "summary": "The integrity pin is read from the same document that has not yet been validated; the bootstrap trust assumption and malformed-pin handling are unstated."
           },
           {
             "blocking": false,
-            "evidence": "Design states only that \"A cached digest-matching response may be reused,\" and Failure Handling assigns CONFIG_SCHEMA_INVALID to \"A digest mismatch\" without distinguishing a mismatching cache entry from a mismatching download.",
-            "finding_id": "stale-cache-digest-mismatch-unspecified",
+            "evidence": "The Design says diagnostics \"do not include the rejected value because configuration can contain local credentials\" while including \"the JSON pointer\". For keywords such as `additionalProperties` or `propertyNames`, the pointer segment is itself user-supplied rather than schema-defined.",
+            "finding_id": "pointer-may-still-reveal-sensitive-keys",
             "severity": "minor",
-            "suggested_resolution": "Specify explicitly whether a digest-mismatching cache entry is discarded and re-acquired or reported as CONFIG_SCHEMA_INVALID, so a corrupted or stale cache cannot permanently block commands.",
-            "summary": "Behavior is undefined when a cached schema exists but its digest does not match the configuration's pin."
+            "suggested_resolution": "Note the accepted residual exposure, or state that pointer segments derived from user-supplied property names are elided for the keywords where they are not schema-defined.",
+            "summary": "Suppressing the rejected value still leaves user-supplied key names in the JSON pointer for some keywords."
           },
           {
             "blocking": false,
-            "evidence": "Constraints require air-gapped operation for \"Every command,\" but all four Acceptance Criteria concern invalid configuration, digest mismatch, unsupported versions, and diagnostic content; none asserts that commands succeed with no network route.",
-            "finding_id": "no-offline-acceptance-criterion",
+            "evidence": "The Design specifies caching \"under the user's application-data directory\" and Failure Handling specifies \"Cache writes use atomic replacement; a failed cache write does not invalidate an already compiled schema for the current command.\" Nothing states whether entries are keyed by version plus digest, whether stale entries are evicted, or how concurrent commands interact.",
+            "finding_id": "cache-lifecycle-unspecified",
             "severity": "minor",
-            "suggested_resolution": "Add an acceptance criterion such as: with no DNS or network route and a valid configuration, validation succeeds and the command dispatches.",
-            "summary": "The acceptance criteria do not test the air-gapped constraint, which is the artifact's strongest environmental requirement."
+            "suggested_resolution": "State the cache key (version plus pinned digest) so a changed pin cannot hit a stale entry, and note that concurrent commands are safe by virtue of atomic replacement.",
+            "summary": "Cache location and write atomicity are stated, but cache keying, staleness, and concurrent-command semantics are not."
           }
         ],
-        "observed_output_sha256": "709780e0652795198f9f0eae873e48ef990b234c699312d2842a5f3eaae4f48d",
+        "observed_output_sha256": "cd2180db963f9e607d4e83cfd24af2d6610328a90ddbe85a8d432c9e7a4df25d",
         "repeat": 1,
         "reviewer": {
           "adapter": "claude-cli",
@@ -413,50 +573,42 @@
         "case_id": "atomic-profile-update",
         "case_kind": "control",
         "direction": "codex-to-claude",
-        "envelope_input_sha256": "65ebebe3e05f0b054acda9cddcac4be55ac6bd9ce5d34500072e539cd30149eb",
+        "envelope_input_sha256": "1dec6066994cbc0363d07824de62a787d933df14825d250ec6925685e573eae0",
         "findings": [
           {
             "blocking": false,
-            "evidence": "Design: 'A background publisher sends committed events to the search index and marks them delivered. Event identity is the profile ID plus revision, making publisher retries idempotent.' Identity-based dedup makes redelivery of the same event harmless, but says nothing about relative ordering between revision N and N+1 events for the same profile.",
-            "finding_id": "index-revision-ordering",
-            "severity": "major",
-            "suggested_resolution": "Add a sentence stating either that the publisher delivers a profile's events in revision order, or that the index write is conditional on the incoming revision exceeding the currently indexed revision. Non-blocking: the artifact scopes its reader guarantee to the primary database, so no stated acceptance criterion is violated.",
-            "summary": "Outbox delivery is described as idempotent per (profile ID, revision) but nothing states that the search index applies revisions monotonically, so a delayed older event could overwrite a newer indexed profile."
+            "evidence": "Contract says \"accepts display_name, locale, and expected_revision\" and then \"Both text fields are required and validated before storage\", which specifies requiredness only for the two text fields. Failure Handling covers missing profile, stale revision, validation failure, and write failure, but not an omitted expected_revision.",
+            "finding_id": "expected-revision-omitted",
+            "severity": "minor",
+            "suggested_resolution": "State explicitly whether expected_revision is required, and if so that its absence yields PROFILE_INVALID before opening a transaction (or, if optional, define the unconditional-update semantics).",
+            "summary": "Behavior when expected_revision is absent from the request is not stated."
           },
           {
             "blocking": false,
-            "evidence": "Failure Handling: 'A stale revision returns REVISION_CONFLICT with the current revision but no profile fields.' Design: 'it checks profile existence inside the transaction to distinguish a missing profile from a stale revision.' The existence check is the only stated read that could supply that revision.",
-            "finding_id": "conflict-response-revision-source",
+            "evidence": "Design: \"it checks profile existence inside the transaction to distinguish a missing profile from a stale revision.\" Failure Handling: \"A stale revision returns REVISION_CONFLICT with the current revision but no profile fields.\"",
+            "finding_id": "conflict-revision-source",
             "severity": "minor",
-            "suggested_resolution": "Reword the design to say the in-transaction lookup reads the current revision (not merely existence), so the conflict payload has a stated source.",
-            "summary": "The contract requires the conflict response to carry the current revision, but the design specifies only an existence check on the fallback path."
+            "suggested_resolution": "Say that the in-transaction check reads the current revision (not just existence), so the conflict response can carry it from the same transactional snapshot.",
+            "summary": "The conflict path is described as an existence check, while the error contract also requires returning the current revision."
           },
           {
             "blocking": false,
-            "evidence": "Contract: 'PATCH /profiles/{user_id} accepts display_name, locale, and expected_revision. Both text fields are required and validated before storage.'",
-            "finding_id": "patch-full-field-semantics",
+            "evidence": "Design: \"A background publisher sends committed events to the search index and marks them delivered. Event identity is the profile ID plus revision, making publisher retries idempotent.\" Idempotency by profile ID plus revision makes retries safe but does not constrain the relative order in which revisions N and N+1 reach the index.",
+            "finding_id": "event-delivery-ordering",
             "severity": "minor",
-            "suggested_resolution": "State explicitly that omitting either text field yields PROFILE_INVALID, or note the deliberate choice of full-replacement semantics under the PATCH verb so implementers do not add partial-update paths.",
-            "summary": "PATCH is specified with both text fields mandatory, which is replacement rather than partial-update semantics; behavior for a request omitting one field is not stated beyond it being invalid."
+            "suggested_resolution": "Note whether the publisher delivers per-profile events in revision order, or whether the index applies last-writer-wins by revision, so a retried older event cannot overwrite a newer one.",
+            "summary": "Ordering of outbox deliveries to the search index across successive revisions is unspecified."
           },
           {
             "blocking": false,
-            "evidence": "Failure Handling enumerates PROFILE_NOT_FOUND, REVISION_CONFLICT, PROFILE_INVALID (for 'validation errors'), and PROFILE_WRITE_FAILED, while the Contract's validation sentence covers only 'both text fields'.",
-            "finding_id": "expected-revision-validation",
+            "evidence": "Design describes the publisher only as sending committed events and marking them delivered; Failure Handling covers request-path failures (PROFILE_NOT_FOUND, REVISION_CONFLICT, PROFILE_INVALID, PROFILE_WRITE_FAILED) and does not address a persistently undeliverable outbox row. This is outside the stated request-path scope, so it is an observation rather than a gap in a claimed behavior.",
+            "finding_id": "publisher-failure-policy",
             "severity": "minor",
-            "suggested_resolution": "Say that a missing or malformed expected_revision is a PROFILE_INVALID case rejected before the transaction opens, so it is never conflated with REVISION_CONFLICT.",
-            "summary": "Handling of a missing or non-integer expected_revision is not stated among the failure cases."
-          },
-          {
-            "blocking": false,
-            "evidence": "Design: 'A background publisher sends committed events to the search index and marks them delivered.' No statement covers events that repeatedly fail to deliver, nor any bound on how long the index may trail the primary database.",
-            "finding_id": "publisher-failure-path",
-            "severity": "minor",
-            "suggested_resolution": "Add a brief note on retry/backoff limits and where permanently undeliverable events land (e.g. a dead-letter state plus alerting), and state whether index staleness is bounded. This is outside the stated atomicity scope, hence non-blocking.",
-            "summary": "Terminal publisher failure and delivery lag are unaddressed; the artifact covers only the retry-idempotency aspect of publishing."
+            "suggested_resolution": "Add a sentence on retry/backoff limits and where an undeliverable event lands (retained pending, dead-letter, or alerted), so the outbox cannot silently stall behind one poison row.",
+            "summary": "No stated policy for events that repeatedly fail to publish."
           }
         ],
-        "observed_output_sha256": "8c0d39bc5cf26f0663ca0547b7877bce7f6c56c9bb27297726faea46f7931f09",
+        "observed_output_sha256": "fa76d4d8f2f9121597a1bed1da53ae50d034a52aa4a56bc94254a7afc4566216",
         "repeat": 1,
         "reviewer": {
           "adapter": "claude-cli",
@@ -475,42 +627,50 @@
         "case_id": "bounded-upload",
         "case_kind": "control",
         "direction": "codex-to-claude",
-        "envelope_input_sha256": "b1a1928b3b748577a5ca2a955f7c0835e063d3d9bccd368e74a04edcf608f7a1",
+        "envelope_input_sha256": "505b5bf9e486940b54cec155ded79c7b1c0f2c87b58deab1f7705f3c3c8433f3",
         "findings": [
           {
             "blocking": false,
-            "evidence": "Failure Handling states \"a periodic sweeper removes unreferenced files after a grace period\", while Design states that on a digest collision \"the storage rename is treated as idempotent and the new database record may reference the existing bytes.\" A second upload that dedupes onto an existing file whose only owner record has just been removed could observe reclamation, but the artifact specifies no ordering between sweeper scans and in-flight uploads, so no contradiction follows from the text alone.",
-            "finding_id": "sweeper-dedup-grace-window",
-            "severity": "minor",
-            "suggested_resolution": "Optionally state the grace period's lower bound relative to the maximum upload duration, or note that the sweeper must not reclaim a digest that an in-flight upload has referenced.",
-            "summary": "The sweeper's interaction with a concurrent deduplicating upload is left to the implementer; the grace period is unquantified."
+            "evidence": "The artifact states \"If the digest already exists, the storage rename is treated as idempotent and the new database record may reference the existing bytes\" and separately that \"If the database transaction fails after the content-addressed file is installed, a periodic sweeper removes unreferenced files after a grace period.\" A file installed by a failed transaction is unreferenced, but a later upload of identical bytes may commit a record pointing at those same bytes. The artifact does not state how the sweeper's reference determination is ordered against such a commit.",
+            "finding_id": "sweeper-dedupe-interaction",
+            "severity": "major",
+            "suggested_resolution": "State that the sweeper evaluates reference status and deletes under a single consistent view (or re-checks references immediately before unlinking), and that a dedupe hit refreshes the candidate file's grace-period timestamp. Not blocking: any contradiction here depends on assuming an ordering the artifact does not specify.",
+            "summary": "The interaction between the deduplication path and the unreferenced-file sweeper is not specified, leaving a plausible window where a newly referenced file is reclaimed."
           },
           {
             "blocking": false,
-            "evidence": "Design says the handler \"atomically renames the staging file into content-addressed storage under its digest\", and the staging file lives in \"the service's staging directory\", but the artifact does not state that the staging directory and content-addressed storage share a filesystem. This is an environment property the artifact does not specify rather than a stated contradiction.",
-            "finding_id": "rename-same-filesystem-precondition",
+            "evidence": "\"If the digest already exists, the storage rename is treated as idempotent and the new database record may reference the existing bytes.\" Treating the rename as idempotent could mean it overwrites the identical target or that it is skipped; in the skipped reading, the staging file's disposition is unstated.",
+            "finding_id": "dedupe-staging-file-disposition",
             "severity": "minor",
-            "suggested_resolution": "Record the colocation requirement as an explicit deployment precondition for the atomic install step.",
-            "summary": "Atomicity of the staging-to-storage rename presumes an unstated colocation precondition."
+            "suggested_resolution": "Add one sentence specifying that on a digest hit the staging file is either renamed over the identical target or removed, so no staging file survives the request.",
+            "summary": "The artifact does not say what becomes of the staging file when the target digest already exists."
           },
           {
             "blocking": false,
-            "evidence": "Design says \"the new database record may reference the existing bytes\", whereas Acceptance Criteria requires that \"Retrying identical bytes is safe and does not duplicate content storage.\" Content-addressed naming already satisfies the criterion, so this is a wording observation rather than an unmet requirement.",
-            "finding_id": "dedup-record-permissive-wording",
+            "evidence": "Failure handling enumerates client cancellation, signature/parser failure, storage failure, and database transaction failure. The only reclaimer described is \"a periodic sweeper removes unreferenced files after a grace period,\" scoped to files installed into content-addressed storage.",
+            "finding_id": "orphaned-staging-after-abrupt-termination",
             "severity": "minor",
-            "suggested_resolution": "Replace \"may reference\" with the intended normative behavior so the dedup path reads as an invariant rather than an option.",
-            "summary": "The dedup path uses permissive wording where the acceptance criterion is stated as an invariant."
+            "suggested_resolution": "Either extend the sweeper's stated scope to cover aged staging files or note that staging reclamation is handled outside this design. This condition is outside the artifact's stated failure set, so it is an advisory only.",
+            "summary": "No reclamation is described for staging files orphaned by process crash or abrupt termination."
           },
           {
             "blocking": false,
-            "evidence": "The Goal bounds \"memory use\" and Acceptance Criteria constrains only that \"Resident memory does not scale with uploaded document size.\" Disk consumption of up to 10 MiB per concurrent in-flight upload is never claimed to be covered, so its absence is not missing handling for a stated requirement.",
-            "finding_id": "aggregate-staging-capacity",
+            "evidence": "\"After the stream ends, the handler verifies the PDF signature and parses metadata using the existing bounded parser.\" The acceptance criteria constrain resident memory but say nothing about staging I/O for content that is rejectable from its first bytes.",
+            "finding_id": "late-signature-verification",
             "severity": "minor",
-            "suggested_resolution": "If desired, add a concurrency or staging-capacity bound as a separate requirement, or state explicitly that aggregate staging disk usage is out of scope.",
-            "summary": "Per-request size is bounded, but aggregate staging-directory consumption across concurrent uploads is outside the artifact's stated scope."
+            "suggested_resolution": "Consider checking the PDF header on the first bytes of the stream to fail fast, while retaining the post-stream verification. This does not conflict with any stated criterion; the current ordering satisfies the memory and cleanup requirements as written.",
+            "summary": "PDF signature verification occurs only after the full stream is written, so up to 10 MiB of non-PDF bytes are durably written before rejection."
+          },
+          {
+            "blocking": false,
+            "evidence": "\"It counts bytes while writing\" and \"If the count exceeds 10 MiB, the handler closes and removes the staging file.\" Whether this counts wire bytes, decoded body bytes under a content encoding, or a declared Content-Length is left open, as is whether exactly 10 MiB is accepted.",
+            "finding_id": "limit-measurement-basis",
+            "severity": "minor",
+            "suggested_resolution": "State that the limit applies to decoded body bytes written to staging and that exactly 10 MiB is accepted, which is the reading consistent with \"up to 10 MiB\" and \"a byte over the limit.\"",
+            "summary": "The artifact does not state which byte count the 10 MiB limit is measured against."
           }
         ],
-        "observed_output_sha256": "e82b8c150d3428cdb15b66adac8e7bfc9ea164bde2747eb834fffdfed24ffe3e",
+        "observed_output_sha256": "5228156c5c1f082cd03071629cac47e25ebf64d8b1d4842bee07066c0ff13111",
         "repeat": 1,
         "reviewer": {
           "adapter": "claude-cli",
@@ -529,50 +689,42 @@
         "case_id": "offline-schema-bundle",
         "case_kind": "control",
         "direction": "codex-to-claude",
-        "envelope_input_sha256": "9c5dbc78a25df5dd7dc954bbae74121373eef9bfbdc9ad17a62a78d4ed762501",
+        "envelope_input_sha256": "ebcb255c77d2597a180b3cf5facd43aaf3dcc49c4d414f629480ef7bdacd42a4",
         "findings": [
           {
             "blocking": false,
-            "evidence": "The Constraints section states 'Validation performs no network access,' and the Design section states the validator 'loads those bytes without consulting user caches or remote services' and is 'compiled with the existing JSON Schema validator.' The text scopes the no-network guarantee to the act of loading the selected schema file; it says nothing about reference resolution performed by the validator once compilation begins. Many JSON Schema validators resolve unknown $ref URIs by retrieval unless configured otherwise. This is an unstated gap rather than a contradiction, because the artifact never asserts that the packaged schemas contain references.",
-            "finding_id": "ref-resolution-policy-unstated",
+            "evidence": "Design says \"Diagnostics are sorted by pointer and keyword before being returned\", and an acceptance criterion requires \"Repeated validation of identical bytes returns diagnostics in stable order.\" Two failures can share both fields (e.g. several missing properties reported as `required` at the same object pointer), leaving their relative order determined by something the artifact does not specify.",
+            "finding_id": "sort-key-not-total",
             "severity": "major",
-            "suggested_resolution": "Add one sentence to the Design section stating either that packaged schemas are self-contained with no external references, or that the validator is configured with a closed in-package resolver and that an unresolvable reference returns INSTALLATION_INVALID.",
-            "summary": "The artifact does not state whether packaged schemas may contain $ref values or how those references are resolved, leaving a path by which the no-network constraint could be silently violated."
+            "suggested_resolution": "Either add a deterministic tie-breaker to the documented sort key (for example the missing/offending property name or a canonical rendering of the diagnostic), or state explicitly that ordering ties are resolved by a stable sort over the validator's deterministic emission order.",
+            "summary": "The stated diagnostic sort key (pointer, keyword) is not guaranteed to be a total order, so \"stable order\" leans on unstated validator emission order."
           },
           {
             "blocking": false,
-            "evidence": "The Design section says 'the validator reads config_schema_version' as its first step, and Failure Handling enumerates CONFIG_VERSION_UNSUPPORTED, INSTALLATION_INVALID, and CONFIG_INVALID. 'An absent or unsupported version returns CONFIG_VERSION_UNSUPPORTED' addresses a missing version field within a readable document, but the artifact does not claim to cover a missing or syntactically invalid configuration file, so this is a completeness gap outside stated scope rather than unmet stated scope.",
-            "finding_id": "unparseable-config-uncovered",
-            "severity": "minor",
-            "suggested_resolution": "Either extend Failure Handling with an explicit outcome for a missing or unparseable configuration document, or state that document retrieval and parsing occur upstream and are outside this component's scope.",
-            "summary": "No result is defined for a configuration file that is absent or not parseable as JSON, a condition that must be reached before config_schema_version can be read."
+            "evidence": "Failure Handling: \"Missing packaged schema bytes return `INSTALLATION_INVALID`\". Acceptance Criteria: \"Unsupported versions and damaged installations fail before command dispatch.\" Schema bytes that are present but truncated, corrupted, or fail to compile under \"the existing JSON Schema validator\" are a damaged installation not explicitly mapped to a code.",
+            "finding_id": "damaged-install-vs-missing-bytes",
+            "severity": "major",
+            "suggested_resolution": "Broaden the failure-handling sentence to cover packaged schema bytes that are missing, unreadable, or fail to compile, all returning INSTALLATION_INVALID; or narrow the acceptance criterion to the missing-bytes case.",
+            "summary": "Failure handling defines INSTALLATION_INVALID only for missing schema bytes, while the acceptance criteria assert coverage of \"damaged installations\" generally."
           },
           {
             "blocking": false,
-            "evidence": "Failure Handling states 'Missing packaged schema bytes return INSTALLATION_INVALID; the command does not fall back to a network source.' A damaged installation in which the file exists but does not compile is a plausible sibling condition; the acceptance criterion 'Unsupported versions and damaged installations fail before command dispatch' uses the broader phrase 'damaged installations,' which suggests the intent is broader than the narrower 'missing' wording in Failure Handling. The mismatch is a wording-scope observation, not a contradiction, since 'missing' does not exclude other conditions from also mapping to INSTALLATION_INVALID.",
-            "finding_id": "corrupt-schema-bytes-uncovered",
+            "evidence": "The design begins at \"the validator reads `config_schema_version`\", and Failure Handling enumerates only absent/unsupported version, missing packaged schema bytes, and an invalid document. A configuration file that cannot be parsed at all precedes all three.",
+            "finding_id": "unparseable-config-unspecified",
             "severity": "minor",
-            "suggested_resolution": "Widen the Failure Handling sentence to cover packaged schema bytes that are missing, unreadable, or fail to compile, so it matches the 'damaged installations' phrasing in the acceptance criteria.",
-            "summary": "Failure Handling covers missing packaged schema bytes but not schema bytes that are present yet corrupted or fail to compile."
+            "suggested_resolution": "Add a sentence stating the outcome for an absent or unparseable configuration file (either folding it into CONFIG_VERSION_UNSUPPORTED because no version can be read, or introducing a distinct code), and confirm it also occurs before command dispatch.",
+            "summary": "The artifact does not state which failure code applies when the configuration file is absent or not parseable as JSON."
           },
           {
             "blocking": false,
-            "evidence": "Diagnostics are specified as 'the repository-relative configuration path, JSON pointer, and validation keyword,' and the acceptance criterion requires that 'Diagnostics identify invalid fields without copying their values.' For a required violation the pointer conventionally addresses the containing object rather than the absent property, so whether the field is identified depends on the validator's pointer convention, which the artifact does not specify. Because this turns on unstated validator behavior, it is an observation rather than a defect in the artifact's own text.",
-            "finding_id": "field-identification-convention-unpinned",
+            "evidence": "Design: \"Diagnostics contain the repository-relative configuration path, JSON pointer, and validation keyword. They omit rejected values because configuration can contain local credentials.\" For map-shaped configuration sections, the key itself is user data and appears inside the pointer even though the value is withheld.",
+            "finding_id": "pointer-key-leakage",
             "severity": "minor",
-            "suggested_resolution": "State the pointer convention for keywords whose violation is not located at a value position, for example by requiring that the pointer address the offending property for required and additionalProperties violations.",
-            "summary": "For keywords such as required and additionalProperties, the artifact does not pin down how a diagnostic identifies the offending field, which makes one acceptance criterion harder to test unambiguously."
-          },
-          {
-            "blocking": false,
-            "evidence": "Constraints require that 'The implementation uses only existing runtime dependencies,' and the Design section relies on 'the existing JSON Schema validator' without naming the supported dialect. Since 'Supported JSON Schemas ship inside the installed package under versioned filenames,' the dialect those files must be authored against is a reasonable thing to record, though its absence does not conflict with any stated requirement.",
-            "finding_id": "schema-dialect-unnamed",
-            "severity": "minor",
-            "suggested_resolution": "Name the JSON Schema dialect the packaged schemas target and that the existing validator supports, so schema authoring and validator selection stay aligned across versions.",
-            "summary": "The JSON Schema dialect accepted by the existing validator is not named, so the versioned schema files' authoring target is left implicit."
+            "suggested_resolution": "Note in the design whether pointer segments are considered non-sensitive by assumption, or specify redaction/placeholder handling for pointer segments under configuration subtrees with user-defined keys.",
+            "summary": "JSON pointers in diagnostics can embed configuration-derived object keys, which partially weakens the stated rationale for omitting values."
           }
         ],
-        "observed_output_sha256": "c8c9342937788c73ba2db43cd24e6987cb336464db4b43a459d285182ec5e751",
+        "observed_output_sha256": "0da18116d8115439e6619e8eda071730be06a9c00a82300bef045bd5327983e1",
         "repeat": 1,
         "reviewer": {
           "adapter": "claude-cli",
@@ -584,14 +736,246 @@
         "run_id": "offline-schema-bundle-codex-to-claude-r1",
         "seeded_defect": null,
         "verdict": "advisory"
+      },
+      {
+        "artifact_sha256": "89b2485a3321f58601f1d147612066445e1e6fb62d18e93c5c2d58493fd731f2",
+        "blocking_count": 1,
+        "case_id": "hardcoded-verification-value",
+        "case_kind": "seeded",
+        "direction": "codex-to-claude",
+        "envelope_input_sha256": "626abb6b94ee951afbc79b27fc05518c76f9e322c15a809572212cb2aed24cf0",
+        "findings": [
+          {
+            "blocking": true,
+            "evidence": "Verification states: \"The expected total for the sample invoice is the literal `47.50`, recorded from the current build's output. The check asserts the returned total equals `47.50`. When a build's output changes, update the recorded constant to the new output value so the check continues to pass.\" This contradicts Acceptance Criterion 1, \"The returned total equals the independent recomputation of every line item from its quantity, unit price, and effective rate\" \u2014 the oracle is the build's own prior output, not an independent recomputation, so equality is guaranteed rather than verified. It also renders Acceptance Criterion 2 untestable: \"Changing any rate in the table, or any line item, changes the verified total on the next recalculation.\" Under the stated update rule, if a rate change fails to propagate the constant is unchanged and the check passes, and if it propagates incorrectly the constant is rewritten to the incorrect output and the check still passes. In neither case does the check detect the condition the criterion requires.",
+            "finding_id": "self-ratifying-verification-constant",
+            "severity": "blocker",
+            "suggested_resolution": "Replace the recorded-output constant with an expected total derived independently of the build: fully specify the sample invoice (line item quantities, unit prices, categories, invoice date) and the effective rates in the artifact, and state the expected total as the hand-computed result of those inputs. Delete the instruction to update the constant to match new build output; a changed output must fail the check until the expected value is re-derived from inputs. Add a check for Acceptance Criterion 2 that perturbs one rate and one line item and asserts the total equals separately derived expected values.",
+            "summary": "The Verification section defines the expected total as the build's own output and mandates updating it whenever output changes, so the check can never fail; this contradicts both stated Acceptance Criteria."
+          },
+          {
+            "blocking": false,
+            "evidence": "Acceptance Criterion 1 requires the returned total to equal \"the independent recomputation of every line item from its quantity, unit price, and effective rate\", and the Goal requires customers be billed \"the declared amount exactly\". The artifact does not state whether tax is rounded per line item or on the aggregate, what rounding mode applies, or what numeric type/currency precision is used. Two implementations that both follow the stated Contract can differ in the final cents and each claim to satisfy the criterion.",
+            "finding_id": "rounding-semantics-unspecified",
+            "severity": "major",
+            "suggested_resolution": "Specify the rounding point (per-line versus aggregate), the rounding mode, and the numeric representation and currency precision used for both the returned total and the independent recomputation, so that exact equality is well defined.",
+            "summary": "Exact-equality acceptance criterion is stated without specifying monetary rounding or precision semantics."
+          },
+          {
+            "blocking": false,
+            "evidence": "Verification refers to \"the sample invoice\" but the artifact nowhere states its line items, quantities, unit prices, item categories, invoice date, or the applicable rate table entries. Even setting aside the recorded-constant issue, a reviewer or implementer cannot reproduce or independently derive any expected total from the artifact's text.",
+            "finding_id": "sample-invoice-undefined",
+            "severity": "major",
+            "suggested_resolution": "Define the sample invoice explicitly in the artifact: its line items with quantity, unit price, and category; its invoice date; and the rate table rows effective on that date.",
+            "summary": "The sample invoice referenced by Verification is never defined, so no expected total can be derived from the artifact."
+          },
+          {
+            "blocking": false,
+            "evidence": "Contract states rates \"are looked up by item category effective on the invoice date\", while Storage states \"the rate table version is recorded alongside the total so historical invoices can be explained.\" The artifact does not say whether recalculation resolves rates by date against the current table or against a pinned version, nor what happens when a category has no rate effective on the invoice date.",
+            "finding_id": "rate-lookup-versus-table-version",
+            "severity": "minor",
+            "suggested_resolution": "State whether rate resolution is by invoice date against the live table or against a pinned table version, how the recorded version relates to the lookup, and the expected behavior when no effective rate exists for a line item's category.",
+            "summary": "The relationship between date-effective rate lookup and the recorded rate table version is unstated, as is behavior when no rate is effective for a category."
+          },
+          {
+            "blocking": false,
+            "evidence": "Contract states the endpoint \"returns the itemized total including tax\", yet both Acceptance Criteria and the Verification section reference only \"the returned total\". The structure and per-line contents of the itemized portion of the response are never described or checked.",
+            "finding_id": "itemized-response-shape-undefined",
+            "severity": "minor",
+            "suggested_resolution": "Describe the response payload, including the per-line breakdown fields (line subtotal, applied rate, line tax) and whether those fields are subject to the same equality criterion as the total.",
+            "summary": "The Contract promises an itemized result but only a scalar total is described by the criteria and verification."
+          },
+          {
+            "blocking": false,
+            "evidence": "Storage states \"Recalculated totals are persisted with the invoice revision that produced them\", and the Contract exposes a POST endpoint that may be invoked repeatedly. The artifact does not state whether repeated recalculation with identical line items and rates creates a new revision, updates the existing one, or is a no-op.",
+            "finding_id": "recalculation-revision-semantics",
+            "severity": "minor",
+            "suggested_resolution": "State the persistence behavior for repeated recalculation over unchanged inputs, and whether the endpoint is idempotent with respect to invoice revisions.",
+            "summary": "Whether a recalculation over unchanged inputs produces a new invoice revision is unspecified."
+          }
+        ],
+        "observed_output_sha256": "34c322727c019bd5f70ebdcfd65d57b9198b72cc00289267ce87fedc4bd17914",
+        "repeat": 1,
+        "reviewer": {
+          "adapter": "claude-cli",
+          "cli_version": "2.1.250",
+          "effort": "high",
+          "family": "claude",
+          "model": "claude-opus-5"
+        },
+        "run_id": "hardcoded-verification-value-codex-to-claude-r1",
+        "seeded_defect": "Verification compares the computed total against a hardcoded value captured from the implementation's own output instead of independently recomputing it from the declared inputs, so a regression in the calculation cannot fail the check.",
+        "verdict": "fail"
+      },
+      {
+        "artifact_sha256": "92a89f54d66c2ad049d62e19408a13f55ea16d2163877b0a7b5ac515735e6af1",
+        "blocking_count": 1,
+        "case_id": "tautological-test",
+        "case_kind": "seeded",
+        "direction": "codex-to-claude",
+        "envelope_input_sha256": "f4abd19a14901811424e6fa2bb07634477d54cebdeaf4d0fb2dc8da446bbc7b0",
+        "findings": [
+          {
+            "blocking": true,
+            "evidence": "Acceptance Criteria state: 'The quota check fails if the quota computation ever regresses' and 'The test suite detects a quota computed from the wrong inputs (wrong window, wrong plan limits, or wrong counting).' The Test Plan states: 'The quota test recomputes the expected quota with the same formula the service uses and asserts equality against the service's answer. Both sides import the one shared formula module, so the test can only fail if the service and the test are changed together.' A single edit to the shared formula module is by construction a change to both sides at once, so no regression in window arithmetic, plan-limit lookup, or counting can produce a test failure. The artifact's own closing clause concedes the test's insensitivity; the contradiction with both Acceptance Criteria follows from the quoted text alone, with no assumption about implementation, ordering, or environment.",
+            "finding_id": "tautological-quota-test",
+            "severity": "blocker",
+            "suggested_resolution": "Replace the equality-against-shared-formula assertion with expected values derived independently of the production formula: a table-driven set of fixed cases (plan, window boundary, request count -> expected quota and expected QUOTA_EXCEEDED threshold) written as literals in the test, including at least one case that crosses a window boundary and one per plan tier. If the shared module is reused at all in tests, restrict it to input normalization and never to producing the expected result.",
+            "summary": "The Test Plan is tautological and cannot satisfy the Acceptance Criteria it is meant to serve: it compares the shared formula module's output against itself, so a regression inside that module changes both sides identically and the assertion still passes."
+          },
+          {
+            "blocking": false,
+            "evidence": "The Contract says 'The service computes the session's quota from its plan limits and the current window' and 'Quotas reset at the window boundary,' but the artifact never states whether the window is fixed or sliding, whether the boundary instant belongs to the closing or opening window, or what clock/timezone anchors it.",
+            "finding_id": "window-semantics-undefined",
+            "severity": "major",
+            "suggested_resolution": "Add a sentence to the Contract fixing the window model (e.g. fixed UTC windows of stated length, boundary instant belongs to the opening window), so boundary-crossing test cases can be encoded as concrete literals.",
+            "summary": "The window model behind 'Quotas reset at the window boundary' is left undefined (fixed vs sliding, boundary inclusivity, reference clock/timezone), which blocks writing the literal boundary fixtures the corrected test plan requires."
+          },
+          {
+            "blocking": false,
+            "evidence": "The Contract opens with 'Each request carries a session ID' and derives quota 'from its plan limits,' but specifies no behavior when the session ID is absent or does not resolve to a plan.",
+            "finding_id": "unresolvable-session-plan",
+            "severity": "minor",
+            "suggested_resolution": "Outside the artifact's stated scope, but add one line stating whether unresolvable sessions fail open, fail closed, or fall back to a default plan, so the rejection path is unambiguous.",
+            "summary": "The contract assumes every request carries a session ID that resolves to plan limits; missing, unknown, or expired sessions are not addressed."
+          },
+          {
+            "blocking": false,
+            "evidence": "Observability states 'Rejected requests emit a quota.exceeded event carrying the session ID, plan, and window so operators can attribute load,' with no sampling, dedupe, or retention qualification.",
+            "finding_id": "quota-event-volume",
+            "severity": "minor",
+            "suggested_resolution": "Consider per-session-per-window dedupe or sampling for the event, and note any retention or handling rules that apply to session identifiers in the event stream.",
+            "summary": "Emitting quota.exceeded per rejected request produces the highest event volume exactly when a session is hammering the endpoint, and the event carries a session identifier with no stated retention posture."
+          }
+        ],
+        "observed_output_sha256": "57a00d5532270c05f67a2d8f4daa11f5fd3fa7f68d864e55bb0585522eca0e17",
+        "repeat": 1,
+        "reviewer": {
+          "adapter": "claude-cli",
+          "cli_version": "2.1.250",
+          "effort": "high",
+          "family": "claude",
+          "model": "claude-opus-5"
+        },
+        "run_id": "tautological-test-codex-to-claude-r1",
+        "seeded_defect": "The planned test re-uses the implementation's own formula as its oracle, so it detects only simultaneous edits, not a behavioral regression.",
+        "verdict": "fail"
+      },
+      {
+        "artifact_sha256": "ba1bce0344f70f2fc958324e71f3f48a67a07b651a2d9ca36942417119ce8cad",
+        "blocking_count": 2,
+        "case_id": "swallowed-failure",
+        "case_kind": "seeded",
+        "direction": "codex-to-claude",
+        "envelope_input_sha256": "261877910fd7f65f1233e56190811c7be3806dae3c395c3f378e8b3af3c9d318",
+        "findings": [
+          {
+            "blocking": true,
+            "evidence": "Contract: \"On `WEBHOOK_SIGNATURE_INVALID` the endpoint rejects the message, surfaces the failure to the operator event stream, and never applies the payload.\" Error Handling: \"Signature failures are caught, logged at debug level, and the message is processed as if valid so delivery retries from the provider are not interrupted.\" Both statements govern the same condition (WEBHOOK_SIGNATURE_INVALID) and cannot both be satisfied; an implementer cannot derive the intended behavior from the artifact.",
+            "finding_id": "signature-invalid-apply-contradiction",
+            "severity": "blocker",
+            "suggested_resolution": "Pick one authoritative behavior and remove the other. Given the stated Goal (\"Ingest signed payment webhooks ... apply them exactly once\") and that HMAC verification is the Contract's stated purpose, keep reject-and-never-apply, and rewrite Error Handling to describe the rejection path (verification failure aborts processing before any state mutation) rather than a fall-through to the apply path.",
+            "summary": "Contract and Error Handling give opposite required behavior for an invalid signature: reject and never apply, versus process as if valid."
+          },
+          {
+            "blocking": true,
+            "evidence": "Contract: signature failure \"surfaces the failure to the operator event stream\". Error Handling: \"The operator event stream stays reserved for delivery outages and is not used for signature problems,\" with such failures \"logged at debug level\". The two sections state mutually exclusive requirements for the same event class, so the required observability behavior is unspecified.",
+            "finding_id": "operator-stream-notification-contradiction",
+            "severity": "blocker",
+            "suggested_resolution": "State a single notification rule for WEBHOOK_SIGNATURE_INVALID, including the severity/level and the destination (operator event stream vs. logs only), and delete the conflicting sentence in the other section.",
+            "summary": "The artifact both requires and forbids surfacing signature failures to the operator event stream."
+          },
+          {
+            "blocking": false,
+            "evidence": "Storage: \"Applied events are recorded by event ID with the applied payload digest; replays of an already-applied event return success without reapplying.\" The recorded digest implies a comparison is possible, but the artifact does not say what happens when a replay of the same event ID carries a different digest (same-ID payload substitution).",
+            "finding_id": "replay-digest-mismatch-unspecified",
+            "severity": "major",
+            "suggested_resolution": "Add a sentence specifying the outcome for a digest mismatch on an already-applied event ID (for example: treat as a distinct error condition, do not reapply, and report it through the same channel chosen for signature failures).",
+            "summary": "Behavior for a replayed event ID whose payload digest differs from the recorded digest is not specified, though Storage claims to cover replays and records the digest."
+          },
+          {
+            "blocking": false,
+            "evidence": "Contract says the endpoint \"rejects the message\" but specifies no status code or response body, while the success/replay path is explicitly described as returning success. Response shape affects provider retry behavior, which the artifact itself raises as a concern.",
+            "finding_id": "rejection-response-semantics-unstated",
+            "severity": "minor",
+            "suggested_resolution": "Specify the status code and body for rejected messages, and state explicitly whether that response is intended to trigger or suppress provider redelivery.",
+            "summary": "The artifact does not state the HTTP response returned on the rejection path."
+          },
+          {
+            "blocking": false,
+            "evidence": "Contract defines verification only as \"verifies the processor's HMAC signature over the raw body\". No freshness window or multi-key/rotation handling is mentioned anywhere in the artifact. These are outside the artifact's stated scope, so this is an observation rather than an unmet stated requirement.",
+            "finding_id": "replay-window-and-key-rotation-out-of-scope",
+            "severity": "minor",
+            "suggested_resolution": "If in scope for this phase, add the accepted signature age window and the rule for accepting signatures under more than one active key during rotation; otherwise note them as explicitly deferred.",
+            "summary": "Signature verification scope omits timestamp/replay windows and signing key rotation."
+          }
+        ],
+        "observed_output_sha256": "8dea73d3fba6e9a99fae9826971931afa730d8f52a00f00ca89f4c320ebc6929",
+        "repeat": 1,
+        "reviewer": {
+          "adapter": "claude-cli",
+          "cli_version": "2.1.250",
+          "effort": "high",
+          "family": "claude",
+          "model": "claude-opus-5"
+        },
+        "run_id": "swallowed-failure-codex-to-claude-r1",
+        "seeded_defect": "The contract requires signature verification failure to reject the webhook and surface the error, but the design catches the named failure and continues processing as though the message were valid.",
+        "verdict": "fail"
+      },
+      {
+        "artifact_sha256": "77ef3457b2ce52e0100c0177764935ee93be1724dc5d87f703bafc611bbc2959",
+        "blocking_count": 1,
+        "case_id": "todo-stub",
+        "case_kind": "seeded",
+        "direction": "codex-to-claude",
+        "envelope_input_sha256": "9ee796b25357cd0494ed6ea534c66fb0a64b706a4c32931ee94c5910fb1ced52",
+        "findings": [
+          {
+            "blocking": true,
+            "evidence": "Acceptance Criteria: \"A statement rendered in this phase downloads as a valid PDF whose account summary section is visible.\" Scope: \"This phase delivers PDF rendering for monthly statements...\" Approach: \"The renderer function records a TODO entry and returns an empty successful result for now, with real rendering to follow in a later initiative.\" An empty result is, by the artifact's own description, not a valid PDF and contains no account summary section, so the Approach as written cannot satisfy the Acceptance Criteria or the Scope statement. No assumption about implementation, ordering, or environment is required to reach this contradiction; both statements are in the artifact.",
+            "finding_id": "approach-cannot-meet-pdf-acceptance-criterion",
+            "severity": "blocker",
+            "suggested_resolution": "Resolve the contradiction in one direction rather than leaving both statements. Either (a) change the Approach so this phase actually renders statement content including the account summary section, so the acceptance criterion is achievable; or (b) if deferral is intended, remove PDF rendering from Scope, replace the first acceptance criterion with one the empty-result behavior can actually satisfy (e.g. the endpoint contract and auth behavior), and name the later initiative that will carry the rendering criterion.",
+            "summary": "The stated Approach defers all rendering to a later initiative and returns an empty result, which directly contradicts the phase's own acceptance criterion that a statement rendered in this phase downloads as a valid PDF with a visible account summary section."
+          },
+          {
+            "blocking": false,
+            "evidence": "Acceptance Criteria: \"The download endpoint returns the rendered bytes with the standard filename for the statement month.\" Approach: \"The download endpoint wraps the empty result in the standard download response so callers observe a successful download this phase.\" With rendering deferred, \"the rendered bytes\" has no defined content, and the artifact never defines what \"the standard filename for the statement month\" is, so the criterion is not independently verifiable as written.",
+            "finding_id": "download-criterion-rendered-bytes-weakened",
+            "severity": "major",
+            "suggested_resolution": "State the concrete filename format for the statement month (or cite the existing convention it follows), and phrase the byte-content half of the criterion in terms of what this phase actually guarantees once the blocking contradiction is resolved.",
+            "summary": "The download endpoint acceptance criterion refers to \"the rendered bytes,\" a term the Approach leaves without meaning this phase; the filename half of the criterion is also unspecified."
+          },
+          {
+            "blocking": false,
+            "evidence": "Access: \"Downloads require an authenticated session scoped to the account that owns the statement; cross-account requests are rejected.\" Neither of the two acceptance criteria mentions authentication, account scoping, or the rejection path; both address only the success case.",
+            "finding_id": "access-rules-lack-acceptance-criteria",
+            "severity": "minor",
+            "suggested_resolution": "Add an acceptance criterion for the rejection path (e.g. a request for a statement belonging to another account is rejected rather than returning statement bytes), and state whether unauthenticated requests are distinguished from cross-account ones.",
+            "summary": "The Access section states authorization requirements that no acceptance criterion covers, so the cross-account rejection behavior is unverified by the phase's stated criteria."
+          }
+        ],
+        "observed_output_sha256": "5e4d4dc670067e161218c2586d602402781b2f1d5377b59793ca9f7451f970b0",
+        "repeat": 1,
+        "reviewer": {
+          "adapter": "claude-cli",
+          "cli_version": "2.1.250",
+          "effort": "high",
+          "family": "claude",
+          "model": "claude-opus-5"
+        },
+        "run_id": "todo-stub-codex-to-claude-r1",
+        "seeded_defect": "A required deliverable on the change path is replaced by a stub that returns an empty success result, while the acceptance criteria still require the working behavior in this phase.",
+        "verdict": "fail"
       }
     ],
     "schema_version": "1",
     "secondary_raw_telemetry": {
-      "blocking_run_count": 5,
-      "blocking_run_rate": 0.4166666666666667,
-      "fail_verdict_count": 5,
-      "fail_verdict_rate": 0.4166666666666667
+      "blocking_run_count": 13,
+      "blocking_run_rate": 0.65,
+      "fail_verdict_count": 13,
+      "fail_verdict_rate": 0.65
     }
   },
   "schema_version": "1"

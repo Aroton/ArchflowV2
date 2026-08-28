@@ -5075,7 +5075,7 @@
       ]
     },
     "src/init/assets.ts": {
-      "bytes": 5767,
+      "bytes": 6025,
       "format": "esm",
       "imports": [
         {
@@ -9529,7 +9529,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1836924,
+      "bytes": 1837182,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10641,7 +10641,7 @@
           "bytesInOutput": 2216
         },
         "src/init/assets.ts": {
-          "bytesInOutput": 4519
+          "bytesInOutput": 4777
         },
         "src/init/diagnostics.ts": {
           "bytesInOutput": 8333
@@ -10808,7 +10808,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3214331,
+      "bytes": 3214589,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12054,7 +12054,7 @@
           "bytesInOutput": 11205
         },
         "src/init/assets.ts": {
-          "bytesInOutput": 1391
+          "bytesInOutput": 1649
         },
         "src/init/task-initialization.ts": {
           "bytesInOutput": 6636

@@ -22,6 +22,12 @@ criteria:
   - id: verification-evidence
     text: "Report missing or failed verification only when the phase design requires it for an important behavior or risk. Claimed but untranscribed required verification is unverifiable, not a pass."
     blocking: true
+  - id: test-quality
+    text: "Report a test defect only when the suite would not fail if a required behavior regressed: a test that cannot fail for the behavior it claims to cover, a test that only detects the specific change it was written against, a test whose asserted behavior is so thoroughly replaced by test doubles that the real collaborators are never exercised, or a removed or weakened assertion that no longer guards a required behavior. A blocking finding must cite the exact test and the required behavior it fails to guard, and explain why the gap survives the phase design's non-goals and priorities. Do not report test-structure preferences, coverage targets, or a preferred framework."
+    blocking: true
+  - id: anti-shortcut
+    text: "Report a shortcut only when it substitutes the appearance of success for the required behavior on the change path: a stub, TODO, or unimplemented placeholder standing in for required logic; a silently narrowed scope or quietly skipped requirement the approved phase design names; a caught error or failure condition discarded so the failure is invisible; or a check that compares against a hardcoded expected value or special-cases the tested output instead of computing the required result. A blocking finding must cite the exact changed location and the required behavior it bypasses. Do not report work the approved phase design explicitly defers to a later phase."
+    blocking: true
   - id: simplicity
     text: "Report complexity only when it materially harms correctness, maintainability, change cost, or the approved operating envelope; do not report a merely preferred simpler implementation."
     blocking: true
@@ -37,6 +43,9 @@ criteria:
   - id: unverifiable-claims
     text: "When missing envelope or read-only repository evidence prevents a material judgment, record one non-blocking finding naming exactly what is missing, with a finding_id beginning unverifiable-. Never guess. Omit gaps that cannot materially affect the review, report each material gap once, and do not re-report one already named in prior-triage."
     blocking: false
+  - id: reviewer-confidence
+    text: "When a material judgment cannot be made with confidence from the artifact, its digest-checked verification transcript, and the supplied repository snapshot, record one non-blocking finding with a finding_id beginning escalate-, citing the exact judgment that could not be made and what evidence or clarification would settle it. Report escalate- only for a question that could materially change the verdict; a missing document or evidence gap belongs to unverifiable-claims, and never guess in either place."
+    blocking: false
   - id: advisory-observations
-    text: "Do not report non-material observations, optional cleanup, completeness suggestions, stylistic preferences, or harmless refinements. A sound implementation should return no findings rather than a list of possible enhancements."
+    text: "Do not report non-material observations, optional cleanup, completeness suggestions, stylistic preferences, or harmless refinements. A sound implementation should return no findings rather than a list of possible enhancements. Formatting, lint, type-checking, naming, and import-order findings belong to the deterministic tools that own them; never report them."
     blocking: false

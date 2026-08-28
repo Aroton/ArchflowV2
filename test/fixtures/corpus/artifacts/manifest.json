@@ -59,6 +59,38 @@
       "kind": "control",
       "expected_outcome": "pass",
       "seeded_defect": null
+    },
+    {
+      "id": "hardcoded-verification-value",
+      "artifact": "seeded-hardcoded-verification-value.md",
+      "artifact_sha256": "89b2485a3321f58601f1d147612066445e1e6fb62d18e93c5c2d58493fd731f2",
+      "kind": "seeded",
+      "expected_outcome": "blocking-finding",
+      "seeded_defect": "Verification compares the computed total against a hardcoded value captured from the implementation's own output instead of independently recomputing it from the declared inputs, so a regression in the calculation cannot fail the check."
+    },
+    {
+      "id": "tautological-test",
+      "artifact": "seeded-tautological-test.md",
+      "artifact_sha256": "92a89f54d66c2ad049d62e19408a13f55ea16d2163877b0a7b5ac515735e6af1",
+      "kind": "seeded",
+      "expected_outcome": "blocking-finding",
+      "seeded_defect": "The planned test re-uses the implementation's own formula as its oracle, so it detects only simultaneous edits, not a behavioral regression."
+    },
+    {
+      "id": "swallowed-failure",
+      "artifact": "seeded-swallowed-failure.md",
+      "artifact_sha256": "ba1bce0344f70f2fc958324e71f3f48a67a07b651a2d9ca36942417119ce8cad",
+      "kind": "seeded",
+      "expected_outcome": "blocking-finding",
+      "seeded_defect": "The contract requires signature verification failure to reject the webhook and surface the error, but the design catches the named failure and continues processing as though the message were valid."
+    },
+    {
+      "id": "todo-stub",
+      "artifact": "seeded-todo-stub.md",
+      "artifact_sha256": "77ef3457b2ce52e0100c0177764935ee93be1724dc5d87f703bafc611bbc2959",
+      "kind": "seeded",
+      "expected_outcome": "blocking-finding",
+      "seeded_defect": "A required deliverable on the change path is replaced by a stub that returns an empty success result, while the acceptance criteria still require the working behavior in this phase."
     }
   ]
 }

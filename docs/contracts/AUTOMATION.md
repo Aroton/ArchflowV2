@@ -1,6 +1,6 @@
 # contracts/AUTOMATION
 
-**Explored:** 2026-08-26 · **Commit:** `16193ec` · **Covers:** `src/contracts/automation-status.ts`, `src/local/automation-status.ts`, `src/local/commands.ts`, `src/local/main.ts`, `src/state/semantic-status.ts`, `test/integration/automation-status-*.test.ts`
+**Explored:** 2026-08-27 · **Commit:** `7c19a5e` · **Covers:** `src/contracts/automation-status.ts`, `src/local/automation-status.ts`, `src/local/commands.ts`, `src/local/main.ts`, `src/state/semantic-status.ts`, `test/integration/automation-status-*.test.ts`
 
 `archflow-local automation-status` is the stable read-only handoff between ArchFlow and an external controller. It answers three questions from one reconciled observation: what condition is the task in, who is responsible now, and which canonical skill—if any—owns the next producer session.
 
@@ -96,7 +96,7 @@ poll
 
 Never launch a second producer merely because polling says `awaiting-client` while one is alive. Refetch after producer exit, after a human response, after a config edit, and immediately before a launch. If the resumed skill finds its semantic offer stale, it calls status again and follows the fresh server action; the controller must not replay or reconstruct an internal offer.
 
-The same loop covers a clean task from PRD through completion. With no matching approval rules, clean reviews advance to `ready` descriptors for design, numbered phase design, and numbered phase implementation until terminal `complete`; no human response or inferred phase order is needed. A constitution rule the work fails, or material drift from its plan, is `awaiting-client` work (a revise offer naming what to resolve), not `awaiting-human`; under shipped defaults the human boundaries are the PRD, the architecture design and any later rewrite of it or the PRD, SQL changes, and an exhausted attempt budget. With a matching `**/*.sql` implementation rule, the reviewed implementation instead reports one `awaiting-human` configured boundary. Approval in the owning session authorizes those exact bytes; after the client executes the returned commit facts and status proves the commit, automation exposes the next returned successor.
+The same loop covers a clean task from PRD through completion. With no matching approval rules, clean reviews advance to `ready` descriptors for design, numbered phase design, and numbered phase implementation until terminal `complete`; no human response or inferred phase order is needed. A constitution rule the work fails, or material drift from its plan, is `awaiting-client` work (a revise offer naming what to resolve), not `awaiting-human`; under shipped defaults the human boundaries are the PRD, the architecture design and any later rewrite of it or the PRD, SQL changes, the three shipped constitution triggers (access-control changes, cryptography and secrets handling, and ArchFlow control-plane file edits), and an exhausted attempt budget. With a matching `**/*.sql` implementation rule, the reviewed implementation instead reports one `awaiting-human` configured boundary. Approval in the owning session authorizes those exact bytes; after the client executes the returned commit facts and status proves the commit, automation exposes the next returned successor.
 
 ## Launching producers
 

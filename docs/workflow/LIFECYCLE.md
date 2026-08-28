@@ -1,6 +1,6 @@
 # workflow/LIFECYCLE
 
-**Explored:** 2026-08-26 · **Commit:** `16193ec` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/contracts/config.ts`, `src/state/approval-rules.ts`, `src/state/semantic-*.ts`, `src/mcp/handlers/semantic.ts`, `skills/`
+**Explored:** 2026-08-27 · **Commit:** `7c19a5e` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/contracts/config.ts`, `src/state/approval-rules.ts`, `src/state/semantic-*.ts`, `src/mcp/handlers/semantic.ts`, `skills/`
 
 How a task moves from idea to committed code, and where a human must decide.
 
@@ -60,8 +60,9 @@ Every gated stage runs the same evidence pipeline to a fixed point:
    - **accepted** — the finding demands a substantive fix; the work re-enters produce and all evidence is redone against the new bytes.
    - **accepted-editorial** — the fix is purely wording or formatting and the finding is non-blocking (the server refuses this disposition for blocking findings). See the editorial path below.
    - **rejected** — with a written rationale. Findings prefixed `unverifiable-` mean "the reviewer lacked evidence," and are rejected with an `envelope-gap:` rationale, never accepted.
+   - **`escalate-` findings are carried to the human** — the reviewer's signal that a material judgment could not be made with confidence; dispositioned with a written rationale like any other finding, never silently dropped, and presented in full at the next human conversation this phase reaches.
 
-   The constitution verdict is never triaged, and it is not a human gate by default. A failing or uncertain rule and material upstream drift re-enter production with the findings named in the revise offer — the producer fixes the work or updates the governing document it owns — until the attempt budget is spent. Only then, or at once when a rule's own `review_trigger` matched, are they carried into the phase's ordinary gate—`artifact-approval`, `design-approval`, or `commit-authorization`—with rationale, evidence, and exact eligible waiver choices. The human gets one self-contained decision over the reviewed subject rather than a constitution decision followed by ordinary approval. Material drift keeps its separate gate because it governs a different subject and remedy.
+   The constitution verdict is never triaged, and it is not a human gate by default. A failing or uncertain rule and material upstream drift re-enter production with the findings named in the revise offer — the producer fixes the work or updates the governing document it owns — until the attempt budget is spent. Only then, or at once when a rule's own `review_trigger` matched (the shipped seed declares three: access control, cryptography and secrets, and the ArchFlow control-plane files), are they carried into the phase's ordinary gate—`artifact-approval`, `design-approval`, or `commit-authorization`—with rationale, evidence, and exact eligible waiver choices. The human gets one self-contained decision over the reviewed subject rather than a constitution decision followed by ordinary approval. Material drift keeps its separate gate because it governs a different subject and remedy.
 
 On the semantic document path, both an explicit triage submission and review's empty-finding fast path first record `triage: running` through the authenticated `triage-enter` substep. Terminal triage therefore never appears without its normal state-machine entry boundary.
 

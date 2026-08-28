@@ -1,7 +1,7 @@
 {
-  "host_selection_result_digest": "a215e218f03eadbf82966069209db04ee9f50c94663675ea07102fb6c6d2c907",
+  "host_selection_result_digest": "1dfe819aacb09c45888c38c6b34867b707368c8d98450705c240f95cc0d1e9fd",
   "observation_payload": {
-    "bundle_manifest_sha256": "819fe730d8903938843aa13a34b6858c224f3d3a8dbb8fcbca1e9ad60ece657d",
+    "bundle_manifest_sha256": "7c9119d810c3d31d73cc0a3166dfe08621d4902f4421131616c1f7d18137c45f",
     "hosts": {
       "claude": {
         "advertisement": {
