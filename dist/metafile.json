@@ -3889,7 +3889,7 @@
       ]
     },
     "src/contracts/durable-result-manifest.ts": {
-      "bytes": 7478,
+      "bytes": 10462,
       "format": "esm",
       "imports": [
         {
@@ -9036,7 +9036,7 @@
       ]
     },
     "src/state/snapshots.ts": {
-      "bytes": 46245,
+      "bytes": 46547,
       "format": "esm",
       "imports": [
         {
@@ -9544,7 +9544,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1839701,
+      "bytes": 1840659,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10563,7 +10563,7 @@
           "bytesInOutput": 7413
         },
         "src/contracts/durable-result-manifest.ts": {
-          "bytesInOutput": 2812
+          "bytesInOutput": 3761
         },
         "src/contracts/durable-state.ts": {
           "bytesInOutput": 22326
@@ -10809,7 +10809,7 @@
           "bytesInOutput": 21675
         },
         "src/state/snapshots.ts": {
-          "bytesInOutput": 26515
+          "bytesInOutput": 26524
         },
         "src/state/status.ts": {
           "bytesInOutput": 75491
@@ -10823,7 +10823,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3217107,
+      "bytes": 3218065,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -11910,7 +11910,7 @@
           "bytesInOutput": 7413
         },
         "src/contracts/durable-result-manifest.ts": {
-          "bytesInOutput": 2812
+          "bytesInOutput": 3761
         },
         "src/contracts/durable-state.ts": {
           "bytesInOutput": 22323
@@ -12273,7 +12273,7 @@
           "bytesInOutput": 21656
         },
         "src/state/snapshots.ts": {
-          "bytesInOutput": 31935
+          "bytesInOutput": 31944
         },
         "src/state/status.ts": {
           "bytesInOutput": 73194

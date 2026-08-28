@@ -54581,7 +54581,7 @@ var secondaryProjectionSetV1Schema = external_exports.object({
     context2.addIssue({ code: "custom", path: ["projections"], message: "secondary projection repositories must match their wrapper" });
   }
 });
-var resultManifestV1Schema = external_exports.object({
+var resultManifestShape = {
   schema_version: external_exports.literal("1"),
   task_id: taskSlugV1Schema,
   repository_identity_digest: sha256DigestV1Schema,
@@ -54597,10 +54597,34 @@ var resultManifestV1Schema = external_exports.object({
   secondary_projections: external_exports.array(secondaryProjectionSetV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("repository")), "secondary_projections must be sorted by repository with no duplicates").optional(),
   accounting: snapshotAccountingV1Schema,
   secret_scan: secretScanResultV1Schema
-}).strict();
+};
+var resultManifestV1Schema = external_exports.object(resultManifestShape).strict();
 function parseResultManifest(value) {
   assertPlainJson(value, "result manifest");
   return resultManifestV1Schema.parse(value);
+}
+var structuralEvidenceBodySchema = external_exports.object({
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: external_exports.enum(PIPELINE_STEPS),
+  input_fingerprint: sha256DigestV1Schema
+}).passthrough();
+var structuralEvidenceArtifactSchema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  artifact_kind: external_exports.enum(["review-evidence", "triage", "adjudication-evidence"]),
+  evidence: structuralEvidenceBodySchema
+}).strict();
+var resultManifestStructureSchema = external_exports.object({
+  ...resultManifestShape,
+  source_artifact: external_exports.union([
+    documentArtifactV1Schema,
+    implementationOutputV1Schema,
+    structuralEvidenceArtifactSchema
+  ])
+}).strict();
+function parseResultManifestStructure(value) {
+  assertPlainJson(value, "result manifest");
+  return resultManifestStructureSchema.parse(value);
 }
 
 // src/state/implementation-manifest.ts
@@ -60934,7 +60958,7 @@ async function readSnapshot(input) {
     const handle = await openResolved(atLexicalLeaf(input.target, input.worktree_root).absolute, 0);
     const bytes = await handle.readFile().finally(() => handle.close());
     document2 = parseCanonicalDocument(bytes, "result manifest");
-    parseResultManifest(document2.value);
+    parseResultManifestStructure(document2.value);
   } catch {
     return snapshotInvalid(input.expected_result_digest, "manifest-unreadable");
   }

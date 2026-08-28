@@ -134,7 +134,11 @@ export const secondaryProjectionSetV1Schema = z.object({
  * shared exported ordering predicates — so each ordering rule is literally one predicate across
  * every shape.
  */
-export const resultManifestV1Schema = z.object({
+/**
+ * Shared by the strict parser and the structural one below, so the envelope can never drift between
+ * them: they differ in exactly one property, `source_artifact`, and in nothing else.
+ */
+const resultManifestShape = {
   schema_version: z.literal("1"),
   task_id: taskSlugV1Schema,
   repository_identity_digest: sha256DigestV1Schema,
@@ -154,11 +158,69 @@ export const resultManifestV1Schema = z.object({
     .optional(),
   accounting: snapshotAccountingV1Schema,
   secret_scan: secretScanResultV1Schema,
-}).strict() as unknown as z.ZodType<ResultManifestV1>;
+} as const;
+
+export const resultManifestV1Schema = z.object(resultManifestShape)
+  .strict() as unknown as z.ZodType<ResultManifestV1>;
 
 export function parseResultManifest(value: unknown): ResultManifestV1 {
   assertPlainJson(value, "result manifest");
   return resultManifestV1Schema.parse(value);
+}
+
+/**
+ * The evidence arms as a graph-walking reader needs them: the correlation fields every consumer of a
+ * manifest *envelope* reads, and nothing else about the body.
+ *
+ * `validateDurableSemantics` correlates an evidence result through exactly these four fields and the
+ * canonical digest of the whole body, so they stay required and typed here. The rest of the body
+ * passes through unread, because the readers below never look at it.
+ */
+const structuralEvidenceBodySchema = z.object({
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: z.enum(PIPELINE_STEPS),
+  input_fingerprint: sha256DigestV1Schema,
+}).passthrough();
+
+const structuralEvidenceArtifactSchema = z.object({
+  schema_version: z.literal("1"),
+  artifact_kind: z.enum(["review-evidence", "triage", "adjudication-evidence"]),
+  evidence: structuralEvidenceBodySchema,
+}).strict();
+
+const resultManifestStructureSchema = z.object({
+  ...resultManifestShape,
+  source_artifact: z.union([
+    documentArtifactV1Schema,
+    implementationOutputV1Schema,
+    structuralEvidenceArtifactSchema,
+  ]),
+}).strict() as unknown as z.ZodType<ResultManifestV1>;
+
+/**
+ * Parses a retained manifest for a reader that walks the retained-result graph rather than one that
+ * interrogates an artifact body.
+ *
+ * Identical to {@link parseResultManifest} except in one place: a review, triage, or adjudication
+ * *body* is validated only down to the correlation fields above. Everything the graph-walkers
+ * actually read — outputs, projections, accounting, secondary projections, the artifact kind, and
+ * the whole document and implementation-output arms — stays exactly as strict as before.
+ *
+ * This exists because the retained graph spans every result a task has ever produced, so a walker
+ * meets manifests written by earlier server versions, while the *current* shape of an evidence body
+ * is a moving target. Binding the walkers to it meant a field rename inside adjudication evidence
+ * (`source_evidence_set_digest` to `source_review_envelope_digest`) stopped reconciliation discovery
+ * and byte accounting from reading manifests whose bodies they never open — stranding tasks whose
+ * only fault was being older than the rename.
+ *
+ * Nothing is trusted more as a result. Evidence bodies are re-parsed strictly at the point of use by
+ * `validateLoadedEvidence`, which also re-derives the canonical digest and compares the exact bytes,
+ * and every producer path validates a new manifest with the strict parser before it is ever written.
+ */
+export function parseResultManifestStructure(value: unknown): ResultManifestV1 {
+  assertPlainJson(value, "result manifest");
+  return resultManifestStructureSchema.parse(value);
 }
 
 /** Compile-time assertion that the whole persisted graph remains canonical-JSON-compatible. */

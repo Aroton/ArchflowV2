@@ -402,16 +402,44 @@ describe("snapshot storage", () => {
       return { manifestTarget, reference, expectedBytes: bytes.byteLength };
     }
 
+    // A document artifact carries no evidence body, so the evidence tolerance is proved on a review
+    // result — the shape that actually broke in the field.
+    async function legacyEvidenceManifestFixture(directory: string) {
+      execFileSync("git", ["init", "-q", "-b", "main"], { cwd: directory });
+      const bytes = Buffer.from("retained legacy evidence");
+      const { manifest, manifestTarget } = await documentSnapshotFixture(directory, bytes);
+      const evidence = {
+        schema_version: "1", task_id: manifest.task_id, phase_instance: manifest.phase_instance,
+        step: manifest.step, input_fingerprint: manifest.input_fingerprint,
+        retired_field_name: parseSha256Digest("c".repeat(64)),
+      };
+      const legacy = { ...manifest, artifact_digest: canonicalJsonDigest(evidence),
+        outputs: [], projections: [], snapshot_digest: deriveDeclaredSnapshotDigest([], []),
+        source_artifact: { schema_version: "1", artifact_kind: "review-evidence", evidence } } as unknown as ResultManifestV1;
+      const document = canonicalDocument(legacy);
+      await writeFile(manifestTarget.absolute, document.bytes);
+      const reference: AuthoritativeResultRef = {
+        phase_instance: legacy.phase_instance, step: legacy.step, result_digest: document.digest,
+        result_id: legacy.result_id, input_fingerprint: legacy.input_fingerprint,
+      };
+      return { manifestTarget, reference };
+    }
+
     it("totals a manifest whose artifact body no longer matches the current schema", async () => {
       const directory = await root();
       const { manifestTarget, reference, expectedBytes } = await legacyManifestFixture(directory);
-      const runner = createGitRunner({ cwd: directory });
-      // The strict reader rejects it, and must keep doing so: nothing that reads the artifact body
-      // may accept a body it cannot validate.
-      await expect(readSnapshot({ target: manifestTarget, expected_result_digest: reference.result_digest, runner,
-        worktree_root: directory as ResolvedTaskPath })).resolves.toMatchObject({ ok: false, error: { code: "SNAPSHOT_INVALID" } });
       await expect(readSnapshotAccounting({ target: manifestTarget, reference,
         worktree_root: directory as ResolvedTaskPath })).resolves.toEqual(expect.objectContaining({ ok: true, value: expectedBytes }));
+    });
+
+    // Reconciliation discovery walks the same graph through `readSnapshot`, reading only the
+    // envelope. It must not fail on a body it never opens.
+    it("loads a manifest whose evidence body no longer matches the current schema", async () => {
+      const directory = await root();
+      const { manifestTarget, reference } = await legacyEvidenceManifestFixture(directory);
+      const runner = createGitRunner({ cwd: directory });
+      await expect(readSnapshot({ target: manifestTarget, expected_result_digest: reference.result_digest, runner,
+        worktree_root: directory as ResolvedTaskPath })).resolves.toMatchObject({ ok: true });
     });
 
     it("still rejects a manifest whose bytes do not re-hash to the reference digest", async () => {

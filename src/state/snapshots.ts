@@ -14,7 +14,7 @@ import {
 import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
 import type { RepositoryName } from "../contracts/config.js";
 import type { ResultManifestV1 } from "../contracts/durable-result-manifest.js";
-import { parseResultManifest } from "../contracts/durable-result-manifest.js";
+import { parseResultManifest, parseResultManifestStructure } from "../contracts/durable-result-manifest.js";
 import type { OutputEntry, SnapshotAccountingV1 } from "../contracts/durable-primitives.js";
 import { snapshotAccountingV1Schema } from "../contracts/durable-primitives.js";
 import type { AuthoritativeResultRef } from "../contracts/durable-state.js";
@@ -291,7 +291,10 @@ export async function readSnapshot(input: Readonly<{
     const handle = await openResolved(atLexicalLeaf(input.target, input.worktree_root).absolute, 0);
     const bytes = await handle.readFile().finally(() => handle.close());
     document = parseCanonicalDocument<ResultManifestV1>(bytes, "result manifest");
-    parseResultManifest(document.value);
+    // Structural, not strict: this reader walks the retained graph, where manifests written by
+    // earlier server versions are ordinary and expected. See `parseResultManifestStructure` for what
+    // stays strict and why nothing is trusted more as a result.
+    parseResultManifestStructure(document.value);
   } catch {
     return snapshotInvalid(input.expected_result_digest, "manifest-unreadable");
   }

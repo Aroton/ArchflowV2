@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { canonicalDocument, canonicalJsonDigest } from "../../src/contracts/canonical.js";
 import type { ImplementationOutputV1 } from "../../src/contracts/durable-implementation-output.js";
-import { parseResultManifest, type ResultManifestV1, type ReviewEvidenceArtifactV1 } from "../../src/contracts/durable-result-manifest.js";
+import { parseResultManifest, parseResultManifestStructure, type ResultManifestV1, type ReviewEvidenceArtifactV1 } from "../../src/contracts/durable-result-manifest.js";
 import { validateDurableSemantics } from "../../src/contracts/durable.js";
 import { parseSha256Digest } from "../../src/contracts/evidence.js";
 import { createRetainedEvidenceReference, createTransactionAuthorityLink } from "../../src/contracts/internal/test-capabilities.js";
@@ -112,6 +112,54 @@ describe("ResultManifestV1", () => {
     const changed = { ...manifest(), artifact_digest: parseSha256Digest("d".repeat(64)) };
     const result = validateDurableSemantics({ result_manifest: canonicalDocument(changed) });
     expect(result).toMatchObject({ ok: false, error: { code: "SNAPSHOT_INVALID", diagnostic: { parameters: { issue_code: "result-manifest-artifact-digest-mismatch" } } } });
+  });
+
+
+  // The retained-result graph spans every result a task has produced, so graph-walking readers meet
+  // manifests written before the current evidence schema existed. They read the envelope, never the
+  // body — and a rename inside an evidence body once stopped them from reading manifests they never
+  // opened, stranding tasks for being older than the rename.
+  describe("structural parse for graph-walking readers", () => {
+    const legacyEvidenceManifest = (): ResultManifestV1 => {
+      const value = reviewManifest();
+      return {
+        ...value,
+        source_artifact: {
+          ...value.source_artifact,
+          evidence: { ...(value.source_artifact as ReviewEvidenceArtifactV1).evidence, retired_field_name: parseSha256Digest("c".repeat(64)) },
+        },
+      } as unknown as ResultManifestV1;
+    };
+
+    it("accepts an evidence body the strict parser rejects, and correlates it unchanged", () => {
+      const value = legacyEvidenceManifest();
+      expect(() => parseResultManifest(value)).toThrow();
+      expect(parseResultManifestStructure(value)).toEqual(value);
+      // The correlation semantics the envelope readers depend on still hold over the tolerated body.
+      expect(validateDurableSemantics({ result_manifest: canonicalDocument({ ...value,
+        artifact_digest: canonicalJsonDigest((value.source_artifact as ReviewEvidenceArtifactV1).evidence) }) }))
+        .toMatchObject({ ok: true });
+    });
+
+    it("keeps the envelope exactly as strict as the strict parser", () => {
+      expect(() => parseResultManifestStructure({ ...legacyEvidenceManifest(), extra: true })).toThrow();
+      const { accounting: _dropped, ...missingAccounting } = legacyEvidenceManifest();
+      expect(() => parseResultManifestStructure(missingAccounting)).toThrow();
+    });
+
+    it("still requires the correlation fields it reads out of an evidence body", () => {
+      const value = legacyEvidenceManifest();
+      const body = { ...(value.source_artifact as ReviewEvidenceArtifactV1).evidence } as Record<string, unknown>;
+      delete body["input_fingerprint"];
+      expect(() => parseResultManifestStructure({ ...value, source_artifact: { ...value.source_artifact, evidence: body } })).toThrow();
+    });
+
+    it("leaves the document and implementation-output arms fully strict", () => {
+      const value = manifest();
+      expect(parseResultManifestStructure(value)).toEqual(value);
+      expect(() => parseResultManifestStructure({ ...value,
+        source_artifact: { ...value.source_artifact, retired_field_name: true } })).toThrow();
+    });
   });
 
   it("retains structured evidence without a durable review projection", () => {
