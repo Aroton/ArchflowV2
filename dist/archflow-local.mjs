@@ -34448,6 +34448,41 @@ async function readSnapshot(input) {
   }
   return ok10(document2);
 }
+var retainedAccountingProjectionSchema = external_exports.object({
+  result_id: external_exports.string(),
+  phase_instance: external_exports.string(),
+  step: external_exports.string(),
+  input_fingerprint: external_exports.string(),
+  accounting: snapshotAccountingV1Schema,
+  source_artifact: external_exports.object({
+    artifact_kind: external_exports.string(),
+    secondary_repositories: external_exports.array(
+      external_exports.object({ accounting: snapshotAccountingV1Schema }).passthrough()
+    ).optional()
+  }).passthrough()
+}).passthrough();
+async function readSnapshotAccounting(input) {
+  if (input.target.path_class !== "authority-result") throw new TypeError("manifest target has wrong class");
+  let document2;
+  let projection;
+  try {
+    const handle = await openResolved(atLexicalLeaf(input.target, input.worktree_root).absolute, 0);
+    const bytes = await handle.readFile().finally(() => handle.close());
+    document2 = parseCanonicalDocument(bytes, "result manifest");
+    projection = retainedAccountingProjectionSchema.parse(document2.value);
+  } catch {
+    return snapshotInvalid(input.reference.result_digest, "manifest-unreadable");
+  }
+  if (document2.digest !== input.reference.result_digest) {
+    return snapshotInvalid(input.reference.result_digest, "result-digest-mismatch");
+  }
+  if (projection.result_id !== input.reference.result_id || projection.phase_instance !== input.reference.phase_instance || projection.step !== input.reference.step || projection.input_fingerprint !== input.reference.input_fingerprint) return snapshotInvalid(input.reference.result_digest, "retained-result-reference-mismatch");
+  let total = projection.accounting.result_bytes;
+  if (projection.source_artifact.artifact_kind === "implementation-output") {
+    total += (projection.source_artifact.secondary_repositories ?? []).reduce((sum, section) => sum + section.accounting.result_bytes, 0);
+  }
+  return ok10(parseSafeInteger(total));
+}
 async function restoreSnapshotOutput(input) {
   const read = await readSnapshot({
     target: input.target,
@@ -34681,13 +34716,6 @@ function retainedResultDigests(state) {
 }
 
 // src/state/production.ts
-function retainedManifestStoredBytes(manifest) {
-  let total = manifest.accounting.result_bytes;
-  if (manifest.source_artifact.artifact_kind === "implementation-output") {
-    total += (manifest.source_artifact.secondary_repositories ?? []).reduce((sum, section) => sum + section.accounting.result_bytes, 0);
-  }
-  return parseSafeInteger(total);
-}
 var ok11 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail11 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function context(input, phase3, attempt) {
@@ -35053,6 +35081,31 @@ async function createProductionServices(input) {
     manifestCache.set(key, loaded);
     return loaded;
   };
+  const accountingCache = /* @__PURE__ */ new Map();
+  const loadRetainedAccounting = async (reference) => {
+    const key = [
+      reference.result_digest,
+      reference.result_id,
+      reference.phase_instance,
+      reference.step,
+      reference.input_fingerprint
+    ].join("\0");
+    const cached2 = accountingCache.get(key);
+    if (cached2 !== void 0) return cached2;
+    const manifestTarget = await resolvePath6(
+      discovered.value,
+      authority,
+      resultAuthorityClaim(reference.result_digest),
+      "authority-result"
+    );
+    const loaded = manifestTarget.ok ? await readSnapshotAccounting({
+      target: manifestTarget.value,
+      reference,
+      worktree_root: discovered.value.location.worktreeRoot
+    }) : manifestTarget;
+    accountingCache.set(key, loaded);
+    return loaded;
+  };
   const resolver = createProductionInputFingerprintResolver(async ({ state }) => {
     const reference = [...state.value.authoritative_results].reverse().find((candidate) => candidate.phase_instance === state.value.phase_instance && candidate.step === "produce");
     if (reference === void 0) return ok11(void 0);
@@ -35079,9 +35132,9 @@ async function createProductionServices(input) {
       const retainedReferences = retainedResultReferences(current.document.value);
       for (const reference of retainedReferences) {
         if (reference.result_digest === excluded?.result_digest) continue;
-        const retained = await loadRetainedManifest(reference);
-        if (!retained.ok) throw new TypeError("retained result accounting is unavailable");
-        total += retainedManifestStoredBytes(retained.value.manifest.value);
+        const stored = await loadRetainedAccounting(reference);
+        if (!stored.ok) throw new TypeError("retained result accounting is unavailable");
+        total += stored.value;
         parseSafeInteger(total);
       }
       return parseSafeInteger(total);

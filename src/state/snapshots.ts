@@ -2,6 +2,8 @@ import { chmod, lstat, readlink } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
+import { z } from "zod";
+
 import {
   canonicalDocument,
   canonicalJsonDigest,
@@ -14,12 +16,13 @@ import type { RepositoryName } from "../contracts/config.js";
 import type { ResultManifestV1 } from "../contracts/durable-result-manifest.js";
 import { parseResultManifest } from "../contracts/durable-result-manifest.js";
 import type { OutputEntry, SnapshotAccountingV1 } from "../contracts/durable-primitives.js";
+import { snapshotAccountingV1Schema } from "../contracts/durable-primitives.js";
 import type { AuthoritativeResultRef } from "../contracts/durable-state.js";
 import { validateDurableSemantics } from "../contracts/durable.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
-import type { SafeInteger, Sha256Digest } from "../contracts/evidence.js";
+import { parseSafeInteger, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
 import type { PathClass, RepositoryPathClaim } from "../contracts/path-claims.js";
-import { assertPlainJson } from "../contracts/plain-json.js";
+import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import type { SecretScanResult, SecretScanner } from "../contracts/secret-scan.js";
 import { openResolved, type ResolvedPath, type ResolvedTaskPath, type ResolvedWorkspacePath } from "../repository/paths.js";
 import {
@@ -342,6 +345,81 @@ export async function readSnapshot(input: Readonly<{
     }
   }
   return ok(document);
+}
+
+/**
+ * The exact slice of a result manifest that storage accounting reads.
+ *
+ * `accounting` and each secondary section's `accounting` stay strict — an accounting record must be
+ * precisely what its schema says, because it is the number the byte caps are enforced against. The
+ * objects around them are permissive on purpose: accounting never reads the artifact body, and the
+ * identity fields it does read are re-proved against the caller's reference below.
+ */
+const retainedAccountingProjectionSchema = z.object({
+  result_id: z.string(),
+  phase_instance: z.string(),
+  step: z.string(),
+  input_fingerprint: z.string(),
+  accounting: snapshotAccountingV1Schema,
+  source_artifact: z.object({
+    artifact_kind: z.string(),
+    secondary_repositories: z.array(
+      z.object({ accounting: snapshotAccountingV1Schema }).passthrough(),
+    ).optional(),
+  }).passthrough(),
+}).passthrough();
+
+/**
+ * Reads one retained manifest's storage contribution without requiring its artifact body to satisfy
+ * today's schema for that artifact kind.
+ *
+ * Byte accounting exists only to sum retained bytes against `TASK_BYTE_CAP`. What it needs is that
+ * the manifest is authentic and that its `accounting` record is exact — and the content address
+ * proves authenticity completely: bytes that re-hash to the digest the durable reference names are
+ * the same bytes that were installed. It never reads the artifact payload.
+ *
+ * Routing it through `readSnapshot`/`parseResultManifest` therefore bound every historical result to
+ * the *current* shape of every artifact schema, which made accounting fail for reasons that are not
+ * integrity failures. Renaming one evidence field (`source_evidence_set_digest` to
+ * `source_review_envelope_digest`) left tasks holding pre-rename adjudication results unable to
+ * compute their own byte total — over manifests that contribute zero bytes — and the caller turned
+ * that into a hard throw, stranding the task after its review had already run. Artifact schemas will
+ * keep moving; the durable byte total must not be a hostage to them. Corruption is still caught: a
+ * manifest that does not re-hash to its expected digest is rejected here exactly as before.
+ */
+export async function readSnapshotAccounting(input: Readonly<{
+  target: ResolvedPath;
+  reference: AuthoritativeResultRef;
+  worktree_root: ResolvedTaskPath;
+}>): Promise<ProjectResult<SafeInteger>> {
+  if (input.target.path_class !== "authority-result") throw new TypeError("manifest target has wrong class");
+  let document: CanonicalDocument<PlainJsonValue>;
+  let projection: z.infer<typeof retainedAccountingProjectionSchema>;
+  try {
+    const handle = await openResolved(atLexicalLeaf(input.target, input.worktree_root).absolute, 0);
+    const bytes = await handle.readFile().finally(() => handle.close());
+    document = parseCanonicalDocument<PlainJsonValue>(bytes, "result manifest");
+    projection = retainedAccountingProjectionSchema.parse(document.value);
+  } catch {
+    return snapshotInvalid(input.reference.result_digest, "manifest-unreadable");
+  }
+  if (document.digest !== input.reference.result_digest) {
+    return snapshotInvalid(input.reference.result_digest, "result-digest-mismatch");
+  }
+  // The same reference cross-check `readRetainedManifest` applies: the content address proves what
+  // the manifest says, and this proves durable state is pointing at the manifest it claims to be.
+  if (
+    projection.result_id !== input.reference.result_id ||
+    projection.phase_instance !== input.reference.phase_instance ||
+    projection.step !== input.reference.step ||
+    projection.input_fingerprint !== input.reference.input_fingerprint
+  ) return snapshotInvalid(input.reference.result_digest, "retained-result-reference-mismatch");
+  let total: number = projection.accounting.result_bytes;
+  if (projection.source_artifact.artifact_kind === "implementation-output") {
+    total += (projection.source_artifact.secondary_repositories ?? [])
+      .reduce((sum, section) => sum + section.accounting.result_bytes, 0);
+  }
+  return ok(parseSafeInteger(total));
 }
 
 /** Reloads one retained after-image; Git-backed outputs are re-proved by `readSnapshot` first. */

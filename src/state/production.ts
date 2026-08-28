@@ -37,6 +37,7 @@ import {
   prepareProjectionPlan,
   captureProjectionTarget,
   readSnapshot,
+  readSnapshotAccounting,
   readSnapshotPayload,
   restoreSnapshotOutput,
   type PreparedSnapshot,
@@ -509,6 +510,39 @@ export async function createProductionServices(input: ProductionInput): Promise<
     manifestCache.set(key, loaded);
     return loaded;
   };
+  // Byte accounting walks the whole retained graph, including results produced by earlier server
+  // versions, and reads nothing but each manifest's accounting record. `readSnapshotAccounting`
+  // re-proves the content address without binding those historical manifests to today's artifact
+  // schemas; see its contract for why the stricter reader is the wrong tool for this one job.
+  // Keyed on every field the reader cross-checks, exactly as `manifestCache` is: two references can
+  // carry the same digest and disagree elsewhere, and that disagreement must still be caught.
+  const accountingCache = new Map<string, ProjectResult<SafeInteger>>();
+  const loadRetainedAccounting = async (
+    reference: TaskStateV1["authoritative_results"][number],
+  ): Promise<ProjectResult<SafeInteger>> => {
+    const key = [
+      reference.result_digest,
+      reference.result_id,
+      reference.phase_instance,
+      reference.step,
+      reference.input_fingerprint,
+    ].join("\u0000");
+    const cached = accountingCache.get(key);
+    if (cached !== undefined) return cached;
+    const manifestTarget = await resolvePath(
+      discovered.value, authority, resultAuthorityClaim(reference.result_digest), "authority-result",
+    );
+    const loaded = manifestTarget.ok
+      ? await readSnapshotAccounting({
+        target: manifestTarget.value,
+        reference,
+        worktree_root: discovered.value.location.worktreeRoot as ResolvedTaskPath,
+      })
+      : manifestTarget;
+    accountingCache.set(key, loaded);
+    return loaded;
+  };
+
   const resolver = createProductionInputFingerprintResolver(async ({ state }) => {
     const reference = [...state.value.authoritative_results].reverse().find((candidate) =>
       candidate.phase_instance === state.value.phase_instance && candidate.step === "produce");
@@ -539,9 +573,9 @@ export async function createProductionServices(input: ProductionInput): Promise<
       const retainedReferences = retainedResultReferences(current.document.value);
       for (const reference of retainedReferences) {
         if (reference.result_digest === excluded?.result_digest) continue;
-        const retained = await loadRetainedManifest(reference);
-        if (!retained.ok) throw new TypeError("retained result accounting is unavailable");
-        total += retainedManifestStoredBytes(retained.value.manifest.value);
+        const stored = await loadRetainedAccounting(reference);
+        if (!stored.ok) throw new TypeError("retained result accounting is unavailable");
+        total += stored.value;
         parseSafeInteger(total);
       }
       return parseSafeInteger(total);

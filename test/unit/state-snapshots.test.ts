@@ -12,6 +12,7 @@ import type { ResultManifestV1 } from "../../src/contracts/durable-result-manife
 import { parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug, type SafeId, type SafeInteger } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import type { RepositoryPathClaim } from "../../src/contracts/path-claims.js";
+import type { AuthoritativeResultRef } from "../../src/contracts/durable-state.js";
 import type { SecretScanner } from "../../src/contracts/secret-scan.js";
 import type {
   ResolvedPath,
@@ -33,6 +34,7 @@ import {
   prepareSnapshot,
   readSnapshotPayload,
   readSnapshot,
+  readSnapshotAccounting,
   resolveExistingSnapshot,
   restoreSnapshotOutput,
   RESULT_BYTE_CAP,
@@ -376,6 +378,73 @@ describe("snapshot storage", () => {
     execFileSync("git", ["add", "."], { cwd: directory });
     execFileSync("git", ["commit", "-qm", "unrelated"], { cwd: directory });
     await expect(readSnapshot({ target, expected_result_digest: document.digest, runner, worktree_root: directory as ResolvedTaskPath })).resolves.toMatchObject({ ok: false, error: { code: "SNAPSHOT_INVALID" } });
+  });
+
+
+  // A result manifest outlives the server version that wrote it. Byte accounting walks every
+  // retained result a task has ever produced, so binding it to the current artifact schemas made a
+  // routine field rename brick tasks mid-flight: pre-rename adjudication evidence stopped parsing,
+  // and accounting could no longer total bytes it did not even need the artifact body to compute.
+  describe("retained byte accounting", () => {
+    async function legacyManifestFixture(directory: string) {
+      execFileSync("git", ["init", "-q", "-b", "main"], { cwd: directory });
+      const bytes = Buffer.from("retained legacy result");
+      const { manifest, manifestTarget } = await documentSnapshotFixture(directory, bytes);
+      // Exactly the shape that broke: an authentic manifest whose artifact body carries a field the
+      // current schema no longer knows, because that field was renamed after the manifest was written.
+      const legacy = { ...manifest, source_artifact: { ...manifest.source_artifact, retired_field_name: parseSha256Digest("c".repeat(64)) } } as unknown as ResultManifestV1;
+      const document = canonicalDocument(legacy);
+      await writeFile(manifestTarget.absolute, document.bytes);
+      const reference: AuthoritativeResultRef = {
+        phase_instance: legacy.phase_instance, step: legacy.step, result_digest: document.digest,
+        result_id: legacy.result_id, input_fingerprint: legacy.input_fingerprint,
+      };
+      return { manifestTarget, reference, expectedBytes: bytes.byteLength };
+    }
+
+    it("totals a manifest whose artifact body no longer matches the current schema", async () => {
+      const directory = await root();
+      const { manifestTarget, reference, expectedBytes } = await legacyManifestFixture(directory);
+      const runner = createGitRunner({ cwd: directory });
+      // The strict reader rejects it, and must keep doing so: nothing that reads the artifact body
+      // may accept a body it cannot validate.
+      await expect(readSnapshot({ target: manifestTarget, expected_result_digest: reference.result_digest, runner,
+        worktree_root: directory as ResolvedTaskPath })).resolves.toMatchObject({ ok: false, error: { code: "SNAPSHOT_INVALID" } });
+      await expect(readSnapshotAccounting({ target: manifestTarget, reference,
+        worktree_root: directory as ResolvedTaskPath })).resolves.toEqual(expect.objectContaining({ ok: true, value: expectedBytes }));
+    });
+
+    it("still rejects a manifest whose bytes do not re-hash to the reference digest", async () => {
+      const directory = await root();
+      const { manifestTarget, reference } = await legacyManifestFixture(directory);
+      const forged = { ...reference, result_digest: parseSha256Digest("a".repeat(64)) };
+      await expect(readSnapshotAccounting({ target: manifestTarget, reference: forged,
+        worktree_root: directory as ResolvedTaskPath })).resolves.toMatchObject({ ok: false, error: { code: "SNAPSHOT_INVALID" } });
+    });
+
+    it("still rejects a reference that disagrees with the manifest it addresses", async () => {
+      const directory = await root();
+      const { manifestTarget, reference } = await legacyManifestFixture(directory);
+      const mismatched = { ...reference, result_id: parseSafeId("result-other") };
+      await expect(readSnapshotAccounting({ target: manifestTarget, reference: mismatched,
+        worktree_root: directory as ResolvedTaskPath })).resolves.toMatchObject({ ok: false, error: { code: "SNAPSHOT_INVALID" } });
+    });
+
+    it("still rejects a manifest whose own accounting record is malformed", async () => {
+      const directory = await root();
+      execFileSync("git", ["init", "-q", "-b", "main"], { cwd: directory });
+      const bytes = Buffer.from("bad accounting");
+      const { manifest, manifestTarget } = await documentSnapshotFixture(directory, bytes);
+      const broken = { ...manifest, accounting: { ...manifest.accounting, result_bytes: "many" } } as unknown as ResultManifestV1;
+      const document = canonicalDocument(broken);
+      await writeFile(manifestTarget.absolute, document.bytes);
+      const reference: AuthoritativeResultRef = {
+        phase_instance: broken.phase_instance, step: broken.step, result_digest: document.digest,
+        result_id: broken.result_id, input_fingerprint: broken.input_fingerprint,
+      };
+      await expect(readSnapshotAccounting({ target: manifestTarget, reference,
+        worktree_root: directory as ResolvedTaskPath })).resolves.toMatchObject({ ok: false, error: { code: "SNAPSHOT_INVALID" } });
+    });
   });
 
   it("rechecks each target and rolls back earlier absent writes on a mid-apply race", async () => {

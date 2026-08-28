@@ -8385,7 +8385,7 @@
       ]
     },
     "src/state/production.ts": {
-      "bytes": 29547,
+      "bytes": 31074,
       "format": "esm",
       "imports": [
         {
@@ -9036,7 +9036,7 @@
       ]
     },
     "src/state/snapshots.ts": {
-      "bytes": 41985,
+      "bytes": 46245,
       "format": "esm",
       "imports": [
         {
@@ -9056,6 +9056,11 @@
         },
         {
           "kind": "import-statement",
+          "original": "zod",
+          "path": "node_modules/zod/index.js"
+        },
+        {
+          "kind": "import-statement",
           "original": "../contracts/canonical.js",
           "path": "src/contracts/canonical.ts"
         },
@@ -9066,6 +9071,11 @@
         },
         {
           "kind": "import-statement",
+          "original": "../contracts/durable-primitives.js",
+          "path": "src/contracts/durable-primitives.ts"
+        },
+        {
+          "kind": "import-statement",
           "original": "../contracts/durable.js",
           "path": "src/contracts/durable.ts"
         },
@@ -9073,6 +9083,11 @@
           "kind": "import-statement",
           "original": "../contracts/errors.js",
           "path": "src/contracts/errors.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/evidence.js",
+          "path": "src/contracts/evidence.ts"
         },
         {
           "kind": "import-statement",
@@ -9529,7 +9544,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1837308,
+      "bytes": 1839701,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10764,7 +10779,7 @@
           "bytesInOutput": 11341
         },
         "src/state/production.ts": {
-          "bytesInOutput": 22594
+          "bytesInOutput": 23020
         },
         "src/state/read.ts": {
           "bytesInOutput": 2665
@@ -10794,7 +10809,7 @@
           "bytesInOutput": 21675
         },
         "src/state/snapshots.ts": {
-          "bytesInOutput": 24548
+          "bytesInOutput": 26515
         },
         "src/state/status.ts": {
           "bytesInOutput": 75491
@@ -10808,7 +10823,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3214715,
+      "bytes": 3217107,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12222,7 +12237,7 @@
           "bytesInOutput": 14048
         },
         "src/state/production.ts": {
-          "bytesInOutput": 22616
+          "bytesInOutput": 23042
         },
         "src/state/read.ts": {
           "bytesInOutput": 2665
@@ -12258,7 +12273,7 @@
           "bytesInOutput": 21656
         },
         "src/state/snapshots.ts": {
-          "bytesInOutput": 29969
+          "bytesInOutput": 31935
         },
         "src/state/status.ts": {
           "bytesInOutput": 73194
