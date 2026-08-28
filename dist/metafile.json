@@ -9102,7 +9102,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 114097,
+      "bytes": 114551,
       "format": "esm",
       "imports": [
         {
@@ -9529,7 +9529,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1837182,
+      "bytes": 1837308,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10797,7 +10797,7 @@
           "bytesInOutput": 24548
         },
         "src/state/status.ts": {
-          "bytesInOutput": 75365
+          "bytesInOutput": 75491
         },
         "src/state/waiver-origin.ts": {
           "bytesInOutput": 257
@@ -10808,7 +10808,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3214589,
+      "bytes": 3214715,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12261,7 +12261,7 @@
           "bytesInOutput": 29969
         },
         "src/state/status.ts": {
-          "bytesInOutput": 73068
+          "bytesInOutput": 73194
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 50393

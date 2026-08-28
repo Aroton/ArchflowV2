@@ -28,6 +28,34 @@ describe("gate catalogue", () => {
     expect(() => parseGateContext("baseline-adoption", { drifted_projections: [{ path: "src/one.ts", recorded_digest: D, observed_digest: D }] })).toThrow();
   });
 
+  it("requires localeCompare order for mixed-case uncommitted paths", () => {
+    // The schema is the authority for uncommitted_paths, and its localeCompare ordering diverges
+    // from default code-unit .sort() on mixed-case sets — a code-unit producer fails composition
+    // with "uncommitted paths must be sorted with no duplicates". Both orderings are pinned here.
+    const paths = [
+      "scripts/fixtures/transport-acceptance/ssh/v2/README.md",
+      "scripts/fixtures/transport-acceptance/ssh/v2/archforge-acceptance-fixture-forced-command",
+      "docs/transport-acceptance.md",
+    ];
+    const localeOrder = [...paths].sort((left, right) => left.localeCompare(right));
+    expect(localeOrder).not.toEqual([...paths].sort());
+    const drifted = localeOrder.map((path, index) => ({
+      path,
+      recorded_digest: index % 2 === 0 ? D : "c".repeat(64),
+      observed_digest: index % 2 === 0 ? "b".repeat(64) : D,
+    }));
+    const base = { drifted_projections: drifted, target_ref: "refs/heads/main", target_head: "1".repeat(40) };
+    expect(parseGateContext("baseline-adoption", { ...base, uncommitted_paths: localeOrder }).uncommitted_paths).toEqual(localeOrder);
+    expect(() => parseGateContext("baseline-adoption", { ...base, uncommitted_paths: [...localeOrder].sort() })).toThrow(/uncommitted paths must be sorted with no duplicates/);
+    const secondary = {
+      drifted_projections: drifted, deleted_projections: [],
+      repository: "apis", repository_identity_digest: "2".repeat(64),
+      target_ref: "refs/heads/main", target_head: "3".repeat(40), uncommitted_paths: localeOrder,
+    };
+    expect(parseGateContext("baseline-adoption", { drifted_projections: [], secondary_targets: [secondary] }).secondary_targets?.[0]?.uncommitted_paths).toEqual(localeOrder);
+    expect(() => parseGateContext("baseline-adoption", { drifted_projections: [], secondary_targets: [{ ...secondary, uncommitted_paths: [...localeOrder].sort() }] })).toThrow(/uncommitted paths/);
+  });
+
   it("accepts either ascending order for commit paths at mixed-case boundaries", () => {
     // Composers emit code-unit order (the rule every other sorted-path contract applies), but
     // archives written by the previous bundle store localeCompare order; both parse so legacy

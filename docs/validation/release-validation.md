@@ -40,11 +40,22 @@ opt-in real-host suite is what re-establishes this row; the local suite cannot.
 
 The tracked release is now published and byte-reproduced. `dist/manifest.json` binds
 `dist/archflow-mcp.mjs` to digest
-`9788624d71e48a3b683af3112f0f12e2fc735f7cd598a508e07f2d2e25d92499`. The installed terminal
+`02d35500ed306d3698db9f05783ada785d5b47c90286ef850b35782855369f7b`. The installed terminal
 suite in `test/real-host/terminal-journey.test.ts` was rerun from this current `dist/` and all twelve
 implemented scenarios passed. Those results are valid installed-distribution evidence for the
 specific slices named below; they do not imply coverage for terminal slices the suite does not
 implement.
+
+**Amended 2026-08-28.** The digest above changed for the baseline-adoption composition fix (gate
+input `uncommitted_paths` construction now emits the schema's `localeCompare` ordering; see the
+`baselineAdoptionRecord` note in `src/state/gates.ts` for the record-side counterpart). The
+re-release passed the deterministic release gates (`check:release`: byte-reproduction, smoke,
+manifest/provenance mutations) and the full fast unit/contract suite. **The real-host rerun that
+re-establishes the installed-evidence rows is deferred by owner decision** — the terminal-suite
+observations cited below were taken against the prior bundle
+(`9788624d71e48a3b683af3112f0f12e2fc735f7cd598a508e07f2d2e25d92499`), and
+`ARCHFLOW_REAL_HOSTS=1 npm run test:real-host` is the recorded procedure to re-establish them
+against this bundle.
 
 ## Coverage
 

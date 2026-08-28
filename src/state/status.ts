@@ -359,7 +359,7 @@ export function baselineAdoptionInputFromFindings(
     ...(target === undefined || primaryMismatches.length === 0 ? {} : {
       target_ref: target.target_ref,
       target_head: target.target_head,
-      uncommitted_paths: Object.freeze([...target.uncommitted_paths].sort()),
+      uncommitted_paths: Object.freeze([...target.uncommitted_paths].sort((left, right) => left.localeCompare(right))),
     }),
     ...(secondaryTargets.length === 0 ? {} : { secondary_targets: Object.freeze(secondaryTargets as NonNullable<GateContext<"baseline-adoption">["secondary_targets"]>) }),
   });
@@ -408,13 +408,17 @@ export async function currentBaselineTargetFacts(
       repository_identity_digest: member.identity.digest,
       target_ref: memberTarget.value,
       target_head: memberHead,
-      uncommitted_paths: Object.freeze(memberDriftPaths.filter((path) => memberChangedPaths.has(path)).sort()),
+      uncommitted_paths: Object.freeze(memberDriftPaths.filter((path) => memberChangedPaths.has(path)).sort((left, right) => left.localeCompare(right))),
     }));
   }
+  // uncommitted_paths must carry the exact ordering the baseline-adoption context schema enforces
+  // (localeCompare — default .sort() diverges on mixed-case sets and fails composition with an
+  // internal error). The durable adoption record re-sorts code-unit by design; see
+  // baselineAdoptionRecord in state/gates.ts.
   return Object.freeze({
     target_ref: target.value,
     target_head: targetHead,
-    uncommitted_paths: Object.freeze(driftPaths.filter((path) => changedPaths.has(path)).sort()),
+    uncommitted_paths: Object.freeze(driftPaths.filter((path) => changedPaths.has(path)).sort((left, right) => left.localeCompare(right))),
     ...(secondaryTargets.length === 0 ? {} : { secondary_targets: Object.freeze(secondaryTargets) }),
   });
 }

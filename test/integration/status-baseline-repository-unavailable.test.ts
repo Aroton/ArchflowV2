@@ -48,4 +48,37 @@ describe("baseline target facts for a repository that left the writable set", ()
     await expect(rejection).rejects.toMatchObject({ repository: "api" });
     expect(parseGitOid(primary.git("rev-parse", "HEAD"))).toBeDefined();
   });
+
+  it("emits localeCompare-ordered uncommitted paths for a mixed-case drift set", async () => {
+    // The baseline-adoption context schema validates uncommitted_paths with localeCompare; a
+    // code-unit-ordered set of mixed-case paths fails composition with an INTERNAL_ERROR.
+    const repository = createTempRepository({ label: "baseline-uncommitted-ordering" });
+    const paths = [
+      "scripts/fixtures/transport-acceptance/ssh/v2/README.md",
+      "scripts/fixtures/transport-acceptance/ssh/v2/archforge-acceptance-fixture-forced-command",
+      "docs/transport-acceptance.md",
+    ];
+    for (const path of paths) repository.write(path, "committed\n");
+    repository.commitAll("mixed-case fixtures");
+    for (const path of paths) repository.write(path, "drifted\n");
+    const context = {
+      task_id: parseTaskSlug("baseline-ordering"), phase_instance: "phase-impl-1" as never,
+      operation: parseSafeCode("baseline-ordering"), attempt: parseSafeInteger(2),
+    };
+    const discovered = await discoverWorktree(createGitRunner({ cwd: repository.path }), context);
+    if (!discovered.ok) throw new Error(`discover: ${discovered.error.code}`);
+    const environment = await preflightGit(discovered.value, context);
+    if (!environment.ok) throw new Error(`preflight: ${environment.error.code}`);
+    const findings = paths.map((path, index) => ({
+      kind: "projection-mismatch" as const,
+      repository: undefined,
+      path: parseRepositoryPathClaim(path),
+      recorded_digest: parseSha256Digest("1".repeat(64)),
+      observed_digest: index % 2 === 0 ? parseSha256Digest("2".repeat(64)) : parseSha256Digest("3".repeat(64)),
+    }));
+    const facts = await currentBaselineTargetFacts({ runner: discovered.value, environment: environment.value } as never, findings as never);
+    const byLocale = [...paths].sort((left, right) => left.localeCompare(right));
+    expect(byLocale).not.toEqual([...paths].sort());
+    expect([...facts.uncommitted_paths]).toEqual(byLocale);
+  });
 });

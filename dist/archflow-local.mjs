@@ -38319,7 +38319,7 @@ function baselineAdoptionInputFromFindings(task_id, state, findings, target) {
     ...target === void 0 || primaryMismatches.length === 0 ? {} : {
       target_ref: target.target_ref,
       target_head: target.target_head,
-      uncommitted_paths: Object.freeze([...target.uncommitted_paths].sort())
+      uncommitted_paths: Object.freeze([...target.uncommitted_paths].sort((left, right) => left.localeCompare(right)))
     },
     ...secondaryTargets.length === 0 ? {} : { secondary_targets: Object.freeze(secondaryTargets) }
   });
@@ -38358,13 +38358,13 @@ async function currentBaselineTargetFacts(dependencies, findings, repositorySet)
       repository_identity_digest: member.identity.digest,
       target_ref: memberTarget.value,
       target_head: memberHead,
-      uncommitted_paths: Object.freeze(memberDriftPaths.filter((path2) => memberChangedPaths.has(path2)).sort())
+      uncommitted_paths: Object.freeze(memberDriftPaths.filter((path2) => memberChangedPaths.has(path2)).sort((left, right) => left.localeCompare(right)))
     }));
   }
   return Object.freeze({
     target_ref: target.value,
     target_head: targetHead,
-    uncommitted_paths: Object.freeze(driftPaths.filter((path2) => changedPaths.has(path2)).sort()),
+    uncommitted_paths: Object.freeze(driftPaths.filter((path2) => changedPaths.has(path2)).sort((left, right) => left.localeCompare(right))),
     ...secondaryTargets.length === 0 ? {} : { secondary_targets: Object.freeze(secondaryTargets) }
   });
 }
