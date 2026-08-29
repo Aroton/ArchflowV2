@@ -40,11 +40,16 @@ const GIT_ENV: NodeJS.ProcessEnv = {
   GIT_COMMITTER_EMAIL: "test@example.invalid",
 };
 
+let gitAvailableMemo: boolean | undefined;
+
 export function gitAvailable(): boolean {
+  if (gitAvailableMemo !== undefined) return gitAvailableMemo;
   try {
     execFileSync("git", ["--version"], { stdio: "ignore" });
+    gitAvailableMemo = true;
     return true;
   } catch {
+    gitAvailableMemo = false;
     return false;
   }
 }

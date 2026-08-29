@@ -139,6 +139,15 @@ export const phaseInstanceIdV1Schema = z.string().regex(/^(?:prd|design|phase-(?
 
 /** Throws, per the contract-layer convention. */
 export function parsePhaseInstanceId(value: unknown): PhaseInstanceId {
+  if (typeof value === "string") {
+    try {
+      decodePhaseInstance(value);
+      return value as PhaseInstanceId;
+    } catch {
+      // drop through to strict Zod validation
+    }
+  }
   assertPlainJson(value, "phase instance id");
   return phaseInstanceIdV1Schema.parse(value);
 }
+

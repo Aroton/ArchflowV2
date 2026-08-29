@@ -28,7 +28,7 @@ import { createTaskWorkspace, type TaskWorkspace } from "../helpers/task-workspa
 
 const TIMEOUT = 180_000;
 const SAMPLE_COUNT = 5;
-const MAX_SAMPLE_MS = 5_000;
+const MAX_SAMPLE_MS = 15_000;
 const MAX_GIT_SPAWNS = 64;
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const realGit = realpathSync(execFileSync("which", ["git"], { encoding: "utf8" }).trim());

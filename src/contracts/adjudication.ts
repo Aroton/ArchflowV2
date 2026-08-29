@@ -162,8 +162,10 @@ export const adjudicationEvidenceSchema = z.discriminatedUnion("assurance", [age
 // See parseReviewEvidence: the assertion narrows zod's `| undefined` inference on the optional
 // route_override back to the exact persisted shape; no parsed value ever carries the key as undefined.
 export function parseAdjudicationEvidence(value: unknown): AdjudicationEvidence { assertPlainJson(value, "adjudication evidence"); return adjudicationEvidenceSchema.parse(value) as AdjudicationEvidence; }
+const referencedAdjudicationWrapperSchema = z.object({ evidence_digest: digest, evidence: z.unknown() }).strict();
 export function parseReferencedAdjudicationEvidence(value: unknown): ReferencedEvidence<AdjudicationEvidence> {
   assertPlainJson(value, "referenced adjudication evidence");
-  const wrapper = z.object({ evidence_digest: digest, evidence: z.unknown() }).strict().parse(value);
+  const wrapper = referencedAdjudicationWrapperSchema.parse(value);
   return { evidence_digest: wrapper.evidence_digest, evidence: parseAdjudicationEvidence(wrapper.evidence) };
 }
+

@@ -126,8 +126,6 @@ describe.skipIf(!gitAvailable())("declared repository set", () => {
     expect(first.value.members[1]!.binding.runner.location.worktreeRoot).toBe(secondary);
 
     git(inside, "-c", "init.defaultBranch=main", "init", "-q");
-    git(inside, "config", "user.email", "archflow@example.invalid");
-    git(inside, "config", "user.name", "ArchFlow Test");
     writeFileSync(join(inside, "nested.txt"), "nested\n", "utf8");
     git(inside, "add", "-A");
     git(inside, "commit", "-q", "-m", "nested root");

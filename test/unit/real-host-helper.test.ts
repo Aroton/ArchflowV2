@@ -9,6 +9,7 @@ import {
   realHostsAvailable,
   realHostsEnabled,
   requireRealHostsAvailable,
+  resetRealHostsCacheForTesting,
   REAL_HOST_OPT_IN_ENV,
   REVIEW_BENCHMARK_OPT_IN_ENV,
 } from "../helpers/real-host.js";
@@ -28,6 +29,7 @@ afterEach(() => {
   restore(REAL_HOST_OPT_IN_ENV, originalRealHosts);
   restore(REVIEW_BENCHMARK_OPT_IN_ENV, originalBenchmark);
   delete process.env.PROBE_LOG;
+  resetRealHostsCacheForTesting();
   for (const root of temporaryRoots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 

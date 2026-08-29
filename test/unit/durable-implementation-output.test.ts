@@ -19,13 +19,19 @@ const schema = async (name: string): Promise<object> =>
  * `snapshotAccounting`), `secret-scan-result` (whole root), `primitives`, and the `path-claim` root
  * both claim `$defs` delegate to.
  */
-const validator = async () =>
-  createJsonSchemaValidator<ImplementationOutputV1>(await schema("implementation-output"), [
-    await schema("primitives"),
-    await schema("path-claim"),
-    await schema("durable-primitives"),
-    await schema("secret-scan-result"),
-  ]);
+let validatorPromise: Promise<ReturnType<typeof createJsonSchemaValidator<ImplementationOutputV1>>> | undefined;
+const validator = () => {
+  if (validatorPromise === undefined) {
+    validatorPromise = Promise.all([
+      schema("implementation-output"),
+      schema("primitives"),
+      schema("path-claim"),
+      schema("durable-primitives"),
+      schema("secret-scan-result"),
+    ]).then(([implSchema, ...refs]) => createJsonSchemaValidator<ImplementationOutputV1>(implSchema, refs));
+  }
+  return validatorPromise;
+};
 
 const fixture = async (): Promise<Record<string, unknown>> =>
   JSON.parse(

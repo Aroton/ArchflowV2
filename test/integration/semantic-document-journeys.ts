@@ -18,6 +18,7 @@ import {
 import {
   createTaskWorkspace,
   legacyHumanAuthorityConstitutionV1Bytes,
+  supportedRuleAcceptanceConstitutionV2Bytes,
   type TaskWorkspace,
 } from "../helpers/task-workspace.js";
 
@@ -1178,15 +1179,135 @@ The committed state carries the settlement and the successor hand-off is offered
     expect(observed.next_action).toMatchObject({ kind: "start-next-skill", skill: "archflow-phase-design", skill_args: ["1"] });
   });
 
-  register("keeps waiver decisions human and advances after their granted wait:false settlement", async () => {
-    // No subject rule waits for the design document, but a constitution rule fails its review:
-    // the foldable adjudication fixed point records the exact wait:false receipt while the policy
-    // finding is carried by design-approval. The phase exit still refuses until the separate
-    // waiver decisions discharge every policy axis.
+  register("grants a bounded policy exception and keeps remaining policy axes pending for human decision", async () => {
     const workspace = await createTaskWorkspace({
-      taskId: "semantic-design-policy-arm",
-      label: "semantic-design-policy-arm",
+      taskId: "semantic-waiver-grant",
+      label: "semantic-waiver-grant",
       configBytes: documentSubjectsConfig(["prd"]),
+      constitutionBytes: supportedRuleAcceptanceConstitutionV2Bytes(),
+    });
+    workspaces.push(workspace);
+    restorers.push(installSemanticReviewStub(workspace.root, [[]], { adjudicationCompliance: "fail" }));
+    const h = semanticJourneyHarness(workspace);
+    const invocation = { skill: "archflow-prd", intent: "resume" } as const;
+    writeFileSync(join(workspace.services.authority.task_root, "ask.md"), "Describe a waiver-grant journey.\n");
+    writeFileSync(join(workspace.services.authority.task_root, "prd.md"), "# Waiver-grant PRD\n\nReviewed requirements.\n");
+
+    let view = await h.apply(invocation, await h.status(invocation), { kind: "work-result", outcome: "succeeded" });
+    expect(view.ok, JSON.stringify(view)).toBe(true);
+    if (!view.ok) return;
+    view = await h.apply(invocation, view.value);
+    expect(view.ok, JSON.stringify(view)).toBe(true);
+    if (!view.ok) return;
+    view = await h.apply(invocation, view.value, { kind: "gate-summary", summary: "The policy finding needs a human decision." });
+    expect(view.ok, JSON.stringify(view)).toBe(true);
+    if (!view.ok) return;
+
+    const waiverToken = view.value.presentation?.options
+      .map((option) => option.token)
+      .find((token) => token.startsWith("request-exception-"));
+    expect(waiverToken).toBeDefined();
+    view = await h.apply(invocation, view.value, {
+      kind: "decision", choice: waiverToken!, reason: "Request a bounded policy exception.",
+      option_rationale: "The policy trigger is inapplicable here.",
+    });
+    expect(view.ok, JSON.stringify(view)).toBe(true);
+    if (!view.ok) return;
+    expect(view.value.next_action).toMatchObject({ kind: "open-waiver", expected_submission: "none" });
+    view = await h.apply(invocation, view.value);
+    expect(view.ok, JSON.stringify(view)).toBe(true);
+    if (!view.ok) return;
+    view = await h.apply(invocation, view.value, {
+      kind: "decision", choice: "grant-exception", reason: "Grant the bounded exception.",
+    });
+    expect(view.ok, JSON.stringify(view)).toBe(true);
+    if (!view.ok) return;
+
+    // One of the policy gate's axes remains pending. The first grant neither replaces
+    // nor broadens the frozen settlement; discharge the remaining axis in a separate human gate.
+    expect(view.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    const pending = await readTaskState(workspace.services.authority.state);
+    if (pending.kind !== "canonical") throw new Error("task state unavailable");
+    const prdSettlements = pending.document.value.rule_settlements?.filter((entry) =>
+      entry.phase_instance === "prd") ?? [];
+    expect(prdSettlements).toEqual([expect.objectContaining({
+      conclusion: { wait: true, match: { kind: "subject", subject: "prd" } },
+    })]);
+    const grantedWaiver = pending.document.value.waivers?.find((w) => w.granted === true);
+    expect(grantedWaiver).toBeDefined();
+
+    view = await h.apply(invocation, view.value, {
+      kind: "gate-summary", summary: "One policy axis remains for human resolution.",
+    });
+    expect(view.ok, JSON.stringify(view)).toBe(true);
+    if (!view.ok) return;
+    const remainingWaiverToken = view.value.presentation?.options
+      .map((option) => option.token)
+      .find((token) => token.startsWith("request-exception-") && token !== waiverToken);
+    expect(remainingWaiverToken).toBeDefined();
+  });
+
+  register("denies a requested policy exception and keeps the policy gate unsatisfied", async () => {
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-waiver-reject",
+      label: "semantic-waiver-reject",
+      configBytes: documentSubjectsConfig(["prd"]),
+      constitutionBytes: supportedRuleAcceptanceConstitutionV2Bytes(),
+    });
+    workspaces.push(workspace);
+    restorers.push(installSemanticReviewStub(workspace.root, [[]], { adjudicationCompliance: "fail" }));
+    const h = semanticJourneyHarness(workspace);
+    const invocation = { skill: "archflow-prd", intent: "resume" } as const;
+    writeFileSync(join(workspace.services.authority.task_root, "ask.md"), "Describe a waiver-rejection journey.\n");
+    writeFileSync(join(workspace.services.authority.task_root, "prd.md"), "# Waiver-rejection PRD\n\nReviewed requirements.\n");
+
+    let view = await h.apply(invocation, await h.status(invocation), { kind: "work-result", outcome: "succeeded" });
+    expect(view.ok, JSON.stringify(view)).toBe(true);
+    if (!view.ok) return;
+    view = await h.apply(invocation, view.value);
+    expect(view.ok, JSON.stringify(view)).toBe(true);
+    if (!view.ok) return;
+    view = await h.apply(invocation, view.value, { kind: "gate-summary", summary: "The policy finding needs a human decision." });
+    expect(view.ok, JSON.stringify(view)).toBe(true);
+    if (!view.ok) return;
+
+    const waiverToken = view.value.presentation?.options
+      .map((option) => option.token)
+      .find((token) => token.startsWith("request-exception-"));
+    expect(waiverToken).toBeDefined();
+    view = await h.apply(invocation, view.value, {
+      kind: "decision", choice: waiverToken!, reason: "Request a bounded policy exception.",
+      option_rationale: "The policy trigger is inapplicable here.",
+    });
+    expect(view.ok, JSON.stringify(view)).toBe(true);
+    if (!view.ok) return;
+    expect(view.value.next_action).toMatchObject({ kind: "open-waiver", expected_submission: "none" });
+    view = await h.apply(invocation, view.value);
+    expect(view.ok, JSON.stringify(view)).toBe(true);
+    if (!view.ok) return;
+
+    // Human explicitly denies the requested exception.
+    view = await h.apply(invocation, view.value, {
+      kind: "decision", choice: "deny-exception", reason: "Deny the requested policy exception to keep policy enforced.",
+    });
+    expect(view.ok, JSON.stringify(view)).toBe(true);
+    if (!view.ok) return;
+
+    // Denying the exception leaves the policy requirement in force. Next action returns to gate-summary.
+    expect(view.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    const pending = await readTaskState(workspace.services.authority.state);
+    if (pending.kind !== "canonical") throw new Error("task state unavailable");
+    const deniedWaiver = pending.document.value.waivers?.find((w) => w.granted === false);
+    expect(deniedWaiver).toBeDefined();
+    expect(deniedWaiver?.granted).toBe(false);
+  });
+
+  register("advances a wait:false document to autonomous milestone commit once all policy waivers are granted", async () => {
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-waiver-no-wait-advance",
+      label: "semantic-waiver-no-wait-advance",
+      configBytes: documentSubjectsConfig(["prd"]),
+      constitutionBytes: supportedRuleAcceptanceConstitutionV2Bytes(),
     });
     workspaces.push(workspace);
     const restorePassing = installSemanticReviewStub(workspace.root, [[]]);
@@ -1209,7 +1330,7 @@ The committed state carries the settlement and the successor hand-off is offered
     expect(result.ok, JSON.stringify(result)).toBe(true);
     if (!result.ok) return;
 
-    // From here every adjudicated constitution rule reports a matched, violated trigger.
+    // Switch to failing review stub for the design tier.
     restorePassing();
     restorers.push(installSemanticReviewStub(workspace.root, [[]], { adjudicationCompliance: "fail" }));
 
@@ -1227,8 +1348,7 @@ The committed state carries the settlement and the successor hand-off is offered
     expect(design.ok, JSON.stringify(design)).toBe(true);
     if (!design.ok) return;
 
-    // The policy arm opens design-approval despite the absent subject rule. Its frozen settlement
-    // is evaluation evidence only; the unresolved policy gate has no milestone commit authority.
+    // The policy arm opens design-approval despite the absent subject rule.
     expect(design.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
     expect(design.value.next_action.commit).toBeUndefined();
     const unsettled = await readTaskState(workspace.services.authority.state);
@@ -1239,82 +1359,23 @@ The committed state carries the settlement and the successor hand-off is offered
       conclusion: { wait: false, match: null },
     })]);
 
-    // The opened gate is still approval-shaped: a human can discharge it by decision.
-    design = await h.apply(designInvocation, design.value, { kind: "gate-summary", summary: "The design needs an explicit human decision." });
-    expect(design.ok, JSON.stringify(design)).toBe(true);
-    if (!design.ok) return;
-    expect(design.value.presentation?.options.map((option) => option.token)).toContain("approve");
-    const waiverToken = design.value.presentation?.options
-      .map((option) => option.token)
-      .find((token) => token.startsWith("request-exception-"));
-    expect(waiverToken).toBeDefined();
-
-    design = await h.apply(designInvocation, design.value, {
-      kind: "decision", choice: waiverToken!, reason: "Request a bounded policy exception.",
-      option_rationale: "The rule is not relevant to this reviewed design.",
-    });
-    expect(design.ok, JSON.stringify(design)).toBe(true);
-    if (!design.ok) return;
-    expect(design.value.next_action).toMatchObject({ kind: "open-waiver", expected_submission: "none" });
-    design = await h.apply(designInvocation, design.value);
-    expect(design.ok, JSON.stringify(design)).toBe(true);
-    if (!design.ok) return;
-    design = await h.apply(designInvocation, design.value, {
-      kind: "decision", choice: "grant-exception", reason: "Grant the bounded exception.",
-    });
-    expect(design.ok, JSON.stringify(design)).toBe(true);
-    if (!design.ok) return;
-
-    // One of the merged policy gate's two axes remains pending. The first grant neither replaces
-    // nor broadens the frozen settlement; discharge the remaining axis in a separate human gate.
-    expect(design.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
-    let pending = await readTaskState(workspace.services.authority.state);
-    if (pending.kind !== "canonical") throw new Error("task state unavailable");
-    expect(pending.document.value.rule_settlements?.filter((entry) => entry.phase_instance === "design"))
-      .toEqual(frozenDesignSettlements);
-    design = await h.apply(designInvocation, design.value, {
-      kind: "gate-summary", summary: "One policy axis remains for human resolution.",
-    });
-    expect(design.ok, JSON.stringify(design)).toBe(true);
-    if (!design.ok) return;
-    const remainingWaiverToken = design.value.presentation?.options
-      .map((option) => option.token)
-      .find((token) => token.startsWith("request-exception-") && token !== waiverToken);
-    expect(remainingWaiverToken).toBeDefined();
-    design = await h.apply(designInvocation, design.value, {
-      kind: "decision", choice: remainingWaiverToken!, reason: "Request the remaining bounded policy exception.",
-      option_rationale: "The remaining policy axis is inapplicable here.",
-    });
-    expect(design.ok, JSON.stringify(design)).toBe(true);
-    if (!design.ok) return;
-    design = await h.apply(designInvocation, design.value);
-    expect(design.ok, JSON.stringify(design)).toBe(true);
-    if (!design.ok) return;
-    design = await h.apply(designInvocation, design.value, {
-      kind: "decision", choice: "grant-exception", reason: "Grant the remaining bounded exception.",
-    });
-    expect(design.ok, JSON.stringify(design)).toBe(true);
-    if (!design.ok) return;
-
-    // The repository fixture carries several active rules. Continue resolving distinct policy
-    // scopes until the final grant discharges the fixed point; every grant leaves the original
-    // approval-rule settlement untouched.
-    const requestedWaivers = new Set([waiverToken!, remainingWaiverToken!]);
-    for (let index = 0; index < 20; index += 1) {
+    // Request and grant all required waivers until the autonomous commit is derived.
+    const requestedWaivers = new Set<string>();
+    for (let index = 0; index < 10; index += 1) {
       if (design.value.next_action.kind === "commit") break;
       expect(design.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
       design = await h.apply(designInvocation, design.value, {
-        kind: "gate-summary", summary: "Another policy scope remains for human resolution.",
+        kind: "gate-summary", summary: "A policy scope remains for human resolution.",
       });
       expect(design.ok, JSON.stringify(design)).toBe(true);
       if (!design.ok) return;
       const token = design.value.presentation?.options
         .map((option) => option.token)
         .find((candidate) => candidate.startsWith("request-exception-") && !requestedWaivers.has(candidate));
-      expect(token).toBeDefined();
-      requestedWaivers.add(token!);
+      if (token === undefined) break;
+      requestedWaivers.add(token);
       design = await h.apply(designInvocation, design.value, {
-        kind: "decision", choice: token!, reason: "Request the next bounded policy exception.",
+        kind: "decision", choice: token, reason: "Request the bounded policy exception.",
         option_rationale: "This policy scope is inapplicable to the reviewed design.",
       });
       expect(design.ok, JSON.stringify(design)).toBe(true);
@@ -1329,9 +1390,7 @@ The committed state carries the settlement and the successor hand-off is offered
       if (!design.ok) return;
     }
 
-    // Exact discharge evaluates and persists wait:false. Every waiver above required explicit
-    // human decisions; once those exception boundaries are resolved, shipped v2 can return the
-    // exact autonomous design commit without inventing another approval gate.
+    // Exact discharge evaluates and persists wait:false without an explicit approval gate.
     expect(design.value.next_action).toMatchObject({ kind: "commit" });
     expect(design.value.presentation).toBeUndefined();
     const settled = await readTaskState(workspace.services.authority.state);
@@ -1342,15 +1401,15 @@ The committed state carries the settlement and the successor hand-off is offered
     expect(settledDesignReceipts.every((entry) =>
       entry.subject_digest.length > 0 && entry.conclusion.wait === false && entry.conclusion.match === null)).toBe(true);
     expect(settled.document.value.planned_final_phase).toBeUndefined();
-
     expect(design.value.next_action.commit).not.toHaveProperty("requires_human_confirmation");
   });
 
-  register("persists and presents a granted wait:true waiver settlement behind PRD approval", async () => {
+  register("persists a wait:true settlement and presents human approval after all policy waivers are granted", async () => {
     const workspace = await createTaskWorkspace({
-      taskId: "semantic-prd-waiver-wait",
-      label: "semantic-prd-waiver-wait",
+      taskId: "semantic-waiver-wait-approval",
+      label: "semantic-waiver-wait-approval",
       configBytes: documentSubjectsConfig(["prd"]),
+      constitutionBytes: supportedRuleAcceptanceConstitutionV2Bytes(),
     });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[]], { adjudicationCompliance: "fail" }));
@@ -1365,67 +1424,13 @@ The committed state carries the settlement and the successor hand-off is offered
     view = await h.apply(invocation, view.value);
     expect(view.ok, JSON.stringify(view)).toBe(true);
     if (!view.ok) return;
-    view = await h.apply(invocation, view.value, { kind: "gate-summary", summary: "The policy finding needs a human decision." });
-    expect(view.ok, JSON.stringify(view)).toBe(true);
-    if (!view.ok) return;
-    const waiverToken = view.value.presentation?.options
-      .map((option) => option.token)
-      .find((token) => token.startsWith("request-exception-"));
-    expect(waiverToken).toBeDefined();
-    view = await h.apply(invocation, view.value, {
-      kind: "decision", choice: waiverToken!, reason: "Request a bounded policy exception.",
-      option_rationale: "The policy trigger is inapplicable here.",
-    });
-    expect(view.ok, JSON.stringify(view)).toBe(true);
-    if (!view.ok) return;
-    view = await h.apply(invocation, view.value);
-    expect(view.ok, JSON.stringify(view)).toBe(true);
-    if (!view.ok) return;
-    view = await h.apply(invocation, view.value, {
-      kind: "decision", choice: "grant-exception", reason: "Grant the bounded exception.",
-    });
-    expect(view.ok, JSON.stringify(view)).toBe(true);
-    if (!view.ok) return;
 
-    // The merged finding exposes compliance and trigger as distinct waiver scopes. The first
-    // grant leaves the gate pending without replacing the exact settlement recorded at triage.
-    expect(view.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
-    let pending = await readTaskState(workspace.services.authority.state);
-    if (pending.kind !== "canonical") throw new Error("task state unavailable");
-    const frozenPrdSettlements = pending.document.value.rule_settlements?.filter((entry) =>
-      entry.phase_instance === "prd") ?? [];
-    expect(frozenPrdSettlements).toEqual([expect.objectContaining({
-      conclusion: { wait: true, match: { kind: "subject", subject: "prd" } },
-    })]);
-    view = await h.apply(invocation, view.value, {
-      kind: "gate-summary", summary: "One policy axis remains for human resolution.",
-    });
-    expect(view.ok, JSON.stringify(view)).toBe(true);
-    if (!view.ok) return;
-    const remainingWaiverToken = view.value.presentation?.options
-      .map((option) => option.token)
-      .find((token) => token.startsWith("request-exception-") && token !== waiverToken);
-    expect(remainingWaiverToken).toBeDefined();
-    view = await h.apply(invocation, view.value, {
-      kind: "decision", choice: remainingWaiverToken!, reason: "Request the remaining bounded policy exception.",
-      option_rationale: "The remaining policy axis is inapplicable here.",
-    });
-    expect(view.ok, JSON.stringify(view)).toBe(true);
-    if (!view.ok) return;
-    view = await h.apply(invocation, view.value);
-    expect(view.ok, JSON.stringify(view)).toBe(true);
-    if (!view.ok) return;
-    view = await h.apply(invocation, view.value, {
-      kind: "decision", choice: "grant-exception", reason: "Grant the remaining bounded exception.",
-    });
-    expect(view.ok, JSON.stringify(view)).toBe(true);
-    if (!view.ok) return;
-
-    const requestedWaivers = new Set([waiverToken!, remainingWaiverToken!]);
-    for (let index = 0; index < 20; index += 1) {
+    // Request and grant all required waivers until PRD approval gate opens.
+    const requestedWaivers = new Set<string>();
+    for (let index = 0; index < 10; index += 1) {
       expect(view.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
       view = await h.apply(invocation, view.value, {
-        kind: "gate-summary", summary: "Another policy scope remains for human resolution.",
+        kind: "gate-summary", summary: "A policy finding needs a human decision.",
       });
       expect(view.ok, JSON.stringify(view)).toBe(true);
       if (!view.ok) return;
@@ -1433,9 +1438,9 @@ The committed state carries the settlement and the successor hand-off is offered
         .map((option) => option.token)
         .find((candidate) => candidate.startsWith("request-exception-") && !requestedWaivers.has(candidate));
       if (token === undefined) break;
-      requestedWaivers.add(token!);
+      requestedWaivers.add(token);
       view = await h.apply(invocation, view.value, {
-        kind: "decision", choice: token!, reason: "Request the next bounded policy exception.",
+        kind: "decision", choice: token, reason: "Request the bounded policy exception.",
         option_rationale: "This policy scope is inapplicable to the reviewed PRD.",
       });
       expect(view.ok, JSON.stringify(view)).toBe(true);
@@ -1450,6 +1455,7 @@ The committed state carries the settlement and the successor hand-off is offered
       if (!view.ok) return;
     }
 
+    // After all waivers are granted, the PRD remains behind human approval decision (wait:true).
     expect(view.value.next_action).toMatchObject({ kind: "decide", expected_submission: "decision" });
     const settled = await readTaskState(workspace.services.authority.state);
     if (settled.kind !== "canonical") throw new Error("task state unavailable");
@@ -1458,10 +1464,6 @@ The committed state carries the settlement and the successor hand-off is offered
     expect(settledPrdReceipts.length).toBeGreaterThanOrEqual(1);
     expect(settledPrdReceipts.every((entry) => entry.conclusion.wait === true &&
       entry.conclusion.match?.kind === "subject" && entry.conclusion.match.subject === "prd")).toBe(true);
-
-    expect(view.value.presentation?.summary).toContain(
-      "Another policy scope remains for human resolution.",
-    );
     expect(view.value.presentation?.options.map((option) => option.token)).toContain("approve");
   });
 

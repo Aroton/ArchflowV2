@@ -24,7 +24,7 @@
     "release:write": "node scripts/write-tracked-release.mjs",
     "release:smoke": "node scripts/smoke-release-bundle.mjs",
     "release:mutations": "node scripts/test-release-integrity.mjs",
-    "check:release": "npm run release:check -- --payload dist && npm run release:smoke -- --payload dist && npm run release:mutations && npm run release:reproduce",
+    "check:release": "node scripts/run-concurrent.mjs --exec \"npm run release:check -- --payload dist\" \"npm run release:smoke -- --payload dist\" \"npm run release:mutations\" \"npm run release:reproduce\"",
     "generate:schemas": "node scripts/generate-schemas.mjs",
     "check:schemas": "node scripts/generate-schemas.mjs --check",
     "check:notices": "node scripts/check-notices.mjs",
@@ -32,7 +32,7 @@
     "check:mcp-sdk-boundary": "node scripts/check-mcp-sdk-boundary.mjs",
     "test:mcp-sdk-boundary-policy": "node scripts/test-mcp-sdk-boundary-policy.mjs",
     "check": "npm run probe:mcp-sdk-compatibility && npm run typecheck && npm test && npm run build:temp && npm run check:notices && npm run check:mcp-sdk-boundary",
-    "check:deep": "npm run check && npm run check:schemas && npm run test:extended && npm run test:integration && npm run test:crash && npm run test:notices-policy && npm run test:mcp-sdk-boundary-policy && npm run check:release"
+    "check:deep": "npm run check && node scripts/run-concurrent.mjs --npm check:schemas test:notices-policy test:mcp-sdk-boundary-policy test:extended check:release && npm run test:crash && npm run test:integration"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",

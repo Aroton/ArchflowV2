@@ -34,7 +34,7 @@ export interface WorktreeLocation {
   readonly linked: boolean;
 }
 
-declare const rootBoundBrand: unique symbol;
+const rootBoundBrand = Symbol("rootBoundBrand");
 
 /**
  * A runner whose cwd is provably the worktree root. Only `discoverWorktree` can mint one, because
@@ -50,6 +50,21 @@ declare const rootBoundBrand: unique symbol;
 export interface RootBoundGitRunner extends GitRunner {
   readonly location: WorktreeLocation;
   readonly [rootBoundBrand]: true;
+}
+
+export function isRootBoundGitRunner(runner: unknown): runner is RootBoundGitRunner {
+  if (typeof runner !== "object" || runner === null) return false;
+  const candidate = runner as {
+    [rootBoundBrand]?: unknown;
+    location?: unknown;
+    cwd?: unknown;
+  };
+  return (
+    candidate[rootBoundBrand] === true &&
+    typeof candidate.location === "object" &&
+    candidate.location !== null &&
+    typeof (candidate.location as WorktreeLocation).worktreeRoot === "string"
+  );
 }
 
 export interface RepositoryIdentity {
@@ -121,6 +136,15 @@ function ordinal(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+const MAX_REPOSITORY_IDENTITIES = 256;
+const repositoryIdentityCache = new Map<string, RepositoryIdentity>();
+
+export function resetRepositoryIdentityCacheForTesting(): void {
+  repositoryIdentityCache.clear();
+}
+
+
+
 /**
  * The runner interface exposes no way to change the cwd it closed over, so binding prefixes every
  * argv with `-C <worktreeRoot>`. That keeps the caller's git path, buffer, and timeout settings
@@ -138,6 +162,7 @@ function bindToRoot(runner: GitRunner, location: WorktreeLocation): RootBoundGit
     run: (spec: GitCommandSpec) => runner.run(atRoot(spec)),
     runText: (spec: GitCommandSpec) => runner.runText(atRoot(spec)),
     runNulFields: (spec: GitCommandSpec) => runner.runNulFields(atRoot(spec)),
+    [rootBoundBrand]: true,
   }) as unknown as RootBoundGitRunner;
 }
 
@@ -168,6 +193,10 @@ export async function discoverWorktree(
   runner: GitRunner,
   context: RepositoryOperationContext
 ): Promise<ProjectResult<RootBoundGitRunner>> {
+  if (isRootBoundGitRunner(runner) && runner.cwd === runner.location.worktreeRoot) {
+    return ok(runner);
+  }
+
   try {
     // One process answers the whole matrix. `rev-parse` prints one line per flag in argument
     // order, except `--show-superproject-working-tree`, which prints nothing at all outside a
@@ -225,6 +254,7 @@ export async function discoverWorktree(
       gitCommonDir,
       linked: gitDir !== gitCommonDir,
     });
+
     return ok(bindToRoot(runner, location));
   } catch (error) {
     if (error instanceof GitInvocationError) {
@@ -260,6 +290,14 @@ export async function resolveRepositoryIdentity(
     });
     if (head === "") return fail(repositoryNotFound(runner));
 
+    const cacheKey = `${runner.location.worktreeRoot}\0${head}\0${environment.object_format}`;
+    const cached = repositoryIdentityCache.get(cacheKey);
+    if (cached !== undefined) {
+      repositoryIdentityCache.delete(cacheKey);
+      repositoryIdentityCache.set(cacheKey, cached);
+      return ok(cached);
+    }
+
     const output = await runner.runText({
       argv: ["rev-list", "--max-parents=0", "HEAD"],
       operation: ROOTS_OPERATION,
@@ -277,14 +315,20 @@ export async function resolveRepositoryIdentity(
         root_commits: rootCommits.map((oid) => oid as string),
       })
     );
-    return ok<RepositoryIdentity>(
-      Object.freeze({
-        schema_version: "1",
-        object_format: environment.object_format,
-        root_commits: Object.freeze(rootCommits),
-        digest,
-      })
-    );
+    const identity: RepositoryIdentity = Object.freeze({
+      schema_version: "1",
+      object_format: environment.object_format,
+      root_commits: Object.freeze(rootCommits),
+      digest,
+    });
+
+    if (repositoryIdentityCache.size >= MAX_REPOSITORY_IDENTITIES) {
+      const oldestKey = repositoryIdentityCache.keys().next().value;
+      if (oldestKey !== undefined) repositoryIdentityCache.delete(oldestKey);
+    }
+    repositoryIdentityCache.set(cacheKey, identity);
+
+    return ok<RepositoryIdentity>(identity);
   } catch (error) {
     if (error instanceof GitInvocationError) {
       return fail(projectErrorForGitFailure(error, runner, context));

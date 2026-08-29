@@ -44,6 +44,16 @@ import {
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
 
+const GIT_ENV: NodeJS.ProcessEnv = {
+  ...process.env,
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_SYSTEM: "/dev/null",
+  GIT_AUTHOR_NAME: "ArchFlow Test",
+  GIT_AUTHOR_EMAIL: "test@example.invalid",
+  GIT_COMMITTER_NAME: "ArchFlow Test",
+  GIT_COMMITTER_EMAIL: "test@example.invalid",
+};
+
 const P = (value: string): RepositoryPathClaim => value as RepositoryPathClaim;
 function resolved(absolute: string, path_class: ResolvedPath["path_class"], claim = P("file.txt")): ResolvedPath {
   return Object.freeze({ absolute: absolute as ResolvedTaskPath, path_class, repositoryRelative: claim });
@@ -334,16 +344,14 @@ describe("snapshot storage", () => {
 
   it("re-proves Git-backed bytes on read and restore, then fails after base ancestry is lost", async () => {
     const directory = await root();
-    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: directory });
-    execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: directory });
-    execFileSync("git", ["config", "user.name", "Test"], { cwd: directory });
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: directory, env: GIT_ENV });
     await mkdir(join(directory, "src"));
     const bytes = Buffer.from("retained from tree\n");
     await writeFile(join(directory, "src", "index.ts"), bytes);
-    execFileSync("git", ["add", "."], { cwd: directory });
-    execFileSync("git", ["commit", "-qm", "base"], { cwd: directory });
-    const base = execFileSync("git", ["rev-parse", "HEAD"], { cwd: directory, encoding: "utf8" }).trim();
-    const oid = execFileSync("git", ["rev-parse", "HEAD:src/index.ts"], { cwd: directory, encoding: "utf8" }).trim();
+    execFileSync("git", ["add", "."], { cwd: directory, env: GIT_ENV });
+    execFileSync("git", ["commit", "-qm", "base"], { cwd: directory, env: GIT_ENV });
+    const base = execFileSync("git", ["rev-parse", "HEAD"], { cwd: directory, env: GIT_ENV, encoding: "utf8" }).trim();
+    const oid = execFileSync("git", ["rev-parse", "HEAD:src/index.ts"], { cwd: directory, env: GIT_ENV, encoding: "utf8" }).trim();
     const source = JSON.parse(await readFile(new URL("../fixtures/contracts/durable/implementation-output.valid.json", import.meta.url), "utf8")) as ImplementationOutputV1;
     const outputs = structuredClone(source.outputs) as [...ImplementationOutputV1["outputs"]];
     const gitOutput = outputs[1]!;

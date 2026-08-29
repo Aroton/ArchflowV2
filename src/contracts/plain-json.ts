@@ -65,16 +65,22 @@ function inspect(value: unknown, path: string, ancestors: WeakSet<object>): void
   try {
     if (isArray) {
       const array = object as unknown[];
-      const expectedKeys = new Set(["length", ...Array.from({ length: array.length }, (_, index) => String(index))]);
+      const len = array.length;
       for (const key of keys) {
-        if (typeof key !== "string" || !expectedKeys.has(key)) fail("arrays may only contain indexed elements", path);
+        if (typeof key !== "string") fail("arrays may only contain indexed elements", path);
+        if (key === "length") continue;
+        const num = Number(key);
+        if (!/^(?:0|[1-9]\d*)$/u.test(key) || num >= len) {
+          fail("arrays may only contain indexed elements", path);
+        }
       }
-      for (let index = 0; index < array.length; index += 1) {
+      for (let index = 0; index < len; index += 1) {
+        const indexStr = String(index);
         if (!Object.prototype.hasOwnProperty.call(array, index)) fail("sparse array holes are not JSON values", `${path}[${index}]`);
-        const descriptor = Object.getOwnPropertyDescriptor(array, String(index));
-        if (descriptor === undefined || !("value" in descriptor)) fail("accessor properties are not JSON values", `${path}[${index}]`);
-        inspect(descriptor.value, `${path}[${index}]`, ancestors);
-        assertDescriptorStable(array, String(index), descriptor, `${path}[${index}]`);
+        const descriptor = Object.getOwnPropertyDescriptor(array, indexStr);
+        if (descriptor === undefined || !("value" in descriptor)) fail("accessor properties are not JSON values", `${path}[${indexStr}]`);
+        inspect(descriptor.value, `${path}[${indexStr}]`, ancestors);
+        assertDescriptorStable(array, indexStr, descriptor, `${path}[${indexStr}]`);
       }
     } else {
       for (const key of keys as string[]) {
@@ -97,6 +103,11 @@ function inspect(value: unknown, path: string, ancestors: WeakSet<object>): void
 }
 
 export function assertPlainJson(value: unknown, label = "value"): asserts value is PlainJsonValue {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) fail("non-finite numbers are not JSON values", label);
+    return;
+  }
   inspect(value, label, new WeakSet());
 }
 

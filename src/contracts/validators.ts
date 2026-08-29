@@ -37,7 +37,15 @@ export function hasUniqueObjectPropertyValues(properties: string | readonly stri
  * length >= 2; callers that need object ordering supply `tupleKey`.
  */
 export function isSortedUniqueBy(items: unknown, key: (value: unknown) => string = String): boolean {
-  return Array.isArray(items) && items.every((value, index) => index === 0 || key(items[index - 1]) < key(value));
+  if (!Array.isArray(items)) return false;
+  if (items.length <= 1) return true;
+  let prevKey = key(items[0]);
+  for (let i = 1; i < items.length; i++) {
+    const currentKey = key(items[i]);
+    if (prevKey >= currentKey) return false;
+    prevKey = currentKey;
+  }
+  return true;
 }
 
 /**
@@ -52,13 +60,31 @@ export function isSortedUniqueBy(items: unknown, key: (value: unknown) => string
  * ordinal comparison. A `":"`-joined key is deliberately not used — `SafeId` admits `":"`, so that
  * key can collide across a component boundary.
  */
+const tupleKeyCache = new Map<string, (value: unknown) => string>();
+
 export function tupleKey(properties: string | readonly string[]): (value: unknown) => string {
-  const propertyNames = typeof properties === "string" ? [properties] : properties;
-  return (value: unknown): string => {
-    if (typeof value !== "object" || value === null) return String(value);
-    return propertyNames.map((property) => {
-      const descriptor = Object.getOwnPropertyDescriptor(value, property);
+  const cacheKey = typeof properties === "string" ? properties : properties.join("\u0000");
+  const cached = tupleKeyCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+  const propertyNames = typeof properties === "string" ? [properties] : [...properties];
+  let fn: (value: unknown) => string;
+  if (propertyNames.length === 1) {
+    const prop = propertyNames[0]!;
+    fn = (value: unknown): string => {
+      if (typeof value !== "object" || value === null) return String(value);
+      const descriptor = Object.getOwnPropertyDescriptor(value, prop);
       return String(descriptor !== undefined && "value" in descriptor ? descriptor.value : undefined);
-    }).join("\u0000");
-  };
+    };
+  } else {
+    fn = (value: unknown): string => {
+      if (typeof value !== "object" || value === null) return String(value);
+      return propertyNames.map((property) => {
+        const descriptor = Object.getOwnPropertyDescriptor(value, property);
+        return String(descriptor !== undefined && "value" in descriptor ? descriptor.value : undefined);
+      }).join("\u0000");
+    };
+  }
+  tupleKeyCache.set(cacheKey, fn);
+  return fn;
 }
+

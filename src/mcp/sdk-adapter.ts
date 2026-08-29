@@ -27,6 +27,8 @@ import {
 } from "./server.js";
 import { ADVERTISED_TOOL_CATALOGUE } from "./tools.js";
 
+const ADVERTISED_TOOL_BY_NAME = new Map(ADVERTISED_TOOL_CATALOGUE.map((descriptor) => [descriptor.name, descriptor]));
+
 export interface McpRuntimeOptions {
   readonly input: Readable;
   readonly output: Writable;
@@ -264,7 +266,7 @@ export async function startMcpRuntime(options: McpRuntimeOptions): Promise<McpRu
       const error = outcome.error.value;
       throw new SdkProtocolError(protocolCode(error), error.code, error);
     }
-    const descriptor = ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === outcome.tool);
+    const descriptor = ADVERTISED_TOOL_BY_NAME.get(outcome.tool);
     if (descriptor === undefined) throw new SdkProtocolError(-32603, "Internal error");
     const structuredContent = wireResult(outcome);
     return server.projectCallToolResult({

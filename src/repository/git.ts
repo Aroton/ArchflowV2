@@ -141,8 +141,8 @@ function execGit(
       (failure, stdout, stderr) => {
         resolve({
           failure: failure ?? undefined,
-          stdout: Buffer.from(stdout),
-          stderr: Buffer.from(stderr),
+          stdout: Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout),
+          stderr: Buffer.isBuffer(stderr) ? stderr : Buffer.from(stderr),
         });
       }
     );
@@ -241,8 +241,19 @@ export function createGitRunner(options: {
   async function runNulFields(spec: GitCommandSpec): Promise<readonly string[]> {
     const result = await run(spec);
     if (result.absent) return Object.freeze([]);
-    const fields = decodeFatal(result.stdout, spec.operation).split("\0");
-    if (fields.length > 0 && fields[fields.length - 1] === "") fields.pop();
+    const text = decodeFatal(result.stdout, spec.operation);
+    if (text.length === 0) return Object.freeze([]);
+    const fields: string[] = [];
+    let start = 0;
+    let index = text.indexOf("\0");
+    while (index !== -1) {
+      fields.push(text.slice(start, index));
+      start = index + 1;
+      index = text.indexOf("\0", start);
+    }
+    if (start < text.length) {
+      fields.push(text.slice(start));
+    }
     return Object.freeze(fields);
   }
 
@@ -273,6 +284,69 @@ const GIT_OID = /^[0-9a-f]{40}$/u;
 const BLOB_MODE = /^(?:100644|100755|120000)$/u;
 const MAX_RESULT_BLOB_BYTES = 25 * 1024 * 1024;
 const MAX_COMMIT_TREE_ENTRIES = 1_024;
+
+const MAX_COMMIT_RESOLUTION_CACHE_ENTRIES = 2_048;
+const MAX_BLOB_SIZE_CACHE_ENTRIES = 4_096;
+const MAX_BLOB_BYTES_CACHE_ENTRIES = 512;
+const MAX_COMMIT_TREE_BLOB_CACHE_ENTRIES = 4_096;
+const MAX_COMMIT_TREE_ENTRIES_CACHE_ENTRIES = 1_024;
+const MAX_COMMIT_ANCESTOR_CACHE_ENTRIES = 2_048;
+const MAX_FIRST_PARENT_CHILD_CACHE_ENTRIES = 1_024;
+const MAX_COMMIT_TREE_PATH_LISTING_CACHE_ENTRIES = 512;
+
+interface GitRunnerCache {
+  readonly commitResolution: Map<string, GitOid>;
+  readonly blobSize: Map<string, number>;
+  readonly blobBytes: Map<string, Uint8Array>;
+  readonly commitTreeBlob: Map<string, GitTreeBlobEntry | undefined>;
+  readonly commitTreeEntries: Map<string, readonly GitCommitTreeEntry[]>;
+  readonly commitAncestor: Map<string, boolean>;
+  readonly firstParentChild: Map<string, GitOid | undefined>;
+  readonly commitTreePathListing: Map<string, CommitTreePathListing>;
+}
+
+function createRunnerCache(): GitRunnerCache {
+  return {
+    commitResolution: new Map(),
+    blobSize: new Map(),
+    blobBytes: new Map(),
+    commitTreeBlob: new Map(),
+    commitTreeEntries: new Map(),
+    commitAncestor: new Map(),
+    firstParentChild: new Map(),
+    commitTreePathListing: new Map(),
+  };
+}
+
+const runnerCaches = new WeakMap<object, GitRunnerCache>();
+let globalFallbackCache: GitRunnerCache = createRunnerCache();
+
+function getRunnerCache(runner: GitRunner): GitRunnerCache {
+  if (typeof runner !== "object" || runner === null) return globalFallbackCache;
+  let cache = runnerCaches.get(runner);
+  if (cache === undefined) {
+    cache = createRunnerCache();
+    runnerCaches.set(runner, cache);
+  }
+  return cache;
+}
+
+function setBoundedCache<K, V>(map: Map<K, V>, key: K, value: V, maxEntries: number): void {
+  if (map.has(key)) {
+    map.delete(key);
+  } else if (map.size >= maxEntries) {
+    const firstKey = map.keys().next().value;
+    if (firstKey !== undefined) {
+      map.delete(firstKey);
+    }
+  }
+  map.set(key, value);
+}
+
+/** Resets in-memory Git caches across all runner sessions. For testing only. */
+export function resetGitCachesForTesting(): void {
+  globalFallbackCache = createRunnerCache();
+}
 
 /** Hashes bytes as Git would for a declared path. Omit `path` for unconverted symlink targets. */
 export async function hashGitBlob(
@@ -311,6 +385,8 @@ export type GitChangedPathReport = Readonly<{
   unrepresentable_count: number;
 }>;
 
+const LS_TREE_ENTRY = /^(\d{6}) blob ([0-9a-f]{40})\t([\s\S]+)$/u;
+
 /**
  * Reads porcelain-v1 `-z` without losing invalid UTF-8 names; those are counted, never omitted
  * silently. `pathspecs` narrows the report to one subtree; omit it for the whole worktree. Callers
@@ -331,7 +407,7 @@ export async function readChangedGitPaths(
   let start = 0;
   for (let index = 0; index < result.stdout.byteLength; index += 1) {
     if (result.stdout[index] === 0) {
-      fields.push(result.stdout.slice(start, index));
+      fields.push(result.stdout.subarray(start, index));
       start = index + 1;
     }
   }
@@ -342,7 +418,7 @@ export async function readChangedGitPaths(
     const field = fields[index]!;
     if (field.byteLength < 4 || field[2] !== 0x20) throw new TypeError("git status porcelain record is malformed");
     const status = String.fromCharCode(field[0]!, field[1]!);
-    const pathFields: Uint8Array[] = [field.slice(3)];
+    const pathFields: Uint8Array[] = [field.subarray(3)];
     if (status.includes("R") || status.includes("C")) {
       const source = fields[index + 1];
       if (source === undefined) throw new TypeError("git status rename record lacks its source");
@@ -364,12 +440,23 @@ export async function isCommitAncestor(
   ancestor: string,
   descendant: string,
 ): Promise<boolean> {
+  const isImmutable = GIT_OID.test(ancestor) && GIT_OID.test(descendant);
+  const cacheKey = isImmutable ? `${ancestor}\0${descendant}` : undefined;
+  const cache = getRunnerCache(runner);
+  if (cacheKey !== undefined) {
+    const cached = cache.commitAncestor.get(cacheKey);
+    if (cached !== undefined) return cached;
+  }
   const result = await runner.run({
     argv: ["merge-base", "--is-ancestor", ancestor, descendant],
     operation: ANCESTOR_OPERATION,
     expectedAbsence: [{ code: 1, stderrIncludes: "" }],
   });
-  return !result.absent;
+  const isAnc = !result.absent;
+  if (cacheKey !== undefined) {
+    setBoundedCache(cache.commitAncestor, cacheKey, isAnc, MAX_COMMIT_ANCESTOR_CACHE_ENTRIES);
+  }
+  return isAnc;
 }
 
 /** True only when `ancestor` is retained by the current HEAD ancestry. */
@@ -392,15 +479,35 @@ export async function readFirstParentChildAfter(
   target: string,
 ): Promise<GitOid | undefined> {
   if (baseline === target) return undefined;
-  if (!await isCommitAncestor(runner, baseline, target)) return undefined;
+  const isImmutable = GIT_OID.test(baseline) && GIT_OID.test(target);
+  const cacheKey = isImmutable ? `${baseline}\0${target}` : undefined;
+  const cache = getRunnerCache(runner);
+  if (cacheKey !== undefined && cache.firstParentChild.has(cacheKey)) {
+    return cache.firstParentChild.get(cacheKey);
+  }
+  if (!await isCommitAncestor(runner, baseline, target)) {
+    if (cacheKey !== undefined) {
+      setBoundedCache(cache.firstParentChild, cacheKey, undefined, MAX_FIRST_PARENT_CHILD_CACHE_ENTRIES);
+    }
+    return undefined;
+  }
   const commits = await runner.runText({
     argv: ["rev-list", "--first-parent", target],
     operation: FIRST_PARENT_PATH_OPERATION,
   });
   const chain = commits === "" ? [] : commits.split("\n");
   const baselineIndex = chain.indexOf(baseline);
-  if (baselineIndex <= 0) return undefined;
-  return parseGitOid(chain[baselineIndex - 1]!);
+  if (baselineIndex <= 0) {
+    if (cacheKey !== undefined) {
+      setBoundedCache(cache.firstParentChild, cacheKey, undefined, MAX_FIRST_PARENT_CHILD_CACHE_ENTRIES);
+    }
+    return undefined;
+  }
+  const result = parseGitOid(chain[baselineIndex - 1]!);
+  if (cacheKey !== undefined) {
+    setBoundedCache(cache.firstParentChild, cacheKey, result, MAX_FIRST_PARENT_CHILD_CACHE_ENTRIES);
+  }
+  return result;
 }
 
 /** Resolves one exact blob entry from a commit tree; empty output is ordinary absence. */
@@ -409,25 +516,39 @@ export async function readCommitTreeBlob(
   commit: string,
   path: string
 ): Promise<GitTreeBlobEntry | undefined> {
+  const isCommitOid = GIT_OID.test(commit);
+  const cacheKey = isCommitOid ? `${commit}\0${path}` : undefined;
+  const cache = getRunnerCache(runner);
+  if (cacheKey !== undefined && cache.commitTreeBlob.has(cacheKey)) {
+    return cache.commitTreeBlob.get(cacheKey);
+  }
   const fields = await runner.runNulFields({
     argv: ["ls-tree", "-z", commit, "--", path],
     operation: TREE_ENTRY_OPERATION,
   });
-  if (fields.length === 0) return undefined;
+  if (fields.length === 0) {
+    if (cacheKey !== undefined) {
+      setBoundedCache(cache.commitTreeBlob, cacheKey, undefined, MAX_COMMIT_TREE_BLOB_CACHE_ENTRIES);
+    }
+    return undefined;
+  }
   if (fields.length !== 1) throw new TypeError("git ls-tree returned conflicting path entries");
-  const match = /^(?<mode>\d{6}) blob (?<oid>[0-9a-f]+)\t(?<path>[\s\S]+)$/u.exec(fields[0] ?? "");
+  const match = LS_TREE_ENTRY.exec(fields[0] ?? "");
   if (
-    match?.groups === undefined ||
-    match.groups["path"] !== path ||
-    !BLOB_MODE.test(match.groups["mode"] ?? "") ||
-    !GIT_OID.test(match.groups["oid"] ?? "")
+    match === null ||
+    match[3] !== path ||
+    !BLOB_MODE.test(match[1]!)
   ) {
     throw new TypeError("git ls-tree returned an invalid or mismatched blob entry");
   }
-  return Object.freeze({
-    mode: match.groups["mode"] as GitTreeBlobEntry["mode"],
-    oid: match.groups["oid"] as string,
+  const entry: GitTreeBlobEntry = Object.freeze({
+    mode: match[1]! as GitTreeBlobEntry["mode"],
+    oid: match[2]!,
   });
+  if (cacheKey !== undefined) {
+    setBoundedCache(cache.commitTreeBlob, cacheKey, entry, MAX_COMMIT_TREE_BLOB_CACHE_ENTRIES);
+  }
+  return entry;
 }
 
 /**
@@ -443,6 +564,13 @@ export async function readCommitTreeEntries(
   directory: string,
 ): Promise<readonly GitCommitTreeEntry[]> {
   const prefix = directory.endsWith("/") ? directory : `${directory}/`;
+  const isCommitOid = GIT_OID.test(commit);
+  const cacheKey = isCommitOid ? `${commit}\0${prefix}` : undefined;
+  const cache = getRunnerCache(runner);
+  if (cacheKey !== undefined) {
+    const cached = cache.commitTreeEntries.get(cacheKey);
+    if (cached !== undefined) return cached;
+  }
   const fields = await runner.runNulFields({
     argv: ["ls-tree", "-z", commit, "--", prefix],
     operation: TREE_LIST_OPERATION,
@@ -451,23 +579,26 @@ export async function readCommitTreeEntries(
     throw new TypeError("git ls-tree exceeded the bounded commit-tree entry limit");
   }
   const entries = fields.map((field): GitCommitTreeEntry => {
-    const match = /^(?<mode>\d{6}) blob (?<oid>[0-9a-f]+)\t(?<path>[\s\S]+)$/u.exec(field);
+    const match = LS_TREE_ENTRY.exec(field);
     if (
-      match?.groups === undefined ||
-      !(match.groups["path"] ?? "").startsWith(prefix) ||
-      !BLOB_MODE.test(match.groups["mode"] ?? "") ||
-      !GIT_OID.test(match.groups["oid"] ?? "")
+      match === null ||
+      !match[3]!.startsWith(prefix) ||
+      !BLOB_MODE.test(match[1]!)
     ) {
       throw new TypeError("git ls-tree returned an invalid commit-tree blob entry");
     }
     return Object.freeze({
-      path: match.groups["path"] as string,
-      mode: match.groups["mode"] as GitCommitTreeEntry["mode"],
-      oid: match.groups["oid"] as string,
+      path: match[3]!,
+      mode: match[1]! as GitCommitTreeEntry["mode"],
+      oid: match[2]!,
     });
   });
   entries.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
-  return Object.freeze(entries);
+  const frozen = Object.freeze(entries);
+  if (cacheKey !== undefined) {
+    setBoundedCache(cache.commitTreeEntries, cacheKey, frozen, MAX_COMMIT_TREE_ENTRIES_CACHE_ENTRIES);
+  }
+  return frozen;
 }
 
 /** Lists paths changed between a policy-base commit and HEAD below one repository directory. */
@@ -511,26 +642,45 @@ export async function readCommitTreePathListing(
   const prefixes = [...new Set(directories)]
     .map((directory) => directory === "" || directory === "." ? "." : directory.endsWith("/") ? directory : `${directory}/`);
   if (prefixes.length === 0) return Object.freeze({ paths: Object.freeze([]), truncated: false });
+  const isCommitOid = GIT_OID.test(commit);
+  const cacheKey = isCommitOid ? `${commit}\0${prefixes.join("\0")}` : undefined;
+  const cache = getRunnerCache(runner);
+  if (cacheKey !== undefined) {
+    const cached = cache.commitTreePathListing.get(cacheKey);
+    if (cached !== undefined) return cached;
+  }
   const fields = await runner.runNulFields({
     argv: ["ls-tree", "-r", "-z", "--name-only", commit, "--", ...prefixes],
-    operation: TREE_LIST_OPERATION,
+    operation: "git-tree-paths" as SafeCode,
   });
   const unique = [...new Set(fields)].sort();
   const truncated = unique.length > MAX_COMMIT_TREE_ENTRIES;
-  return Object.freeze({
+  const result: CommitTreePathListing = Object.freeze({
     paths: Object.freeze(truncated ? unique.slice(0, MAX_COMMIT_TREE_ENTRIES) : unique),
     truncated,
   });
+  if (cacheKey !== undefined) {
+    setBoundedCache(cache.commitTreePathListing, cacheKey, result, MAX_COMMIT_TREE_PATH_LISTING_CACHE_ENTRIES);
+  }
+  return result;
 }
 
 /** Resolves one revision to a commit through the shared bounded Git command boundary. */
 export async function resolveCommit(runner: GitRunner, revision: string): Promise<GitOid> {
+  const isOid = GIT_OID.test(revision);
+  const cache = getRunnerCache(runner);
+  if (isOid) {
+    const cached = cache.commitResolution.get(revision);
+    if (cached !== undefined) return cached;
+  }
   const oid = await runner.runText({
     argv: ["rev-parse", "--verify", `${revision}^{commit}`],
     operation: HEAD_COMMIT_OPERATION,
   });
   if (!GIT_OID.test(oid)) throw new TypeError("git rev-parse returned an invalid commit");
-  return parseGitOid(oid);
+  const parsed = parseGitOid(oid);
+  setBoundedCache(cache.commitResolution, parsed, parsed, MAX_COMMIT_RESOLUTION_CACHE_ENTRIES);
+  return parsed;
 }
 
 /** Resolves the current HEAD commit through the shared bounded Git command boundary. */
@@ -541,6 +691,14 @@ export async function readHeadCommit(runner: GitRunner): Promise<GitOid> {
 /** Reads the byte size of a blob already named by an authenticated tree entry. */
 export async function readGitBlobSize(runner: GitRunner, oid: string): Promise<number> {
   if (!GIT_OID.test(oid)) throw new TypeError("Git blob object id is invalid");
+  const cache = getRunnerCache(runner);
+  const cached = cache.blobSize.get(oid);
+  if (cached !== undefined) return cached;
+  const cachedBytes = cache.blobBytes.get(oid);
+  if (cachedBytes !== undefined) {
+    setBoundedCache(cache.blobSize, oid, cachedBytes.byteLength, MAX_BLOB_SIZE_CACHE_ENTRIES);
+    return cachedBytes.byteLength;
+  }
   const output = await runner.runText({
     argv: ["cat-file", "-s", oid],
     operation: OBJECT_SIZE_OPERATION,
@@ -548,6 +706,7 @@ export async function readGitBlobSize(runner: GitRunner, oid: string): Promise<n
   if (!/^(?:0|[1-9][0-9]*)$/u.test(output)) throw new TypeError("git cat-file returned an invalid size");
   const size = Number(output);
   if (!Number.isSafeInteger(size)) throw new TypeError("git blob size exceeds the safe integer range");
+  setBoundedCache(cache.blobSize, oid, size, MAX_BLOB_SIZE_CACHE_ENTRIES);
   return size;
 }
 
@@ -559,6 +718,11 @@ export async function readGitBlobSize(runner: GitRunner, oid: string): Promise<n
  */
 export async function readGitBlobBytes(runner: GitRunner, oid: string): Promise<Uint8Array> {
   if (!GIT_OID.test(oid)) throw new TypeError("Git blob object id is invalid");
+  const cache = getRunnerCache(runner);
+  const cached = cache.blobBytes.get(oid);
+  if (cached !== undefined) {
+    return cached.slice();
+  }
   let result: GitInvocationResult;
   try {
     result = await runner.run({
@@ -572,7 +736,10 @@ export async function readGitBlobBytes(runner: GitRunner, oid: string): Promise<
     }
     throw error;
   }
-  return new Uint8Array(result.stdout);
+  const bytes = new Uint8Array(result.stdout.buffer, result.stdout.byteOffset, result.stdout.byteLength);
+  setBoundedCache(cache.blobBytes, oid, bytes, MAX_BLOB_BYTES_CACHE_ENTRIES);
+  setBoundedCache(cache.blobSize, oid, bytes.byteLength, MAX_BLOB_SIZE_CACHE_ENTRIES);
+  return bytes.slice();
 }
 
 /** Materializes a regular blob through the declared destination path's checkout filters. */
@@ -595,7 +762,7 @@ export async function readGitBlobProjectedBytes(
       message: "projected Git blob exceeds the bounded result-byte limit",
     });
   }
-  return new Uint8Array(result.stdout);
+  return new Uint8Array(result.stdout.buffer, result.stdout.byteOffset, result.stdout.byteLength);
 }
 
 /**

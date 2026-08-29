@@ -14,6 +14,9 @@ import { runDispatchChild } from "../../src/dispatch/process.js";
 import { startMcpRuntime, type McpRuntimeHandle } from "../../src/mcp/sdk-adapter.js";
 import type { ToolHandlerRegistry } from "../../src/mcp/server.js";
 import { ADVERTISED_TOOL_CATALOGUE } from "../../src/mcp/tools.js";
+// @ts-expect-error build-temp-helper.mjs is an untyped mjs script
+import { buildTemporaryBundles } from "../../scripts/build-temp-helper.mjs";
+
 import adversarial from "../fixtures/mcp/runtime/adversarial-bytes.json" with { type: "json" };
 import calls from "../fixtures/mcp/runtime/calls.json" with { type: "json" };
 import initialize from "../fixtures/mcp/runtime/initialize.json" with { type: "json" };
@@ -155,24 +158,8 @@ function semanticContractInvalidFrame(): Record<string, unknown> {
 
 beforeAll(async () => {
   outputDirectory = await mkdtemp(resolve(tmpdir(), "archflow-mcp-integration-"));
-  const buildProgram = [
-    'import { resolve } from "node:path";',
-    'import { pathToFileURL } from "node:url";',
-    'const root = process.argv[1];',
-    'const output = process.argv[2];',
-    'const helper = await import(pathToFileURL(resolve(root, "scripts/build-temp-helper.mjs")));',
-    'const bundles = await helper.buildTemporaryBundles(output);',
-    'process.stdout.write(bundles.runtimeBundle);',
-  ].join("");
-  const built = spawnSync(process.execPath, ["--input-type=module", "--eval", buildProgram, repositoryRoot, outputDirectory], {
-    cwd: repositoryRoot,
-    encoding: "utf8",
-    timeout: PROCESS_TIMEOUT_MS,
-  });
-  if (built.error !== undefined || built.status !== 0) {
-    throw built.error ?? new Error(`temporary runtime build failed: ${built.stderr}`);
-  }
-  runtimeBundle = built.stdout;
+  const bundles = await buildTemporaryBundles(outputDirectory);
+  runtimeBundle = bundles.runtimeBundle;
   expect(relative(repositoryRoot, runtimeBundle).startsWith("..")).toBe(true);
 
   const trackedBuildOutput = spawnSync("git", ["ls-files", "--", ".tmp"], {

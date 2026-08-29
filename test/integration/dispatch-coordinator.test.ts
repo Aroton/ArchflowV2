@@ -21,7 +21,7 @@ import {
 } from "../../src/dispatch/workspace.js";
 import { DispatchProcessError, scanDispatchOutput } from "../../src/dispatch/process.js";
 import type { DispatchRoute } from "../../src/dispatch/routing.js";
-import { createGitRunner, preflightGit, type RepositoryOperationContext } from "../../src/repository/git.js";
+import { createGitRunner, preflightGit, readHeadCommit, type RepositoryOperationContext } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import type { ResolvedTaskWorkspacePath } from "../../src/repository/paths.js";
 import type { DispatchEnvelope } from "../../src/review/envelopes.js";
@@ -152,7 +152,8 @@ if (argv.length === 1 && argv[0] === "--version") {
     read_config: async () => ({ kind: "missing" }),
     read_receipt: async () => ({ kind: "missing" }),
   };
-  return { root, repository, bin, sourceHome, childStarted, authority: authority.value, dependencies };
+  const headCommit = await readHeadCommit(discovered.value);
+  return { root, repository, bin, sourceHome, childStarted, authority: authority.value, dependencies, commit: headCommit };
 }
 
 /**
@@ -223,7 +224,7 @@ describe("createDispatchCoordinator", () => {
 
   it("shares one materialized repository view across the coordinators of one review", async () => {
     const h = await harness("success");
-    const commit = parseGitOid(execFileSync("git", ["rev-parse", "HEAD"], { cwd: h.repository }).toString().trim());
+    const commit = h.commit;
     const shared = shareRepositoryViewWorkspace(primaryViews(h.repository, commit), h.repository);
     let view: string | undefined;
     const coordinate = () => createDispatchCoordinator({
@@ -269,7 +270,7 @@ describe("createDispatchCoordinator", () => {
   it("keeps a borrowed workspace alive through one child's failure so its sibling can run", async () => {
     const h = await harness("fail-child-once");
     await writeFile(join(h.root, "child-down"), "down");
-    const commit = parseGitOid(execFileSync("git", ["rev-parse", "HEAD"], { cwd: h.repository }).toString().trim());
+    const commit = h.commit;
     const shared = shareRepositoryViewWorkspace(primaryViews(h.repository, commit), h.repository);
     const coordinate = () => createDispatchCoordinator({
       authority: h.authority,
@@ -361,9 +362,7 @@ describe("createDispatchCoordinator", () => {
 
   it("materializes a read-only repository view for review dispatch and targets the child at it", async () => {
     const h = await harness("success");
-    const head = parseGitOid(execFileSync("git", ["rev-parse", "HEAD"], {
-      cwd: h.repository, encoding: "utf8",
-    }).trim());
+    const head = h.commit;
     const coordinator = createDispatchCoordinator({
       authority: h.authority,
       dependencies: h.dependencies,
@@ -400,9 +399,7 @@ describe("createDispatchCoordinator", () => {
 
   it("materializes the explicitly configured sealed repository view for adjudication dispatch", async () => {
     const h = await harness("success");
-    const head = parseGitOid(execFileSync("git", ["rev-parse", "HEAD"], {
-      cwd: h.repository, encoding: "utf8",
-    }).trim());
+    const head = h.commit;
     const coordinator = createDispatchCoordinator({
       authority: h.authority,
       dependencies: h.dependencies,

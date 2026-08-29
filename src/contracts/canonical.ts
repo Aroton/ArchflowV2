@@ -15,15 +15,29 @@ export type GitTreeMode = (typeof GIT_TREE_MODES)[number];
 /** The only mode legal below the `.archflow` tree: no executables, symlinks, or gitlinks. */
 export type ArchflowTreeMode = "100644";
 
+const GIT_OID_REGEX = /^[0-9a-f]{40}$/u;
+
 export const gitOidV1Schema = z.string().regex(/^[0-9a-f]{40}$/u) as unknown as z.ZodType<GitOid>;
 export const gitTreeModeV1Schema = z.enum(GIT_TREE_MODES) as unknown as z.ZodType<GitTreeMode>;
 
 export function parseGitOid(value: unknown): GitOid {
+  if (typeof value === "string" && value.length === 40 && GIT_OID_REGEX.test(value)) {
+    return value as GitOid;
+  }
   assertPlainJson(value, "git object name");
   return gitOidV1Schema.parse(value);
 }
 
 export function parseGitTreeMode(value: unknown): GitTreeMode {
+  if (
+    value === "040000" ||
+    value === "100644" ||
+    value === "100755" ||
+    value === "120000" ||
+    value === "160000"
+  ) {
+    return value;
+  }
   assertPlainJson(value, "git tree mode");
   return gitTreeModeV1Schema.parse(value);
 }
@@ -46,19 +60,37 @@ function ordinal(a: string, b: string): number {
  * or non-finite numbers are rejected rather than silently dropped or emitted as `null`.
  */
 function sortCanonical(value: unknown): unknown {
-  if (Array.isArray(value)) return (value as readonly unknown[]).map(sortCanonical);
-  if (value !== null && typeof value === "object") {
+  if (typeof value === "string" || typeof value === "boolean" || value === null) {
+    return value;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new TypeError("canonical JSON cannot contain a non-finite number");
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    const len = value.length;
+    const result = new Array(len);
+    for (let i = 0; i < len; i++) {
+      result[i] = sortCanonical(value[i]);
+    }
+    return result;
+  }
+  if (typeof value === "object") {
     const record = value as Record<string, unknown>;
-    return Object.fromEntries(
-      Object.keys(record)
-        .sort(ordinal)
-        .map((key) => [key, sortCanonical(record[key])])
-    );
+    const keys = Object.keys(record);
+    if (keys.length > 1) {
+      keys.sort(ordinal);
+    }
+    const sorted: Record<string, unknown> = {};
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i]!;
+      sorted[key] = sortCanonical(record[key]);
+    }
+    return sorted;
   }
   if (value === undefined) throw new TypeError("canonical JSON cannot contain undefined");
-  if (typeof value === "number" && !Number.isFinite(value)) {
-    throw new TypeError("canonical JSON cannot contain a non-finite number");
-  }
   return value;
 }
 
@@ -72,13 +104,17 @@ export function sha256Bytes(bytes: Uint8Array): Sha256Digest {
 }
 
 export function canonicalJsonDigest(value: PlainJsonValue): Sha256Digest {
-  return sha256Bytes(canonicalJsonBytes(value));
+  return createHash("sha256")
+    .update(`${JSON.stringify(sortCanonical(value), null, 2)}\n`, "utf8")
+    .digest("hex") as Sha256Digest;
 }
 
 /** OID = SHA1("blob " + ASCII_decimal(content.byteLength) + NUL + content). */
 export function gitBlobOid(content: Uint8Array): GitOid {
-  const header = Buffer.from(`blob ${String(content.byteLength)}\0`, "ascii");
-  return createHash("sha1").update(header).update(content).digest("hex") as GitOid;
+  return createHash("sha1")
+    .update(`blob ${String(content.byteLength)}\0`, "ascii")
+    .update(content)
+    .digest("hex") as GitOid;
 }
 
 /**
@@ -88,11 +124,15 @@ export function gitBlobOid(content: Uint8Array): GitOid {
  * only `/^[0-9a-f]{64}$/`.
  */
 export function historyIdentityDigest(oid: GitOid): Sha256Digest {
-  return sha256Bytes(encoder.encode(`archflow:history-identity:v1:${oid}`));
+  return createHash("sha256")
+    .update(`archflow:history-identity:v1:${oid}`, "utf8")
+    .digest("hex") as Sha256Digest;
 }
 
 export function repositoryCandidateDigest(absoluteCwd: string): Sha256Digest {
-  return sha256Bytes(encoder.encode(`archflow:repository-candidate:v1:${absoluteCwd}`));
+  return createHash("sha256")
+    .update(`archflow:repository-candidate:v1:${absoluteCwd}`, "utf8")
+    .digest("hex") as Sha256Digest;
 }
 
 export interface CanonicalDocument<T extends PlainJsonValue> {
@@ -104,6 +144,13 @@ export interface CanonicalDocument<T extends PlainJsonValue> {
 export function canonicalDocument<T extends PlainJsonValue>(value: T): CanonicalDocument<T> {
   const bytes = canonicalJsonBytes(value);
   return Object.freeze({ bytes, value, digest: sha256Bytes(bytes) });
+}
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) return false;
+  return Buffer.from(a.buffer, a.byteOffset, a.byteLength).equals(
+    Buffer.from(b.buffer, b.byteOffset, b.byteLength)
+  );
 }
 
 /**
@@ -135,7 +182,7 @@ export function parseCanonicalDocument<T extends PlainJsonValue>(
   }
   assertPlainJson(value, label);
   const expected = canonicalJsonBytes(value);
-  if (!Buffer.from(bytes).equals(Buffer.from(expected))) {
+  if (!bytesEqual(bytes, expected)) {
     throw new TypeError(`${label} is not canonical JSON`);
   }
   return Object.freeze({ bytes, value: value as T, digest: sha256Bytes(bytes) });

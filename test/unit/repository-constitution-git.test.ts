@@ -14,17 +14,25 @@ import {
 
 const roots: string[] = [];
 
+const GIT_ENV: NodeJS.ProcessEnv = {
+  ...process.env,
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_SYSTEM: "/dev/null",
+  GIT_AUTHOR_NAME: "ArchFlow Test",
+  GIT_AUTHOR_EMAIL: "test@example.invalid",
+  GIT_COMMITTER_NAME: "ArchFlow Test",
+  GIT_COMMITTER_EMAIL: "test@example.invalid",
+};
+
 function repository(): string {
   const root = mkdtempSync(join(tmpdir(), "archflow-constitution-git-"));
   roots.push(root);
-  execFileSync("git", ["init", "-q"], { cwd: root });
-  execFileSync("git", ["config", "user.email", "test@example.invalid"], { cwd: root });
-  execFileSync("git", ["config", "user.name", "ArchFlow Test"], { cwd: root });
+  execFileSync("git", ["init", "-q"], { cwd: root, env: GIT_ENV });
   mkdirSync(join(root, ".archflow", "constitution"), { recursive: true });
   writeFileSync(join(root, ".archflow", "constitution", "00-process.md"), "process\n");
   writeFileSync(join(root, ".archflow", "constitution", "README.md"), "readme\n");
-  execFileSync("git", ["add", "."], { cwd: root });
-  execFileSync("git", ["commit", "-qm", "base"], { cwd: root });
+  execFileSync("git", ["add", "."], { cwd: root, env: GIT_ENV });
+  execFileSync("git", ["commit", "-qm", "base"], { cwd: root, env: GIT_ENV });
   return root;
 }
 
@@ -37,6 +45,7 @@ describe("constitution Git readers", () => {
     const root = repository();
     const expected = execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: root,
+      env: GIT_ENV,
       encoding: "utf8",
     }).trim();
     await expect(readHeadCommit(createGitRunner({ cwd: root }))).resolves.toBe(expected);
@@ -58,10 +67,10 @@ describe("constitution Git readers", () => {
 
   it("detects committed policy-base-to-HEAD constitution edits", async () => {
     const root = repository();
-    const base = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+    const base = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, env: GIT_ENV, encoding: "utf8" }).trim();
     writeFileSync(join(root, ".archflow", "constitution", "README.md"), "changed\n");
-    execFileSync("git", ["add", "."], { cwd: root });
-    execFileSync("git", ["commit", "-qm", "edit"], { cwd: root });
+    execFileSync("git", ["add", "."], { cwd: root, env: GIT_ENV });
+    execFileSync("git", ["commit", "-qm", "edit"], { cwd: root, env: GIT_ENV });
 
     await expect(readCommitRangeChangedPaths(
       createGitRunner({ cwd: root }),

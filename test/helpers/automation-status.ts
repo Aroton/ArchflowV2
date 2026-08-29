@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { cpSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
+import { buildSync } from "esbuild";
 import { parseAutomationStatus, type AutomationStatusV1 } from "../../src/contracts/automation-status.js";
 import type { WorkflowInvocationV1 } from "../../src/contracts/semantic-workflow.js";
 
@@ -23,17 +24,18 @@ export function buildAutomationLocalBundle(repositoryRoot: string, outfile: stri
   const distDir = join(dirname(outfile), "dist");
   mkdirSync(distDir, { recursive: true });
   const bundled = join(distDir, basename(outfile));
-  const program = [
-    'import { build } from "esbuild";',
-    'const [root, outfile] = process.argv.slice(1);',
-    'await build({absWorkingDir:root,entryPoints:["src/local/main.ts"],outfile,bundle:true,platform:"node",format:"esm",target:"node24",banner:{js:\'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);\'}});',
-  ].join("");
-  const built = spawnSync(process.execPath, ["--input-type=module", "--eval", program, repositoryRoot, bundled], {
-    cwd: repositoryRoot,
-    encoding: "utf8",
-    timeout: 30_000,
+  buildSync({
+    absWorkingDir: repositoryRoot,
+    entryPoints: ["src/local/main.ts"],
+    outfile: bundled,
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    target: "node24",
+    banner: {
+      js: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);',
+    },
   });
-  if (built.status !== 0) throw new Error(`local bundle failed: ${built.stderr}`);
   cpSync(join(repositoryRoot, "assets"), join(dirname(outfile), "assets"), { recursive: true });
   return bundled;
 }

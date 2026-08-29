@@ -14,9 +14,16 @@ import {
 import {
   createGitRunner,
   GitInvocationError,
+  isCommitAncestor,
   preflightGit,
   projectErrorForGitFailure,
+  readCommitTreeBlob,
+  readCommitTreeEntries,
+  readFirstParentChildAfter,
   readGitBlobBytes,
+  readGitBlobSize,
+  resetGitCachesForTesting,
+  resolveCommit,
   type GitCommandSpec,
   type GitRunner,
   type RepositoryOperationContext,
@@ -390,5 +397,245 @@ describe("readGitBlobBytes", () => {
       run: async () => Promise.reject(new Error("must not spawn")),
     };
     await expect(readGitBlobBytes(stub, "not-an-oid")).rejects.toThrow(/object id is invalid/u);
+  });
+
+  it("memoizes blob bytes and populates blob size cache", async () => {
+    resetGitCachesForTesting();
+    const runner = shellRunner();
+    const oid = "b".repeat(40);
+    let runCount = 0;
+    const testBytes = new Uint8Array([1, 2, 3, 4, 5]);
+    const stub: GitRunner = {
+      cwd: runner.cwd,
+      runText: runner.runText,
+      runNulFields: runner.runNulFields,
+      run: async (spec) => {
+        runCount += 1;
+        return { code: 0, stdout: testBytes, stderr: "", absent: false };
+      },
+    };
+
+    const first = await readGitBlobBytes(stub, oid);
+    expect(first).toEqual(testBytes);
+    expect(runCount).toBe(1);
+
+    // Second read should be served from memoized cache without invoking runner
+    const second = await readGitBlobBytes(stub, oid);
+    expect(second).toEqual(testBytes);
+    expect(runCount).toBe(1);
+
+    // Returned Uint8Array should be isolated from cache mutation
+    first[0] = 99;
+    const third = await readGitBlobBytes(stub, oid);
+    expect(third[0]).toBe(1);
+
+    // readGitBlobSize should reuse cached byte length without shelling out to cat-file -s
+    const size = await readGitBlobSize(stub, oid);
+    expect(size).toBe(5);
+    expect(runCount).toBe(1);
+  });
+});
+
+describe("readGitBlobSize: memoization", () => {
+  it("memoizes blob size lookups per repository cwd", async () => {
+    resetGitCachesForTesting();
+    const runner = shellRunner();
+    const oid = "c".repeat(40);
+    let runCount = 0;
+    const stub: GitRunner = {
+      cwd: runner.cwd,
+      run: runner.run,
+      runNulFields: runner.runNulFields,
+      runText: async () => {
+        runCount += 1;
+        return "1024";
+      },
+    };
+
+    const first = await readGitBlobSize(stub, oid);
+    expect(first).toBe(1024);
+    expect(runCount).toBe(1);
+
+    const second = await readGitBlobSize(stub, oid);
+    expect(second).toBe(1024);
+    expect(runCount).toBe(1);
+
+    // Different cwd should not share cache
+    const otherStub: GitRunner = {
+      ...stub,
+      cwd: temporaryDirectory("archflow-git-other-"),
+    };
+    const third = await readGitBlobSize(otherStub, oid);
+    expect(third).toBe(1024);
+    expect(runCount).toBe(2);
+  });
+});
+
+describe("resolveCommit: memoization", () => {
+  it("memoizes authenticated commit OID resolutions without repeated rev-parse invocations", async () => {
+    resetGitCachesForTesting();
+    const runner = shellRunner();
+    const commitOid = "d".repeat(40);
+    let runCount = 0;
+    const stub: GitRunner = {
+      cwd: runner.cwd,
+      run: runner.run,
+      runNulFields: runner.runNulFields,
+      runText: async () => {
+        runCount += 1;
+        return commitOid;
+      },
+    };
+
+    const first = await resolveCommit(stub, commitOid);
+    expect(first).toBe(commitOid);
+    expect(runCount).toBe(1);
+
+    const second = await resolveCommit(stub, commitOid);
+    expect(second).toBe(commitOid);
+    expect(runCount).toBe(1);
+  });
+
+  it("does not memoize non-OID revisions like HEAD", async () => {
+    resetGitCachesForTesting();
+    const runner = shellRunner();
+    const commitOid1 = "1".repeat(40);
+    const commitOid2 = "2".repeat(40);
+    let currentCommit = commitOid1;
+    let runCount = 0;
+    const stub: GitRunner = {
+      cwd: runner.cwd,
+      run: runner.run,
+      runNulFields: runner.runNulFields,
+      runText: async () => {
+        runCount += 1;
+        return currentCommit;
+      },
+    };
+
+    const first = await resolveCommit(stub, "HEAD");
+    expect(first).toBe(commitOid1);
+    expect(runCount).toBe(1);
+
+    // HEAD moves
+    currentCommit = commitOid2;
+    const second = await resolveCommit(stub, "HEAD");
+    expect(second).toBe(commitOid2);
+    expect(runCount).toBe(2);
+  });
+});
+
+describe("readCommitTreeBlob: memoization", () => {
+  it("memoizes present and absent commit tree blob entries for immutable commit OIDs", async () => {
+    resetGitCachesForTesting();
+    const runner = shellRunner();
+    const commitOid = "e".repeat(40);
+    const blobOid = "f".repeat(40);
+    let runCount = 0;
+    const stub: GitRunner = {
+      cwd: runner.cwd,
+      run: runner.run,
+      runText: runner.runText,
+      runNulFields: async (spec) => {
+        runCount += 1;
+        if (spec.argv.includes("file.txt")) {
+          return [`100644 blob ${blobOid}\tfile.txt`];
+        }
+        return [];
+      },
+    };
+
+    const entry = await readCommitTreeBlob(stub, commitOid, "file.txt");
+    expect(entry).toEqual({ mode: "100644", oid: blobOid });
+    expect(runCount).toBe(1);
+
+    // Second lookup should use cache
+    const entry2 = await readCommitTreeBlob(stub, commitOid, "file.txt");
+    expect(entry2).toEqual({ mode: "100644", oid: blobOid });
+    expect(runCount).toBe(1);
+
+    // Absent entry lookup
+    const absent1 = await readCommitTreeBlob(stub, commitOid, "missing.txt");
+    expect(absent1).toBeUndefined();
+    expect(runCount).toBe(2);
+
+    // Second absent lookup should use cached absence
+    const absent2 = await readCommitTreeBlob(stub, commitOid, "missing.txt");
+    expect(absent2).toBeUndefined();
+    expect(runCount).toBe(2);
+  });
+});
+
+describe("readCommitTreeEntries: memoization", () => {
+  it("memoizes commit tree entries list for immutable commit OIDs", async () => {
+    resetGitCachesForTesting();
+    const runner = shellRunner();
+    const commitOid = "a".repeat(40);
+    const blobOid = "b".repeat(40);
+    let runCount = 0;
+    const stub: GitRunner = {
+      cwd: runner.cwd,
+      run: runner.run,
+      runText: runner.runText,
+      runNulFields: async () => {
+        runCount += 1;
+        return [`100644 blob ${blobOid}\tsrc/index.ts`];
+      },
+    };
+
+    const first = await readCommitTreeEntries(stub, commitOid, "src");
+    expect(first).toEqual([{ path: "src/index.ts", mode: "100644", oid: blobOid }]);
+    expect(runCount).toBe(1);
+
+    const second = await readCommitTreeEntries(stub, commitOid, "src");
+    expect(second).toEqual([{ path: "src/index.ts", mode: "100644", oid: blobOid }]);
+    expect(runCount).toBe(1);
+  });
+});
+
+describe("isCommitAncestor & readFirstParentChildAfter: memoization", () => {
+  it("memoizes ancestor checks and first-parent paths for immutable commit OIDs", async () => {
+    resetGitCachesForTesting();
+    const runner = shellRunner();
+    const ancestorOid = "1".repeat(40);
+    const targetOid = "2".repeat(40);
+    const childOid = "3".repeat(40);
+    let ancestorRuns = 0;
+    let revListRuns = 0;
+
+    const stub: GitRunner = {
+      cwd: runner.cwd,
+      run: async (spec) => {
+        if (spec.argv.includes("--is-ancestor")) {
+          ancestorRuns += 1;
+          return { code: 0, stdout: new Uint8Array(), stderr: "", absent: false };
+        }
+        return { code: 0, stdout: new Uint8Array(), stderr: "", absent: false };
+      },
+      runNulFields: runner.runNulFields,
+      runText: async (spec) => {
+        if (spec.argv.includes("--first-parent")) {
+          revListRuns += 1;
+          return `${childOid}\n${ancestorOid}\n`;
+        }
+        return "";
+      },
+    };
+
+    const isAnc1 = await isCommitAncestor(stub, ancestorOid, targetOid);
+    expect(isAnc1).toBe(true);
+    expect(ancestorRuns).toBe(1);
+
+    const isAnc2 = await isCommitAncestor(stub, ancestorOid, targetOid);
+    expect(isAnc2).toBe(true);
+    expect(ancestorRuns).toBe(1);
+
+    const child1 = await readFirstParentChildAfter(stub, ancestorOid, targetOid);
+    expect(child1).toBe(childOid);
+    expect(revListRuns).toBe(1);
+
+    const child2 = await readFirstParentChildAfter(stub, ancestorOid, targetOid);
+    expect(child2).toBe(childOid);
+    expect(revListRuns).toBe(1);
   });
 });

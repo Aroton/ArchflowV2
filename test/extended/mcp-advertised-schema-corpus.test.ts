@@ -436,15 +436,24 @@ describe("advertised MCP tool catalogue", () => {
     const documents = await Promise.all(schemaDocumentPaths.map(async (path) => JSON.parse(await readFile(new URL(path, import.meta.url), "utf8")) as object));
     const mcp = documents[0] as { $id?: string; $defs: Record<string, { input: object; result?: object }> };
     const references = documents.slice(1);
-    const durableSchemaValidator = (entry: CorpusCase) => createJsonSchemaValidator<unknown>({
-      $schema: "https://json-schema.org/draft/2020-12/schema",
-      ...mcp.$defs[entry.tool]![entry.member === "input" ? "input" : "result"]!,
-      $defs: mcp.$defs,
-    }, references);
+    const validatorCache = new Map<string, ReturnType<typeof createJsonSchemaValidator<unknown>>>();
+    const getDurableSchemaValidator = (entry: CorpusCase) => {
+      const cacheKey = `${entry.tool}:${entry.member}`;
+      let cached = validatorCache.get(cacheKey);
+      if (cached === undefined) {
+        cached = createJsonSchemaValidator<unknown>({
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          ...mcp.$defs[entry.tool]![entry.member === "input" ? "input" : "result"]!,
+          $defs: mcp.$defs,
+        }, references);
+        validatorCache.set(cacheKey, cached);
+      }
+      return cached;
+    };
 
     for (const entry of cases) {
       const { value, call } = materialize(entry);
-      const validator = durableSchemaValidator(entry);
+      const validator = getDurableSchemaValidator(entry);
       expect(validator.validate(value), `${entry.label} portable: ${JSON.stringify(validator.validate.errors)}`).toBe(entry.portable);
       const isSuccessOutput = entry.member === "output" && (value as { ok?: unknown }).ok === true;
       if (isSuccessOutput) {

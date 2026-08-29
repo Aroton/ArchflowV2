@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { buildSync } from "esbuild";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { parseTaskSlug } from "../../src/contracts/evidence.js";
@@ -35,15 +36,18 @@ const RETIRED_COMMANDS = ["build-request", "envelope", "decide", "commit", "stat
 beforeAll(async () => {
   bundleRoot = await mkdtemp(resolve(tmpdir(), "archflow-local-cli-"));
   localBundle = resolve(bundleRoot, "archflow-local.mjs");
-  const program = [
-    'import { build } from "esbuild";',
-    'const [root, outfile] = process.argv.slice(1);',
-    'await build({absWorkingDir:root,entryPoints:["src/local/main.ts"],outfile,bundle:true,platform:"node",format:"esm",target:"node24",banner:{js:\'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);\'}});',
-  ].join("");
-  const built = spawnSync(process.execPath, ["--input-type=module", "--eval", program, repositoryRoot, localBundle], {
-    cwd: repositoryRoot, encoding: "utf8", timeout: TIMEOUT,
+  buildSync({
+    absWorkingDir: repositoryRoot,
+    entryPoints: ["src/local/main.ts"],
+    outfile: localBundle,
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    target: "node24",
+    banner: {
+      js: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);',
+    },
   });
-  expect(built.status, built.stderr).toBe(0);
 }, TIMEOUT);
 
 afterAll(async () => { if (bundleRoot !== "") await rm(bundleRoot, { recursive: true, force: true }); });

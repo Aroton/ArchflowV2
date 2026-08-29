@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { buildSync } from "esbuild";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const TEST_TIMEOUT_MS = 30_000;
@@ -15,18 +16,18 @@ let localBundle = "";
 beforeAll(async () => {
   outputDirectory = await mkdtemp(resolve(tmpdir(), "archflow-local-integration-"));
   localBundle = resolve(outputDirectory, "archflow-local.mjs");
-  const program = [
-    'import { build } from "esbuild";',
-    'const [root, outfile] = process.argv.slice(1);',
-    'await build({absWorkingDir:root,entryPoints:["src/local/main.ts"],outfile,bundle:true,platform:"node",format:"esm",target:"node24",banner:{js:\'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);\'}});',
-  ].join("");
-  const built = spawnSync(process.execPath, ["--input-type=module", "--eval", program, repositoryRoot, localBundle], {
-    cwd: repositoryRoot,
-    encoding: "utf8",
-    timeout: TEST_TIMEOUT_MS,
+  buildSync({
+    absWorkingDir: repositoryRoot,
+    entryPoints: ["src/local/main.ts"],
+    outfile: localBundle,
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    target: "node24",
+    banner: {
+      js: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);',
+    },
   });
-  expect(built.error).toBeUndefined();
-  expect(built.status, built.stderr).toBe(0);
 }, TEST_TIMEOUT_MS);
 
 afterAll(async () => {

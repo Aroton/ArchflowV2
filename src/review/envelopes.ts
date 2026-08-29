@@ -246,13 +246,25 @@ function parseEvidenceId(value: unknown, field: "invocation_id" | "result_id"): 
   return value;
 }
 
+const sortedExpectedCache = new WeakMap<readonly string[], readonly string[]>();
+
+function getSortedExpected(expected: readonly string[]): readonly string[] {
+  let cached = sortedExpectedCache.get(expected);
+  if (cached === undefined) {
+    cached = Object.freeze([...expected].sort());
+    sortedExpectedCache.set(expected, cached);
+  }
+  return cached;
+}
+
 function exactFields(value: object, expected: readonly string[], label: string): void {
   const actual = Object.keys(value).sort();
-  const wanted = [...expected].sort();
+  const wanted = getSortedExpected(expected);
   if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
     throw new TypeError(`${label} must contain exactly ${wanted.join(", ")}`);
   }
 }
+
 
 function materialize<T>(value: T): T {
   assertPlainJson(value, "review envelope input");

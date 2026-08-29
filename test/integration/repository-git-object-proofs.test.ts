@@ -31,6 +31,16 @@ import {
   type SnapshotObservation,
 } from "../../src/state/implementation-manifest.js";
 
+const gitEnv: NodeJS.ProcessEnv = {
+  ...process.env,
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_SYSTEM: "/dev/null",
+  GIT_AUTHOR_NAME: "Test",
+  GIT_AUTHOR_EMAIL: "test@example.com",
+  GIT_COMMITTER_NAME: "Test",
+  GIT_COMMITTER_EMAIL: "test@example.com",
+};
+
 const roots: string[] = [];
 afterAll(() => roots.forEach((root) => rmSync(root, { recursive: true, force: true })));
 
@@ -46,14 +56,12 @@ describe("Git object proofs", () => {
   it("selects only the first child after an exact first-parent baseline", async () => {
     const root = mkdtempSync(join(tmpdir(), "archflow-first-parent-proof-"));
     roots.push(root);
-    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root });
-    execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: root });
-    execFileSync("git", ["config", "user.name", "Test"], { cwd: root });
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root, env: gitEnv });
     writeFileSync(join(root, "value.txt"), "root\n");
-    execFileSync("git", ["add", "."], { cwd: root });
-    execFileSync("git", ["commit", "-qm", "root"], { cwd: root });
+    execFileSync("git", ["add", "."], { cwd: root, env: gitEnv });
+    execFileSync("git", ["commit", "-qm", "root"], { cwd: root, env: gitEnv });
     writeFileSync(join(root, "value.txt"), "base\n");
-    execFileSync("git", ["commit", "-qam", "base"], { cwd: root });
+    execFileSync("git", ["commit", "-qam", "base"], { cwd: root, env: gitEnv });
     const baseline = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
     writeFileSync(join(root, "value.txt"), "candidate\n");
     execFileSync("git", ["commit", "-qam", "candidate"], { cwd: root });
@@ -77,15 +85,13 @@ describe("Git object proofs", () => {
   it("uses path conversion for regular bytes and no conversion for symlink target bytes", async () => {
     const root = mkdtempSync(join(tmpdir(), "archflow-git-proofs-"));
     roots.push(root);
-    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root });
-    execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: root });
-    execFileSync("git", ["config", "user.name", "Test"], { cwd: root });
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root, env: gitEnv });
     writeFileSync(join(root, ".gitattributes"), "*.txt text eol=lf\n");
     writeFileSync(join(root, "value.txt"), "a\r\nb\r\n");
     symlinkSync("value.txt", join(root, "link"));
-    execFileSync("git", ["add", "."], { cwd: root });
-    execFileSync("git", ["commit", "-qm", "base"], { cwd: root });
-    const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+    execFileSync("git", ["add", "."], { cwd: root, env: gitEnv });
+    execFileSync("git", ["commit", "-qm", "base"], { cwd: root, env: gitEnv });
+    const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, env: gitEnv, encoding: "utf8" }).trim();
     const runner = createGitRunner({ cwd: root });
 
     const regularBytes = new TextEncoder().encode("a\r\nb\r\n");
@@ -105,12 +111,10 @@ describe("Git object proofs", () => {
   it("authenticates a raw add and rejects forged identity and undeclared-change facts", async () => {
     const root = mkdtempSync(join(tmpdir(), "archflow-git-manifest-"));
     roots.push(root);
-    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root });
-    execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: root });
-    execFileSync("git", ["config", "user.name", "Test"], { cwd: root });
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root, env: gitEnv });
     writeFileSync(join(root, "base.txt"), "base\n");
-    execFileSync("git", ["add", "."], { cwd: root });
-    execFileSync("git", ["commit", "-qm", "base"], { cwd: root });
+    execFileSync("git", ["add", "."], { cwd: root, env: gitEnv });
+    execFileSync("git", ["commit", "-qm", "base"], { cwd: root, env: gitEnv });
     const taskId = parseTaskSlug("task-1");
     const phase = encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(11) });
     const context = { task_id: taskId, phase_instance: phase, operation: "verify-implementation" as never, attempt: parseSafeInteger(1) };
@@ -118,7 +122,7 @@ describe("Git object proofs", () => {
     const runnerResult = await discoverWorktree(createGitRunner({ cwd: root }), context);
     if (!runnerResult.ok) throw new Error("worktree discovery failed");
     const runner = runnerResult.value;
-    const baseCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim() as ImplementationOutputV1["base_commit"];
+    const baseCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, env: gitEnv, encoding: "utf8" }).trim() as ImplementationOutputV1["base_commit"];
     const path = parseRepositoryPathClaim("new-output.txt");
     const bytes = new TextEncoder().encode("new output\n");
     writeFileSync(join(root, path), bytes);
@@ -152,15 +156,13 @@ describe("Git object proofs", () => {
   it("uses converted blob size and retained base proof for a pure rename under autocrlf", async () => {
     const root = mkdtempSync(join(tmpdir(), "archflow-git-rename-"));
     roots.push(root);
-    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root });
-    execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: root });
-    execFileSync("git", ["config", "user.name", "Test"], { cwd: root });
-    execFileSync("git", ["config", "core.autocrlf", "true"], { cwd: root });
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root, env: gitEnv });
+    execFileSync("git", ["config", "core.autocrlf", "true"], { cwd: root, env: gitEnv });
     writeFileSync(join(root, ".gitattributes"), "*.txt text\n");
     const projectedBytes = new TextEncoder().encode("a\r\nb\r\n");
     writeFileSync(join(root, "old.txt"), projectedBytes);
-    execFileSync("git", ["add", "."], { cwd: root });
-    execFileSync("git", ["commit", "-qm", "base"], { cwd: root });
+    execFileSync("git", ["add", "."], { cwd: root, env: gitEnv });
+    execFileSync("git", ["commit", "-qm", "base"], { cwd: root, env: gitEnv });
 
     const taskId = parseTaskSlug("task-1");
     const phase = encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(11) });
@@ -169,7 +171,7 @@ describe("Git object proofs", () => {
     const runnerResult = await discoverWorktree(createGitRunner({ cwd: root }), context);
     if (!runnerResult.ok) throw new Error("worktree discovery failed");
     const runner = runnerResult.value;
-    const baseCommit = parseGitOid(execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim());
+    const baseCommit = parseGitOid(execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, env: gitEnv, encoding: "utf8" }).trim());
     const previousPath = parseRepositoryPathClaim("old.txt");
     const path = parseRepositoryPathClaim("new.txt");
     const tree = await readCommitTreeBlob(runner, baseCommit, previousPath);
@@ -208,19 +210,17 @@ describe("Git object proofs", () => {
     const facts = await verifyImplementationManifest(runner, artifact, context);
     expect(facts.snapshot_entries).toEqual([after, absent]);
     expect(facts.raw_payloads.size).toBe(0);
-    execFileSync("git", ["prune", "--expire=now"], { cwd: root });
+    execFileSync("git", ["prune", "--expire=now"], { cwd: root, env: gitEnv });
     expect(await readGitBlobBytes(runner, identity.oid)).toEqual(new TextEncoder().encode("a\nb\n"));
   });
 
   it("authenticates modified binary and symlink payloads plus deletion of a prior raw generation", async () => {
     const root = mkdtempSync(join(tmpdir(), "archflow-git-operations-"));
     roots.push(root);
-    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root });
-    execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: root });
-    execFileSync("git", ["config", "user.name", "Test"], { cwd: root });
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root, env: gitEnv });
     writeFileSync(join(root, "modify.bin"), new Uint8Array([0, 1, 2]));
-    execFileSync("git", ["add", "."], { cwd: root });
-    execFileSync("git", ["commit", "-qm", "base"], { cwd: root });
+    execFileSync("git", ["add", "."], { cwd: root, env: gitEnv });
+    execFileSync("git", ["commit", "-qm", "base"], { cwd: root, env: gitEnv });
 
     const taskId = parseTaskSlug("task-1");
     const phase = encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(11) });

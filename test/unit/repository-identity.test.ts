@@ -20,6 +20,7 @@ import {
 import {
   computeTaskIdentity,
   discoverWorktree,
+  isRootBoundGitRunner,
   resolveRepositoryIdentity,
   verifyRepositoryIdentity,
   type RepositoryIdentity,
@@ -422,3 +423,78 @@ describe.skipIf(!hasGit)("identity comparison and task identity", () => {
     expect(computeTaskIdentity(alpha, other).digest).not.toBe(identity.digest);
   });
 });
+
+describe.skipIf(!hasGit)("in-memory memoization", () => {
+  it("memoizes resolveRepositoryIdentity for the same HEAD commit", async () => {
+    const repository = singleRootRepository("memo-ident");
+    const environment = await environmentAt(repository);
+    const runner = await discoverAt(repository);
+
+    const first = await resolveRepositoryIdentity(runner, environment, context);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    let revListCount = 0;
+    const trackingRunner: RootBoundGitRunner = {
+      ...runner,
+      runText: async (spec) => {
+        if (spec.argv.includes("rev-list")) {
+          revListCount += 1;
+        }
+        return runner.runText(spec);
+      },
+    };
+
+    const second = await resolveRepositoryIdentity(trackingRunner, environment, context);
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+
+    expect(second.value).toBe(first.value);
+    expect(revListCount).toBe(0);
+  });
+
+  it("memoizes discoverWorktree for an already bound runner and for cached cwd", async () => {
+    const repository = singleRootRepository("memo-discover");
+    const runner = await discoverAt(repository);
+    expect(isRootBoundGitRunner(runner)).toBe(true);
+
+    let runCount = 0;
+    const trackingRunner: RootBoundGitRunner = {
+      ...runner,
+      runText: async (spec) => {
+        runCount += 1;
+        return runner.runText(spec);
+      },
+    };
+
+    const rediscovered = await discoverWorktree(trackingRunner, context);
+    expect(rediscovered.ok).toBe(true);
+    expect(runCount).toBe(0);
+
+    const freshRunner = createGitRunner({ cwd: repository });
+    const freshDiscovered = await discoverWorktree(freshRunner, context);
+    expect(freshDiscovered.ok).toBe(true);
+    if (freshDiscovered.ok) {
+      expect(freshDiscovered.value.location.worktreeRoot).toBe(repository);
+    }
+  });
+
+  it("re-evaluates identity when HEAD moves to a new commit", async () => {
+    const repository = singleRootRepository("memo-head-move");
+    const environment = await environmentAt(repository);
+    const runner = await discoverAt(repository);
+
+    const initial = await resolveRepositoryIdentity(runner, environment, context);
+    expect(initial.ok).toBe(true);
+
+    commitFile(repository, "next.txt", "second\n", "second commit");
+
+    const updated = await resolveRepositoryIdentity(runner, environment, context);
+    expect(updated.ok).toBe(true);
+    if (!initial.ok || !updated.ok) return;
+
+    expect(updated.value.digest).toBe(initial.value.digest);
+    expect(updated.value.root_commits).toStrictEqual(initial.value.root_commits);
+  });
+});
+

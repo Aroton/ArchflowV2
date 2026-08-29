@@ -291,8 +291,10 @@ export function parseReviewEvidence(value: unknown): ReviewEvidence {
   return parsed as ReviewEvidence;
 }
 
+const referencedReviewWrapperSchema = z.object({ evidence_digest: digest, evidence: z.unknown() }).strict();
 export function parseReferencedReviewEvidence(value: unknown): ReferencedEvidence<ReviewEvidence> {
   assertPlainJson(value, "referenced review evidence");
-  const wrapper = z.object({ evidence_digest: digest, evidence: z.unknown() }).strict().parse(value);
+  const wrapper = referencedReviewWrapperSchema.parse(value);
   return { evidence_digest: wrapper.evidence_digest, evidence: parseReviewEvidence(wrapper.evidence) };
 }
+

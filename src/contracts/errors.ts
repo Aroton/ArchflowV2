@@ -146,9 +146,11 @@ function constructError<R extends Readonly<Record<string, ErrorDefinition<any, a
 export function createProjectError<K extends ProjectErrorCode>(code: K, parameters: z.input<(typeof PROJECT_PARAMETER_SCHEMAS)[K]>): ErrorValue<ProjectErrorDefinitionByCode, K> { return constructError(PROJECT_ERROR_DEFINITIONS, code, parameters); }
 export function createProtocolError<K extends ProtocolErrorCode>(code: K, parameters: z.input<(typeof PROTOCOL_PARAMETER_SCHEMAS)[K]>): ErrorValue<ProtocolErrorDefinitionByCode, K> { return constructError(PROTOCOL_ERROR_DEFINITIONS, code, parameters); }
 
+const errorShellSchema = object({ schema_version: z.literal("1"), code: z.string(), owner: z.string(), retryable: z.boolean(), diagnostic: object({ template_id: z.string(), parameters: z.record(z.string(), z.unknown()) }), next_action: z.string() });
+
 function parseSerializedError<R extends Readonly<Record<string, ErrorDefinition<any, any, any, any, any>>>>(registry: R, value: unknown, label: string): ErrorValue<R, keyof R> {
   assertPlainJson(value, label);
-  const shell = object({ schema_version: z.literal("1"), code: z.string(), owner: z.string(), retryable: z.boolean(), diagnostic: object({ template_id: z.string(), parameters: z.record(z.string(), z.unknown()) }), next_action: z.string() }).parse(value);
+  const shell = errorShellSchema.parse(value);
   if (!Object.hasOwn(registry, shell.code)) throw new TypeError(`${label}: unknown code`);
   const code = shell.code as keyof R;
   const expected = constructError(registry, code, shell.diagnostic.parameters);

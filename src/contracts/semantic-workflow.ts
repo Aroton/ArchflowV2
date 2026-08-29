@@ -428,6 +428,8 @@ export const semanticSuccessV1Schema = z.object({ schema_version: z.literal("1")
 export const semanticFailureV1Schema = z.object({ schema_version: z.literal("1"), ok: z.literal(false), error: semanticErrorSummaryV1Schema, view: workflowViewV1Schema.optional() }).strict() as unknown as z.ZodType<SemanticFailureV1>;
 export const semanticResultV1Schema = z.union([semanticSuccessV1Schema, semanticFailureV1Schema]) as unknown as z.ZodType<SemanticResultV1>;
 
+
+
 const humanRevisionDeclarationV1Schema = z.object({ classification: z.enum(["simple", "significant"]), rationale: boundedText, user_override: z.object({ agent_classification: z.enum(["simple", "significant"]), rationale: boundedText }).strict().optional() }).strict().superRefine((revision, context) => {
   if (revision.user_override?.agent_classification === revision.classification) context.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
 });

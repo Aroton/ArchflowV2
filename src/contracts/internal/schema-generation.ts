@@ -80,6 +80,21 @@ function requireEmitted(
   return emitted;
 }
 
+function rewriteLocalPointers(obj: unknown, currentDocumentId: string): unknown {
+  if (typeof obj !== "object" || obj === null) return obj;
+  if (Array.isArray(obj)) return obj.map((item) => rewriteLocalPointers(item, currentDocumentId));
+  const res: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (k === "$ref" && typeof v === "string") {
+      const prefix = `${currentDocumentId}#/$defs/`;
+      res[k] = v.startsWith(prefix) ? `#/$defs/${v.slice(prefix.length)}` : v;
+    } else {
+      res[k] = rewriteLocalPointers(v, currentDocumentId);
+    }
+  }
+  return res;
+}
+
 /**
  * Renders every migrated document to its committed serialization: draft 2020-12, `$schema` then
  * `$id` then `$defs` then the root body, 2-space indent, trailing newline. Key order inside each
@@ -101,24 +116,26 @@ export function renderGeneratedSchemaFiles(): Readonly<Record<string, string>> {
     }
   }
 
-  const resolveUri = (currentFile: string) => (registryId: string): string => {
+  const resolveUri = (registryId: string): string => {
     const separator = registryId.indexOf("#");
     const file = separator === -1 ? registryId : registryId.slice(0, separator);
     const documentId = documentIds.get(file);
     if (documentId === undefined) throw new Error(`unregistered schema document in reference: ${registryId}`);
     if (separator === -1) return documentId;
     const pointer = `#/$defs/${registryId.slice(separator + 1)}`;
-    return file === currentFile ? pointer : `${documentId}${pointer}`;
+    return `${documentId}${pointer}`;
   };
+
+  const { schemas } = z.toJSONSchema(registry, { target: "draft-2020-12", uri: resolveUri });
 
   const rendered: Record<string, string> = {};
   for (const document of documents) {
     if (!document.migrated) continue;
-    const { schemas } = z.toJSONSchema(registry, { target: "draft-2020-12", uri: resolveUri(document.file) });
     const defs: Record<string, unknown> = {};
     for (const name of Object.keys(document.defs ?? {})) {
       const override = document.overrides?.[name];
-      const body = override ?? stripEmissionEnvelope(requireEmitted(schemas, `${document.file}#${name}`));
+      const rawBody = override ?? stripEmissionEnvelope(requireEmitted(schemas, `${document.file}#${name}`));
+      const body = rewriteLocalPointers(rawBody, document.id);
       const segments = name.split("/");
       let target = defs;
       for (const segment of segments.slice(0, -1)) {
@@ -129,11 +146,13 @@ export function renderGeneratedSchemaFiles(): Readonly<Record<string, string>> {
       }
       target[segments[segments.length - 1] as string] = body;
     }
+    const rawRoot = stripEmissionEnvelope(requireEmitted(schemas, document.file));
+    const rootBody = rewriteLocalPointers(rawRoot, document.id) as Record<string, unknown>;
     const assembled = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: document.id,
       ...(Object.keys(defs).length > 0 ? { $defs: defs } : {}),
-      ...stripEmissionEnvelope(requireEmitted(schemas, document.file)),
+      ...rootBody,
     };
     rendered[`${document.file}.schema.json`] = `${JSON.stringify(assembled, null, 2)}\n`;
   }

@@ -59,16 +59,24 @@ function supportedRuleSource(id: string, override: Partial<{
   ].join("\n");
 }
 
+const GIT_ENV: NodeJS.ProcessEnv = {
+  ...process.env,
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_SYSTEM: "/dev/null",
+  GIT_AUTHOR_NAME: "ArchFlow Test",
+  GIT_AUTHOR_EMAIL: "test@example.invalid",
+  GIT_COMMITTER_NAME: "ArchFlow Test",
+  GIT_COMMITTER_EMAIL: "test@example.invalid",
+};
+
 function git(root: string, ...argv: string[]): string {
-  return execFileSync("git", argv, { cwd: root, encoding: "utf8" }).trim();
+  return execFileSync("git", argv, { cwd: root, env: GIT_ENV, encoding: "utf8" }).trim();
 }
 
 async function repository(files: Readonly<Record<string, string>>) {
   const root = mkdtempSync(join(tmpdir(), "archflow-state-constitution-"));
   roots.push(root);
   git(root, "init", "-q");
-  git(root, "config", "user.email", "test@example.invalid");
-  git(root, "config", "user.name", "ArchFlow Test");
   mkdirSync(join(root, ".archflow", "constitution"), { recursive: true });
   for (const [name, source] of Object.entries(files)) {
     writeFileSync(join(root, ".archflow", "constitution", name), source);

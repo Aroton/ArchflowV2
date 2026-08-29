@@ -8,7 +8,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -135,11 +135,15 @@ export async function createTaskWorkspace(options: TaskWorkspaceOptions): Promis
     if (options.configBytes !== undefined) {
       writeFileSync(join(root, ".archflow", "config.yaml"), options.configBytes);
     }
-    for (const [filename, bytes] of Object.entries(options.constitutionBytes ?? {})) {
-      if (!/^[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u.test(filename)) {
-        throw new TypeError(`invalid constitution fixture filename: ${filename}`);
+    if (options.constitutionBytes !== undefined) {
+      rmSync(join(root, ".archflow", "constitution"), { recursive: true, force: true });
+      mkdirSync(join(root, ".archflow", "constitution"), { recursive: true });
+      for (const [filename, bytes] of Object.entries(options.constitutionBytes)) {
+        if (!/^[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u.test(filename)) {
+          throw new TypeError(`invalid constitution fixture filename: ${filename}`);
+        }
+        writeFileSync(join(root, ".archflow", "constitution", filename), bytes);
       }
-      writeFileSync(join(root, ".archflow", "constitution", filename), bytes);
     }
     git(root, "add", "--", ".gitattributes", ".archflow/workflow.yaml", ".archflow/constitution", ".archflow/config.yaml");
     git(root, "commit", "-q", "-m", "approve policy");

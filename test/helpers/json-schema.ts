@@ -80,10 +80,7 @@ function hasMcpSemantics(_enabled: true, data: Record<string, unknown>): boolean
   return true;
 }
 
-export function createJsonSchemaValidator<T>(
-  schema: AnySchema,
-  referencedSchemas: readonly AnySchema[] = []
-): JsonSchemaValidator<T> {
+function createAjvEngine(): Ajv2020 {
   const ajv = new Ajv2020({
     strict: true,
     allErrors: true,
@@ -140,6 +137,26 @@ export function createJsonSchemaValidator<T>(
     errors: false,
     validate: hasMcpSemantics
   });
+  return ajv;
+}
+
+const validatorCache = new Map<string, JsonSchemaValidator<unknown>>();
+
+function schemaCacheKey(schema: AnySchema, referencedSchemas: readonly AnySchema[]): string {
+  const schemaId = typeof schema === "object" && schema !== null && "$id" in schema ? String(schema.$id) : JSON.stringify(schema);
+  const refIds = referencedSchemas.map((s) => (typeof s === "object" && s !== null && "$id" in s ? String(s.$id) : JSON.stringify(s))).join(",");
+  return `${schemaId}|refs:${refIds}`;
+}
+
+export function createJsonSchemaValidator<T>(
+  schema: AnySchema,
+  referencedSchemas: readonly AnySchema[] = []
+): JsonSchemaValidator<T> {
+  const key = schemaCacheKey(schema, referencedSchemas);
+  const cached = validatorCache.get(key);
+  if (cached !== undefined) return cached as JsonSchemaValidator<T>;
+
+  const ajv = createAjvEngine();
   for (const referencedSchema of referencedSchemas) ajv.addSchema(referencedSchema);
   const validate = ajv.compile<T>(schema);
   const assert = (value: unknown, label = "value"): T => {
@@ -147,7 +164,9 @@ export function createJsonSchemaValidator<T>(
     if (!validate(value)) throw new ContractValidationError(`${label}: ${formatAjvErrors(validate.errors)}`, validate.errors);
     return value as unknown as T;
   };
-  return { validate, assert };
+  const validator: JsonSchemaValidator<T> = { validate, assert };
+  validatorCache.set(key, validator as JsonSchemaValidator<unknown>);
+  return validator;
 }
 
 /**

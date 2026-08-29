@@ -67,6 +67,15 @@ function codexAuthenticated(): boolean {
   return successLines.length >= 1;
 }
 
+let realHostsAvailableMemo: boolean | undefined;
+let realHostsAvailableMemoPath: string | undefined;
+
+/** Resets the real-hosts probe cache for testing. */
+export function resetRealHostsCacheForTesting(): void {
+  realHostsAvailableMemo = undefined;
+  realHostsAvailableMemoPath = undefined;
+}
+
 /**
  * Synchronously checks the two required real hosts and their authentication state.
  *
@@ -75,16 +84,30 @@ function codexAuthenticated(): boolean {
  */
 export function realHostsAvailable(): boolean {
   if (!realHostsEnabled()) return false;
+  const currentPath = process.env.PATH ?? "";
+  if (realHostsAvailableMemoPath === currentPath && realHostsAvailableMemo !== undefined) {
+    return realHostsAvailableMemo;
+  }
   // npm/npx prepend package bins to PATH. A stale host shim there must not shadow the developer's
   // installed first-party CLI during an explicitly opted-in run. The sanitized PATH intentionally
   // remains installed so production dispatch uses the same binaries the probe approved.
   sanitizePathForRealHosts();
+  const probePath = process.env.PATH ?? "";
   try {
     output("claude", ["--version"]);
-    if (!claudeAuthenticated()) return false;
+    if (!claudeAuthenticated()) {
+      realHostsAvailableMemoPath = probePath;
+      realHostsAvailableMemo = false;
+      return false;
+    }
     output("codex", ["--version"]);
-    return codexAuthenticated();
+    const available = codexAuthenticated();
+    realHostsAvailableMemoPath = probePath;
+    realHostsAvailableMemo = available;
+    return available;
   } catch {
+    realHostsAvailableMemoPath = probePath;
+    realHostsAvailableMemo = false;
     return false;
   }
 }

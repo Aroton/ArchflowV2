@@ -364,14 +364,22 @@ function successFor<K extends ToolName>(call: Extract<ParsedToolCall, { name: K 
   if (call.name === "archflow_waiver") { const input = call.input as ParsedToolInput<"archflow_waiver">; const result = parsed as WaiverSuccess; if (result.origin_gate_id !== input.origin.origin_gate_id || result.task_id !== input.task_id || result.rule_id !== input.origin.rule.rule_id || result.rule_version !== input.origin.rule.rule_version || result.subject_digest !== input.origin.subject_digest || result.current_evidence_set_digest !== input.origin.current_evidence_set_digest || !isDeepStrictEqual(result.scope, input.origin.scope)) throw new TypeError("waiver result mismatch"); }
   return parsed;
 }
+
 export type StructurallyValidProjectResult<K extends ToolName> = ProjectResult<ToolSuccess<K>> & { readonly [structuralResultBrand]: K };
+
+
+const projectFailureEnvelopeSchema = z.object({ schema_version: z.literal("1"), ok: z.literal(false), error: z.unknown() }).strict();
+const projectResultBaseEnvelopeSchema = z.object({ schema_version: z.literal("1"), ok: z.boolean() }).passthrough();
+const projectSuccessEnvelopeSchema = z.object({ schema_version: z.literal("1"), ok: z.literal(true), value: z.unknown() }).strict();
+
+
 function projectFailureForTool<K extends ToolName>(
   name: K,
   value: unknown,
   label: string
 ): Extract<ProjectResult<ToolSuccess<K>>, { readonly ok: false }> {
   assertPlainJson(value, label);
-  const failure = z.object({ schema_version: z.literal("1"), ok: z.literal(false), error: z.unknown() }).strict().parse(value);
+  const failure = projectFailureEnvelopeSchema.parse(value);
   const error = parseProjectError(failure.error);
   const parameters = error.diagnostic.parameters;
   if (Object.hasOwn(parameters, "tool") && Reflect.get(parameters, "tool") !== name) {
@@ -379,7 +387,7 @@ function projectFailureForTool<K extends ToolName>(
   }
   return { schema_version: "1", ok: false, error };
 }
-export function validateProjectResultStructure<K extends ToolName>(call: Extract<ParsedToolCall, { name: K }>, value: unknown): StructurallyValidProjectResult<K> { if (!parsedCalls.has(call)) throw new TypeError("an authentic parsed tool call is required"); assertPlainJson(value, `${call.name} result`); const base = z.object({ schema_version: z.literal("1"), ok: z.boolean() }).passthrough().parse(value); const result: ProjectResult<ToolSuccess<K>> = base.ok ? (() => { const e = z.object({ schema_version: z.literal("1"), ok: z.literal(true), value: z.unknown() }).strict().parse(value); return { ...e, value: successFor(call, e.value) }; })() : projectFailureForTool(call.name, value, `${call.name} result`); const branded = Object.freeze({ ...result, [structuralResultBrand]: call.name }) as StructurallyValidProjectResult<K>; structuralResults.add(branded); return branded; }
+export function validateProjectResultStructure<K extends ToolName>(call: Extract<ParsedToolCall, { name: K }>, value: unknown): StructurallyValidProjectResult<K> { if (!parsedCalls.has(call)) throw new TypeError("an authentic parsed tool call is required"); assertPlainJson(value, `${call.name} result`); const base = projectResultBaseEnvelopeSchema.parse(value); const result: ProjectResult<ToolSuccess<K>> = base.ok ? (() => { const e = projectSuccessEnvelopeSchema.parse(value); return { ...e, value: successFor(call, e.value) }; })() : projectFailureForTool(call.name, value, `${call.name} result`); const branded = Object.freeze({ ...result, [structuralResultBrand]: call.name }) as StructurallyValidProjectResult<K>; structuralResults.add(branded); return branded; }
 export function validateProjectFailureStructure<K extends ToolName>(name: K, value: unknown): StructurallyValidProjectResult<K> {
   if (!(TOOL_NAMES as readonly string[]).includes(name)) throw new TypeError("unknown tool");
   const failure = projectFailureForTool(name, value, `${name} failure result`);

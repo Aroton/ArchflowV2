@@ -17,21 +17,29 @@ import {
   type ResolvedConstitution,
 } from "../../src/state/constitution.js";
 
+const GIT_ENV: NodeJS.ProcessEnv = {
+  ...process.env,
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_SYSTEM: "/dev/null",
+  GIT_AUTHOR_NAME: "ArchFlow Test",
+  GIT_AUTHOR_EMAIL: "test@example.invalid",
+  GIT_COMMITTER_NAME: "ArchFlow Test",
+  GIT_COMMITTER_EMAIL: "test@example.invalid",
+};
+
 /** Creates a real commit-tree-backed constitution capability for focused service tests. */
 export async function resolvedConstitutionFixture(
   files: Readonly<Record<string, string>>,
 ): Promise<ResolvedConstitution> {
   const root = mkdtempSync(join(tmpdir(), "archflow-resolved-constitution-"));
   try {
-    execFileSync("git", ["init", "-q"], { cwd: root });
-    execFileSync("git", ["config", "user.email", "test@example.invalid"], { cwd: root });
-    execFileSync("git", ["config", "user.name", "ArchFlow Test"], { cwd: root });
+    execFileSync("git", ["init", "-q"], { cwd: root, env: GIT_ENV });
     mkdirSync(join(root, ".archflow", "constitution"), { recursive: true });
     for (const [name, source] of Object.entries(files)) {
       writeFileSync(join(root, ".archflow", "constitution", name), source);
     }
-    execFileSync("git", ["add", "."], { cwd: root });
-    execFileSync("git", ["commit", "-qm", "constitution fixture"], { cwd: root });
+    execFileSync("git", ["add", "."], { cwd: root, env: GIT_ENV });
+    execFileSync("git", ["commit", "-qm", "constitution fixture"], { cwd: root, env: GIT_ENV });
     const context = {
       task_id: parseTaskSlug("constitution-fixture"),
       phase_instance: parsePhaseInstanceId("phase-impl-14"),
@@ -43,7 +51,7 @@ export async function resolvedConstitutionFixture(
     const commit = parseGitOid(execFileSync(
       "git",
       ["rev-parse", "HEAD"],
-      { cwd: root, encoding: "utf8" },
+      { cwd: root, env: GIT_ENV, encoding: "utf8" },
     ).trim());
     const resolved = await resolvePinnedConstitution(runner.value, commit, context);
     if (!resolved.ok) throw new Error(resolved.error.code);

@@ -54,6 +54,13 @@ const pathSegmentSafe = <T extends z.ZodType<string>>(schema: T): T =>
     .refine((value) => !isReservedDeviceName(value), "must not be a reserved Windows device name")
     .refine((value) => !endsWithDotOrSpace(value), "must not end with a dot or a space") as unknown as T;
 
+const SHA256_HEX_REGEX = /^[0-9a-f]{64}$/u;
+const SAFE_ID_REGEX = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
+const PATH_SAFE_ID_BASE_REGEX = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
+const TASK_SLUG_BASE_REGEX = /^[a-z0-9][a-z0-9._-]{0,63}$/u;
+const SAFE_CODE_REGEX = /^[a-z0-9][a-z0-9_-]{0,63}$/u;
+const SAFE_VERSION_REGEX = /^[A-Za-z0-9.-]{1,64}$/u;
+
 export const sha256DigestV1Schema = z.string().regex(/^[0-9a-f]{64}$/u);
 export const safeIdV1Schema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
 export const pathSafeIdV1Schema = pathSegmentSafe(z.string().regex(/^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\.[^/]*)?$)(?!.*[. ]$)[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u)) as unknown as z.ZodType<PathSafeId>;
@@ -72,36 +79,71 @@ export const safeVersionV1Schema = z.string().regex(/^[A-Za-z0-9.-]{1,64}$/u);
 export const safeIntegerV1Schema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 
 export function parseSha256Digest(value: unknown): Sha256Digest {
+  if (typeof value === "string" && value.length === 64 && SHA256_HEX_REGEX.test(value)) {
+    return value as Sha256Digest;
+  }
   assertPlainJson(value, "SHA-256 digest");
   return sha256DigestV1Schema.parse(value) as Sha256Digest;
 }
 
 export function parseSafeId(value: unknown): SafeId {
+  if (typeof value === "string" && value.length >= 1 && value.length <= 128 && SAFE_ID_REGEX.test(value)) {
+    return value as SafeId;
+  }
   assertPlainJson(value, "safe identifier");
   return safeIdV1Schema.parse(value) as SafeId;
 }
 
 export function parsePathSafeId(value: unknown): PathSafeId {
+  if (
+    typeof value === "string" &&
+    value.length >= 1 &&
+    value.length <= 128 &&
+    PATH_SAFE_ID_BASE_REGEX.test(value) &&
+    !RESERVED_DEVICE_NAME.test(value) &&
+    !endsWithDotOrSpace(value)
+  ) {
+    return value as PathSafeId;
+  }
   assertPlainJson(value, "path-safe identifier");
   return pathSafeIdV1Schema.parse(value);
 }
 
 export function parseTaskSlug(value: unknown): TaskSlug {
+  if (
+    typeof value === "string" &&
+    value.length >= 1 &&
+    value.length <= 64 &&
+    TASK_SLUG_BASE_REGEX.test(value) &&
+    !RESERVED_DEVICE_NAME.test(value) &&
+    !endsWithDotOrSpace(value)
+  ) {
+    return value as TaskSlug;
+  }
   assertPlainJson(value, "task slug");
   return taskSlugV1Schema.parse(value);
 }
 
 export function parseSafeCode(value: unknown): SafeCode {
+  if (typeof value === "string" && value.length >= 1 && value.length <= 64 && SAFE_CODE_REGEX.test(value)) {
+    return value as SafeCode;
+  }
   assertPlainJson(value, "safe code");
   return safeCodeV1Schema.parse(value) as SafeCode;
 }
 
 export function parseSafeVersion(value: unknown): SafeVersion {
+  if (typeof value === "string" && value.length >= 1 && value.length <= 64 && SAFE_VERSION_REGEX.test(value)) {
+    return value as SafeVersion;
+  }
   assertPlainJson(value, "safe version");
   return safeVersionV1Schema.parse(value) as SafeVersion;
 }
 
 export function parseSafeInteger(value: unknown): SafeInteger {
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER) {
+    return value as SafeInteger;
+  }
   assertPlainJson(value, "safe integer");
   return safeIntegerV1Schema.parse(value) as SafeInteger;
 }

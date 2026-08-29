@@ -35980,16 +35980,22 @@ function inspect(value, path2, ancestors) {
   try {
     if (isArray) {
       const array2 = object3;
-      const expectedKeys = /* @__PURE__ */ new Set(["length", ...Array.from({ length: array2.length }, (_, index) => String(index))]);
+      const len = array2.length;
       for (const key of keys) {
-        if (typeof key !== "string" || !expectedKeys.has(key)) fail("arrays may only contain indexed elements", path2);
+        if (typeof key !== "string") fail("arrays may only contain indexed elements", path2);
+        if (key === "length") continue;
+        const num = Number(key);
+        if (!/^(?:0|[1-9]\d*)$/u.test(key) || num >= len) {
+          fail("arrays may only contain indexed elements", path2);
+        }
       }
-      for (let index = 0; index < array2.length; index += 1) {
+      for (let index = 0; index < len; index += 1) {
+        const indexStr = String(index);
         if (!Object.prototype.hasOwnProperty.call(array2, index)) fail("sparse array holes are not JSON values", `${path2}[${index}]`);
-        const descriptor = Object.getOwnPropertyDescriptor(array2, String(index));
-        if (descriptor === void 0 || !("value" in descriptor)) fail("accessor properties are not JSON values", `${path2}[${index}]`);
-        inspect(descriptor.value, `${path2}[${index}]`, ancestors);
-        assertDescriptorStable(array2, String(index), descriptor, `${path2}[${index}]`);
+        const descriptor = Object.getOwnPropertyDescriptor(array2, indexStr);
+        if (descriptor === void 0 || !("value" in descriptor)) fail("accessor properties are not JSON values", `${path2}[${indexStr}]`);
+        inspect(descriptor.value, `${path2}[${indexStr}]`, ancestors);
+        assertDescriptorStable(array2, indexStr, descriptor, `${path2}[${indexStr}]`);
       }
     } else {
       for (const key of keys) {
@@ -36011,6 +36017,11 @@ function inspect(value, path2, ancestors) {
   }
 }
 function assertPlainJson(value, label = "value") {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) fail("non-finite numbers are not JSON values", label);
+    return;
+  }
   inspect(value, label, /* @__PURE__ */ new WeakSet());
 }
 
@@ -36127,6 +36138,11 @@ var RESERVED_DEVICE_NAME = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.[^/]*)?$/
 var isReservedDeviceName = (component) => RESERVED_DEVICE_NAME.test(component);
 var endsWithDotOrSpace = (component) => /[. ]$/u.test(component);
 var pathSegmentSafe = (schema) => schema.refine((value) => !isReservedDeviceName(value), "must not be a reserved Windows device name").refine((value) => !endsWithDotOrSpace(value), "must not end with a dot or a space");
+var SHA256_HEX_REGEX = /^[0-9a-f]{64}$/u;
+var SAFE_ID_REGEX = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
+var PATH_SAFE_ID_BASE_REGEX = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
+var TASK_SLUG_BASE_REGEX = /^[a-z0-9][a-z0-9._-]{0,63}$/u;
+var SAFE_CODE_REGEX = /^[a-z0-9][a-z0-9_-]{0,63}$/u;
 var sha256DigestV1Schema = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var safeIdV1Schema = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
 var pathSafeIdV1Schema = pathSegmentSafe(external_exports.string().regex(/^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\.[^/]*)?$)(?!.*[. ]$)[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u));
@@ -36136,26 +36152,44 @@ var safeCodeV1Schema = external_exports.string().regex(/^[a-z0-9][a-z0-9_-]{0,63
 var safeVersionV1Schema = external_exports.string().regex(/^[A-Za-z0-9.-]{1,64}$/u);
 var safeIntegerV1Schema = external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 function parseSha256Digest(value) {
+  if (typeof value === "string" && value.length === 64 && SHA256_HEX_REGEX.test(value)) {
+    return value;
+  }
   assertPlainJson(value, "SHA-256 digest");
   return sha256DigestV1Schema.parse(value);
 }
 function parseSafeId(value) {
+  if (typeof value === "string" && value.length >= 1 && value.length <= 128 && SAFE_ID_REGEX.test(value)) {
+    return value;
+  }
   assertPlainJson(value, "safe identifier");
   return safeIdV1Schema.parse(value);
 }
 function parsePathSafeId(value) {
+  if (typeof value === "string" && value.length >= 1 && value.length <= 128 && PATH_SAFE_ID_BASE_REGEX.test(value) && !RESERVED_DEVICE_NAME.test(value) && !endsWithDotOrSpace(value)) {
+    return value;
+  }
   assertPlainJson(value, "path-safe identifier");
   return pathSafeIdV1Schema.parse(value);
 }
 function parseTaskSlug(value) {
+  if (typeof value === "string" && value.length >= 1 && value.length <= 64 && TASK_SLUG_BASE_REGEX.test(value) && !RESERVED_DEVICE_NAME.test(value) && !endsWithDotOrSpace(value)) {
+    return value;
+  }
   assertPlainJson(value, "task slug");
   return taskSlugV1Schema.parse(value);
 }
 function parseSafeCode(value) {
+  if (typeof value === "string" && value.length >= 1 && value.length <= 64 && SAFE_CODE_REGEX.test(value)) {
+    return value;
+  }
   assertPlainJson(value, "safe code");
   return safeCodeV1Schema.parse(value);
 }
 function parseSafeInteger(value) {
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER) {
+    return value;
+  }
   assertPlainJson(value, "safe integer");
   return safeIntegerV1Schema.parse(value);
 }
@@ -36234,6 +36268,13 @@ var phaseInstanceIdV1Schema = external_exports.string().regex(/^(?:prd|design|ph
   }
 });
 function parsePhaseInstanceId(value) {
+  if (typeof value === "string") {
+    try {
+      decodePhaseInstance(value);
+      return value;
+    } catch {
+    }
+  }
   assertPlainJson(value, "phase instance id");
   return phaseInstanceIdV1Schema.parse(value);
 }
@@ -36295,13 +36336,20 @@ import { isDeepStrictEqual } from "node:util";
 // src/contracts/canonical.ts
 import { createHash } from "node:crypto";
 var GIT_TREE_MODES = ["040000", "100644", "100755", "120000", "160000"];
+var GIT_OID_REGEX = /^[0-9a-f]{40}$/u;
 var gitOidV1Schema = external_exports.string().regex(/^[0-9a-f]{40}$/u);
 var gitTreeModeV1Schema = external_exports.enum(GIT_TREE_MODES);
 function parseGitOid(value) {
+  if (typeof value === "string" && value.length === 40 && GIT_OID_REGEX.test(value)) {
+    return value;
+  }
   assertPlainJson(value, "git object name");
   return gitOidV1Schema.parse(value);
 }
 function parseGitTreeMode(value) {
+  if (value === "040000" || value === "100644" || value === "100755" || value === "120000" || value === "160000") {
+    return value;
+  }
   assertPlainJson(value, "git tree mode");
   return gitTreeModeV1Schema.parse(value);
 }
@@ -36314,17 +36362,37 @@ function ordinal(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 function sortCanonical(value) {
-  if (Array.isArray(value)) return value.map(sortCanonical);
-  if (value !== null && typeof value === "object") {
+  if (typeof value === "string" || typeof value === "boolean" || value === null) {
+    return value;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new TypeError("canonical JSON cannot contain a non-finite number");
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    const len = value.length;
+    const result = new Array(len);
+    for (let i = 0; i < len; i++) {
+      result[i] = sortCanonical(value[i]);
+    }
+    return result;
+  }
+  if (typeof value === "object") {
     const record3 = value;
-    return Object.fromEntries(
-      Object.keys(record3).sort(ordinal).map((key) => [key, sortCanonical(record3[key])])
-    );
+    const keys = Object.keys(record3);
+    if (keys.length > 1) {
+      keys.sort(ordinal);
+    }
+    const sorted = {};
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      sorted[key] = sortCanonical(record3[key]);
+    }
+    return sorted;
   }
   if (value === void 0) throw new TypeError("canonical JSON cannot contain undefined");
-  if (typeof value === "number" && !Number.isFinite(value)) {
-    throw new TypeError("canonical JSON cannot contain a non-finite number");
-  }
   return value;
 }
 function canonicalJsonBytes(value) {
@@ -36335,18 +36403,24 @@ function sha256Bytes(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 function canonicalJsonDigest(value) {
-  return sha256Bytes(canonicalJsonBytes(value));
+  return createHash("sha256").update(`${JSON.stringify(sortCanonical(value), null, 2)}
+`, "utf8").digest("hex");
 }
 function gitBlobOid(content) {
-  const header = Buffer.from(`blob ${String(content.byteLength)}\0`, "ascii");
-  return createHash("sha1").update(header).update(content).digest("hex");
+  return createHash("sha1").update(`blob ${String(content.byteLength)}\0`, "ascii").update(content).digest("hex");
 }
 function repositoryCandidateDigest(absoluteCwd) {
-  return sha256Bytes(encoder.encode(`archflow:repository-candidate:v1:${absoluteCwd}`));
+  return createHash("sha256").update(`archflow:repository-candidate:v1:${absoluteCwd}`, "utf8").digest("hex");
 }
 function canonicalDocument(value) {
   const bytes = canonicalJsonBytes(value);
   return Object.freeze({ bytes, value, digest: sha256Bytes(bytes) });
+}
+function bytesEqual(a, b) {
+  if (a.byteLength !== b.byteLength) return false;
+  return Buffer.from(a.buffer, a.byteOffset, a.byteLength).equals(
+    Buffer.from(b.buffer, b.byteOffset, b.byteLength)
+  );
 }
 function parseCanonicalDocument(bytes, label = "JSON document") {
   if (!(bytes instanceof Uint8Array)) throw new TypeError(`${label} must be bytes`);
@@ -36364,7 +36438,7 @@ function parseCanonicalDocument(bytes, label = "JSON document") {
   }
   assertPlainJson(value, label);
   const expected = canonicalJsonBytes(value);
-  if (!Buffer.from(bytes).equals(Buffer.from(expected))) {
+  if (!bytesEqual(bytes, expected)) {
     throw new TypeError(`${label} is not canonical JSON`);
   }
   return Object.freeze({ bytes, value, digest: sha256Bytes(bytes) });
@@ -36910,6 +36984,7 @@ function parseReviewEvidence(value) {
   validateReviewClaims(parsed);
   return parsed;
 }
+var referencedReviewWrapperSchema = external_exports.object({ evidence_digest: digest2, evidence: external_exports.unknown() }).strict();
 
 // src/contracts/tool-names.ts
 var TOOL_NAMES = Object.freeze([
@@ -37125,9 +37200,10 @@ function createProjectError(code2, parameters) {
 function createProtocolError(code2, parameters) {
   return constructError(PROTOCOL_ERROR_DEFINITIONS, code2, parameters);
 }
+var errorShellSchema = object2({ schema_version: external_exports.literal("1"), code: external_exports.string(), owner: external_exports.string(), retryable: external_exports.boolean(), diagnostic: object2({ template_id: external_exports.string(), parameters: external_exports.record(external_exports.string(), external_exports.unknown()) }), next_action: external_exports.string() });
 function parseSerializedError(registry2, value, label) {
   assertPlainJson(value, label);
-  const shell = object2({ schema_version: external_exports.literal("1"), code: external_exports.string(), owner: external_exports.string(), retryable: external_exports.boolean(), diagnostic: object2({ template_id: external_exports.string(), parameters: external_exports.record(external_exports.string(), external_exports.unknown()) }), next_action: external_exports.string() }).parse(value);
+  const shell = errorShellSchema.parse(value);
   if (!Object.hasOwn(registry2, shell.code)) throw new TypeError(`${label}: unknown code`);
   const code2 = shell.code;
   const expected = constructError(registry2, code2, shell.diagnostic.parameters);
@@ -50524,6 +50600,7 @@ var ADVERTISED_TOOL_CATALOGUE = deepFreeze3(
 );
 
 // src/mcp/sdk-adapter.ts
+var ADVERTISED_TOOL_BY_NAME = new Map(ADVERTISED_TOOL_CATALOGUE.map((descriptor) => [descriptor.name, descriptor]));
 var PROTOCOL_VERSION = "2025-11-25";
 var CONNECTION_ID = "connection-1";
 var JSON_RPC = "2.0";
@@ -50704,7 +50781,7 @@ async function startMcpRuntime(options) {
       const error51 = outcome.error.value;
       throw new ProtocolError(protocolCode2(error51), error51.code, error51);
     }
-    const descriptor = ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === outcome.tool);
+    const descriptor = ADVERTISED_TOOL_BY_NAME.get(outcome.tool);
     if (descriptor === void 0) throw new ProtocolError(-32603, "Internal error");
     const structuredContent = wireResult(outcome);
     return server.projectCallToolResult({
@@ -50932,6 +51009,7 @@ function parseAdjudicationEvidence(value) {
   assertPlainJson(value, "adjudication evidence");
   return adjudicationEvidenceSchema.parse(value);
 }
+var referencedAdjudicationWrapperSchema = external_exports.object({ evidence_digest: digest4, evidence: external_exports.unknown() }).strict();
 
 // src/contracts/internal/trust-brands.ts
 var observationCapabilities = /* @__PURE__ */ new WeakMap();
@@ -51430,17 +51508,41 @@ import { isDeepStrictEqual as isDeepStrictEqual3 } from "node:util";
 
 // src/contracts/validators.ts
 function isSortedUniqueBy(items, key = String) {
-  return Array.isArray(items) && items.every((value, index) => index === 0 || key(items[index - 1]) < key(value));
+  if (!Array.isArray(items)) return false;
+  if (items.length <= 1) return true;
+  let prevKey = key(items[0]);
+  for (let i = 1; i < items.length; i++) {
+    const currentKey = key(items[i]);
+    if (prevKey >= currentKey) return false;
+    prevKey = currentKey;
+  }
+  return true;
 }
+var tupleKeyCache = /* @__PURE__ */ new Map();
 function tupleKey(properties) {
-  const propertyNames = typeof properties === "string" ? [properties] : properties;
-  return (value) => {
-    if (typeof value !== "object" || value === null) return String(value);
-    return propertyNames.map((property) => {
-      const descriptor = Object.getOwnPropertyDescriptor(value, property);
+  const cacheKey = typeof properties === "string" ? properties : properties.join("\0");
+  const cached2 = tupleKeyCache.get(cacheKey);
+  if (cached2 !== void 0) return cached2;
+  const propertyNames = typeof properties === "string" ? [properties] : [...properties];
+  let fn;
+  if (propertyNames.length === 1) {
+    const prop = propertyNames[0];
+    fn = (value) => {
+      if (typeof value !== "object" || value === null) return String(value);
+      const descriptor = Object.getOwnPropertyDescriptor(value, prop);
       return String(descriptor !== void 0 && "value" in descriptor ? descriptor.value : void 0);
-    }).join("\0");
-  };
+    };
+  } else {
+    fn = (value) => {
+      if (typeof value !== "object" || value === null) return String(value);
+      return propertyNames.map((property) => {
+        const descriptor = Object.getOwnPropertyDescriptor(value, property);
+        return String(descriptor !== void 0 && "value" in descriptor ? descriptor.value : void 0);
+      }).join("\0");
+    };
+  }
+  tupleKeyCache.set(cacheKey, fn);
+  return fn;
 }
 
 // src/contracts/durable-primitives.ts
@@ -52468,9 +52570,12 @@ function successFor(call, value) {
   }
   return parsed;
 }
+var projectFailureEnvelopeSchema = external_exports.object({ schema_version: external_exports.literal("1"), ok: external_exports.literal(false), error: external_exports.unknown() }).strict();
+var projectResultBaseEnvelopeSchema = external_exports.object({ schema_version: external_exports.literal("1"), ok: external_exports.boolean() }).passthrough();
+var projectSuccessEnvelopeSchema = external_exports.object({ schema_version: external_exports.literal("1"), ok: external_exports.literal(true), value: external_exports.unknown() }).strict();
 function projectFailureForTool(name, value, label) {
   assertPlainJson(value, label);
-  const failure3 = external_exports.object({ schema_version: external_exports.literal("1"), ok: external_exports.literal(false), error: external_exports.unknown() }).strict().parse(value);
+  const failure3 = projectFailureEnvelopeSchema.parse(value);
   const error51 = parseProjectError(failure3.error);
   const parameters = error51.diagnostic.parameters;
   if (Object.hasOwn(parameters, "tool") && Reflect.get(parameters, "tool") !== name) {
@@ -52481,9 +52586,9 @@ function projectFailureForTool(name, value, label) {
 function validateProjectResultStructure(call, value) {
   if (!parsedCalls.has(call)) throw new TypeError("an authentic parsed tool call is required");
   assertPlainJson(value, `${call.name} result`);
-  const base2 = external_exports.object({ schema_version: external_exports.literal("1"), ok: external_exports.boolean() }).passthrough().parse(value);
+  const base2 = projectResultBaseEnvelopeSchema.parse(value);
   const result = base2.ok ? (() => {
-    const e = external_exports.object({ schema_version: external_exports.literal("1"), ok: external_exports.literal(true), value: external_exports.unknown() }).strict().parse(value);
+    const e = projectSuccessEnvelopeSchema.parse(value);
     return { ...e, value: successFor(call, e.value) };
   })() : projectFailureForTool(call.name, value, `${call.name} result`);
   const branded = Object.freeze({ ...result, [structuralResultBrand]: call.name });
@@ -53053,8 +53158,8 @@ function execGit(gitPath, spec, options) {
       (failure3, stdout, stderr) => {
         resolve2({
           failure: failure3 ?? void 0,
-          stdout: Buffer.from(stdout),
-          stderr: Buffer.from(stderr)
+          stdout: Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout),
+          stderr: Buffer.isBuffer(stderr) ? stderr : Buffer.from(stderr)
         });
       }
     );
@@ -53140,8 +53245,19 @@ function createGitRunner(options) {
   async function runNulFields(spec) {
     const result = await run(spec);
     if (result.absent) return Object.freeze([]);
-    const fields = decodeFatal(result.stdout, spec.operation).split("\0");
-    if (fields.length > 0 && fields[fields.length - 1] === "") fields.pop();
+    const text4 = decodeFatal(result.stdout, spec.operation);
+    if (text4.length === 0) return Object.freeze([]);
+    const fields = [];
+    let start = 0;
+    let index = text4.indexOf("\0");
+    while (index !== -1) {
+      fields.push(text4.slice(start, index));
+      start = index + 1;
+      index = text4.indexOf("\0", start);
+    }
+    if (start < text4.length) {
+      fields.push(text4.slice(start));
+    }
     return Object.freeze(fields);
   }
   return Object.freeze({ cwd, run, runText, runNulFields });
@@ -53158,6 +53274,48 @@ var GIT_OID = /^[0-9a-f]{40}$/u;
 var BLOB_MODE = /^(?:100644|100755|120000)$/u;
 var MAX_RESULT_BLOB_BYTES = 25 * 1024 * 1024;
 var MAX_COMMIT_TREE_ENTRIES = 1024;
+var MAX_COMMIT_RESOLUTION_CACHE_ENTRIES = 2048;
+var MAX_BLOB_SIZE_CACHE_ENTRIES = 4096;
+var MAX_BLOB_BYTES_CACHE_ENTRIES = 512;
+var MAX_COMMIT_TREE_BLOB_CACHE_ENTRIES = 4096;
+var MAX_COMMIT_TREE_ENTRIES_CACHE_ENTRIES = 1024;
+var MAX_COMMIT_ANCESTOR_CACHE_ENTRIES = 2048;
+var MAX_FIRST_PARENT_CHILD_CACHE_ENTRIES = 1024;
+var MAX_COMMIT_TREE_PATH_LISTING_CACHE_ENTRIES = 512;
+function createRunnerCache() {
+  return {
+    commitResolution: /* @__PURE__ */ new Map(),
+    blobSize: /* @__PURE__ */ new Map(),
+    blobBytes: /* @__PURE__ */ new Map(),
+    commitTreeBlob: /* @__PURE__ */ new Map(),
+    commitTreeEntries: /* @__PURE__ */ new Map(),
+    commitAncestor: /* @__PURE__ */ new Map(),
+    firstParentChild: /* @__PURE__ */ new Map(),
+    commitTreePathListing: /* @__PURE__ */ new Map()
+  };
+}
+var runnerCaches = /* @__PURE__ */ new WeakMap();
+var globalFallbackCache = createRunnerCache();
+function getRunnerCache(runner) {
+  if (typeof runner !== "object" || runner === null) return globalFallbackCache;
+  let cache = runnerCaches.get(runner);
+  if (cache === void 0) {
+    cache = createRunnerCache();
+    runnerCaches.set(runner, cache);
+  }
+  return cache;
+}
+function setBoundedCache(map2, key, value, maxEntries) {
+  if (map2.has(key)) {
+    map2.delete(key);
+  } else if (map2.size >= maxEntries) {
+    const firstKey = map2.keys().next().value;
+    if (firstKey !== void 0) {
+      map2.delete(firstKey);
+    }
+  }
+  map2.set(key, value);
+}
 async function hashGitBlob(runner, bytes, path2) {
   const argv = ["hash-object"];
   if (path2 !== void 0) argv.push(`--path=${path2}`);
@@ -53174,6 +53332,7 @@ async function hashGitBlobIdentity(runner, bytes, path2) {
   if (!GIT_OID.test(oid)) throw new TypeError("git hash-object returned an invalid SHA-1 object id");
   return Object.freeze({ oid, size_bytes: await readGitBlobSize(runner, oid) });
 }
+var LS_TREE_ENTRY = /^(\d{6}) blob ([0-9a-f]{40})\t([\s\S]+)$/u;
 async function readChangedGitPaths(runner, pathspecs = []) {
   const result = await runner.run({
     argv: [
@@ -53189,7 +53348,7 @@ async function readChangedGitPaths(runner, pathspecs = []) {
   let start = 0;
   for (let index = 0; index < result.stdout.byteLength; index += 1) {
     if (result.stdout[index] === 0) {
-      fields.push(result.stdout.slice(start, index));
+      fields.push(result.stdout.subarray(start, index));
       start = index + 1;
     }
   }
@@ -53200,7 +53359,7 @@ async function readChangedGitPaths(runner, pathspecs = []) {
     const field = fields[index];
     if (field.byteLength < 4 || field[2] !== 32) throw new TypeError("git status porcelain record is malformed");
     const status = String.fromCharCode(field[0], field[1]);
-    const pathFields = [field.slice(3)];
+    const pathFields = [field.subarray(3)];
     if (status.includes("R") || status.includes("C")) {
       const source = fields[index + 1];
       if (source === void 0) throw new TypeError("git status rename record lacks its source");
@@ -53219,46 +53378,99 @@ async function readChangedGitPaths(runner, pathspecs = []) {
   return Object.freeze({ paths: Object.freeze([...new Set(paths)]), unrepresentable_count: unrepresentable });
 }
 async function isCommitAncestor(runner, ancestor, descendant) {
+  const isImmutable = GIT_OID.test(ancestor) && GIT_OID.test(descendant);
+  const cacheKey = isImmutable ? `${ancestor}\0${descendant}` : void 0;
+  const cache = getRunnerCache(runner);
+  if (cacheKey !== void 0) {
+    const cached2 = cache.commitAncestor.get(cacheKey);
+    if (cached2 !== void 0) return cached2;
+  }
   const result = await runner.run({
     argv: ["merge-base", "--is-ancestor", ancestor, descendant],
     operation: ANCESTOR_OPERATION,
     expectedAbsence: [{ code: 1, stderrIncludes: "" }]
   });
-  return !result.absent;
+  const isAnc = !result.absent;
+  if (cacheKey !== void 0) {
+    setBoundedCache(cache.commitAncestor, cacheKey, isAnc, MAX_COMMIT_ANCESTOR_CACHE_ENTRIES);
+  }
+  return isAnc;
 }
 async function isCommitAncestorOfHead(runner, ancestor) {
   return isCommitAncestor(runner, ancestor, "HEAD");
 }
 async function readFirstParentChildAfter(runner, baseline, target2) {
   if (baseline === target2) return void 0;
-  if (!await isCommitAncestor(runner, baseline, target2)) return void 0;
+  const isImmutable = GIT_OID.test(baseline) && GIT_OID.test(target2);
+  const cacheKey = isImmutable ? `${baseline}\0${target2}` : void 0;
+  const cache = getRunnerCache(runner);
+  if (cacheKey !== void 0 && cache.firstParentChild.has(cacheKey)) {
+    return cache.firstParentChild.get(cacheKey);
+  }
+  if (!await isCommitAncestor(runner, baseline, target2)) {
+    if (cacheKey !== void 0) {
+      setBoundedCache(cache.firstParentChild, cacheKey, void 0, MAX_FIRST_PARENT_CHILD_CACHE_ENTRIES);
+    }
+    return void 0;
+  }
   const commits = await runner.runText({
     argv: ["rev-list", "--first-parent", target2],
     operation: FIRST_PARENT_PATH_OPERATION
   });
   const chain = commits === "" ? [] : commits.split("\n");
   const baselineIndex = chain.indexOf(baseline);
-  if (baselineIndex <= 0) return void 0;
-  return parseGitOid(chain[baselineIndex - 1]);
+  if (baselineIndex <= 0) {
+    if (cacheKey !== void 0) {
+      setBoundedCache(cache.firstParentChild, cacheKey, void 0, MAX_FIRST_PARENT_CHILD_CACHE_ENTRIES);
+    }
+    return void 0;
+  }
+  const result = parseGitOid(chain[baselineIndex - 1]);
+  if (cacheKey !== void 0) {
+    setBoundedCache(cache.firstParentChild, cacheKey, result, MAX_FIRST_PARENT_CHILD_CACHE_ENTRIES);
+  }
+  return result;
 }
 async function readCommitTreeBlob(runner, commit, path2) {
+  const isCommitOid = GIT_OID.test(commit);
+  const cacheKey = isCommitOid ? `${commit}\0${path2}` : void 0;
+  const cache = getRunnerCache(runner);
+  if (cacheKey !== void 0 && cache.commitTreeBlob.has(cacheKey)) {
+    return cache.commitTreeBlob.get(cacheKey);
+  }
   const fields = await runner.runNulFields({
     argv: ["ls-tree", "-z", commit, "--", path2],
     operation: TREE_ENTRY_OPERATION
   });
-  if (fields.length === 0) return void 0;
+  if (fields.length === 0) {
+    if (cacheKey !== void 0) {
+      setBoundedCache(cache.commitTreeBlob, cacheKey, void 0, MAX_COMMIT_TREE_BLOB_CACHE_ENTRIES);
+    }
+    return void 0;
+  }
   if (fields.length !== 1) throw new TypeError("git ls-tree returned conflicting path entries");
-  const match = /^(?<mode>\d{6}) blob (?<oid>[0-9a-f]+)\t(?<path>[\s\S]+)$/u.exec(fields[0] ?? "");
-  if (match?.groups === void 0 || match.groups["path"] !== path2 || !BLOB_MODE.test(match.groups["mode"] ?? "") || !GIT_OID.test(match.groups["oid"] ?? "")) {
+  const match = LS_TREE_ENTRY.exec(fields[0] ?? "");
+  if (match === null || match[3] !== path2 || !BLOB_MODE.test(match[1])) {
     throw new TypeError("git ls-tree returned an invalid or mismatched blob entry");
   }
-  return Object.freeze({
-    mode: match.groups["mode"],
-    oid: match.groups["oid"]
+  const entry = Object.freeze({
+    mode: match[1],
+    oid: match[2]
   });
+  if (cacheKey !== void 0) {
+    setBoundedCache(cache.commitTreeBlob, cacheKey, entry, MAX_COMMIT_TREE_BLOB_CACHE_ENTRIES);
+  }
+  return entry;
 }
 async function readCommitTreeEntries(runner, commit, directory) {
   const prefix = directory.endsWith("/") ? directory : `${directory}/`;
+  const isCommitOid = GIT_OID.test(commit);
+  const cacheKey = isCommitOid ? `${commit}\0${prefix}` : void 0;
+  const cache = getRunnerCache(runner);
+  if (cacheKey !== void 0) {
+    const cached2 = cache.commitTreeEntries.get(cacheKey);
+    if (cached2 !== void 0) return cached2;
+  }
   const fields = await runner.runNulFields({
     argv: ["ls-tree", "-z", commit, "--", prefix],
     operation: TREE_LIST_OPERATION
@@ -53267,46 +53479,77 @@ async function readCommitTreeEntries(runner, commit, directory) {
     throw new TypeError("git ls-tree exceeded the bounded commit-tree entry limit");
   }
   const entries = fields.map((field) => {
-    const match = /^(?<mode>\d{6}) blob (?<oid>[0-9a-f]+)\t(?<path>[\s\S]+)$/u.exec(field);
-    if (match?.groups === void 0 || !(match.groups["path"] ?? "").startsWith(prefix) || !BLOB_MODE.test(match.groups["mode"] ?? "") || !GIT_OID.test(match.groups["oid"] ?? "")) {
+    const match = LS_TREE_ENTRY.exec(field);
+    if (match === null || !match[3].startsWith(prefix) || !BLOB_MODE.test(match[1])) {
       throw new TypeError("git ls-tree returned an invalid commit-tree blob entry");
     }
     return Object.freeze({
-      path: match.groups["path"],
-      mode: match.groups["mode"],
-      oid: match.groups["oid"]
+      path: match[3],
+      mode: match[1],
+      oid: match[2]
     });
   });
   entries.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
-  return Object.freeze(entries);
+  const frozen = Object.freeze(entries);
+  if (cacheKey !== void 0) {
+    setBoundedCache(cache.commitTreeEntries, cacheKey, frozen, MAX_COMMIT_TREE_ENTRIES_CACHE_ENTRIES);
+  }
+  return frozen;
 }
 async function readCommitTreePathListing(runner, commit, directories) {
   const prefixes = [...new Set(directories)].map((directory) => directory === "" || directory === "." ? "." : directory.endsWith("/") ? directory : `${directory}/`);
   if (prefixes.length === 0) return Object.freeze({ paths: Object.freeze([]), truncated: false });
+  const isCommitOid = GIT_OID.test(commit);
+  const cacheKey = isCommitOid ? `${commit}\0${prefixes.join("\0")}` : void 0;
+  const cache = getRunnerCache(runner);
+  if (cacheKey !== void 0) {
+    const cached2 = cache.commitTreePathListing.get(cacheKey);
+    if (cached2 !== void 0) return cached2;
+  }
   const fields = await runner.runNulFields({
     argv: ["ls-tree", "-r", "-z", "--name-only", commit, "--", ...prefixes],
-    operation: TREE_LIST_OPERATION
+    operation: "git-tree-paths"
   });
   const unique = [...new Set(fields)].sort();
   const truncated = unique.length > MAX_COMMIT_TREE_ENTRIES;
-  return Object.freeze({
+  const result = Object.freeze({
     paths: Object.freeze(truncated ? unique.slice(0, MAX_COMMIT_TREE_ENTRIES) : unique),
     truncated
   });
+  if (cacheKey !== void 0) {
+    setBoundedCache(cache.commitTreePathListing, cacheKey, result, MAX_COMMIT_TREE_PATH_LISTING_CACHE_ENTRIES);
+  }
+  return result;
 }
 async function resolveCommit(runner, revision) {
+  const isOid = GIT_OID.test(revision);
+  const cache = getRunnerCache(runner);
+  if (isOid) {
+    const cached2 = cache.commitResolution.get(revision);
+    if (cached2 !== void 0) return cached2;
+  }
   const oid = await runner.runText({
     argv: ["rev-parse", "--verify", `${revision}^{commit}`],
     operation: HEAD_COMMIT_OPERATION
   });
   if (!GIT_OID.test(oid)) throw new TypeError("git rev-parse returned an invalid commit");
-  return parseGitOid(oid);
+  const parsed = parseGitOid(oid);
+  setBoundedCache(cache.commitResolution, parsed, parsed, MAX_COMMIT_RESOLUTION_CACHE_ENTRIES);
+  return parsed;
 }
 async function readHeadCommit(runner) {
   return resolveCommit(runner, "HEAD");
 }
 async function readGitBlobSize(runner, oid) {
   if (!GIT_OID.test(oid)) throw new TypeError("Git blob object id is invalid");
+  const cache = getRunnerCache(runner);
+  const cached2 = cache.blobSize.get(oid);
+  if (cached2 !== void 0) return cached2;
+  const cachedBytes = cache.blobBytes.get(oid);
+  if (cachedBytes !== void 0) {
+    setBoundedCache(cache.blobSize, oid, cachedBytes.byteLength, MAX_BLOB_SIZE_CACHE_ENTRIES);
+    return cachedBytes.byteLength;
+  }
   const output = await runner.runText({
     argv: ["cat-file", "-s", oid],
     operation: OBJECT_SIZE_OPERATION
@@ -53314,10 +53557,16 @@ async function readGitBlobSize(runner, oid) {
   if (!/^(?:0|[1-9][0-9]*)$/u.test(output)) throw new TypeError("git cat-file returned an invalid size");
   const size = Number(output);
   if (!Number.isSafeInteger(size)) throw new TypeError("git blob size exceeds the safe integer range");
+  setBoundedCache(cache.blobSize, oid, size, MAX_BLOB_SIZE_CACHE_ENTRIES);
   return size;
 }
 async function readGitBlobBytes(runner, oid) {
   if (!GIT_OID.test(oid)) throw new TypeError("Git blob object id is invalid");
+  const cache = getRunnerCache(runner);
+  const cached2 = cache.blobBytes.get(oid);
+  if (cached2 !== void 0) {
+    return cached2.slice();
+  }
   let result;
   try {
     result = await runner.run({
@@ -53331,7 +53580,10 @@ async function readGitBlobBytes(runner, oid) {
     }
     throw error51;
   }
-  return new Uint8Array(result.stdout);
+  const bytes = new Uint8Array(result.stdout.buffer, result.stdout.byteOffset, result.stdout.byteLength);
+  setBoundedCache(cache.blobBytes, oid, bytes, MAX_BLOB_BYTES_CACHE_ENTRIES);
+  setBoundedCache(cache.blobSize, oid, bytes.byteLength, MAX_BLOB_SIZE_CACHE_ENTRIES);
+  return bytes.slice();
 }
 async function readGitBlobProjectedBytes(runner, oid, path2) {
   if (!GIT_OID.test(oid)) throw new TypeError("cannot read an invalid Git object id");
@@ -53348,7 +53600,7 @@ async function readGitBlobProjectedBytes(runner, oid, path2) {
       message: "projected Git blob exceeds the bounded result-byte limit"
     });
   }
-  return new Uint8Array(result.stdout);
+  return new Uint8Array(result.stdout.buffer, result.stdout.byteOffset, result.stdout.byteLength);
 }
 function projectErrorForGitFailure(error51, runner, context2) {
   if (error51.kind === "not-installed" || error51.kind === "not-executable") {
@@ -53415,6 +53667,12 @@ async function preflightGit(runner, context2) {
 // src/repository/identity.ts
 import { realpath as realpath2 } from "node:fs/promises";
 import { resolve as resolvePath3 } from "node:path";
+var rootBoundBrand = /* @__PURE__ */ Symbol("rootBoundBrand");
+function isRootBoundGitRunner(runner) {
+  if (typeof runner !== "object" || runner === null) return false;
+  const candidate = runner;
+  return candidate[rootBoundBrand] === true && typeof candidate.location === "object" && candidate.location !== null && typeof candidate.location.worktreeRoot === "string";
+}
 var LOCATION_OPERATION = "git-rev-parse-location";
 var GIT_DIR_OPERATION = "git-rev-parse-git-dir";
 var HEAD_OPERATION = "git-rev-parse-head";
@@ -53447,6 +53705,8 @@ function isErrnoException(error51) {
 function ordinal2(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
+var MAX_REPOSITORY_IDENTITIES = 256;
+var repositoryIdentityCache = /* @__PURE__ */ new Map();
 function bindToRoot(runner, location) {
   const atRoot = (spec) => ({
     ...spec,
@@ -53457,10 +53717,14 @@ function bindToRoot(runner, location) {
     location,
     run: (spec) => runner.run(atRoot(spec)),
     runText: (spec) => runner.runText(atRoot(spec)),
-    runNulFields: (spec) => runner.runNulFields(atRoot(spec))
+    runNulFields: (spec) => runner.runNulFields(atRoot(spec)),
+    [rootBoundBrand]: true
   });
 }
 async function discoverWorktree(runner, context2) {
+  if (isRootBoundGitRunner(runner) && runner.cwd === runner.location.worktreeRoot) {
+    return ok3(runner);
+  }
   try {
     const lines = (await runner.runText({
       argv: [
@@ -53512,6 +53776,13 @@ async function resolveRepositoryIdentity(runner, environment, context2) {
       expectedAbsence: UNBORN_HEAD
     });
     if (head === "") return fail4(repositoryNotFound(runner));
+    const cacheKey = `${runner.location.worktreeRoot}\0${head}\0${environment.object_format}`;
+    const cached2 = repositoryIdentityCache.get(cacheKey);
+    if (cached2 !== void 0) {
+      repositoryIdentityCache.delete(cacheKey);
+      repositoryIdentityCache.set(cacheKey, cached2);
+      return ok3(cached2);
+    }
     const output = await runner.runText({
       argv: ["rev-list", "--max-parents=0", "HEAD"],
       operation: ROOTS_OPERATION
@@ -53524,14 +53795,18 @@ async function resolveRepositoryIdentity(runner, environment, context2) {
         root_commits: rootCommits.map((oid) => oid)
       })
     );
-    return ok3(
-      Object.freeze({
-        schema_version: "1",
-        object_format: environment.object_format,
-        root_commits: Object.freeze(rootCommits),
-        digest: digest9
-      })
-    );
+    const identity = Object.freeze({
+      schema_version: "1",
+      object_format: environment.object_format,
+      root_commits: Object.freeze(rootCommits),
+      digest: digest9
+    });
+    if (repositoryIdentityCache.size >= MAX_REPOSITORY_IDENTITIES) {
+      const oldestKey = repositoryIdentityCache.keys().next().value;
+      if (oldestKey !== void 0) repositoryIdentityCache.delete(oldestKey);
+    }
+    repositoryIdentityCache.set(cacheKey, identity);
+    return ok3(identity);
   } catch (error51) {
     if (error51 instanceof GitInvocationError) {
       return fail4(projectErrorForGitFailure(error51, runner, context2));
@@ -57585,7 +57860,7 @@ function readInteger(tlv) {
   }
   return value;
 }
-function bytesEqual(a, b) {
+function bytesEqual2(a, b) {
   if (a.length !== b.length)
     return false;
   let diff = 0;
@@ -57607,7 +57882,7 @@ var MAC_HASHES = [
 ];
 function matchHash(oidBytes) {
   for (const { oid, hash: hash2 } of MAC_HASHES) {
-    if (bytesEqual(oidBytes, oid))
+    if (bytesEqual2(oidBytes, oid))
       return hash2;
   }
   return void 0;
@@ -57624,7 +57899,7 @@ function parsePkcs12(buf) {
   expectTag(authSafeInfo, TAG_SEQUENCE, "ContentInfo SEQUENCE");
   const contentType = readTlv(authSafeInfo.content, 0);
   expectTag(contentType, TAG_OID, "contentType OID");
-  if (!bytesEqual(contentType.content, OID_DATA)) {
+  if (!bytesEqual2(contentType.content, OID_DATA)) {
     throw new Error("PKCS12: unsupported authSafe contentType");
   }
   const explicit0 = readTlv(authSafeInfo.content, contentType.end);
@@ -57725,7 +58000,7 @@ async function verifyPkcs12Mac(pfxBytes, password) {
     const key = await deriveMacKey(parsed.macHash, password, parsed.macSalt, parsed.iterations);
     const cryptoKey = await globalThis.crypto.subtle.importKey("raw", toBufferSource(key), { name: "HMAC", hash: parsed.macHash.name }, false, ["sign"]);
     const mac3 = new Uint8Array(await globalThis.crypto.subtle.sign("HMAC", cryptoKey, toBufferSource(parsed.authSafe)));
-    return bytesEqual(mac3, parsed.macDigest);
+    return bytesEqual2(mac3, parsed.macDigest);
   } catch {
     return false;
   }
@@ -75458,9 +75733,18 @@ function parseEvidenceId(value, field) {
   }
   return value;
 }
+var sortedExpectedCache = /* @__PURE__ */ new WeakMap();
+function getSortedExpected(expected) {
+  let cached2 = sortedExpectedCache.get(expected);
+  if (cached2 === void 0) {
+    cached2 = Object.freeze([...expected].sort());
+    sortedExpectedCache.set(expected, cached2);
+  }
+  return cached2;
+}
 function exactFields2(value, expected, label) {
   const actual = Object.keys(value).sort();
-  const wanted = [...expected].sort();
+  const wanted = getSortedExpected(expected);
   if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
     throw new TypeError(`${label} must contain exactly ${wanted.join(", ")}`);
   }
