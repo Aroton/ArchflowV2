@@ -1782,8 +1782,8 @@ describe("partial review round retry", () => {
   it("dispatches only the reviewer that raised findings in a remediation round, with its own prior-triage record", async () => {
     const h = await fixture();
     const { store } = memoryStore();
-    const subjects = [canonicalJsonDigest({ artifact: 0 }), canonicalJsonDigest({ artifact: 1 })] as const;
-    const fingerprints = [computeInputFingerprint(fingerprintSubject(0)), computeInputFingerprint(fingerprintSubject(1))] as const;
+    const subjects = [canonicalJsonDigest({ artifact: 0 }), canonicalJsonDigest({ artifact: 1 }), canonicalJsonDigest({ artifact: 2 })] as const;
+    const fingerprints = [computeInputFingerprint(fingerprintSubject(0)), computeInputFingerprint(fingerprintSubject(1)), computeInputFingerprint(fingerprintSubject(2))] as const;
 
     // Round 1: a full review; sol passes cleanly, fable raises a blocker carrying its tag.
     const first = await round(h, store, subjects[0], fingerprints[0], { clean_reviewer: SOL }, true);
@@ -1808,7 +1808,7 @@ describe("partial review round retry", () => {
       instructions: { prior_triage?: string };
       context: { kind: string; status: string; content?: string }[];
     };
-    expect(fableEnvelope.instructions.prior_triage).toMatch(/remediation review, not a second full review/u);
+    expect(fableEnvelope.instructions.prior_triage).toMatch(/remediation review, not a new full review/u);
     const priorEntry = fableEnvelope.context.find((entry) => entry.kind === "prior-triage");
     expect(priorEntry?.status).toBe("pinned");
     const rendered = JSON.parse(priorEntry!.content!) as { dispositions: { finding_id: string; disposition: string }[] };
@@ -1822,6 +1822,20 @@ describe("partial review round retry", () => {
     expect(review.assurance).toBe("server-attested");
     if (review.assurance !== "server-attested") return;
     expect(second.result.value.constitution_evidence?.source_review_envelope_digest).toBe(review.envelope_input_digest);
+
+    // Round 3 receives only round 2's latest accepted disposition. The cumulative ledger remains
+    // durable, but it is not fanned into the child prompt.
+    await commitTriageDecisions(h, dependencies, 1, () => "accepted");
+    const dependenciesV2 = await rewrite(h, dependencies, 2);
+    const third = await round(h, store, subjects[2], fingerprints[2], {}, true, {
+      dependencies: dependenciesV2, version: 2, remediation: true,
+    });
+    expect(third.models).toEqual([FABLE, ADJUDICATOR].sort());
+    const latest = priorRecord(third.envelopes.get(FABLE));
+    expect(latest.dispositions).toHaveLength(1);
+    expect(latest.dispositions).toEqual([
+      expect.objectContaining({ finding_id: "general-2-counter-review-blocker", disposition: "accepted", attempt: 3 }),
+    ]);
   });
 
   it("dispatches only the test specialist to confirm its finding in remediation", async () => {
@@ -1856,7 +1870,7 @@ describe("partial review round retry", () => {
     expect(prior?.content).toContain("test-counter-review-blocker");
   });
 
-  it("falls back to all reviewers and the full general rubric when a specialist owner disappears", async () => {
+  it("falls back to the first reviewer with the full general rubric when a specialist owner disappears", async () => {
     const h = await fixture();
     const { store } = memoryStore();
     const subjects = [canonicalJsonDigest({ reconfigured: 0 }), canonicalJsonDigest({ reconfigured: 1 })] as const;
@@ -1872,17 +1886,16 @@ describe("partial review round retry", () => {
     const second = await round(h, store, subjects[1], fingerprints[1], {}, true, {
       dependencies, version: 1, remediation: true, config: multiReviewConfig,
     });
-    expect(second.models).toEqual([SOL, FABLE, ADJUDICATOR].sort());
-    for (const model of [SOL, FABLE]) {
-      const envelope = second.envelopes.get(model) as {
-        assignment: { focus: string; criterion_ids: string[] };
-        context: { kind: string; content?: string }[];
-      };
-      expect(envelope.assignment.focus).toBe("general");
-      expect(envelope.assignment.criterion_ids).toEqual(["correctness", "verification-evidence", "test-quality"]);
-      expect(envelope.context.find((entry) => entry.kind === "prior-triage")?.content)
-        .toContain("test-counter-review-blocker");
-    }
+    expect(second.models).toEqual([SOL, ADJUDICATOR].sort());
+    expect(second.envelopes.has(FABLE)).toBe(false);
+    const envelope = second.envelopes.get(SOL) as {
+      assignment: { focus: string; criterion_ids: string[] };
+      context: { kind: string; content?: string }[];
+    };
+    expect(envelope.assignment.focus).toBe("general");
+    expect(envelope.assignment.criterion_ids).toEqual(["correctness", "verification-evidence", "test-quality"]);
+    expect(envelope.context.find((entry) => entry.kind === "prior-triage")?.content)
+      .toContain("test-counter-review-blocker");
   });
 
   it("records invocation and one-dispatch override provenance independently for the test reviewer", async () => {
@@ -2001,21 +2014,18 @@ describe("partial review round retry", () => {
     return JSON.parse(entry!.content!) as { coverage: string; dispositions: { finding_id: string; disposition: string }[] };
   };
 
-  it("dispatches a reviewer whose finding was rejected so it can contest the rejection, each reviewer scoped to its own findings", async () => {
+  it("dispatches only owners of accepted findings; rejected findings are closed", async () => {
     const h = await fixture();
     const second = await remediationAfter(h, (findingId) => findingId.startsWith("general-2-") ? "accepted" : "rejected");
-    expect(second.models).toEqual([SOL, FABLE, ADJUDICATOR].sort());
-    expect(priorRecord(second.envelopes.get(SOL)).dispositions)
-      .toEqual([expect.objectContaining({ finding_id: "general-1-counter-review-blocker", disposition: "rejected" })]);
+    expect(second.models).toEqual([FABLE, ADJUDICATOR].sort());
+    expect(second.envelopes.has(SOL)).toBe(false);
     expect(priorRecord(second.envelopes.get(FABLE)).dispositions)
       .toEqual([expect.objectContaining({ finding_id: "general-2-counter-review-blocker", disposition: "accepted" })]);
-    // Two reviewers, two envelopes: the round identity is the first dispatched reviewer's.
     if (!second.result.ok) return;
     const review = second.result.value.evidence;
     if (review.assurance !== "server-attested") throw new Error("expected server-attested review");
-    expect(second.digests.get(SOL)).not.toBe(second.digests.get(FABLE));
-    expect(review.envelope_input_digest).toBe(second.digests.get(SOL));
-    expect(second.result.value.constitution_evidence?.source_review_envelope_digest).toBe(second.digests.get(SOL));
+    expect(review.envelope_input_digest).toBe(second.digests.get(FABLE));
+    expect(second.result.value.constitution_evidence?.source_review_envelope_digest).toBe(second.digests.get(FABLE));
   });
 
   it("leaves out a reviewer whose only findings were accepted editorially", async () => {
@@ -2025,18 +2035,17 @@ describe("partial review round retry", () => {
     expect(second.models).toEqual([FABLE, ADJUDICATOR].sort());
   });
 
-  it("runs every reviewer with the full record when a dispositioned finding is owned by no configured reviewer", async () => {
+  it("uses the first configured reviewer when an accepted finding has no configured owner", async () => {
     const h = await fixture();
     // Round 1 ran under a one-reviewer override, so its finding id carries no reviewer tag.
     const second = await remediationAfter(h, () => "accepted", {
       declaration: { reason: "fable CLI outage; reviewing on sol alone for this dispatch", "counter-reviewer": { model: SOL, effort: "high" } },
     });
-    expect(second.models).toEqual([SOL, FABLE, ADJUDICATOR].sort());
-    for (const model of [SOL, FABLE]) {
-      const record = priorRecord(second.envelopes.get(model));
-      expect(record.coverage).toMatch(/all retained rounds/u);
-      expect(record.dispositions).toEqual([expect.objectContaining({ finding_id: "counter-review-blocker", disposition: "accepted" })]);
-    }
+    expect(second.models).toEqual([SOL, ADJUDICATOR].sort());
+    const record = priorRecord(second.envelopes.get(SOL));
+    expect(record.coverage).toMatch(/latest accepted findings/u);
+    expect(record.dispositions).toEqual([expect.objectContaining({ finding_id: "counter-review-blocker", disposition: "accepted" })]);
+    expect(second.envelopes.has(FABLE)).toBe(false);
   });
 
   it("keeps both reviewer outputs when the constitution child fails and retries only that child", async () => {

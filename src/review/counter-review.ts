@@ -441,31 +441,27 @@ export async function runCounterReview(
   const totalReviewers = taggedRoutes.length;
   const sharedPriorTriage = input.envelope.context.find((entry) => entry.kind === "prior-triage");
   const priorTriage = sharedPriorTriage === undefined ? undefined : input.prior_triage;
-  // A remediation round dispatches only the reviewers whose findings the producer dispositioned
-  // in the latest triage: the reviewer that raised a finding confirms its fix, or may contest a
-  // rejection by naming it. A reviewer whose last round returned nothing (or only editorial
-  // findings, which re-run nothing) is not asked to review again. If any dispositioned finding
-  // belongs to no configured reviewer — a lone-reviewer override round, a reconfigured route
-  // list — attribution has failed and every reviewer runs with the full record, so no accepted
-  // intent goes unconfirmed.
-  const dispositioned = priorTriage === undefined
-    ? []
-    : priorTriage.current.filter((disposition) => disposition.disposition !== "accepted-editorial");
+  // A remediation round dispatches only owners of the latest accepted findings. Rejected and
+  // editorial findings are closed. If attribution fails, the first configured reviewer confirms
+  // every accepted intent; dispatching every reviewer would turn remediation into another sweep.
+  const dispositioned = priorTriage?.current ?? [];
   const owners = (findingId: string) =>
     taggedRoutes.filter((routeEntry) => reviewerOwnsFinding(routeEntry.tag, totalReviewers, findingId));
-  const ownerMissing = dispositioned.some((disposition) => owners(disposition.finding_id).length === 0);
-  const fallback = priorTriage === undefined || totalReviewers <= 1 || ownerMissing;
-  const reviewRoutes = fallback
+  const unattributed = priorTriage !== undefined &&
+    dispositioned.some((disposition) => owners(disposition.finding_id).length === 0);
+  const reviewRoutes = priorTriage === undefined
     ? taggedRoutes
+    : unattributed
+      ? taggedRoutes.slice(0, 1)
     : taggedRoutes.filter((routeEntry) => dispositioned.some((disposition) =>
       reviewerOwnsFinding(routeEntry.tag, totalReviewers, disposition.finding_id)));
   const assignmentFor = (routeEntry: (typeof taggedRoutes)[number]) =>
-    ownerMissing && routeEntry.role === "counter-reviewer"
+    unattributed && routeEntry.role === "counter-reviewer"
       ? reviewAssignment(routeEntry.tag, "general", phaseKind, input.envelope.rubric, false)
       : routeEntry.assignment;
   const envelopeFor = (routeEntry: (typeof taggedRoutes)[number]): DispatchEnvelope => {
     const assignment = assignmentFor(routeEntry);
-    if (priorTriage === undefined || fallback) {
+    if (priorTriage === undefined || unattributed) {
       return buildReviewEnvelopeWithCap({ ...input.envelope, assignment, subject });
     }
     const scoped = priorTriageContextEntry(priorTriage, (findingId) =>

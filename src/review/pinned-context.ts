@@ -178,9 +178,8 @@ const fail = <T>(phase: PhaseInstanceId, issue_code: string): ProjectResult<T> =
  * digest. Any missing result, absent authority, or byte drift fails closed: upstream pinning
  * restates durable authority, never observes around it.
  *
- * Every phase kind additionally pins the previous round's triage record when one is retained
- * (see {@link priorTriageEvidence}), so a re-entry reviewer sees which findings were already
- * dispositioned instead of rediscovering the class.
+ * Every phase kind additionally pins the latest accepted revision intents when present
+ * (see {@link priorTriageEvidence}), so remediation confirms only unresolved owned work.
  */
 export async function assembleReviewContext(input: {
   readonly runner: RootBoundGitRunner;
@@ -538,25 +537,17 @@ async function implementationMechanicalEvidence(
 }
 
 /**
- * Pins the mechanical triage record of this phase instance's review rounds, so a fresh reviewer
- * sees which findings were already dispositioned instead of rediscovering the defect class round
- * after round.
+ * Pins the latest accepted triage dispositions for remediation confirmation.
  *
- * Durable state retains exactly one triage result per `(phase_instance, step)` — the latest —
- * because `authoritative_results` is a replace-on-install set and superseded manifests are no
- * longer referenced by any durable authority. Each installed triage therefore carries a
- * server-computed `disposition_ledger`: at install the round's dispositions are embedded with
- * their finding details and the predecessor's ledger is carried forward, so the rendered record
- * spans every round of this phase instance whose triage installed since reviewer memory existed.
- * Rounds installed before that field, or whose triage never installed, are absent: absence is
- * the accurate record, not a gap.
+ * Durable triage still carries its cumulative `disposition_ledger` for audit and review-strength
+ * accounting. This child projection deliberately ignores that ledger so prompts do not grow by
+ * replaying closed rounds.
  *
  * Every rendered field restates durable authority: finding severity, summary, evidence, and
  * suggested resolution come from the retained reviewer-authored evidence manifest; dispositions,
- * rationales, and revision intents come from retained triage. Disposition strings render as-is so
- * a grown vocabulary never breaks assembly. A referenced-but-unloadable manifest fails closed;
- * a disposition whose finding is not in retained counter-review evidence (for example a
- * finding from an older evidence shape) renders without unresolvable fields rather than inventing them.
+ * rationales, and revision intents come from retained triage. A referenced-but-unloadable
+ * manifest fails closed; a finding absent from retained review evidence renders without invented
+ * details.
  */
 export type PriorTriageDisposition = Readonly<Record<string, unknown> & {
   finding_id: string;
@@ -564,9 +555,9 @@ export type PriorTriageDisposition = Readonly<Record<string, unknown> & {
 }>;
 
 /**
- * The structured prior-triage record before rendering: every disposition of this phase instance
- * — the latest round's first, then the carried ledger — plus the latest round's own dispositions,
- * which decide which reviewers a remediation round must dispatch.
+ * The structured prior-triage record before rendering. It is a child projection of only the
+ * latest accepted dispositions. Durable triage retains its cumulative ledger separately for
+ * audit and review-strength accounting.
  */
 export type PriorTriageRecord = Readonly<{
   phase_instance: PhaseInstanceId;
@@ -631,35 +622,12 @@ export async function loadPriorTriageRecord(
         : {}),
     };
   });
-  // The carried ledger holds every earlier round this phase instance installed since reviewer
-  // memory existed, each entry already embedded with its round's finding details. The current
-  // dispositions are the newest record of their findings and win a finding_id collision; the
-  // ledger supplies the history a replaced triage result would otherwise have superseded.
-  // The latest round's dispositions come first — they are what the reviewer must confirm — and a
-  // ledger entry for the same finding id is superseded by them.
-  const merged = new Map<string, PriorTriageDisposition>();
-  for (const disposition of dispositions) merged.set(disposition.finding_id, disposition);
-  for (const entry of triageSource.evidence.disposition_ledger ?? []) {
-    if (merged.has(entry.finding_id)) continue;
-    merged.set(entry.finding_id, {
-      finding_id: entry.finding_id,
-      attempt: entry.attempt,
-      ...(entry.severity !== undefined
-        ? { severity: entry.severity, blocking: entry.blocking ?? false }
-        : {}),
-      ...(entry.summary === undefined ? {} : { summary: entry.summary }),
-      ...(entry.evidence === undefined ? {} : { evidence: entry.evidence }),
-      ...(entry.suggested_resolution === undefined ? {} : { suggested_resolution: entry.suggested_resolution }),
-      disposition: entry.disposition,
-      ...(entry.rationale === undefined ? {} : { rationale: entry.rationale }),
-      ...(entry.revision_intent === undefined ? {} : { revision_intent: entry.revision_intent }),
-    });
-  }
+  const accepted = dispositions.filter((disposition) => disposition.disposition === "accepted");
   return ok(Object.freeze({
     phase_instance: state.phase_instance,
     current_attempt: state.attempt,
-    dispositions: Object.freeze([...merged.values()]),
-    current: Object.freeze(dispositions.map((disposition) => Object.freeze({
+    dispositions: Object.freeze(accepted),
+    current: Object.freeze(accepted.map((disposition) => Object.freeze({
       finding_id: disposition.finding_id,
       disposition: disposition.disposition,
     }))),
@@ -667,25 +635,24 @@ export async function loadPriorTriageRecord(
 }
 
 /**
- * Renders the prior-triage record as one pinned context entry. With `owns`, the record is scoped
- * to the findings one reviewer raised, so a remediation round asks each reviewer to confirm only
- * its own findings rather than every sibling's.
+ * Renders the latest accepted dispositions. With `owns`, the record is scoped to one reviewer.
  */
 export function priorTriageContextEntry(
   record: PriorTriageRecord,
   owns?: (findingId: string) => boolean,
 ): PinnedContextEntry {
+  const accepted = record.dispositions.filter((disposition) => disposition.disposition === "accepted");
   const dispositions = owns === undefined
-    ? record.dispositions
-    : record.dispositions.filter((disposition) => owns(disposition.finding_id));
+    ? accepted
+    : accepted.filter((disposition) => owns(disposition.finding_id));
   const rendered = {
     schema_version: "1",
     record_kind: "prior-triage",
     phase_instance: record.phase_instance,
     current_attempt: record.current_attempt,
     coverage: owns === undefined
-      ? "all retained rounds of this phase instance: the current dispositions plus the carried ledger; rounds whose triage predates reviewer memory or never installed are absent"
-      : "the findings this reviewer raised in the retained rounds of this phase instance, with the producer's disposition of each; sibling reviewers' findings are confirmed by the reviewers that raised them",
+      ? "the latest accepted findings for this phase instance"
+      : "the latest accepted findings assigned to this reviewer",
     dispositions,
   };
   const bytes = new TextEncoder().encode(`${JSON.stringify(rendered, null, 2)}\n`);
@@ -702,7 +669,11 @@ export async function priorTriageEvidence(
     ? ok<PriorTriageRecord | undefined>(preloaded)
     : await loadPriorTriageRecord(dependencies, state);
   if (!record.ok) return record;
-  return ok(Object.freeze(record.value === undefined ? [] : [priorTriageContextEntry(record.value)]));
+  return ok(Object.freeze(
+    record.value === undefined || record.value.dispositions.length === 0
+      ? []
+      : [priorTriageContextEntry(record.value)],
+  ));
 }
 
 /** Pins the repository's conventions document from the worktree; absent conventions pin nothing. */

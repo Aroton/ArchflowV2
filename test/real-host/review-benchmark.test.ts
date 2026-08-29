@@ -115,7 +115,7 @@ requireRealHostsAvailable(!benchmarkEnabled() || benchmarkAvailable);
 describe("benchmark digest contract", () => {
   it("pins the production design rubric and the twenty-six-run matrix without real model calls", async () => {
     expect(designRubric.rubric_id).toBe("design-v3");
-    expect(rubricDigest).toBe("cd7c1d7a1dceaa9a9595076ebf2e89407505103453eab6309b74e8b2598275db");
+    expect(rubricDigest).toBe("1de3ef4ed22d5698493eb7a6376ebdf493763c1ba39e821fa8e875f9095a8c8e");
     expect(rubric.criteria.map((criterion) => criterion.id)).toEqual([
       "substantive-correctness",
       "upstream-coverage",

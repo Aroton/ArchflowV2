@@ -1,6 +1,6 @@
 # ArchFlow
 
-A lightweight, human-centered development workflow for Claude Code and Codex. Nine portable Agent Skills turn vague ideas into structured implementations with human review at every stage.
+A lightweight, human-centered development workflow for Claude Code and Codex. Nine portable Agent Skills turn an idea into reviewed requirements, designs, and implementations.
 
 ## What It Does
 
@@ -32,7 +32,7 @@ An in-flight legacy task takes an explicit side path into a new task, then rejoi
 /archflow-design new-task
 ```
 
-The phase skills marshal the MCP-backed workflow and stop at durable human approval gates. Before each document advances, self-review, independent counter-review, triage, and adjudication evidence must reach a fixed point. Every gate also offers an optional ready-to-run prompt for the configured opposite producer family.
+The phase skills drive the MCP-backed workflow and stop whenever the server requires human approval. Before work advances, an independent counter-review, triage, and any constitution review must reach a fixed point. The review runs before the gate; there is no optional supplemental gate review.
 
 ## Install
 
@@ -195,9 +195,9 @@ only a cache and may be regenerated or cleaned with `archflow-local clean --task
 
 ## Key Design Decisions
 
-- **Human-in-the-loop**: You review and approve at every stage — the agent does the labor (including running verification), you exercise the judgment
-- **Durable review fixed point**: Every document records self-review plus a configured opposite-producer-family counter-review, then durable triage and adjudication resolve the findings before the workflow can advance
-- **Optional gate review**: Every human gate offers a ready-to-run prompt for an additional opposite-producer-family review; the human decides whether to run it, and any resulting findings are durably triaged before the gate resolves
+- **Human-in-the-loop**: The agent does the labor, including verification; you decide at every returned human gate
+- **Durable review fixed point**: The server dispatches the configured counter-review and any constitution review, then durable triage resolves the findings before work advances
+- **Change-bounded implementation review**: Phase review covers declared outputs and their current behavior. Unchanged repository files are supporting evidence, not a general code-review backlog.
 - **Outcome-sized checkpoints**: A phase normally lands one coherent, repository-ready outcome with a valid stopping point and a verification story a human can understand. These checkpoints make review, recovery, and later changes easier to reason about. Phase sizing remains engineering judgment, not a deterministic rule based on file count, layer count, phase count, or context-window arithmetic.
 - **Inter-phase learning**: Each phase writes `impl-notes.md` with decisions, patterns, gotchas, and interfaces. The technical design absorbs deviations so later phases read current truth; durable conventions get promoted to the project's CLAUDE.md.
 - **Plan stays accurate**: After each phase, `design.md` and `prd.md` are updated to reflect what actually happened, not just what was planned.

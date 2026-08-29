@@ -29,7 +29,6 @@ describe("reviewer finding tags", () => {
       dispositions: [
         { finding_id: "sol-budget", disposition: "rejected", attempt: 1 },
         { finding_id: "fable-contract", disposition: "accepted", attempt: 1, revision_intent: "fix it" },
-        // Carried from an earlier round: in the ledger, not in the current dispositions.
         { finding_id: "fable-older", disposition: "rejected", attempt: 0 },
       ],
       current: [
@@ -42,10 +41,10 @@ describe("reviewer finding tags", () => {
       return JSON.parse(entry.content) as { dispositions: { finding_id: string }[]; coverage: string };
     };
     const all = decode(priorTriageContextEntry(record));
-    expect(all.dispositions.map((d) => d.finding_id)).toEqual(["sol-budget", "fable-contract", "fable-older"]);
+    expect(all.dispositions.map((d) => d.finding_id)).toEqual(["fable-contract"]);
     const fable = decode(priorTriageContextEntry(record, (id) => reviewerOwnsFinding("fable", 2, id)));
-    expect(fable.dispositions.map((d) => d.finding_id)).toEqual(["fable-contract", "fable-older"]);
-    expect(fable.coverage).toMatch(/this reviewer raised/u);
+    expect(fable.dispositions.map((d) => d.finding_id)).toEqual(["fable-contract"]);
+    expect(fable.coverage).toMatch(/assigned to this reviewer/u);
   });
 
   it("pins the prior-triage record whole even past the excerpt budget", () => {

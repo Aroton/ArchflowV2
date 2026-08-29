@@ -172,7 +172,7 @@ describe("canonical skill contracts", () => {
       expect(source).toContain("audit detail");
       expect(source.toLowerCase()).toContain("there is no optional");
     }
-    expect(skill("archflow-status")).toContain("Do not expose the gate ID");
+    expect(skill("archflow-status")).toMatch(/gate IDs?.*diagnostic-only/u);
     expect(skill("archflow-init")).toContain("Do not relay raw output");
     expect(all).not.toContain("archflow-local gate-counter");
     expect(all).not.toContain("SUPPLEMENTAL_REVIEW_REQUIRED");
@@ -191,11 +191,31 @@ describe("canonical skill contracts", () => {
     }
   });
 
-  it("uses one bounded PRD author check before the independent review", () => {
-    const source = skill("archflow-prd");
-    expect(source.toLowerCase()).toContain("perform one bounded author check");
-    expect(source).not.toContain("spawn a fresh review sub-agent");
-    expect(source).toMatch(/Do not spawn an (?:additional|extra) generative reviewer/u);
+  it("uses one bounded author check and no extra generative reviewer for every producer", () => {
+    for (const name of producerSkills) {
+      const source = skill(name);
+      expect(source.toLowerCase()).toContain("perform one bounded author check");
+      expect(source).toContain("`review_context.rubric` verbatim");
+      expect(source).toContain("returned active rules");
+      expect(source).toContain("server-dispatched review is the only independent review");
+      expect(source).not.toContain("spawn a fresh review sub-agent");
+      expect(source).not.toContain("fresh same-side draft review");
+      expect(source).toMatch(/Do not spawn an (?:additional|extra) generative reviewer/u);
+    }
+  });
+
+  it("keeps review triage on the submitted subject instead of the whole repository", () => {
+    for (const name of producerSkills) {
+      const source = skill(name);
+      expect(source).toContain("review subject");
+      expect(source).toMatch(/repository snapshots.*evidence/u);
+      expect(source).toMatch(/pre-existing defects?/u);
+      expect(source).toContain("introduced, exposed, or materially worsened");
+    }
+    const implementation = skill("archflow-phase-impl");
+    expect(implementation).toContain("declared add, modify, delete, and rename outputs");
+    expect(implementation).toContain("current post-change behavior");
+    expect(implementation).toContain("this is not a general code review");
   });
 
   it("persists PRD clarification dialogue in the pinned ask record", () => {
@@ -214,7 +234,8 @@ describe("canonical skill contracts", () => {
       const source = skill(name);
       expect(source).toContain("`review_context.rubric`");
       expect(source).toContain("active rules");
-      expect(source).toMatch(/never (?:author durable review policy|an authored rubric)/u);
+      expect(source).toContain("author durable review policy");
+      expect(source).toContain("server-dispatched review is the only independent review");
     }
   });
 
@@ -338,7 +359,7 @@ describe("canonical skill contracts", () => {
       expect(source).toContain("`commit.paths`");
       expect(source).toContain("read-only `archflow_status`");
     }
-    expect(skill("archflow-phase-design")).toContain("compound parent update");
+    expect(skill("archflow-phase-design")).toContain("compound production result");
   });
 
   it("limits destination-skill hand-off recovery to the exact semantic offer", () => {

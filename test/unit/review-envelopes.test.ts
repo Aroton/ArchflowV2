@@ -5,6 +5,8 @@ import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import {
   PRIOR_TRIAGE_INSTRUCTION,
+  IMPLEMENTATION_REVIEW_INSTRUCTION,
+  CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION,
   REVIEW_INSTRUCTION,
   REVIEW_ASSIGNMENT_INSTRUCTION,
   MULTI_REPOSITORY_VIEW_NOTE,
@@ -139,7 +141,10 @@ describe("review dispatch envelopes", () => {
     });
     const visible = json(assigned.bytes);
     expect(visible.assignment).toEqual({ reviewer_id: "test", focus: "tests", criterion_ids: ["contract-match"] });
-    expect(visible.instructions).toEqual({ review: REVIEW_INSTRUCTION, assignment: REVIEW_ASSIGNMENT_INSTRUCTION });
+    expect(visible.instructions).toEqual({
+      review: IMPLEMENTATION_REVIEW_INSTRUCTION,
+      assignment: REVIEW_ASSIGNMENT_INSTRUCTION,
+    });
     expect(assigned.digest).not.toBe(bare.digest);
     expect(() => buildReviewEnvelope({
       ...input(),
@@ -226,8 +231,8 @@ describe("review dispatch envelopes", () => {
       ],
     };
     expect(json(buildReviewEnvelope({ ...input(), workspace }).bytes).workspace).toEqual(workspace);
-    expect(MULTI_REPOSITORY_VIEW_NOTE).toContain("commit-pinned read-only context");
-    expect(MULTI_REPOSITORY_VIEW_NOTE).toContain("may not contain this phase's work");
+    expect(MULTI_REPOSITORY_VIEW_NOTE).toContain("declared outputs and their current post-change behavior");
+    expect(MULTI_REPOSITORY_VIEW_NOTE).toContain("supporting evidence only");
 
     for (const invalid of [
       { ...workspace, note: "inspect everything" },
@@ -276,29 +281,27 @@ describe("review dispatch envelopes", () => {
     const visible = json(bound.bytes);
 
     // The framing literal is always present; the remediation literal only when prior triage is pinned.
-    expect(json(bare.bytes).instructions).toEqual({ review: REVIEW_INSTRUCTION });
+    expect(json(bare.bytes).instructions).toEqual({ review: IMPLEMENTATION_REVIEW_INSTRUCTION });
     expect(Object.keys(visible)).toEqual([
       "schema_version", "artifact", "rubric", "context", "instructions", "subject",
     ]);
     expect(visible.context).toEqual([priorTriage]);
-    expect(visible.instructions).toEqual({ review: REVIEW_INSTRUCTION, prior_triage: PRIOR_TRIAGE_INSTRUCTION });
-    expect(REVIEW_INSTRUCTION).toContain("independent counter-reviewer");
-    expect(REVIEW_INSTRUCTION).toContain("Read the whole artifact and every pinned context entry before judging");
-    expect(REVIEW_INSTRUCTION).toContain("check that they jointly hold");
-    expect(REVIEW_INSTRUCTION).toContain("recompute derived figures");
-    expect(REVIEW_INSTRUCTION).toContain("Only after that pass apply the rubric's materiality bar");
+    expect(visible.instructions).toEqual({ review: IMPLEMENTATION_REVIEW_INSTRUCTION, prior_triage: PRIOR_TRIAGE_INSTRUCTION });
+    expect(IMPLEMENTATION_REVIEW_INSTRUCTION).toContain("declared by this phase");
+    expect(IMPLEMENTATION_REVIEW_INSTRUCTION).toContain("unchanged files");
+    expect(IMPLEMENTATION_REVIEW_INSTRUCTION).toContain("introduced, exposed, or materially worsened");
+    expect(IMPLEMENTATION_REVIEW_INSTRUCTION).toContain("not a general code review");
     expect(PRIOR_TRIAGE_INSTRUCTION).toContain("This is a remediation review");
-    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("not a second full review");
-    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("for every accepted revision intent in that record, verify in the artifact that it was carried out");
-    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("only if the revision itself introduced it or made it visible, and only if it is a blocker");
-    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("Non-blocking findings are not reportable in a remediation round");
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("not a new full review");
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("only the latest accepted findings");
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("introduced, exposed, or materially worsened a blocker");
     expect(PRIOR_TRIAGE_INSTRUCTION).toContain("unverifiable- or escalate- finding");
     // Remediation rounds are scoped to the revision: no fresh sweep of unchanged sections, and
     // an empty finding list is the intended terminal state.
-    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("do not open a new sweep of unchanged sections");
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("inspect unrelated unchanged content");
     expect(PRIOR_TRIAGE_INSTRUCTION).not.toContain("anywhere in the artifact");
-    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("must return no findings");
-    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("Do not re-evaluate changed content against the full rubric");
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("return no findings");
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("apply the full rubric as a new sweep");
     // The instruction literal and the entry participate in the recorded envelope digest.
     expect(bound.digest).not.toBe(bare.digest);
     expect(bound.digest).toBe(canonicalJsonDigest({
@@ -345,6 +348,29 @@ describe("review dispatch envelopes", () => {
     expect(visible.instructions.trigger).toMatch(/directly evidenced by the artifact/u);
     expect(visible.instructions.trigger).toMatch(/no review_trigger is always not-matched/u);
     expect(visible.instructions.trigger).toMatch(/gate authority, approvals, commits, and dispatch outcomes/u);
+    expect(visible.instructions).not.toHaveProperty("implementation_scope");
+  });
+
+  it("limits implementation and constitution review to declared outputs", () => {
+    const workspace: ReviewWorkspaceBinding = {
+      kind: "read-only-produced-repository-snapshot",
+      base_commit: "0123456789abcdef0123456789abcdef01234567" as never,
+      snapshot_digest: digest("f"),
+      note: PRODUCED_REPOSITORY_VIEW_NOTE,
+    };
+    const adjudication = json(buildAdjudicationEnvelope({ ...adjudicationInput(), workspace }).bytes) as {
+      instructions: Record<string, string>;
+    };
+    expect(adjudication.instructions.implementation_scope).toBe(CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION);
+    expect(adjudication.instructions.implementation_scope).toContain("supporting evidence, not separate review subjects");
+    expect(adjudication.instructions.implementation_scope).toContain("introduced, exposed, or materially worsened");
+
+    const document = input();
+    const documentReview = json(buildReviewEnvelope({
+      ...document,
+      rubric: { ...document.rubric, kind: "artifact" },
+    }).bytes) as { instructions: Record<string, string> };
+    expect(documentReview.instructions.review).toBe(REVIEW_INSTRUCTION);
   });
 
   it("builds a domain-separated adjudication envelope with only child-visible instructions", () => {

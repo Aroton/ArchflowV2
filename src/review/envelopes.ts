@@ -98,15 +98,15 @@ export type PinnedContextEntry =
  * variable note would reopen the instruction channel this envelope deliberately closes.
  */
 export const REPOSITORY_VIEW_NOTE =
-  "Your working directory is a read-only checkout of the repository at this commit, excluding .archflow/tasks. Use it to verify repository claims; the artifact and pinned context remain the review subject and take precedence on conflict.";
+  "Your working directory is a read-only checkout of the repository at this commit, excluding .archflow/tasks. It is evidence for claims about the review subject, not a separate review subject. The artifact and pinned context take precedence on conflict.";
 
 /** Fixed child-visible explanation of the retained implementation snapshot. */
 export const PRODUCED_REPOSITORY_VIEW_NOTE =
-  "Your working directory is a sealed read-only post-change repository snapshot reconstructed from the authenticated implementation output, excluding .archflow/tasks. The artifact names the changed paths and baseline; inspect the files in this snapshot as the review subject.";
+  "Your working directory is a sealed read-only post-change repository snapshot reconstructed from the authenticated implementation output, excluding .archflow/tasks. Review the declared outputs and their current post-change behavior. Unchanged files are supporting evidence only.";
 
 /** Fixed child-visible navigation and authority boundary for a named repository set. */
 export const MULTI_REPOSITORY_VIEW_NOTE =
-  "Your working directory contains read-only repository snapshots at `./<name>`; cite files as `<name>/<path>`. A repository entry with `snapshot_digest` is a sealed post-change tree reconstructed from authenticated implementation output and is part of the review subject. An entry without `snapshot_digest` is commit-pinned read-only context and may not contain this phase's work; the artifact and pinned context remain the review subject and take precedence on conflict.";
+  "Your working directory contains read-only repository snapshots at `./<name>`; cite files as `<name>/<path>`. An entry with `snapshot_digest` is a sealed post-change tree reconstructed from authenticated implementation output; review only its declared outputs and their current post-change behavior. Every other file and every entry without `snapshot_digest` is supporting evidence only. The artifact and pinned context take precedence on conflict.";
 
 export type MultiRepositoryWorkspaceEntry = {
   readonly name: string;
@@ -169,13 +169,8 @@ export type ReviewEnvelopeSeed = Readonly<
 >;
 
 /**
- * The fixed framing and method every rubric-review child receives as `instructions.review`. The
- * child otherwise sees only data — artifact, rubric, pinned context, subject — and the rubric
- * says what counts as a defect, not how to look for one. This literal supplies the search: read
- * everything first, trace every stated commitment into the sections that depend on it, recompute,
- * verify against the view, and only then apply the materiality bar. It is a literal for the same
- * reason as {@link REPOSITORY_VIEW_NOTE}: variable prose would reopen the caller-instruction
- * channel this envelope deliberately closes.
+ * Fixed document-review framing. Implementation rubrics use the narrower implementation literal.
+ * Both are server-owned so caller prose cannot enter the instruction channel.
  */
 export const REVIEW_INSTRUCTION =
   "You are the independent counter-reviewer for the artifact in this envelope. Read the whole artifact and every pinned context entry before judging anything; the pinned approved upstream documents state what the artifact must satisfy. Then work through the artifact section by section: trace each stated constant, budget, invariant, interface claim, and policy into every other section that depends on it and check that they jointly hold; recompute derived figures rather than accepting them; verify repository and interface claims against the pinned evidence and the read-only repository view when one is provided; follow each stated property through the inputs and lifecycle events the system will actually meet. Frame your evaluation around the finite question: 'What would break in production or fail execution?' A true observation or discrepancy that does not change downstream implementation, break an approved boundary, or alter verification is not a defect and must not be reported. Only after that pass apply the rubric's materiality bar to decide what to report. Every finding cites the exact evidence and names its concrete consequence. Return the structured result the output schema describes and nothing else.";
@@ -183,18 +178,21 @@ export const REVIEW_INSTRUCTION =
 export const REVIEW_ASSIGNMENT_INSTRUCTION =
   "Assess only the rubric criteria named by assignment.criterion_ids, using assignment.focus as the boundary of your review. Do not report findings owned by another assignment. You may cite evidence outside your focus when it proves an assigned finding, but do not turn that evidence into an additional out-of-scope finding.";
 
+/** Review framing used only for implementation outputs. */
+export const IMPLEMENTATION_REVIEW_INSTRUCTION =
+  "Review only the implementation output declared by this phase: its added, modified, deleted, and renamed paths; its co-produced documents; and the current post-change behavior of those outputs. Use unchanged files, repository snapshots, pinned context, and dependencies only to verify how a declared output behaves or connects to an existing interface. They are evidence, not additional review subjects. Do not report a pre-existing or unrelated defect. Every finding must name the declared output that introduced, exposed, or materially worsened the defect and explain the current concrete consequence. This is a phase-change review, not a general code review. Apply the rubric's materiality bar and return only the structured result the output schema describes.";
+
 /**
  * The fixed remediation instruction the envelope adds as `instructions.prior_triage` when a
- * `prior-triage` context entry is pinned. A remediation round is a confirmation of the reviewer's
- * own earlier findings plus a regression check scoped to blockers the revision introduced — not a
- * second full review. Two earlier wordings each failed in one direction: confirmation-only let
- * fix-introduced defects through, and "as an initial review would" over the changed sections
- * turned every round into a fresh sweep that never returned empty. The blocker-only regression
- * task keeps the guard against the first failure while closing the second. Same literal
- * discipline as above.
+ * `prior-triage` context entry is pinned. It owns all remediation scope so rubrics stay identical
+ * between initial and later rounds.
  */
 export const PRIOR_TRIAGE_INSTRUCTION =
-  "This is a remediation review, not a second full review. The artifact already received a full review; the pinned prior-triage record lists the findings from earlier rounds that you are responsible for, each with the producer's disposition and revision intent. First task, confirmation: for every accepted revision intent in that record, verify in the artifact that it was carried out, and report a finding only where it was not. Second task, regression: in the sections the revision changed and the sections that depend on changed content, report a defect only if the revision itself introduced it or made it visible, and only if it is a blocker — one that would break production, alter downstream implementation, fail execution or verification, or breach an approved boundary. Non-blocking findings are not reportable in a remediation round, with one exception: an unverifiable- or escalate- finding that names evidence you needed and lacked to make the confirmation judgment itself. Do not re-evaluate changed content against the full rubric, do not open a new sweep of unchanged sections, and do not re-raise completed or rejected findings in variant form; challenge a prior disposition only by naming its finding_id and showing that the revision intent was not carried out or that the change introduced a blocker. A remediation round that finds nothing to report must return no findings; that is the intended terminal state of review, not a failure of diligence.";
+  "This is a remediation review, not a new full review. The pinned prior-triage record contains only the latest accepted findings assigned to you. Verify each revision intent against the current artifact. Report an accepted finding only when its intent was not carried out. Report a new finding only when the remediation change itself introduced, exposed, or materially worsened a blocker in the changed content or a directly dependent section. Do not revisit completed findings, inspect unrelated unchanged content, or apply the full rubric as a new sweep. If evidence needed for this confirmation is missing, one scoped unverifiable- or escalate- finding is allowed. Otherwise, when every intent is satisfied and no remediation regression exists, return no findings.";
+
+/** Additional constitution-review scope when the artifact is an implementation output. */
+export const CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION =
+  "For this implementation phase, judge rules, triggers, and approved-upstream drift only against the declared outputs, their co-produced documents, and their current post-change behavior. Repository snapshots and unchanged files are supporting evidence, not separate review subjects. A noncompliant, uncertain, triggered, or drifted result must identify the declared output that introduced, exposed, or materially worsened the condition. Do not surface pre-existing or unrelated repository conditions.";
 
 export type DispatchEnvelope = Readonly<{
   readonly result_kind: "review" | "adjudication";
@@ -624,7 +622,7 @@ export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelop
     // literal appears exactly when a prior-triage record is pinned, and its presence is derived
     // from validated context, never a caller switch.
     instructions: {
-      review: REVIEW_INSTRUCTION,
+      review: parsedRubric.kind === "implementation" ? IMPLEMENTATION_REVIEW_INSTRUCTION : REVIEW_INSTRUCTION,
       ...(assignment === undefined ? {} : { assignment: REVIEW_ASSIGNMENT_INSTRUCTION }),
       ...(context.some((entry) => entry.kind === "prior-triage")
         ? { prior_triage: PRIOR_TRIAGE_INSTRUCTION }
@@ -681,6 +679,11 @@ export function buildAdjudicationEnvelope(value: AdjudicationEnvelopeInput): Dis
       enforcement_context: "A rule's enforced_by labels name where that rule is mechanically enforced in the repository. They are context for your judgment, not evidence you are asked to verify or report on. Judge every rule the same way: from the artifact and the evidence supplied here.",
       uncertainty: "Report uncertain compliance only when the artifact, approved upstreams, and supplied repository snapshot leave the question genuinely open. Absence of runtime-only evidence is not by itself a reason to be uncertain.",
       trigger: "A rule's review_trigger names a condition the repository wants a human to look at. Report trigger=matched only when that condition is directly evidenced by the artifact, its co-produced documents, or the supplied repository snapshot, and trigger=uncertain only when those genuinely leave it open. Workflow mechanics the server owns—gate authority, approvals, commits, and dispatch outcomes—are never evidence for a trigger; report not-matched. A rule with no review_trigger is always not-matched, with trigger_evidence stating that the rule declares no trigger.",
+      ...(workspace !== undefined && (
+        workspace.kind === "read-only-produced-repository-snapshot" ||
+        (workspace.kind === "read-only-multi-repository-view" &&
+          workspace.repositories.some((repository) => repository.snapshot_digest !== undefined))
+      ) ? { implementation_scope: CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION } : {}),
     },
     subject,
   } as const satisfies PlainJsonValue;

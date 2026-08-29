@@ -254,7 +254,7 @@ describe("priorTriageEvidence", () => {
     expect(noLoader).toMatchObject({ ok: true, value: [] });
   });
 
-  it("assembles the prior round's dispositions joined to their reviewer-authored findings", async () => {
+  it("projects only the latest accepted dispositions with reviewer-authored findings", async () => {
     const result = await priorTriageEvidence(
       loader({
         triage: installation(triageManifest([
@@ -288,27 +288,10 @@ describe("priorTriageEvidence", () => {
         disposition: "accepted", rationale: "Real defect.",
         revision_intent: "Recompute after the slot check.",
       },
-      {
-        finding_id: "naming-nit", attempt: 2, severity: "minor", blocking: false,
-        summary: "Rename the helper.",
-        evidence: "The name differs from a convention.",
-        suggested_resolution: "Rename it.",
-        disposition: "rejected", rationale: "envelope-gap: name matches the convention.",
-      },
-      // An unknown disposition string renders as-is; the vocabulary can grow without breaking assembly.
-      {
-        finding_id: "style-note", attempt: 2, severity: "minor", blocking: false,
-        summary: "Editorial wording.",
-        evidence: "The sentence is awkward.",
-        suggested_resolution: "Reword it.",
-        disposition: "accepted-editorial", rationale: "Wording only.",
-      },
-      // A finding outside the retained counter-review evidence renders without invented fields.
-      { finding_id: "older-extra", attempt: 2, disposition: "rejected", rationale: "From older review evidence." },
     ]);
   });
 
-  it("renders the carried ledger with the current dispositions winning a finding_id collision", async () => {
+  it("does not expose the cumulative disposition ledger to a remediation child", async () => {
     const result = await priorTriageEvidence(
       loader({
         triage: installation({
@@ -338,24 +321,28 @@ describe("priorTriageEvidence", () => {
       coverage: string;
       dispositions: readonly Record<string, unknown>[];
     };
-    expect(record.coverage).toContain("all retained rounds");
+    expect(record.coverage).toContain("latest accepted findings");
     expect(record.dispositions).toEqual([
-      // The current dispositions come first — they are what the reviewer must confirm — and win
-      // a finding_id collision with the carried ledger.
       {
         finding_id: "digest-drift", attempt: 2,
         disposition: "accepted", rationale: "Round two disposition.",
         revision_intent: "Recompute after the slot check.",
       },
-      // Ledger history follows, carrying the details its round embedded at install time.
-      {
-        finding_id: "older-round", attempt: 1, severity: "major", blocking: false,
-        summary: "Older summary.",
-        evidence: "Older rejection evidence.",
-        suggested_resolution: "Older resolution.",
-        disposition: "rejected", rationale: "Older rejection.",
-      },
     ]);
+  });
+
+  it("pins no remediation context when the latest triage has no accepted findings", async () => {
+    const result = await priorTriageEvidence(
+      loader({
+        triage: installation(triageManifest([
+          { review_evidence_digest: REVIEW_DIGEST, finding_id: "naming-nit", disposition: "rejected", rationale: "Not applicable." },
+          { review_evidence_digest: REVIEW_DIGEST, finding_id: "style-note", disposition: "accepted-editorial", rationale: "Wording only." },
+        ])),
+        counter_review: installation(reviewManifest),
+      }),
+      state([reference("counter_review", "3".repeat(64)), reference("triage", "2".repeat(64))]),
+    );
+    expect(result).toMatchObject({ ok: true, value: [] });
   });
 
   it("fails closed when a referenced manifest cannot be loaded or has the wrong kind", async () => {

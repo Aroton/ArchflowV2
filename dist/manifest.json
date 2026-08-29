@@ -92,10 +92,10 @@
       "size": 1873819
     },
     {
-      "digest": "0b2eb7ac04b9c00a9b9e2d2905f301628a8ee2188ffc70d52cc6c4f484e45ac1",
+      "digest": "536114a49e38084c7c07081724c0e6809a12fd0c7d5fa2dfaa7294c541eab626",
       "path": "archflow-mcp.mjs",
       "role": "executable",
-      "size": 3284461
+      "size": 3284443
     },
     {
       "digest": "b1a2da6bef84f2512ae167c3f0e9f8caee088fed9ac04f4e7022366d83729ca0",
@@ -210,7 +210,7 @@
       "role": "manifest"
     },
     {
-      "digest": "c6e429e9b33c2eb6f53c74c3093e2a7b4eeebe15dd2578ca98495ec662192e5b",
+      "digest": "ac442d40f24ee556b7a918fa9482a328d27769731a0d25d9171db697af5c4b3b",
       "path": "metafile.json",
       "role": "metafile",
       "size": 354365
@@ -232,7 +232,7 @@
       "role": "local-cli"
     }
   ],
-  "bundle_digest": "0b2eb7ac04b9c00a9b9e2d2905f301628a8ee2188ffc70d52cc6c4f484e45ac1",
+  "bundle_digest": "536114a49e38084c7c07081724c0e6809a12fd0c7d5fa2dfaa7294c541eab626",
   "bundle_inputs": [
     {
       "bytes_in_output": 34870,
@@ -3521,24 +3521,24 @@
       "size": 10317
     },
     {
-      "bytes_in_output": 21436,
-      "digest": "ce4375ff82441594c859eeb62d3be7284b50679beff252c48e87af0fb52158ac",
+      "bytes_in_output": 21343,
+      "digest": "061698c07fc8bd328510d6acb3c1bef2de17166c9ec331859e4750e6d0646b88",
       "key": "src/review/counter-review.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/counter-review.ts"
       },
-      "size": 37160
+      "size": 36755
     },
     {
-      "bytes_in_output": 23581,
-      "digest": "0d6cd87253317d914a6a28503b7cd561a7f44f456d664f62ae0748a0017ff5e5",
+      "bytes_in_output": 24631,
+      "digest": "b9d3c0241e804ba55d0bbf851afd1fdd9d546beb8856ee7639c8a0d8140baabe",
       "key": "src/review/envelopes.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/envelopes.ts"
       },
-      "size": 35524
+      "size": 35880
     },
     {
       "bytes_in_output": 30609,
@@ -3551,14 +3551,14 @@
       "size": 29744
     },
     {
-      "bytes_in_output": 20736,
-      "digest": "3407741f16425e593ee210d1ee769fd217879fd79472af97077069ef30a71686",
+      "bytes_in_output": 19761,
+      "digest": "206f3634329d08f75ab89ff7de1700c9a9716cac7fd3aa41b4dde77a0c72ad61",
       "key": "src/review/pinned-context.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/pinned-context.ts"
       },
-      "size": 33931
+      "size": 31310
     },
     {
       "bytes_in_output": 314,
@@ -4965,7 +4965,7 @@
       ],
       "entry_point": "src/main.ts",
       "id": "mcp-stdio",
-      "output_digest": "0b2eb7ac04b9c00a9b9e2d2905f301628a8ee2188ffc70d52cc6c4f484e45ac1",
+      "output_digest": "536114a49e38084c7c07081724c0e6809a12fd0c7d5fa2dfaa7294c541eab626",
       "output_path": "archflow-mcp.mjs"
     },
     {
@@ -5419,19 +5419,19 @@
       "size": 1917
     },
     {
-      "digest": "8f8b62e80628de72b74605e6e05296763c04e954cab2488732639fdf80d3fb4c",
+      "digest": "accca13dffcea87de6b427a95bbf9e46c9de0663c5d3357b17d0ce913150ec62",
       "path": "assets/rubrics/design.yaml",
-      "size": 8193
+      "size": 7838
     },
     {
-      "digest": "321a658d59d84316ad11cb57be60b5eb86b5c350f468c61035565ae19789b3af",
+      "digest": "779d9436c659ab87e49e59e73691f0bfbce10580a2713fc7d2d927a81bb41399",
       "path": "assets/rubrics/implementation.yaml",
-      "size": 6855
+      "size": 6472
     },
     {
-      "digest": "f13655e57dc8093cf8b02fc0aec36dd79558684fe8dcdd919a1189bbf6601ab6",
+      "digest": "07a61ba7f854b276e26859996193aba32dc9943f015d610b04436faf050b6745",
       "path": "assets/rubrics/prd.yaml",
-      "size": 4496
+      "size": 4120
     },
     {
       "digest": "3f5f7536f19219fbf4ade78aea07c93d22d03057ce2ed83d532e25a54a8aab9a",
@@ -5751,19 +5751,19 @@
       "size": 1917
     },
     {
-      "digest": "8f8b62e80628de72b74605e6e05296763c04e954cab2488732639fdf80d3fb4c",
+      "digest": "accca13dffcea87de6b427a95bbf9e46c9de0663c5d3357b17d0ce913150ec62",
       "path": "assets/rubrics/design.yaml",
-      "size": 8193
+      "size": 7838
     },
     {
-      "digest": "321a658d59d84316ad11cb57be60b5eb86b5c350f468c61035565ae19789b3af",
+      "digest": "779d9436c659ab87e49e59e73691f0bfbce10580a2713fc7d2d927a81bb41399",
       "path": "assets/rubrics/implementation.yaml",
-      "size": 6855
+      "size": 6472
     },
     {
-      "digest": "f13655e57dc8093cf8b02fc0aec36dd79558684fe8dcdd919a1189bbf6601ab6",
+      "digest": "07a61ba7f854b276e26859996193aba32dc9943f015d610b04436faf050b6745",
       "path": "assets/rubrics/prd.yaml",
-      "size": 4496
+      "size": 4120
     },
     {
       "digest": "3f5f7536f19219fbf4ade78aea07c93d22d03057ce2ed83d532e25a54a8aab9a",

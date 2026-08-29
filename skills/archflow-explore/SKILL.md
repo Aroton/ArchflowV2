@@ -31,9 +31,9 @@ Either way, state which pages will be written or refreshed and stop for confirma
 
 ## Parallel exploration
 
-Exploration is bulk reading, and the reading belongs in sub-agent contexts, not this one — this session is the orchestrator: its context is the scarcest resource, so it plans the page set, reviews the results, and runs the commit gate. Spawn one sub-agent per page being written or refreshed, run them in parallel, and wait for all of them. A sub-agent sees nothing of this conversation, so give each a complete brief: the page's scope and target path, the document format above, the stamp values, and any focus area. Each agent explores the *actual code* in its own fresh context, writes its page directly, and returns only the file path and a few-sentence summary; keep this session's own reading to spot checks of the finished pages. Only if a spawn actually fails, run that page's investigation yourself, distilling into the page as you go — a fallback for real failure, never a preference.
+Delegate exploration when its size or separable subsystems justify parallel contexts; a small refresh can stay inline. Group related pages or subsystems into as few independent briefs as the work needs rather than assigning one agent per page. A sub-agent sees none of this conversation, so include its scope, target pages, document format, stamp values, and focus area. Have it inspect actual code, write its assigned pages, and return the paths plus conclusions needed for synthesis. Review every result before the gate.
 
-After the fan-out, write or update `docs/OVERVIEW.md` yourself as the synthesis pass: the system map, how the sections connect, and cross-links to every page.
+Write or update `docs/OVERVIEW.md` when the system map, glossary, subsystem relationships, or maintained page set changed. Otherwise preserve its existing bytes and stamp.
 
 All correspondence with the user, especially review and commit gates, is conversational and human-readable. Lead with what changed, why it matters, and the decision needed. Do not dump IDs, digests, JSON, internal workflow paths, or protocol codes unless the user explicitly asks for diagnostics or audit detail.
 

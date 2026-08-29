@@ -13,9 +13,9 @@ import { loadTestRubric } from "../helpers/rubrics.js";
 // deliberately, never casually: a changed digest is changed review policy for every
 // installed bundle, and it fails in-flight tasks' input fingerprints closed.
 const PINNED_RUBRIC_DIGESTS = Object.freeze({
-  "prd-v1": "477c9807c2f3e8affea4bef05f1eb924e577758d5d94439a9f9fabf34e7798ab",
-  "design-v3": "73cbbb653e8d02b36d1ddd8eb017847498ae8e9770dbc62d3acc7349942e5b8b",
-  "implementation-v1": "4222d39d0770c748972f2e507dd6e3f64476253c53087a72c07dbcaacf9e46bb",
+  "prd-v1": "8d1c0a25544d39435895472d7d1942f70886ef4073260b07343610f387714d6d",
+  "design-v3": "1de3ef4ed22d5698493eb7a6376ebdf493763c1ba39e821fa8e875f9095a8c8e",
+  "implementation-v1": "37ccf2e8223156f213f503caf8c1927b801a024332421a3c2f2c44ad300e1825",
 } satisfies Record<CanonicalRubricId, string>);
 
 const roots: string[] = [];
@@ -98,6 +98,18 @@ describe("canonical counter-review rubrics", () => {
       expect(confidence?.blocking).toBe(false);
       expect(confidence?.text).toContain("escalate-");
     }
+  });
+
+  it("keeps remediation policy in the fixed instruction and implementation findings on declared outputs", async () => {
+    for (const rubric of [await loadTestRubric("prd"), await loadTestRubric("design"), await loadTestRubric("phase-impl")]) {
+      const text = rubric.rubric.criteria.map((criterion) => criterion.text).join("\n");
+      expect(text).not.toMatch(/prior-triage|challenge a prior disposition|accepted revision intent/iu);
+    }
+    const implementation = await loadTestRubric("phase-impl");
+    const substantive = implementation.rubric.criteria.find((criterion) => criterion.id === "substantive-correctness")?.text ?? "";
+    expect(substantive).toContain("declared phase output");
+    expect(substantive).toContain("introduced, exposed, or materially worsened");
+    expect(substantive).toContain("pre-existing unrelated defects");
   });
 
   it("partitions test review without duplicating criteria and preserves full legacy review", async () => {

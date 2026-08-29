@@ -6965,7 +6965,7 @@
       ]
     },
     "src/review/counter-review.ts": {
-      "bytes": 37160,
+      "bytes": 36755,
       "format": "esm",
       "imports": [
         {
@@ -7067,7 +7067,7 @@
       ]
     },
     "src/review/envelopes.ts": {
-      "bytes": 35524,
+      "bytes": 35880,
       "format": "esm",
       "imports": [
         {
@@ -7144,7 +7144,7 @@
       ]
     },
     "src/review/pinned-context.ts": {
-      "bytes": 33931,
+      "bytes": 31310,
       "format": "esm",
       "imports": [
         {
@@ -10919,7 +10919,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3284461,
+      "bytes": 3284443,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12266,16 +12266,16 @@
           "bytesInOutput": 5798
         },
         "src/review/counter-review.ts": {
-          "bytesInOutput": 21436
+          "bytesInOutput": 21343
         },
         "src/review/envelopes.ts": {
-          "bytesInOutput": 23550
+          "bytesInOutput": 24600
         },
         "src/review/fixed-point.ts": {
           "bytesInOutput": 15705
         },
         "src/review/pinned-context.ts": {
-          "bytesInOutput": 20736
+          "bytesInOutput": 19761
         },
         "src/review/reviewer-tags.ts": {
           "bytesInOutput": 314

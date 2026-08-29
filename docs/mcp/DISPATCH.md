@@ -2,7 +2,7 @@
 
 **Explored:** 2026-08-27 · **Commit:** `1b2602e` · **Covers:** `src/dispatch/`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/mcp/handlers/session.ts`, `src/state/semantic-actions.ts`, `src/state/workspace-cleanup.ts`
 
-Dispatch is how the server turns "get an independent review" into real child processes running reviewer CLIs. It exists so that general counter-review, optional test-specialist review, and constitution-review evidence is something the producer **cannot author** — the server spawns each contributor, captures its bytes, and binds the output to provenance. A semantic `review` action reaches the direct handler seam. All required children run concurrently, receive sealed role-specific envelopes, and share the same ordered server-materialized repository views.
+Dispatch turns a semantic `review` action into server-run general, optional test-specialist, and constitution reviewer processes. The server supplies sealed role-specific inputs, captures validated output, and binds it to contributor provenance, so the producer cannot author the evidence. Required children share the same ordered server-materialized repository views and run concurrently.
 
 ## The flow
 
@@ -24,6 +24,8 @@ flowchart LR
 ## The read-only repository view
 
 The resolved configured set is the only membership source. A one-repository review preserves the historical `<workspace>/repo` cwd and envelope arm. With secondaries, the child cwd is `<workspace>/repos`, containing `primary/` first and then each configured secondary by ordinal name; findings cite paths such as `apis/src/handler.ts`. Document members are archived at their already-observed HEADs. During implementation review the primary uses the artifact's attested `base_commit` with retained projections applied, while a secondary without an authenticated implementation section is commit-only context at observed HEAD—even when configured `writable`. The compact envelope names each repository and binds its identity and commit; proposed trees additionally bind a snapshot digest.
+
+For implementation review, the view is evidence rather than the review subject. The subject is the declared outputs, co-produced documents, and their current behavior. Reviewers may inspect unchanged files to trace direct dependencies, interfaces, and effects, but must not report unrelated pre-existing defects. Every implementation finding must describe a material defect introduced, exposed, or worsened by the current change. Unchanged writable members and context-only repositories remain supporting context.
 
 Each baseline is a `git archive | tar -x` extraction, deliberately **not** a worktree: no snapshot contains `.git`. The primary removes `.archflow/tasks`; every secondary removes `.archflow` completely, so another repository's task and policy state cannot become review context. Applying a primary produced projection likewise omits task-authority entries (including a retained implementation log), and rejects escapes, symlink parents, and directory collisions; repository names never reach the filesystem unchecked because the ordered view plan is validated first (index 0 is literally `primary`, every other member is a declared repository name), so each view is a direct child of its container by construction. Unrelated live-worktree edits are never copied.
 
