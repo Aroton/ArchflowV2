@@ -60,7 +60,8 @@
       "type": "string",
       "enum": [
         "claude-cli",
-        "codex-cli"
+        "codex-cli",
+        "antigravity-cli"
       ]
     },
     "family": {

@@ -82,7 +82,7 @@ function decodeJson(bytes: Uint8Array): unknown {
 const digestBytes = (bytes: Uint8Array): Sha256Digest => parseSha256Digest(createHash("sha256").update(bytes).digest("hex"));
 const copiedBytes = (bytes: Uint8Array): Uint8Array => Uint8Array.from(bytes);
 export function assertAdapterFamily(adapter: AdapterId, family: ModelFamily): void {
-  const expected = adapter === "claude-cli" ? "claude" : "codex";
+  const expected = adapter === "claude-cli" ? "claude" : adapter === "antigravity-cli" ? "gemini" : "codex";
   if (family !== expected) throw new TypeError("adapter and model family do not match");
 }
 function createObservation<K extends EvidenceKind>(binding: ObservationBindingByKind[K], bytes: Uint8Array, rawOutputDigest: Sha256Digest): AdapterObservation<K> {

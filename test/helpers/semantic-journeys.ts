@@ -117,48 +117,89 @@ export function installSemanticReviewStub(
   mkdirSync(join(stubHome, ".codex"), { recursive: true });
   mkdirSync(bin, { recursive: true });
   writeFileSync(join(stubHome, ".codex", "auth.json"), "{}\n");
-  writeFileSync(join(bin, "codex"), `#!/usr/bin/env node
-import { readFileSync, writeFileSync } from "node:fs";
-const argv = process.argv.slice(2);
-if (argv.length === 1 && argv[0] === "--version") process.stdout.write("codex-cli 0.146.0\\n");
-else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logged in using ChatGPT\\n");
-else {
-  const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
-  const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8")); const subject = envelope.subject;
-  let output;
+
+  const generatorScript = `
+function generateOutput(envelope, countPath, findingsByReview, adjudicationCompliance, implementationFailingRule) {
+  const subject = envelope.subject;
   if (subject.role === "counter-review") {
-    let count = 0; try { count = Number(readFileSync(${JSON.stringify(countPath)}, "utf8")); } catch {}
-    const all = ${JSON.stringify(findingsByReview)}; const findings = all[Math.min(count, all.length - 1)] ?? [];
-    writeFileSync(${JSON.stringify(countPath)}, String(count + 1));
-    output = { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
+    let count = 0; try { count = Number(readFileSync(countPath, "utf8")); } catch {}
+    const all = findingsByReview; const findings = all[Math.min(count, all.length - 1)] ?? [];
+    writeFileSync(countPath, String(count + 1));
+    return { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
       step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
       input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
       producer_family: subject.producer_family, findings, matched_rule_versions: [],
       verdict: findings.some((finding) => finding.blocking === true) ? "fail" : findings.length === 0 ? "pass" : "advisory",
       blocking_count: findings.filter((finding) => finding.blocking === true).length };
   } else {
-    output = { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
+    return { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
       step: "adjudicate", subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
       pinned_constitution_digest: subject.pinned_constitution_digest,
       approved_upstream_digests: subject.approved_upstream_digests,
       source_review_envelope_digest: subject.source_review_envelope_digest,
-      rule_findings: envelope.rules.map((rule, index) => ${JSON.stringify(implementationFailingRule)} && index === 0 &&
+      rule_findings: envelope.rules.map((rule, index) => implementationFailingRule && index === 0 &&
         subject.phase_instance.indexOf("phase-impl-") === 0
         ? { rule_id: rule.id, rule_version: rule.version, compliance: "pass",
             rationale: "The implementation respects this rule.", trigger: "matched",
             trigger_evidence: "The approved phase design requires an update before this work advances." }
         : { rule_id: rule.id, rule_version: rule.version,
-        compliance: ${JSON.stringify(adjudicationCompliance)},
-        rationale: ${JSON.stringify(adjudicationCompliance === "pass" ? "The document respects this rule." : "The document violates this rule.")},
-        trigger: ${JSON.stringify(adjudicationCompliance === "pass" ? "not-matched" : "matched")},
-        trigger_evidence: ${JSON.stringify(adjudicationCompliance === "pass" ? "No review trigger matched." : "The review trigger matched this document.")} }),
+        compliance: adjudicationCompliance,
+        rationale: adjudicationCompliance === "pass" ? "The document respects this rule." : "The document violates this rule.",
+        trigger: adjudicationCompliance === "pass" ? "not-matched" : "matched",
+        trigger_evidence: adjudicationCompliance === "pass" ? "No review trigger matched." : "The review trigger matched this document." }),
       drift_findings: subject.approved_upstream_digests.map((digest) => ({ upstream_digest: digest,
         drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift." })) };
   }
+}
+`;
+
+  writeFileSync(join(bin, "codex"), `#!/usr/bin/env node
+import { readFileSync, writeFileSync } from "node:fs";
+${generatorScript}
+const argv = process.argv.slice(2);
+if (argv.length === 1 && argv[0] === "--version") process.stdout.write("codex-cli 0.146.0\\n");
+else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logged in using ChatGPT\\n");
+else {
+  const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
+  const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const output = generateOutput(envelope, ${JSON.stringify(countPath)}, ${JSON.stringify(findingsByReview)}, ${JSON.stringify(adjudicationCompliance)}, ${JSON.stringify(implementationFailingRule)});
   writeFileSync(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');
 }`);
   chmodSync(join(bin, "codex"), 0o755);
+
+  writeFileSync(join(bin, "claude"), `#!/usr/bin/env node
+import { readFileSync, writeFileSync } from "node:fs";
+${generatorScript}
+const argv = process.argv.slice(2);
+if (argv.length === 1 && argv[0] === "--version") process.stdout.write("2.1.220 (Claude Code)\\n");
+else if (argv[0] === "auth" && argv[1] === "status") process.stdout.write(JSON.stringify({ loggedIn: true }) + "\\n");
+else {
+  const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
+  const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const output = generateOutput(envelope, ${JSON.stringify(countPath)}, ${JSON.stringify(findingsByReview)}, ${JSON.stringify(adjudicationCompliance)}, ${JSON.stringify(implementationFailingRule)});
+  process.stdout.write(JSON.stringify({ structured_output: output }) + "\\n");
+}`);
+  chmodSync(join(bin, "claude"), 0o755);
+
+  writeFileSync(join(bin, "agy"), `#!/usr/bin/env node
+import { readFileSync, writeFileSync } from "node:fs";
+${generatorScript}
+const argv = process.argv.slice(2);
+if (argv.length === 1 && argv[0] === "--version") process.stdout.write("agy 1.1.22\\n");
+else if (argv[0] === "models") process.stdout.write("gemini-3.7-flash-high\\n");
+else {
+  let envelope;
+  if (argv.includes("-p")) {
+    envelope = JSON.parse(argv[argv.indexOf("-p") + 1]);
+  } else {
+    const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
+    envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  }
+  const output = generateOutput(envelope, ${JSON.stringify(countPath)}, ${JSON.stringify(findingsByReview)}, ${JSON.stringify(adjudicationCompliance)}, ${JSON.stringify(implementationFailingRule)});
+  process.stdout.write(JSON.stringify({ structured_output: output }) + "\\n");
+}`);
+  chmodSync(join(bin, "agy"), 0o755);
   const saved = { path: process.env.PATH, home: process.env.HOME };
   process.env.PATH = `${bin}:${saved.path ?? ""}`;
   process.env.HOME = stubHome;

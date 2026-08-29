@@ -561,6 +561,8 @@ export async function handleCounterReview(
         serialize_dispatch: async <T>(operation: () => Promise<T>) => operation(),
         serialize_dispatch_pair: async <A, B>(first: () => Promise<A>, second: () => Promise<B>) =>
           Promise.all([first(), second()]),
+        serialize_dispatch_all: async <T>(ops: readonly (() => Promise<T>)[]) =>
+          Promise.all(ops.map((op) => op())),
       } : {}),
       prepare_evidence: (evidence, measuredAtRevision) => prepareDispatchEvidence(
         services, retainedBytes, resultId, { kind: "review", evidence }, measuredAtRevision,
@@ -580,6 +582,7 @@ export async function handleCounterReview(
       config: session.value.config,
       phase_kind: session.value.phase_kind,
       producer_family: session.value.producer_family,
+      host: session.value.host,
       measured_at_revision: session.value.measured_at_revision,
       repositories: reviewedRepositories,
       envelope: {

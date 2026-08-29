@@ -45,7 +45,7 @@ const MODEL_CHANGE: Mutation = {
 };
 const EFFORT_CHANGE: Mutation = {
   name: "effort change",
-  apply: (source) => source.replace("effort: xhigh", "effort: high"),
+  apply: (source) => source.replace("effort: high", "effort: max"),
 };
 const SEMANTIC_REWRITE: Mutation = {
   name: "semantically equivalent rewrite",
@@ -312,7 +312,7 @@ describe("config as an editable input", () => {
     if (!result.ok) return;
     expect(prepared).toBe(true);
     expect(result.value.state.value.last_seen_config).toMatchObject({
-      roles: { "counter-reviewer": { effort: "high" } },
+      roles: { "counter-reviewer": { effort: "max" } },
     });
   });
 
@@ -461,7 +461,7 @@ describe("config as an editable input", () => {
     const committed = await current.services.dependencies.read_state(current.services.authority.state);
     expect(committed).toMatchObject({
       kind: "canonical",
-      document: { value: { last_seen_config: { roles: { "counter-reviewer": { effort: "high" } } } } },
+      document: { value: { last_seen_config: { roles: { "counter-reviewer": { effort: "max" } } } } },
     });
   });
 

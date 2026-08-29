@@ -8,7 +8,7 @@ import { assertPlainJson } from "./plain-json.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
 import { PATH_CLASSES, repositoryPathClaimV1Schema, type RepositoryPathClaim } from "./path-claims.js";
 import { GATE_KINDS, type GateKind } from "./gates.js";
-import { MODEL_FAMILIES, type AdapterId, type ModelFamily } from "./review.js";
+import { ADAPTER_IDS, MODEL_FAMILIES, type AdapterId, type ModelFamily } from "./review.js";
 import { ADVERTISED_TOOL_NAMES, TOOL_NAMES, type ToolName } from "./tool-names.js";
 
 export type ErrorOwner = "contracts" | "config" | "repository" | "paths" | "policy" | "state" | "intent" | "snapshot" | "gate" | "routing" | "dispatch" | "sandbox" | "protocol" | "integrity";
@@ -40,7 +40,7 @@ const version = documentScoped(safeVersionV1Schema);
 const integer = documentScoped(safeIntegerV1Schema);
 const repositoryPathClaim = documentScoped(repositoryPathClaimV1Schema);
 const tool = z.enum(TOOL_NAMES);
-const adapter = z.enum(["claude-cli", "codex-cli"] satisfies readonly AdapterId[]);
+const adapter = z.enum(ADAPTER_IDS);
 const family = z.enum(MODEL_FAMILIES);
 const gateKind = z.enum(GATE_KINDS);
 const repositoryName = z.union([z.literal("primary"), z.string().regex(REPOSITORY_NAME_PATTERN)]);

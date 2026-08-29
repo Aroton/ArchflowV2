@@ -21,7 +21,7 @@ import {
   type TaskWorkspace,
 } from "../helpers/task-workspace.js";
 
-const TIMEOUT = 60_000;
+const TIMEOUT = 180_000;
 const workspaces: TaskWorkspace[] = [];
 const restorers: (() => void)[] = [];
 

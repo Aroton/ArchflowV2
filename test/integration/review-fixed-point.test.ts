@@ -44,7 +44,8 @@ import {
 } from "../../src/contracts/phase-instance.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { REPOSITORY_VIEW_NOTE } from "../../src/review/envelopes.js";
-import type { ReviewEvidence } from "../../src/contracts/review.js";
+import type { HostIdentity } from "../../src/contracts/hosts.js";
+import type { ReviewEvidence, ModelFamily } from "../../src/contracts/review.js";
 import type { SecretScanner } from "../../src/contracts/secret-scan.js";
 import type { CurrentReviewSet } from "../../src/contracts/trust.js";
 import { validateTriage, type TriageCandidate } from "../../src/contracts/triage.js";
@@ -393,6 +394,7 @@ function reviewOutput(
   subject: Sha256Digest,
   fingerprint: Sha256Digest,
   finding: "accepted" | "blocker" | "clean",
+  producerFamily: ModelFamily = "claude",
 ) {
   const findings = finding === "clean"
     ? []
@@ -413,7 +415,7 @@ function reviewOutput(
     subject_digest: subject,
     input_fingerprint: fingerprint,
     rubric_digest: rubricDigest,
-    producer_family: "claude" as const,
+    producer_family: producerFamily,
     findings,
     matched_rule_versions: [],
     verdict: finding === "clean"
@@ -774,7 +776,9 @@ async function commitCounter(
   finding: "accepted" | "blocker" | "clean",
   override?: Readonly<{ declaration: unknown; routes: DispatchRoute[]; config?: ConfigV1 }>,
   dispatchAlreadySerialized = false,
+  host: HostIdentity = "claude",
 ) {
+  const producerFamily = host === "antigravity" ? "gemini" : host === "codex" ? "codex" : "claude";
   await enterStep(
     h,
     dependencies,
@@ -791,7 +795,7 @@ async function commitCounter(
     expected_revision: runningState.revision,
     input_fingerprint: fingerprint,
     artifact_path: parseTaskPathClaim("phases/phase-14-output.md"),
-    ...(override === undefined ? {} : { route_override: override.declaration }),
+    ...(override?.declaration === undefined ? {} : { route_override: override.declaration }),
   });
   const result = await runCounterReview({
     transaction: dependencies,
@@ -805,7 +809,7 @@ async function commitCounter(
       return {
         cli_version: "fixture-1",
         extracted_output_bytes: canonicalJsonBytes(
-          reviewOutput("counter-review", subject, fingerprint, finding),
+          reviewOutput("counter-review", subject, fingerprint, finding, producerFamily),
         ),
       };
     },
@@ -839,7 +843,8 @@ async function commitCounter(
     call,
     config: override?.config ?? config,
     phase_kind: "phase-impl",
-    producer_family: "claude",
+    producer_family: producerFamily,
+    host,
     measured_at_revision: runningState.revision,
     repositories: Object.freeze([Object.freeze({
       name: "primary",
@@ -858,7 +863,7 @@ async function commitCounter(
         subject_digest: subject,
         input_fingerprint: fingerprint,
         rubric_digest: rubricDigest,
-        producer_family: "claude",
+        producer_family: producerFamily,
         invocation_id: `counter-invocation-v${version}`,
         result_id: resultId,
       },
@@ -1449,5 +1454,54 @@ describe("editorial revision fixed point", () => {
       reentry_required: true,
       next: "produce",
     });
+  });
+
+  it("dispatches multiple reviewers in parallel for antigravity producer and merges findings and blockers", async () => {
+    const h = await fixture();
+    const subject = canonicalJsonDigest({ artifact: 0 });
+    const fingerprint = computeInputFingerprint(fingerprintSubject(0));
+    const routes: DispatchRoute[] = [];
+
+    const multiReviewConfig: ConfigV1 = {
+      schema_version: "1",
+      roles: {
+        "counter-reviewer": { model: "gpt-5.6-sol", effort: "high" },
+        adjudicator: { model: "gemini-3.7-flash-high", effort: "high" },
+      },
+      producers: {
+        antigravity: {
+          "counter-reviewers": [
+            { model: "gpt-5.6-sol", effort: "high" },
+            { model: "claude-fable-5", effort: "medium" },
+          ],
+          adjudicator: { model: "gemini-3.7-flash-high", effort: "high" },
+        },
+      },
+    };
+
+    const merged = await commitCounter(
+      h,
+      h.dependencies,
+      0,
+      subject,
+      fingerprint,
+      "blocker",
+      { declaration: undefined, routes, config: multiReviewConfig },
+      false,
+      "antigravity",
+    );
+
+    // Both counter-reviewers and the constitution adjudicator ran
+    expect(routes).toEqual([
+      { adapter: "codex-cli", family: "codex", model: "gpt-5.6-sol", effort: "high" },
+      { adapter: "claude-cli", family: "claude", model: "claude-fable-5", effort: "medium" },
+      { adapter: "antigravity-cli", family: "gemini", model: "gemini-3.7-flash-high", effort: "high" },
+    ]);
+
+    expect(merged.evidence.verdict).toBe("fail");
+    expect(merged.evidence.blocking_count).toBe(2); // 1 blocker per reviewer = 2 total
+    expect(merged.evidence.findings).toHaveLength(2);
+    expect(merged.evidence.findings[0]!.finding_id).toBe("sol-counter-review-blocker");
+    expect(merged.evidence.findings[1]!.finding_id).toBe("fable-counter-review-blocker");
   });
 });

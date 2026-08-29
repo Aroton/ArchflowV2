@@ -30,6 +30,7 @@ import type { DispatchWorkspace } from "./workspace.js";
 
 const CLAUDE_MINIMUM_VERSION = "2.1.205";
 const CODEX_MINIMUM_VERSION = "0.122.0";
+const ANTIGRAVITY_MINIMUM_VERSION = "1.0.0";
 
 export const CLAUDE_MANAGED_POLICY_PATHS = Object.freeze([
   "/etc/claude-code/managed-settings.json",
@@ -45,6 +46,8 @@ export const CODEX_MANAGED_POLICY_PATHS = Object.freeze([
   "/etc/codex/requirements.toml",
   "/etc/codex/rules",
 ] as const);
+
+export const ANTIGRAVITY_MANAGED_POLICY_PATHS = Object.freeze([] as const);
 
 const CODEX_DISABLED_FEATURES = Object.freeze([
   "shell_tool",
@@ -294,21 +297,29 @@ export function serializeDispatch<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 /**
- * Runs two dispatch operations as ONE process-wide FIFO link, so the rubric and constitution
- * children of a single counter-review fly together while the queue still bounds the server
- * process to one review in flight. The first rejection (in time) rejects the pair after both
- * operations settle; the caller decides error precedence.
+ * Runs multiple dispatch operations concurrently as ONE process-wide FIFO link, so all counter-review
+ * children and the constitution child of a single counter-review run simultaneously in parallel while
+ * the queue still bounds the server process to one review in flight.
  */
-export function serializeDispatchPair<A, B>(
-  first: () => Promise<A>,
-  second: () => Promise<B>,
-): Promise<[A, B]> {
-  const link = dispatchQueue.then(() => Promise.all([first(), second()]));
+export function serializeDispatchAll<T>(
+  operations: readonly (() => Promise<T>)[],
+): Promise<T[]> {
+  const link = dispatchQueue.then(() => Promise.all(operations.map((op) => op())));
   dispatchQueue = link.then(
     () => undefined,
     () => undefined,
   );
   return link;
+}
+
+/**
+ * Runs two dispatch operations as ONE process-wide FIFO link.
+ */
+export function serializeDispatchPair<A, B>(
+  first: () => Promise<A>,
+  second: () => Promise<B>,
+): Promise<[A, B]> {
+  return serializeDispatchAll<unknown>([first, second]) as unknown as Promise<[A, B]>;
 }
 
 const memoizedPreflights = new Map<AdapterId, CliPreflight>();
@@ -404,10 +415,19 @@ function compareVersions(left: string, right: string): number {
 
 function exactVersion(adapter: AdapterId, output: Uint8Array): string {
   const text = Buffer.from(output).toString("utf8").trim();
-  const match = adapter === "claude-cli"
-    ? /^(\d+\.\d+\.\d+) \(Claude Code\)$/u.exec(text)
-    : /^codex-cli (\d+\.\d+\.\d+)$/u.exec(text);
-  return match?.[1] ?? "unrecognized";
+  if (adapter === "claude-cli") {
+    const match = /^(\d+\.\d+\.\d+) \(Claude Code\)$/u.exec(text);
+    return match?.[1] ?? "unrecognized";
+  }
+  if (adapter === "codex-cli") {
+    const match = /^codex-cli (\d+\.\d+\.\d+)$/u.exec(text);
+    return match?.[1] ?? "unrecognized";
+  }
+  if (adapter === "antigravity-cli") {
+    const match = /^(?:(?:agy|antigravity(?:-cli)?)\s+)?(\d+\.\d+\.\d+)/u.exec(text);
+    return match?.[1] ?? "unrecognized";
+  }
+  return "unrecognized";
 }
 
 /** Detects present managed-policy paths; exported for the real-host positive-branch probe. */
@@ -479,6 +499,8 @@ async function preflight(
       .flatMap((channel) => channel.toString("utf8").split(/\r?\n/u))
       .filter((line) => /^Logged in(?:\s|$)/u.test(line.trim()));
     loggedIn = successLines.length >= 1;
+  } else if (adapter === "antigravity-cli" && authResult.exit_code === 0) {
+    loggedIn = true;
   }
   if (!loggedIn) return fail(createProjectError("AUTH_UNAVAILABLE", { adapter }), version);
 
@@ -491,7 +513,7 @@ async function preflight(
 }
 
 function assertRoute(adapter: AdapterId, route: DispatchRoute): void {
-  const expectedFamily = adapter === "claude-cli" ? "claude" : "codex";
+  const expectedFamily = adapter === "claude-cli" ? "claude" : adapter === "antigravity-cli" ? "gemini" : "codex";
   if (route.adapter !== adapter || route.family !== expectedFamily) {
     fail(createProjectError("FAMILY_MISMATCH", {
       expected_family: expectedFamily,
@@ -758,14 +780,91 @@ const codexAdapter: CliAdapter = Object.freeze({
   },
 });
 
+const antigravityAdapter: CliAdapter = Object.freeze({
+  id: "antigravity-cli",
+  family: "gemini",
+  preflight: (
+    workspace: DispatchWorkspace,
+    signal = new AbortController().signal,
+    cancellationSource: CancellationSource = "client",
+  ) => preflight(
+    "antigravity-cli",
+    "agy",
+    ["--version"],
+    ["models"],
+    ANTIGRAVITY_MINIMUM_VERSION,
+    ANTIGRAVITY_MANAGED_POLICY_PATHS,
+    workspace,
+    signal,
+    cancellationSource,
+  ),
+  async buildInvocation(
+    envelope: DispatchEnvelope,
+    route: DispatchRoute,
+    workspace: DispatchWorkspace,
+    outputSchema: PlainJsonValue,
+  ) {
+    assertRoute("antigravity-cli", route);
+    if (route.provider !== undefined) {
+      return fail(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
+    }
+    const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "antigravity-cli", envelopeSubject(envelope));
+    const promptString = new TextDecoder("utf-8", { fatal: true }).decode(envelope.bytes);
+    const argv = Object.freeze([
+      "-p",
+      promptString,
+      "--json-schema", JSON.stringify(schema),
+      "--output-format", "json",
+      "--model", route.model,
+      "--effort", route.effort,
+      "--disable-slash-commands",
+      "--dangerously-skip-permissions",
+    ]);
+    return Object.freeze({
+      adapter: "antigravity-cli",
+      command: "agy",
+      argv,
+      cwd: workspace.repository_view_root ?? workspace.root,
+      env: withLocalBinOnPath(workspace),
+      stdin: new Uint8Array(),
+    });
+  },
+  parseOutput(result: DispatchChildResult) {
+    const wrapper = decodeJson(result.stdout, "antigravity-cli", "antigravity-wrapper-invalid");
+    if (wrapper === null || typeof wrapper !== "object" || Array.isArray(wrapper)) {
+      return fail(createProjectError("MODEL_OUTPUT_INVALID", {
+        adapter: "antigravity-cli", attempt: 1, issue_code: "structured-output-missing",
+      }));
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(wrapper, "structured_output");
+    if (descriptor === undefined || descriptor.enumerable !== true || !("value" in descriptor)) {
+      return fail(createProjectError("MODEL_OUTPUT_INVALID", {
+        adapter: "antigravity-cli", attempt: 1, issue_code: "structured-output-missing",
+      }));
+    }
+    try {
+      assertPlainJson(descriptor.value, "Antigravity structured output");
+      return canonicalJsonBytes(descriptor.value as PlainJsonValue);
+    } catch {
+      return fail(createProjectError("MODEL_OUTPUT_INVALID", {
+        adapter: "antigravity-cli", attempt: 1, issue_code: "structured-output-invalid",
+      }));
+    }
+  },
+  classifyFailure(result: DispatchChildResult) {
+    const message = claudeFailureMessage(result);
+    return classifyNonzero("antigravity-cli", result, message === undefined ? [] : [message]);
+  },
+});
+
 /** Runs the exact dispatch version/auth/policy preflight for one named adapter. */
 export function preflightAdapter(
   adapterId: AdapterId,
   workspace: DispatchWorkspace,
 ): Promise<CliPreflight> {
-  return adapterId === "claude-cli"
-    ? claudeAdapter.preflight(workspace)
-    : codexAdapter.preflight(workspace);
+  if (adapterId === "claude-cli") return claudeAdapter.preflight(workspace);
+  if (adapterId === "antigravity-cli") return antigravityAdapter.preflight(workspace);
+  return codexAdapter.preflight(workspace);
 }
 
 /**
@@ -779,11 +878,16 @@ export function selectCliAdapter(
   route?: DispatchRoute,
 ): CliAdapter {
   if (host === "unknown") return fail(createProjectError("UNSUPPORTED_HOST", { host: "unknown" }));
-  if (route !== undefined) return route.adapter === "claude-cli" ? claudeAdapter : codexAdapter;
+  if (route !== undefined) {
+    if (route.adapter === "claude-cli") return claudeAdapter;
+    if (route.adapter === "antigravity-cli") return antigravityAdapter;
+    return codexAdapter;
+  }
   switch (host) {
     case "claude":
       return codexAdapter;
     case "codex":
+      return claudeAdapter;
     case "antigravity":
       return claudeAdapter;
   }

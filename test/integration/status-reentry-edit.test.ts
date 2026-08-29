@@ -195,29 +195,67 @@ function installReviewerStub(
   const stubHome = join(root, "stub-home");
   mkdirSync(join(stubHome, ".codex"), { recursive: true });
   mkdirSync(bin, { recursive: true });
-  writeFileSync(join(stubHome, ".codex", "auth.json"), "{}\n");
+  const generatorScript = `
+function generateOutput(envelope, findings) {
+  const subject = envelope.subject;
+  return {
+    schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
+    step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
+    input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
+    producer_family: subject.producer_family,
+    findings,
+    matched_rule_versions: [],
+    verdict: findings.some((finding) => finding.blocking === true) ? "fail" : "advisory",
+    blocking_count: findings.filter((finding) => finding.blocking === true).length
+  };
+}
+`;
+
   writeFileSync(join(bin, "codex"), `#!/usr/bin/env node
 import { writeFile } from "node:fs/promises";
+${generatorScript}
 const argv = process.argv.slice(2);
 if (argv.length === 1 && argv[0] === "--version") process.stdout.write("codex-cli 0.146.0\\n");
 else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logged in using ChatGPT\\n");
 else {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
-  const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8")); const subject = envelope.subject;
-  const output = {
-    schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
-    step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
-    input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
-    producer_family: subject.producer_family,
-    findings: ${JSON.stringify(findings)},
-    matched_rule_versions: [],
-    verdict: ${JSON.stringify(findings.some((finding) => finding.blocking === true) ? "fail" : "advisory")},
-    blocking_count: ${JSON.stringify(findings.filter((finding) => finding.blocking === true).length)}
-  };
+  const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const output = generateOutput(envelope, ${JSON.stringify(findings)});
   await writeFile(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');
 }`);
   chmodSync(join(bin, "codex"), 0o755);
+
+  writeFileSync(join(bin, "claude"), `#!/usr/bin/env node
+${generatorScript}
+const argv = process.argv.slice(2);
+if (argv.length === 1 && argv[0] === "--version") process.stdout.write("2.1.220 (Claude Code)\\n");
+else if (argv[0] === "auth" && argv[1] === "status") process.stdout.write(JSON.stringify({ loggedIn: true }) + "\\n");
+else {
+  const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
+  const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const output = generateOutput(envelope, ${JSON.stringify(findings)});
+  process.stdout.write(JSON.stringify({ structured_output: output }) + "\\n");
+}`);
+  chmodSync(join(bin, "claude"), 0o755);
+
+  writeFileSync(join(bin, "agy"), `#!/usr/bin/env node
+${generatorScript}
+const argv = process.argv.slice(2);
+if (argv.length === 1 && argv[0] === "--version") process.stdout.write("agy 1.1.22\\n");
+else if (argv[0] === "models") process.stdout.write("gemini-3.7-flash-high\\n");
+else {
+  let envelope;
+  if (argv.includes("-p")) {
+    envelope = JSON.parse(argv[argv.indexOf("-p") + 1]);
+  } else {
+    const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
+    envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  }
+  const output = generateOutput(envelope, ${JSON.stringify(findings)});
+  process.stdout.write(JSON.stringify({ structured_output: output }) + "\\n");
+}`);
+  chmodSync(join(bin, "agy"), 0o755);
   const saved = { PATH: process.env.PATH, HOME: process.env.HOME };
   process.env.PATH = `${bin}:${saved.PATH ?? ""}`;
   process.env.HOME = stubHome;

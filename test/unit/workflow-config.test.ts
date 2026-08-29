@@ -52,7 +52,8 @@ describe("fixed workflow", () => {
 describe("model routing configuration", () => {
   it("accepts only role and phase model/effort selection", async () => {
     const config = parseConfigYaml(await fixture("config/valid.yaml"));
-    expect(config.overrides?.design?.["counter-reviewer"]?.effort).toBe("xhigh");
+    const cr = config.overrides?.design?.["counter-reviewer"];
+    expect(Array.isArray(cr) ? cr[0]?.effort : cr?.effort).toBe("xhigh");
   });
 
   it("accepts the retired producer role on read and rejects unknown roles still", () => {

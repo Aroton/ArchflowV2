@@ -17,16 +17,28 @@ import {
 } from "../contracts/mcp-tools.js";
 import { parseRepositoryPathClaim } from "../contracts/path-claims.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
-import type { ModelFamily, ReviewedRepositoryV1, ReviewEvidence, RouteOverrideRecord } from "../contracts/review.js";
+import type { HostIdentity } from "../contracts/hosts.js";
+import type {
+  ModelFamily,
+  ReviewedRepositoryV1,
+  ReviewEvidence,
+  ReviewFinding,
+  ReviewVerdict,
+  RouteOverrideRecord,
+  RuleVersionRef,
+} from "../contracts/review.js";
 import {
   mintAdjudicationObservation,
   mintReviewObservation,
   serializeDispatch,
+  serializeDispatchAll,
   serializeDispatchPair,
 } from "../dispatch/cli.js";
 import {
   configuredRoute,
-  selectDispatchRouteCandidate,
+  configuredRoutes,
+  selectDispatchRouteCandidates,
+  selectDispatchRoutes,
   validateSelectedDispatchRoute,
   type DispatchRoute,
   type RoutingRole,
@@ -103,6 +115,8 @@ export type RunCounterReviewDependencies = Readonly<{
   serialize_dispatch?: <T>(operation: () => Promise<T>) => Promise<T>;
   /** Pair form of {@link serialize_dispatch}: one FIFO link carrying both children of one review. */
   serialize_dispatch_pair?: <A, B>(first: () => Promise<A>, second: () => Promise<B>) => Promise<[A, B]>;
+  /** Group form of {@link serialize_dispatch}: one FIFO link carrying all parallel children of one review. */
+  serialize_dispatch_all?: <T>(operations: readonly (() => Promise<T>)[]) => Promise<T[]>;
   /** Best-effort runtime observation seam. It must never replace the original routing/dispatch error. */
   observe_failure?: (
     role: RoutingRole,
@@ -149,6 +163,7 @@ export type RunCounterReviewInput = Readonly<{
   config: ConfigV1;
   phase_kind: keyof NonNullable<ConfigV1["overrides"]>;
   producer_family: ModelFamily;
+  host?: HostIdentity;
   measured_at_revision: SafeInteger;
   /** Ordered trusted pins projected from the same repository-view plan as the child workspace. */
   repositories: readonly ReviewedRepositoryV1[];
@@ -302,21 +317,25 @@ export async function runCounterReview(
       // Best effort by contract.
     }
   };
-  const selectRoute = async (
+  const selectRoutes = async (
     role: RoutingRole,
-  ): Promise<Readonly<{ candidate: SelectedRouteCandidate; selection: SelectedDispatchRoute }>> => {
-    let selected: SelectedRouteCandidate | undefined;
+  ): Promise<readonly Readonly<{ candidate: SelectedRouteCandidate; selection: SelectedDispatchRoute }>[]> => {
+    let currentCandidate: SelectedRouteCandidate | undefined;
     try {
-      selected = selectDispatchRouteCandidate(
+      const candidates = selectDispatchRouteCandidates(
         input.config,
         input.phase_kind,
         role,
         input.call.input.invocation_routes?.[role],
         input.call.input.route_override?.[role],
+        input.host,
       );
-      return Object.freeze({ candidate: selected, selection: validateSelectedDispatchRoute(selected) });
+      return Object.freeze(candidates.map((candidate) => {
+        currentCandidate = candidate;
+        return Object.freeze({ candidate, selection: validateSelectedDispatchRoute(candidate) });
+      }));
     } catch (error) {
-      await observeFailure(role, selected, error);
+      await observeFailure(role, currentCandidate, error);
       throw error;
     }
   };
@@ -339,7 +358,7 @@ export async function runCounterReview(
     if (declared?.[role] === undefined) return undefined;
     // Read rather than resolve: the displaced route is reported as configured, and a role with no
     // pinned route at all records the reason alone rather than failing the dispatch.
-    const pinned = configuredRoute(input.config, input.phase_kind, role);
+    const pinned = configuredRoute(input.config, input.phase_kind, role, input.host);
     return Object.freeze({
       reason: declared.reason,
       ...(pinned === undefined
@@ -359,18 +378,17 @@ export async function runCounterReview(
     attempt: input.authority.context.attempt,
   });
   const envelope = buildReviewEnvelopeWithCap({ ...input.envelope, subject });
-  const serialize = dependencies.serialize_dispatch ?? serializeDispatch;
-  const serializePair = dependencies.serialize_dispatch_pair ?? serializeDispatchPair;
+  const serializeAll = dependencies.serialize_dispatch_all ??
+    (dependencies.serialize_dispatch ?
+      async <T>(ops: readonly (() => Promise<T>)[]) => Promise.all(ops.map((op) => op())) :
+      serializeDispatchAll);
   const plan = input.constitution;
-  // Both routes are selected before either child spends tokens, so a bad adjudicator route
-  // fails the call without launching its sibling. Selection is a pure config read.
-  const reviewRoute = await selectRoute("counter-reviewer");
-  const constitutionRoute = plan === undefined ? undefined : await selectRoute("adjudicator");
+  // All routes are selected before children spend tokens, so a bad route fails before launch.
+  const reviewRoutes = await selectRoutes("counter-reviewer");
+  const constitutionRoutes = plan === undefined ? undefined : await selectRoutes("adjudicator");
+  const constitutionRoute = constitutionRoutes?.[0];
   // The constitution dispatch binds to the ROUND, not to the review's output payload: the review
-  // envelope digest is stamped before either child dispatches, so the two children of one review
-  // fly concurrently. The retained server-attested review evidence carries the same digest as
-  // envelope_input_digest, so the fixed point and gate approvals recompute the identical round
-  // binding from durable state afterwards.
+  // envelope digest is stamped before either child dispatches, so the children fly concurrently.
   const constitutionSubject = plan === undefined || constitutionRoute === undefined
     ? undefined
     : Object.freeze({
@@ -396,11 +414,11 @@ export async function runCounterReview(
       workspace: plan.workspace,
       subject: constitutionSubject,
     });
-  // The FIFO link below owns serialization exactly once: these closures run the raw dispatch,
-  // so nesting a second queue acquisition here would deadlock the link against itself.
-  const dispatchReview = () =>
-    dispatchObserved("counter-reviewer", reviewRoute, (route) =>
-      dependencies.dispatch(route, envelope, reviewOutputSchema as PlainJsonValue));
+
+  const dispatchReviewOps = reviewRoutes.map((routeEntry) => () =>
+    dispatchObserved("counter-reviewer", routeEntry, (route) =>
+      dependencies.dispatch(route, envelope, reviewOutputSchema as PlainJsonValue)),
+  );
   let dispatchConstitution: (() => Promise<CounterReviewDispatchResult>) | undefined;
   if (
     plan !== undefined && constitutionRoute !== undefined &&
@@ -411,28 +429,89 @@ export async function runCounterReview(
         plan.dispatch(route, constitutionEnvelope, adjudicationOutputSchema as PlainJsonValue));
   }
 
-  let reviewDispatched: CounterReviewDispatchResult;
-  let constitutionDispatched: CounterReviewDispatchResult | undefined;
-  if (dispatchConstitution === undefined) {
-    reviewDispatched = await serialize<CounterReviewDispatchResult>(dispatchReview);
-  } else {
-    [reviewDispatched, constitutionDispatched] =
-      await serializePair<CounterReviewDispatchResult, CounterReviewDispatchResult>(
-        dispatchReview, dispatchConstitution,
-      );
+  const allOps: (() => Promise<CounterReviewDispatchResult>)[] = [...dispatchReviewOps];
+  if (dispatchConstitution !== undefined) {
+    allOps.push(dispatchConstitution);
   }
-  const route = reviewRoute.selection.route;
-  const observed = mintReviewObservation({
-    subject,
-    adapter: route.adapter,
-    cli_version: reviewDispatched.cli_version,
-    route,
-    route_source: reviewRoute.selection.source,
-    envelope_input_digest: envelope.digest,
-    extracted_output_bytes: reviewDispatched.extracted_output_bytes,
-    repositories: input.repositories,
-    ...(reviewOverride === undefined ? {} : { route_override: reviewOverride }),
+
+  const allDispatched = await serializeAll(allOps);
+  const reviewDispatchedList = allDispatched.slice(0, reviewRoutes.length);
+  const constitutionDispatched = dispatchConstitution !== undefined ? allDispatched[reviewRoutes.length] : undefined;
+
+  const singleObservations = reviewDispatchedList.map((reviewDispatched, index) => {
+    const routeEntry = reviewRoutes[index]!;
+    const route = routeEntry.selection.route;
+    return mintReviewObservation({
+      subject,
+      adapter: route.adapter,
+      cli_version: reviewDispatched.cli_version,
+      route,
+      route_source: routeEntry.selection.source,
+      envelope_input_digest: envelope.digest,
+      extracted_output_bytes: reviewDispatched.extracted_output_bytes,
+      repositories: input.repositories,
+      ...(reviewOverride === undefined ? {} : { route_override: reviewOverride }),
+    });
   });
+
+  const makeFindingId = (model: string, findingId: string, index: number, total: number): string => {
+    if (total <= 1) return findingId;
+    const modelSlug = model.toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "");
+    const shortTag = modelSlug.includes("sol") ? "sol"
+      : modelSlug.includes("fable") ? "fable"
+      : modelSlug.includes("opus") ? "opus"
+      : modelSlug.includes("sonnet") ? "sonnet"
+      : modelSlug.includes("haiku") ? "haiku"
+      : modelSlug.includes("flash") ? "flash"
+      : modelSlug.includes("pro") ? "pro"
+      : `r${index + 1}`;
+    if (findingId.startsWith(`${shortTag}-`)) return findingId;
+    return `${shortTag}-${findingId}`;
+  };
+
+  const allFindings: ReviewFinding[] = [];
+  const seenIds = new Set<string>();
+  for (let i = 0; i < singleObservations.length; i += 1) {
+    const obs = singleObservations[i]!;
+    const model = obs.evidence.model;
+    for (const f of obs.evidence.findings) {
+      const rawId = makeFindingId(model, f.finding_id, i, singleObservations.length);
+      let uniqueId = rawId;
+      let disambig = 2;
+      while (seenIds.has(uniqueId)) {
+        uniqueId = `${rawId}-${disambig}`;
+        disambig += 1;
+      }
+      seenIds.add(uniqueId);
+      allFindings.push({
+        ...f,
+        finding_id: uniqueId,
+      });
+    }
+  }
+
+  const matchedMap = new Map<string, RuleVersionRef>();
+  for (const obs of singleObservations) {
+    for (const ruleRef of obs.evidence.matched_rule_versions) {
+      matchedMap.set(`${ruleRef.rule_id}:${ruleRef.rule_version}`, ruleRef);
+    }
+  }
+  const mergedMatchedRules = [...matchedMap.values()].sort((a, b) => a.rule_id.localeCompare(b.rule_id));
+
+  const anyFail = singleObservations.some((obs) => obs.evidence.verdict === "fail");
+  const anyAdvisory = singleObservations.some((obs) => obs.evidence.verdict === "advisory");
+  const mergedVerdict: ReviewVerdict = anyFail ? "fail" : anyAdvisory ? "advisory" : "pass";
+  const mergedBlockingCount = allFindings.filter((f) => f.blocking).length;
+
+  const primaryObs = singleObservations[0]!;
+  const mergedReviewEvidence: ReviewEvidence = Object.freeze({
+    ...primaryObs.evidence,
+    findings: Object.freeze(allFindings),
+    verdict: mergedVerdict,
+    blocking_count: mergedBlockingCount,
+    matched_rule_versions: Object.freeze(mergedMatchedRules),
+  });
+
   let constitutionEvidence: AdjudicationEvidence | undefined;
   if (
     plan !== undefined && constitutionSubject !== undefined && constitutionEnvelope !== undefined &&
@@ -489,7 +568,7 @@ export async function runCounterReview(
   }
 
   const prepared = await dependencies.prepare_evidence(
-    observed.evidence,
+    mergedReviewEvidence,
     input.measured_at_revision,
   );
   if (!prepared.ok) return prepared;
@@ -531,7 +610,7 @@ export async function runCounterReview(
       task_id: input.authority.task_id,
       intent_id: input.call.input.intent_id,
       request_digest: identified.request_digest,
-      review_evidence: observed.evidence,
+      review_evidence: mergedReviewEvidence,
       constitution_evidence: summarizedConstitution,
       result_reference: prepared.value.reference,
       result_installation: installation,
@@ -545,7 +624,7 @@ export async function runCounterReview(
     ok: true,
     value: Object.freeze({
       transaction: committed.value,
-      evidence: observed.evidence,
+      evidence: mergedReviewEvidence,
       ...(constitutionEvidence === undefined ? {} : { constitution_evidence: constitutionEvidence }),
     }),
   };

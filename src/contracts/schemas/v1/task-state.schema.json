@@ -887,7 +887,25 @@
           "$ref": "#/$defs/configRoute"
         },
         "counter-reviewer": {
-          "$ref": "#/$defs/configRoute"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/configRoute"
+            },
+            {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/configRoute"
+              }
+            }
+          ]
+        },
+        "counter-reviewers": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/configRoute"
+          }
         },
         "adjudicator": {
           "$ref": "#/$defs/configRoute"
@@ -1004,6 +1022,21 @@
         },
         "roles": {
           "$ref": "#/$defs/configRoles"
+        },
+        "producers": {
+          "type": "object",
+          "properties": {
+            "claude": {
+              "$ref": "#/$defs/configRoles"
+            },
+            "codex": {
+              "$ref": "#/$defs/configRoles"
+            },
+            "antigravity": {
+              "$ref": "#/$defs/configRoles"
+            }
+          },
+          "additionalProperties": false
         },
         "overrides": {
           "$ref": "#/$defs/configOverrides"

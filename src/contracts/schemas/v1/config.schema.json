@@ -40,7 +40,25 @@
           "$ref": "#/$defs/route"
         },
         "counter-reviewer": {
-          "$ref": "#/$defs/route"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/route"
+            },
+            {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/route"
+              }
+            }
+          ]
+        },
+        "counter-reviewers": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/route"
+          }
         },
         "adjudicator": {
           "$ref": "#/$defs/route"
@@ -115,6 +133,21 @@
     },
     "roles": {
       "$ref": "#/$defs/roles"
+    },
+    "producers": {
+      "type": "object",
+      "properties": {
+        "claude": {
+          "$ref": "#/$defs/roles"
+        },
+        "codex": {
+          "$ref": "#/$defs/roles"
+        },
+        "antigravity": {
+          "$ref": "#/$defs/roles"
+        }
+      },
+      "additionalProperties": false
     },
     "overrides": {
       "$ref": "#/$defs/overrides"

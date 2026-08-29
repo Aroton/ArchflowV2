@@ -82,9 +82,10 @@ describe("CLI adapter selection", () => {
     expect(projectError(() => selectCliAdapter("unknown" as HostIdentity))).toMatchObject({ code: "UNSUPPORTED_HOST", diagnostic: { parameters: { host: "unknown" } } });
   });
 
-  it("follows the resolved route's adapter for either family", () => {
+  it("follows the resolved route's adapter for any family", () => {
     expect(selectCliAdapter("claude", { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "high" }).id).toBe("claude-cli");
     expect(selectCliAdapter("codex", { adapter: "codex-cli", family: "codex", model: "gpt-5.4", effort: "high" }).id).toBe("codex-cli");
+    expect(selectCliAdapter("antigravity", { adapter: "antigravity-cli", family: "gemini", model: "gemini-3.7-flash-high", effort: "high" }).id).toBe("antigravity-cli");
     expect(projectError(() => selectCliAdapter("unknown" as HostIdentity, { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "high" })))
       .toMatchObject({ code: "UNSUPPORTED_HOST", diagnostic: { parameters: { host: "unknown" } } });
   });
@@ -493,5 +494,53 @@ describe("CLI output contracts and failure classification", () => {
       terminal_reason: "api_error",
       result: "Failed to authenticate: OAuth session expired and could not be refreshed",
     })) }))).toMatchObject({ code: "AUTH_UNAVAILABLE" });
+  });
+
+  it("extracts and canonically re-encodes Antigravity structured_output", async () => {
+    const adapter = selectCliAdapter("antigravity", {
+      adapter: "antigravity-cli",
+      family: "gemini",
+      model: "gemini-3.7-flash-high",
+      effort: "high",
+    });
+    const structured = { schema_version: "1", verdict: "pass" };
+    expect(adapter.parseOutput(result({
+      stdout: bytes(JSON.stringify({ status: "SUCCESS", structured_output: structured })),
+    }))).toEqual(canonicalJsonBytes(structured));
+
+    expect(projectError(() => adapter.parseOutput(result({
+      stdout: bytes(JSON.stringify({ status: "ERROR" })),
+    })))).toMatchObject({
+      code: "MODEL_OUTPUT_INVALID",
+      diagnostic: { parameters: { issue_code: "structured-output-missing" } },
+    });
+  });
+
+  it("builds Antigravity CLI invocation with exact arguments and flags", async () => {
+    const adapter = selectCliAdapter("antigravity", {
+      adapter: "antigravity-cli",
+      family: "gemini",
+      model: "gemini-3.7-flash-high",
+      effort: "high",
+    });
+    const ws = await workspace();
+    const inv = await adapter.buildInvocation(
+      envelope,
+      { adapter: "antigravity-cli", family: "gemini", model: "gemini-3.7-flash-high", effort: "high" },
+      ws,
+      reviewSchema as PlainJsonValue,
+    );
+
+    expect(inv.command).toBe("agy");
+    expect(inv.argv).toContain("-p");
+    expect(inv.argv).toContain("--json-schema");
+    expect(inv.argv).toContain("--output-format");
+    expect(inv.argv).toContain("json");
+    expect(inv.argv).toContain("--model");
+    expect(inv.argv).toContain("gemini-3.7-flash-high");
+    expect(inv.argv).toContain("--effort");
+    expect(inv.argv).toContain("high");
+    expect(inv.argv).toContain("--disable-slash-commands");
+    expect(inv.argv).toContain("--dangerously-skip-permissions");
   });
 });

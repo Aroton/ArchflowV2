@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { GitOid } from "./canonical.js";
 import { gitOidV1Schema } from "./canonical.js";
 import type { RepositoryName, TaskConfigSnapshot, WorkflowSubject } from "./config.js";
-import { approvalRulesSchema, configOverridesSchema, configRolesSchema, configRouteSchema, configV1Schema, repositoriesV1Schema, repositoryDeclarationV1Schema, repositoryModeV1Schema, repositoryNameV1Schema, workflowSubjectV1Schema } from "./config.js";
+import { approvalRulesSchema, configOverridesSchema, configRolesSchema, configRouteSchema, configV1Schema, producersSchema, repositoriesV1Schema, repositoryDeclarationV1Schema, repositoryModeV1Schema, repositoryNameV1Schema, workflowSubjectV1Schema } from "./config.js";
 import type { PathSafeId, SafeCode, SafeId, SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
 import { pathSafeIdV1Schema, safeCodeV1Schema, safeIdV1Schema, safeIntegerV1Schema, sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
 import type { GateKind, WaiverScope } from "./gates.js";
@@ -746,11 +746,26 @@ export const lastTransitionV1Schema = z.object({
 // from the source shapes at module load — it cannot drift silently. The clones register as this
 // document's own `$defs` (see the schema-generation manifest), so each shape emits once.
 export const taskConfigRouteV1Schema = configRouteSchema.clone(configRouteSchema.def);
+export const taskConfigSingleOrArrayRoutesV1Schema = z.union([
+  taskConfigRouteV1Schema,
+  z.array(taskConfigRouteV1Schema).min(1),
+]);
 export const taskConfigRolesV1Schema = configRolesSchema.clone({
   ...configRolesSchema.def,
-  shape: Object.fromEntries(
-    Object.entries(configRolesSchema.shape).map(([role]) => [role, taskConfigRouteV1Schema.optional()]),
-  ) as typeof configRolesSchema.shape,
+  shape: {
+    producer: taskConfigRouteV1Schema.optional(),
+    "counter-reviewer": taskConfigSingleOrArrayRoutesV1Schema.optional(),
+    "counter-reviewers": z.array(taskConfigRouteV1Schema).min(1).optional(),
+    adjudicator: taskConfigRouteV1Schema.optional(),
+  },
+});
+export const taskConfigProducersV1Schema = producersSchema.clone({
+  ...producersSchema.def,
+  shape: {
+    claude: taskConfigRolesV1Schema.optional(),
+    codex: taskConfigRolesV1Schema.optional(),
+    antigravity: taskConfigRolesV1Schema.optional(),
+  },
 });
 export const taskConfigOverridesV1Schema = configOverridesSchema.clone({
   ...configOverridesSchema.def,
@@ -778,6 +793,7 @@ export const taskConfigSnapshotV1Schema = configV1Schema.clone({
   shape: {
     ...configV1Schema.shape,
     roles: taskConfigRolesV1Schema,
+    producers: taskConfigProducersV1Schema.optional(),
     overrides: taskConfigOverridesV1Schema.optional(),
     approval_rules: taskConfigApprovalRulesV1Schema.optional(),
     repositories: taskConfigRepositoriesV1Schema.optional(),

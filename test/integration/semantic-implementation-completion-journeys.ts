@@ -88,60 +88,102 @@ function installScriptedReviewChild(
   mkdirSync(join(stubHome, ".codex"), { recursive: true });
   mkdirSync(bin, { recursive: true });
   writeFileSync(join(stubHome, ".codex", "auth.json"), "{}\n");
-  writeFileSync(join(bin, "codex"), `#!/usr/bin/env node
-import { readFileSync, writeFileSync } from "node:fs";
-const argv = process.argv.slice(2);
-if (argv.length === 1 && argv[0] === "--version") process.stdout.write("codex-cli 0.146.0\\n");
-else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logged in using ChatGPT\\n");
-else {
-  const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
-  const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8")); const subject = envelope.subject;
-  let output;
+  const generatorScript = `
+function generateOutput(envelope, countPath, findingsByReview, script) {
+  const subject = envelope.subject;
   if (subject.role === "counter-review") {
-    let count = 0; try { count = Number(readFileSync(${JSON.stringify(countPath)}, "utf8")); } catch {}
-    const all = ${JSON.stringify(findingsByReview)}; const findings = all[Math.min(count, all.length - 1)] ?? [];
-    writeFileSync(${JSON.stringify(countPath)}, String(count + 1));
-    output = { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
+    let count = 0; try { count = Number(readFileSync(countPath, "utf8")); } catch {}
+    const all = findingsByReview; const findings = all[Math.min(count, all.length - 1)] ?? [];
+    writeFileSync(countPath, String(count + 1));
+    return { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
       step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
       input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
       producer_family: subject.producer_family, findings, matched_rule_versions: [],
       verdict: findings.some((finding) => finding.blocking === true) ? "fail" : findings.length === 0 ? "pass" : "advisory",
       blocking_count: findings.filter((finding) => finding.blocking === true).length };
   } else {
-    let reviews = 0; try { reviews = Number(readFileSync(${JSON.stringify(countPath)}, "utf8")); } catch {}
-    const resolved = ${JSON.stringify(script.resolveAtReview ?? null)} !== null && reviews >= ${JSON.stringify(script.resolveAtReview ?? 0)};
+    const adjCountPath = countPath + "-adjudicate";
+    let reviews = 0; try { reviews = Number(readFileSync(adjCountPath, "utf8")); } catch {}
+    writeFileSync(adjCountPath, String(reviews + 1));
+    const resolved = (script.resolveAtReview ?? null) !== null && (reviews + 1) >= (script.resolveAtReview ?? 0);
     const implementation = subject.phase_instance.indexOf("phase-impl-") === 0 && !resolved;
     const pass = (rule) => ({ rule_id: rule.id, rule_version: rule.version, compliance: "pass",
       rationale: "The work respects this rule.", trigger: "not-matched",
       trigger_evidence: "No review trigger matched." });
     const rule_findings = envelope.rules.map((rule, index) => (
-      ${JSON.stringify(script.failingRule === true)} && implementation && index === 0
+      script.failingRule === true && implementation && index === 0
         ? { rule_id: rule.id, rule_version: rule.version, compliance: "fail",
             rationale: "The implementation departs from the approved plan.",
             trigger: "matched",
             trigger_evidence: "The approved phase design requires an update before this work advances." }
-        : ${JSON.stringify(script.failingCompliance === true)} && implementation && index === 0
+        : script.failingCompliance === true && implementation && index === 0
           ? { rule_id: rule.id, rule_version: rule.version, compliance: "fail",
               rationale: "The implementation records a human decision the workflow never recorded.",
               trigger: "not-matched", trigger_evidence: "This rule declares no review trigger." }
           : pass(rule)));
-    const drift_findings = ${JSON.stringify(script.materialDrift === true)} && implementation && subject.approved_upstream_digests.length > 0
+    const drift_findings = script.materialDrift === true && implementation && subject.approved_upstream_digests.length > 0
       ? [{ upstream_digest: subject.approved_upstream_digests[0], drift: "material",
           affected_claim_ids: ["claim-verified-behavior"],
           rationale: "The approved upstream plan no longer matches the implemented reality." }]
       : subject.approved_upstream_digests.map((digest) => ({ upstream_digest: digest, drift: "aligned",
           affected_claim_ids: [], rationale: "No upstream drift." }));
-    output = { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
+    return { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
       step: "adjudicate", subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
       pinned_constitution_digest: subject.pinned_constitution_digest,
       approved_upstream_digests: subject.approved_upstream_digests,
       source_review_envelope_digest: subject.source_review_envelope_digest,
       rule_findings, drift_findings };
   }
+}
+`;
+
+  writeFileSync(join(bin, "codex"), `#!/usr/bin/env node
+import { readFileSync, writeFileSync } from "node:fs";
+${generatorScript}
+const argv = process.argv.slice(2);
+if (argv.length === 1 && argv[0] === "--version") process.stdout.write("codex-cli 0.146.0\\n");
+else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logged in using ChatGPT\\n");
+else {
+  const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
+  const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const output = generateOutput(envelope, ${JSON.stringify(countPath)}, ${JSON.stringify(findingsByReview)}, ${JSON.stringify(script)});
   writeFileSync(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');
 }`);
   chmodSync(join(bin, "codex"), 0o755);
+
+  writeFileSync(join(bin, "claude"), `#!/usr/bin/env node
+import { readFileSync, writeFileSync } from "node:fs";
+${generatorScript}
+const argv = process.argv.slice(2);
+if (argv.length === 1 && argv[0] === "--version") process.stdout.write("2.1.220 (Claude Code)\\n");
+else if (argv[0] === "auth" && argv[1] === "status") process.stdout.write(JSON.stringify({ loggedIn: true }) + "\\n");
+else {
+  const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
+  const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const output = generateOutput(envelope, ${JSON.stringify(countPath)}, ${JSON.stringify(findingsByReview)}, ${JSON.stringify(script)});
+  process.stdout.write(JSON.stringify({ structured_output: output }) + "\\n");
+}`);
+  chmodSync(join(bin, "claude"), 0o755);
+
+  writeFileSync(join(bin, "agy"), `#!/usr/bin/env node
+import { readFileSync, writeFileSync } from "node:fs";
+${generatorScript}
+const argv = process.argv.slice(2);
+if (argv.length === 1 && argv[0] === "--version") process.stdout.write("agy 1.1.22\\n");
+else if (argv[0] === "models") process.stdout.write("gemini-3.7-flash-high\\n");
+else {
+  let envelope;
+  if (argv.includes("-p")) {
+    envelope = JSON.parse(argv[argv.indexOf("-p") + 1]);
+  } else {
+    const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
+    envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  }
+  const output = generateOutput(envelope, ${JSON.stringify(countPath)}, ${JSON.stringify(findingsByReview)}, ${JSON.stringify(script)});
+  process.stdout.write(JSON.stringify({ structured_output: output }) + "\\n");
+}`);
+  chmodSync(join(bin, "agy"), 0o755);
   const saved = { path: process.env.PATH, home: process.env.HOME };
   process.env.PATH = `${bin}:${saved.path ?? ""}`;
   process.env.HOME = stubHome;

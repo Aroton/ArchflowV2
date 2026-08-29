@@ -20,12 +20,24 @@ export const configRouteSchema = z.object({
   provider: z.string().trim().min(1).regex(/\S/, "provider must contain a non-whitespace character").optional(),
 }).strict();
 
+export const singleOrArrayRoutesSchema = z.union([
+  configRouteSchema,
+  z.array(configRouteSchema).min(1),
+]);
+
 export const configRolesSchema = z.object({
   // Retired; accepted on read only so configs pinned before the producer role was removed
   // round-trip unchanged. The producer is the connected host; nothing consumes this.
   producer: configRouteSchema.optional(),
-  "counter-reviewer": configRouteSchema.optional(),
+  "counter-reviewer": singleOrArrayRoutesSchema.optional(),
+  "counter-reviewers": z.array(configRouteSchema).min(1).optional(),
   adjudicator: configRouteSchema.optional(),
+}).strict();
+
+export const producersSchema = z.object({
+  claude: configRolesSchema.optional(),
+  codex: configRolesSchema.optional(),
+  antigravity: configRolesSchema.optional(),
 }).strict();
 
 export const configOverridesSchema = z.object({
@@ -71,6 +83,7 @@ export const repositoriesV1Schema = z.record(repositoryNameV1Schema, repositoryD
 export const configV1Schema = z.object({
   schema_version: z.literal("1"),
   roles: configRolesSchema,
+  producers: producersSchema.optional(),
   overrides: configOverridesSchema.optional(),
   max_attempts: z.number().int().positive().safe().optional(),
   approval_rules: approvalRulesSchema.optional(),

@@ -36065,12 +36065,22 @@ var configRouteSchema = external_exports.object({
   // CLI launch with no wrapper.
   provider: external_exports.string().trim().min(1).regex(/\S/, "provider must contain a non-whitespace character").optional()
 }).strict();
+var singleOrArrayRoutesSchema = external_exports.union([
+  configRouteSchema,
+  external_exports.array(configRouteSchema).min(1)
+]);
 var configRolesSchema = external_exports.object({
   // Retired; accepted on read only so configs pinned before the producer role was removed
   // round-trip unchanged. The producer is the connected host; nothing consumes this.
   producer: configRouteSchema.optional(),
-  "counter-reviewer": configRouteSchema.optional(),
+  "counter-reviewer": singleOrArrayRoutesSchema.optional(),
+  "counter-reviewers": external_exports.array(configRouteSchema).min(1).optional(),
   adjudicator: configRouteSchema.optional()
+}).strict();
+var producersSchema = external_exports.object({
+  claude: configRolesSchema.optional(),
+  codex: configRolesSchema.optional(),
+  antigravity: configRolesSchema.optional()
 }).strict();
 var configOverridesSchema = external_exports.object({
   explore: configRolesSchema.optional(),
@@ -36098,6 +36108,7 @@ var repositoriesV1Schema = external_exports.record(repositoryNameV1Schema, repos
 var configV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
   roles: configRolesSchema,
+  producers: producersSchema.optional(),
   overrides: configOverridesSchema.optional(),
   max_attempts: external_exports.number().int().positive().safe().optional(),
   approval_rules: approvalRulesSchema.optional(),
@@ -36758,7 +36769,7 @@ var REVIEW_VERDICTS = ["pass", "advisory", "fail"];
 var REVIEW_ROLES = ["counter-review"];
 var REVIEW_FINDING_SEVERITIES = ["blocker", "major", "minor"];
 var MODEL_FAMILIES = ["claude", "codex", "gemini"];
-var ADAPTER_IDS = ["claude-cli", "codex-cli"];
+var ADAPTER_IDS = ["claude-cli", "codex-cli", "antigravity-cli"];
 var EFFORT_VALUES = ["low", "medium", "high", "xhigh", "max", "ultra"];
 var nonBlank = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
 var id = external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
@@ -36930,7 +36941,7 @@ var version2 = documentScoped(safeVersionV1Schema);
 var integer2 = documentScoped(safeIntegerV1Schema);
 var repositoryPathClaim = documentScoped(repositoryPathClaimV1Schema);
 var tool = external_exports.enum(TOOL_NAMES);
-var adapter = external_exports.enum(["claude-cli", "codex-cli"]);
+var adapter = external_exports.enum(ADAPTER_IDS);
 var family = external_exports.enum(MODEL_FAMILIES);
 var gateKind = external_exports.enum(GATE_KINDS);
 var repositoryName2 = external_exports.union([external_exports.literal("primary"), external_exports.string().regex(REPOSITORY_NAME_PATTERN)]);
@@ -42963,7 +42974,8 @@ var project_error_schema_default = {
       type: "string",
       enum: [
         "claude-cli",
-        "codex-cli"
+        "codex-cli",
+        "antigravity-cli"
       ]
     },
     family: {
@@ -47640,7 +47652,25 @@ var task_state_schema_default = {
           $ref: "#/$defs/configRoute"
         },
         "counter-reviewer": {
-          $ref: "#/$defs/configRoute"
+          anyOf: [
+            {
+              $ref: "#/$defs/configRoute"
+            },
+            {
+              minItems: 1,
+              type: "array",
+              items: {
+                $ref: "#/$defs/configRoute"
+              }
+            }
+          ]
+        },
+        "counter-reviewers": {
+          minItems: 1,
+          type: "array",
+          items: {
+            $ref: "#/$defs/configRoute"
+          }
         },
         adjudicator: {
           $ref: "#/$defs/configRoute"
@@ -47757,6 +47787,21 @@ var task_state_schema_default = {
         },
         roles: {
           $ref: "#/$defs/configRoles"
+        },
+        producers: {
+          type: "object",
+          properties: {
+            claude: {
+              $ref: "#/$defs/configRoles"
+            },
+            codex: {
+              $ref: "#/$defs/configRoles"
+            },
+            antigravity: {
+              $ref: "#/$defs/configRoles"
+            }
+          },
+          additionalProperties: false
         },
         overrides: {
           $ref: "#/$defs/configOverrides"
@@ -50790,7 +50835,7 @@ function decodeJson(bytes) {
 var digestBytes = (bytes) => parseSha256Digest(createHash3("sha256").update(bytes).digest("hex"));
 var copiedBytes = (bytes) => Uint8Array.from(bytes);
 function assertAdapterFamily(adapter2, family2) {
-  const expected = adapter2 === "claude-cli" ? "claude" : "codex";
+  const expected = adapter2 === "claude-cli" ? "claude" : adapter2 === "antigravity-cli" ? "gemini" : "codex";
   if (family2 !== expected) throw new TypeError("adapter and model family do not match");
 }
 function createObservation(binding, bytes, rawOutputDigest) {
@@ -51785,11 +51830,26 @@ var lastTransitionV1Schema = external_exports.object({
   resulting_revision: positiveSafeInteger
 }).strict();
 var taskConfigRouteV1Schema = configRouteSchema.clone(configRouteSchema.def);
+var taskConfigSingleOrArrayRoutesV1Schema = external_exports.union([
+  taskConfigRouteV1Schema,
+  external_exports.array(taskConfigRouteV1Schema).min(1)
+]);
 var taskConfigRolesV1Schema = configRolesSchema.clone({
   ...configRolesSchema.def,
-  shape: Object.fromEntries(
-    Object.entries(configRolesSchema.shape).map(([role]) => [role, taskConfigRouteV1Schema.optional()])
-  )
+  shape: {
+    producer: taskConfigRouteV1Schema.optional(),
+    "counter-reviewer": taskConfigSingleOrArrayRoutesV1Schema.optional(),
+    "counter-reviewers": external_exports.array(taskConfigRouteV1Schema).min(1).optional(),
+    adjudicator: taskConfigRouteV1Schema.optional()
+  }
+});
+var taskConfigProducersV1Schema = producersSchema.clone({
+  ...producersSchema.def,
+  shape: {
+    claude: taskConfigRolesV1Schema.optional(),
+    codex: taskConfigRolesV1Schema.optional(),
+    antigravity: taskConfigRolesV1Schema.optional()
+  }
 });
 var taskConfigOverridesV1Schema = configOverridesSchema.clone({
   ...configOverridesSchema.def,
@@ -51817,6 +51877,7 @@ var taskConfigSnapshotV1Schema = configV1Schema.clone({
   shape: {
     ...configV1Schema.shape,
     roles: taskConfigRolesV1Schema,
+    producers: taskConfigProducersV1Schema.optional(),
     overrides: taskConfigOverridesV1Schema.optional(),
     approval_rules: taskConfigApprovalRulesV1Schema.optional(),
     repositories: taskConfigRepositoriesV1Schema.optional()
@@ -66776,17 +66837,20 @@ var fail14 = (error51) => {
 function deriveModelFamily(model) {
   if (model.startsWith("claude-")) return "claude";
   if (model.startsWith("gpt-")) return "codex";
+  if (model.startsWith("gemini-")) return "gemini";
   return fail14(createProjectError("CONFIG_MODEL_UNSUPPORTED", { model }));
 }
 function adapterForFamily(family2) {
   if (family2 === "claude") return "claude-cli";
   if (family2 === "codex") return "codex-cli";
+  if (family2 === "gemini") return "antigravity-cli";
   return fail14(createProjectError("CONFIG_FAMILY_UNSUPPORTED", { family: family2 }));
 }
 var SUPPORTED_EFFORTS = Object.freeze({
   "claude-cli": /* @__PURE__ */ new Set(["low", "medium", "high", "xhigh", "max"]),
   // Codex 0.146.0 recognizes every effort in the durable configuration vocabulary.
-  "codex-cli": new Set(EFFORT_VALUES)
+  "codex-cli": new Set(EFFORT_VALUES),
+  "antigravity-cli": /* @__PURE__ */ new Set(["low", "medium", "high"])
 });
 function assertSupportedEffort(adapter2, effort) {
   if (!SUPPORTED_EFFORTS[adapter2].has(effort)) {
@@ -66797,7 +66861,7 @@ function routeFromConfiguredRoute(configured) {
   if (!safeIdV1Schema.safeParse(configured.model).success) {
     return fail14(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
   }
-  if (configured.provider !== void 0 && configured.model.startsWith("gpt-")) {
+  if (configured.provider !== void 0 && (configured.model.startsWith("gpt-") || configured.model.startsWith("gemini-"))) {
     return fail14(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
   }
   const family2 = configured.provider !== void 0 ? "claude" : deriveModelFamily(configured.model);
@@ -66812,8 +66876,41 @@ function routeFromConfiguredRoute(configured) {
     ...configured.provider === void 0 ? {} : { provider: configured.provider }
   });
 }
-function configuredRoute(config2, phaseKind2, role) {
-  return config2.overrides?.[phaseKind2]?.[role] ?? config2.roles[role];
+function normalizeRawRoutes(value) {
+  if (value === void 0) return [];
+  if (Array.isArray(value)) return value;
+  return [value];
+}
+function configuredRoutes(config2, phaseKind2, role, host) {
+  if (host !== void 0 && host !== "unknown" && config2.producers?.[host] !== void 0) {
+    const producerRoles = config2.producers[host];
+    if (role === "counter-reviewer") {
+      const candidates = normalizeRawRoutes(producerRoles?.["counter-reviewers"] ?? producerRoles?.["counter-reviewer"]);
+      if (candidates.length > 0) return candidates;
+    } else if (producerRoles?.adjudicator !== void 0) {
+      return [producerRoles.adjudicator];
+    }
+  }
+  const phaseOverrides = config2.overrides?.[phaseKind2];
+  if (phaseOverrides !== void 0) {
+    if (role === "counter-reviewer") {
+      const candidates = normalizeRawRoutes(phaseOverrides["counter-reviewers"] ?? phaseOverrides["counter-reviewer"]);
+      if (candidates.length > 0) return candidates;
+    } else if (phaseOverrides.adjudicator !== void 0) {
+      return [phaseOverrides.adjudicator];
+    }
+  }
+  const baseRoles = config2.roles;
+  if (role === "counter-reviewer") {
+    const candidates = normalizeRawRoutes(baseRoles["counter-reviewers"] ?? baseRoles["counter-reviewer"]);
+    if (candidates.length > 0) return candidates;
+  } else if (baseRoles.adjudicator !== void 0) {
+    return [baseRoles.adjudicator];
+  }
+  return [];
+}
+function configuredRoute(config2, phaseKind2, role, host) {
+  return configuredRoutes(config2, phaseKind2, role, host)[0];
 }
 var displacedRoute = (source, route2) => Object.freeze({
   source,
@@ -66821,34 +66918,39 @@ var displacedRoute = (source, route2) => Object.freeze({
   effort: route2.effort,
   ...route2.provider === void 0 ? {} : { provider: route2.provider }
 });
-function selectDispatchRouteCandidate(config2, phaseKind2, role, invocationRoute, humanOverride) {
-  const configured = configuredRoute(config2, phaseKind2, role);
-  const normallySelected = invocationRoute ?? configured;
+function selectDispatchRouteCandidates(config2, phaseKind2, role, invocationRoute, humanOverride, host) {
+  const configured = configuredRoutes(config2, phaseKind2, role, host);
+  const primaryConfigured = configured[0];
+  const normallySelected = invocationRoute ?? primaryConfigured;
   if (humanOverride !== void 0) {
-    return Object.freeze({
+    return Object.freeze([{
       raw_route: humanOverride,
       source: Object.freeze({
         provenance: "route-override",
         ...normallySelected === void 0 ? {} : { displaced: displacedRoute(invocationRoute === void 0 ? "configured" : "invocation-declared", normallySelected) }
       })
-    });
+    }]);
   }
   if (invocationRoute !== void 0) {
-    return Object.freeze({
+    return Object.freeze([{
       raw_route: invocationRoute,
       source: Object.freeze({
         provenance: "invocation-declared",
-        ...configured === void 0 ? {} : { displaced: displacedRoute("configured", configured) }
+        ...primaryConfigured === void 0 ? {} : { displaced: displacedRoute("configured", primaryConfigured) }
       })
-    });
+    }]);
   }
-  if (configured === void 0) {
+  if (configured.length === 0) {
     return fail14(createProjectError("CONFIG_INVALID", { issue_code: "route-missing" }));
   }
-  return Object.freeze({
-    raw_route: configured,
+  return Object.freeze(configured.map((raw_route) => Object.freeze({
+    raw_route,
     source: Object.freeze({ provenance: "configured" })
-  });
+  })));
+}
+function selectDispatchRouteCandidate(config2, phaseKind2, role, invocationRoute, humanOverride, host) {
+  const candidates = selectDispatchRouteCandidates(config2, phaseKind2, role, invocationRoute, humanOverride, host);
+  return candidates[0];
 }
 function validateSelectedDispatchRoute(selected) {
   return Object.freeze({
@@ -66857,17 +66959,18 @@ function validateSelectedDispatchRoute(selected) {
     source: selected.source
   });
 }
-function selectDispatchRoute(config2, phaseKind2, role, invocationRoute, humanOverride) {
+function selectDispatchRoute(config2, phaseKind2, role, invocationRoute, humanOverride, host) {
   return validateSelectedDispatchRoute(selectDispatchRouteCandidate(
     config2,
     phaseKind2,
     role,
     invocationRoute,
-    humanOverride
+    humanOverride,
+    host
   ));
 }
-function resolveDispatchRoute(config2, phaseKind2, role) {
-  return selectDispatchRoute(config2, phaseKind2, role).route;
+function resolveDispatchRoute(config2, phaseKind2, role, host) {
+  return selectDispatchRoute(config2, phaseKind2, role, void 0, void 0, host).route;
 }
 
 // src/state/next-action.ts
@@ -73366,6 +73469,7 @@ async function runDispatchChild(spec) {
 // src/dispatch/cli.ts
 var CLAUDE_MINIMUM_VERSION = "2.1.205";
 var CODEX_MINIMUM_VERSION = "0.122.0";
+var ANTIGRAVITY_MINIMUM_VERSION = "1.0.0";
 var CLAUDE_MANAGED_POLICY_PATHS = Object.freeze([
   "/etc/claude-code/managed-settings.json",
   "/etc/claude-code/managed-settings.d",
@@ -73379,6 +73483,7 @@ var CODEX_MANAGED_POLICY_PATHS = Object.freeze([
   "/etc/codex/requirements.toml",
   "/etc/codex/rules"
 ]);
+var ANTIGRAVITY_MANAGED_POLICY_PATHS = Object.freeze([]);
 var CODEX_DISABLED_FEATURES = Object.freeze([
   "shell_tool",
   "unified_exec",
@@ -73552,8 +73657,8 @@ function serializeDispatch(operation) {
   );
   return result;
 }
-function serializeDispatchPair(first, second) {
-  const link2 = dispatchQueue.then(() => Promise.all([first(), second()]));
+function serializeDispatchAll(operations) {
+  const link2 = dispatchQueue.then(() => Promise.all(operations.map((op) => op())));
   dispatchQueue = link2.then(
     () => void 0,
     () => void 0
@@ -73607,8 +73712,19 @@ function compareVersions(left, right) {
 }
 function exactVersion(adapter2, output) {
   const text4 = Buffer.from(output).toString("utf8").trim();
-  const match = adapter2 === "claude-cli" ? /^(\d+\.\d+\.\d+) \(Claude Code\)$/u.exec(text4) : /^codex-cli (\d+\.\d+\.\d+)$/u.exec(text4);
-  return match?.[1] ?? "unrecognized";
+  if (adapter2 === "claude-cli") {
+    const match = /^(\d+\.\d+\.\d+) \(Claude Code\)$/u.exec(text4);
+    return match?.[1] ?? "unrecognized";
+  }
+  if (adapter2 === "codex-cli") {
+    const match = /^codex-cli (\d+\.\d+\.\d+)$/u.exec(text4);
+    return match?.[1] ?? "unrecognized";
+  }
+  if (adapter2 === "antigravity-cli") {
+    const match = /^(?:(?:agy|antigravity(?:-cli)?)\s+)?(\d+\.\d+\.\d+)/u.exec(text4);
+    return match?.[1] ?? "unrecognized";
+  }
+  return "unrecognized";
 }
 async function detectManagedPolicyPaths(paths) {
   const observations = await Promise.all(paths.map(async (path2) => {
@@ -73665,6 +73781,8 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
   } else if (adapter2 === "codex-cli" && authResult.exit_code === 0) {
     const successLines = [authResult.stdout, authResult.stderr].flatMap((channel) => channel.toString("utf8").split(/\r?\n/u)).filter((line) => /^Logged in(?:\s|$)/u.test(line.trim()));
     loggedIn = successLines.length >= 1;
+  } else if (adapter2 === "antigravity-cli" && authResult.exit_code === 0) {
+    loggedIn = true;
   }
   if (!loggedIn) return fail22(createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 }), version4);
   const managedPolicyPaths = await detectManagedPolicyPaths(policyPaths);
@@ -73675,7 +73793,7 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
   });
 }
 function assertRoute(adapter2, route2) {
-  const expectedFamily = adapter2 === "claude-cli" ? "claude" : "codex";
+  const expectedFamily = adapter2 === "claude-cli" ? "claude" : adapter2 === "antigravity-cli" ? "gemini" : "codex";
   if (route2.adapter !== adapter2 || route2.family !== expectedFamily) {
     fail22(createProjectError("FAMILY_MISMATCH", {
       expected_family: expectedFamily,
@@ -73920,13 +74038,95 @@ var codexAdapter = Object.freeze({
     return classifyNonzero("codex-cli", result, codexFailureMessages(result.stdout));
   }
 });
+var antigravityAdapter = Object.freeze({
+  id: "antigravity-cli",
+  family: "gemini",
+  preflight: (workspace, signal = new AbortController().signal, cancellationSource = "client") => preflight(
+    "antigravity-cli",
+    "agy",
+    ["--version"],
+    ["models"],
+    ANTIGRAVITY_MINIMUM_VERSION,
+    ANTIGRAVITY_MANAGED_POLICY_PATHS,
+    workspace,
+    signal,
+    cancellationSource
+  ),
+  async buildInvocation(envelope, route2, workspace, outputSchema) {
+    assertRoute("antigravity-cli", route2);
+    if (route2.provider !== void 0) {
+      return fail22(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
+    }
+    const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "antigravity-cli", envelopeSubject(envelope));
+    const promptString = new TextDecoder("utf-8", { fatal: true }).decode(envelope.bytes);
+    const argv = Object.freeze([
+      "-p",
+      promptString,
+      "--json-schema",
+      JSON.stringify(schema),
+      "--output-format",
+      "json",
+      "--model",
+      route2.model,
+      "--effort",
+      route2.effort,
+      "--disable-slash-commands",
+      "--dangerously-skip-permissions"
+    ]);
+    return Object.freeze({
+      adapter: "antigravity-cli",
+      command: "agy",
+      argv,
+      cwd: workspace.repository_view_root ?? workspace.root,
+      env: withLocalBinOnPath(workspace),
+      stdin: new Uint8Array()
+    });
+  },
+  parseOutput(result) {
+    const wrapper = decodeJson2(result.stdout, "antigravity-cli", "antigravity-wrapper-invalid");
+    if (wrapper === null || typeof wrapper !== "object" || Array.isArray(wrapper)) {
+      return fail22(createProjectError("MODEL_OUTPUT_INVALID", {
+        adapter: "antigravity-cli",
+        attempt: 1,
+        issue_code: "structured-output-missing"
+      }));
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(wrapper, "structured_output");
+    if (descriptor === void 0 || descriptor.enumerable !== true || !("value" in descriptor)) {
+      return fail22(createProjectError("MODEL_OUTPUT_INVALID", {
+        adapter: "antigravity-cli",
+        attempt: 1,
+        issue_code: "structured-output-missing"
+      }));
+    }
+    try {
+      assertPlainJson(descriptor.value, "Antigravity structured output");
+      return canonicalJsonBytes(descriptor.value);
+    } catch {
+      return fail22(createProjectError("MODEL_OUTPUT_INVALID", {
+        adapter: "antigravity-cli",
+        attempt: 1,
+        issue_code: "structured-output-invalid"
+      }));
+    }
+  },
+  classifyFailure(result) {
+    const message = claudeFailureMessage(result);
+    return classifyNonzero("antigravity-cli", result, message === void 0 ? [] : [message]);
+  }
+});
 function selectCliAdapter(host, route2) {
   if (host === "unknown") return fail22(createProjectError("UNSUPPORTED_HOST", { host: "unknown" }));
-  if (route2 !== void 0) return route2.adapter === "claude-cli" ? claudeAdapter : codexAdapter;
+  if (route2 !== void 0) {
+    if (route2.adapter === "claude-cli") return claudeAdapter;
+    if (route2.adapter === "antigravity-cli") return antigravityAdapter;
+    return codexAdapter;
+  }
   switch (host) {
     case "claude":
       return codexAdapter;
     case "codex":
+      return claudeAdapter;
     case "antigravity":
       return claudeAdapter;
   }
@@ -77574,19 +77774,23 @@ async function runCounterReview(dependencies, input) {
     } catch {
     }
   };
-  const selectRoute = async (role) => {
-    let selected;
+  const selectRoutes = async (role) => {
+    let currentCandidate;
     try {
-      selected = selectDispatchRouteCandidate(
+      const candidates = selectDispatchRouteCandidates(
         input.config,
         input.phase_kind,
         role,
         input.call.input.invocation_routes?.[role],
-        input.call.input.route_override?.[role]
+        input.call.input.route_override?.[role],
+        input.host
       );
-      return Object.freeze({ candidate: selected, selection: validateSelectedDispatchRoute(selected) });
+      return Object.freeze(candidates.map((candidate) => {
+        currentCandidate = candidate;
+        return Object.freeze({ candidate, selection: validateSelectedDispatchRoute(candidate) });
+      }));
     } catch (error51) {
-      await observeFailure(role, selected, error51);
+      await observeFailure(role, currentCandidate, error51);
       throw error51;
     }
   };
@@ -77601,7 +77805,7 @@ async function runCounterReview(dependencies, input) {
   const overrideRecordFor = (role) => {
     const declared = input.call.input.route_override;
     if (declared?.[role] === void 0) return void 0;
-    const pinned = configuredRoute(input.config, input.phase_kind, role);
+    const pinned = configuredRoute(input.config, input.phase_kind, role, input.host);
     return Object.freeze({
       reason: declared.reason,
       ...pinned === void 0 ? {} : {
@@ -77617,11 +77821,11 @@ async function runCounterReview(dependencies, input) {
     attempt: input.authority.context.attempt
   });
   const envelope = buildReviewEnvelopeWithCap({ ...input.envelope, subject });
-  const serialize = dependencies.serialize_dispatch ?? serializeDispatch;
-  const serializePair = dependencies.serialize_dispatch_pair ?? serializeDispatchPair;
+  const serializeAll = dependencies.serialize_dispatch_all ?? (dependencies.serialize_dispatch ? async (ops) => Promise.all(ops.map((op) => op())) : serializeDispatchAll);
   const plan = input.constitution;
-  const reviewRoute = await selectRoute("counter-reviewer");
-  const constitutionRoute = plan === void 0 ? void 0 : await selectRoute("adjudicator");
+  const reviewRoutes = await selectRoutes("counter-reviewer");
+  const constitutionRoutes = plan === void 0 ? void 0 : await selectRoutes("adjudicator");
+  const constitutionRoute = constitutionRoutes?.[0];
   const constitutionSubject = plan === void 0 || constitutionRoute === void 0 ? void 0 : Object.freeze({
     task_id: input.envelope.subject.task_id,
     phase_instance: input.envelope.subject.phase_instance,
@@ -77643,32 +77847,80 @@ async function runCounterReview(dependencies, input) {
     workspace: plan.workspace,
     subject: constitutionSubject
   });
-  const dispatchReview = () => dispatchObserved("counter-reviewer", reviewRoute, (route3) => dependencies.dispatch(route3, envelope, review_schema_default));
+  const dispatchReviewOps = reviewRoutes.map(
+    (routeEntry) => () => dispatchObserved("counter-reviewer", routeEntry, (route2) => dependencies.dispatch(route2, envelope, review_schema_default))
+  );
   let dispatchConstitution;
   if (plan !== void 0 && constitutionRoute !== void 0 && constitutionSubject !== void 0 && constitutionEnvelope !== void 0) {
-    dispatchConstitution = () => dispatchObserved("adjudicator", constitutionRoute, (route3) => plan.dispatch(route3, constitutionEnvelope, adjudication_schema_default));
+    dispatchConstitution = () => dispatchObserved("adjudicator", constitutionRoute, (route2) => plan.dispatch(route2, constitutionEnvelope, adjudication_schema_default));
   }
-  let reviewDispatched;
-  let constitutionDispatched;
-  if (dispatchConstitution === void 0) {
-    reviewDispatched = await serialize(dispatchReview);
-  } else {
-    [reviewDispatched, constitutionDispatched] = await serializePair(
-      dispatchReview,
-      dispatchConstitution
-    );
+  const allOps = [...dispatchReviewOps];
+  if (dispatchConstitution !== void 0) {
+    allOps.push(dispatchConstitution);
   }
-  const route2 = reviewRoute.selection.route;
-  const observed = mintReviewObservation({
-    subject,
-    adapter: route2.adapter,
-    cli_version: reviewDispatched.cli_version,
-    route: route2,
-    route_source: reviewRoute.selection.source,
-    envelope_input_digest: envelope.digest,
-    extracted_output_bytes: reviewDispatched.extracted_output_bytes,
-    repositories: input.repositories,
-    ...reviewOverride === void 0 ? {} : { route_override: reviewOverride }
+  const allDispatched = await serializeAll(allOps);
+  const reviewDispatchedList = allDispatched.slice(0, reviewRoutes.length);
+  const constitutionDispatched = dispatchConstitution !== void 0 ? allDispatched[reviewRoutes.length] : void 0;
+  const singleObservations = reviewDispatchedList.map((reviewDispatched, index) => {
+    const routeEntry = reviewRoutes[index];
+    const route2 = routeEntry.selection.route;
+    return mintReviewObservation({
+      subject,
+      adapter: route2.adapter,
+      cli_version: reviewDispatched.cli_version,
+      route: route2,
+      route_source: routeEntry.selection.source,
+      envelope_input_digest: envelope.digest,
+      extracted_output_bytes: reviewDispatched.extracted_output_bytes,
+      repositories: input.repositories,
+      ...reviewOverride === void 0 ? {} : { route_override: reviewOverride }
+    });
+  });
+  const makeFindingId = (model, findingId, index, total) => {
+    if (total <= 1) return findingId;
+    const modelSlug = model.toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "");
+    const shortTag = modelSlug.includes("sol") ? "sol" : modelSlug.includes("fable") ? "fable" : modelSlug.includes("opus") ? "opus" : modelSlug.includes("sonnet") ? "sonnet" : modelSlug.includes("haiku") ? "haiku" : modelSlug.includes("flash") ? "flash" : modelSlug.includes("pro") ? "pro" : `r${index + 1}`;
+    if (findingId.startsWith(`${shortTag}-`)) return findingId;
+    return `${shortTag}-${findingId}`;
+  };
+  const allFindings = [];
+  const seenIds = /* @__PURE__ */ new Set();
+  for (let i = 0; i < singleObservations.length; i += 1) {
+    const obs = singleObservations[i];
+    const model = obs.evidence.model;
+    for (const f of obs.evidence.findings) {
+      const rawId = makeFindingId(model, f.finding_id, i, singleObservations.length);
+      let uniqueId = rawId;
+      let disambig = 2;
+      while (seenIds.has(uniqueId)) {
+        uniqueId = `${rawId}-${disambig}`;
+        disambig += 1;
+      }
+      seenIds.add(uniqueId);
+      allFindings.push({
+        ...f,
+        finding_id: uniqueId
+      });
+    }
+  }
+  const matchedMap = /* @__PURE__ */ new Map();
+  for (const obs of singleObservations) {
+    for (const ruleRef of obs.evidence.matched_rule_versions) {
+      matchedMap.set(`${ruleRef.rule_id}:${ruleRef.rule_version}`, ruleRef);
+    }
+  }
+  const mergedMatchedRules = [...matchedMap.values()].sort((a, b) => a.rule_id.localeCompare(b.rule_id));
+  const anyFail = singleObservations.some((obs) => obs.evidence.verdict === "fail");
+  const anyAdvisory = singleObservations.some((obs) => obs.evidence.verdict === "advisory");
+  const mergedVerdict = anyFail ? "fail" : anyAdvisory ? "advisory" : "pass";
+  const mergedBlockingCount = allFindings.filter((f) => f.blocking).length;
+  const primaryObs = singleObservations[0];
+  const mergedReviewEvidence = Object.freeze({
+    ...primaryObs.evidence,
+    findings: Object.freeze(allFindings),
+    verdict: mergedVerdict,
+    blocking_count: mergedBlockingCount,
+    matched_rule_versions: Object.freeze(mergedMatchedRules)
   });
   let constitutionEvidence;
   if (plan !== void 0 && constitutionSubject !== void 0 && constitutionEnvelope !== void 0 && constitutionRoute !== void 0 && constitutionDispatched !== void 0) {
@@ -77716,7 +77968,7 @@ async function runCounterReview(dependencies, input) {
     };
   }
   const prepared = await dependencies.prepare_evidence(
-    observed.evidence,
+    mergedReviewEvidence,
     input.measured_at_revision
   );
   if (!prepared.ok) return prepared;
@@ -77755,7 +78007,7 @@ async function runCounterReview(dependencies, input) {
       task_id: input.authority.task_id,
       intent_id: input.call.input.intent_id,
       request_digest: identified.request_digest,
-      review_evidence: observed.evidence,
+      review_evidence: mergedReviewEvidence,
       constitution_evidence: summarizedConstitution,
       result_reference: prepared.value.reference,
       result_installation: installation,
@@ -77769,7 +78021,7 @@ async function runCounterReview(dependencies, input) {
     ok: true,
     value: Object.freeze({
       transaction: committed2.value,
-      evidence: observed.evidence,
+      evidence: mergedReviewEvidence,
       ...constitutionEvidence === void 0 ? {} : { constitution_evidence: constitutionEvidence }
     })
   };
@@ -78275,7 +78527,8 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
       }),
       ...dispatchAlreadySerialized ? {
         serialize_dispatch: async (operation) => operation(),
-        serialize_dispatch_pair: async (first, second) => Promise.all([first(), second()])
+        serialize_dispatch_pair: async (first, second) => Promise.all([first(), second()]),
+        serialize_dispatch_all: async (ops) => Promise.all(ops.map((op) => op()))
       } : {},
       prepare_evidence: (evidence, measuredAtRevision) => prepareDispatchEvidence(
         services,
@@ -78299,6 +78552,7 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
       config: session.value.config,
       phase_kind: session.value.phase_kind,
       producer_family: session.value.producer_family,
+      host: session.value.host,
       measured_at_revision: session.value.measured_at_revision,
       repositories: reviewedRepositories,
       envelope: {

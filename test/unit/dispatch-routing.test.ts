@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ConfigV1 } from "../../src/contracts/config.js";
 import { EFFORT_VALUES } from "../../src/contracts/review.js";
-import { DispatchRoutingError, resolveDispatchRoute, routeFromConfiguredRoute, selectDispatchRoute, type RoutingRole } from "../../src/dispatch/routing.js";
+import { DispatchRoutingError, resolveDispatchRoute, resolveDispatchRoutes, routeFromConfiguredRoute, selectDispatchRoute, type RoutingRole } from "../../src/dispatch/routing.js";
 
 const config = (roles: ConfigV1["roles"], overrides?: ConfigV1["overrides"]): ConfigV1 => ({
   schema_version: "1",
@@ -117,10 +117,61 @@ describe("dispatch routing", () => {
       { issue_code: "model-not-safe-id" },
     );
     expectRoutingError(
-      () => resolveDispatchRoute(config({ adjudicator: { model: "gemini-3", effort: "high" } }), "design", "adjudicator"),
+      () => resolveDispatchRoute(config({ adjudicator: { model: "mistral-large", effort: "high" } }), "design", "adjudicator"),
       "CONFIG_MODEL_UNSUPPORTED",
-      { model: "gemini-3" },
+      { model: "mistral-large" },
     );
+  });
+
+  it("resolves gemini models to antigravity-cli adapter and gemini family", () => {
+    expect(resolveDispatchRoute(config({ adjudicator: { model: "gemini-3.7-flash-high", effort: "high" } }), "design", "adjudicator"))
+      .toEqual({ adapter: "antigravity-cli", family: "gemini", model: "gemini-3.7-flash-high", effort: "high" });
+  });
+
+  it("resolves per-producer client specific routes and multiple counter-reviewers", () => {
+    const fullConfig: ConfigV1 = {
+      schema_version: "1",
+      roles: {
+        "counter-reviewer": { model: "gpt-5.6-sol", effort: "high" },
+        adjudicator: { model: "gemini-3.7-flash-high", effort: "high" },
+      },
+      producers: {
+        claude: {
+          "counter-reviewer": { model: "gpt-5.6-sol", effort: "high" },
+          adjudicator: { model: "gemini-3.7-flash-high", effort: "high" },
+        },
+        antigravity: {
+          "counter-reviewers": [
+            { model: "gpt-5.6-sol", effort: "high" },
+            { model: "claude-fable-5", effort: "medium" },
+          ],
+          adjudicator: { model: "gemini-3.7-flash-high", effort: "high" },
+        },
+        codex: {
+          "counter-reviewer": { model: "claude-fable-5", effort: "medium" },
+          adjudicator: { model: "gemini-3.7-flash-high", effort: "high" },
+        },
+      },
+    };
+
+    // Claude host producer
+    expect(resolveDispatchRoutes(fullConfig, "design", "counter-reviewer", "claude"))
+      .toEqual([{ adapter: "codex-cli", family: "codex", model: "gpt-5.6-sol", effort: "high" }]);
+
+    // Antigravity host producer (multiple parallel reviewers)
+    expect(resolveDispatchRoutes(fullConfig, "design", "counter-reviewer", "antigravity"))
+      .toEqual([
+        { adapter: "codex-cli", family: "codex", model: "gpt-5.6-sol", effort: "high" },
+        { adapter: "claude-cli", family: "claude", model: "claude-fable-5", effort: "medium" },
+      ]);
+
+    // Codex host producer
+    expect(resolveDispatchRoutes(fullConfig, "design", "counter-reviewer", "codex"))
+      .toEqual([{ adapter: "claude-cli", family: "claude", model: "claude-fable-5", effort: "medium" }]);
+
+    // Adjudicator for all hosts
+    expect(resolveDispatchRoute(fullConfig, "design", "adjudicator", "antigravity"))
+      .toEqual({ adapter: "antigravity-cli", family: "gemini", model: "gemini-3.7-flash-high", effort: "high" });
   });
 });
 
@@ -130,6 +181,8 @@ describe("route override validation", () => {
       .toEqual({ adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "high" });
     expect(routeFromConfiguredRoute({ model: "glm-5.3", effort: "high", provider: "zhipu" }))
       .toEqual({ adapter: "claude-cli", family: "claude", model: "glm-5.3", effort: "high", provider: "zhipu" });
+    expect(routeFromConfiguredRoute({ model: "gemini-3.7-flash-high", effort: "high" }))
+      .toEqual({ adapter: "antigravity-cli", family: "gemini", model: "gemini-3.7-flash-high", effort: "high" });
   });
 
   it("rejects the same substitute shapes a pinned route rejects", () => {
