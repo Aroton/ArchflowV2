@@ -86,10 +86,10 @@
   ],
   "artifacts": [
     {
-      "digest": "5ce206ef243eddae206bc2625aefe862cfcbf0d30f825ed51ae083a1db83f8e3",
+      "digest": "7ace65ec8884f81b2b8e49855f18064b1e615c5fa518cb4aaabb67554a2e6227",
       "path": "archflow-local.mjs",
       "role": "executable",
-      "size": 1853667
+      "size": 1854200
     },
     {
       "digest": "5ab52bbc2896550c0ba87567f1437ad652b0013314f9f47189fa07c7f20c5691",
@@ -210,7 +210,7 @@
       "role": "manifest"
     },
     {
-      "digest": "b36e4c23f51d332a5b17872d6f93bf7c6bf48592a5d954c6d776522602c40673",
+      "digest": "64d61255f0f85766f540b9e1163d06efe4513d7b0b2f6b1acde2fc096a836397",
       "path": "metafile.json",
       "role": "metafile",
       "size": 351459
@@ -3201,14 +3201,14 @@
       "size": 28832
     },
     {
-      "bytes_in_output": 14967,
-      "digest": "9ac232c606d88b49c901512e594bb8fdc2592606f1d7f7d291a28b4296dd1a01",
+      "bytes_in_output": 15500,
+      "digest": "6997bac9c49c6a6e24adc8cc21fb18dca910b5e133b68cd7c306c4aa9c2f20f9",
       "key": "src/init/registration.ts",
       "origin": {
         "kind": "repository",
         "path": "src/init/registration.ts"
       },
-      "size": 17655
+      "size": 18603
     },
     {
       "bytes_in_output": 8474,
@@ -5242,7 +5242,7 @@
       ],
       "entry_point": "src/local/main.ts",
       "id": "local-cli",
-      "output_digest": "5ce206ef243eddae206bc2625aefe862cfcbf0d30f825ed51ae083a1db83f8e3",
+      "output_digest": "7ace65ec8884f81b2b8e49855f18064b1e615c5fa518cb4aaabb67554a2e6227",
       "output_path": "archflow-local.mjs"
     }
   ],

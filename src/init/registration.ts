@@ -9,12 +9,14 @@ import type { AdapterId } from "../contracts/review.js";
 export const CLAUDE_MCP_TIMEOUT_MS = 3_600_000;
 export const CODEX_TOOL_TIMEOUT_SEC = 3_600;
 export const CODEX_STARTUP_TIMEOUT_SEC = 30;
+// agy defaults an MCP tool call to three minutes, which a review round trip routinely exceeds.
+export const ANTIGRAVITY_TOOL_TIMEOUT_SEC = 3_600;
 
 export const CODEX_BLOCK_BEGIN = "# >>> archflow managed MCP server >>>";
 export const CODEX_BLOCK_END = "# <<< archflow managed MCP server <<<";
 export const CODEX_MANAGED_BLOCK = `${CODEX_BLOCK_BEGIN}\n[mcp_servers.archflow]\ncommand = "archflow-mcp"\nargs = []\nstartup_timeout_sec = ${CODEX_STARTUP_TIMEOUT_SEC}\ntool_timeout_sec = ${CODEX_TOOL_TIMEOUT_SEC}\n${CODEX_BLOCK_END}\n`;
 export const CLAUDE_MANUAL_ENTRY = `"archflow": {\n  "type": "stdio",\n  "command": "archflow-mcp",\n  "args": [],\n  "timeout": ${CLAUDE_MCP_TIMEOUT_MS}\n}`;
-export const ANTIGRAVITY_MANUAL_ENTRY = `"archflow": {\n  "command": "archflow-mcp",\n  "args": []\n}`;
+export const ANTIGRAVITY_MANUAL_ENTRY = `"archflow": {\n  "command": "archflow-mcp",\n  "args": [],\n  "timeoutSeconds": ${ANTIGRAVITY_TOOL_TIMEOUT_SEC}\n}`;
 export const CLAUDE_PASTE_GUIDANCE = `Add this exact entry under \"mcpServers\" in .mcp.json after resolving the conflicting content:\n${CLAUDE_MANUAL_ENTRY}\n`;
 export const CODEX_PASTE_GUIDANCE = `Add this exact ArchFlow-owned block to .codex/config.toml after resolving the conflicting content:\n${CODEX_MANAGED_BLOCK}`;
 export const ANTIGRAVITY_PASTE_GUIDANCE = `Add this exact entry under \"mcpServers\" in ~/.gemini/config/mcp_config.json after resolving the conflicting content:\n${ANTIGRAVITY_MANUAL_ENTRY}\n`;
@@ -139,6 +141,11 @@ function parseMcpJson(source: string | undefined): ProjectResult<McpJson> {
     return fail("mcp-json-foreign-keys");
   }
   return ok({ mcpServers: servers as Record<string, unknown> });
+}
+
+/** True for the launcher by bare name or by absolute path (as `agy mcp add` records it). */
+function isArchflowCommand(command: string | undefined): boolean {
+  return command !== undefined && basename(command) === "archflow-mcp";
 }
 
 function serverCommand(server: unknown): string | undefined {
@@ -354,20 +361,28 @@ export async function registerAntigravityConfig(input: RegistrationInput): Promi
     const before = parseMcpJson(beforeSource);
     if (!before.ok) return refuse("mcp-json-foreign-keys", ANTIGRAVITY_PASTE_GUIDANCE);
     const existing = before.value.mcpServers.archflow;
-    if (existing !== undefined && serverCommand(existing) !== "archflow-mcp") {
+    const existingCommand = serverCommand(existing);
+    if (existing !== undefined && !isArchflowCommand(existingCommand)) {
       return refuse("server-command-collision", ANTIGRAVITY_PASTE_GUIDANCE);
     }
 
     let registration: HostRegistrationReport["registration"] = "unchanged";
-    if (existing === undefined) {
+    const existingEntry = existing === undefined ? undefined : existing as Record<string, unknown>;
+    if (existingEntry === undefined) {
       registration = "created";
+    } else if (existingEntry.timeoutSeconds !== ANTIGRAVITY_TOOL_TIMEOUT_SEC) {
+      registration = "updated";
     }
 
+    // Other keys on an existing entry (env, disabledTools, ...) are the human's; only the
+    // command, args, and tool timeout are ArchFlow-owned.
     const updatedServers = {
       ...before.value.mcpServers,
       archflow: {
-        command: "archflow-mcp",
+        ...existingEntry,
+        command: existingCommand ?? "archflow-mcp",
         args: [],
+        timeoutSeconds: ANTIGRAVITY_TOOL_TIMEOUT_SEC,
       },
     };
     const serialized = `${JSON.stringify({ mcpServers: updatedServers }, null, 2)}\n`;

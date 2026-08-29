@@ -59,7 +59,7 @@ Before host registration, `src/init/assets.ts` copies `assets/archflow.gitignore
 
 - Claude Code: `claude mcp add --scope project archflow -- archflow-mcp`, followed by `claude mcp get archflow`. The project descriptor is `.mcp.json`; the registered stdio command is `archflow-mcp` with a 3,600,000 ms timeout. Human project approval can remain pending.
 - Codex: ArchFlow atomically maintains only its marked block in `.codex/config.toml`, then checks it with `codex mcp get archflow --json`. The block sets `startup_timeout_sec = 30` and `tool_timeout_sec = 3600`. Repository trust remains a human action; initialization never writes `trust_level`.
-- Antigravity: ArchFlow atomically maintains its server configuration in `~/.gemini/config/mcp_config.json`, then checks it with `agy mcp list` when the CLI is present.
+- Antigravity: ArchFlow atomically maintains its server configuration in `~/.gemini/config/mcp_config.json`, then checks it with `agy mcp list` when the CLI is present. The entry sets `timeoutSeconds: 3600`; without it `agy` aborts an MCP tool call after three minutes, which cancels any review dispatch still running. Other keys on an existing entry are left alone.
 - All registration paths detect foreign configuration and command collisions instead of overwriting unrelated host settings.
 
 The repository itself contains current examples in `.mcp.json` and `.codex/config.toml`.

@@ -41527,6 +41527,7 @@ import { basename as basename4, dirname as dirname6, join as join11 } from "node
 var CLAUDE_MCP_TIMEOUT_MS = 36e5;
 var CODEX_TOOL_TIMEOUT_SEC = 3600;
 var CODEX_STARTUP_TIMEOUT_SEC = 30;
+var ANTIGRAVITY_TOOL_TIMEOUT_SEC = 3600;
 var CODEX_BLOCK_BEGIN = "# >>> archflow managed MCP server >>>";
 var CODEX_BLOCK_END = "# <<< archflow managed MCP server <<<";
 var CODEX_MANAGED_BLOCK = `${CODEX_BLOCK_BEGIN}
@@ -41545,7 +41546,8 @@ var CLAUDE_MANUAL_ENTRY = `"archflow": {
 }`;
 var ANTIGRAVITY_MANUAL_ENTRY = `"archflow": {
   "command": "archflow-mcp",
-  "args": []
+  "args": [],
+  "timeoutSeconds": ${ANTIGRAVITY_TOOL_TIMEOUT_SEC}
 }`;
 var CLAUDE_PASTE_GUIDANCE = `Add this exact entry under "mcpServers" in .mcp.json after resolving the conflicting content:
 ${CLAUDE_MANUAL_ENTRY}
@@ -41642,6 +41644,9 @@ function parseMcpJson(source) {
     return fail17("mcp-json-foreign-keys");
   }
   return ok18({ mcpServers: servers });
+}
+function isArchflowCommand(command) {
+  return command !== void 0 && basename4(command) === "archflow-mcp";
 }
 function serverCommand(server) {
   if (server === null || typeof server !== "object" || Array.isArray(server)) return void 0;
@@ -41829,18 +41834,24 @@ async function registerAntigravityConfig(input) {
     const before = parseMcpJson(beforeSource);
     if (!before.ok) return refuse("mcp-json-foreign-keys", ANTIGRAVITY_PASTE_GUIDANCE);
     const existing = before.value.mcpServers.archflow;
-    if (existing !== void 0 && serverCommand(existing) !== "archflow-mcp") {
+    const existingCommand = serverCommand(existing);
+    if (existing !== void 0 && !isArchflowCommand(existingCommand)) {
       return refuse("server-command-collision", ANTIGRAVITY_PASTE_GUIDANCE);
     }
     let registration = "unchanged";
-    if (existing === void 0) {
+    const existingEntry = existing === void 0 ? void 0 : existing;
+    if (existingEntry === void 0) {
       registration = "created";
+    } else if (existingEntry.timeoutSeconds !== ANTIGRAVITY_TOOL_TIMEOUT_SEC) {
+      registration = "updated";
     }
     const updatedServers = {
       ...before.value.mcpServers,
       archflow: {
-        command: "archflow-mcp",
-        args: []
+        ...existingEntry,
+        command: existingCommand ?? "archflow-mcp",
+        args: [],
+        timeoutSeconds: ANTIGRAVITY_TOOL_TIMEOUT_SEC
       }
     };
     const serialized = `${JSON.stringify({ mcpServers: updatedServers }, null, 2)}

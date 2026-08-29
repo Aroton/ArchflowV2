@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ANTIGRAVITY_MANUAL_ENTRY,
   ANTIGRAVITY_PASTE_GUIDANCE,
+  ANTIGRAVITY_TOOL_TIMEOUT_SEC,
   CLAUDE_MCP_TIMEOUT_MS,
   CLAUDE_PASTE_GUIDANCE,
   CODEX_MANAGED_BLOCK,
@@ -190,10 +191,28 @@ describe("host registration", () => {
     const path = join(home, ".gemini", "config", "mcp_config.json");
     const once = await readFile(path, "utf8");
     expect(JSON.parse(once).mcpServers.archflow.command).toBe("archflow-mcp");
+    expect(JSON.parse(once).mcpServers.archflow.timeoutSeconds).toBe(ANTIGRAVITY_TOOL_TIMEOUT_SEC);
     expect(once.endsWith("\n")).toBe(true);
     const second = await registerAntigravityConfig({ working_directory: repository, environment: env });
     expect(second.ok).toBe(true);
+    expect(second.ok && second.value.registration).toBe("unchanged");
     expect(await readFile(path, "utf8")).toBe(once);
+  });
+
+  it("patches the tool timeout onto an existing Antigravity entry and keeps its other keys", async () => {
+    const { repository, home, env } = await setup();
+    const configDir = join(home, ".gemini", "config");
+    await mkdir(configDir, { recursive: true });
+    const path = join(configDir, "mcp_config.json");
+    await writeFile(path, `${JSON.stringify({
+      mcpServers: { archflow: { command: "/home/user/.local/bin/archflow-mcp", args: [], env: { FOO: "bar" } } },
+    }, null, 2)}\n`);
+    const result = await registerAntigravityConfig({ working_directory: repository, environment: env });
+    expect(result.ok && result.value.registration).toBe("updated");
+    const entry = JSON.parse(await readFile(path, "utf8")).mcpServers.archflow;
+    expect(entry.timeoutSeconds).toBe(ANTIGRAVITY_TOOL_TIMEOUT_SEC);
+    expect(entry.command).toBe("/home/user/.local/bin/archflow-mcp");
+    expect(entry.env).toEqual({ FOO: "bar" });
   });
 
   it("refuses foreign Antigravity top-level keys and command collisions", async () => {

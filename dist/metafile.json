@@ -5395,7 +5395,7 @@
       ]
     },
     "src/init/registration.ts": {
-      "bytes": 17655,
+      "bytes": 18603,
       "format": "esm",
       "imports": [
         {
@@ -9559,7 +9559,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1853667,
+      "bytes": 1854200,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10686,7 +10686,7 @@
           "bytesInOutput": 23031
         },
         "src/init/registration.ts": {
-          "bytesInOutput": 14967
+          "bytesInOutput": 15500
         },
         "src/init/task-initialization.ts": {
           "bytesInOutput": 1838
