@@ -264,6 +264,10 @@ describe("semantic status projection", () => {
       attempt: 2,
       remediation_round: true,
       rounds,
+      reviewers: [{
+        reviewer_id: "general", focus: "general", model: "claude-opus-5", effort: "medium",
+        reviewer_family: "claude", same_family: true, finding_count: 0,
+      }],
     });
 
     const opposite = fullStatus(action("run-step", { step: "triage" }), {
@@ -288,6 +292,71 @@ describe("semantic status projection", () => {
 
     const unreviewed = fullStatus(action("run-step", { step: "produce" }), { evidence: { available: false } as never });
     expect(projectSemanticStatus(snapshot(unreviewed), invocation).view).not.toHaveProperty("review_strength");
+  });
+
+  it("projects the actual multi-general and test assignments and fresh contributor strengths", () => {
+    const generalOne = { adapter: "codex-cli", family: "codex", model: "gpt-5.6-sol", effort: "xhigh" } as const;
+    const generalTwo = { adapter: "claude-cli", family: "claude", model: "claude-fable-5", effort: "high" } as const;
+    const testRoute = { adapter: "codex-cli", family: "codex", model: "gpt-5.6-luna", effort: "max" } as const;
+    const adjudicator = { adapter: "antigravity-cli", family: "gemini", model: "gemini-3.7-flash-high", effort: "high" } as const;
+    const policy = {
+      rubric_id: "implementation-v1" as const,
+      rubric_digest: digestB,
+      rubric: {
+        schema_version: "1" as const, kind: "implementation" as const, mode: "adversarial" as const,
+        criteria: [
+          { id: "correctness", text: "Find material defects.", blocking: true },
+          { id: "verification-evidence", text: "Verify the evidence.", blocking: true },
+          { id: "test-quality", text: "Assess regression protection.", blocking: true },
+        ],
+      },
+    };
+    const routes = {
+      counter_reviewer: generalOne,
+      counter_reviewers: [generalOne, generalTwo],
+      test_reviewer: testRoute,
+      adjudicator,
+    };
+    const preReview = fullStatus(action("run-step", { step: "counter_review" }), {
+      review_policy: policy,
+      routes,
+    });
+    expect(projectSemanticStatus(snapshot(preReview), invocation).view.review_context?.assignments).toBeUndefined();
+
+    const run = (reviewer_id: string, focus: "general" | "tests", route: typeof generalOne | typeof generalTwo | typeof testRoute, criterion_ids: string[], finding_ids: string[]) => ({
+      reviewer_id, focus, routing_role: focus === "tests" ? "test-reviewer" : "counter-reviewer",
+      criterion_ids, rubric_digest: digestB, model_family: route.family, model: route.model,
+      effort: route.effort, adapter: route.adapter, cli_version: "1.0.0", invocation_id: `invocation-${reviewer_id}`,
+      envelope_input_digest: digestA, observed_output_digest: digestB, finding_ids,
+      route_source: { provenance: "configured" },
+    });
+    const reviewed = fullStatus(action("run-step", { step: "triage" }), {
+      step: "counter_review", status: "succeeded", review_policy: policy, routes,
+      evidence: {
+        available: true, subject_digest: digestA,
+        current_evidence: { set_digest: digestB, slots: [] }, findings: [], assessment: "current",
+        counter_review_provenance: {
+          assurance: "server-attested", producer_family: "claude", model_family: "codex",
+          model: generalOne.model, effort: generalOne.effort, adapter: generalOne.adapter,
+          reviewer_runs: [
+            run("general-1", "general", generalOne, ["correctness"], ["general-1-defect"]),
+            run("general-2", "general", generalTwo, ["correctness"], []),
+            run("test", "tests", testRoute, ["verification-evidence", "test-quality"], ["test-gap", "test-duplicate"]),
+          ],
+        },
+      } as never,
+    });
+    const view = projectSemanticStatus(snapshot(reviewed), invocation).view;
+    expect(view.review_context?.assignments).toEqual([
+      { reviewer_id: "general-1", focus: "general", criterion_ids: ["correctness"] },
+      { reviewer_id: "general-2", focus: "general", criterion_ids: ["correctness"] },
+      { reviewer_id: "test", focus: "tests", criterion_ids: ["verification-evidence", "test-quality"] },
+    ]);
+    expect(view.review_strength?.reviewers).toMatchObject([
+      { reviewer_id: "general-1", reviewer_family: "codex", same_family: false, finding_count: 1 },
+      { reviewer_id: "general-2", reviewer_family: "claude", same_family: true, finding_count: 0 },
+      { reviewer_id: "test", reviewer_family: "codex", same_family: false, finding_count: 2 },
+    ]);
   });
 
   it("projects baseline refresh as one server-owned no-submission action", () => {

@@ -24,6 +24,7 @@
       "type": "string",
       "enum": [
         "counter-reviewer",
+        "test-reviewer",
         "adjudicator"
       ]
     },

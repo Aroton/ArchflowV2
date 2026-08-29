@@ -5,7 +5,7 @@ import { parseSingleYamlDocument } from "./yaml.js";
 
 // The producer is the connected MCP host, never a config role; routing config
 // describes only the roles the server dispatches.
-export const ROUTING_ROLES = ["counter-reviewer", "adjudicator"] as const;
+export const ROUTING_ROLES = ["counter-reviewer", "test-reviewer", "adjudicator"] as const;
 export const REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"] as const;
 export const WORKFLOW_SUBJECTS = ["prd", "design", "phase-design", "phase-impl"] as const;
 export type WorkflowSubject = (typeof WORKFLOW_SUBJECTS)[number];
@@ -31,6 +31,7 @@ export const configRolesSchema = z.object({
   producer: configRouteSchema.optional(),
   "counter-reviewer": singleOrArrayRoutesSchema.optional(),
   "counter-reviewers": z.array(configRouteSchema).min(1).optional(),
+  "test-reviewer": configRouteSchema.optional(),
   adjudicator: configRouteSchema.optional(),
 }).strict();
 

@@ -9,6 +9,7 @@ import {
   type ProjectResult,
 } from "../contracts/errors.js";
 import { parseRubricV1, type RubricV1 } from "../contracts/rubric.js";
+import type { ReviewAssignmentV1, ReviewFocus } from "./envelopes.js";
 import { parseSingleYamlDocument } from "../contracts/yaml.js";
 import { assetRoot } from "../init/assets.js";
 
@@ -20,6 +21,35 @@ export type CanonicalRubric = Readonly<{
   rubric_digest: Sha256Digest;
   rubric: RubricV1;
 }>;
+
+const TEST_CRITERIA: Readonly<Partial<Record<CounterReviewPhaseKind, readonly string[]>>> = Object.freeze({
+  "phase-design": Object.freeze(["test-strategy"]),
+  "phase-impl": Object.freeze(["verification-evidence", "test-quality"]),
+});
+
+export function reviewCriterionIds(
+  phaseKind: CounterReviewPhaseKind,
+  rubric: RubricV1,
+  focus: ReviewFocus,
+  specialistActive: boolean,
+): readonly string[] {
+  const all = rubric.criteria.map((criterion) => criterion.id);
+  const tests = TEST_CRITERIA[phaseKind] ?? [];
+  if (focus === "tests") return Object.freeze(all.filter((criterion) => tests.includes(criterion)));
+  return Object.freeze(specialistActive ? all.filter((criterion) => !tests.includes(criterion)) : all);
+}
+
+export function reviewAssignment(
+  reviewerId: string,
+  focus: ReviewFocus,
+  phaseKind: CounterReviewPhaseKind,
+  rubric: RubricV1,
+  specialistActive: boolean,
+): ReviewAssignmentV1 {
+  const criterionIds = reviewCriterionIds(phaseKind, rubric, focus, specialistActive);
+  if (criterionIds.length === 0) throw new TypeError(`review focus ${focus} is not applicable to ${phaseKind}`);
+  return Object.freeze({ reviewer_id: reviewerId, focus, criterion_ids: criterionIds });
+}
 
 const PHASE_KIND_RUBRIC_FILES: Readonly<Record<CounterReviewPhaseKind, Readonly<{
   file: string;

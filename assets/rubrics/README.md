@@ -21,6 +21,11 @@ before use.
 - Criterion order is significant. The rubric digest and the review contract
   both depend on it; keep `schema_version` quoted (`"1"`) so YAML parses it as
   a string.
+- Phase design and implementation may partition their ordered criteria between
+  a general reviewer and the configured `test-reviewer`. The specialist owns
+  `test-strategy` for phase design and `verification-evidence` plus
+  `test-quality` for implementation; without that route, general review owns
+  the complete rubric.
 - Changing any digested byte changes the rubric digest, which folds into
   in-flight tasks' input fingerprints: a mid-task edit fails those tasks closed
   with `INPUT_FINGERPRINT_MISMATCH` on their next review-cycle step. Edit

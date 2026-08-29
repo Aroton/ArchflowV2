@@ -144,9 +144,19 @@ export type ReviewWorkspaceBinding =
 export type ReviewEnvelopeInput = {
   readonly artifact: string;
   readonly rubric: RubricV1;
+  /** Server-owned reviewer scope. Absent only for legacy/tests that exercise the pre-assignment envelope. */
+  readonly assignment?: ReviewAssignmentV1;
   readonly context: readonly PinnedContextEntry[];
   readonly subject: DispatchSubject;
   readonly workspace?: ReviewWorkspaceBinding;
+};
+
+export const REVIEW_FOCUSES = ["general", "tests"] as const;
+export type ReviewFocus = (typeof REVIEW_FOCUSES)[number];
+export type ReviewAssignmentV1 = {
+  readonly reviewer_id: string;
+  readonly focus: ReviewFocus;
+  readonly criterion_ids: readonly string[];
 };
 
 /**
@@ -169,6 +179,9 @@ export type ReviewEnvelopeSeed = Readonly<
  */
 export const REVIEW_INSTRUCTION =
   "You are the independent counter-reviewer for the artifact in this envelope. Read the whole artifact and every pinned context entry before judging anything; the pinned approved upstream documents state what the artifact must satisfy. Then work through the artifact section by section: trace each stated constant, budget, invariant, interface claim, and policy into every other section that depends on it and check that they jointly hold; recompute derived figures rather than accepting them; verify repository and interface claims against the pinned evidence and the read-only repository view when one is provided; follow each stated property through the inputs and lifecycle events the system will actually meet. Frame your evaluation around the finite question: 'What would break in production or fail execution?' A true observation or discrepancy that does not change downstream implementation, break an approved boundary, or alter verification is not a defect and must not be reported. Only after that pass apply the rubric's materiality bar to decide what to report. Every finding cites the exact evidence and names its concrete consequence. Return the structured result the output schema describes and nothing else.";
+
+export const REVIEW_ASSIGNMENT_INSTRUCTION =
+  "Assess only the rubric criteria named by assignment.criterion_ids, using assignment.focus as the boundary of your review. Do not report findings owned by another assignment. You may cite evidence outside your focus when it proves an assigned finding, but do not turn that evidence into an additional out-of-scope finding.";
 
 /**
  * The fixed remediation instruction the envelope adds as `instructions.prior_triage` when a
@@ -418,6 +431,32 @@ function parseNonBlank(value: unknown, label: string): string {
   return value;
 }
 
+function validateAssignment(
+  value: ReviewAssignmentV1,
+  rubric: RubricV1,
+): ReviewAssignmentV1 {
+  exactFields(value, ["reviewer_id", "focus", "criterion_ids"], "review assignment");
+  if (!EVIDENCE_ID.test(value.reviewer_id)) {
+    throw new TypeError("review assignment reviewer_id must use the evidence identifier vocabulary");
+  }
+  if (!(REVIEW_FOCUSES as readonly string[]).includes(value.focus)) {
+    throw new TypeError("review assignment focus is invalid");
+  }
+  if (!Array.isArray(value.criterion_ids) || value.criterion_ids.length === 0) {
+    throw new TypeError("review assignment must name at least one rubric criterion");
+  }
+  const allowed = rubric.criteria.map((criterion) => criterion.id);
+  const selected = value.criterion_ids.map((criterion) => parseNonBlank(criterion, "review assignment criterion"));
+  if (new Set(selected).size !== selected.length || selected.some((criterion) => !allowed.includes(criterion))) {
+    throw new TypeError("review assignment criteria must be unique members of the rubric");
+  }
+  const canonical = allowed.filter((criterion) => selected.includes(criterion));
+  if (canonical.some((criterion, index) => criterion !== selected[index])) {
+    throw new TypeError("review assignment criteria must follow canonical rubric order");
+  }
+  return Object.freeze({ reviewer_id: value.reviewer_id, focus: value.focus, criterion_ids: Object.freeze(selected) });
+}
+
 function parseEncoding(value: unknown): "utf8" | "base64" {
   if (value !== "utf8" && value !== "base64") {
     throw new TypeError("pinned context encoding must be utf8 or base64");
@@ -550,9 +589,11 @@ export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelop
   const snapshot = materialize(value);
   exactFields(
     snapshot,
-    snapshot.workspace === undefined
-      ? ["artifact", "rubric", "context", "subject"]
-      : ["artifact", "rubric", "context", "subject", "workspace"],
+    [
+      "artifact", "rubric", "context", "subject",
+      ...(snapshot.assignment === undefined ? [] : ["assignment"]),
+      ...(snapshot.workspace === undefined ? [] : ["workspace"]),
+    ],
     "review envelope input",
   );
   if (typeof snapshot.artifact !== "string") throw new TypeError("review envelope artifact must be text");
@@ -568,18 +609,23 @@ export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelop
       blocking: criterion.blocking,
     })),
   } as const;
+  const assignment = snapshot.assignment === undefined
+    ? undefined
+    : validateAssignment(snapshot.assignment, parsedRubric);
 
   const context = validateContext(snapshot.context);
   const envelope = {
     schema_version: "1",
     artifact: snapshot.artifact,
     rubric,
+    ...(assignment === undefined ? {} : { assignment }),
     context,
     // Both instructions are fixed literals. The review framing is always present; the remediation
     // literal appears exactly when a prior-triage record is pinned, and its presence is derived
     // from validated context, never a caller switch.
     instructions: {
       review: REVIEW_INSTRUCTION,
+      ...(assignment === undefined ? {} : { assignment: REVIEW_ASSIGNMENT_INSTRUCTION }),
       ...(context.some((entry) => entry.kind === "prior-triage")
         ? { prior_triage: PRIOR_TRIAGE_INSTRUCTION }
         : {}),

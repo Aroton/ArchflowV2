@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 
 import { canonicalJsonBytes } from "../contracts/canonical.js";
 import type { RepositoryName } from "../contracts/config.js";
@@ -224,7 +226,14 @@ export function createDispatchCoordinator(input: DispatchCoordinatorInput): (
       failureStage = "cli-preflight";
       preflight = await memoizedCliPreflight(adapter, workspace, input.signal, input.cancellation_source);
       failureStage = "invocation-build";
-      const invocation = await adapter.buildInvocation(envelope, route, workspace, outputSchema);
+      const childRoot = join(workspace.root, "children", attemptId);
+      await mkdir(childRoot, { recursive: true, mode: 0o700 });
+      const childWorkspace = Object.freeze({
+        ...workspace,
+        root: childRoot,
+        env: Object.freeze({ ...workspace.env, TMPDIR: childRoot }),
+      });
+      const invocation = await adapter.buildInvocation(envelope, route, childWorkspace, outputSchema);
       failureStage = "child-run";
       childResult = await runDispatchChild({
         ...invocation,

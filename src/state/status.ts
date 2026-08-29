@@ -25,10 +25,10 @@ import type {
   SecondaryCommitAuthorizationV1,
 } from "../contracts/gates.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
-import type { ReviewEvidence, RouteOverrideRecord, RouteSourceRecord } from "../contracts/review.js";
+import type { ReviewerRunV1, ReviewEvidence, RouteOverrideRecord, RouteSourceRecord } from "../contracts/review.js";
 import type { RepositoryStatusV1 } from "../contracts/semantic-workflow.js";
 import type { CurrentEvidenceSetRef } from "../contracts/trust.js";
-import { resolveDispatchRoute, type DispatchRoute } from "../dispatch/routing.js";
+import { configuredRoute, resolveDispatchRoute, type DispatchRoute } from "../dispatch/routing.js";
 import { designApprovalPolicyContext, selectAdjudicationGates } from "../review/adjudication.js";
 import { assessCurrentEvidence, DEFAULT_MAX_ATTEMPTS, waiverInForce, type EvidenceAssessment } from "../review/fixed-point.js";
 import { loadCanonicalRubricForPhaseKind, type CanonicalRubric } from "../review/rubrics.js";
@@ -127,6 +127,7 @@ type StatusEvidence = Readonly<{
     provider?: string;
     route_source?: RouteSourceRecord;
     route_override?: RouteOverrideRecord;
+    reviewer_runs?: readonly ReviewerRunV1[];
   }>;
   assessment: EvidenceAssessment;
 }>;
@@ -493,7 +494,7 @@ export type TaskStatusV1 = Readonly<{
    */
   config_change?: readonly ConfigChangeEntry[];
   /** The dispatched review routes for the current phase kind; the producer is the host, never routed. */
-  routes?: Readonly<{ counter_reviewer: DispatchRoute; adjudicator: DispatchRoute }>;
+  routes?: Readonly<{ counter_reviewer: DispatchRoute; test_reviewer?: DispatchRoute; adjudicator: DispatchRoute }>;
   /** Safe exact-current dispatch outage facts; carries no runtime path or state join identifiers. */
   dispatch_failure?: PublicDispatchFailureV1;
   constitution?: Readonly<{
@@ -1318,8 +1319,15 @@ async function computeTaskStatusDetailedInternal(
       const decodedPhase = decodePhaseInstance(state.phase_instance);
       const phaseKind = decodedPhase.kind;
       const counterReviewer = resolveDispatchRoute(parsedConfig, phaseKind, "counter-reviewer");
+      const testReviewer = configuredRoute(parsedConfig, phaseKind, "test-reviewer") === undefined
+        ? undefined
+        : resolveDispatchRoute(parsedConfig, phaseKind, "test-reviewer");
       const adjudicator = resolveDispatchRoute(parsedConfig, phaseKind, "adjudicator");
-      routes = Object.freeze({ counter_reviewer: counterReviewer, adjudicator });
+      routes = Object.freeze({
+        counter_reviewer: counterReviewer,
+        ...(testReviewer === undefined ? {} : { test_reviewer: testReviewer }),
+        adjudicator,
+      });
     } catch {
       blockers.push("dispatch-routes-invalid");
     }
@@ -1956,6 +1964,9 @@ async function computeTaskStatusDetailedInternal(
         // the human sees which model reviewed but never that it was not the configured one.
         ...(counter.assurance === "server-attested" && counter.route_override !== undefined
           ? { route_override: counter.route_override }
+          : {}),
+        ...(counter.assurance === "server-attested" && counter.reviewer_runs !== undefined
+          ? { reviewer_runs: counter.reviewer_runs }
           : {}),
       }),
       assessment,

@@ -60,6 +60,9 @@
             "$ref": "#/$defs/route"
           }
         },
+        "test-reviewer": {
+          "$ref": "#/$defs/route"
+        },
         "adjudicator": {
           "$ref": "#/$defs/route"
         }

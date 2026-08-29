@@ -212,6 +212,28 @@ type ReviewProvenanceBase = DerivedReview & {
   readonly effort: DeclaredEffort;
 };
 
+export const REVIEW_RUN_FOCUSES = ["general", "tests"] as const;
+export const REVIEW_RUN_ROLES = ["counter-reviewer", "test-reviewer"] as const;
+export type ReviewerRunV1 = {
+  readonly reviewer_id: string;
+  readonly focus: (typeof REVIEW_RUN_FOCUSES)[number];
+  readonly routing_role: (typeof REVIEW_RUN_ROLES)[number];
+  readonly criterion_ids: readonly string[];
+  readonly rubric_digest: Sha256Digest;
+  readonly model_family: ModelFamily;
+  readonly model: string;
+  readonly effort: Exclude<DeclaredEffort, "unknown">;
+  readonly adapter: AdapterId;
+  readonly cli_version: string;
+  readonly invocation_id: string;
+  readonly envelope_input_digest: Sha256Digest;
+  readonly observed_output_digest: Sha256Digest;
+  readonly finding_ids: readonly string[];
+  readonly provider?: string;
+  readonly route_source: RouteSourceRecord;
+  readonly route_override?: RouteOverrideRecord;
+};
+
 export type ServerAttestedReview = Omit<ReviewProvenanceBase, "model_family" | "effort"> & {
   readonly assurance: "server-attested";
   readonly adapter: AdapterId;
@@ -235,6 +257,8 @@ export type ServerAttestedReview = Omit<ReviewProvenanceBase, "model_family" | "
    * after review never stales the evidence or its gate.
    */
   readonly repositories?: readonly ReviewedRepositoryV1[];
+  /** Ordered contributor provenance for fresh multi/specialist reviews; absent on archived evidence. */
+  readonly reviewer_runs?: readonly ReviewerRunV1[];
 };
 export type DegradedReview = ReviewProvenanceBase & {
   readonly assurance: "degraded";
@@ -263,6 +287,32 @@ export const routeSourceRecordSchema = z.object({
   provenance: z.enum(ROUTE_SOURCE_PROVENANCES),
   displaced: displacedRouteRecordSchema.optional(),
 }).strict();
+export const reviewerRunV1Schema = z.object({
+  reviewer_id: id,
+  focus: z.enum(REVIEW_RUN_FOCUSES),
+  routing_role: z.enum(REVIEW_RUN_ROLES),
+  criterion_ids: z.array(id).min(1),
+  rubric_digest: digest,
+  model_family: z.enum(MODEL_FAMILIES),
+  model: nonBlank,
+  effort: z.enum(EFFORT_VALUES),
+  adapter: z.enum(ADAPTER_IDS),
+  cli_version: nonBlank,
+  invocation_id: id,
+  envelope_input_digest: digest,
+  observed_output_digest: digest,
+  finding_ids: z.array(id),
+  provider: nonBlank.optional(),
+  route_source: routeSourceRecordSchema,
+  route_override: routeOverrideRecordSchema.optional(),
+}).strict().superRefine((run, context) => {
+  if (new Set(run.criterion_ids).size !== run.criterion_ids.length) {
+    context.addIssue({ code: "custom", path: ["criterion_ids"], message: "reviewer run criteria must be unique" });
+  }
+  if (new Set(run.finding_ids).size !== run.finding_ids.length) {
+    context.addIssue({ code: "custom", path: ["finding_ids"], message: "reviewer run findings must be unique" });
+  }
+});
 const serverAttestedReviewSchema = provenanceBase.safeExtend({
   assurance: z.literal("server-attested"),
   adapter: z.enum(ADAPTER_IDS),
@@ -277,7 +327,20 @@ const serverAttestedReviewSchema = provenanceBase.safeExtend({
   route_source: routeSourceRecordSchema.optional(),
   route_override: routeOverrideRecordSchema.optional(),
   repositories: reviewedRepositoriesV1Schema.optional(),
-}).strict();
+  reviewer_runs: z.array(reviewerRunV1Schema).min(1).optional(),
+}).strict().superRefine((review, context) => {
+  if (review.reviewer_runs === undefined) return;
+  const reviewerIds = review.reviewer_runs.map((run) => run.reviewer_id);
+  if (new Set(reviewerIds).size !== reviewerIds.length) {
+    context.addIssue({ code: "custom", path: ["reviewer_runs"], message: "reviewer run ids must be unique" });
+  }
+  const owned = review.reviewer_runs.flatMap((run) => run.finding_ids);
+  const findings = review.findings.map((finding) => finding.finding_id);
+  if (owned.length !== findings.length || new Set(owned).size !== owned.length ||
+      findings.some((finding) => !owned.includes(finding))) {
+    context.addIssue({ code: "custom", path: ["reviewer_runs"], message: "reviewer runs must partition review findings exactly" });
+  }
+});
 const degradedReviewSchema = provenanceBase.safeExtend({ assurance: z.literal("degraded"), reason: nonBlank }).strict();
 export const reviewEvidenceSchema = z.discriminatedUnion("assurance", [serverAttestedReviewSchema, degradedReviewSchema]);
 
@@ -297,4 +360,3 @@ export function parseReferencedReviewEvidence(value: unknown): ReferencedEvidenc
   const wrapper = referencedReviewWrapperSchema.parse(value);
   return { evidence_digest: wrapper.evidence_digest, evidence: parseReviewEvidence(wrapper.evidence) };
 }
-

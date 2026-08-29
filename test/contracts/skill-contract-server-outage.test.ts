@@ -72,6 +72,11 @@ describe("server-outage skill contracts", () => {
       expect(skill, `${name} keeps the degraded stop path distinct from a route outage`)
         .toContain("it is not degraded operation");
     }
+    for (const name of ["archflow-phase-design", "archflow-phase-impl"] as const) {
+      const skill = source(name);
+      expect(skill).toContain("reports that the test-reviewer route failed");
+      expect(skill).toContain("using exactly the returned failed role (`counter-reviewer`, `test-reviewer`, or `adjudicator`)");
+    }
   });
 
   it("archflow-status drives the read-only semantic status with manual-status as its fallback", () => {

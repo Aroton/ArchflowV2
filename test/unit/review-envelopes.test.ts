@@ -6,6 +6,7 @@ import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/co
 import {
   PRIOR_TRIAGE_INSTRUCTION,
   REVIEW_INSTRUCTION,
+  REVIEW_ASSIGNMENT_INSTRUCTION,
   MULTI_REPOSITORY_VIEW_NOTE,
   PRODUCED_REPOSITORY_VIEW_NOTE,
   REPOSITORY_VIEW_NOTE,
@@ -128,6 +129,44 @@ describe("review dispatch envelopes", () => {
     } as const;
     expect(json(buildReviewEnvelope({ ...input(), context: [unavailable] }).bytes).context)
       .toEqual([unavailable]);
+  });
+
+  it("seals a reviewer assignment and its fixed instruction into the envelope digest", () => {
+    const bare = buildReviewEnvelope(input());
+    const assigned = buildReviewEnvelope({
+      ...input(),
+      assignment: { reviewer_id: "test", focus: "tests", criterion_ids: ["contract-match"] },
+    });
+    const visible = json(assigned.bytes);
+    expect(visible.assignment).toEqual({ reviewer_id: "test", focus: "tests", criterion_ids: ["contract-match"] });
+    expect(visible.instructions).toEqual({ review: REVIEW_INSTRUCTION, assignment: REVIEW_ASSIGNMENT_INSTRUCTION });
+    expect(assigned.digest).not.toBe(bare.digest);
+    expect(() => buildReviewEnvelope({
+      ...input(),
+      assignment: { reviewer_id: "test", focus: "tests", criterion_ids: ["missing"] },
+    })).toThrow(/members of the rubric/iu);
+    expect(() => buildReviewEnvelope({
+      ...input(),
+      assignment: { reviewer_id: "unsafe id", focus: "tests", criterion_ids: ["contract-match"] },
+    })).toThrow(/identifier vocabulary/iu);
+    const twoCriteria = {
+      ...input(),
+      rubric: {
+        ...input().rubric,
+        criteria: [
+          { id: "first", text: "First criterion.", blocking: true },
+          { id: "second", text: "Second criterion.", blocking: true },
+        ],
+      },
+    };
+    expect(() => buildReviewEnvelope({
+      ...twoCriteria,
+      assignment: { reviewer_id: "test", focus: "tests", criterion_ids: ["first", "first"] },
+    })).toThrow(/unique members/iu);
+    expect(() => buildReviewEnvelope({
+      ...twoCriteria,
+      assignment: { reviewer_id: "test", focus: "tests", criterion_ids: ["second", "first"] },
+    })).toThrow(/canonical rubric order/iu);
   });
 
   it("carries an optional validated workspace binding that participates in the digest", () => {
@@ -442,7 +481,7 @@ describe("review dispatch envelopes", () => {
   });
 
   it("keeps contamination fields out of the representable and accepted shapes", () => {
-    expectTypeOf<keyof ReviewEnvelopeInput>().toEqualTypeOf<"artifact" | "rubric" | "context" | "subject" | "workspace">();
+    expectTypeOf<keyof ReviewEnvelopeInput>().toEqualTypeOf<"artifact" | "rubric" | "assignment" | "context" | "subject" | "workspace">();
     expectTypeOf<keyof Extract<ReviewWorkspaceBinding, { kind: "read-only-repository-checkout" }>>()
       .toEqualTypeOf<"kind" | "commit" | "note">();
     expectTypeOf<keyof Extract<ReviewWorkspaceBinding, { kind: "read-only-produced-repository-snapshot" }>>()

@@ -63,7 +63,13 @@ export type PublicRubricV1 = {
 };
 export type PublicReviewContextV1 = {
   readonly rubric: PublicRubricV1;
+  readonly assignments?: readonly PublicReviewAssignmentV1[];
   readonly active_rules: readonly PublicConstitutionRuleV1[];
+};
+export type PublicReviewAssignmentV1 = {
+  readonly reviewer_id: string;
+  readonly focus: "general" | "tests";
+  readonly criterion_ids: readonly string[];
 };
 
 /** One counter-review round of the current phase instance: what it raised and what triage accepted. */
@@ -90,6 +96,16 @@ export type PublicReviewStrengthV1 = {
   /** True when the current review ran against pinned prior triage rather than as a first, full-scope review. */
   readonly remediation_round: boolean;
   readonly rounds: readonly PublicReviewRoundV1[];
+  readonly reviewers?: readonly PublicReviewerStrengthV1[];
+};
+export type PublicReviewerStrengthV1 = {
+  readonly reviewer_id: string;
+  readonly focus: "general" | "tests";
+  readonly model: string;
+  readonly effort: string;
+  readonly reviewer_family: string;
+  readonly same_family: boolean;
+  readonly finding_count: number;
 };
 
 export type HumanPresentationOptionV1 = { readonly token: string; readonly label: string; readonly consequence: string };
@@ -113,10 +129,11 @@ export type WorkflowPositionV1 =
 
 /** Public route declaration repeated unchanged for one producer skill invocation. */
 export type WorkflowReviewRoutesV1 = ReviewRouteSetV1;
+export type WorkflowGeneralReviewRoutesV1 = Omit<ReviewRouteSetV1, "test-reviewer">;
 
 export type WorkflowInvocationV1 =
-  | { readonly skill: "archflow-prd"; readonly intent: "resume" | "reopen"; readonly review_routes?: WorkflowReviewRoutesV1 }
-  | { readonly skill: "archflow-design"; readonly intent: "resume" | "reopen"; readonly review_routes?: WorkflowReviewRoutesV1 }
+  | { readonly skill: "archflow-prd"; readonly intent: "resume" | "reopen"; readonly review_routes?: WorkflowGeneralReviewRoutesV1 }
+  | { readonly skill: "archflow-design"; readonly intent: "resume" | "reopen"; readonly review_routes?: WorkflowGeneralReviewRoutesV1 }
   | { readonly skill: "archflow-phase-design"; readonly phase: number; readonly intent: "resume" | "reopen"; readonly review_routes?: WorkflowReviewRoutesV1 }
   | { readonly skill: "archflow-phase-impl"; readonly phase: number; readonly intent: "resume"; readonly review_routes?: WorkflowReviewRoutesV1 };
 
@@ -349,10 +366,12 @@ export const publicFindingV1Schema = z.object({
 const publicConstitutionRuleV1Schema = z.object({ id: nonBlank, version: positiveSafePhaseNumberV1Schema, text: nonBlank, review_trigger: nonBlank.optional(), enforced_by: z.array(nonBlank).min(1).optional() }).strict();
 const rubricCriterionV1Schema = z.object({ id: nonBlank, text: nonBlank, blocking: z.boolean() }).strict();
 const publicRubricV1Schema = z.object({ schema_version: z.literal("1"), kind: z.enum(["artifact", "implementation"]), mode: z.literal("adversarial"), criteria: z.array(rubricCriterionV1Schema).min(1) }).strict();
-const publicReviewContextV1Schema = z.object({ rubric: publicRubricV1Schema, active_rules: z.array(publicConstitutionRuleV1Schema) }).strict();
+const publicReviewAssignmentV1Schema = z.object({ reviewer_id: nonBlank, focus: z.enum(["general", "tests"]), criterion_ids: z.array(nonBlank).min(1) }).strict();
+const publicReviewContextV1Schema = z.object({ rubric: publicRubricV1Schema, assignments: z.array(publicReviewAssignmentV1Schema).min(1).optional(), active_rules: z.array(publicConstitutionRuleV1Schema) }).strict();
 const roundCount = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 export const publicReviewRoundV1Schema = z.object({ attempt: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER), findings: roundCount, blocking: roundCount, accepted: roundCount }).strict() as unknown as z.ZodType<PublicReviewRoundV1>;
-export const publicReviewStrengthV1Schema = z.object({ reviewer_model: nonBlank, reviewer_effort: nonBlank, reviewer_family: nonBlank, producer_family: nonBlank, same_family: z.boolean(), attempt: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER), remediation_round: z.boolean(), rounds: z.array(publicReviewRoundV1Schema) }).strict() as unknown as z.ZodType<PublicReviewStrengthV1>;
+const publicReviewerStrengthV1Schema = z.object({ reviewer_id: nonBlank, focus: z.enum(["general", "tests"]), model: nonBlank, effort: nonBlank, reviewer_family: nonBlank, same_family: z.boolean(), finding_count: roundCount }).strict();
+export const publicReviewStrengthV1Schema = z.object({ reviewer_model: nonBlank, reviewer_effort: nonBlank, reviewer_family: nonBlank, producer_family: nonBlank, same_family: z.boolean(), attempt: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER), remediation_round: z.boolean(), rounds: z.array(publicReviewRoundV1Schema), reviewers: z.array(publicReviewerStrengthV1Schema).min(1).optional() }).strict() as unknown as z.ZodType<PublicReviewStrengthV1>;
 const presentationClass = z.enum(["configured-approval", "exception"]);
 const humanPresentationV1Schema = z.object({ class: presentationClass, title: nonBlank, summary: nonBlank, details: z.array(nonBlank).optional(), question: nonBlank, reasons: z.array(z.object({ class: presentationClass, text: nonBlank }).strict()).min(1), options: z.array(z.object({ token: nonBlank, label: nonBlank, consequence: nonBlank }).strict()).min(1) }).strict().superRefine((presentation, context) => {
   const expected = presentation.reasons.some((reason) => reason.class === "exception") ? "exception" : "configured-approval";
@@ -367,15 +386,24 @@ export const workflowPositionV1Schema = z.discriminatedUnion("kind", [
 export const workflowReviewModelRouteV1Schema = configRouteSchema.clone(configRouteSchema.def) as z.ZodType<ModelRouteV1>;
 export const workflowReviewRoutesV1Schema = z.object({
   "counter-reviewer": workflowReviewModelRouteV1Schema.optional(),
+  "test-reviewer": workflowReviewModelRouteV1Schema.optional(),
+  adjudicator: workflowReviewModelRouteV1Schema.optional(),
+}).strict().superRefine((routes, context) => {
+  if (routes["counter-reviewer"] === undefined && routes["test-reviewer"] === undefined && routes.adjudicator === undefined) {
+    context.addIssue({ code: "custom", message: "review_routes must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
+  }
+}) as z.ZodType<ReviewRouteSetV1>;
+export const workflowGeneralReviewRoutesV1Schema = z.object({
+  "counter-reviewer": workflowReviewModelRouteV1Schema.optional(),
   adjudicator: workflowReviewModelRouteV1Schema.optional(),
 }).strict().superRefine((routes, context) => {
   if (routes["counter-reviewer"] === undefined && routes.adjudicator === undefined) {
     context.addIssue({ code: "custom", message: "review_routes must name counter-reviewer, adjudicator, or both" });
   }
-}) as z.ZodType<ReviewRouteSetV1>;
+}) as z.ZodType<WorkflowGeneralReviewRoutesV1>;
 export const workflowInvocationV1Schema = z.discriminatedUnion("skill", [
-  z.object({ skill: z.literal("archflow-prd"), intent: z.enum(["resume", "reopen"]), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
-  z.object({ skill: z.literal("archflow-design"), intent: z.enum(["resume", "reopen"]), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
+  z.object({ skill: z.literal("archflow-prd"), intent: z.enum(["resume", "reopen"]), review_routes: workflowGeneralReviewRoutesV1Schema.optional() }).strict(),
+  z.object({ skill: z.literal("archflow-design"), intent: z.enum(["resume", "reopen"]), review_routes: workflowGeneralReviewRoutesV1Schema.optional() }).strict(),
   z.object({ skill: z.literal("archflow-phase-design"), phase: positiveSafePhaseNumberV1Schema, intent: z.enum(["resume", "reopen"]), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
   z.object({ skill: z.literal("archflow-phase-impl"), phase: positiveSafePhaseNumberV1Schema, intent: z.literal("resume"), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
 ]) as unknown as z.ZodType<WorkflowInvocationV1>;
@@ -456,10 +484,11 @@ const overrideRoute = configRouteSchema.clone(configRouteSchema.def) as z.ZodTyp
 const routeOverrideDeclarationV1Schema = z.object({
   reason: boundedText,
   "counter-reviewer": overrideRoute.optional(),
+  "test-reviewer": overrideRoute.optional(),
   adjudicator: overrideRoute.optional(),
 }).strict().superRefine((override, context) => {
-  if (override["counter-reviewer"] === undefined && override.adjudicator === undefined) {
-    context.addIssue({ code: "custom", message: "route_override must name counter-reviewer, adjudicator, or both" });
+  if (override["counter-reviewer"] === undefined && override["test-reviewer"] === undefined && override.adjudicator === undefined) {
+    context.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
   }
 });
 export const applySubmissionV1Schema = z.union([
@@ -474,7 +503,20 @@ export const applySubmissionV1Schema = z.union([
 ]) as unknown as z.ZodType<ApplySubmissionV1>;
 
 /** Plain object root; all variants are nested below `invocation` and `action.submission`. */
-export const archFlowApplyInputV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema, action: z.object({ offer: z.string().regex(/^af1_[0-9a-f]{64}$/u), submission: applySubmissionV1Schema.optional() }).strict() }).strict() as unknown as z.ZodType<ArchFlowApplyInputV1>;
+export const archFlowApplyInputV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema, action: z.object({ offer: z.string().regex(/^af1_[0-9a-f]{64}$/u), submission: applySubmissionV1Schema.optional() }).strict() }).strict().superRefine((input, context) => {
+  const submission = input.action.submission;
+  if (
+    (input.invocation.skill === "archflow-prd" || input.invocation.skill === "archflow-design") &&
+    submission?.kind === "review-dispatch" &&
+    submission.route_override["test-reviewer"] !== undefined
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["action", "submission", "route_override", "test-reviewer"],
+      message: "test-reviewer overrides are available only for phase design and phase implementation",
+    });
+  }
+}) as unknown as z.ZodType<ArchFlowApplyInputV1>;
 export const archFlowStatusInputV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema.optional() }).strict() as unknown as z.ZodType<ArchFlowStatusInputV1>;
 
 const parseMaterialized = <T>(schema: z.ZodType<T>, value: unknown, label: string): T => {

@@ -107,7 +107,7 @@ export type AutomationHumanBoundaryV1 =
       readonly summary: string;
       readonly question: string;
       readonly reasons: readonly AutomationHumanBoundaryReasonV1[];
-      readonly failed_role: "counter-reviewer" | "adjudicator";
+      readonly failed_role: "counter-reviewer" | "test-reviewer" | "adjudicator";
       readonly failure_code: string;
     };
 
@@ -235,7 +235,7 @@ const dispatchBoundaryV1Schema = z.object({
   source: z.literal("dispatch-failure"), class: z.literal("exception"),
   headline: boundedText, summary: boundedText, question: boundedText,
   reasons: z.array(humanBoundaryReasonV1Schema).min(1),
-  failed_role: z.enum(["counter-reviewer", "adjudicator"]), failure_code: nonBlank.max(128),
+  failed_role: z.enum(["counter-reviewer", "test-reviewer", "adjudicator"]), failure_code: nonBlank.max(128),
 }).strict().superRefine((boundary, context) => {
   if (!boundary.reasons.some((reason) => reason.class === "exception")) {
     context.addIssue({ code: "custom", path: ["reasons"], message: "dispatch failure requires an exceptional reason" });

@@ -40,6 +40,27 @@ describe("dispatch routing", () => {
     expect(resolveDispatchRoute(value, "prd", "counter-reviewer").model).toBe("gpt-5.3-codex");
   });
 
+  it("routes the optional test reviewer with producer and phase precedence", () => {
+    const value: ConfigV1 = {
+      schema_version: "1",
+      roles: { "test-reviewer": { model: "gpt-5.6-luna", effort: "max" } },
+      producers: {
+        codex: { "test-reviewer": { model: "gpt-5.6-luna-fast", effort: "xhigh" } },
+      },
+      overrides: {
+        "phase-impl": { "test-reviewer": { model: "gpt-5.6-luna-impl", effort: "max" } },
+      },
+    };
+    expect(resolveDispatchRoute(value, "phase-design", "test-reviewer", "codex").model)
+      .toBe("gpt-5.6-luna-fast");
+    expect(resolveDispatchRoute(value, "phase-impl", "test-reviewer", "codex").model)
+      .toBe("gpt-5.6-luna-fast");
+    expect(resolveDispatchRoute(value, "phase-impl", "test-reviewer", "claude").model)
+      .toBe("gpt-5.6-luna-impl");
+    expect(resolveDispatchRoute(value, "phase-design", "test-reviewer", "claude").model)
+      .toBe("gpt-5.6-luna");
+  });
+
   it("classifies an absent dispatched role without returning a route", () => {
     expectRoutingError(
       () => resolveDispatchRoute(config({}), "phase-impl", "counter-reviewer"),

@@ -24,6 +24,7 @@ import type {
   ReviewEvidence,
   ReviewFinding,
   ReviewVerdict,
+  ReviewerRunV1,
   RouteOverrideRecord,
   RuleVersionRef,
 } from "../contracts/review.js";
@@ -76,7 +77,8 @@ import {
   type ReviewEnvelopeSeed,
 } from "./envelopes.js";
 import { buildReviewEnvelopeWithCap, priorTriageContextEntry, type PriorTriageRecord } from "./pinned-context.js";
-import { reviewerFindingTag, reviewerOwnsFinding, taggedFindingId } from "./reviewer-tags.js";
+import { reviewerOwnsFinding, taggedFindingId } from "./reviewer-tags.js";
+import { reviewAssignment, type CounterReviewPhaseKind } from "./rubrics.js";
 
 export type CounterReviewDispatchResult = Readonly<{
   cli_version: string;
@@ -390,6 +392,7 @@ export async function runCounterReview(
     });
   };
   const reviewOverride = overrideRecordFor("counter-reviewer");
+  const testReviewOverride = overrideRecordFor("test-reviewer");
   // The server stamps the durable attempt counter into the child-visible subject from the same
   // transaction authority the dispatch runs under, so the round number is never a caller claim.
   const subject: DispatchSubject = Object.freeze({
@@ -403,16 +406,39 @@ export async function runCounterReview(
   const plan = input.constitution;
   // All routes are selected before children spend tokens, so a bad route fails before launch.
   const configuredReviewRoutes = await selectRoutes("counter-reviewer");
+  const specialistApplicable = input.phase_kind === "phase-design" || input.phase_kind === "phase-impl";
+  const testReviewDeclared = configuredRoutes(input.config, input.phase_kind, "test-reviewer", input.host).length > 0 ||
+    input.call.input.invocation_routes?.["test-reviewer"] !== undefined ||
+    input.call.input.route_override?.["test-reviewer"] !== undefined;
+  const configuredTestRoutes = specialistApplicable && testReviewDeclared
+    ? await selectRoutes("test-reviewer")
+    : Object.freeze([]);
   const constitutionRoutes = plan === undefined ? undefined : await selectRoutes("adjudicator");
   const constitutionRoute = constitutionRoutes?.[0];
 
   // Reviewer identity is the tag stamped on its findings, fixed by position in the configured
   // route list so it survives rounds that dispatch only a subset of reviewers.
-  const totalReviewers = configuredReviewRoutes.length;
-  const taggedRoutes = configuredReviewRoutes.map((routeEntry, index) => Object.freeze({
+  const specialistActive = configuredTestRoutes.length > 0;
+  const phaseKind = input.phase_kind as CounterReviewPhaseKind;
+  const generalRoutes = configuredReviewRoutes.map((routeEntry, index) => {
+    // Number every general reviewer whenever the configured list has siblings. A bare `general`
+    // would also prefix-match `general-2-*` finding IDs during remediation ownership checks.
+    const reviewerId = configuredReviewRoutes.length === 1 ? "general" : `general-${String(index + 1)}`;
+    return Object.freeze({
+      ...routeEntry,
+      role: "counter-reviewer" as const,
+      tag: reviewerId,
+      assignment: reviewAssignment(reviewerId, "general", phaseKind, input.envelope.rubric, specialistActive),
+    });
+  });
+  const testRoutes = configuredTestRoutes.map((routeEntry) => Object.freeze({
     ...routeEntry,
-    tag: reviewerFindingTag(routeEntry.selection.route.model, index),
+    role: "test-reviewer" as const,
+    tag: "test",
+    assignment: reviewAssignment("test", "tests", phaseKind, input.envelope.rubric, specialistActive),
   }));
+  const taggedRoutes = Object.freeze([...generalRoutes, ...testRoutes]);
+  const totalReviewers = taggedRoutes.length;
   const sharedPriorTriage = input.envelope.context.find((entry) => entry.kind === "prior-triage");
   const priorTriage = sharedPriorTriage === undefined ? undefined : input.prior_triage;
   // A remediation round dispatches only the reviewers whose findings the producer dispositioned
@@ -427,24 +453,31 @@ export async function runCounterReview(
     : priorTriage.current.filter((disposition) => disposition.disposition !== "accepted-editorial");
   const owners = (findingId: string) =>
     taggedRoutes.filter((routeEntry) => reviewerOwnsFinding(routeEntry.tag, totalReviewers, findingId));
-  const fallback = priorTriage === undefined || totalReviewers <= 1 ||
-    dispositioned.some((disposition) => owners(disposition.finding_id).length === 0);
+  const ownerMissing = dispositioned.some((disposition) => owners(disposition.finding_id).length === 0);
+  const fallback = priorTriage === undefined || totalReviewers <= 1 || ownerMissing;
   const reviewRoutes = fallback
     ? taggedRoutes
     : taggedRoutes.filter((routeEntry) => dispositioned.some((disposition) =>
       reviewerOwnsFinding(routeEntry.tag, totalReviewers, disposition.finding_id)));
+  const assignmentFor = (routeEntry: (typeof taggedRoutes)[number]) =>
+    ownerMissing && routeEntry.role === "counter-reviewer"
+      ? reviewAssignment(routeEntry.tag, "general", phaseKind, input.envelope.rubric, false)
+      : routeEntry.assignment;
   const envelopeFor = (routeEntry: (typeof taggedRoutes)[number]): DispatchEnvelope => {
+    const assignment = assignmentFor(routeEntry);
     if (priorTriage === undefined || fallback) {
-      return buildReviewEnvelopeWithCap({ ...input.envelope, subject });
+      return buildReviewEnvelopeWithCap({ ...input.envelope, assignment, subject });
     }
     const scoped = priorTriageContextEntry(priorTriage, (findingId) =>
       reviewerOwnsFinding(routeEntry.tag, totalReviewers, findingId));
     return buildReviewEnvelopeWithCap({
       ...input.envelope,
+      assignment,
       subject,
       context: input.envelope.context.map((entry) => entry.kind === "prior-triage" ? scoped : entry),
     });
   };
+  const activeAssignments = reviewRoutes.map(assignmentFor);
   const reviewEnvelopes = reviewRoutes.map(envelopeFor);
   // The first dispatched reviewer's envelope is the round: the merged evidence carries its digest
   // and the constitution child binds to it, so every retained record of the round agrees.
@@ -498,10 +531,11 @@ export async function runCounterReview(
   };
 
   const reviewOp = (
-    routeEntry: Readonly<{ candidate: SelectedRouteCandidate; selection: SelectedDispatchRoute }>,
+    routeEntry: (typeof reviewRoutes)[number],
     reviewEnvelope: DispatchEnvelope,
   ) => async (): Promise<ChildOutcome> => {
     const route = routeEntry.selection.route;
+    const routeOverride = routeEntry.role === "test-reviewer" ? testReviewOverride : reviewOverride;
     const mint = (dispatched: CounterReviewDispatchResult): ReviewObservation => mintReviewObservation({
       subject,
       adapter: route.adapter,
@@ -511,9 +545,9 @@ export async function runCounterReview(
       envelope_input_digest: reviewEnvelope.digest,
       extracted_output_bytes: dispatched.extracted_output_bytes,
       repositories: input.repositories,
-      ...(reviewOverride === undefined ? {} : { route_override: reviewOverride }),
+      ...(routeOverride === undefined ? {} : { route_override: routeOverride }),
     });
-    const binding = { envelope_digest: reviewEnvelope.digest, role: "counter-reviewer" as const, selection: routeEntry.selection };
+    const binding = { envelope_digest: reviewEnvelope.digest, role: routeEntry.role, selection: routeEntry.selection };
     const kept = await retained?.read(binding);
     if (kept !== undefined) {
       try {
@@ -524,7 +558,7 @@ export async function runCounterReview(
     }
     let dispatched: CounterReviewDispatchResult;
     try {
-      dispatched = await dispatchObserved("counter-reviewer", routeEntry, (selectedRoute) =>
+      dispatched = await dispatchObserved(routeEntry.role, routeEntry, (selectedRoute) =>
         dependencies.dispatch(selectedRoute, reviewEnvelope, reviewOutputSchema as PlainJsonValue));
     } catch (error) {
       return { ok: false, error };
@@ -631,6 +665,7 @@ export async function runCounterReview(
   }
 
   const allFindings: ReviewFinding[] = [];
+  const ownedFindingIds = singleObservations.map((): string[] => []);
   const seenIds = new Set<string>();
   for (let i = 0; i < singleObservations.length; i += 1) {
     const obs = singleObservations[i]!;
@@ -644,6 +679,7 @@ export async function runCounterReview(
         disambig += 1;
       }
       seenIds.add(uniqueId);
+      ownedFindingIds[i]!.push(uniqueId);
       allFindings.push({
         ...f,
         finding_id: uniqueId,
@@ -665,12 +701,40 @@ export async function runCounterReview(
   const mergedBlockingCount = allFindings.filter((f) => f.blocking).length;
 
   const primaryObs = singleObservations[0]!;
+  const reviewerRuns: ReviewerRunV1[] = singleObservations.map((obs, index) => {
+    const evidence = obs.evidence;
+    const routeEntry = reviewRoutes[index]!;
+    const assignment = activeAssignments[index]!;
+    if (evidence.route_source === undefined) {
+      throw new TypeError("fresh reviewer evidence must carry route provenance");
+    }
+    return Object.freeze({
+      reviewer_id: assignment.reviewer_id,
+      focus: assignment.focus,
+      routing_role: routeEntry.role,
+      criterion_ids: Object.freeze([...assignment.criterion_ids]),
+      rubric_digest: evidence.rubric_digest,
+      model_family: evidence.model_family,
+      model: evidence.model,
+      effort: evidence.effort,
+      adapter: evidence.adapter,
+      cli_version: evidence.cli_version,
+      invocation_id: evidence.invocation_id,
+      envelope_input_digest: evidence.envelope_input_digest,
+      observed_output_digest: evidence.observed_output_digest,
+      finding_ids: Object.freeze([...ownedFindingIds[index]!]),
+      ...(evidence.provider === undefined ? {} : { provider: evidence.provider }),
+      route_source: evidence.route_source,
+      ...(evidence.route_override === undefined ? {} : { route_override: evidence.route_override }),
+    });
+  });
   const mergedReviewEvidence: ReviewEvidence = Object.freeze({
     ...primaryObs.evidence,
     findings: Object.freeze(allFindings),
     verdict: mergedVerdict,
     blocking_count: mergedBlockingCount,
     matched_rule_versions: Object.freeze(mergedMatchedRules),
+    reviewer_runs: Object.freeze(reviewerRuns),
   });
 
   const summarizedConstitution = constitutionEvidence;

@@ -117,7 +117,9 @@ export function configuredRoutes(
     if (role === "counter-reviewer") {
       const candidates = normalizeRawRoutes(producerRoles?.["counter-reviewers"] ?? producerRoles?.["counter-reviewer"]);
       if (candidates.length > 0) return candidates;
-    } else if (producerRoles?.adjudicator !== undefined) {
+    } else if (role === "test-reviewer" && producerRoles?.["test-reviewer"] !== undefined) {
+      return [producerRoles["test-reviewer"]];
+    } else if (role === "adjudicator" && producerRoles?.adjudicator !== undefined) {
       return [producerRoles.adjudicator];
     }
   }
@@ -127,7 +129,9 @@ export function configuredRoutes(
     if (role === "counter-reviewer") {
       const candidates = normalizeRawRoutes(phaseOverrides["counter-reviewers"] ?? phaseOverrides["counter-reviewer"]);
       if (candidates.length > 0) return candidates;
-    } else if (phaseOverrides.adjudicator !== undefined) {
+    } else if (role === "test-reviewer" && phaseOverrides["test-reviewer"] !== undefined) {
+      return [phaseOverrides["test-reviewer"]];
+    } else if (role === "adjudicator" && phaseOverrides.adjudicator !== undefined) {
       return [phaseOverrides.adjudicator];
     }
   }
@@ -136,7 +140,9 @@ export function configuredRoutes(
   if (role === "counter-reviewer") {
     const candidates = normalizeRawRoutes(baseRoles["counter-reviewers"] ?? baseRoles["counter-reviewer"]);
     if (candidates.length > 0) return candidates;
-  } else if (baseRoles.adjudicator !== undefined) {
+  } else if (role === "test-reviewer" && baseRoles["test-reviewer"] !== undefined) {
+    return [baseRoles["test-reviewer"]];
+  } else if (role === "adjudicator" && baseRoles.adjudicator !== undefined) {
     return [baseRoles.adjudicator];
   }
 
@@ -282,4 +288,3 @@ export function resolveDispatchRoutes(
 ): readonly DispatchRoute[] {
   return selectDispatchRoutes(config, phaseKind, role, undefined, undefined, host).map((s) => s.route);
 }
-

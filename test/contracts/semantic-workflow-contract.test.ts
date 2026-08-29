@@ -124,6 +124,32 @@ describe("semantic workflow contracts", () => {
       expect(parseArchFlowStatusInputV1({ schema_version: "1", task_id: "api-refactor", invocation }).invocation).toEqual(invocation);
       expect(parseArchFlowApplyInputV1({ schema_version: "1", task_id: "api-refactor", invocation, action: { offer } }).invocation).toEqual(invocation);
     }
+    const specialistRoutes = {
+      ...review_routes,
+      "test-reviewer": { model: "gpt-5.6-luna", effort: "max" },
+    } as const;
+    for (const invocation of [
+      { skill: "archflow-phase-design", phase: 2, intent: "resume", review_routes: specialistRoutes },
+      { skill: "archflow-phase-impl", phase: 2, intent: "resume", review_routes: specialistRoutes },
+    ]) expect(parseWorkflowInvocationV1(invocation)).toEqual(invocation);
+    for (const skill of ["archflow-prd", "archflow-design"] as const) {
+      expect(() => parseWorkflowInvocationV1({ skill, intent: "resume", review_routes: specialistRoutes }))
+        .toThrow(/test-reviewer|unrecognized/iu);
+      expect(() => parseArchFlowApplyInputV1({
+        schema_version: "1", task_id: "api-refactor",
+        invocation: { skill, intent: "resume" },
+        action: {
+          offer,
+          submission: {
+            kind: "review-dispatch",
+            route_override: {
+              reason: "temporary test route",
+              "test-reviewer": { model: "gpt-5.6-luna", effort: "max" },
+            },
+          },
+        },
+      })).toThrow(/only for phase design/iu);
+    }
     expect(() => parseWorkflowInvocationV1({ skill: "archflow-phase-impl", phase: 2, intent: "reopen" })).toThrow();
     expect(() => parseWorkflowInvocationV1({ skill: "archflow-prd", intent: "resume", review_routes: {} })).toThrow(/review_routes/u);
     expect(() => parseWorkflowInvocationV1({ skill: "archflow-prd", intent: "resume", review_routes: { reviewer: review_routes["counter-reviewer"] } })).toThrow();

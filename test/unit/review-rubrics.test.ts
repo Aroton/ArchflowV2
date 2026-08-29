@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { canonicalJsonDigest } from "../../src/contracts/canonical.js";
 import type { ProjectResult } from "../../src/contracts/errors.js";
-import { loadRubricFile, type CanonicalRubric, type CanonicalRubricId } from "../../src/review/rubrics.js";
+import { loadRubricFile, reviewAssignment, type CanonicalRubric, type CanonicalRubricId } from "../../src/review/rubrics.js";
 import { loadTestRubric } from "../helpers/rubrics.js";
 
 // Digests pinned to the reviewed rubric policy in assets/rubrics/. Regenerate
@@ -14,8 +14,8 @@ import { loadTestRubric } from "../helpers/rubrics.js";
 // installed bundle, and it fails in-flight tasks' input fingerprints closed.
 const PINNED_RUBRIC_DIGESTS = Object.freeze({
   "prd-v1": "477c9807c2f3e8affea4bef05f1eb924e577758d5d94439a9f9fabf34e7798ab",
-  "design-v3": "2286f4a5a9fdde2a8a588c589370a305f256da548385bcdd70ad596579a79c41",
-  "implementation-v1": "5ccb8347f1ee9d7a04aaa041e548a0a01ca8ee26ec8c9db39fda439e7292291a",
+  "design-v3": "73cbbb653e8d02b36d1ddd8eb017847498ae8e9770dbc62d3acc7349942e5b8b",
+  "implementation-v1": "4222d39d0770c748972f2e507dd6e3f64476253c53087a72c07dbcaacf9e46bb",
 } satisfies Record<CanonicalRubricId, string>);
 
 const roots: string[] = [];
@@ -98,6 +98,43 @@ describe("canonical counter-review rubrics", () => {
       expect(confidence?.blocking).toBe(false);
       expect(confidence?.text).toContain("escalate-");
     }
+  });
+
+  it("partitions test review without duplicating criteria and preserves full legacy review", async () => {
+    const design = await loadTestRubric("phase-design");
+    const implementation = await loadTestRubric("phase-impl");
+    const designGeneral = reviewAssignment("general", "general", "phase-design", design.rubric, true);
+    const designTests = reviewAssignment("test", "tests", "phase-design", design.rubric, true);
+    const implementationGeneral = reviewAssignment("general", "general", "phase-impl", implementation.rubric, true);
+    const implementationTests = reviewAssignment("test", "tests", "phase-impl", implementation.rubric, true);
+
+    expect(designTests.criterion_ids).toEqual(["test-strategy"]);
+    expect(implementationTests.criterion_ids).toEqual(["verification-evidence", "test-quality"]);
+    for (const [rubric, general, tests] of [
+      [design.rubric, designGeneral, designTests],
+      [implementation.rubric, implementationGeneral, implementationTests],
+    ] as const) {
+      expect(new Set([...general.criterion_ids, ...tests.criterion_ids])).toEqual(
+        new Set(rubric.criteria.map((criterion) => criterion.id)),
+      );
+      expect(general.criterion_ids.some((id) => tests.criterion_ids.includes(id))).toBe(false);
+    }
+    expect(reviewAssignment("general", "general", "phase-impl", implementation.rubric, false).criterion_ids)
+      .toEqual(implementation.rubric.criteria.map((criterion) => criterion.id));
+  });
+
+  it("asks the test reviewer for economical distinct coverage, not raw test volume", async () => {
+    const design = await loadTestRubric("phase-design");
+    const implementation = await loadTestRubric("phase-impl");
+    const policy = [
+      design.rubric.criteria.find((criterion) => criterion.id === "test-strategy")?.text,
+      implementation.rubric.criteria.find((criterion) => criterion.id === "test-quality")?.text,
+    ].join("\n");
+    expect(policy).toMatch(/distinct regression protection/iu);
+    expect(policy).toMatch(/duplicate/iu);
+    expect(policy).toMatch(/cheap/iu);
+    expect(policy).toMatch(/expensive.*fixture/iu);
+    expect(policy).toMatch(/raw coverage/iu);
   });
 
   it("reviews design phase sizing structurally and only for material consequences", async () => {

@@ -30,6 +30,9 @@ describe("advertised MCP tool catalogue", () => {
     // semantic tools; the ceiling sits about 3% above that so any further growth of the
     // advertisement is a deliberate decision rather than drift. Input roots and their
     // host-compatibility constraints remain unchanged.
-    expect(JSON.stringify({ tools: ADVERTISED_TOOL_CATALOGUE }).length).toBeLessThan(34_600);
+    // The additive test-reviewer route and public contributor/assignment provenance intentionally
+    // expand both semantic tool schemas. Keep a close ceiling so accidental recursive growth still
+    // fails, while accounting for those user-visible fields.
+    expect(JSON.stringify({ tools: ADVERTISED_TOOL_CATALOGUE }).length).toBeLessThan(36_500);
   });
 });

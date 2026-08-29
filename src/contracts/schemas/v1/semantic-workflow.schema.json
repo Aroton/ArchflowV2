@@ -633,6 +633,42 @@
               ],
               "additionalProperties": false
             },
+            "assignments": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "reviewer_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "focus": {
+                    "type": "string",
+                    "enum": [
+                      "general",
+                      "tests"
+                    ]
+                  },
+                  "criterion_ids": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    }
+                  }
+                },
+                "required": [
+                  "reviewer_id",
+                  "focus",
+                  "criterion_ids"
+                ],
+                "additionalProperties": false
+              }
+            },
             "active_rules": {
               "type": "array",
               "items": {
@@ -746,6 +782,60 @@
                   "findings",
                   "blocking",
                   "accepted"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "reviewers": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "reviewer_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "focus": {
+                    "type": "string",
+                    "enum": [
+                      "general",
+                      "tests"
+                    ]
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "effort": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "reviewer_family": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "same_family": {
+                    "type": "boolean"
+                  },
+                  "finding_count": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "reviewer_id",
+                  "focus",
+                  "model",
+                  "effort",
+                  "reviewer_family",
+                  "same_family",
+                  "finding_count"
                 ],
                 "additionalProperties": false
               }
@@ -1463,6 +1553,37 @@
                   ],
                   "additionalProperties": false
                 },
+                "test-reviewer": {
+                  "type": "object",
+                  "properties": {
+                    "model": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "effort": {
+                      "type": "string",
+                      "enum": [
+                        "low",
+                        "medium",
+                        "high",
+                        "xhigh",
+                        "max",
+                        "ultra"
+                      ]
+                    },
+                    "provider": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "effort"
+                  ],
+                  "additionalProperties": false
+                },
                 "adjudicator": {
                   "type": "object",
                   "properties": {
@@ -1756,6 +1877,42 @@
           ],
           "additionalProperties": false
         },
+        "assignments": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "reviewer_id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "focus": {
+                "type": "string",
+                "enum": [
+                  "general",
+                  "tests"
+                ]
+              },
+              "criterion_ids": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                }
+              }
+            },
+            "required": [
+              "reviewer_id",
+              "focus",
+              "criterion_ids"
+            ],
+            "additionalProperties": false
+          }
+        },
         "active_rules": {
           "type": "array",
           "items": {
@@ -1869,6 +2026,60 @@
               "findings",
               "blocking",
               "accepted"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "reviewers": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "reviewer_id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "focus": {
+                "type": "string",
+                "enum": [
+                  "general",
+                  "tests"
+                ]
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "effort": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "reviewer_family": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "same_family": {
+                "type": "boolean"
+              },
+              "finding_count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "reviewer_id",
+              "focus",
+              "model",
+              "effort",
+              "reviewer_family",
+              "same_family",
+              "finding_count"
             ],
             "additionalProperties": false
           }

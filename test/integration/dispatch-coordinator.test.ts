@@ -110,6 +110,7 @@ if (argv.length === 1 && argv[0] === "--version") {
       tasks: existsSync(join(target, ".archflow", "tasks")),
     },
   }));
+  await writeFile(${JSON.stringify(join(root, "observed-invocations.log"))}, JSON.stringify({ argv, tmpdir: process.env.TMPDIR }) + "\\n", { flag: "a" });
   process.stdin.resume();
   process.stdin.on("end", async () => {
     await writeFile(argv[argv.indexOf("-o") + 1], '{"schema_version":"1"}\\n');
@@ -237,8 +238,8 @@ describe("createDispatchCoordinator", () => {
       cancellation_source: "client",
       shared_workspace: shared,
     });
-    const codexEnvelope: DispatchEnvelope = Object.freeze({
-      result_kind: "adjudication",
+    const siblingEnvelope: DispatchEnvelope = Object.freeze({
+      result_kind: "review",
       bytes: Buffer.from('{"schema_version":"1"}\n'),
       digest: "e".repeat(64) as DispatchEnvelope["digest"],
       byte_count: 23,
@@ -247,21 +248,26 @@ describe("createDispatchCoordinator", () => {
       invocation.argv[invocation.argv.indexOf("-C") + 1] as string;
     const outputOf = (invocation: { argv: string[] }): string =>
       invocation.argv[invocation.argv.indexOf("-o") + 1] as string;
-    let first: { argv: string[] };
-    let second: { argv: string[] };
+    let invocations: { argv: string[]; tmpdir: string }[];
     await withDispatchEnvironment(h, async () => {
       // Acquire inside the dispatch environment: the workspace captures PATH at creation, so
       // creating it under the ambient PATH would leak the real CLIs into child resolution.
       view = (await shared.acquire()).repository_view_root!;
-      await coordinate()(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue);
-      first = JSON.parse(await readFile(join(h.root, "observed-invocation.json"), "utf8")) as { argv: string[] };
-      await coordinate()(ROUTE, codexEnvelope, adjudicationSchema as PlainJsonValue);
-      second = JSON.parse(await readFile(join(h.root, "observed-invocation.json"), "utf8")) as { argv: string[] };
+      await Promise.all([
+        coordinate()(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue),
+        coordinate()(ROUTE, siblingEnvelope, reviewSchema as PlainJsonValue),
+      ]);
+      invocations = (await readFile(join(h.root, "observed-invocations.log"), "utf8"))
+        .trim().split("\n").map((line) => JSON.parse(line) as { argv: string[]; tmpdir: string });
     });
-    // One materialized view for both children of the review, with per-kind output files.
+    const [first, second] = invocations!;
+    // Reproduces the original collision shape: concurrent Codex children with the same result kind.
     expect(viewOf(second!)).toBe(viewOf(first!));
     expect(viewOf(first!)).toBe(view);
     expect(outputOf(second!)).not.toBe(outputOf(first!));
+    expect(dirname(outputOf(second!))).not.toBe(dirname(outputOf(first!)));
+    expect(first!.tmpdir).toBe(dirname(outputOf(first!)));
+    expect(second!.tmpdir).toBe(dirname(outputOf(second!)));
     expect(existsSync(view!)).toBe(true);
     await shared.dispose();
     expect(existsSync(view!)).toBe(false);
@@ -391,9 +397,6 @@ describe("createDispatchCoordinator", () => {
       argv: string[];
       view: { tracked: boolean; git: boolean; tasks: boolean };
     };
-    const target = observed.argv[observed.argv.indexOf("-C") + 1]!;
-    const outputPath = observed.argv[observed.argv.indexOf("-o") + 1]!;
-    expect(target).toBe(join(dirname(outputPath), "repo"));
     expect(observed.view).toEqual({ tracked: true, git: false, tasks: false });
   });
 
@@ -429,9 +432,6 @@ describe("createDispatchCoordinator", () => {
       argv: string[];
       view: { tracked: boolean; git: boolean; tasks: boolean };
     };
-    const target = observed.argv[observed.argv.indexOf("-C") + 1]!;
-    const outputPath = observed.argv[observed.argv.indexOf("-o") + 1]!;
-    expect(target).toBe(join(dirname(outputPath), "repo"));
     expect(observed.view).toEqual({ tracked: true, git: false, tasks: false });
   });
 

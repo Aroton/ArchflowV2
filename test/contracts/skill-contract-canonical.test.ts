@@ -233,6 +233,12 @@ describe("canonical skill contracts", () => {
       expect(source).toContain("significant-revision reviews");
       expect(source).toMatch(/Never add, drop, or change (?:normalized )?routes between status and apply/u);
     }
+    for (const name of ["archflow-phase-design", "archflow-phase-impl"] as const) {
+      expect(skill(name)).toContain("--test-reviewer <model>:<effort>[@<provider>]");
+    }
+    for (const name of ["archflow-prd", "archflow-design"] as const) {
+      expect(skill(name)).not.toContain("--test-reviewer <model>:<effort>[@<provider>]");
+    }
   });
 
   it("keeps the implementation producer on semantic commit observation and successor boundaries", () => {

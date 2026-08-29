@@ -23120,6 +23120,7 @@ var configRolesSchema = external_exports.object({
   producer: configRouteSchema.optional(),
   "counter-reviewer": singleOrArrayRoutesSchema.optional(),
   "counter-reviewers": external_exports.array(configRouteSchema).min(1).optional(),
+  "test-reviewer": configRouteSchema.optional(),
   adjudicator: configRouteSchema.optional()
 }).strict();
 var producersSchema = external_exports.object({
@@ -23860,6 +23861,8 @@ function parseAndDeriveReview(value) {
 }
 var ROUTE_SOURCE_PROVENANCES = ["configured", "invocation-declared", "route-override"];
 var DISPLACED_ROUTE_SOURCES = ["configured", "invocation-declared"];
+var REVIEW_RUN_FOCUSES = ["general", "tests"];
+var REVIEW_RUN_ROLES = ["counter-reviewer", "test-reviewer"];
 var provenanceBase = rawReviewSchema.safeExtend({
   model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]),
   model: nonBlank,
@@ -23881,6 +23884,32 @@ var routeSourceRecordSchema = external_exports.object({
   provenance: external_exports.enum(ROUTE_SOURCE_PROVENANCES),
   displaced: displacedRouteRecordSchema.optional()
 }).strict();
+var reviewerRunV1Schema = external_exports.object({
+  reviewer_id: id,
+  focus: external_exports.enum(REVIEW_RUN_FOCUSES),
+  routing_role: external_exports.enum(REVIEW_RUN_ROLES),
+  criterion_ids: external_exports.array(id).min(1),
+  rubric_digest: digest2,
+  model_family: external_exports.enum(MODEL_FAMILIES),
+  model: nonBlank,
+  effort: external_exports.enum(EFFORT_VALUES),
+  adapter: external_exports.enum(ADAPTER_IDS),
+  cli_version: nonBlank,
+  invocation_id: id,
+  envelope_input_digest: digest2,
+  observed_output_digest: digest2,
+  finding_ids: external_exports.array(id),
+  provider: nonBlank.optional(),
+  route_source: routeSourceRecordSchema,
+  route_override: routeOverrideRecordSchema.optional()
+}).strict().superRefine((run, context2) => {
+  if (new Set(run.criterion_ids).size !== run.criterion_ids.length) {
+    context2.addIssue({ code: "custom", path: ["criterion_ids"], message: "reviewer run criteria must be unique" });
+  }
+  if (new Set(run.finding_ids).size !== run.finding_ids.length) {
+    context2.addIssue({ code: "custom", path: ["finding_ids"], message: "reviewer run findings must be unique" });
+  }
+});
 var serverAttestedReviewSchema = provenanceBase.safeExtend({
   assurance: external_exports.literal("server-attested"),
   adapter: external_exports.enum(ADAPTER_IDS),
@@ -23894,8 +23923,20 @@ var serverAttestedReviewSchema = provenanceBase.safeExtend({
   provider: nonBlank.optional(),
   route_source: routeSourceRecordSchema.optional(),
   route_override: routeOverrideRecordSchema.optional(),
-  repositories: reviewedRepositoriesV1Schema.optional()
-}).strict();
+  repositories: reviewedRepositoriesV1Schema.optional(),
+  reviewer_runs: external_exports.array(reviewerRunV1Schema).min(1).optional()
+}).strict().superRefine((review, context2) => {
+  if (review.reviewer_runs === void 0) return;
+  const reviewerIds = review.reviewer_runs.map((run) => run.reviewer_id);
+  if (new Set(reviewerIds).size !== reviewerIds.length) {
+    context2.addIssue({ code: "custom", path: ["reviewer_runs"], message: "reviewer run ids must be unique" });
+  }
+  const owned = review.reviewer_runs.flatMap((run) => run.finding_ids);
+  const findings = review.findings.map((finding) => finding.finding_id);
+  if (owned.length !== findings.length || new Set(owned).size !== owned.length || findings.some((finding) => !owned.includes(finding))) {
+    context2.addIssue({ code: "custom", path: ["reviewer_runs"], message: "reviewer runs must partition review findings exactly" });
+  }
+});
 var degradedReviewSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank }).strict();
 var reviewEvidenceSchema = external_exports.discriminatedUnion("assurance", [serverAttestedReviewSchema, degradedReviewSchema]);
 function parseReviewEvidence(value) {
@@ -26831,6 +26872,7 @@ var taskConfigRolesV1Schema = configRolesSchema.clone({
     producer: taskConfigRouteV1Schema.optional(),
     "counter-reviewer": taskConfigSingleOrArrayRoutesV1Schema.optional(),
     "counter-reviewers": external_exports.array(taskConfigRouteV1Schema).min(1).optional(),
+    "test-reviewer": taskConfigRouteV1Schema.optional(),
     adjudicator: taskConfigRouteV1Schema.optional()
   }
 });
@@ -27050,19 +27092,21 @@ var stateInputSchema = external_exports.object({
 var reviewModelRouteV1Schema = configRouteSchema.clone(configRouteSchema.def);
 var reviewRouteSetV1Schema = external_exports.object({
   "counter-reviewer": reviewModelRouteV1Schema.optional(),
+  "test-reviewer": reviewModelRouteV1Schema.optional(),
   adjudicator: reviewModelRouteV1Schema.optional()
 }).strict().superRefine((routes, context2) => {
-  if (routes["counter-reviewer"] === void 0 && routes.adjudicator === void 0) {
-    context2.addIssue({ code: "custom", message: "review routes must name counter-reviewer, adjudicator, or both" });
+  if (routes["counter-reviewer"] === void 0 && routes["test-reviewer"] === void 0 && routes.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "review routes must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
   }
 });
 var routeOverrideSchema = external_exports.object({
   reason: text2,
   "counter-reviewer": reviewModelRouteV1Schema.optional(),
+  "test-reviewer": reviewModelRouteV1Schema.optional(),
   adjudicator: reviewModelRouteV1Schema.optional()
 }).strict().superRefine((override, context2) => {
-  if (override["counter-reviewer"] === void 0 && override.adjudicator === void 0) {
-    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, adjudicator, or both" });
+  if (override["counter-reviewer"] === void 0 && override["test-reviewer"] === void 0 && override.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
   }
 });
 var counterReviewInputSchema = external_exports.object({
@@ -27892,6 +27936,10 @@ async function scaffoldRepositoryAssets(input) {
 }
 
 // src/review/rubrics.ts
+var TEST_CRITERIA = Object.freeze({
+  "phase-design": Object.freeze(["test-strategy"]),
+  "phase-impl": Object.freeze(["verification-evidence", "test-quality"])
+});
 var PHASE_KIND_RUBRIC_FILES = Object.freeze({
   prd: Object.freeze({ file: "rubrics/prd.yaml", rubric_id: "prd-v1" }),
   design: Object.freeze({ file: "rubrics/design.yaml", rubric_id: "design-v3" }),
@@ -35547,7 +35595,7 @@ var dispatchFailureObservationV1Schema = external_exports.object({
   phase_instance: phaseInstanceIdV1Schema,
   step: external_exports.literal("counter_review"),
   attempt: safeIntegerV1Schema,
-  role: external_exports.enum(["counter-reviewer", "adjudicator"]),
+  role: external_exports.enum(["counter-reviewer", "test-reviewer", "adjudicator"]),
   code: external_exports.enum(DISPATCH_FAILURE_CODES),
   message: boundedMessage,
   repository_name: repositoryName3().optional(),
@@ -35555,7 +35603,7 @@ var dispatchFailureObservationV1Schema = external_exports.object({
   observed_at_revision: safeIntegerV1Schema
 }).strict().superRefine(requireRepositoryNameOnlyForViewFailures).meta({ ...REPOSITORY_NAME_PRESENCE_RULE });
 var publicDispatchFailureV1Schema = external_exports.object({
-  role: external_exports.enum(["counter-reviewer", "adjudicator"]),
+  role: external_exports.enum(["counter-reviewer", "test-reviewer", "adjudicator"]),
   code: external_exports.enum(DISPATCH_FAILURE_CODES),
   message: boundedMessage,
   repository_name: repositoryName3().optional(),
@@ -35619,10 +35667,12 @@ var publicFindingV1Schema = external_exports.object({
 var publicConstitutionRuleV1Schema = external_exports.object({ id: nonBlank4, version: positiveSafePhaseNumberV1Schema, text: nonBlank4, review_trigger: nonBlank4.optional(), enforced_by: external_exports.array(nonBlank4).min(1).optional() }).strict();
 var rubricCriterionV1Schema = external_exports.object({ id: nonBlank4, text: nonBlank4, blocking: external_exports.boolean() }).strict();
 var publicRubricV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), kind: external_exports.enum(["artifact", "implementation"]), mode: external_exports.literal("adversarial"), criteria: external_exports.array(rubricCriterionV1Schema).min(1) }).strict();
-var publicReviewContextV1Schema = external_exports.object({ rubric: publicRubricV1Schema, active_rules: external_exports.array(publicConstitutionRuleV1Schema) }).strict();
+var publicReviewAssignmentV1Schema = external_exports.object({ reviewer_id: nonBlank4, focus: external_exports.enum(["general", "tests"]), criterion_ids: external_exports.array(nonBlank4).min(1) }).strict();
+var publicReviewContextV1Schema = external_exports.object({ rubric: publicRubricV1Schema, assignments: external_exports.array(publicReviewAssignmentV1Schema).min(1).optional(), active_rules: external_exports.array(publicConstitutionRuleV1Schema) }).strict();
 var roundCount = external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 var publicReviewRoundV1Schema = external_exports.object({ attempt: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER), findings: roundCount, blocking: roundCount, accepted: roundCount }).strict();
-var publicReviewStrengthV1Schema = external_exports.object({ reviewer_model: nonBlank4, reviewer_effort: nonBlank4, reviewer_family: nonBlank4, producer_family: nonBlank4, same_family: external_exports.boolean(), attempt: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER), remediation_round: external_exports.boolean(), rounds: external_exports.array(publicReviewRoundV1Schema) }).strict();
+var publicReviewerStrengthV1Schema = external_exports.object({ reviewer_id: nonBlank4, focus: external_exports.enum(["general", "tests"]), model: nonBlank4, effort: nonBlank4, reviewer_family: nonBlank4, same_family: external_exports.boolean(), finding_count: roundCount }).strict();
+var publicReviewStrengthV1Schema = external_exports.object({ reviewer_model: nonBlank4, reviewer_effort: nonBlank4, reviewer_family: nonBlank4, producer_family: nonBlank4, same_family: external_exports.boolean(), attempt: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER), remediation_round: external_exports.boolean(), rounds: external_exports.array(publicReviewRoundV1Schema), reviewers: external_exports.array(publicReviewerStrengthV1Schema).min(1).optional() }).strict();
 var presentationClass = external_exports.enum(["configured-approval", "exception"]);
 var humanPresentationV1Schema = external_exports.object({ class: presentationClass, title: nonBlank4, summary: nonBlank4, details: external_exports.array(nonBlank4).optional(), question: nonBlank4, reasons: external_exports.array(external_exports.object({ class: presentationClass, text: nonBlank4 }).strict()).min(1), options: external_exports.array(external_exports.object({ token: nonBlank4, label: nonBlank4, consequence: nonBlank4 }).strict()).min(1) }).strict().superRefine((presentation, context2) => {
   const expected = presentation.reasons.some((reason2) => reason2.class === "exception") ? "exception" : "configured-approval";
@@ -35637,6 +35687,15 @@ var workflowPositionV1Schema = external_exports.discriminatedUnion("kind", [
 var workflowReviewModelRouteV1Schema = configRouteSchema.clone(configRouteSchema.def);
 var workflowReviewRoutesV1Schema = external_exports.object({
   "counter-reviewer": workflowReviewModelRouteV1Schema.optional(),
+  "test-reviewer": workflowReviewModelRouteV1Schema.optional(),
+  adjudicator: workflowReviewModelRouteV1Schema.optional()
+}).strict().superRefine((routes, context2) => {
+  if (routes["counter-reviewer"] === void 0 && routes["test-reviewer"] === void 0 && routes.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "review_routes must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
+  }
+});
+var workflowGeneralReviewRoutesV1Schema = external_exports.object({
+  "counter-reviewer": workflowReviewModelRouteV1Schema.optional(),
   adjudicator: workflowReviewModelRouteV1Schema.optional()
 }).strict().superRefine((routes, context2) => {
   if (routes["counter-reviewer"] === void 0 && routes.adjudicator === void 0) {
@@ -35644,8 +35703,8 @@ var workflowReviewRoutesV1Schema = external_exports.object({
   }
 });
 var workflowInvocationV1Schema = external_exports.discriminatedUnion("skill", [
-  external_exports.object({ skill: external_exports.literal("archflow-prd"), intent: external_exports.enum(["resume", "reopen"]), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
-  external_exports.object({ skill: external_exports.literal("archflow-design"), intent: external_exports.enum(["resume", "reopen"]), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
+  external_exports.object({ skill: external_exports.literal("archflow-prd"), intent: external_exports.enum(["resume", "reopen"]), review_routes: workflowGeneralReviewRoutesV1Schema.optional() }).strict(),
+  external_exports.object({ skill: external_exports.literal("archflow-design"), intent: external_exports.enum(["resume", "reopen"]), review_routes: workflowGeneralReviewRoutesV1Schema.optional() }).strict(),
   external_exports.object({ skill: external_exports.literal("archflow-phase-design"), phase: positiveSafePhaseNumberV1Schema, intent: external_exports.enum(["resume", "reopen"]), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
   external_exports.object({ skill: external_exports.literal("archflow-phase-impl"), phase: positiveSafePhaseNumberV1Schema, intent: external_exports.literal("resume"), review_routes: workflowReviewRoutesV1Schema.optional() }).strict()
 ]);
@@ -35708,10 +35767,11 @@ var overrideRoute = configRouteSchema.clone(configRouteSchema.def);
 var routeOverrideDeclarationV1Schema = external_exports.object({
   reason: boundedText2,
   "counter-reviewer": overrideRoute.optional(),
+  "test-reviewer": overrideRoute.optional(),
   adjudicator: overrideRoute.optional()
 }).strict().superRefine((override, context2) => {
-  if (override["counter-reviewer"] === void 0 && override.adjudicator === void 0) {
-    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, adjudicator, or both" });
+  if (override["counter-reviewer"] === void 0 && override["test-reviewer"] === void 0 && override.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
   }
 });
 var applySubmissionV1Schema = external_exports.union([
@@ -35724,7 +35784,16 @@ var applySubmissionV1Schema = external_exports.union([
   external_exports.object({ kind: external_exports.literal("decision"), choice: nonBlank4, reason: boundedText2, option_rationale: boundedText2.optional() }).strict(),
   external_exports.object({ kind: external_exports.literal("review-dispatch"), route_override: routeOverrideDeclarationV1Schema }).strict()
 ]);
-var archFlowApplyInputV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema, action: external_exports.object({ offer: external_exports.string().regex(/^af1_[0-9a-f]{64}$/u), submission: applySubmissionV1Schema.optional() }).strict() }).strict();
+var archFlowApplyInputV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema, action: external_exports.object({ offer: external_exports.string().regex(/^af1_[0-9a-f]{64}$/u), submission: applySubmissionV1Schema.optional() }).strict() }).strict().superRefine((input, context2) => {
+  const submission = input.action.submission;
+  if ((input.invocation.skill === "archflow-prd" || input.invocation.skill === "archflow-design") && submission?.kind === "review-dispatch" && submission.route_override["test-reviewer"] !== void 0) {
+    context2.addIssue({
+      code: "custom",
+      path: ["action", "submission", "route_override", "test-reviewer"],
+      message: "test-reviewer overrides are available only for phase design and phase implementation"
+    });
+  }
+});
 var archFlowStatusInputV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema.optional() }).strict();
 
 // src/state/evidence-results.ts
@@ -36359,7 +36428,9 @@ function configuredRoutes(config2, phaseKind, role, host) {
     if (role === "counter-reviewer") {
       const candidates = normalizeRawRoutes(producerRoles?.["counter-reviewers"] ?? producerRoles?.["counter-reviewer"]);
       if (candidates.length > 0) return candidates;
-    } else if (producerRoles?.adjudicator !== void 0) {
+    } else if (role === "test-reviewer" && producerRoles?.["test-reviewer"] !== void 0) {
+      return [producerRoles["test-reviewer"]];
+    } else if (role === "adjudicator" && producerRoles?.adjudicator !== void 0) {
       return [producerRoles.adjudicator];
     }
   }
@@ -36368,7 +36439,9 @@ function configuredRoutes(config2, phaseKind, role, host) {
     if (role === "counter-reviewer") {
       const candidates = normalizeRawRoutes(phaseOverrides["counter-reviewers"] ?? phaseOverrides["counter-reviewer"]);
       if (candidates.length > 0) return candidates;
-    } else if (phaseOverrides.adjudicator !== void 0) {
+    } else if (role === "test-reviewer" && phaseOverrides["test-reviewer"] !== void 0) {
+      return [phaseOverrides["test-reviewer"]];
+    } else if (role === "adjudicator" && phaseOverrides.adjudicator !== void 0) {
       return [phaseOverrides.adjudicator];
     }
   }
@@ -36376,10 +36449,15 @@ function configuredRoutes(config2, phaseKind, role, host) {
   if (role === "counter-reviewer") {
     const candidates = normalizeRawRoutes(baseRoles["counter-reviewers"] ?? baseRoles["counter-reviewer"]);
     if (candidates.length > 0) return candidates;
-  } else if (baseRoles.adjudicator !== void 0) {
+  } else if (role === "test-reviewer" && baseRoles["test-reviewer"] !== void 0) {
+    return [baseRoles["test-reviewer"]];
+  } else if (role === "adjudicator" && baseRoles.adjudicator !== void 0) {
     return [baseRoles.adjudicator];
   }
   return [];
+}
+function configuredRoute(config2, phaseKind, role, host) {
+  return configuredRoutes(config2, phaseKind, role, host)[0];
 }
 var displacedRoute = (source, route2) => Object.freeze({
   source,
@@ -39258,8 +39336,13 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       const decodedPhase = decodePhaseInstance(state.phase_instance);
       const phaseKind = decodedPhase.kind;
       const counterReviewer = resolveDispatchRoute(parsedConfig, phaseKind, "counter-reviewer");
+      const testReviewer = configuredRoute(parsedConfig, phaseKind, "test-reviewer") === void 0 ? void 0 : resolveDispatchRoute(parsedConfig, phaseKind, "test-reviewer");
       const adjudicator = resolveDispatchRoute(parsedConfig, phaseKind, "adjudicator");
-      routes = Object.freeze({ counter_reviewer: counterReviewer, adjudicator });
+      routes = Object.freeze({
+        counter_reviewer: counterReviewer,
+        ...testReviewer === void 0 ? {} : { test_reviewer: testReviewer },
+        adjudicator
+      });
     } catch {
       blockers.push("dispatch-routes-invalid");
     }
@@ -39767,7 +39850,8 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         // Present only when a human substituted this review's route for the pinned one. It travels
         // with the provenance because the gate correspondence is built from this block: without it
         // the human sees which model reviewed but never that it was not the configured one.
-        ...counter.assurance === "server-attested" && counter.route_override !== void 0 ? { route_override: counter.route_override } : {}
+        ...counter.assurance === "server-attested" && counter.route_override !== void 0 ? { route_override: counter.route_override } : {},
+        ...counter.assurance === "server-attested" && counter.reviewer_runs !== void 0 ? { reviewer_runs: counter.reviewer_runs } : {}
       }),
       assessment
     });
@@ -40476,6 +40560,11 @@ function publicResources(status) {
 }
 function reviewContext(status) {
   if (status.review_policy === void 0) return void 0;
+  const recordedAssignments = status.evidence?.available === true ? status.evidence.counter_review_provenance.reviewer_runs?.map((run) => Object.freeze({
+    reviewer_id: run.reviewer_id,
+    focus: run.focus,
+    criterion_ids: Object.freeze([...run.criterion_ids])
+  })) : void 0;
   return Object.freeze({
     rubric: Object.freeze({
       schema_version: "1",
@@ -40487,6 +40576,7 @@ function reviewContext(status) {
         blocking: criterion.blocking
       })))
     }),
+    ...recordedAssignments === void 0 ? {} : { assignments: Object.freeze(recordedAssignments) },
     active_rules: Object.freeze((status.constitution?.active_rules ?? []).map((rule4) => Object.freeze({
       id: rule4.id,
       version: rule4.version,
@@ -40500,6 +40590,24 @@ function reviewStrength(status, snapshot2) {
   const evidence = status.evidence;
   if (evidence?.available !== true || status.attempt === void 0) return void 0;
   const provenance2 = evidence.counter_review_provenance;
+  const recordedReviewers = provenance2.reviewer_runs?.map((reviewer) => Object.freeze({
+    reviewer_id: reviewer.reviewer_id,
+    focus: reviewer.focus,
+    model: reviewer.model,
+    effort: reviewer.effort,
+    reviewer_family: reviewer.model_family,
+    same_family: reviewer.model_family === provenance2.producer_family,
+    finding_count: reviewer.finding_ids.length
+  }));
+  const reviewers = recordedReviewers ?? [Object.freeze({
+    reviewer_id: "general",
+    focus: "general",
+    model: provenance2.model,
+    effort: provenance2.effort,
+    reviewer_family: provenance2.model_family,
+    same_family: provenance2.model_family === provenance2.producer_family,
+    finding_count: evidence.findings.length
+  })];
   return Object.freeze({
     reviewer_model: provenance2.model,
     reviewer_effort: provenance2.effort,
@@ -40508,7 +40616,8 @@ function reviewStrength(status, snapshot2) {
     same_family: provenance2.model_family === provenance2.producer_family,
     attempt: status.attempt,
     remediation_round: status.attempt > 1,
-    rounds: Object.freeze((snapshot2.review_rounds ?? []).map((round) => Object.freeze({ ...round })))
+    rounds: Object.freeze((snapshot2.review_rounds ?? []).map((round) => Object.freeze({ ...round }))),
+    reviewers: Object.freeze(reviewers)
   });
 }
 function publicPresentation(status) {
@@ -43734,7 +43843,7 @@ var dispatchBoundaryV1Schema = external_exports.object({
   summary: boundedText3,
   question: boundedText3,
   reasons: external_exports.array(humanBoundaryReasonV1Schema).min(1),
-  failed_role: external_exports.enum(["counter-reviewer", "adjudicator"]),
+  failed_role: external_exports.enum(["counter-reviewer", "test-reviewer", "adjudicator"]),
   failure_code: nonBlank5.max(128)
 }).strict().superRefine((boundary, context2) => {
   if (!boundary.reasons.some((reason2) => reason2.class === "exception")) {

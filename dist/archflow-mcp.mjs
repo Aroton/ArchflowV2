@@ -36086,6 +36086,7 @@ var configRolesSchema = external_exports.object({
   producer: configRouteSchema.optional(),
   "counter-reviewer": singleOrArrayRoutesSchema.optional(),
   "counter-reviewers": external_exports.array(configRouteSchema).min(1).optional(),
+  "test-reviewer": configRouteSchema.optional(),
   adjudicator: configRouteSchema.optional()
 }).strict();
 var producersSchema = external_exports.object({
@@ -36940,6 +36941,8 @@ function parseAndDeriveReview(value) {
 }
 var ROUTE_SOURCE_PROVENANCES = ["configured", "invocation-declared", "route-override"];
 var DISPLACED_ROUTE_SOURCES = ["configured", "invocation-declared"];
+var REVIEW_RUN_FOCUSES = ["general", "tests"];
+var REVIEW_RUN_ROLES = ["counter-reviewer", "test-reviewer"];
 var provenanceBase = rawReviewSchema.safeExtend({
   model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]),
   model: nonBlank,
@@ -36961,6 +36964,32 @@ var routeSourceRecordSchema = external_exports.object({
   provenance: external_exports.enum(ROUTE_SOURCE_PROVENANCES),
   displaced: displacedRouteRecordSchema.optional()
 }).strict();
+var reviewerRunV1Schema = external_exports.object({
+  reviewer_id: id,
+  focus: external_exports.enum(REVIEW_RUN_FOCUSES),
+  routing_role: external_exports.enum(REVIEW_RUN_ROLES),
+  criterion_ids: external_exports.array(id).min(1),
+  rubric_digest: digest2,
+  model_family: external_exports.enum(MODEL_FAMILIES),
+  model: nonBlank,
+  effort: external_exports.enum(EFFORT_VALUES),
+  adapter: external_exports.enum(ADAPTER_IDS),
+  cli_version: nonBlank,
+  invocation_id: id,
+  envelope_input_digest: digest2,
+  observed_output_digest: digest2,
+  finding_ids: external_exports.array(id),
+  provider: nonBlank.optional(),
+  route_source: routeSourceRecordSchema,
+  route_override: routeOverrideRecordSchema.optional()
+}).strict().superRefine((run, context2) => {
+  if (new Set(run.criterion_ids).size !== run.criterion_ids.length) {
+    context2.addIssue({ code: "custom", path: ["criterion_ids"], message: "reviewer run criteria must be unique" });
+  }
+  if (new Set(run.finding_ids).size !== run.finding_ids.length) {
+    context2.addIssue({ code: "custom", path: ["finding_ids"], message: "reviewer run findings must be unique" });
+  }
+});
 var serverAttestedReviewSchema = provenanceBase.safeExtend({
   assurance: external_exports.literal("server-attested"),
   adapter: external_exports.enum(ADAPTER_IDS),
@@ -36974,8 +37003,20 @@ var serverAttestedReviewSchema = provenanceBase.safeExtend({
   provider: nonBlank.optional(),
   route_source: routeSourceRecordSchema.optional(),
   route_override: routeOverrideRecordSchema.optional(),
-  repositories: reviewedRepositoriesV1Schema.optional()
-}).strict();
+  repositories: reviewedRepositoriesV1Schema.optional(),
+  reviewer_runs: external_exports.array(reviewerRunV1Schema).min(1).optional()
+}).strict().superRefine((review, context2) => {
+  if (review.reviewer_runs === void 0) return;
+  const reviewerIds = review.reviewer_runs.map((run) => run.reviewer_id);
+  if (new Set(reviewerIds).size !== reviewerIds.length) {
+    context2.addIssue({ code: "custom", path: ["reviewer_runs"], message: "reviewer run ids must be unique" });
+  }
+  const owned = review.reviewer_runs.flatMap((run) => run.finding_ids);
+  const findings = review.findings.map((finding) => finding.finding_id);
+  if (owned.length !== findings.length || new Set(owned).size !== owned.length || findings.some((finding) => !owned.includes(finding))) {
+    context2.addIssue({ code: "custom", path: ["reviewer_runs"], message: "reviewer runs must partition review findings exactly" });
+  }
+});
 var degradedReviewSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank }).strict();
 var reviewEvidenceSchema = external_exports.discriminatedUnion("assurance", [serverAttestedReviewSchema, degradedReviewSchema]);
 function parseReviewEvidence(value) {
@@ -37637,7 +37678,7 @@ var dispatchFailureObservationV1Schema = external_exports.object({
   phase_instance: phaseInstanceIdV1Schema,
   step: external_exports.literal("counter_review"),
   attempt: safeIntegerV1Schema,
-  role: external_exports.enum(["counter-reviewer", "adjudicator"]),
+  role: external_exports.enum(["counter-reviewer", "test-reviewer", "adjudicator"]),
   code: external_exports.enum(DISPATCH_FAILURE_CODES),
   message: boundedMessage,
   repository_name: repositoryName3().optional(),
@@ -37645,7 +37686,7 @@ var dispatchFailureObservationV1Schema = external_exports.object({
   observed_at_revision: safeIntegerV1Schema
 }).strict().superRefine(requireRepositoryNameOnlyForViewFailures).meta({ ...REPOSITORY_NAME_PRESENCE_RULE });
 var publicDispatchFailureV1Schema = external_exports.object({
-  role: external_exports.enum(["counter-reviewer", "adjudicator"]),
+  role: external_exports.enum(["counter-reviewer", "test-reviewer", "adjudicator"]),
   code: external_exports.enum(DISPATCH_FAILURE_CODES),
   message: boundedMessage,
   repository_name: repositoryName3().optional(),
@@ -37730,10 +37771,12 @@ var publicFindingV1Schema = external_exports.object({
 var publicConstitutionRuleV1Schema = external_exports.object({ id: nonBlank2, version: positiveSafePhaseNumberV1Schema, text: nonBlank2, review_trigger: nonBlank2.optional(), enforced_by: external_exports.array(nonBlank2).min(1).optional() }).strict();
 var rubricCriterionV1Schema = external_exports.object({ id: nonBlank2, text: nonBlank2, blocking: external_exports.boolean() }).strict();
 var publicRubricV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), kind: external_exports.enum(["artifact", "implementation"]), mode: external_exports.literal("adversarial"), criteria: external_exports.array(rubricCriterionV1Schema).min(1) }).strict();
-var publicReviewContextV1Schema = external_exports.object({ rubric: publicRubricV1Schema, active_rules: external_exports.array(publicConstitutionRuleV1Schema) }).strict();
+var publicReviewAssignmentV1Schema = external_exports.object({ reviewer_id: nonBlank2, focus: external_exports.enum(["general", "tests"]), criterion_ids: external_exports.array(nonBlank2).min(1) }).strict();
+var publicReviewContextV1Schema = external_exports.object({ rubric: publicRubricV1Schema, assignments: external_exports.array(publicReviewAssignmentV1Schema).min(1).optional(), active_rules: external_exports.array(publicConstitutionRuleV1Schema) }).strict();
 var roundCount = external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 var publicReviewRoundV1Schema = external_exports.object({ attempt: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER), findings: roundCount, blocking: roundCount, accepted: roundCount }).strict();
-var publicReviewStrengthV1Schema = external_exports.object({ reviewer_model: nonBlank2, reviewer_effort: nonBlank2, reviewer_family: nonBlank2, producer_family: nonBlank2, same_family: external_exports.boolean(), attempt: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER), remediation_round: external_exports.boolean(), rounds: external_exports.array(publicReviewRoundV1Schema) }).strict();
+var publicReviewerStrengthV1Schema = external_exports.object({ reviewer_id: nonBlank2, focus: external_exports.enum(["general", "tests"]), model: nonBlank2, effort: nonBlank2, reviewer_family: nonBlank2, same_family: external_exports.boolean(), finding_count: roundCount }).strict();
+var publicReviewStrengthV1Schema = external_exports.object({ reviewer_model: nonBlank2, reviewer_effort: nonBlank2, reviewer_family: nonBlank2, producer_family: nonBlank2, same_family: external_exports.boolean(), attempt: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER), remediation_round: external_exports.boolean(), rounds: external_exports.array(publicReviewRoundV1Schema), reviewers: external_exports.array(publicReviewerStrengthV1Schema).min(1).optional() }).strict();
 var presentationClass = external_exports.enum(["configured-approval", "exception"]);
 var humanPresentationV1Schema = external_exports.object({ class: presentationClass, title: nonBlank2, summary: nonBlank2, details: external_exports.array(nonBlank2).optional(), question: nonBlank2, reasons: external_exports.array(external_exports.object({ class: presentationClass, text: nonBlank2 }).strict()).min(1), options: external_exports.array(external_exports.object({ token: nonBlank2, label: nonBlank2, consequence: nonBlank2 }).strict()).min(1) }).strict().superRefine((presentation, context2) => {
   const expected = presentation.reasons.some((reason2) => reason2.class === "exception") ? "exception" : "configured-approval";
@@ -37748,6 +37791,15 @@ var workflowPositionV1Schema = external_exports.discriminatedUnion("kind", [
 var workflowReviewModelRouteV1Schema = configRouteSchema.clone(configRouteSchema.def);
 var workflowReviewRoutesV1Schema = external_exports.object({
   "counter-reviewer": workflowReviewModelRouteV1Schema.optional(),
+  "test-reviewer": workflowReviewModelRouteV1Schema.optional(),
+  adjudicator: workflowReviewModelRouteV1Schema.optional()
+}).strict().superRefine((routes, context2) => {
+  if (routes["counter-reviewer"] === void 0 && routes["test-reviewer"] === void 0 && routes.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "review_routes must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
+  }
+});
+var workflowGeneralReviewRoutesV1Schema = external_exports.object({
+  "counter-reviewer": workflowReviewModelRouteV1Schema.optional(),
   adjudicator: workflowReviewModelRouteV1Schema.optional()
 }).strict().superRefine((routes, context2) => {
   if (routes["counter-reviewer"] === void 0 && routes.adjudicator === void 0) {
@@ -37755,8 +37807,8 @@ var workflowReviewRoutesV1Schema = external_exports.object({
   }
 });
 var workflowInvocationV1Schema = external_exports.discriminatedUnion("skill", [
-  external_exports.object({ skill: external_exports.literal("archflow-prd"), intent: external_exports.enum(["resume", "reopen"]), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
-  external_exports.object({ skill: external_exports.literal("archflow-design"), intent: external_exports.enum(["resume", "reopen"]), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
+  external_exports.object({ skill: external_exports.literal("archflow-prd"), intent: external_exports.enum(["resume", "reopen"]), review_routes: workflowGeneralReviewRoutesV1Schema.optional() }).strict(),
+  external_exports.object({ skill: external_exports.literal("archflow-design"), intent: external_exports.enum(["resume", "reopen"]), review_routes: workflowGeneralReviewRoutesV1Schema.optional() }).strict(),
   external_exports.object({ skill: external_exports.literal("archflow-phase-design"), phase: positiveSafePhaseNumberV1Schema, intent: external_exports.enum(["resume", "reopen"]), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
   external_exports.object({ skill: external_exports.literal("archflow-phase-impl"), phase: positiveSafePhaseNumberV1Schema, intent: external_exports.literal("resume"), review_routes: workflowReviewRoutesV1Schema.optional() }).strict()
 ]);
@@ -37819,10 +37871,11 @@ var overrideRoute = configRouteSchema.clone(configRouteSchema.def);
 var routeOverrideDeclarationV1Schema = external_exports.object({
   reason: boundedText2,
   "counter-reviewer": overrideRoute.optional(),
+  "test-reviewer": overrideRoute.optional(),
   adjudicator: overrideRoute.optional()
 }).strict().superRefine((override, context2) => {
-  if (override["counter-reviewer"] === void 0 && override.adjudicator === void 0) {
-    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, adjudicator, or both" });
+  if (override["counter-reviewer"] === void 0 && override["test-reviewer"] === void 0 && override.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
   }
 });
 var applySubmissionV1Schema = external_exports.union([
@@ -37835,7 +37888,16 @@ var applySubmissionV1Schema = external_exports.union([
   external_exports.object({ kind: external_exports.literal("decision"), choice: nonBlank2, reason: boundedText2, option_rationale: boundedText2.optional() }).strict(),
   external_exports.object({ kind: external_exports.literal("review-dispatch"), route_override: routeOverrideDeclarationV1Schema }).strict()
 ]);
-var archFlowApplyInputV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema, action: external_exports.object({ offer: external_exports.string().regex(/^af1_[0-9a-f]{64}$/u), submission: applySubmissionV1Schema.optional() }).strict() }).strict();
+var archFlowApplyInputV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema, action: external_exports.object({ offer: external_exports.string().regex(/^af1_[0-9a-f]{64}$/u), submission: applySubmissionV1Schema.optional() }).strict() }).strict().superRefine((input, context2) => {
+  const submission = input.action.submission;
+  if ((input.invocation.skill === "archflow-prd" || input.invocation.skill === "archflow-design") && submission?.kind === "review-dispatch" && submission.route_override["test-reviewer"] !== void 0) {
+    context2.addIssue({
+      code: "custom",
+      path: ["action", "submission", "route_override", "test-reviewer"],
+      message: "test-reviewer overrides are available only for phase design and phase implementation"
+    });
+  }
+});
 var archFlowStatusInputV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema.optional() }).strict();
 var parseMaterialized = (schema, value, label) => {
   assertPlainJson(value, label);
@@ -41719,6 +41781,37 @@ var mcp_tools_schema_default = {
                 ],
                 additionalProperties: false
               },
+              "test-reviewer": {
+                type: "object",
+                properties: {
+                  model: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  effort: {
+                    type: "string",
+                    enum: [
+                      "low",
+                      "medium",
+                      "high",
+                      "xhigh",
+                      "max",
+                      "ultra"
+                    ]
+                  },
+                  provider: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  }
+                },
+                required: [
+                  "model",
+                  "effort"
+                ],
+                additionalProperties: false
+              },
               adjudicator: {
                 type: "object",
                 properties: {
@@ -41760,6 +41853,37 @@ var mcp_tools_schema_default = {
                 $ref: "#/$defs/text"
               },
               "counter-reviewer": {
+                type: "object",
+                properties: {
+                  model: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  effort: {
+                    type: "string",
+                    enum: [
+                      "low",
+                      "medium",
+                      "high",
+                      "xhigh",
+                      "max",
+                      "ultra"
+                    ]
+                  },
+                  provider: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  }
+                },
+                required: [
+                  "model",
+                  "effort"
+                ],
+                additionalProperties: false
+              },
+              "test-reviewer": {
                 type: "object",
                 properties: {
                   model: {
@@ -47751,6 +47875,9 @@ var task_state_schema_default = {
             $ref: "#/$defs/configRoute"
           }
         },
+        "test-reviewer": {
+          $ref: "#/$defs/configRoute"
+        },
         adjudicator: {
           $ref: "#/$defs/configRoute"
         }
@@ -49104,6 +49231,42 @@ var semantic_workflow_schema_default = {
               ],
               additionalProperties: false
             },
+            assignments: {
+              minItems: 1,
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  reviewer_id: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  focus: {
+                    type: "string",
+                    enum: [
+                      "general",
+                      "tests"
+                    ]
+                  },
+                  criterion_ids: {
+                    minItems: 1,
+                    type: "array",
+                    items: {
+                      type: "string",
+                      minLength: 1,
+                      pattern: "\\S"
+                    }
+                  }
+                },
+                required: [
+                  "reviewer_id",
+                  "focus",
+                  "criterion_ids"
+                ],
+                additionalProperties: false
+              }
+            },
             active_rules: {
               type: "array",
               items: {
@@ -49217,6 +49380,60 @@ var semantic_workflow_schema_default = {
                   "findings",
                   "blocking",
                   "accepted"
+                ],
+                additionalProperties: false
+              }
+            },
+            reviewers: {
+              minItems: 1,
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  reviewer_id: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  focus: {
+                    type: "string",
+                    enum: [
+                      "general",
+                      "tests"
+                    ]
+                  },
+                  model: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  effort: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  reviewer_family: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  same_family: {
+                    type: "boolean"
+                  },
+                  finding_count: {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 9007199254740991
+                  }
+                },
+                required: [
+                  "reviewer_id",
+                  "focus",
+                  "model",
+                  "effort",
+                  "reviewer_family",
+                  "same_family",
+                  "finding_count"
                 ],
                 additionalProperties: false
               }
@@ -49934,6 +50151,37 @@ var semantic_workflow_schema_default = {
                   ],
                   additionalProperties: false
                 },
+                "test-reviewer": {
+                  type: "object",
+                  properties: {
+                    model: {
+                      type: "string",
+                      minLength: 1,
+                      pattern: "\\S"
+                    },
+                    effort: {
+                      type: "string",
+                      enum: [
+                        "low",
+                        "medium",
+                        "high",
+                        "xhigh",
+                        "max",
+                        "ultra"
+                      ]
+                    },
+                    provider: {
+                      type: "string",
+                      minLength: 1,
+                      pattern: "\\S"
+                    }
+                  },
+                  required: [
+                    "model",
+                    "effort"
+                  ],
+                  additionalProperties: false
+                },
                 adjudicator: {
                   type: "object",
                   properties: {
@@ -50227,6 +50475,42 @@ var semantic_workflow_schema_default = {
           ],
           additionalProperties: false
         },
+        assignments: {
+          minItems: 1,
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              reviewer_id: {
+                type: "string",
+                minLength: 1,
+                pattern: "\\S"
+              },
+              focus: {
+                type: "string",
+                enum: [
+                  "general",
+                  "tests"
+                ]
+              },
+              criterion_ids: {
+                minItems: 1,
+                type: "array",
+                items: {
+                  type: "string",
+                  minLength: 1,
+                  pattern: "\\S"
+                }
+              }
+            },
+            required: [
+              "reviewer_id",
+              "focus",
+              "criterion_ids"
+            ],
+            additionalProperties: false
+          }
+        },
         active_rules: {
           type: "array",
           items: {
@@ -50340,6 +50624,60 @@ var semantic_workflow_schema_default = {
               "findings",
               "blocking",
               "accepted"
+            ],
+            additionalProperties: false
+          }
+        },
+        reviewers: {
+          minItems: 1,
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              reviewer_id: {
+                type: "string",
+                minLength: 1,
+                pattern: "\\S"
+              },
+              focus: {
+                type: "string",
+                enum: [
+                  "general",
+                  "tests"
+                ]
+              },
+              model: {
+                type: "string",
+                minLength: 1,
+                pattern: "\\S"
+              },
+              effort: {
+                type: "string",
+                minLength: 1,
+                pattern: "\\S"
+              },
+              reviewer_family: {
+                type: "string",
+                minLength: 1,
+                pattern: "\\S"
+              },
+              same_family: {
+                type: "boolean"
+              },
+              finding_count: {
+                type: "integer",
+                minimum: 0,
+                maximum: 9007199254740991
+              }
+            },
+            required: [
+              "reviewer_id",
+              "focus",
+              "model",
+              "effort",
+              "reviewer_family",
+              "same_family",
+              "finding_count"
             ],
             additionalProperties: false
           }
@@ -52109,6 +52447,7 @@ var taskConfigRolesV1Schema = configRolesSchema.clone({
     producer: taskConfigRouteV1Schema.optional(),
     "counter-reviewer": taskConfigSingleOrArrayRoutesV1Schema.optional(),
     "counter-reviewers": external_exports.array(taskConfigRouteV1Schema).min(1).optional(),
+    "test-reviewer": taskConfigRouteV1Schema.optional(),
     adjudicator: taskConfigRouteV1Schema.optional()
   }
 });
@@ -52439,19 +52778,21 @@ var stateInputSchema = external_exports.object({
 var reviewModelRouteV1Schema = configRouteSchema.clone(configRouteSchema.def);
 var reviewRouteSetV1Schema = external_exports.object({
   "counter-reviewer": reviewModelRouteV1Schema.optional(),
+  "test-reviewer": reviewModelRouteV1Schema.optional(),
   adjudicator: reviewModelRouteV1Schema.optional()
 }).strict().superRefine((routes, context2) => {
-  if (routes["counter-reviewer"] === void 0 && routes.adjudicator === void 0) {
-    context2.addIssue({ code: "custom", message: "review routes must name counter-reviewer, adjudicator, or both" });
+  if (routes["counter-reviewer"] === void 0 && routes["test-reviewer"] === void 0 && routes.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "review routes must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
   }
 });
 var routeOverrideSchema = external_exports.object({
   reason: text3,
   "counter-reviewer": reviewModelRouteV1Schema.optional(),
+  "test-reviewer": reviewModelRouteV1Schema.optional(),
   adjudicator: reviewModelRouteV1Schema.optional()
 }).strict().superRefine((override, context2) => {
-  if (override["counter-reviewer"] === void 0 && override.adjudicator === void 0) {
-    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, adjudicator, or both" });
+  if (override["counter-reviewer"] === void 0 && override["test-reviewer"] === void 0 && override.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
   }
 });
 var counterReviewInputSchema = external_exports.object({
@@ -64987,6 +65328,21 @@ async function assetRoot() {
 }
 
 // src/review/rubrics.ts
+var TEST_CRITERIA = Object.freeze({
+  "phase-design": Object.freeze(["test-strategy"]),
+  "phase-impl": Object.freeze(["verification-evidence", "test-quality"])
+});
+function reviewCriterionIds(phaseKind2, rubric, focus, specialistActive) {
+  const all = rubric.criteria.map((criterion) => criterion.id);
+  const tests = TEST_CRITERIA[phaseKind2] ?? [];
+  if (focus === "tests") return Object.freeze(all.filter((criterion) => tests.includes(criterion)));
+  return Object.freeze(specialistActive ? all.filter((criterion) => !tests.includes(criterion)) : all);
+}
+function reviewAssignment(reviewerId, focus, phaseKind2, rubric, specialistActive) {
+  const criterionIds = reviewCriterionIds(phaseKind2, rubric, focus, specialistActive);
+  if (criterionIds.length === 0) throw new TypeError(`review focus ${focus} is not applicable to ${phaseKind2}`);
+  return Object.freeze({ reviewer_id: reviewerId, focus, criterion_ids: criterionIds });
+}
 var PHASE_KIND_RUBRIC_FILES = Object.freeze({
   prd: Object.freeze({ file: "rubrics/prd.yaml", rubric_id: "prd-v1" }),
   design: Object.freeze({ file: "rubrics/design.yaml", rubric_id: "design-v3" }),
@@ -67329,7 +67685,9 @@ function configuredRoutes(config2, phaseKind2, role, host) {
     if (role === "counter-reviewer") {
       const candidates = normalizeRawRoutes(producerRoles?.["counter-reviewers"] ?? producerRoles?.["counter-reviewer"]);
       if (candidates.length > 0) return candidates;
-    } else if (producerRoles?.adjudicator !== void 0) {
+    } else if (role === "test-reviewer" && producerRoles?.["test-reviewer"] !== void 0) {
+      return [producerRoles["test-reviewer"]];
+    } else if (role === "adjudicator" && producerRoles?.adjudicator !== void 0) {
       return [producerRoles.adjudicator];
     }
   }
@@ -67338,7 +67696,9 @@ function configuredRoutes(config2, phaseKind2, role, host) {
     if (role === "counter-reviewer") {
       const candidates = normalizeRawRoutes(phaseOverrides["counter-reviewers"] ?? phaseOverrides["counter-reviewer"]);
       if (candidates.length > 0) return candidates;
-    } else if (phaseOverrides.adjudicator !== void 0) {
+    } else if (role === "test-reviewer" && phaseOverrides["test-reviewer"] !== void 0) {
+      return [phaseOverrides["test-reviewer"]];
+    } else if (role === "adjudicator" && phaseOverrides.adjudicator !== void 0) {
       return [phaseOverrides.adjudicator];
     }
   }
@@ -67346,7 +67706,9 @@ function configuredRoutes(config2, phaseKind2, role, host) {
   if (role === "counter-reviewer") {
     const candidates = normalizeRawRoutes(baseRoles["counter-reviewers"] ?? baseRoles["counter-reviewer"]);
     if (candidates.length > 0) return candidates;
-  } else if (baseRoles.adjudicator !== void 0) {
+  } else if (role === "test-reviewer" && baseRoles["test-reviewer"] !== void 0) {
+    return [baseRoles["test-reviewer"]];
+  } else if (role === "adjudicator" && baseRoles.adjudicator !== void 0) {
     return [baseRoles.adjudicator];
   }
   return [];
@@ -68745,8 +69107,13 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       const decodedPhase = decodePhaseInstance(state.phase_instance);
       const phaseKind2 = decodedPhase.kind;
       const counterReviewer = resolveDispatchRoute(parsedConfig, phaseKind2, "counter-reviewer");
+      const testReviewer = configuredRoute(parsedConfig, phaseKind2, "test-reviewer") === void 0 ? void 0 : resolveDispatchRoute(parsedConfig, phaseKind2, "test-reviewer");
       const adjudicator = resolveDispatchRoute(parsedConfig, phaseKind2, "adjudicator");
-      routes = Object.freeze({ counter_reviewer: counterReviewer, adjudicator });
+      routes = Object.freeze({
+        counter_reviewer: counterReviewer,
+        ...testReviewer === void 0 ? {} : { test_reviewer: testReviewer },
+        adjudicator
+      });
     } catch {
       blockers.push("dispatch-routes-invalid");
     }
@@ -69254,7 +69621,8 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         // Present only when a human substituted this review's route for the pinned one. It travels
         // with the provenance because the gate correspondence is built from this block: without it
         // the human sees which model reviewed but never that it was not the configured one.
-        ...counter.assurance === "server-attested" && counter.route_override !== void 0 ? { route_override: counter.route_override } : {}
+        ...counter.assurance === "server-attested" && counter.route_override !== void 0 ? { route_override: counter.route_override } : {},
+        ...counter.assurance === "server-attested" && counter.reviewer_runs !== void 0 ? { reviewer_runs: counter.reviewer_runs } : {}
       }),
       assessment
     });
@@ -73319,6 +73687,11 @@ function publicResources(status) {
 }
 function reviewContext(status) {
   if (status.review_policy === void 0) return void 0;
+  const recordedAssignments = status.evidence?.available === true ? status.evidence.counter_review_provenance.reviewer_runs?.map((run) => Object.freeze({
+    reviewer_id: run.reviewer_id,
+    focus: run.focus,
+    criterion_ids: Object.freeze([...run.criterion_ids])
+  })) : void 0;
   return Object.freeze({
     rubric: Object.freeze({
       schema_version: "1",
@@ -73330,6 +73703,7 @@ function reviewContext(status) {
         blocking: criterion.blocking
       })))
     }),
+    ...recordedAssignments === void 0 ? {} : { assignments: Object.freeze(recordedAssignments) },
     active_rules: Object.freeze((status.constitution?.active_rules ?? []).map((rule4) => Object.freeze({
       id: rule4.id,
       version: rule4.version,
@@ -73343,6 +73717,24 @@ function reviewStrength(status, snapshot) {
   const evidence = status.evidence;
   if (evidence?.available !== true || status.attempt === void 0) return void 0;
   const provenance2 = evidence.counter_review_provenance;
+  const recordedReviewers = provenance2.reviewer_runs?.map((reviewer) => Object.freeze({
+    reviewer_id: reviewer.reviewer_id,
+    focus: reviewer.focus,
+    model: reviewer.model,
+    effort: reviewer.effort,
+    reviewer_family: reviewer.model_family,
+    same_family: reviewer.model_family === provenance2.producer_family,
+    finding_count: reviewer.finding_ids.length
+  }));
+  const reviewers = recordedReviewers ?? [Object.freeze({
+    reviewer_id: "general",
+    focus: "general",
+    model: provenance2.model,
+    effort: provenance2.effort,
+    reviewer_family: provenance2.model_family,
+    same_family: provenance2.model_family === provenance2.producer_family,
+    finding_count: evidence.findings.length
+  })];
   return Object.freeze({
     reviewer_model: provenance2.model,
     reviewer_effort: provenance2.effort,
@@ -73351,7 +73743,8 @@ function reviewStrength(status, snapshot) {
     same_family: provenance2.model_family === provenance2.producer_family,
     attempt: status.attempt,
     remediation_round: status.attempt > 1,
-    rounds: Object.freeze((snapshot.review_rounds ?? []).map((round) => Object.freeze({ ...round })))
+    rounds: Object.freeze((snapshot.review_rounds ?? []).map((round) => Object.freeze({ ...round }))),
+    reviewers: Object.freeze(reviewers)
   });
 }
 function publicPresentation(status) {
@@ -75690,6 +76083,8 @@ function computeSemanticStatusSnapshot(status, enrichments) {
 
 // src/dispatch/coordinator.ts
 import { randomUUID as randomUUID3 } from "node:crypto";
+import { mkdir as mkdir7 } from "node:fs/promises";
+import { join as join15 } from "node:path";
 
 // src/dispatch/workspace.ts
 import { spawn as spawn2 } from "node:child_process";
@@ -75712,7 +76107,9 @@ var PINNED_CONTEXT_KINDS = [
 var REPOSITORY_VIEW_NOTE = "Your working directory is a read-only checkout of the repository at this commit, excluding .archflow/tasks. Use it to verify repository claims; the artifact and pinned context remain the review subject and take precedence on conflict.";
 var PRODUCED_REPOSITORY_VIEW_NOTE = "Your working directory is a sealed read-only post-change repository snapshot reconstructed from the authenticated implementation output, excluding .archflow/tasks. The artifact names the changed paths and baseline; inspect the files in this snapshot as the review subject.";
 var MULTI_REPOSITORY_VIEW_NOTE = "Your working directory contains read-only repository snapshots at `./<name>`; cite files as `<name>/<path>`. A repository entry with `snapshot_digest` is a sealed post-change tree reconstructed from authenticated implementation output and is part of the review subject. An entry without `snapshot_digest` is commit-pinned read-only context and may not contain this phase's work; the artifact and pinned context remain the review subject and take precedence on conflict.";
+var REVIEW_FOCUSES = ["general", "tests"];
 var REVIEW_INSTRUCTION = "You are the independent counter-reviewer for the artifact in this envelope. Read the whole artifact and every pinned context entry before judging anything; the pinned approved upstream documents state what the artifact must satisfy. Then work through the artifact section by section: trace each stated constant, budget, invariant, interface claim, and policy into every other section that depends on it and check that they jointly hold; recompute derived figures rather than accepting them; verify repository and interface claims against the pinned evidence and the read-only repository view when one is provided; follow each stated property through the inputs and lifecycle events the system will actually meet. Frame your evaluation around the finite question: 'What would break in production or fail execution?' A true observation or discrepancy that does not change downstream implementation, break an approved boundary, or alter verification is not a defect and must not be reported. Only after that pass apply the rubric's materiality bar to decide what to report. Every finding cites the exact evidence and names its concrete consequence. Return the structured result the output schema describes and nothing else.";
+var REVIEW_ASSIGNMENT_INSTRUCTION = "Assess only the rubric criteria named by assignment.criterion_ids, using assignment.focus as the boundary of your review. Do not report findings owned by another assignment. You may cite evidence outside your focus when it proves an assigned finding, but do not turn that evidence into an additional out-of-scope finding.";
 var PRIOR_TRIAGE_INSTRUCTION = "This is a remediation review, not a second full review. The artifact already received a full review; the pinned prior-triage record lists the findings from earlier rounds that you are responsible for, each with the producer's disposition and revision intent. First task, confirmation: for every accepted revision intent in that record, verify in the artifact that it was carried out, and report a finding only where it was not. Second task, regression: in the sections the revision changed and the sections that depend on changed content, report a defect only if the revision itself introduced it or made it visible, and only if it is a blocker \u2014 one that would break production, alter downstream implementation, fail execution or verification, or breach an approved boundary. Non-blocking findings are not reportable in a remediation round, with one exception: an unverifiable- or escalate- finding that names evidence you needed and lacked to make the confirmation judgment itself. Do not re-evaluate changed content against the full rubric, do not open a new sweep of unchanged sections, and do not re-raise completed or rejected findings in variant form; challenge a prior disposition only by naming its finding_id and showing that the revision intent was not carried out or that the change introduced a blocker. A remediation round that finds nothing to report must return no findings; that is the intended terminal state of review, not a failure of diligence.";
 var ReviewEnvelopeError = class extends Error {
   project_error;
@@ -75889,6 +76286,28 @@ function parseNonBlank(value, label) {
   }
   return value;
 }
+function validateAssignment(value, rubric) {
+  exactFields2(value, ["reviewer_id", "focus", "criterion_ids"], "review assignment");
+  if (!EVIDENCE_ID.test(value.reviewer_id)) {
+    throw new TypeError("review assignment reviewer_id must use the evidence identifier vocabulary");
+  }
+  if (!REVIEW_FOCUSES.includes(value.focus)) {
+    throw new TypeError("review assignment focus is invalid");
+  }
+  if (!Array.isArray(value.criterion_ids) || value.criterion_ids.length === 0) {
+    throw new TypeError("review assignment must name at least one rubric criterion");
+  }
+  const allowed = rubric.criteria.map((criterion) => criterion.id);
+  const selected = value.criterion_ids.map((criterion) => parseNonBlank(criterion, "review assignment criterion"));
+  if (new Set(selected).size !== selected.length || selected.some((criterion) => !allowed.includes(criterion))) {
+    throw new TypeError("review assignment criteria must be unique members of the rubric");
+  }
+  const canonical2 = allowed.filter((criterion) => selected.includes(criterion));
+  if (canonical2.some((criterion, index) => criterion !== selected[index])) {
+    throw new TypeError("review assignment criteria must follow canonical rubric order");
+  }
+  return Object.freeze({ reviewer_id: value.reviewer_id, focus: value.focus, criterion_ids: Object.freeze(selected) });
+}
 function parseEncoding(value) {
   if (value !== "utf8" && value !== "base64") {
     throw new TypeError("pinned context encoding must be utf8 or base64");
@@ -76003,7 +76422,14 @@ function buildReviewEnvelope(value) {
   const snapshot = materialize4(value);
   exactFields2(
     snapshot,
-    snapshot.workspace === void 0 ? ["artifact", "rubric", "context", "subject"] : ["artifact", "rubric", "context", "subject", "workspace"],
+    [
+      "artifact",
+      "rubric",
+      "context",
+      "subject",
+      ...snapshot.assignment === void 0 ? [] : ["assignment"],
+      ...snapshot.workspace === void 0 ? [] : ["workspace"]
+    ],
     "review envelope input"
   );
   if (typeof snapshot.artifact !== "string") throw new TypeError("review envelope artifact must be text");
@@ -76019,17 +76445,20 @@ function buildReviewEnvelope(value) {
       blocking: criterion.blocking
     }))
   };
+  const assignment = snapshot.assignment === void 0 ? void 0 : validateAssignment(snapshot.assignment, parsedRubric);
   const context2 = validateContext(snapshot.context);
   const envelope = {
     schema_version: "1",
     artifact: snapshot.artifact,
     rubric,
+    ...assignment === void 0 ? {} : { assignment },
     context: context2,
     // Both instructions are fixed literals. The review framing is always present; the remediation
     // literal appears exactly when a prior-triage record is pinned, and its presence is derived
     // from validated context, never a caller switch.
     instructions: {
       review: REVIEW_INSTRUCTION,
+      ...assignment === void 0 ? {} : { assignment: REVIEW_ASSIGNMENT_INSTRUCTION },
       ...context2.some((entry) => entry.kind === "prior-triage") ? { prior_triage: PRIOR_TRIAGE_INSTRUCTION } : {}
     },
     ...workspace === void 0 ? {} : { workspace },
@@ -76458,7 +76887,14 @@ function createDispatchCoordinator(input) {
       failureStage = "cli-preflight";
       preflight2 = await memoizedCliPreflight(adapter2, workspace, input.signal, input.cancellation_source);
       failureStage = "invocation-build";
-      const invocation = await adapter2.buildInvocation(envelope, route2, workspace, outputSchema);
+      const childRoot = join15(workspace.root, "children", attemptId);
+      await mkdir7(childRoot, { recursive: true, mode: 448 });
+      const childWorkspace = Object.freeze({
+        ...workspace,
+        root: childRoot,
+        env: Object.freeze({ ...workspace.env, TMPDIR: childRoot })
+      });
+      const invocation = await adapter2.buildInvocation(envelope, route2, childWorkspace, outputSchema);
       failureStage = "child-run";
       childResult = await runDispatchChild({
         ...invocation,
@@ -76492,7 +76928,7 @@ function createDispatchCoordinator(input) {
 
 // src/dispatch/retained-child-output.ts
 import { readdir as readdir4, readFile as readFile15 } from "node:fs/promises";
-import { join as join15 } from "node:path";
+import { join as join16 } from "node:path";
 var nonBlank5 = external_exports.string().min(1);
 var retainedRouteSchema = external_exports.object({
   adapter: external_exports.enum(ADAPTER_IDS),
@@ -76507,7 +76943,7 @@ var retainedChildOutputSchema = external_exports.object({
   phase_instance: phaseInstanceIdV1Schema,
   step: external_exports.literal("counter_review"),
   attempt: safeIntegerV1Schema,
-  role: external_exports.enum(["counter-reviewer", "adjudicator"]),
+  role: external_exports.enum(["counter-reviewer", "test-reviewer", "adjudicator"]),
   envelope_digest: sha256DigestV1Schema,
   route: retainedRouteSchema,
   route_source: routeSourceRecordSchema,
@@ -76610,7 +77046,7 @@ function createRetainedChildOutputStore(context2) {
     },
     async discard(envelopeDigest) {
       try {
-        const directory = join15(context2.authority.workspace_root, "diagnostics", "attempts", context2.phase_instance);
+        const directory = join16(context2.authority.workspace_root, "diagnostics", "attempts", context2.phase_instance);
         const prefix = roundPrefix(envelopeDigest);
         for (const name of await readdir4(directory)) {
           if (!name.startsWith(prefix) || !name.endsWith(".json")) continue;
@@ -77918,7 +78354,7 @@ async function runStateTransaction(dependencies, request, prepare) {
 
 // src/review/pinned-context.ts
 import { readFile as readFile16 } from "node:fs/promises";
-import { join as join16, posix } from "node:path";
+import { join as join17, posix } from "node:path";
 
 // src/contracts/utf8.ts
 import { Buffer as Buffer3 } from "node:buffer";
@@ -78398,7 +78834,7 @@ async function priorTriageEvidence(dependencies, state, preloaded) {
 async function conventionsEvidence(runner) {
   let bytes;
   try {
-    bytes = new Uint8Array(await readFile16(join16(runner.location.worktreeRoot, "CLAUDE.md")));
+    bytes = new Uint8Array(await readFile16(join17(runner.location.worktreeRoot, "CLAUDE.md")));
   } catch {
     return Object.freeze([]);
   }
@@ -78421,10 +78857,6 @@ function dropCandidateIndex(context2) {
 }
 
 // src/review/reviewer-tags.ts
-function reviewerFindingTag(model, index) {
-  const modelSlug = model.toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "");
-  return modelSlug.includes("sol") ? "sol" : modelSlug.includes("fable") ? "fable" : modelSlug.includes("opus") ? "opus" : modelSlug.includes("sonnet") ? "sonnet" : modelSlug.includes("haiku") ? "haiku" : modelSlug.includes("flash") ? "flash" : modelSlug.includes("pro") ? "pro" : `r${index + 1}`;
-}
 function taggedFindingId(tag, totalReviewers, findingId) {
   if (totalReviewers <= 1) return findingId;
   return findingId.startsWith(`${tag}-`) ? findingId : `${tag}-${findingId}`;
@@ -78569,6 +79001,7 @@ async function runCounterReview(dependencies, input) {
     });
   };
   const reviewOverride = overrideRecordFor("counter-reviewer");
+  const testReviewOverride = overrideRecordFor("test-reviewer");
   const subject = Object.freeze({
     ...input.envelope.subject,
     attempt: input.authority.context.attempt
@@ -78576,30 +79009,52 @@ async function runCounterReview(dependencies, input) {
   const serializeAll = dependencies.serialize_dispatch_all ?? (dependencies.serialize_dispatch ? async (ops2) => Promise.all(ops2.map((op) => op())) : serializeDispatchAll);
   const plan = input.constitution;
   const configuredReviewRoutes = await selectRoutes("counter-reviewer");
+  const specialistApplicable = input.phase_kind === "phase-design" || input.phase_kind === "phase-impl";
+  const testReviewDeclared = configuredRoutes(input.config, input.phase_kind, "test-reviewer", input.host).length > 0 || input.call.input.invocation_routes?.["test-reviewer"] !== void 0 || input.call.input.route_override?.["test-reviewer"] !== void 0;
+  const configuredTestRoutes = specialistApplicable && testReviewDeclared ? await selectRoutes("test-reviewer") : Object.freeze([]);
   const constitutionRoutes = plan === void 0 ? void 0 : await selectRoutes("adjudicator");
   const constitutionRoute = constitutionRoutes?.[0];
-  const totalReviewers = configuredReviewRoutes.length;
-  const taggedRoutes = configuredReviewRoutes.map((routeEntry, index) => Object.freeze({
+  const specialistActive = configuredTestRoutes.length > 0;
+  const phaseKind2 = input.phase_kind;
+  const generalRoutes = configuredReviewRoutes.map((routeEntry, index) => {
+    const reviewerId = configuredReviewRoutes.length === 1 ? "general" : `general-${String(index + 1)}`;
+    return Object.freeze({
+      ...routeEntry,
+      role: "counter-reviewer",
+      tag: reviewerId,
+      assignment: reviewAssignment(reviewerId, "general", phaseKind2, input.envelope.rubric, specialistActive)
+    });
+  });
+  const testRoutes = configuredTestRoutes.map((routeEntry) => Object.freeze({
     ...routeEntry,
-    tag: reviewerFindingTag(routeEntry.selection.route.model, index)
+    role: "test-reviewer",
+    tag: "test",
+    assignment: reviewAssignment("test", "tests", phaseKind2, input.envelope.rubric, specialistActive)
   }));
+  const taggedRoutes = Object.freeze([...generalRoutes, ...testRoutes]);
+  const totalReviewers = taggedRoutes.length;
   const sharedPriorTriage = input.envelope.context.find((entry) => entry.kind === "prior-triage");
   const priorTriage = sharedPriorTriage === void 0 ? void 0 : input.prior_triage;
   const dispositioned = priorTriage === void 0 ? [] : priorTriage.current.filter((disposition) => disposition.disposition !== "accepted-editorial");
   const owners = (findingId) => taggedRoutes.filter((routeEntry) => reviewerOwnsFinding(routeEntry.tag, totalReviewers, findingId));
-  const fallback = priorTriage === void 0 || totalReviewers <= 1 || dispositioned.some((disposition) => owners(disposition.finding_id).length === 0);
+  const ownerMissing = dispositioned.some((disposition) => owners(disposition.finding_id).length === 0);
+  const fallback = priorTriage === void 0 || totalReviewers <= 1 || ownerMissing;
   const reviewRoutes = fallback ? taggedRoutes : taggedRoutes.filter((routeEntry) => dispositioned.some((disposition) => reviewerOwnsFinding(routeEntry.tag, totalReviewers, disposition.finding_id)));
+  const assignmentFor = (routeEntry) => ownerMissing && routeEntry.role === "counter-reviewer" ? reviewAssignment(routeEntry.tag, "general", phaseKind2, input.envelope.rubric, false) : routeEntry.assignment;
   const envelopeFor = (routeEntry) => {
+    const assignment = assignmentFor(routeEntry);
     if (priorTriage === void 0 || fallback) {
-      return buildReviewEnvelopeWithCap({ ...input.envelope, subject });
+      return buildReviewEnvelopeWithCap({ ...input.envelope, assignment, subject });
     }
     const scoped = priorTriageContextEntry(priorTriage, (findingId) => reviewerOwnsFinding(routeEntry.tag, totalReviewers, findingId));
     return buildReviewEnvelopeWithCap({
       ...input.envelope,
+      assignment,
       subject,
       context: input.envelope.context.map((entry) => entry.kind === "prior-triage" ? scoped : entry)
     });
   };
+  const activeAssignments = reviewRoutes.map(assignmentFor);
   const reviewEnvelopes = reviewRoutes.map(envelopeFor);
   const envelope = reviewEnvelopes[0];
   const constitutionSubject = plan === void 0 || constitutionRoute === void 0 ? void 0 : Object.freeze({
@@ -78631,6 +79086,7 @@ async function runCounterReview(dependencies, input) {
   };
   const reviewOp = (routeEntry, reviewEnvelope) => async () => {
     const route2 = routeEntry.selection.route;
+    const routeOverride = routeEntry.role === "test-reviewer" ? testReviewOverride : reviewOverride;
     const mint = (dispatched2) => mintReviewObservation({
       subject,
       adapter: route2.adapter,
@@ -78640,9 +79096,9 @@ async function runCounterReview(dependencies, input) {
       envelope_input_digest: reviewEnvelope.digest,
       extracted_output_bytes: dispatched2.extracted_output_bytes,
       repositories: input.repositories,
-      ...reviewOverride === void 0 ? {} : { route_override: reviewOverride }
+      ...routeOverride === void 0 ? {} : { route_override: routeOverride }
     });
-    const binding = { envelope_digest: reviewEnvelope.digest, role: "counter-reviewer", selection: routeEntry.selection };
+    const binding = { envelope_digest: reviewEnvelope.digest, role: routeEntry.role, selection: routeEntry.selection };
     const kept = await retained?.read(binding);
     if (kept !== void 0) {
       try {
@@ -78652,7 +79108,7 @@ async function runCounterReview(dependencies, input) {
     }
     let dispatched;
     try {
-      dispatched = await dispatchObserved("counter-reviewer", routeEntry, (selectedRoute) => dependencies.dispatch(selectedRoute, reviewEnvelope, review_schema_default));
+      dispatched = await dispatchObserved(routeEntry.role, routeEntry, (selectedRoute) => dependencies.dispatch(selectedRoute, reviewEnvelope, review_schema_default));
     } catch (error51) {
       return { ok: false, error: error51 };
     }
@@ -78744,6 +79200,7 @@ async function runCounterReview(dependencies, input) {
     throw new TypeError("counter-review settled without an observation for every selected reviewer");
   }
   const allFindings = [];
+  const ownedFindingIds = singleObservations.map(() => []);
   const seenIds = /* @__PURE__ */ new Set();
   for (let i = 0; i < singleObservations.length; i += 1) {
     const obs = singleObservations[i];
@@ -78757,6 +79214,7 @@ async function runCounterReview(dependencies, input) {
         disambig += 1;
       }
       seenIds.add(uniqueId);
+      ownedFindingIds[i].push(uniqueId);
       allFindings.push({
         ...f,
         finding_id: uniqueId
@@ -78775,12 +79233,40 @@ async function runCounterReview(dependencies, input) {
   const mergedVerdict = anyFail ? "fail" : anyAdvisory ? "advisory" : "pass";
   const mergedBlockingCount = allFindings.filter((f) => f.blocking).length;
   const primaryObs = singleObservations[0];
+  const reviewerRuns = singleObservations.map((obs, index) => {
+    const evidence = obs.evidence;
+    const routeEntry = reviewRoutes[index];
+    const assignment = activeAssignments[index];
+    if (evidence.route_source === void 0) {
+      throw new TypeError("fresh reviewer evidence must carry route provenance");
+    }
+    return Object.freeze({
+      reviewer_id: assignment.reviewer_id,
+      focus: assignment.focus,
+      routing_role: routeEntry.role,
+      criterion_ids: Object.freeze([...assignment.criterion_ids]),
+      rubric_digest: evidence.rubric_digest,
+      model_family: evidence.model_family,
+      model: evidence.model,
+      effort: evidence.effort,
+      adapter: evidence.adapter,
+      cli_version: evidence.cli_version,
+      invocation_id: evidence.invocation_id,
+      envelope_input_digest: evidence.envelope_input_digest,
+      observed_output_digest: evidence.observed_output_digest,
+      finding_ids: Object.freeze([...ownedFindingIds[index]]),
+      ...evidence.provider === void 0 ? {} : { provider: evidence.provider },
+      route_source: evidence.route_source,
+      ...evidence.route_override === void 0 ? {} : { route_override: evidence.route_override }
+    });
+  });
   const mergedReviewEvidence = Object.freeze({
     ...primaryObs.evidence,
     findings: Object.freeze(allFindings),
     verdict: mergedVerdict,
     blocking_count: mergedBlockingCount,
-    matched_rule_versions: Object.freeze(mergedMatchedRules)
+    matched_rule_versions: Object.freeze(mergedMatchedRules),
+    reviewer_runs: Object.freeze(reviewerRuns)
   });
   const summarizedConstitution = constitutionEvidence;
   const currentProjection = await dependencies.reobserve_projection_digest();

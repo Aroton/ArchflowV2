@@ -98,6 +98,7 @@ export interface StateSuccess { readonly path: TaskPathClaim; readonly revision:
 export type RouteOverrideDeclaration = {
   readonly reason: string;
   readonly "counter-reviewer"?: ModelRouteV1;
+  readonly "test-reviewer"?: ModelRouteV1;
   readonly adjudicator?: ModelRouteV1;
 };
 /** Normal per-invocation reviewer routing, distinct from a human outage substitution. */
@@ -108,6 +109,7 @@ export type ReviewRouteV1 = {
 };
 export type ReviewRouteSetV1 = {
   readonly "counter-reviewer"?: ReviewRouteV1;
+  readonly "test-reviewer"?: ReviewRouteV1;
   readonly adjudicator?: ReviewRouteV1;
 };
 export interface CounterReviewInput extends CommonToolInput {
@@ -236,19 +238,21 @@ export const stateInputSchema = z.object({
 const reviewModelRouteV1Schema = configRouteSchema.clone(configRouteSchema.def) as z.ZodType<ModelRouteV1>;
 export const reviewRouteSetV1Schema = z.object({
   "counter-reviewer": reviewModelRouteV1Schema.optional(),
+  "test-reviewer": reviewModelRouteV1Schema.optional(),
   adjudicator: reviewModelRouteV1Schema.optional(),
 }).strict().superRefine((routes, context) => {
-  if (routes["counter-reviewer"] === undefined && routes.adjudicator === undefined) {
-    context.addIssue({ code: "custom", message: "review routes must name counter-reviewer, adjudicator, or both" });
+  if (routes["counter-reviewer"] === undefined && routes["test-reviewer"] === undefined && routes.adjudicator === undefined) {
+    context.addIssue({ code: "custom", message: "review routes must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
   }
 }) as z.ZodType<ReviewRouteSetV1>;
 export const routeOverrideSchema = z.object({
   reason: text,
   "counter-reviewer": reviewModelRouteV1Schema.optional(),
+  "test-reviewer": reviewModelRouteV1Schema.optional(),
   adjudicator: reviewModelRouteV1Schema.optional(),
 }).strict().superRefine((override, context) => {
-  if (override["counter-reviewer"] === undefined && override.adjudicator === undefined) {
-    context.addIssue({ code: "custom", message: "route_override must name counter-reviewer, adjudicator, or both" });
+  if (override["counter-reviewer"] === undefined && override["test-reviewer"] === undefined && override.adjudicator === undefined) {
+    context.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
   }
 });
 export const counterReviewInputSchema = z.object({

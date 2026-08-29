@@ -246,6 +246,192 @@
             ],
             "additionalProperties": false
           }
+        },
+        "reviewer_runs": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "reviewer_id": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+              },
+              "focus": {
+                "type": "string",
+                "enum": [
+                  "general",
+                  "tests"
+                ]
+              },
+              "routing_role": {
+                "type": "string",
+                "enum": [
+                  "counter-reviewer",
+                  "test-reviewer"
+                ]
+              },
+              "criterion_ids": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+                }
+              },
+              "rubric_digest": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/digest"
+              },
+              "model_family": {
+                "type": "string",
+                "enum": [
+                  "claude",
+                  "codex",
+                  "gemini"
+                ]
+              },
+              "model": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+              },
+              "effort": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max",
+                  "ultra"
+                ]
+              },
+              "adapter": {
+                "type": "string",
+                "enum": [
+                  "claude-cli",
+                  "codex-cli",
+                  "antigravity-cli"
+                ]
+              },
+              "cli_version": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+              },
+              "invocation_id": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+              },
+              "envelope_input_digest": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/digest"
+              },
+              "observed_output_digest": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/digest"
+              },
+              "finding_ids": {
+                "type": "array",
+                "items": {
+                  "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+                }
+              },
+              "provider": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+              },
+              "route_source": {
+                "type": "object",
+                "properties": {
+                  "provenance": {
+                    "type": "string",
+                    "enum": [
+                      "configured",
+                      "invocation-declared",
+                      "route-override"
+                    ]
+                  },
+                  "displaced": {
+                    "type": "object",
+                    "properties": {
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "configured",
+                          "invocation-declared"
+                        ]
+                      },
+                      "model": {
+                        "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                      },
+                      "effort": {
+                        "type": "string",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          "xhigh",
+                          "max",
+                          "ultra"
+                        ]
+                      },
+                      "provider": {
+                        "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                      }
+                    },
+                    "required": [
+                      "source",
+                      "model",
+                      "effort"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "provenance"
+                ],
+                "additionalProperties": false
+              },
+              "route_override": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                  },
+                  "pinned_model": {
+                    "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                  },
+                  "pinned_effort": {
+                    "type": "string",
+                    "enum": [
+                      "low",
+                      "medium",
+                      "high",
+                      "xhigh",
+                      "max",
+                      "ultra"
+                    ]
+                  },
+                  "pinned_provider": {
+                    "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "reviewer_id",
+              "focus",
+              "routing_role",
+              "criterion_ids",
+              "rubric_digest",
+              "model_family",
+              "model",
+              "effort",
+              "adapter",
+              "cli_version",
+              "invocation_id",
+              "envelope_input_digest",
+              "observed_output_digest",
+              "finding_ids",
+              "route_source"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "required": [

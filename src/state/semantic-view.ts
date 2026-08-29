@@ -114,6 +114,13 @@ function publicResources(status: TaskStatusV1): readonly WorkflowResourceV1[] {
 
 function reviewContext(status: TaskStatusV1): PublicReviewContextV1 | undefined {
   if (status.review_policy === undefined) return undefined;
+  const recordedAssignments = status.evidence?.available === true
+    ? status.evidence.counter_review_provenance.reviewer_runs?.map((run) => Object.freeze({
+      reviewer_id: run.reviewer_id,
+      focus: run.focus,
+      criterion_ids: Object.freeze([...run.criterion_ids]),
+    }))
+    : undefined;
   return Object.freeze({
     rubric: Object.freeze({
       schema_version: "1" as const,
@@ -125,6 +132,7 @@ function reviewContext(status: TaskStatusV1): PublicReviewContextV1 | undefined 
         blocking: criterion.blocking,
       }))),
     }),
+    ...(recordedAssignments === undefined ? {} : { assignments: Object.freeze(recordedAssignments) }),
     active_rules: Object.freeze((status.constitution?.active_rules ?? []).map((rule) => Object.freeze({
       id: rule.id,
       version: rule.version,
@@ -145,6 +153,24 @@ function reviewStrength(status: TaskStatusV1, snapshot: SemanticStatusSnapshotV1
   const evidence = status.evidence;
   if (evidence?.available !== true || status.attempt === undefined) return undefined;
   const provenance = evidence.counter_review_provenance;
+  const recordedReviewers = provenance.reviewer_runs?.map((reviewer) => Object.freeze({
+    reviewer_id: reviewer.reviewer_id,
+    focus: reviewer.focus,
+    model: reviewer.model,
+    effort: reviewer.effort,
+    reviewer_family: reviewer.model_family,
+    same_family: reviewer.model_family === provenance.producer_family,
+    finding_count: reviewer.finding_ids.length,
+  }));
+  const reviewers = recordedReviewers ?? [Object.freeze({
+    reviewer_id: "general",
+    focus: "general" as const,
+    model: provenance.model,
+    effort: provenance.effort,
+    reviewer_family: provenance.model_family,
+    same_family: provenance.model_family === provenance.producer_family,
+    finding_count: evidence.findings.length,
+  })];
   return Object.freeze({
     reviewer_model: provenance.model,
     reviewer_effort: provenance.effort,
@@ -154,6 +180,7 @@ function reviewStrength(status: TaskStatusV1, snapshot: SemanticStatusSnapshotV1
     attempt: status.attempt,
     remediation_round: status.attempt > 1,
     rounds: Object.freeze((snapshot.review_rounds ?? []).map((round) => Object.freeze({ ...round }))),
+    reviewers: Object.freeze(reviewers),
   });
 }
 

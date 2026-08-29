@@ -319,7 +319,7 @@ describe("advertised MCP tool catalogue", () => {
     expect(arm!.required).toEqual(["kind", "route_override"]);
     const routeOverride = (arm!.properties as Record<string, { required?: string[]; properties?: Record<string, unknown> }>).route_override!;
     expect(routeOverride.required).toEqual(["reason"]);
-    expect(Object.keys(routeOverride.properties!)).toEqual(["reason", "counter-reviewer", "adjudicator"]);
+    expect(Object.keys(routeOverride.properties!)).toEqual(["reason", "counter-reviewer", "test-reviewer", "adjudicator"]);
     // The route schema is a semantic-workflow-local clone: the arm resolves without any $ref, so
     // the advertised catalogue never reaches into a config document it does not carry.
     expect(JSON.stringify(arm)).not.toContain("$ref");

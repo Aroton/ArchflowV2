@@ -171,6 +171,14 @@ const rubric = {
     id: "correctness",
     text: "The artifact must satisfy the phase design.",
     blocking: true,
+  }, {
+    id: "verification-evidence",
+    text: "Verification evidence must support the implementation.",
+    blocking: true,
+  }, {
+    id: "test-quality",
+    text: "Tests must provide distinct economical regression protection.",
+    blocking: true,
   }],
 } as const;
 const rubricDigest = canonicalJsonDigest(rubric);
@@ -1472,6 +1480,7 @@ describe("editorial revision fixed point", () => {
       schema_version: "1",
       roles: {
         "counter-reviewer": { model: "gpt-5.6-sol", effort: "high" },
+        "test-reviewer": { model: "gpt-5.6-luna", effort: "max" },
         adjudicator: { model: "gemini-3.7-flash-high", effort: "high" },
       },
       producers: {
@@ -1497,18 +1506,26 @@ describe("editorial revision fixed point", () => {
       "antigravity",
     );
 
-    // Both counter-reviewers and the constitution adjudicator ran
+    // Both general reviewers, the test specialist, and the constitution adjudicator ran.
     expect(routes).toEqual([
       { adapter: "codex-cli", family: "codex", model: "gpt-5.6-sol", effort: "high" },
       { adapter: "claude-cli", family: "claude", model: "claude-fable-5", effort: "medium" },
+      { adapter: "codex-cli", family: "codex", model: "gpt-5.6-luna", effort: "max" },
       { adapter: "antigravity-cli", family: "gemini", model: "gemini-3.7-flash-high", effort: "high" },
     ]);
 
     expect(merged.evidence.verdict).toBe("fail");
-    expect(merged.evidence.blocking_count).toBe(2); // 1 blocker per reviewer = 2 total
-    expect(merged.evidence.findings).toHaveLength(2);
-    expect(merged.evidence.findings[0]!.finding_id).toBe("sol-counter-review-blocker");
-    expect(merged.evidence.findings[1]!.finding_id).toBe("fable-counter-review-blocker");
+    expect(merged.evidence.blocking_count).toBe(3);
+    expect(merged.evidence.findings).toHaveLength(3);
+    expect(merged.evidence.assurance).toBe("server-attested");
+    if (merged.evidence.assurance !== "server-attested") return;
+    expect(merged.evidence.reviewer_runs).toMatchObject([
+      { reviewer_id: "general-1", focus: "general", routing_role: "counter-reviewer", criterion_ids: ["correctness"] },
+      { reviewer_id: "general-2", focus: "general", routing_role: "counter-reviewer", criterion_ids: ["correctness"] },
+      { reviewer_id: "test", focus: "tests", routing_role: "test-reviewer", criterion_ids: ["verification-evidence", "test-quality"] },
+    ]);
+    expect(merged.evidence.reviewer_runs?.flatMap((run) => run.finding_ids))
+      .toEqual(merged.evidence.findings.map((finding) => finding.finding_id));
   });
 });
 
@@ -1519,6 +1536,7 @@ describe("editorial revision fixed point", () => {
 describe("partial review round retry", () => {
   const SOL = "gpt-5.6-sol";
   const FABLE = "gpt-5.6-fable";
+  const LUNA = "gpt-5.6-luna";
   const ADJUDICATOR = "gpt-fixture";
   const multiReviewConfig: ConfigV1 = {
     schema_version: "1",
@@ -1534,6 +1552,14 @@ describe("partial review round retry", () => {
         ],
         adjudicator: { model: ADJUDICATOR, effort: "high" },
       },
+    },
+  };
+  const specialistReviewConfig: ConfigV1 = {
+    schema_version: "1",
+    roles: {
+      "counter-reviewer": { model: SOL, effort: "high" },
+      "test-reviewer": { model: LUNA, effort: "max" },
+      adjudicator: { model: ADJUDICATOR, effort: "high" },
     },
   };
 
@@ -1579,7 +1605,15 @@ describe("partial review round retry", () => {
     fingerprint: Sha256Digest,
     behaviour: RoundBehaviour,
     enter: boolean,
-    options: Readonly<{ dependencies?: TransactionDependencies; version?: number; remediation?: boolean }> = {},
+    options: Readonly<{
+      dependencies?: TransactionDependencies;
+      version?: number;
+      remediation?: boolean;
+      config?: ConfigV1;
+      invocation_routes?: Record<string, unknown>;
+      observed_failures?: string[];
+      observed_models?: string[];
+    }> = {},
   ) {
     const dependencies = options.dependencies ?? h.dependencies;
     const version = options.version ?? 0;
@@ -1610,6 +1644,7 @@ describe("partial review round retry", () => {
       expected_revision: runningState.revision,
       input_fingerprint: fingerprint,
       artifact_path: parseTaskPathClaim("phases/phase-14-output.md"),
+      ...(options.invocation_routes === undefined ? {} : { invocation_routes: options.invocation_routes }),
       ...(behaviour.declaration === undefined ? {} : { route_override: behaviour.declaration }),
     });
     const plan = constitutionPlan(h, dependencies, version);
@@ -1619,6 +1654,7 @@ describe("partial review round retry", () => {
       retained_outputs: store,
       dispatch: async (route, envelope) => {
         routes.push(route);
+        options.observed_models?.push(route.model);
         envelopes.set(route.model, JSON.parse(new TextDecoder().decode(envelope.bytes)));
         digests.set(route.model, envelope.digest);
         await settle(route.model);
@@ -1654,10 +1690,11 @@ describe("partial review round retry", () => {
       },
       serialize_dispatch: async <T>(operation: () => Promise<T>) => operation(),
       serialize_dispatch_all: async <T>(ops: readonly (() => Promise<T>)[]) => Promise.all(ops.map((op) => op())),
+      observe_failure: async (role) => { options.observed_failures?.push(role); },
     }, {
       authority: h.authority,
       call,
-      config: multiReviewConfig,
+      config: options.config ?? multiReviewConfig,
       phase_kind: "phase-impl",
       producer_family: "claude",
       host: "claude",
@@ -1754,7 +1791,7 @@ describe("partial review round retry", () => {
     expect(first.result.ok, JSON.stringify(first.result)).toBe(true);
     if (!first.result.ok) return;
     expect(first.result.value.evidence.findings.map((finding) => finding.finding_id))
-      .toEqual(["fable-counter-review-blocker"]);
+      .toEqual(["general-2-counter-review-blocker"]);
 
     // The producer accepts fable's finding, then revises.
     await commitTriageDecisions(h, h.dependencies, 0, () => "accepted");
@@ -1776,15 +1813,166 @@ describe("partial review round retry", () => {
     expect(priorEntry?.status).toBe("pinned");
     const rendered = JSON.parse(priorEntry!.content!) as { dispositions: { finding_id: string; disposition: string }[] };
     expect(rendered.dispositions).toEqual([
-      expect.objectContaining({ finding_id: "fable-counter-review-blocker", disposition: "accepted" }),
+      expect.objectContaining({ finding_id: "general-2-counter-review-blocker", disposition: "accepted" }),
     ]);
 
     // Fable's tag is stable even though it ran alone, so round 3 can still attribute its findings.
-    expect(second.result.value.evidence.findings.map((finding) => finding.finding_id)).toEqual(["fable-counter-review-blocker"]);
+    expect(second.result.value.evidence.findings.map((finding) => finding.finding_id)).toEqual(["general-2-counter-review-blocker"]);
     const review = second.result.value.evidence;
     expect(review.assurance).toBe("server-attested");
     if (review.assurance !== "server-attested") return;
     expect(second.result.value.constitution_evidence?.source_review_envelope_digest).toBe(review.envelope_input_digest);
+  });
+
+  it("dispatches only the test specialist to confirm its finding in remediation", async () => {
+    const h = await fixture();
+    const { store } = memoryStore();
+    const subjects = [canonicalJsonDigest({ specialist: 0 }), canonicalJsonDigest({ specialist: 1 })] as const;
+    const fingerprints = [computeInputFingerprint(fingerprintSubject(0)), computeInputFingerprint(fingerprintSubject(1))] as const;
+
+    const first = await round(h, store, subjects[0], fingerprints[0], { clean_reviewer: SOL }, true, {
+      config: specialistReviewConfig,
+    });
+    expect(first.models).toEqual([SOL, LUNA, ADJUDICATOR].sort());
+    expect(first.result.ok, JSON.stringify(first.result)).toBe(true);
+    if (!first.result.ok) return;
+    expect(first.result.value.evidence.findings.map((finding) => finding.finding_id))
+      .toEqual(["test-counter-review-blocker"]);
+
+    await commitTriageDecisions(h, h.dependencies, 0, () => "accepted");
+    const dependencies = await rewrite(h, h.dependencies, 1);
+    const second = await round(h, store, subjects[1], fingerprints[1], {}, true, {
+      dependencies, version: 1, remediation: true, config: specialistReviewConfig,
+    });
+    expect(second.models).toEqual([LUNA, ADJUDICATOR].sort());
+    const specialistEnvelope = second.envelopes.get(LUNA) as {
+      assignment: { reviewer_id: string; focus: string; criterion_ids: string[] };
+      context: { kind: string; content?: string }[];
+    };
+    expect(specialistEnvelope.assignment).toEqual({
+      reviewer_id: "test", focus: "tests", criterion_ids: ["verification-evidence", "test-quality"],
+    });
+    const prior = specialistEnvelope.context.find((entry) => entry.kind === "prior-triage");
+    expect(prior?.content).toContain("test-counter-review-blocker");
+  });
+
+  it("falls back to all reviewers and the full general rubric when a specialist owner disappears", async () => {
+    const h = await fixture();
+    const { store } = memoryStore();
+    const subjects = [canonicalJsonDigest({ reconfigured: 0 }), canonicalJsonDigest({ reconfigured: 1 })] as const;
+    const fingerprints = [computeInputFingerprint(fingerprintSubject(0)), computeInputFingerprint(fingerprintSubject(1))] as const;
+    const first = await round(h, store, subjects[0], fingerprints[0], { clean_reviewer: SOL }, true, {
+      config: specialistReviewConfig,
+    });
+    expect(first.result.ok, JSON.stringify(first.result)).toBe(true);
+    if (!first.result.ok) return;
+    await commitTriageDecisions(h, h.dependencies, 0, () => "accepted");
+    const dependencies = await rewrite(h, h.dependencies, 1);
+
+    const second = await round(h, store, subjects[1], fingerprints[1], {}, true, {
+      dependencies, version: 1, remediation: true, config: multiReviewConfig,
+    });
+    expect(second.models).toEqual([SOL, FABLE, ADJUDICATOR].sort());
+    for (const model of [SOL, FABLE]) {
+      const envelope = second.envelopes.get(model) as {
+        assignment: { focus: string; criterion_ids: string[] };
+        context: { kind: string; content?: string }[];
+      };
+      expect(envelope.assignment.focus).toBe("general");
+      expect(envelope.assignment.criterion_ids).toEqual(["correctness", "verification-evidence", "test-quality"]);
+      expect(envelope.context.find((entry) => entry.kind === "prior-triage")?.content)
+        .toContain("test-counter-review-blocker");
+    }
+  });
+
+  it("records invocation and one-dispatch override provenance independently for the test reviewer", async () => {
+    const invokedModel = "gpt-5.6-luna-invoked";
+    const invokedHarness = await fixture();
+    const invoked = await round(
+      invokedHarness,
+      memoryStore().store,
+      canonicalJsonDigest({ invoked: true }),
+      computeInputFingerprint(fingerprintSubject(0)),
+      {},
+      true,
+      {
+        config: specialistReviewConfig,
+        invocation_routes: { "test-reviewer": { model: invokedModel, effort: "xhigh" } },
+      },
+    );
+    expect(invoked.result.ok, JSON.stringify(invoked.result)).toBe(true);
+    if (!invoked.result.ok || invoked.result.value.evidence.assurance !== "server-attested") return;
+    expect(invoked.result.value.evidence.reviewer_runs?.find((run) => run.focus === "tests")).toMatchObject({
+      reviewer_id: "test", model: invokedModel, effort: "xhigh",
+      criterion_ids: ["verification-evidence", "test-quality"],
+      route_source: {
+        provenance: "invocation-declared",
+        displaced: { source: "configured", model: LUNA, effort: "max" },
+      },
+    });
+
+    const overrideModel = "gpt-5.6-luna-override";
+    const overrideHarness = await fixture();
+    const overridden = await round(
+      overrideHarness,
+      memoryStore().store,
+      canonicalJsonDigest({ overridden: true }),
+      computeInputFingerprint(fingerprintSubject(0)),
+      {
+        declaration: {
+          reason: "the configured test reviewer is temporarily unavailable",
+          "test-reviewer": { model: overrideModel, effort: "xhigh" },
+        },
+      },
+      true,
+      { config: specialistReviewConfig },
+    );
+    expect(overridden.result.ok, JSON.stringify(overridden.result)).toBe(true);
+    if (!overridden.result.ok || overridden.result.value.evidence.assurance !== "server-attested") return;
+    expect(overridden.result.value.evidence.reviewer_runs?.find((run) => run.focus === "tests")).toMatchObject({
+      reviewer_id: "test", model: overrideModel,
+      route_source: { provenance: "route-override" },
+      route_override: { reason: "the configured test reviewer is temporarily unavailable", pinned_model: LUNA, pinned_effort: "max" },
+    });
+  });
+
+  it("attributes a specialist selection or dispatch failure to test-reviewer", async () => {
+    const h = await fixture();
+    const failures: string[] = [];
+    await expect(round(
+      h,
+      memoryStore().store,
+      canonicalJsonDigest({ specialist_failure: true }),
+      computeInputFingerprint(fingerprintSubject(0)),
+      { fail_reviewer: LUNA },
+      true,
+      { config: specialistReviewConfig, observed_failures: failures },
+    )).rejects.toBeInstanceOf(DispatchRoutingError);
+    expect(failures).toEqual(["test-reviewer"]);
+  });
+
+  it("fails an invalid specialist route before launching any review child", async () => {
+    const h = await fixture();
+    const failures: string[] = [];
+    const models: string[] = [];
+    const invalidConfig: ConfigV1 = {
+      ...specialistReviewConfig,
+      roles: {
+        ...specialistReviewConfig.roles,
+        "test-reviewer": { model: "not a safe model" as never, effort: "max" },
+      },
+    };
+    await expect(round(
+      h,
+      memoryStore().store,
+      canonicalJsonDigest({ invalid_specialist: true }),
+      computeInputFingerprint(fingerprintSubject(0)),
+      {},
+      true,
+      { config: invalidConfig, observed_failures: failures, observed_models: models },
+    )).rejects.toBeInstanceOf(DispatchRoutingError);
+    expect(failures).toEqual(["test-reviewer"]);
+    expect(models).toEqual([]);
   });
 
   /** Runs a full two-reviewer round, triages it as decided, revises, and returns the remediation round. */
@@ -1815,12 +2003,12 @@ describe("partial review round retry", () => {
 
   it("dispatches a reviewer whose finding was rejected so it can contest the rejection, each reviewer scoped to its own findings", async () => {
     const h = await fixture();
-    const second = await remediationAfter(h, (findingId) => findingId.startsWith("fable-") ? "accepted" : "rejected");
+    const second = await remediationAfter(h, (findingId) => findingId.startsWith("general-2-") ? "accepted" : "rejected");
     expect(second.models).toEqual([SOL, FABLE, ADJUDICATOR].sort());
     expect(priorRecord(second.envelopes.get(SOL)).dispositions)
-      .toEqual([expect.objectContaining({ finding_id: "sol-counter-review-blocker", disposition: "rejected" })]);
+      .toEqual([expect.objectContaining({ finding_id: "general-1-counter-review-blocker", disposition: "rejected" })]);
     expect(priorRecord(second.envelopes.get(FABLE)).dispositions)
-      .toEqual([expect.objectContaining({ finding_id: "fable-counter-review-blocker", disposition: "accepted" })]);
+      .toEqual([expect.objectContaining({ finding_id: "general-2-counter-review-blocker", disposition: "accepted" })]);
     // Two reviewers, two envelopes: the round identity is the first dispatched reviewer's.
     if (!second.result.ok) return;
     const review = second.result.value.evidence;
@@ -1833,7 +2021,7 @@ describe("partial review round retry", () => {
   it("leaves out a reviewer whose only findings were accepted editorially", async () => {
     const h = await fixture();
     // Only a non-blocking finding may be accepted editorially, so sol raises an advisory one.
-    const second = await remediationAfter(h, (findingId) => findingId.startsWith("fable-") ? "accepted" : "editorial", { advisory_reviewer: SOL });
+    const second = await remediationAfter(h, (findingId) => findingId.startsWith("general-2-") ? "accepted" : "editorial", { advisory_reviewer: SOL });
     expect(second.models).toEqual([FABLE, ADJUDICATOR].sort());
   });
 
@@ -1866,8 +2054,8 @@ describe("partial review round retry", () => {
     expect(retried.result.ok, JSON.stringify(retried.result)).toBe(true);
     if (!retried.result.ok) return;
     expect(retried.result.value.evidence.findings.map((finding) => finding.finding_id)).toEqual([
-      "sol-counter-review-blocker",
-      "fable-counter-review-blocker",
+      "general-1-counter-review-blocker",
+      "general-2-counter-review-blocker",
     ]);
     expect(retried.result.value.evidence.blocking_count).toBe(2);
     const review = retried.result.value.evidence;
@@ -1895,7 +2083,7 @@ describe("partial review round retry", () => {
     // Reused sol plus fresh fable merge in config order, and the reused constitution result still
     // binds to the round the reused review answered.
     expect(retried.result.value.evidence.findings.map((finding) => finding.finding_id))
-      .toEqual(["sol-counter-review-blocker", "fable-counter-review-blocker"]);
+      .toEqual(["general-1-counter-review-blocker", "general-2-counter-review-blocker"]);
     const review = retried.result.value.evidence;
     if (review.assurance !== "server-attested") throw new Error("expected server-attested review");
     expect(retried.result.value.constitution_evidence?.source_review_envelope_digest).toBe(review.envelope_input_digest);
