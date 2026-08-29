@@ -29,7 +29,7 @@ criteria:
     text: "Report a shortcut only when it substitutes the appearance of success for the required behavior on the change path: a stub, TODO, or unimplemented placeholder standing in for required logic; a silently narrowed scope or quietly skipped requirement the approved phase design names; a caught error or failure condition discarded so the failure is invisible; or a check that compares against a hardcoded expected value or special-cases the tested output instead of computing the required result. A blocking finding must cite the exact changed location and the required behavior it bypasses. Do not report work the approved phase design explicitly defers to a later phase."
     blocking: true
   - id: simplicity
-    text: "Report complexity only when it materially harms correctness, maintainability, change cost, or the approved operating envelope; do not report a merely preferred simpler implementation."
+    text: "Report complexity only when it materially harms correctness, maintainability, change cost, or the approved operating envelope; do not report a merely preferred simpler implementation. Report custom implementations of standard domain problems where well-tested, widely-adopted libraries or standard platform APIs exist in the ecosystem and are appropriate for the project's dependency budget."
     blocking: true
   - id: duplication
     text: "Report duplication only when it creates a concrete material risk of divergence, defects, or disproportionate maintenance; do not request an abstraction for small or clearer repetition."

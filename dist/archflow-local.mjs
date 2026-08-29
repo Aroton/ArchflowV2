@@ -27490,6 +27490,7 @@ var ASSETS = Object.freeze([
   ["constitution/README.md", ".archflow/constitution/README.md"],
   ["constitution/00-process.md", ".archflow/constitution/00-process.md"],
   ["constitution/10-architecture.md", ".archflow/constitution/10-architecture.md"],
+  ["constitution/15-dependencies.md", ".archflow/constitution/15-dependencies.md"],
   ["constitution/20-data.md", ".archflow/constitution/20-data.md"],
   ["constitution/30-product.md", ".archflow/constitution/30-product.md"],
   ["constitution/40-authentication.md", ".archflow/constitution/40-authentication.md"],
