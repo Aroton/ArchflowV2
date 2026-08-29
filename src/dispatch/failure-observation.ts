@@ -105,9 +105,9 @@ export async function writeDispatchFailureObservation(
     context: context.authority.context,
   });
   if (!target.ok) return false;
-  // Sibling children of one dispatch fail together: the root cause rejects first and the others
-  // are cancelled behind it. Keep the first observation of this exact revision so the slot names
-  // the failure that actually happened; a later revision (a retry) replaces it as before.
+  // Sibling children of one round run to completion independently, and more than one may fail.
+  // Keep the first observation of this exact revision so the slot names the failure that
+  // happened first; a later revision (a retry) replaces it as before.
   if (await slotHoldsObservationFor(target.value.absolute, context)) return false;
   const observation = dispatchFailureObservationV1Schema.parse({
     schema_version: "1",

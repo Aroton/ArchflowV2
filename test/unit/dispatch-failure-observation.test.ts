@@ -114,8 +114,8 @@ describe("dispatch-failure observation", () => {
       createProjectError("PROCESS_FAILED", { adapter: "claude-cli", exit_class: "nonzero" }),
     ) });
 
-    // Siblings of one dispatch fail together; the first classified failure is the root cause
-    // and the cancelled sibling must not overwrite it.
+    // Siblings of one round run to completion independently and more than one may fail; the
+    // first classified failure to finish is kept and a later sibling must not overwrite it.
     await expect(readCurrentDispatchFailure(dependencies, authority, state)).resolves.toMatchObject({
       task_id: "dispatch-failure",
       phase_instance: "phase-impl-2",

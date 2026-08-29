@@ -30,13 +30,15 @@ Repository review coverage is recovered from retained evidence, not inferred fro
   runtime/tasks/<task>/
     transient/{intents/,.transaction-lock}
     cache/{results/,reviews/,gates/,phases/<n>/verification.txt,imports/}
-    diagnostics/attempts/
+    diagnostics/attempts/   # failed-dispatch forensics plus retained child outputs of an uncommitted review round
   runtime/diagnostics/internal-errors.log
 ```
 
 The durable side contains human-authored documents, mutable task configuration, pinned constitution policy, `state.json`, the adopted initialization artifact, current result manifests, and gate authority still referenced by state. The `runtime/` side contains intent receipts, crash receipts, locks, duplicate payload bytes, rendered evidence and gate interfaces, raw verification transcripts, legacy import staging, and failed-dispatch diagnostics. `.archflow/.gitignore` ignores that entire tree; initialization checks both that the rule works and that no runtime path is already tracked, without touching the project root `.gitignore`.
 
 Each current review attempt may have one deterministic compact dispatch-failure observation beside the existing random-ID forensic attempt records. The compact file is latest-failure-only and intentionally disposable: it records safe route/code facts plus task, phase instance, step, attempt, and revision solely so status can reject stale or mismatched bytes. It never transitions state, consumes an attempt, mints evidence, opens a gate, or authorizes a retry. Losing it removes convenience only; the same pending durable review authority remains and a still-failing retry can reconstruct the observation.
+
+The same directory holds the retained child outputs of a review round that has not committed yet (`round-<envelope>-<role>-<key>.json`): the validated raw output of each reviewer or constitution child bound to the exact envelope digest, role, route, and route provenance it answered. A retry of the same round reuses them instead of re-dispatching those children and deletes them when the round commits. They are equally disposable — reuse re-validates the bytes under the current binding, and losing a record costs one re-dispatch, never workflow progress.
 
 Task isolation applies equally to both roots. A runtime path is resolved only below `.archflow/runtime/tasks/<validated-task>` with the same containment, symlink, and cross-task protections used for durable task paths.
 

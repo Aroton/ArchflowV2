@@ -68,7 +68,14 @@ import {
   type ResolvedWorkspacePath,
 } from "../../src/repository/paths.js";
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
-import type { DispatchRoute } from "../../src/dispatch/routing.js";
+import { DispatchRoutingError, type DispatchRoute } from "../../src/dispatch/routing.js";
+import {
+  retainedChildOutputKey,
+  type RetainedChildOutputBinding,
+  type RetainedChildOutputStore,
+} from "../../src/dispatch/retained-child-output.js";
+import { createProjectError } from "../../src/contracts/errors.js";
+import { loadPriorTriageRecord, priorTriageEvidence } from "../../src/review/pinned-context.js";
 import { rulesForEnvelope } from "../../src/review/adjudication.js";
 import {
   runCounterReview,
@@ -834,8 +841,7 @@ async function commitCounter(
     ...(dispatchAlreadySerialized
       ? {
         serialize_dispatch: async <T>(operation: () => Promise<T>) => operation(),
-        serialize_dispatch_pair: async <A, B>(first: () => Promise<A>, second: () => Promise<B>) =>
-          Promise.all([first(), second()]),
+        serialize_dispatch_all: async <T>(ops: readonly (() => Promise<T>)[]) => Promise.all(ops.map((op) => op())),
       }
       : {}),
   }, {
@@ -1503,5 +1509,532 @@ describe("editorial revision fixed point", () => {
     expect(merged.evidence.findings).toHaveLength(2);
     expect(merged.evidence.findings[0]!.finding_id).toBe("sol-counter-review-blocker");
     expect(merged.evidence.findings[1]!.finding_id).toBe("fable-counter-review-blocker");
+  });
+});
+
+/**
+ * A review round whose children can fail one at a time, backed by an in-memory retained-output
+ * store, so a retry of the same round can be observed re-dispatching only what failed.
+ */
+describe("partial review round retry", () => {
+  const SOL = "gpt-5.6-sol";
+  const FABLE = "gpt-5.6-fable";
+  const ADJUDICATOR = "gpt-fixture";
+  const multiReviewConfig: ConfigV1 = {
+    schema_version: "1",
+    roles: {
+      "counter-reviewer": { model: SOL, effort: "high" },
+      adjudicator: { model: ADJUDICATOR, effort: "high" },
+    },
+    producers: {
+      claude: {
+        "counter-reviewers": [
+          { model: SOL, effort: "high" },
+          { model: FABLE, effort: "high" },
+        ],
+        adjudicator: { model: ADJUDICATOR, effort: "high" },
+      },
+    },
+  };
+
+  type RoundBehaviour = Readonly<{
+    /** A reviewer that returns a clean pass instead of the fixture blocker. */
+    clean_reviewer?: string;
+    /** A reviewer that returns a non-blocking finding instead of the fixture blocker. */
+    advisory_reviewer?: string;
+    fail_reviewer?: string;
+    invalid_reviewer?: string;
+    fail_adjudicator?: boolean;
+    invalid_adjudicator?: boolean;
+    /** Milliseconds each named child waits before answering, to order how children finish. */
+    delay?: Readonly<Record<string, number>>;
+    declaration?: unknown;
+  }>;
+
+  function memoryStore() {
+    const records = new Map<string, { binding: RetainedChildOutputBinding; cli_version: string; extracted_output_bytes: Uint8Array }>();
+    const store: RetainedChildOutputStore = {
+      read: async (binding) => {
+        const record = records.get(retainedChildOutputKey(binding));
+        return record === undefined ? undefined : { cli_version: record.cli_version, extracted_output_bytes: record.extracted_output_bytes };
+      },
+      write: async (binding, result) => {
+        records.set(retainedChildOutputKey(binding), { binding, ...result });
+      },
+      discard: async (digest) => {
+        for (const [key, record] of records) if (record.binding.envelope_digest === digest) records.delete(key);
+      },
+    };
+    return { store, records };
+  }
+
+  const outage = (route: DispatchRoute) => new DispatchRoutingError(createProjectError("PROCESS_FAILED", {
+    adapter: route.adapter, exit_class: "simulated-outage",
+  }));
+
+  async function round(
+    h: Harness,
+    store: RetainedChildOutputStore,
+    subject: Sha256Digest,
+    fingerprint: Sha256Digest,
+    behaviour: RoundBehaviour,
+    enter: boolean,
+    options: Readonly<{ dependencies?: TransactionDependencies; version?: number; remediation?: boolean }> = {},
+  ) {
+    const dependencies = options.dependencies ?? h.dependencies;
+    const version = options.version ?? 0;
+    if (enter) await enterStep(h, dependencies, `counter-running-v${version}`, "counter_review", fingerprint);
+    const runningState = await durableState(h.authority);
+    // A remediation round carries the structured prior-triage record and its pinned rendering,
+    // exactly as the handler derives them from durable state.
+    const priorTriage = options.remediation === true
+      ? await loadPriorTriageRecord(dependencies, runningState)
+      : undefined;
+    if (priorTriage !== undefined && !priorTriage.ok) throw new Error(priorTriage.error.code);
+    const priorContext = priorTriage?.value === undefined
+      ? []
+      : await priorTriageEvidence(dependencies, runningState, priorTriage.value);
+    if (!Array.isArray(priorContext) && !priorContext.ok) throw new Error(priorContext.error.code);
+    const context = Array.isArray(priorContext) ? priorContext : priorContext.value;
+    const routes: DispatchRoute[] = [];
+    const envelopes = new Map<string, unknown>();
+    const digests = new Map<string, string>();
+    const settle = async (model: string) => {
+      const wait = behaviour.delay?.[model];
+      if (wait !== undefined) await new Promise((resolve) => setTimeout(resolve, wait));
+    };
+    const call = parseToolCall("archflow_counter_review", {
+      schema_version: "1",
+      task_id: task,
+      intent_id: `counter-intent-v${version}`,
+      expected_revision: runningState.revision,
+      input_fingerprint: fingerprint,
+      artifact_path: parseTaskPathClaim("phases/phase-14-output.md"),
+      ...(behaviour.declaration === undefined ? {} : { route_override: behaviour.declaration }),
+    });
+    const plan = constitutionPlan(h, dependencies, version);
+    const result = await runCounterReview({
+      transaction: dependencies,
+      reobserve_projection_digest: async () => ({ schema_version: "1", ok: true, value: subject }),
+      retained_outputs: store,
+      dispatch: async (route, envelope) => {
+        routes.push(route);
+        envelopes.set(route.model, JSON.parse(new TextDecoder().decode(envelope.bytes)));
+        digests.set(route.model, envelope.digest);
+        await settle(route.model);
+        if (behaviour.fail_reviewer === route.model) throw outage(route);
+        if (behaviour.invalid_reviewer === route.model) {
+          return { cli_version: "fixture-1", extracted_output_bytes: new TextEncoder().encode('{"schema_version":"1"}') };
+        }
+        return {
+          cli_version: "fixture-1",
+          extracted_output_bytes: canonicalJsonBytes(reviewOutput(
+            "counter-review", subject, fingerprint,
+            behaviour.clean_reviewer === route.model ? "clean" : behaviour.advisory_reviewer === route.model ? "accepted" : "blocker",
+          )),
+        };
+      },
+      prepare_evidence: async (evidence, measuredAtRevision) => {
+        const prepared = await prepareEvidenceResult({
+          authority: h.authority,
+          runner: h.runner,
+          result_id: parseSafeId(`counter-v${version}`),
+          retained_task_bytes: await dependencies.read_retained_task_bytes!(),
+          measured_at_revision: measuredAtRevision,
+          scanner: cleanScanner,
+          value: { kind: "review", evidence },
+        });
+        if (prepared.ok) {
+          for (const payload of prepared.value.prepared.payloads) {
+            await mkdir(dirname(payload.target.absolute), { recursive: true });
+          }
+          await mkdir(dirname(prepared.value.manifest_target.absolute), { recursive: true });
+        }
+        return prepared;
+      },
+      serialize_dispatch: async <T>(operation: () => Promise<T>) => operation(),
+      serialize_dispatch_all: async <T>(ops: readonly (() => Promise<T>)[]) => Promise.all(ops.map((op) => op())),
+    }, {
+      authority: h.authority,
+      call,
+      config: multiReviewConfig,
+      phase_kind: "phase-impl",
+      producer_family: "claude",
+      host: "claude",
+      measured_at_revision: runningState.revision,
+      repositories: Object.freeze([Object.freeze({
+        name: "primary",
+        repository_identity_digest: "a".repeat(64) as Sha256Digest,
+        commit: "b".repeat(40) as never,
+      })]),
+      envelope: {
+        artifact: `artifact-v${version}`,
+        rubric,
+        context,
+        subject: {
+          task_id: task,
+          phase_instance: phase,
+          role: "counter-review",
+          step: "counter_review",
+          subject_digest: subject,
+          input_fingerprint: fingerprint,
+          rubric_digest: rubricDigest,
+          producer_family: "claude",
+          invocation_id: `counter-invocation-v${version}`,
+          result_id: `counter-v${version}`,
+        },
+      },
+      projection_digest: subject,
+      ...(priorTriage?.value === undefined ? {} : { prior_triage: priorTriage.value }),
+      constitution: {
+        ...plan,
+        dispatch: async (route, envelope, schema) => {
+          routes.push(route);
+          await settle(route.model);
+          if (behaviour.fail_adjudicator === true) throw outage(route);
+          if (behaviour.invalid_adjudicator === true) {
+            return { cli_version: "fixture-1", extracted_output_bytes: new TextEncoder().encode('{"schema_version":"1"}') };
+          }
+          return plan.dispatch(route, envelope, schema);
+        },
+      },
+    });
+    return { result, models: routes.map((route) => route.model).sort(), envelopes, digests };
+  }
+
+  /** Triages the current review set with one disposition per finding, chosen by finding id. */
+  async function commitTriageDecisions(
+    h: Harness,
+    dependencies: TransactionDependencies,
+    version: number,
+    decide: (findingId: string) => TriageMode,
+  ) {
+    const fingerprint = (await durableState(h.authority)).input_fingerprint;
+    await enterStep(h, dependencies, `triage-running-v${version}`, "triage", fingerprint);
+    const current = await reconstruct(h, dependencies);
+    const dispositions = current.reviews.flatMap((review) => review.evidence.findings.map((finding) => {
+      const base = { review_evidence_digest: review.evidence_digest, finding_id: finding.finding_id };
+      const mode = decide(finding.finding_id);
+      return mode === "accepted"
+        ? { ...base, disposition: "accepted" as const, rationale: "rewrite required", revision_intent: "rewrite" }
+        : mode === "editorial"
+          ? { ...base, disposition: "accepted-editorial" as const, rationale: "wording only", revision_intent: "polish" }
+          : { ...base, disposition: "rejected" as const, rationale: "not applicable", evidence: "fixture rejection evidence" };
+    }));
+    const candidate: TriageCandidate = {
+      schema_version: "1",
+      task_id: task,
+      phase_instance: phase,
+      step: "triage",
+      subject_digest: current.subject_digest,
+      input_fingerprint: current.input_fingerprint,
+      current_evidence_set_digest: current.current_evidence_set.set_digest,
+      source_evidence_digests: current.reviews.map((review) => review.evidence_digest),
+      dispositions,
+      accepted_count: dispositions.filter((d) => d.disposition === "accepted").length,
+      rejected_count: dispositions.filter((d) => d.disposition === "rejected").length,
+      accepted_editorial_count: dispositions.filter((d) => d.disposition === "accepted-editorial").length,
+    };
+    validateTriage(current, candidate);
+    const prepared = await prepareEvidence(h, `triage-v${version}`, { kind: "triage", current_reviews: current, evidence: candidate });
+    await commitStateEvidence(h, dependencies, `triage-intent-v${version}`, prepared, {
+      schema_version: "1", artifact_kind: "triage", evidence: candidate,
+    });
+  }
+
+  it("dispatches only the reviewer that raised findings in a remediation round, with its own prior-triage record", async () => {
+    const h = await fixture();
+    const { store } = memoryStore();
+    const subjects = [canonicalJsonDigest({ artifact: 0 }), canonicalJsonDigest({ artifact: 1 })] as const;
+    const fingerprints = [computeInputFingerprint(fingerprintSubject(0)), computeInputFingerprint(fingerprintSubject(1))] as const;
+
+    // Round 1: a full review; sol passes cleanly, fable raises a blocker carrying its tag.
+    const first = await round(h, store, subjects[0], fingerprints[0], { clean_reviewer: SOL }, true);
+    expect(first.models).toEqual([SOL, FABLE, ADJUDICATOR].sort());
+    expect(first.result.ok, JSON.stringify(first.result)).toBe(true);
+    if (!first.result.ok) return;
+    expect(first.result.value.evidence.findings.map((finding) => finding.finding_id))
+      .toEqual(["fable-counter-review-blocker"]);
+
+    // The producer accepts fable's finding, then revises.
+    await commitTriageDecisions(h, h.dependencies, 0, () => "accepted");
+    const dependencies = await rewrite(h, h.dependencies, 1);
+
+    // Round 2: only fable is asked to confirm its fix; sol, which raised nothing, is not
+    // re-dispatched. The constitution child still runs against the revised bytes.
+    const second = await round(h, store, subjects[1], fingerprints[1], {}, true, { dependencies, version: 1, remediation: true });
+    expect(second.models).toEqual([FABLE, ADJUDICATOR].sort());
+    expect(second.result.ok, JSON.stringify(second.result)).toBe(true);
+    if (!second.result.ok) return;
+
+    const fableEnvelope = second.envelopes.get(FABLE) as {
+      instructions: { prior_triage?: string };
+      context: { kind: string; status: string; content?: string }[];
+    };
+    expect(fableEnvelope.instructions.prior_triage).toMatch(/remediation review, not a second full review/u);
+    const priorEntry = fableEnvelope.context.find((entry) => entry.kind === "prior-triage");
+    expect(priorEntry?.status).toBe("pinned");
+    const rendered = JSON.parse(priorEntry!.content!) as { dispositions: { finding_id: string; disposition: string }[] };
+    expect(rendered.dispositions).toEqual([
+      expect.objectContaining({ finding_id: "fable-counter-review-blocker", disposition: "accepted" }),
+    ]);
+
+    // Fable's tag is stable even though it ran alone, so round 3 can still attribute its findings.
+    expect(second.result.value.evidence.findings.map((finding) => finding.finding_id)).toEqual(["fable-counter-review-blocker"]);
+    const review = second.result.value.evidence;
+    expect(review.assurance).toBe("server-attested");
+    if (review.assurance !== "server-attested") return;
+    expect(second.result.value.constitution_evidence?.source_review_envelope_digest).toBe(review.envelope_input_digest);
+  });
+
+  /** Runs a full two-reviewer round, triages it as decided, revises, and returns the remediation round. */
+  async function remediationAfter(
+    h: Harness,
+    decide: (findingId: string) => TriageMode,
+    firstRound: RoundBehaviour = {},
+  ) {
+    const { store } = memoryStore();
+    const first = await round(h, store, canonicalJsonDigest({ artifact: 0 }), computeInputFingerprint(fingerprintSubject(0)), firstRound, true);
+    expect(first.result.ok, JSON.stringify(first.result)).toBe(true);
+    await commitTriageDecisions(h, h.dependencies, 0, decide);
+    const dependencies = await rewrite(h, h.dependencies, 1);
+    const second = await round(
+      h, store, canonicalJsonDigest({ artifact: 1 }), computeInputFingerprint(fingerprintSubject(1)), {}, true,
+      { dependencies, version: 1, remediation: true },
+    );
+    expect(second.result.ok, JSON.stringify(second.result)).toBe(true);
+    return second;
+  }
+
+  const priorRecord = (envelope: unknown) => {
+    const entry = (envelope as { context: { kind: string; status: string; content?: string }[] }).context
+      .find((candidate) => candidate.kind === "prior-triage");
+    expect(entry?.status).toBe("pinned");
+    return JSON.parse(entry!.content!) as { coverage: string; dispositions: { finding_id: string; disposition: string }[] };
+  };
+
+  it("dispatches a reviewer whose finding was rejected so it can contest the rejection, each reviewer scoped to its own findings", async () => {
+    const h = await fixture();
+    const second = await remediationAfter(h, (findingId) => findingId.startsWith("fable-") ? "accepted" : "rejected");
+    expect(second.models).toEqual([SOL, FABLE, ADJUDICATOR].sort());
+    expect(priorRecord(second.envelopes.get(SOL)).dispositions)
+      .toEqual([expect.objectContaining({ finding_id: "sol-counter-review-blocker", disposition: "rejected" })]);
+    expect(priorRecord(second.envelopes.get(FABLE)).dispositions)
+      .toEqual([expect.objectContaining({ finding_id: "fable-counter-review-blocker", disposition: "accepted" })]);
+    // Two reviewers, two envelopes: the round identity is the first dispatched reviewer's.
+    if (!second.result.ok) return;
+    const review = second.result.value.evidence;
+    if (review.assurance !== "server-attested") throw new Error("expected server-attested review");
+    expect(second.digests.get(SOL)).not.toBe(second.digests.get(FABLE));
+    expect(review.envelope_input_digest).toBe(second.digests.get(SOL));
+    expect(second.result.value.constitution_evidence?.source_review_envelope_digest).toBe(second.digests.get(SOL));
+  });
+
+  it("leaves out a reviewer whose only findings were accepted editorially", async () => {
+    const h = await fixture();
+    // Only a non-blocking finding may be accepted editorially, so sol raises an advisory one.
+    const second = await remediationAfter(h, (findingId) => findingId.startsWith("fable-") ? "accepted" : "editorial", { advisory_reviewer: SOL });
+    expect(second.models).toEqual([FABLE, ADJUDICATOR].sort());
+  });
+
+  it("runs every reviewer with the full record when a dispositioned finding is owned by no configured reviewer", async () => {
+    const h = await fixture();
+    // Round 1 ran under a one-reviewer override, so its finding id carries no reviewer tag.
+    const second = await remediationAfter(h, () => "accepted", {
+      declaration: { reason: "fable CLI outage; reviewing on sol alone for this dispatch", "counter-reviewer": { model: SOL, effort: "high" } },
+    });
+    expect(second.models).toEqual([SOL, FABLE, ADJUDICATOR].sort());
+    for (const model of [SOL, FABLE]) {
+      const record = priorRecord(second.envelopes.get(model));
+      expect(record.coverage).toMatch(/all retained rounds/u);
+      expect(record.dispositions).toEqual([expect.objectContaining({ finding_id: "counter-review-blocker", disposition: "accepted" })]);
+    }
+  });
+
+  it("keeps both reviewer outputs when the constitution child fails and retries only that child", async () => {
+    const h = await fixture();
+    const subject = canonicalJsonDigest({ artifact: 0 });
+    const fingerprint = computeInputFingerprint(fingerprintSubject(0));
+    const { store, records } = memoryStore();
+
+    await expect(round(h, store, subject, fingerprint, { fail_adjudicator: true }, true))
+      .rejects.toSatisfy((error: unknown) => error instanceof DispatchRoutingError && error.project_error.code === "PROCESS_FAILED");
+    expect([...records.values()].map((record) => record.binding.role).sort()).toEqual(["counter-reviewer", "counter-reviewer"]);
+
+    const retried = await round(h, store, subject, fingerprint, {}, false);
+    expect(retried.models).toEqual([ADJUDICATOR]);
+    expect(retried.result.ok, JSON.stringify(retried.result)).toBe(true);
+    if (!retried.result.ok) return;
+    expect(retried.result.value.evidence.findings.map((finding) => finding.finding_id)).toEqual([
+      "sol-counter-review-blocker",
+      "fable-counter-review-blocker",
+    ]);
+    expect(retried.result.value.evidence.blocking_count).toBe(2);
+    const review = retried.result.value.evidence;
+    expect(review.assurance).toBe("server-attested");
+    if (review.assurance !== "server-attested") return;
+    expect(retried.result.value.constitution_evidence?.source_review_envelope_digest).toBe(review.envelope_input_digest);
+    // The committed round no longer needs its retained outputs.
+    expect(records.size).toBe(0);
+  });
+
+  it("keeps the passing reviewer and the constitution result when one reviewer fails, and retries only that reviewer", async () => {
+    const h = await fixture();
+    const subject = canonicalJsonDigest({ artifact: 0 });
+    const fingerprint = computeInputFingerprint(fingerprintSubject(0));
+    const { store, records } = memoryStore();
+
+    const first = round(h, store, subject, fingerprint, { fail_reviewer: FABLE }, true);
+    await expect(first).rejects.toBeInstanceOf(DispatchRoutingError);
+    expect([...records.values()].map((record) => record.binding.role).sort()).toEqual(["adjudicator", "counter-reviewer"]);
+
+    const retried = await round(h, store, subject, fingerprint, {}, false);
+    expect(retried.models).toEqual([FABLE]);
+    expect(retried.result.ok, JSON.stringify(retried.result)).toBe(true);
+    if (!retried.result.ok) return;
+    // Reused sol plus fresh fable merge in config order, and the reused constitution result still
+    // binds to the round the reused review answered.
+    expect(retried.result.value.evidence.findings.map((finding) => finding.finding_id))
+      .toEqual(["sol-counter-review-blocker", "fable-counter-review-blocker"]);
+    const review = retried.result.value.evidence;
+    if (review.assurance !== "server-attested") throw new Error("expected server-attested review");
+    expect(retried.result.value.constitution_evidence?.source_review_envelope_digest).toBe(review.envelope_input_digest);
+    expect(records.size).toBe(0);
+  });
+
+  it("reports invalid constitution output as MODEL_OUTPUT_INVALID and retains both reviewer outputs", async () => {
+    const h = await fixture();
+    const subject = canonicalJsonDigest({ artifact: 0 });
+    const fingerprint = computeInputFingerprint(fingerprintSubject(0));
+    const { store, records } = memoryStore();
+
+    const first = await round(h, store, subject, fingerprint, { invalid_adjudicator: true }, true);
+    expect(first.result.ok).toBe(false);
+    if (first.result.ok) return;
+    expect(first.result.error.code).toBe("MODEL_OUTPUT_INVALID");
+    expect(first.result.error.diagnostic.parameters).toMatchObject({ issue_code: "adjudication-schema-invalid" });
+    expect([...records.values()].map((record) => record.binding.role)).toEqual(["counter-reviewer", "counter-reviewer"]);
+
+    const retried = await round(h, store, subject, fingerprint, {}, false);
+    expect(retried.models).toEqual([ADJUDICATOR]);
+    expect(retried.result.ok, JSON.stringify(retried.result)).toBe(true);
+    expect(records.size).toBe(0);
+  });
+
+  it("waits for a slow sibling before surfacing a failure, so its output is retained", async () => {
+    const h = await fixture();
+    const subject = canonicalJsonDigest({ artifact: 0 });
+    const fingerprint = computeInputFingerprint(fingerprintSubject(0));
+    const { store, records } = memoryStore();
+
+    // The constitution child fails at once; fable answers 30ms later. A fail-fast round would
+    // reject before fable's output existed.
+    await expect(round(h, store, subject, fingerprint, { fail_adjudicator: true, delay: { [FABLE]: 30 } }, true))
+      .rejects.toBeInstanceOf(DispatchRoutingError);
+    expect([...records.values()].map((record) => record.binding.selection.route.model).sort()).toEqual([FABLE, SOL].sort());
+    const retried = await round(h, store, subject, fingerprint, {}, false);
+    expect(retried.models).toEqual([ADJUDICATOR]);
+    expect(retried.result.ok, JSON.stringify(retried.result)).toBe(true);
+  });
+
+  it("surfaces the first failure to finish, matching the failure observation slot", async () => {
+    const h = await fixture();
+    const subject = canonicalJsonDigest({ artifact: 0 });
+    const fingerprint = computeInputFingerprint(fingerprintSubject(0));
+    const { store, records } = memoryStore();
+
+    // sol (first in config order) dies slowly with an outage; fable returns invalid output at once.
+    const first = await round(h, store, subject, fingerprint, { fail_reviewer: SOL, delay: { [SOL]: 30 }, invalid_reviewer: FABLE }, true);
+    expect(first.result.ok).toBe(false);
+    if (first.result.ok) return;
+    expect(first.result.error.code).toBe("MODEL_OUTPUT_INVALID");
+    expect([...records.values()].map((record) => record.binding.role)).toEqual(["adjudicator"]);
+  });
+
+  it("re-dispatches a child whose retained output no longer validates", async () => {
+    const h = await fixture();
+    const subject = canonicalJsonDigest({ artifact: 0 });
+    const fingerprint = computeInputFingerprint(fingerprintSubject(0));
+    const { store, records } = memoryStore();
+
+    await expect(round(h, store, subject, fingerprint, { fail_adjudicator: true }, true)).rejects.toBeInstanceOf(DispatchRoutingError);
+    // Corrupt sol's retained output into a review of a different subject: it still parses, but
+    // re-minting under this round's binding rejects it, so sol is dispatched again.
+    for (const record of records.values()) {
+      if (record.binding.selection.route.model === SOL) {
+        record.extracted_output_bytes = canonicalJsonBytes(reviewOutput("counter-review", canonicalJsonDigest({ artifact: 99 }), fingerprint, "clean"));
+      }
+    }
+    const retried = await round(h, store, subject, fingerprint, {}, false);
+    expect(retried.models).toEqual([SOL, ADJUDICATOR].sort());
+    expect(retried.result.ok, JSON.stringify(retried.result)).toBe(true);
+  });
+
+  it("reports invalid reviewer output as MODEL_OUTPUT_INVALID and still retains the valid siblings", async () => {
+    const h = await fixture();
+    const subject = canonicalJsonDigest({ artifact: 0 });
+    const fingerprint = computeInputFingerprint(fingerprintSubject(0));
+    const { store, records } = memoryStore();
+
+    const first = await round(h, store, subject, fingerprint, { invalid_reviewer: FABLE }, true);
+    expect(first.result.ok).toBe(false);
+    if (first.result.ok) return;
+    expect(first.result.error.code).toBe("MODEL_OUTPUT_INVALID");
+    expect(first.result.error.diagnostic.parameters).toMatchObject({ adapter: "codex-cli", issue_code: "review-schema-invalid" });
+    expect([...records.values()].map((record) => record.binding.role).sort()).toEqual(["adjudicator", "counter-reviewer"]);
+
+    const retried = await round(h, store, subject, fingerprint, {}, false);
+    expect(retried.models).toEqual([FABLE]);
+    expect(retried.result.ok, JSON.stringify(retried.result)).toBe(true);
+    if (!retried.result.ok) return;
+    expect(retried.result.value.evidence.findings).toHaveLength(2);
+    expect(records.size).toBe(0);
+  });
+
+  it("reuses retained siblings under a route override for the failed role", async () => {
+    const h = await fixture();
+    const subject = canonicalJsonDigest({ artifact: 0 });
+    const fingerprint = computeInputFingerprint(fingerprintSubject(0));
+    const { store } = memoryStore();
+
+    await expect(round(h, store, subject, fingerprint, { fail_adjudicator: true }, true)).rejects.toBeInstanceOf(DispatchRoutingError);
+
+    // Substituting the adjudicator route changes nothing about the retained reviewer outputs.
+    const substituted = "gpt-fixture-substitute";
+    const overridden = await round(h, store, subject, fingerprint, {
+      declaration: { reason: "adjudicator CLI outage; substituting for this dispatch", adjudicator: { model: substituted, effort: "high" } },
+    }, false);
+    expect(overridden.models).toEqual([substituted]);
+    expect(overridden.result.ok, JSON.stringify(overridden.result)).toBe(true);
+    if (!overridden.result.ok) return;
+    const constitutionEvidence = overridden.result.value.constitution_evidence;
+    expect(constitutionEvidence?.assurance).toBe("server-attested");
+    if (constitutionEvidence?.assurance !== "server-attested") return;
+    expect(constitutionEvidence.model).toBe(substituted);
+    expect(constitutionEvidence.route_override).toMatchObject({ pinned_model: ADJUDICATOR });
+    expect(overridden.result.value.evidence.findings).toHaveLength(2);
+  });
+
+  it("does not reuse a reviewer output whose route was selected under different provenance", async () => {
+    const h = await fixture();
+    const subject = canonicalJsonDigest({ artifact: 0 });
+    const fingerprint = computeInputFingerprint(fingerprintSubject(0));
+    const { store } = memoryStore();
+
+    await expect(round(h, store, subject, fingerprint, { fail_adjudicator: true }, true)).rejects.toBeInstanceOf(DispatchRoutingError);
+
+    // The override names the same sol route, but as a substitution: the retained configured-route
+    // output must not be presented as an override-route review, so sol is dispatched again.
+    const overridden = await round(h, store, subject, fingerprint, {
+      declaration: { reason: "reviewing on a single reviewer for this dispatch", "counter-reviewer": { model: SOL, effort: "high" } },
+    }, false);
+    expect(overridden.models).toEqual([SOL, ADJUDICATOR].sort());
+    expect(overridden.result.ok, JSON.stringify(overridden.result)).toBe(true);
+    if (!overridden.result.ok) return;
+    const review = overridden.result.value.evidence;
+    expect(review.findings).toHaveLength(1);
+    expect(review.assurance).toBe("server-attested");
+    if (review.assurance !== "server-attested") return;
+    expect(review.route_override).toMatchObject({ pinned_model: SOL });
   });
 });

@@ -22,6 +22,7 @@ import {
   type DispatchRepositoryViewPlan,
 } from "../../dispatch/workspace.js";
 import { createDispatchFailureObserver } from "../../dispatch/failure-observation.js";
+import { createRetainedChildOutputStore } from "../../dispatch/retained-child-output.js";
 import { readHeadCommit } from "../../repository/git.js";
 import type { RootBoundGitRunner } from "../../repository/identity.js";
 import { unavailableRepositoryView, type RepositorySet } from "../../repository/repository-set.js";
@@ -34,7 +35,7 @@ import {
   type AdjudicationUpstreamInput,
 } from "../../review/envelopes.js";
 import { requireApprovedUpstreamDigests } from "../../review/fixed-point.js";
-import { assembleReviewContext } from "../../review/pinned-context.js";
+import { assembleReviewContext, loadPriorTriageRecord } from "../../review/pinned-context.js";
 import { authenticateRuleAcceptancePolicy, resolvePinnedConstitution } from "../../state/constitution.js";
 import {
   prepareEvidenceResult,
@@ -515,7 +516,7 @@ export async function handleCounterReview(
         rules: rulesForEnvelope(constitution.value.rules),
         approved_upstreams: upstreams.value.inputs,
         approved_upstream_digests: approvedUpstreamDigests,
-        invocation_id: stableId("adjudication-invocation", context.invocation_id),
+        invocation_id: stableId("adjudication-invocation", call.input.intent_id),
         result_id: constitutionResultId,
         workspace: workspaceBinding,
         dispatch: constitutionCoordinator,
@@ -525,6 +526,8 @@ export async function handleCounterReview(
       });
     }
 
+    const priorTriage = await loadPriorTriageRecord(services.dependencies, state.value);
+    if (!priorTriage.ok) return priorTriage;
     const context_entries = await assembleReviewContext({
       runner: services.runner,
       authority: services.authority,
@@ -533,9 +536,13 @@ export async function handleCounterReview(
       subject: produce.value,
       projection_bytes: projection.value.bytes,
       ...(projectionPlan === undefined ? {} : { projection_plan: projectionPlan }),
+      ...(priorTriage.value === undefined ? {} : { prior_triage: priorTriage.value }),
     });
     if (!context_entries.ok) return context_entries;
 
+    // Every id the children see — review invocation and result, adjudication invocation and
+    // result — derives from the round's intent rather than the MCP call, so a retry of the same
+    // round re-seals byte-identical envelopes and its retained child outputs stay bound to them.
     const resultId = dispatchId("result", call.input.intent_id);
     const coordinator = createDispatchCoordinator({
       authority: services.authority,
@@ -547,6 +554,12 @@ export async function handleCounterReview(
       cancellation_source: "client",
       shared_workspace: sharedWorkspace,
     });
+    const retainedOutputs = createRetainedChildOutputStore({
+      authority: services.authority,
+      dependencies: services.dependencies,
+      phase_instance: state.value.phase_instance,
+      attempt: state.value.attempt,
+    });
     const result = await runCounterReview({
       transaction: services.dependencies,
       dispatch: coordinator,
@@ -557,10 +570,9 @@ export async function handleCounterReview(
         attempt: state.value.attempt,
         observed_at_revision: state.value.revision,
       }),
+      ...(retainedOutputs === undefined ? {} : { retained_outputs: retainedOutputs }),
       ...(dispatchAlreadySerialized ? {
         serialize_dispatch: async <T>(operation: () => Promise<T>) => operation(),
-        serialize_dispatch_pair: async <A, B>(first: () => Promise<A>, second: () => Promise<B>) =>
-          Promise.all([first(), second()]),
         serialize_dispatch_all: async <T>(ops: readonly (() => Promise<T>)[]) =>
           Promise.all(ops.map((op) => op())),
       } : {}),
@@ -599,11 +611,12 @@ export async function handleCounterReview(
           input_fingerprint: call.input.input_fingerprint,
           rubric_digest: canonicalRubric.rubric_digest,
           producer_family: session.value.producer_family,
-          invocation_id: dispatchId("invocation", context.invocation_id),
+          invocation_id: dispatchId("invocation", call.input.intent_id),
           result_id: resultId,
         },
       },
       projection_digest: produceProjectionSetDigest(projections.value),
+      ...(priorTriage.value === undefined ? {} : { prior_triage: priorTriage.value }),
       ...(constitutionPlan === undefined ? {} : { constitution: constitutionPlan }),
     }).catch((error: unknown) => {
       const overflow = envelopeOverflowError(error, produce.value);

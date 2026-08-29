@@ -312,16 +312,6 @@ export function serializeDispatchAll<T>(
   return link;
 }
 
-/**
- * Runs two dispatch operations as ONE process-wide FIFO link.
- */
-export function serializeDispatchPair<A, B>(
-  first: () => Promise<A>,
-  second: () => Promise<B>,
-): Promise<[A, B]> {
-  return serializeDispatchAll<unknown>([first, second]) as unknown as Promise<[A, B]>;
-}
-
 const memoizedPreflights = new Map<AdapterId, CliPreflight>();
 
 /**

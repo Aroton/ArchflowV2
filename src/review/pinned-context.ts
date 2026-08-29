@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import type { SafeInteger } from "../contracts/evidence.js";
 import { join, posix } from "node:path";
 
 import { canonicalJsonBytes, sha256Bytes } from "../contracts/canonical.js";
@@ -45,8 +46,12 @@ const CAP_PRIORITY: readonly PinnedContextKind[] = [
   "prior-triage", "interface-excerpt", "conventions", "repo-map",
 ];
 
+// `prior-triage` is deliberately not droppable and is pinned whole rather than excerpted: a
+// truncated or missing record silently turns a remediation round back into a fresh full review,
+// which is the endless-findings failure the record exists to prevent. An envelope that cannot
+// hold it fails closed like one that cannot hold the user ask.
 const CAP_DROPPABLE_KINDS: ReadonlySet<PinnedContextKind> = new Set([
-  "prior-triage", "interface-excerpt", "conventions", "repo-map",
+  "interface-excerpt", "conventions", "repo-map",
 ]);
 
 /** Per-entry head budget for mechanical evidence; the full-file digest stays recorded. */
@@ -190,9 +195,11 @@ export async function assembleReviewContext(input: {
    * re-runs the secret scan, so the dispatching handler — which already loads it — passes it down.
    */
   readonly projection_plan?: ProjectionPlan;
+  /** A prior-triage record the caller already loaded; avoids re-reading the retained triage. */
+  readonly prior_triage?: PriorTriageRecord;
 }): Promise<ProjectResult<readonly PinnedContextEntry[]>> {
   const phase = decodePhaseInstance(input.state.phase_instance);
-  const priorTriage = await priorTriageEvidence(input.dependencies, input.state);
+  const priorTriage = await priorTriageEvidence(input.dependencies, input.state, input.prior_triage);
   if (!priorTriage.ok) return priorTriage;
   if (phase.kind !== "prd") {
     const upstreams = await assembleUpstreamContext(input);
@@ -551,14 +558,31 @@ async function implementationMechanicalEvidence(
  * a disposition whose finding is not in retained counter-review evidence (for example a
  * finding from an older evidence shape) renders without unresolvable fields rather than inventing them.
  */
-export async function priorTriageEvidence(
+export type PriorTriageDisposition = Readonly<Record<string, unknown> & {
+  finding_id: string;
+  disposition: string;
+}>;
+
+/**
+ * The structured prior-triage record before rendering: every disposition of this phase instance
+ * — the latest round's first, then the carried ledger — plus the latest round's own dispositions,
+ * which decide which reviewers a remediation round must dispatch.
+ */
+export type PriorTriageRecord = Readonly<{
+  phase_instance: PhaseInstanceId;
+  current_attempt: SafeInteger;
+  dispositions: readonly PriorTriageDisposition[];
+  current: readonly Readonly<{ finding_id: string; disposition: string }>[];
+}>;
+
+export async function loadPriorTriageRecord(
   dependencies: Pick<TransactionDependencies, "load_retained_result">,
   state: TaskStateV1,
-): Promise<ProjectResult<readonly PinnedContextEntry[]>> {
+): Promise<ProjectResult<PriorTriageRecord | undefined>> {
   const triageRef = state.authoritative_results.find((candidate) =>
     candidate.phase_instance === state.phase_instance && candidate.step === "triage");
   if (triageRef === undefined || dependencies.load_retained_result === undefined) {
-    return ok(Object.freeze([]));
+    return ok(undefined);
   }
   const triage = await dependencies.load_retained_result(triageRef);
   if (!triage.ok) return triage;
@@ -591,7 +615,7 @@ export async function priorTriageEvidence(
       }
     }
   }
-  const dispositions = triageSource.evidence.dispositions.map((disposition) => {
+  const dispositions: PriorTriageDisposition[] = triageSource.evidence.dispositions.map((disposition) => {
     const finding = findingsByRef.get(`${disposition.review_evidence_digest}:${disposition.finding_id}`);
     // Tolerant field selection: the triage disposition vocabulary can grow (for example
     // accepted-editorial); render whichever recorded response the shape carries.
@@ -611,8 +635,12 @@ export async function priorTriageEvidence(
   // memory existed, each entry already embedded with its round's finding details. The current
   // dispositions are the newest record of their findings and win a finding_id collision; the
   // ledger supplies the history a replaced triage result would otherwise have superseded.
-  const merged = new Map<string, Record<string, unknown>>();
+  // The latest round's dispositions come first — they are what the reviewer must confirm — and a
+  // ledger entry for the same finding id is superseded by them.
+  const merged = new Map<string, PriorTriageDisposition>();
+  for (const disposition of dispositions) merged.set(disposition.finding_id, disposition);
   for (const entry of triageSource.evidence.disposition_ledger ?? []) {
+    if (merged.has(entry.finding_id)) continue;
     merged.set(entry.finding_id, {
       finding_id: entry.finding_id,
       attempt: entry.attempt,
@@ -627,17 +655,54 @@ export async function priorTriageEvidence(
       ...(entry.revision_intent === undefined ? {} : { revision_intent: entry.revision_intent }),
     });
   }
-  for (const disposition of dispositions) merged.set(disposition.finding_id, disposition);
-  const record = {
-    schema_version: "1",
-    record_kind: "prior-triage",
+  return ok(Object.freeze({
     phase_instance: state.phase_instance,
     current_attempt: state.attempt,
-    coverage: "all retained rounds of this phase instance: the current dispositions plus the carried ledger; rounds whose triage predates reviewer memory or never installed are absent",
-    dispositions: [...merged.values()],
+    dispositions: Object.freeze([...merged.values()]),
+    current: Object.freeze(dispositions.map((disposition) => Object.freeze({
+      finding_id: disposition.finding_id,
+      disposition: disposition.disposition,
+    }))),
+  }));
+}
+
+/**
+ * Renders the prior-triage record as one pinned context entry. With `owns`, the record is scoped
+ * to the findings one reviewer raised, so a remediation round asks each reviewer to confirm only
+ * its own findings rather than every sibling's.
+ */
+export function priorTriageContextEntry(
+  record: PriorTriageRecord,
+  owns?: (findingId: string) => boolean,
+): PinnedContextEntry {
+  const dispositions = owns === undefined
+    ? record.dispositions
+    : record.dispositions.filter((disposition) => owns(disposition.finding_id));
+  const rendered = {
+    schema_version: "1",
+    record_kind: "prior-triage",
+    phase_instance: record.phase_instance,
+    current_attempt: record.current_attempt,
+    coverage: owns === undefined
+      ? "all retained rounds of this phase instance: the current dispositions plus the carried ledger; rounds whose triage predates reviewer memory or never installed are absent"
+      : "the findings this reviewer raised in the retained rounds of this phase instance, with the producer's disposition of each; sibling reviewers' findings are confirmed by the reviewers that raised them",
+    dispositions,
   };
-  const bytes = new TextEncoder().encode(`${JSON.stringify(record, null, 2)}\n`);
-  return ok(Object.freeze([excerptContextEntry("prior-triage", "prior-round-triage", bytes)]));
+  const bytes = new TextEncoder().encode(`${JSON.stringify(rendered, null, 2)}\n`);
+  // Pinned whole: a head-truncated record would cut exactly the dispositions the reviewer must confirm.
+  return pinnedContextEntry("prior-triage", "prior-round-triage", bytes);
+}
+
+export async function priorTriageEvidence(
+  dependencies: Pick<TransactionDependencies, "load_retained_result">,
+  state: TaskStateV1,
+  preloaded?: PriorTriageRecord,
+): Promise<ProjectResult<readonly PinnedContextEntry[]>> {
+  const record = preloaded !== undefined
+    ? ok<PriorTriageRecord | undefined>(preloaded)
+    : await loadPriorTriageRecord(dependencies, state);
+  if (!record.ok) return record;
+  return ok(Object.freeze(record.value === undefined ? [] : [priorTriageContextEntry(record.value)]));
 }
 
 /** Pins the repository's conventions document from the worktree; absent conventions pin nothing. */

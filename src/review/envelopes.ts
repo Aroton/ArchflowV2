@@ -172,13 +172,16 @@ export const REVIEW_INSTRUCTION =
 
 /**
  * The fixed remediation instruction the envelope adds as `instructions.prior_triage` when a
- * `prior-triage` context entry is pinned. It gives the round two tasks of equal weight: verify the
- * accepted revision intents, and review the revised and dependent sections as an initial review
- * would. The passing round of most tasks is a remediation round, so narrowing it to intent
- * verification alone let revision-introduced defects through. Same literal discipline as above.
+ * `prior-triage` context entry is pinned. A remediation round is a confirmation of the reviewer's
+ * own earlier findings plus a regression check scoped to blockers the revision introduced — not a
+ * second full review. Two earlier wordings each failed in one direction: confirmation-only let
+ * fix-introduced defects through, and "as an initial review would" over the changed sections
+ * turned every round into a fresh sweep that never returned empty. The blocker-only regression
+ * task keeps the guard against the first failure while closing the second. Same literal
+ * discipline as above.
  */
 export const PRIOR_TRIAGE_INSTRUCTION =
-  "This is a remediation review. The artifact already received a full review; the pinned prior-triage record is that round's outcome. Two tasks: first, verify that every accepted revision intent in the pinned prior-triage record was carried out. Second, review every section the revision changed, and every section that depends on changed content, at the same materiality bar as an initial review: revisions introduce defects, so trace each revised constant, contract, or mechanism into the claims, budgets, and verification stories that rely on it. Do not re-raise completed or rejected findings in variant form; challenge a prior disposition only by naming its finding_id and showing that the revision intent was not carried out or that the change introduced a material defect. Do not open a new sweep of unchanged sections: report an issue outside the changed and dependent sections only when it would break production or fail execution and the revision made it visible. Do not report optional polish, harmless wording refinements, true-but-inconsequential observations, or other non-material items that induce specification drift. A remediation round that finds nothing material must return no findings; that is the intended terminal state of review, not a failure of diligence.";
+  "This is a remediation review, not a second full review. The artifact already received a full review; the pinned prior-triage record lists the findings from earlier rounds that you are responsible for, each with the producer's disposition and revision intent. First task, confirmation: for every accepted revision intent in that record, verify in the artifact that it was carried out, and report a finding only where it was not. Second task, regression: in the sections the revision changed and the sections that depend on changed content, report a defect only if the revision itself introduced it or made it visible, and only if it is a blocker — one that would break production, alter downstream implementation, fail execution or verification, or breach an approved boundary. Non-blocking findings are not reportable in a remediation round, with one exception: an unverifiable- or escalate- finding that names evidence you needed and lacked to make the confirmation judgment itself. Do not re-evaluate changed content against the full rubric, do not open a new sweep of unchanged sections, and do not re-raise completed or rejected findings in variant form; challenge a prior disposition only by naming its finding_id and showing that the revision intent was not carried out or that the change introduced a blocker. A remediation round that finds nothing to report must return no findings; that is the intended terminal state of review, not a failure of diligence.";
 
 export type DispatchEnvelope = Readonly<{
   readonly result_kind: "review" | "adjudication";

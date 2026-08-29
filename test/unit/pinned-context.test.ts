@@ -340,19 +340,20 @@ describe("priorTriageEvidence", () => {
     };
     expect(record.coverage).toContain("all retained rounds");
     expect(record.dispositions).toEqual([
-      // Ledger history first, carrying the details its round embedded at install time.
+      // The current dispositions come first — they are what the reviewer must confirm — and win
+      // a finding_id collision with the carried ledger.
+      {
+        finding_id: "digest-drift", attempt: 2,
+        disposition: "accepted", rationale: "Round two disposition.",
+        revision_intent: "Recompute after the slot check.",
+      },
+      // Ledger history follows, carrying the details its round embedded at install time.
       {
         finding_id: "older-round", attempt: 1, severity: "major", blocking: false,
         summary: "Older summary.",
         evidence: "Older rejection evidence.",
         suggested_resolution: "Older resolution.",
         disposition: "rejected", rationale: "Older rejection.",
-      },
-      // The current dispositions are the newest record of their findings and win the collision.
-      {
-        finding_id: "digest-drift", attempt: 2,
-        disposition: "accepted", rationale: "Round two disposition.",
-        revision_intent: "Recompute after the slot check.",
       },
     ]);
   });
@@ -391,21 +392,12 @@ describe("buildReviewEnvelopeWithCap", () => {
     ]);
     expect(visible.context[2]!.content_digest).toBe(repoMap.status === "pinned" ? repoMap.content_digest : undefined);
   });
-  it("drops an oversized prior-triage entry to omitted-cap like other droppable kinds", () => {
+  it("never drops the prior-triage record for the cap: an envelope that cannot hold it fails closed", () => {
     const upstream = pinnedContextEntry("approved-upstream", "prd.md", new TextEncoder().encode("# PRD\n"));
     const priorTriage = pinnedContextEntry(
       "prior-triage", "prior-round-triage", new TextEncoder().encode("t".repeat(1_100_000)),
     );
-    const envelope = buildReviewEnvelopeWithCap(input([upstream, priorTriage]));
-    const visible = JSON.parse(new TextDecoder().decode(envelope.bytes)) as {
-      context: readonly { kind: string; status: string; content_digest?: string }[];
-    };
-    expect(visible.context.map((entry) => [entry.kind, entry.status])).toEqual([
-      ["approved-upstream", "pinned"],
-      ["prior-triage", "omitted-cap"],
-    ]);
-    expect(visible.context[1]!.content_digest)
-      .toBe(priorTriage.status === "pinned" ? priorTriage.content_digest : undefined);
+    expect(() => buildReviewEnvelopeWithCap(input([upstream, priorTriage]))).toThrow();
   });
 
   it("sacrifices mechanical evidence to the cap before the prior-triage record", () => {

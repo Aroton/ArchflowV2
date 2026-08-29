@@ -150,6 +150,16 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 **Why accepted:** Its purpose is to help the owning interactive skill explain a reviewer outage without parsing forensic files. Durable state already preserves the pending review and safe retry boundary, so making this convenience record authoritative would add complexity and make runtime loss capable of stranding workflow progress.
 
+## Retained review-round outputs are an ignored cache
+
+**Not provided:** When one child of a review round fails, the validated outputs of its siblings are kept as ignored runtime files so the retry re-dispatches only what failed. Those files are not durable authority: a fresh clone, a cleanup, or a server restart on another machine loses them, and the retry then simply runs every child again.
+
+**Existing mitigation:** A record is reused only for the exact envelope digest the server just recomputed from durable authority, the same role, route, and route provenance, and only when its bytes still hash to the recorded digest and pass the same output validation and binding checks a fresh dispatch must pass. Reuse then goes through the ordinary currency re-check and atomic commit. Records are deleted when the round commits and swept with the phase otherwise.
+
+**Also not recorded:** With several reviewers, the merged review evidence carries the first dispatched reviewer's envelope digest and provenance only; in a remediation round each reviewer answers its own scoped envelope, and the siblings' envelope digests exist nowhere durable. Status reports the model that actually ran, but an auditor cannot reconstruct a sibling's exact inputs from durable state.
+
+**Why accepted:** The cache lives under the same same-user filesystem assumption as every other runtime file (see "Task filesystem races are not adversarially hardened" above): a process that can rewrite it can equally replace the reviewer CLI on `PATH`. Making retained outputs authoritative would add durable-state machinery to save one re-dispatch, and the records never change state, consume an attempt, or authorize anything on their own.
+
 ## Trusted live config edits can weaken policy
 
 **Not protected:** Task-local config is mutable throughout a task. A developer or agent with write access can lower review effort, change routes, or remove an approval rule before a later settlement. The server reports field-level changes and records dispatch provenance and settlement config digests, but it does not require a separate authorization for the edit or interpret whether the new policy is weaker.

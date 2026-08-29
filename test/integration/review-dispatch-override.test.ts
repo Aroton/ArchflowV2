@@ -125,7 +125,13 @@ async function reachReviewOffer(
  * counter-review launch appends the model it was launched with so a test can observe the route
  * the server actually resolved.
  */
-function installCrashingReviewStub(root: string, failingDispatches: number): () => void {
+function installCrashingReviewStub(
+  root: string,
+  failingDispatches: number,
+  options: Readonly<{ failing_role?: "counter-review" | "adjudication"; log_all_roles?: boolean }> = {},
+): () => void {
+  const failingRole = options.failing_role ?? "counter-review";
+  const logAllRoles = options.log_all_roles ?? false;
   const bin = join(root, "crash-stub-bin");
   const stubHome = join(root, "crash-stub-home");
   const countPath = join(root, "crash-review-count");
@@ -141,15 +147,20 @@ else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logg
 else {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
   const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8")); const subject = envelope.subject;
-  let output;
-  if (subject.role === "counter-review") {
+  const role = subject.role === "counter-review" ? "counter-review" : "adjudication";
+  const model = argv[argv.indexOf("-m") + 1];
+  if (${JSON.stringify(logAllRoles)}) appendFileSync(${JSON.stringify(modelsPath)}, role + ":" + model + "\\n");
+  else if (role === "counter-review") appendFileSync(${JSON.stringify(modelsPath)}, model + "\\n");
+  if (role === ${JSON.stringify(failingRole)}) {
     let count = 0; try { count = Number(readFileSync(${JSON.stringify(countPath)}, "utf8")); } catch {}
     writeFileSync(${JSON.stringify(countPath)}, String(count + 1));
-    appendFileSync(${JSON.stringify(modelsPath)}, argv[argv.indexOf("-m") + 1] + "\\n");
     if (count < ${JSON.stringify(failingDispatches)}) {
       process.stderr.write("simulated reviewer CLI outage during dispatch\\n");
       process.exit(70);
     }
+  }
+  let output;
+  if (role === "counter-review") {
     output = { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
       step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
       input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
@@ -182,6 +193,24 @@ else {
 
 const launchedModels = (workspace: TaskWorkspace): readonly string[] =>
   readFileSync(join(workspace.root, "crash-review-models"), "utf8").split("\n").filter(Boolean);
+
+/** Two codex counter-reviewers plus a codex constitution reviewer, all served by the one stub. */
+function multiReviewerConfig(): Uint8Array {
+  return new TextEncoder().encode(`schema_version: "1"
+roles:
+  counter-reviewer: { model: ${CONFIGURED_MODEL}, effort: ${CONFIGURED_EFFORT} }
+  adjudicator: { model: ${CONFIGURED_MODEL}, effort: ${CONFIGURED_EFFORT} }
+producers:
+  claude:
+    counter-reviewers:
+      - { model: gpt-5.6-sol, effort: ${CONFIGURED_EFFORT} }
+      - { model: gpt-5.6-fable, effort: ${CONFIGURED_EFFORT} }
+    adjudicator: { model: gpt-5.6-adjudicator, effort: ${CONFIGURED_EFFORT} }
+approval_rules:
+  subjects: [prd]
+  content: []
+`);
+}
 
 /**
  * Config bytes that keep the PRD approval gate demanded by an approval rule: document-gate opening
@@ -386,5 +415,41 @@ describe("reviewer route substitution through the public apply path", { timeout:
       operation_digest: boundaryIdentity.operation_digest,
       substep: "review-empty-triage",
     });
+  });
+  it("retries only the child that failed when its siblings' outputs were valid", async () => {
+    const workspace = await createTaskWorkspace({
+      taskId: "review-partial-retry", label: "review-partial-retry", configBytes: multiReviewerConfig(),
+    });
+    workspaces.push(workspace);
+    restorers.push(installCrashingReviewStub(workspace.root, 1, { failing_role: "adjudication", log_all_roles: true }));
+    const h = semanticJourneyHarness(workspace);
+    const invocation = { skill: "archflow-prd", intent: "resume" } as const;
+    const atReview = await reachReviewOffer(workspace, h);
+
+    // Both rubric reviewers answer; the constitution child dies. The round fails, but the two
+    // valid outputs are retained for the identical envelope the retry will re-seal.
+    const crashed = await h.apply(invocation, atReview);
+    expect(crashed.ok).toBe(false);
+    expect(await freshState(workspace)).toMatchObject({ step: "counter_review", status: "running" });
+    const firstRound = launchedModels(workspace);
+    expect([...firstRound].sort()).toEqual([
+      "adjudication:gpt-5.6-adjudicator",
+      "counter-review:gpt-5.6-fable",
+      "counter-review:gpt-5.6-sol",
+    ]);
+    const attempts = join(workspace.services.authority.workspace_root, "diagnostics", "attempts", "prd");
+    expect(readdirSync(attempts).filter((name) => name.startsWith("round-"))).toHaveLength(2);
+
+    const reoffered = await h.status(invocation);
+    expect(reoffered.next_action).toMatchObject({ kind: "review" });
+    const recovered = await h.apply(invocation, reoffered);
+    expect(recovered.ok, JSON.stringify(recovered)).toBe(true);
+
+    // Only the constitution child ran again; the reviewers' retained outputs were reused.
+    expect(launchedModels(workspace).slice(firstRound.length)).toEqual(["adjudication:gpt-5.6-adjudicator"]);
+    const state = await freshState(workspace);
+    const evidence = await retainedReviewEvidence(workspace, state);
+    expect(evidence.model).toBe("gpt-5.6-sol");
+    expect(readdirSync(attempts).filter((name) => name.startsWith("round-"))).toHaveLength(0);
   });
 });

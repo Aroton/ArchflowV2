@@ -6,7 +6,7 @@ import type { AdjudicationEvidence } from "../contracts/adjudication.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import type { ConfigV1 } from "../contracts/config.js";
 import type { ConstitutionRegistry } from "../contracts/constitution.js";
-import { createProjectError, type ProjectResult } from "../contracts/errors.js";
+import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parseSafeInteger, type SafeId, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
 import {
   createInternalResultExpectation,
@@ -32,8 +32,8 @@ import {
   mintReviewObservation,
   serializeDispatch,
   serializeDispatchAll,
-  serializeDispatchPair,
 } from "../dispatch/cli.js";
+import type { RetainedChildOutputStore } from "../dispatch/retained-child-output.js";
 import {
   configuredRoute,
   configuredRoutes,
@@ -75,7 +75,8 @@ import {
   type ReviewWorkspaceBinding,
   type ReviewEnvelopeSeed,
 } from "./envelopes.js";
-import { buildReviewEnvelopeWithCap } from "./pinned-context.js";
+import { buildReviewEnvelopeWithCap, priorTriageContextEntry, type PriorTriageRecord } from "./pinned-context.js";
+import { reviewerFindingTag, reviewerOwnsFinding, taggedFindingId } from "./reviewer-tags.js";
 
 export type CounterReviewDispatchResult = Readonly<{
   cli_version: string;
@@ -99,6 +100,14 @@ export function adjudicationOutputIssueCode(error: unknown): string {
   return "adjudication-schema-invalid";
 }
 
+/** The reviewer-side counterpart of {@link adjudicationOutputIssueCode}: stable, content-free. */
+export function reviewOutputIssueCode(error: unknown): string {
+  if (error instanceof SyntaxError) return "review-json-invalid";
+  const message = error instanceof Error ? error.message : "";
+  if (/does not match observation capability/u.test(message)) return "review-binding-mismatch";
+  return "review-schema-invalid";
+}
+
 export type RunCounterReviewDependencies = Readonly<{
   transaction: TransactionDependencies;
   dispatch: (
@@ -113,10 +122,14 @@ export type RunCounterReviewDependencies = Readonly<{
   reobserve_projection_digest: () => Promise<ProjectResult<ReviewEvidence["subject_digest"]>>;
   /** The default process-wide FIFO, or a direct runner when the caller already owns that FIFO. */
   serialize_dispatch?: <T>(operation: () => Promise<T>) => Promise<T>;
-  /** Pair form of {@link serialize_dispatch}: one FIFO link carrying both children of one review. */
-  serialize_dispatch_pair?: <A, B>(first: () => Promise<A>, second: () => Promise<B>) => Promise<[A, B]>;
   /** Group form of {@link serialize_dispatch}: one FIFO link carrying all parallel children of one review. */
   serialize_dispatch_all?: <T>(operations: readonly (() => Promise<T>)[]) => Promise<T[]>;
+  /**
+   * Validated outputs this round's earlier children already produced. A child whose retained
+   * output still binds to the exact envelope and route is not dispatched again; absent, every
+   * child dispatches fresh.
+   */
+  retained_outputs?: RetainedChildOutputStore;
   /** Best-effort runtime observation seam. It must never replace the original routing/dispatch error. */
   observe_failure?: (
     role: RoutingRole,
@@ -169,6 +182,12 @@ export type RunCounterReviewInput = Readonly<{
   repositories: readonly ReviewedRepositoryV1[];
   envelope: ReviewEnvelopeSeed;
   projection_digest: ReviewEvidence["subject_digest"];
+  /**
+   * The structured prior-triage record when this round is a remediation of an earlier one. It
+   * decides which reviewers run (only those with accepted findings to confirm) and scopes each
+   * reviewer's pinned record to the findings it raised.
+   */
+  prior_triage?: PriorTriageRecord;
   /**
    * Present exactly when the pinned constitution has active rules. The server, not the caller,
    * decides this: with a plan the call runs the constitution review as a second server-dispatched
@@ -377,16 +396,59 @@ export async function runCounterReview(
     ...input.envelope.subject,
     attempt: input.authority.context.attempt,
   });
-  const envelope = buildReviewEnvelopeWithCap({ ...input.envelope, subject });
   const serializeAll = dependencies.serialize_dispatch_all ??
     (dependencies.serialize_dispatch ?
       async <T>(ops: readonly (() => Promise<T>)[]) => Promise.all(ops.map((op) => op())) :
       serializeDispatchAll);
   const plan = input.constitution;
   // All routes are selected before children spend tokens, so a bad route fails before launch.
-  const reviewRoutes = await selectRoutes("counter-reviewer");
+  const configuredReviewRoutes = await selectRoutes("counter-reviewer");
   const constitutionRoutes = plan === undefined ? undefined : await selectRoutes("adjudicator");
   const constitutionRoute = constitutionRoutes?.[0];
+
+  // Reviewer identity is the tag stamped on its findings, fixed by position in the configured
+  // route list so it survives rounds that dispatch only a subset of reviewers.
+  const totalReviewers = configuredReviewRoutes.length;
+  const taggedRoutes = configuredReviewRoutes.map((routeEntry, index) => Object.freeze({
+    ...routeEntry,
+    tag: reviewerFindingTag(routeEntry.selection.route.model, index),
+  }));
+  const sharedPriorTriage = input.envelope.context.find((entry) => entry.kind === "prior-triage");
+  const priorTriage = sharedPriorTriage === undefined ? undefined : input.prior_triage;
+  // A remediation round dispatches only the reviewers whose findings the producer dispositioned
+  // in the latest triage: the reviewer that raised a finding confirms its fix, or may contest a
+  // rejection by naming it. A reviewer whose last round returned nothing (or only editorial
+  // findings, which re-run nothing) is not asked to review again. If any dispositioned finding
+  // belongs to no configured reviewer — a lone-reviewer override round, a reconfigured route
+  // list — attribution has failed and every reviewer runs with the full record, so no accepted
+  // intent goes unconfirmed.
+  const dispositioned = priorTriage === undefined
+    ? []
+    : priorTriage.current.filter((disposition) => disposition.disposition !== "accepted-editorial");
+  const owners = (findingId: string) =>
+    taggedRoutes.filter((routeEntry) => reviewerOwnsFinding(routeEntry.tag, totalReviewers, findingId));
+  const fallback = priorTriage === undefined || totalReviewers <= 1 ||
+    dispositioned.some((disposition) => owners(disposition.finding_id).length === 0);
+  const reviewRoutes = fallback
+    ? taggedRoutes
+    : taggedRoutes.filter((routeEntry) => dispositioned.some((disposition) =>
+      reviewerOwnsFinding(routeEntry.tag, totalReviewers, disposition.finding_id)));
+  const envelopeFor = (routeEntry: (typeof taggedRoutes)[number]): DispatchEnvelope => {
+    if (priorTriage === undefined || fallback) {
+      return buildReviewEnvelopeWithCap({ ...input.envelope, subject });
+    }
+    const scoped = priorTriageContextEntry(priorTriage, (findingId) =>
+      reviewerOwnsFinding(routeEntry.tag, totalReviewers, findingId));
+    return buildReviewEnvelopeWithCap({
+      ...input.envelope,
+      subject,
+      context: input.envelope.context.map((entry) => entry.kind === "prior-triage" ? scoped : entry),
+    });
+  };
+  const reviewEnvelopes = reviewRoutes.map(envelopeFor);
+  // The first dispatched reviewer's envelope is the round: the merged evidence carries its digest
+  // and the constitution child binds to it, so every retained record of the round agrees.
+  const envelope = reviewEnvelopes[0]!;
   // The constitution dispatch binds to the ROUND, not to the review's output payload: the review
   // envelope digest is stamped before either child dispatches, so the children fly concurrently.
   const constitutionSubject = plan === undefined || constitutionRoute === undefined
@@ -415,67 +477,166 @@ export async function runCounterReview(
       subject: constitutionSubject,
     });
 
-  const dispatchReviewOps = reviewRoutes.map((routeEntry) => () =>
-    dispatchObserved("counter-reviewer", routeEntry, (route) =>
-      dependencies.dispatch(route, envelope, reviewOutputSchema as PlainJsonValue)),
-  );
-  let dispatchConstitution: (() => Promise<CounterReviewDispatchResult>) | undefined;
+  // Each child dispatches, validates, and retains its own output, and never rejects: the round
+  // settles only after every child has finished, so one failure cannot discard its siblings'
+  // valid work or dispose the shared workspace under them. A retry of the same round then
+  // re-dispatches only the children without a retained output for the identical envelope.
+  type ReviewObservation = ReturnType<typeof mintReviewObservation>;
+  type ChildValue =
+    | Readonly<{ kind: "review"; observation: ReviewObservation }>
+    | Readonly<{ kind: "adjudication"; evidence: AdjudicationEvidence }>;
+  type ChildOutcome =
+    | Readonly<{ ok: true; value: ChildValue }>
+    | Readonly<{ ok: false; error: unknown; project_error?: ProjectError }>;
+  const retained = dependencies.retained_outputs;
+  // Failures in the order they FINISHED, so the surfaced error names the same child the
+  // failure-observation slot recorded first.
+  const failures: Extract<ChildOutcome, { ok: false }>[] = [];
+  const noteFailure = (outcome: ChildOutcome): ChildOutcome => {
+    if (!outcome.ok) failures.push(outcome);
+    return outcome;
+  };
+
+  const reviewOp = (
+    routeEntry: Readonly<{ candidate: SelectedRouteCandidate; selection: SelectedDispatchRoute }>,
+    reviewEnvelope: DispatchEnvelope,
+  ) => async (): Promise<ChildOutcome> => {
+    const route = routeEntry.selection.route;
+    const mint = (dispatched: CounterReviewDispatchResult): ReviewObservation => mintReviewObservation({
+      subject,
+      adapter: route.adapter,
+      cli_version: dispatched.cli_version,
+      route,
+      route_source: routeEntry.selection.source,
+      envelope_input_digest: reviewEnvelope.digest,
+      extracted_output_bytes: dispatched.extracted_output_bytes,
+      repositories: input.repositories,
+      ...(reviewOverride === undefined ? {} : { route_override: reviewOverride }),
+    });
+    const binding = { envelope_digest: reviewEnvelope.digest, role: "counter-reviewer" as const, selection: routeEntry.selection };
+    const kept = await retained?.read(binding);
+    if (kept !== undefined) {
+      try {
+        return { ok: true, value: { kind: "review", observation: mint(kept) } };
+      } catch {
+        // Retained bytes that no longer validate are a miss, not a failure: dispatch fresh.
+      }
+    }
+    let dispatched: CounterReviewDispatchResult;
+    try {
+      dispatched = await dispatchObserved("counter-reviewer", routeEntry, (selectedRoute) =>
+        dependencies.dispatch(selectedRoute, reviewEnvelope, reviewOutputSchema as PlainJsonValue));
+    } catch (error) {
+      return { ok: false, error };
+    }
+    let observation: ReviewObservation;
+    try {
+      observation = mint(dispatched);
+    } catch (error) {
+      // Invalid output is not a classified dispatch failure, so no observation slot is written.
+      return {
+        ok: false,
+        error,
+        project_error: createProjectError("MODEL_OUTPUT_INVALID", {
+          adapter: route.adapter,
+          attempt: 1,
+          issue_code: reviewOutputIssueCode(error),
+        }),
+      };
+    }
+    await retained?.write(binding, dispatched);
+    return { ok: true, value: { kind: "review", observation } };
+  };
+
+  const ops: (() => Promise<ChildOutcome>)[] = reviewRoutes.map((routeEntry, index) => reviewOp(routeEntry, reviewEnvelopes[index]!));
   if (
     plan !== undefined && constitutionRoute !== undefined &&
     constitutionSubject !== undefined && constitutionEnvelope !== undefined
   ) {
-    dispatchConstitution = () =>
-      dispatchObserved("adjudicator", constitutionRoute, (route) =>
-        plan.dispatch(route, constitutionEnvelope, adjudicationOutputSchema as PlainJsonValue));
-  }
-
-  const allOps: (() => Promise<CounterReviewDispatchResult>)[] = [...dispatchReviewOps];
-  if (dispatchConstitution !== undefined) {
-    allOps.push(dispatchConstitution);
-  }
-
-  const allDispatched = await serializeAll(allOps);
-  const reviewDispatchedList = allDispatched.slice(0, reviewRoutes.length);
-  const constitutionDispatched = dispatchConstitution !== undefined ? allDispatched[reviewRoutes.length] : undefined;
-
-  const singleObservations = reviewDispatchedList.map((reviewDispatched, index) => {
-    const routeEntry = reviewRoutes[index]!;
-    const route = routeEntry.selection.route;
-    return mintReviewObservation({
-      subject,
-      adapter: route.adapter,
-      cli_version: reviewDispatched.cli_version,
-      route,
-      route_source: routeEntry.selection.source,
-      envelope_input_digest: envelope.digest,
-      extracted_output_bytes: reviewDispatched.extracted_output_bytes,
-      repositories: input.repositories,
-      ...(reviewOverride === undefined ? {} : { route_override: reviewOverride }),
+    const constitutionOverride = overrideRecordFor("adjudicator");
+    const route = constitutionRoute.selection.route;
+    const mint = (dispatched: CounterReviewDispatchResult): AdjudicationEvidence => crossCheckRuleFindings(
+      plan.registry,
+      mintAdjudicationObservation({
+        subject: constitutionSubject,
+        adapter: route.adapter,
+        cli_version: dispatched.cli_version,
+        route,
+        route_source: constitutionRoute.selection.source,
+        envelope_input_digest: constitutionEnvelope.digest,
+        extracted_output_bytes: dispatched.extracted_output_bytes,
+        repositories: input.repositories,
+        ...(constitutionOverride === undefined ? {} : { route_override: constitutionOverride }),
+      }).evidence,
+      route.adapter,
+    );
+    const binding = { envelope_digest: constitutionEnvelope.digest, role: "adjudicator" as const, selection: constitutionRoute.selection };
+    ops.push(async (): Promise<ChildOutcome> => {
+      const kept = await retained?.read(binding);
+      if (kept !== undefined) {
+        try {
+          return { ok: true, value: { kind: "adjudication", evidence: mint(kept) } };
+        } catch {
+          // Same as the reviewer arm: a retained output that no longer validates dispatches fresh.
+        }
+      }
+      let dispatched: CounterReviewDispatchResult;
+      try {
+        dispatched = await dispatchObserved("adjudicator", constitutionRoute, (selectedRoute) =>
+          plan.dispatch(selectedRoute, constitutionEnvelope, adjudicationOutputSchema as PlainJsonValue));
+      } catch (error) {
+        return { ok: false, error };
+      }
+      let evidence: AdjudicationEvidence;
+      try {
+        evidence = mint(dispatched);
+      } catch (error) {
+        return {
+          ok: false,
+          error,
+          project_error: error instanceof AdjudicationServiceError
+            ? error.project_error
+            : createProjectError("MODEL_OUTPUT_INVALID", {
+              adapter: route.adapter,
+              attempt: 1,
+              issue_code: adjudicationOutputIssueCode(error),
+            }),
+        };
+      }
+      await retained?.write(binding, dispatched);
+      return { ok: true, value: { kind: "adjudication", evidence } };
     });
-  });
+  }
 
-  const makeFindingId = (model: string, findingId: string, index: number, total: number): string => {
-    if (total <= 1) return findingId;
-    const modelSlug = model.toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "");
-    const shortTag = modelSlug.includes("sol") ? "sol"
-      : modelSlug.includes("fable") ? "fable"
-      : modelSlug.includes("opus") ? "opus"
-      : modelSlug.includes("sonnet") ? "sonnet"
-      : modelSlug.includes("haiku") ? "haiku"
-      : modelSlug.includes("flash") ? "flash"
-      : modelSlug.includes("pro") ? "pro"
-      : `r${index + 1}`;
-    if (findingId.startsWith(`${shortTag}-`)) return findingId;
-    return `${shortTag}-${findingId}`;
-  };
+  const settled = await serializeAll(ops.map((op) => async () => noteFailure(await op())));
+  // Surface the first failure that finished. Dispatch and routing errors are rethrown so the
+  // handler maps them exactly as before; invalid model output is a project error naming the
+  // adapter and a content-free issue code.
+  const failed = failures[0];
+  if (failed !== undefined) {
+    if (failed.project_error !== undefined) {
+      return { schema_version: "1", ok: false, error: failed.project_error };
+    }
+    throw failed.error;
+  }
+  const singleObservations: ReviewObservation[] = [];
+  let constitutionEvidence: AdjudicationEvidence | undefined;
+  for (const outcome of settled) {
+    if (!outcome.ok) continue;
+    if (outcome.value.kind === "review") singleObservations.push(outcome.value.observation);
+    else constitutionEvidence = outcome.value.evidence;
+  }
+  if (singleObservations.length !== reviewRoutes.length) {
+    throw new TypeError("counter-review settled without an observation for every selected reviewer");
+  }
 
   const allFindings: ReviewFinding[] = [];
   const seenIds = new Set<string>();
   for (let i = 0; i < singleObservations.length; i += 1) {
     const obs = singleObservations[i]!;
-    const model = obs.evidence.model;
+    const tag = reviewRoutes[i]!.tag;
     for (const f of obs.evidence.findings) {
-      const rawId = makeFindingId(model, f.finding_id, i, singleObservations.length);
+      const rawId = taggedFindingId(tag, totalReviewers, f.finding_id);
       let uniqueId = rawId;
       let disambig = 2;
       while (seenIds.has(uniqueId)) {
@@ -512,43 +673,6 @@ export async function runCounterReview(
     matched_rule_versions: Object.freeze(mergedMatchedRules),
   });
 
-  let constitutionEvidence: AdjudicationEvidence | undefined;
-  if (
-    plan !== undefined && constitutionSubject !== undefined && constitutionEnvelope !== undefined &&
-    constitutionRoute !== undefined && constitutionDispatched !== undefined
-  ) {
-    const constitutionOverride = overrideRecordFor("adjudicator");
-    try {
-      const observedConstitution = mintAdjudicationObservation({
-        subject: constitutionSubject,
-        adapter: constitutionRoute.selection.route.adapter,
-        cli_version: constitutionDispatched.cli_version,
-        route: constitutionRoute.selection.route,
-        route_source: constitutionRoute.selection.source,
-        envelope_input_digest: constitutionEnvelope.digest,
-        extracted_output_bytes: constitutionDispatched.extracted_output_bytes,
-        repositories: input.repositories,
-        ...(constitutionOverride === undefined ? {} : { route_override: constitutionOverride }),
-      });
-      constitutionEvidence = crossCheckRuleFindings(
-        plan.registry,
-        observedConstitution.evidence,
-        constitutionRoute.selection.route.adapter,
-      );
-    } catch (error) {
-      return {
-        schema_version: "1",
-        ok: false,
-        error: error instanceof AdjudicationServiceError
-          ? error.project_error
-          : createProjectError("MODEL_OUTPUT_INVALID", {
-            adapter: constitutionRoute.selection.route.adapter,
-            attempt: 1,
-            issue_code: adjudicationOutputIssueCode(error),
-          }),
-      };
-    }
-  }
   const summarizedConstitution = constitutionEvidence;
 
   // Re-authenticate the complete subject only after every required child has returned. In
@@ -619,6 +743,11 @@ export async function runCounterReview(
     }, current, call),
   );
   if (!committed.ok) return committed;
+  // The round is durable now; its retained child outputs have served their purpose.
+  for (const digest of new Set(reviewEnvelopes.map((reviewEnvelope) => reviewEnvelope.digest))) {
+    await retained?.discard(digest);
+  }
+  if (constitutionEnvelope !== undefined) await retained?.discard(constitutionEnvelope.digest);
   return {
     schema_version: "1",
     ok: true,
