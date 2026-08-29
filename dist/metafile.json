@@ -6991,7 +6991,7 @@
       ]
     },
     "src/review/envelopes.ts": {
-      "bytes": 31643,
+      "bytes": 31983,
       "format": "esm",
       "imports": [
         {
@@ -10838,7 +10838,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3238330,
+      "bytes": 3238670,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12165,7 +12165,7 @@
           "bytesInOutput": 15086
         },
         "src/review/envelopes.ts": {
-          "bytesInOutput": 20412
+          "bytesInOutput": 20752
         },
         "src/review/fixed-point.ts": {
           "bytesInOutput": 15705

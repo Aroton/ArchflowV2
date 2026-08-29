@@ -13,9 +13,9 @@ import { loadTestRubric } from "../helpers/rubrics.js";
 // deliberately, never casually: a changed digest is changed review policy for every
 // installed bundle, and it fails in-flight tasks' input fingerprints closed.
 const PINNED_RUBRIC_DIGESTS = Object.freeze({
-  "prd-v1": "1910f0f56ebd54503658d4e5e0f1c44dcb23cc35be2ba1dabbb43f2fc866be56",
-  "design-v3": "cd7c1d7a1dceaa9a9595076ebf2e89407505103453eab6309b74e8b2598275db",
-  "implementation-v1": "9f87225d0d683e19f6e71c1c56929f938ec2df4f3fdebe79fbbe226db683e20b",
+  "prd-v1": "477c9807c2f3e8affea4bef05f1eb924e577758d5d94439a9f9fabf34e7798ab",
+  "design-v3": "2286f4a5a9fdde2a8a588c589370a305f256da548385bcdd70ad596579a79c41",
+  "implementation-v1": "5ccb8347f1ee9d7a04aaa041e548a0a01ca8ee26ec8c9db39fda439e7292291a",
 } satisfies Record<CanonicalRubricId, string>);
 
 const roots: string[] = [];
