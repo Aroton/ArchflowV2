@@ -173,15 +173,13 @@ const argv = process.argv.slice(2);
 if (argv.length === 1 && argv[0] === "--version") process.stdout.write("agy 1.1.22\\n");
 else if (argv[0] === "models") process.stdout.write("gemini-3.7-flash-high\\n");
 else {
-  let envelope;
-  if (argv.includes("-p")) {
-    envelope = JSON.parse(argv[argv.indexOf("-p") + 1]);
-  } else {
-    const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
-    envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  }
+  // The envelope arrives as one stream-json user message on stdin, never on argv.
+  const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
+  const firstLine = Buffer.concat(chunks).toString("utf8").split("\\n").find((line) => line.trim() !== "");
+  const message = JSON.parse(firstLine);
+  const envelope = message.event === "user" ? JSON.parse(message.message.content) : message;
   const output = generateOutput(envelope, ${JSON.stringify(countPath)}, ${JSON.stringify(findingsByReview)}, ${JSON.stringify(script)});
-  process.stdout.write(JSON.stringify({ structured_output: output }) + "\\n");
+  process.stdout.write(JSON.stringify({ event: "result", result: { status: "SUCCESS", structured_output: output } }) + "\\n");
 }`);
   chmodSync(join(bin, "agy"), 0o755);
   const saved = { path: process.env.PATH, home: process.env.HOME };

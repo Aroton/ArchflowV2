@@ -10,8 +10,7 @@ import {
   DispatchProcessError,
   runDispatchChild,
   scanDispatchOutput,
-  type DispatchChildSpec,
-} from "../../src/dispatch/process.js";
+  type DispatchChildSpec, MAX_ARGV_ELEMENT_BYTES } from "../../src/dispatch/process.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -76,6 +75,21 @@ describe("dispatch process runner", () => {
     expect(result.signal).toBeNull();
     expect([...result.stdout]).toEqual([0, 1, 2, 255]);
     expect(result.stderr.toString("utf8")).toBe(`${cwd}|present`);
+  });
+
+  it("rejects an oversized argv element before spawning instead of surfacing a raw E2BIG", async () => {
+    const cwd = await temporaryDirectory();
+    // A command that does not exist would otherwise classify as CLI_MISSING, so a nameable
+    // argument-list failure proves the guard fired before the spawn attempt.
+    const oversized = await projectFailure(runDispatchChild({
+      ...nodeSpec(cwd, ""),
+      command: join(cwd, "missing-cli"),
+      argv: ["-p", "x".repeat(MAX_ARGV_ELEMENT_BYTES)],
+    }));
+    expect(oversized.project_error).toMatchObject({
+      code: "PROCESS_FAILED",
+      diagnostic: { parameters: { adapter: "codex-cli", exit_class: "argument-list-too-long" } },
+    });
   });
 
   it("classifies missing and non-executable commands without exposing raw spawn errors", async () => {

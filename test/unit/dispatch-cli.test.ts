@@ -12,7 +12,7 @@ import adjudicationSchema from "../../src/contracts/schemas/v1/adjudication.sche
 import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
 import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 import type { HostIdentity } from "../../src/contracts/hosts.js";
-import type { DispatchChildResult } from "../../src/dispatch/process.js";
+import { MAX_ARGV_ELEMENT_BYTES, type DispatchChildResult } from "../../src/dispatch/process.js";
 import {
   CliAdapterError,
   projectCliOutputSchema,
@@ -504,16 +504,34 @@ describe("CLI output contracts and failure classification", () => {
       effort: "high",
     });
     const structured = { schema_version: "1", verdict: "pass" };
+    // stream-json output: progress events precede the final result event, which carries the wrapper.
+    const stream = [
+      JSON.stringify({ event: "init", init: { model: "gemini-3.7-flash-high" } }),
+      JSON.stringify({ event: "step_update", step_update: { step_type: "agent_response", text_delta: "{}" } }),
+      JSON.stringify({ event: "result", result: { status: "SUCCESS", structured_output: structured } }),
+    ].join("\n");
+    expect(adapter.parseOutput(result({ stdout: bytes(`${stream}\n`) }))).toEqual(canonicalJsonBytes(structured));
+    // A bare single-object wrapper (the `--output-format json` shape) stays readable.
     expect(adapter.parseOutput(result({
       stdout: bytes(JSON.stringify({ status: "SUCCESS", structured_output: structured })),
     }))).toEqual(canonicalJsonBytes(structured));
 
     expect(projectError(() => adapter.parseOutput(result({
-      stdout: bytes(JSON.stringify({ status: "ERROR" })),
+      stdout: bytes(`${JSON.stringify({ event: "result", result: { status: "ERROR" } })}\n`),
     })))).toMatchObject({
       code: "MODEL_OUTPUT_INVALID",
       diagnostic: { parameters: { issue_code: "structured-output-missing" } },
     });
+    expect(projectError(() => adapter.parseOutput(result({
+      stdout: bytes(`${JSON.stringify({ event: "init", init: {} })}\n`),
+    })))).toMatchObject({
+      code: "MODEL_OUTPUT_INVALID",
+      diagnostic: { parameters: { issue_code: "antigravity-wrapper-invalid" } },
+    });
+    expect(adapter.classifyFailure(result({
+      exit_code: 1,
+      stdout: bytes(`${JSON.stringify({ event: "result", result: { status: "ERROR", error: "Authentication required" } })}\n`),
+    }))).toMatchObject({ code: "AUTH_UNAVAILABLE" });
   });
 
   it("builds Antigravity CLI invocation with exact arguments and flags", async () => {
@@ -533,14 +551,45 @@ describe("CLI output contracts and failure classification", () => {
 
     expect(inv.command).toBe("agy");
     expect(inv.argv).toContain("-p");
-    expect(inv.argv).toContain("--json-schema");
+    expect(inv.argv).toContain("--input-format");
+    expect(inv.argv).toContain("stream-json");
     expect(inv.argv).toContain("--output-format");
-    expect(inv.argv).toContain("json");
+    expect(inv.argv).toContain("--json-schema");
     expect(inv.argv).toContain("--model");
     expect(inv.argv).toContain("gemini-3.7-flash-high");
     expect(inv.argv).toContain("--effort");
     expect(inv.argv).toContain("high");
     expect(inv.argv).toContain("--disable-slash-commands");
     expect(inv.argv).toContain("--dangerously-skip-permissions");
+
+    // The envelope rides on stdin as one stream-json user message, never on argv; the schema is
+    // a workspace file. Neither can then grow past the per-element argv limit.
+    const promptText = envelope.bytes.toString();
+    expect(inv.argv.some((element) => element.includes(promptText))).toBe(false);
+    const lines = Buffer.from(inv.stdin ?? new Uint8Array()).toString("utf8").split("\n").filter((line) => line !== "");
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0]!)).toEqual({ event: "user", message: { role: "user", content: promptText } });
+    const schemaPath = inv.argv[inv.argv.indexOf("--json-schema") + 1]!;
+    expect(schemaPath.startsWith(ws.root)).toBe(true);
+    expect(JSON.parse(await readFile(schemaPath, "utf8"))).toMatchObject({ type: "object" });
+  });
+
+  it("keeps every Antigravity argv element under the per-element limit for a large envelope", async () => {
+    const adapter = selectCliAdapter("antigravity", {
+      adapter: "antigravity-cli", family: "gemini", model: "gemini-3.7-flash-high", effort: "high",
+    });
+    const large: DispatchEnvelope = Object.freeze({
+      ...envelope,
+      bytes: bytes(JSON.stringify({ schema_version: "1", subject: {}, artifact: "x".repeat(300 * 1024) })),
+      byte_count: 300 * 1024 + 48,
+    });
+    const inv = await adapter.buildInvocation(
+      large,
+      { adapter: "antigravity-cli", family: "gemini", model: "gemini-3.7-flash-high", effort: "high" },
+      await workspace(),
+      reviewSchema as PlainJsonValue,
+    );
+    expect(inv.argv.every((element) => Buffer.byteLength(element, "utf8") < MAX_ARGV_ELEMENT_BYTES)).toBe(true);
+    expect(inv.stdin?.byteLength ?? 0).toBeGreaterThan(300 * 1024);
   });
 });

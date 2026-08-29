@@ -92,7 +92,7 @@ describe("dispatch-failure observation", () => {
     expect(classifiedDispatchFailure(new Error("raw child stderr"))).toBeUndefined();
   });
 
-  it("replaces the deterministic slot and reads only the exact running revision", async () => {
+  it("keeps the first observation of a revision, replaces it on a later revision, and reads only the exact running revision", async () => {
     const { authority, dependencies, state } = await fixture();
     const observerContext = {
       authority,
@@ -114,18 +114,41 @@ describe("dispatch-failure observation", () => {
       createProjectError("PROCESS_FAILED", { adapter: "claude-cli", exit_class: "nonzero" }),
     ) });
 
+    // Siblings of one dispatch fail together; the first classified failure is the root cause
+    // and the cancelled sibling must not overwrite it.
     await expect(readCurrentDispatchFailure(dependencies, authority, state)).resolves.toMatchObject({
       task_id: "dispatch-failure",
       phase_instance: "phase-impl-2",
       attempt: 1,
       observed_at_revision: 17,
-      role: "adjudicator",
-      code: "PROCESS_FAILED",
-      route: { model: "claude-fable-5", effort: "xhigh", source: "configured" },
+      role: "counter-reviewer",
+      code: "CONFIG_MODEL_UNSUPPORTED",
+      route: { model: "other-model", effort: "high", provider: "zai", source: "invocation-declared" },
     });
     await expect(readCurrentDispatchFailure(dependencies, authority, {
       ...state, revision: parseSafeInteger(18),
     })).resolves.toBeUndefined();
+
+    // A retry runs at a later revision and its failure replaces the stale slot.
+    await writeDispatchFailureObservation({ ...observerContext, observed_at_revision: parseSafeInteger(18) }, {
+      role: "adjudicator",
+      selected: {
+        raw_route: { model: "claude-fable-5", effort: "xhigh" },
+        source: { provenance: "configured" },
+      },
+      error: new DispatchRoutingError(
+        createProjectError("PROCESS_FAILED", { adapter: "claude-cli", exit_class: "nonzero" }),
+      ),
+    });
+    await expect(readCurrentDispatchFailure(dependencies, authority, {
+      ...state, revision: parseSafeInteger(18),
+    })).resolves.toMatchObject({
+      observed_at_revision: 18,
+      role: "adjudicator",
+      code: "PROCESS_FAILED",
+      route: { model: "claude-fable-5", effort: "xhigh", source: "configured" },
+    });
+    await expect(readCurrentDispatchFailure(dependencies, authority, state)).resolves.toBeUndefined();
     await expect(readCurrentDispatchFailure(dependencies, authority, {
       ...state, status: "succeeded",
     })).resolves.toBeUndefined();

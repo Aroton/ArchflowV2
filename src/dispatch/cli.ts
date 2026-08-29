@@ -780,6 +780,60 @@ const codexAdapter: CliAdapter = Object.freeze({
   },
 });
 
+/**
+ * Antigravity stream-json output is NDJSON; the final `result` event wraps the same object that
+ * `--output-format json` prints. Returns that wrapper, or undefined when no complete result event
+ * decoded as a plain JSON object. A bare JSON object (no `event` field) is accepted as the wrapper
+ * itself so an older single-object print stays readable.
+ */
+function antigravityResultEvent(stdout: Uint8Array): Readonly<Record<string, unknown>> | undefined {
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(stdout);
+  } catch {
+    return undefined;
+  }
+  let wrapper: Readonly<Record<string, unknown>> | undefined;
+  for (const line of text.split("\n")) {
+    if (line.trim() === "") continue;
+    let value: unknown;
+    try {
+      value = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (value === null || typeof value !== "object" || Array.isArray(value)) continue;
+    const record = value as Record<string, unknown>;
+    const eventDescriptor = Object.getOwnPropertyDescriptor(record, "event");
+    if (eventDescriptor === undefined) {
+      wrapper = record;
+      continue;
+    }
+    if (eventDescriptor.enumerable !== true || eventDescriptor.value !== "result") continue;
+    const resultDescriptor = Object.getOwnPropertyDescriptor(record, "result");
+    if (resultDescriptor?.enumerable !== true || !("value" in resultDescriptor)) continue;
+    const inner = resultDescriptor.value;
+    if (inner === null || typeof inner !== "object" || Array.isArray(inner)) continue;
+    wrapper = inner as Record<string, unknown>;
+  }
+  if (wrapper === undefined) return undefined;
+  try {
+    assertPlainJson(wrapper, "Antigravity result event");
+  } catch {
+    return undefined;
+  }
+  return wrapper;
+}
+
+function antigravityFailureMessage(result: DispatchChildResult): string | undefined {
+  const wrapper = antigravityResultEvent(result.stdout);
+  if (wrapper === undefined) return undefined;
+  if (wrapper.is_error !== true && wrapper.type !== "error" && wrapper.status !== "ERROR") return undefined;
+  return typeof wrapper.result === "string" ? wrapper.result
+    : typeof wrapper.error === "string" ? wrapper.error
+    : undefined;
+}
+
 const antigravityAdapter: CliAdapter = Object.freeze({
   id: "antigravity-cli",
   family: "gemini",
@@ -809,12 +863,23 @@ const antigravityAdapter: CliAdapter = Object.freeze({
       return fail(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
     }
     const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "antigravity-cli", envelopeSubject(envelope));
+    // The envelope and the schema never ride on argv: `agy -p` accepts the prompt only as one
+    // argv element, and Linux caps a single element at MAX_ARG_STRLEN (128 KiB) regardless of
+    // ARG_MAX, so a large pinned design made execve fail with E2BIG. The prompt instead travels
+    // as one NDJSON `user` message on stdin (`--input-format stream-json`), the schema as a
+    // workspace file, and the child's final `result` event carries the same wrapper that
+    // `--output-format json` prints.
+    const schemaPath = join(workspace.root, `${envelope.result_kind}.schema.json`);
+    await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     const promptString = new TextDecoder("utf-8", { fatal: true }).decode(envelope.bytes);
+    const stdin = new TextEncoder().encode(
+      `${JSON.stringify({ event: "user", message: { role: "user", content: promptString } })}\n`,
+    );
     const argv = Object.freeze([
-      "-p",
-      promptString,
-      "--json-schema", JSON.stringify(schema),
-      "--output-format", "json",
+      "-p", "",
+      "--input-format", "stream-json",
+      "--output-format", "stream-json",
+      "--json-schema", schemaPath,
       "--model", route.model,
       "--effort", route.effort,
       "--disable-slash-commands",
@@ -826,14 +891,14 @@ const antigravityAdapter: CliAdapter = Object.freeze({
       argv,
       cwd: workspace.repository_view_root ?? workspace.root,
       env: withLocalBinOnPath(workspace),
-      stdin: new Uint8Array(),
+      stdin,
     });
   },
   parseOutput(result: DispatchChildResult) {
-    const wrapper = decodeJson(result.stdout, "antigravity-cli", "antigravity-wrapper-invalid");
-    if (wrapper === null || typeof wrapper !== "object" || Array.isArray(wrapper)) {
+    const wrapper = antigravityResultEvent(result.stdout);
+    if (wrapper === undefined) {
       return fail(createProjectError("MODEL_OUTPUT_INVALID", {
-        adapter: "antigravity-cli", attempt: 1, issue_code: "structured-output-missing",
+        adapter: "antigravity-cli", attempt: 1, issue_code: "antigravity-wrapper-invalid",
       }));
     }
     const descriptor = Object.getOwnPropertyDescriptor(wrapper, "structured_output");
@@ -852,7 +917,7 @@ const antigravityAdapter: CliAdapter = Object.freeze({
     }
   },
   classifyFailure(result: DispatchChildResult) {
-    const message = claudeFailureMessage(result);
+    const message = antigravityFailureMessage(result);
     return classifyNonzero("antigravity-cli", result, message === undefined ? [] : [message]);
   },
 });

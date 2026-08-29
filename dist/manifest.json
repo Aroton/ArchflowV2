@@ -86,16 +86,16 @@
   ],
   "artifacts": [
     {
-      "digest": "558b68617e557454dd99fc242e7922afb18c8a408e64f6a343dffc489e316539",
+      "digest": "9302cb347698f691dcc8df6da97cb827d63771dd0ea515de55f9f6c809c907b4",
       "path": "archflow-local.mjs",
       "role": "executable",
-      "size": 1854956
+      "size": 1857225
     },
     {
-      "digest": "e789f177be751d0f127d87320e6d618f43a04666f5a3eee106a484da77a36fcf",
+      "digest": "50c168a2c77b324c8a8c995ecf5e8cd1662a6d74253ac6401855b083a73c08bc",
       "path": "archflow-mcp.mjs",
       "role": "executable",
-      "size": 3238670
+      "size": 3241714
     },
     {
       "digest": "b1a2da6bef84f2512ae167c3f0e9f8caee088fed9ac04f4e7022366d83729ca0",
@@ -210,7 +210,7 @@
       "role": "manifest"
     },
     {
-      "digest": "e68690c0cc68ed195e15f5b2fd2f5e5a183a1c5c0b51698574d892116c3bc127",
+      "digest": "1f94ba561dc54edba07c5d59df07c87928c78e1f4f2bad208cbfb3ef51c2f0e1",
       "path": "metafile.json",
       "role": "metafile",
       "size": 351459
@@ -232,7 +232,7 @@
       "role": "local-cli"
     }
   ],
-  "bundle_digest": "e789f177be751d0f127d87320e6d618f43a04666f5a3eee106a484da77a36fcf",
+  "bundle_digest": "50c168a2c77b324c8a8c995ecf5e8cd1662a6d74253ac6401855b083a73c08bc",
   "bundle_inputs": [
     {
       "bytes_in_output": 34870,
@@ -3091,14 +3091,14 @@
       "size": 1721
     },
     {
-      "bytes_in_output": 53014,
-      "digest": "fa6db202cc12a22ca03b1a2d6f34447d3e94446ff3ac9bdb35eca2f845d1d549",
+      "bytes_in_output": 56718,
+      "digest": "9e13a82b1cbe3e7794b0b86ed19e151056786aa5ba7501765c122cfd9c61ec6d",
       "key": "src/dispatch/cli.ts",
       "origin": {
         "kind": "repository",
         "path": "src/dispatch/cli.ts"
       },
-      "size": 39163
+      "size": 42128
     },
     {
       "bytes_in_output": 6534,
@@ -3111,24 +3111,24 @@
       "size": 10563
     },
     {
-      "bytes_in_output": 6934,
-      "digest": "274561d21ee7118dee7536f20997609a9ca367095076997447e8e58864e60045",
+      "bytes_in_output": 7465,
+      "digest": "ee7a11302f9596d8b71ac705d5216e8865db981f7f996915b169eb72f5bd596f",
       "key": "src/dispatch/failure-observation.ts",
       "origin": {
         "kind": "repository",
         "path": "src/dispatch/failure-observation.ts"
       },
-      "size": 7601
+      "size": 8494
     },
     {
-      "bytes_in_output": 14808,
-      "digest": "7b39d121a8109297437384ad6fa834d781628fa150c9b6f33a1bec6909ab36de",
+      "bytes_in_output": 15644,
+      "digest": "6f30551de2b2b7941cf5c878ad9a0fed3a0c9647a162e0d63773ccff4380e58d",
       "key": "src/dispatch/process.ts",
       "origin": {
         "kind": "repository",
         "path": "src/dispatch/process.ts"
       },
-      "size": 10258
+      "size": 10958
     },
     {
       "bytes_in_output": 11877,
@@ -3521,14 +3521,14 @@
       "size": 26942
     },
     {
-      "bytes_in_output": 20783,
-      "digest": "1358c8d5fc72b7a209fe503ce26117eeaa6565d131b3f4f50c4e666860a2ea85",
+      "bytes_in_output": 21025,
+      "digest": "c703611372c07bd9eecaf3ae199ee8d61093d4aad267681da2f656e4ae44a34c",
       "key": "src/review/envelopes.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/envelopes.ts"
       },
-      "size": 31983
+      "size": 32225
     },
     {
       "bytes_in_output": 30609,
@@ -4941,7 +4941,7 @@
       ],
       "entry_point": "src/main.ts",
       "id": "mcp-stdio",
-      "output_digest": "e789f177be751d0f127d87320e6d618f43a04666f5a3eee106a484da77a36fcf",
+      "output_digest": "50c168a2c77b324c8a8c995ecf5e8cd1662a6d74253ac6401855b083a73c08bc",
       "output_path": "archflow-mcp.mjs"
     },
     {
@@ -5242,7 +5242,7 @@
       ],
       "entry_point": "src/local/main.ts",
       "id": "local-cli",
-      "output_digest": "558b68617e557454dd99fc242e7922afb18c8a408e64f6a343dffc489e316539",
+      "output_digest": "9302cb347698f691dcc8df6da97cb827d63771dd0ea515de55f9f6c809c907b4",
       "output_path": "archflow-local.mjs"
     }
   ],
@@ -5345,9 +5345,9 @@
       "size": 10
     },
     {
-      "digest": "2e416f6da2498c1ae0c53edeef0552ad36d2b5f1da2ab84f165c488dc29b8ea7",
+      "digest": "b18b055df73b51c9d095afe8f6a84e982dce77bce9c820227b3a9c3fafa6c0f5",
       "path": "assets/config.template.yaml",
-      "size": 4969
+      "size": 4975
     },
     {
       "digest": "3b6cdd5f3370c8455fd7ba443476215d78110eebc6ca6ccba085dbe84f0af8a1",
@@ -5677,9 +5677,9 @@
       "size": 10
     },
     {
-      "digest": "2e416f6da2498c1ae0c53edeef0552ad36d2b5f1da2ab84f165c488dc29b8ea7",
+      "digest": "b18b055df73b51c9d095afe8f6a84e982dce77bce9c820227b3a9c3fafa6c0f5",
       "path": "assets/config.template.yaml",
-      "size": 4969
+      "size": 4975
     },
     {
       "digest": "3b6cdd5f3370c8455fd7ba443476215d78110eebc6ca6ccba085dbe84f0af8a1",

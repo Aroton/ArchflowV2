@@ -248,10 +248,14 @@ describe("review dispatch envelopes", () => {
     expect(REVIEW_INSTRUCTION).toContain("check that they jointly hold");
     expect(REVIEW_INSTRUCTION).toContain("recompute derived figures");
     expect(REVIEW_INSTRUCTION).toContain("Only after that pass apply the rubric's materiality bar");
-    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("This is a remediation review with two tasks of equal weight");
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("This is a remediation review");
     expect(PRIOR_TRIAGE_INSTRUCTION).toContain("verify that every accepted revision intent");
-    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("every section that depends on changed content, exactly as an initial review would");
-    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("previously undiscovered issue");
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("every section that depends on changed content, at the same materiality bar as an initial review");
+    // Remediation rounds are scoped to the revision: no fresh sweep of unchanged sections, and
+    // an empty finding list is the intended terminal state.
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("Do not open a new sweep of unchanged sections");
+    expect(PRIOR_TRIAGE_INSTRUCTION).not.toContain("anywhere in the artifact");
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("must return no findings");
     expect(PRIOR_TRIAGE_INSTRUCTION).toContain("Do not report optional polish");
     // The instruction literal and the entry participate in the recorded envelope digest.
     expect(bound.digest).not.toBe(bare.digest);

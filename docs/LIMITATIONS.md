@@ -128,7 +128,7 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 ## The dispatch timeout is fixed, and a high-effort review of a large design can exceed it
 
-**Not adaptive:** Every reviewer child gets the same 15-minute `DISPATCH_TIMEOUT_MS` regardless of artifact size, effort, or whether a repository view was materialized. On 2026-08-28 a replay of a 74 KB design with its 26 KB PRD pinned and a repository view, routed to `gpt-5.6-sol` at `xhigh`, was killed at the timeout with no output; the same envelope at `gpt-5.6-sol`/`high` (the template's route for a Claude producer) returned eight blockers in seven minutes, and `claude-opus-5`/`medium` returned in six and a half.
+**Not adaptive:** Every reviewer child gets the same 15-minute `DISPATCH_TIMEOUT_MS` regardless of artifact size, effort, or whether a repository view was materialized. On 2026-08-28 a replay of a 74 KB design with its 26 KB PRD pinned and a repository view, routed to `gpt-5.6-sol` at `xhigh`, was killed at the timeout with no output; the same envelope at `gpt-5.6-sol`/`high` (the template's route for a Claude producer) returned eight blockers in seven minutes, and `claude-opus-5`/`medium` returned in six and a half. The template now routes `gpt-5.6-sol` at `medium` for exactly that reason: at `high` the reviewer kept finding real-but-endless issues on every remediation round of a large design, and the loop never converged.
 
 **Existing mitigation:** The timeout surfaces as a classified `TIMEOUT` dispatch failure with the role and route, the review attempt stays pending rather than being consumed, and the skill offers repair or a one-dispatch human `route_override` (for example the same model at `high`). Nothing is silently downgraded.
 

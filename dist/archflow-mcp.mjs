@@ -67777,6 +67777,7 @@ async function writeDispatchFailureObservation(context2, input) {
     context: context2.authority.context
   });
   if (!target2.ok) return false;
+  if (await slotHoldsObservationFor(target2.value.absolute, context2)) return false;
   const observation = dispatchFailureObservationV1Schema.parse({
     schema_version: "1",
     task_id: context2.authority.task_id,
@@ -67799,6 +67800,14 @@ async function writeDispatchFailureObservation(context2, input) {
   });
   await writer.replaceRegular(target2.value, canonicalJsonBytes(observation), false);
   return true;
+}
+async function slotHoldsObservationFor(absolutePath, context2) {
+  try {
+    const existing = dispatchFailureObservationV1Schema.parse(JSON.parse(await readFile9(absolutePath, "utf8")));
+    return existing.task_id === context2.authority.task_id && existing.phase_instance === context2.phase_instance && existing.attempt === context2.attempt && existing.observed_at_revision === context2.observed_at_revision;
+  } catch {
+    return false;
+  }
 }
 function createDispatchFailureObserver(context2) {
   return async (role, selected, error51) => {
@@ -73454,6 +73463,7 @@ import { spawn } from "node:child_process";
 import { open as open6, stat as stat2 } from "node:fs/promises";
 var DISPATCH_TIMEOUT_MS = 9e5;
 var DISPATCH_OUTPUT_BYTE_CAP = 8 * 1024 * 1024;
+var MAX_ARGV_ELEMENT_BYTES = 131072;
 var TERMINATION_GRACE_MS = 250;
 var DispatchProcessError = class extends Error {
   constructor(project_error, channels) {
@@ -73496,6 +73506,9 @@ function classifySpawnError(adapter2, error51) {
   if (error51.code === "ENOENT") return fail21(createProjectError("CLI_MISSING", { adapter: adapter2 }));
   if (error51.code === "EACCES" || error51.code === "EPERM") {
     return fail21(createProjectError("PROCESS_FAILED", { adapter: adapter2, exit_class: "not-executable" }));
+  }
+  if (error51.code === "E2BIG") {
+    return fail21(createProjectError("PROCESS_FAILED", { adapter: adapter2, exit_class: "argument-list-too-long" }));
   }
   return fail21(createProjectError("IO_ERROR", { operation: "dispatch-spawn", attempt: 1 }));
 }
@@ -73546,6 +73559,9 @@ async function runDispatchChild(spec) {
   const cancellationSource = spec.cancellation_source ?? "client";
   if (spec.signal.aborted) {
     return fail21(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
+  }
+  if (spec.argv.some((element) => Buffer.byteLength(element, "utf8") >= MAX_ARGV_ELEMENT_BYTES)) {
+    return fail21(createProjectError("PROCESS_FAILED", { adapter: spec.adapter, exit_class: "argument-list-too-long" }));
   }
   const spawnOptions = {
     cwd: spec.cwd,
@@ -74222,6 +74238,50 @@ var codexAdapter = Object.freeze({
     return classifyNonzero("codex-cli", result, codexFailureMessages(result.stdout));
   }
 });
+function antigravityResultEvent(stdout) {
+  let text4;
+  try {
+    text4 = new TextDecoder("utf-8", { fatal: true }).decode(stdout);
+  } catch {
+    return void 0;
+  }
+  let wrapper;
+  for (const line of text4.split("\n")) {
+    if (line.trim() === "") continue;
+    let value;
+    try {
+      value = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (value === null || typeof value !== "object" || Array.isArray(value)) continue;
+    const record3 = value;
+    const eventDescriptor = Object.getOwnPropertyDescriptor(record3, "event");
+    if (eventDescriptor === void 0) {
+      wrapper = record3;
+      continue;
+    }
+    if (eventDescriptor.enumerable !== true || eventDescriptor.value !== "result") continue;
+    const resultDescriptor = Object.getOwnPropertyDescriptor(record3, "result");
+    if (resultDescriptor?.enumerable !== true || !("value" in resultDescriptor)) continue;
+    const inner = resultDescriptor.value;
+    if (inner === null || typeof inner !== "object" || Array.isArray(inner)) continue;
+    wrapper = inner;
+  }
+  if (wrapper === void 0) return void 0;
+  try {
+    assertPlainJson(wrapper, "Antigravity result event");
+  } catch {
+    return void 0;
+  }
+  return wrapper;
+}
+function antigravityFailureMessage(result) {
+  const wrapper = antigravityResultEvent(result.stdout);
+  if (wrapper === void 0) return void 0;
+  if (wrapper.is_error !== true && wrapper.type !== "error" && wrapper.status !== "ERROR") return void 0;
+  return typeof wrapper.result === "string" ? wrapper.result : typeof wrapper.error === "string" ? wrapper.error : void 0;
+}
 var antigravityAdapter = Object.freeze({
   id: "antigravity-cli",
   family: "gemini",
@@ -74242,14 +74302,23 @@ var antigravityAdapter = Object.freeze({
       return fail22(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
     }
     const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "antigravity-cli", envelopeSubject(envelope));
+    const schemaPath = join13(workspace.root, `${envelope.result_kind}.schema.json`);
+    await writeFile2(schemaPath, `${JSON.stringify(schema, null, 2)}
+`, { encoding: "utf8", mode: 384 });
     const promptString = new TextDecoder("utf-8", { fatal: true }).decode(envelope.bytes);
+    const stdin = new TextEncoder().encode(
+      `${JSON.stringify({ event: "user", message: { role: "user", content: promptString } })}
+`
+    );
     const argv = Object.freeze([
       "-p",
-      promptString,
-      "--json-schema",
-      JSON.stringify(schema),
+      "",
+      "--input-format",
+      "stream-json",
       "--output-format",
-      "json",
+      "stream-json",
+      "--json-schema",
+      schemaPath,
       "--model",
       route2.model,
       "--effort",
@@ -74263,16 +74332,16 @@ var antigravityAdapter = Object.freeze({
       argv,
       cwd: workspace.repository_view_root ?? workspace.root,
       env: withLocalBinOnPath(workspace),
-      stdin: new Uint8Array()
+      stdin
     });
   },
   parseOutput(result) {
-    const wrapper = decodeJson2(result.stdout, "antigravity-cli", "antigravity-wrapper-invalid");
-    if (wrapper === null || typeof wrapper !== "object" || Array.isArray(wrapper)) {
+    const wrapper = antigravityResultEvent(result.stdout);
+    if (wrapper === void 0) {
       return fail22(createProjectError("MODEL_OUTPUT_INVALID", {
         adapter: "antigravity-cli",
         attempt: 1,
-        issue_code: "structured-output-missing"
+        issue_code: "antigravity-wrapper-invalid"
       }));
     }
     const descriptor = Object.getOwnPropertyDescriptor(wrapper, "structured_output");
@@ -74295,7 +74364,7 @@ var antigravityAdapter = Object.freeze({
     }
   },
   classifyFailure(result) {
-    const message = claudeFailureMessage(result);
+    const message = antigravityFailureMessage(result);
     return classifyNonzero("antigravity-cli", result, message === void 0 ? [] : [message]);
   }
 });
@@ -75369,7 +75438,7 @@ var REPOSITORY_VIEW_NOTE = "Your working directory is a read-only checkout of th
 var PRODUCED_REPOSITORY_VIEW_NOTE = "Your working directory is a sealed read-only post-change repository snapshot reconstructed from the authenticated implementation output, excluding .archflow/tasks. The artifact names the changed paths and baseline; inspect the files in this snapshot as the review subject.";
 var MULTI_REPOSITORY_VIEW_NOTE = "Your working directory contains read-only repository snapshots at `./<name>`; cite files as `<name>/<path>`. A repository entry with `snapshot_digest` is a sealed post-change tree reconstructed from authenticated implementation output and is part of the review subject. An entry without `snapshot_digest` is commit-pinned read-only context and may not contain this phase's work; the artifact and pinned context remain the review subject and take precedence on conflict.";
 var REVIEW_INSTRUCTION = "You are the independent counter-reviewer for the artifact in this envelope. Read the whole artifact and every pinned context entry before judging anything; the pinned approved upstream documents state what the artifact must satisfy. Then work through the artifact section by section: trace each stated constant, budget, invariant, interface claim, and policy into every other section that depends on it and check that they jointly hold; recompute derived figures rather than accepting them; verify repository and interface claims against the pinned evidence and the read-only repository view when one is provided; follow each stated property through the inputs and lifecycle events the system will actually meet. Frame your evaluation around the finite question: 'What would break in production or fail execution?' A true observation or discrepancy that does not change downstream implementation, break an approved boundary, or alter verification is not a defect and must not be reported. Only after that pass apply the rubric's materiality bar to decide what to report. Every finding cites the exact evidence and names its concrete consequence. Return the structured result the output schema describes and nothing else.";
-var PRIOR_TRIAGE_INSTRUCTION = "This is a remediation review with two tasks of equal weight. First, verify that every accepted revision intent in the pinned prior-triage record was carried out. Second, review every section the revision changed, and every section that depends on changed content, exactly as an initial review would: revisions introduce defects, so trace each revised constant, contract, or mechanism into every claim, budget, and verification story that relies on it. Do not re-raise completed or rejected findings in variant form; challenge a prior disposition only by naming its finding_id and showing that the revision intent was not carried out or that the change introduced a material defect. Report a previously undiscovered issue anywhere in the artifact when leaving it unchanged is reasonably likely to change a downstream decision, behavior, verification outcome, or important risk. Do not report optional polish, harmless wording refinements, true-but-inconsequential observations, or other non-material items that induce specification drift.";
+var PRIOR_TRIAGE_INSTRUCTION = "This is a remediation review. The artifact already received a full review; the pinned prior-triage record is that round's outcome. Two tasks: first, verify that every accepted revision intent in the pinned prior-triage record was carried out. Second, review every section the revision changed, and every section that depends on changed content, at the same materiality bar as an initial review: revisions introduce defects, so trace each revised constant, contract, or mechanism into the claims, budgets, and verification stories that rely on it. Do not re-raise completed or rejected findings in variant form; challenge a prior disposition only by naming its finding_id and showing that the revision intent was not carried out or that the change introduced a material defect. Do not open a new sweep of unchanged sections: report an issue outside the changed and dependent sections only when it would break production or fail execution and the revision made it visible. Do not report optional polish, harmless wording refinements, true-but-inconsequential observations, or other non-material items that induce specification drift. A remediation round that finds nothing material must return no findings; that is the intended terminal state of review, not a failure of diligence.";
 var ReviewEnvelopeError = class extends Error {
   project_error;
   /** The serialized size that failed the byte cap, when that is what failed. */

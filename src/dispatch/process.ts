@@ -8,6 +8,10 @@ import type { AdapterId } from "../contracts/review.js";
 // multi-minute; the timeout bounds a hung child, not a working one.
 export const DISPATCH_TIMEOUT_MS = 900_000;
 export const DISPATCH_OUTPUT_BYTE_CAP = 8 * 1024 * 1024;
+// Linux rejects any single argv element of MAX_ARG_STRLEN (32 pages, 128 KiB) or more with
+// E2BIG no matter how small the total is, so the guard is per element and platform-independent:
+// a payload that would fail on the developer's machine fails identically and nameably everywhere.
+export const MAX_ARGV_ELEMENT_BYTES = 131_072;
 
 const TERMINATION_GRACE_MS = 250;
 
@@ -91,6 +95,9 @@ function classifySpawnError(adapter: AdapterId, error: NodeJS.ErrnoException): n
   if (error.code === "EACCES" || error.code === "EPERM") {
     return fail(createProjectError("PROCESS_FAILED", { adapter, exit_class: "not-executable" }));
   }
+  if (error.code === "E2BIG") {
+    return fail(createProjectError("PROCESS_FAILED", { adapter, exit_class: "argument-list-too-long" }));
+  }
   return fail(createProjectError("IO_ERROR", { operation: "dispatch-spawn", attempt: 1 }));
 }
 
@@ -148,6 +155,9 @@ export async function runDispatchChild(spec: DispatchChildSpec): Promise<Dispatc
   const cancellationSource = spec.cancellation_source ?? "client";
   if (spec.signal.aborted) {
     return fail(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
+  }
+  if (spec.argv.some((element) => Buffer.byteLength(element, "utf8") >= MAX_ARGV_ELEMENT_BYTES)) {
+    return fail(createProjectError("PROCESS_FAILED", { adapter: spec.adapter, exit_class: "argument-list-too-long" }));
   }
 
   const spawnOptions: SpawnOptionsWithoutStdio = {

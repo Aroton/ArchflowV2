@@ -4854,7 +4854,7 @@
       ]
     },
     "src/dispatch/cli.ts": {
-      "bytes": 39163,
+      "bytes": 42128,
       "format": "esm",
       "imports": [
         {
@@ -4956,7 +4956,7 @@
       ]
     },
     "src/dispatch/failure-observation.ts": {
-      "bytes": 7601,
+      "bytes": 8494,
       "format": "esm",
       "imports": [
         {
@@ -4992,7 +4992,7 @@
       ]
     },
     "src/dispatch/process.ts": {
-      "bytes": 10258,
+      "bytes": 10958,
       "format": "esm",
       "imports": [
         {
@@ -6991,7 +6991,7 @@
       ]
     },
     "src/review/envelopes.ts": {
-      "bytes": 31983,
+      "bytes": 32225,
       "format": "esm",
       "imports": [
         {
@@ -9559,7 +9559,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1854956,
+      "bytes": 1857225,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10656,13 +10656,13 @@
           "bytesInOutput": 1585
         },
         "src/dispatch/cli.ts": {
-          "bytesInOutput": 24710
+          "bytesInOutput": 26561
         },
         "src/dispatch/failure-observation.ts": {
           "bytesInOutput": 2103
         },
         "src/dispatch/process.ts": {
-          "bytesInOutput": 7404
+          "bytesInOutput": 7822
         },
         "src/dispatch/routing.ts": {
           "bytesInOutput": 5871
@@ -10838,7 +10838,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3238670,
+      "bytes": 3241714,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12066,16 +12066,16 @@
           "bytesInOutput": 1586
         },
         "src/dispatch/cli.ts": {
-          "bytesInOutput": 28304
+          "bytesInOutput": 30157
         },
         "src/dispatch/coordinator.ts": {
           "bytesInOutput": 6534
         },
         "src/dispatch/failure-observation.ts": {
-          "bytesInOutput": 4831
+          "bytesInOutput": 5362
         },
         "src/dispatch/process.ts": {
-          "bytesInOutput": 7404
+          "bytesInOutput": 7822
         },
         "src/dispatch/routing.ts": {
           "bytesInOutput": 6006
@@ -12165,7 +12165,7 @@
           "bytesInOutput": 15086
         },
         "src/review/envelopes.ts": {
-          "bytesInOutput": 20752
+          "bytesInOutput": 20994
         },
         "src/review/fixed-point.ts": {
           "bytesInOutput": 15705

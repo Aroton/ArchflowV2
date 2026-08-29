@@ -40640,6 +40640,7 @@ import { spawn } from "node:child_process";
 import { open as open5, stat as stat2 } from "node:fs/promises";
 var DISPATCH_TIMEOUT_MS = 9e5;
 var DISPATCH_OUTPUT_BYTE_CAP = 8 * 1024 * 1024;
+var MAX_ARGV_ELEMENT_BYTES = 131072;
 var TERMINATION_GRACE_MS = 250;
 var DispatchProcessError = class extends Error {
   constructor(project_error, channels) {
@@ -40682,6 +40683,9 @@ function classifySpawnError(adapter2, error51) {
   if (error51.code === "ENOENT") return fail15(createProjectError("CLI_MISSING", { adapter: adapter2 }));
   if (error51.code === "EACCES" || error51.code === "EPERM") {
     return fail15(createProjectError("PROCESS_FAILED", { adapter: adapter2, exit_class: "not-executable" }));
+  }
+  if (error51.code === "E2BIG") {
+    return fail15(createProjectError("PROCESS_FAILED", { adapter: adapter2, exit_class: "argument-list-too-long" }));
   }
   return fail15(createProjectError("IO_ERROR", { operation: "dispatch-spawn", attempt: 1 }));
 }
@@ -40732,6 +40736,9 @@ async function runDispatchChild(spec) {
   const cancellationSource = spec.cancellation_source ?? "client";
   if (spec.signal.aborted) {
     return fail15(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
+  }
+  if (spec.argv.some((element) => Buffer.byteLength(element, "utf8") >= MAX_ARGV_ELEMENT_BYTES)) {
+    return fail15(createProjectError("PROCESS_FAILED", { adapter: spec.adapter, exit_class: "argument-list-too-long" }));
   }
   const spawnOptions = {
     cwd: spec.cwd,
@@ -41384,6 +41391,50 @@ var codexAdapter = Object.freeze({
     return classifyNonzero("codex-cli", result, codexFailureMessages(result.stdout));
   }
 });
+function antigravityResultEvent(stdout) {
+  let text3;
+  try {
+    text3 = new TextDecoder("utf-8", { fatal: true }).decode(stdout);
+  } catch {
+    return void 0;
+  }
+  let wrapper;
+  for (const line of text3.split("\n")) {
+    if (line.trim() === "") continue;
+    let value;
+    try {
+      value = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (value === null || typeof value !== "object" || Array.isArray(value)) continue;
+    const record2 = value;
+    const eventDescriptor = Object.getOwnPropertyDescriptor(record2, "event");
+    if (eventDescriptor === void 0) {
+      wrapper = record2;
+      continue;
+    }
+    if (eventDescriptor.enumerable !== true || eventDescriptor.value !== "result") continue;
+    const resultDescriptor = Object.getOwnPropertyDescriptor(record2, "result");
+    if (resultDescriptor?.enumerable !== true || !("value" in resultDescriptor)) continue;
+    const inner = resultDescriptor.value;
+    if (inner === null || typeof inner !== "object" || Array.isArray(inner)) continue;
+    wrapper = inner;
+  }
+  if (wrapper === void 0) return void 0;
+  try {
+    assertPlainJson(wrapper, "Antigravity result event");
+  } catch {
+    return void 0;
+  }
+  return wrapper;
+}
+function antigravityFailureMessage(result) {
+  const wrapper = antigravityResultEvent(result.stdout);
+  if (wrapper === void 0) return void 0;
+  if (wrapper.is_error !== true && wrapper.type !== "error" && wrapper.status !== "ERROR") return void 0;
+  return typeof wrapper.result === "string" ? wrapper.result : typeof wrapper.error === "string" ? wrapper.error : void 0;
+}
 var antigravityAdapter = Object.freeze({
   id: "antigravity-cli",
   family: "gemini",
@@ -41404,14 +41455,23 @@ var antigravityAdapter = Object.freeze({
       return fail16(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
     }
     const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "antigravity-cli", envelopeSubject(envelope));
+    const schemaPath = join9(workspace.root, `${envelope.result_kind}.schema.json`);
+    await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}
+`, { encoding: "utf8", mode: 384 });
     const promptString = new TextDecoder("utf-8", { fatal: true }).decode(envelope.bytes);
+    const stdin = new TextEncoder().encode(
+      `${JSON.stringify({ event: "user", message: { role: "user", content: promptString } })}
+`
+    );
     const argv = Object.freeze([
       "-p",
-      promptString,
-      "--json-schema",
-      JSON.stringify(schema),
+      "",
+      "--input-format",
+      "stream-json",
       "--output-format",
-      "json",
+      "stream-json",
+      "--json-schema",
+      schemaPath,
       "--model",
       route2.model,
       "--effort",
@@ -41425,16 +41485,16 @@ var antigravityAdapter = Object.freeze({
       argv,
       cwd: workspace.repository_view_root ?? workspace.root,
       env: withLocalBinOnPath(workspace),
-      stdin: new Uint8Array()
+      stdin
     });
   },
   parseOutput(result) {
-    const wrapper = decodeJson2(result.stdout, "antigravity-cli", "antigravity-wrapper-invalid");
-    if (wrapper === null || typeof wrapper !== "object" || Array.isArray(wrapper)) {
+    const wrapper = antigravityResultEvent(result.stdout);
+    if (wrapper === void 0) {
       return fail16(createProjectError("MODEL_OUTPUT_INVALID", {
         adapter: "antigravity-cli",
         attempt: 1,
-        issue_code: "structured-output-missing"
+        issue_code: "antigravity-wrapper-invalid"
       }));
     }
     const descriptor = Object.getOwnPropertyDescriptor(wrapper, "structured_output");
@@ -41457,7 +41517,7 @@ var antigravityAdapter = Object.freeze({
     }
   },
   classifyFailure(result) {
-    const message = claudeFailureMessage(result);
+    const message = antigravityFailureMessage(result);
     return classifyNonzero("antigravity-cli", result, message === void 0 ? [] : [message]);
   }
 });

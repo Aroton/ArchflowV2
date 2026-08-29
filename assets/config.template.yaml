@@ -10,7 +10,7 @@ schema_version: "1"
 roles:
   counter-reviewer:
     model: gpt-5.6-sol
-    effort: high
+    effort: medium
   adjudicator:
     model: gemini-3.7-flash-high
     effort: high
@@ -20,14 +20,14 @@ producers:
   claude:
     counter-reviewer:
       model: gpt-5.6-sol
-      effort: high
+      effort: medium
     adjudicator:
       model: gemini-3.7-flash-high
       effort: high
   antigravity:
     counter-reviewers:
       - model: gpt-5.6-sol
-        effort: high
+        effort: medium
       - model: claude-fable-5
         effort: medium
     adjudicator:

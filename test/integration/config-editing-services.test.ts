@@ -45,7 +45,7 @@ const MODEL_CHANGE: Mutation = {
 };
 const EFFORT_CHANGE: Mutation = {
   name: "effort change",
-  apply: (source) => source.replace("effort: high", "effort: max"),
+  apply: (source) => source.replace("effort: medium", "effort: max"),
 };
 const SEMANTIC_REWRITE: Mutation = {
   name: "semantically equivalent rewrite",

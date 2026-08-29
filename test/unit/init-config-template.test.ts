@@ -14,7 +14,7 @@ describe("config template", () => {
     // Claude host
     expect(resolveDispatchRoute(config, "phase-impl", "counter-reviewer", "claude")).toMatchObject({
       model: "gpt-5.6-sol",
-      effort: "high",
+      effort: "medium",
       family: "codex",
       adapter: "codex-cli",
     });
@@ -27,7 +27,7 @@ describe("config template", () => {
 
     // Antigravity host (multi-reviewer)
     expect(resolveDispatchRoutes(config, "phase-impl", "counter-reviewer", "antigravity")).toEqual([
-      { model: "gpt-5.6-sol", effort: "high", family: "codex", adapter: "codex-cli" },
+      { model: "gpt-5.6-sol", effort: "medium", family: "codex", adapter: "codex-cli" },
       { model: "claude-fable-5", effort: "medium", family: "claude", adapter: "claude-cli" },
     ]);
     expect(resolveDispatchRoute(config, "phase-impl", "adjudicator", "antigravity")).toMatchObject({
@@ -54,7 +54,7 @@ describe("config template", () => {
     // Fallback roles
     expect(resolveDispatchRoute(config, "phase-impl", "counter-reviewer")).toMatchObject({
       model: "gpt-5.6-sol",
-      effort: "high",
+      effort: "medium",
     });
 
     expect(config.approval_rules).toEqual({
