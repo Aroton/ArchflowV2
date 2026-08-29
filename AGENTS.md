@@ -1,6 +1,6 @@
 # ArchFlow
 
-A lightweight, human-centered development workflow for Claude Code and Codex.
+A lightweight, human-centered development workflow for Claude Code, Codex, and Google Antigravity.
 
 ## Repository Structure
 
@@ -12,7 +12,7 @@ The canonical set contains nine portable skills:
 
 | Skill | Purpose |
 |---------|---------|
-| `/archflow-init` | Initialize repository assets and project-scoped MCP registrations |
+| `/archflow-init` | Initialize repository assets and MCP registrations |
 | `/archflow-constitution` | Explain and configure repository-owned constitution rules |
 | `/archflow-upgrade <legacy-source> <task>` | Stage a legacy task into a distinct canonical task and guide its migration audit |
 | `/archflow-explore` | Explore codebase, produce or refresh the maintained `docs/` documentation set |
@@ -22,7 +22,7 @@ The canonical set contains nine portable skills:
 | `/archflow-phase-impl <task> N` | Implement, verify, review, and commit phase N (fresh session) |
 | `/archflow-status [task]` | Check status and next action |
 
-In Codex, invoke the same skill names with `$` instead of `/`: `$archflow-init`, `$archflow-constitution`, `$archflow-upgrade`, `$archflow-explore`, `$archflow-prd`, `$archflow-design`, `$archflow-phase-design`, `$archflow-phase-impl`, and `$archflow-status`.
+In Claude Code and Antigravity, invoke skills with `/` (e.g. `/archflow-init`). In Codex, invoke the same skill names with `$` instead of `/`: `$archflow-init`, `$archflow-constitution`, `$archflow-upgrade`, `$archflow-explore`, `$archflow-prd`, `$archflow-design`, `$archflow-phase-design`, `$archflow-phase-impl`, and `$archflow-status`.
 
 ## How It Works
 

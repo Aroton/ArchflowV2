@@ -11,7 +11,7 @@ import {
 } from "../contracts/evidence.js";
 import { parsePhaseInstanceId, type PhaseInstanceId } from "../contracts/phase-instance.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
-import { type ModelFamily } from "../contracts/review.js";
+import { MODEL_FAMILIES, type ModelFamily } from "../contracts/review.js";
 import { parseRubricV1, type RubricV1 } from "../contracts/rubric.js";
 
 export const REVIEW_ENVELOPE_BYTE_CAP = 1_048_576;
@@ -262,7 +262,7 @@ function validateSubject(value: DispatchSubject): DispatchSubject {
   if (value.role !== "counter-review" || value.step !== "counter_review") {
     throw new TypeError("dispatch subject must be an ordinary counter-review");
   }
-  if (value.producer_family !== "claude" && value.producer_family !== "codex") {
+  if (!MODEL_FAMILIES.includes(value.producer_family as ModelFamily)) {
     throw new TypeError("dispatch subject producer_family is invalid");
   }
   const attempt = parseSafeInteger(value.attempt);

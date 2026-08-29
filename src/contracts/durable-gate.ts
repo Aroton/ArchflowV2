@@ -28,6 +28,7 @@ import {
   type WaiverScope,
 } from "./gates.js";
 import { currentEvidenceSetRefSchema, type CurrentEvidenceSetRef } from "./trust.js";
+import { MODEL_FAMILIES, type ModelFamily } from "./review.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
 import { assertPlainJson } from "./plain-json.js";
 export type WaiverGateContext = { readonly origin: WaiverOriginRef; readonly rationale: string };
@@ -54,8 +55,8 @@ export type LegacySupplementalReviewRefV1 = LegacySupplementalGateRefV1 & {
     readonly role: "gate-counter-review";
     readonly evidence_digest: Sha256Digest;
     readonly assurance: "server-attested" | "degraded";
-    readonly producer_family: "claude" | "codex";
-    readonly reviewer_family: "claude" | "codex";
+    readonly producer_family: ModelFamily;
+    readonly reviewer_family: ModelFamily;
     readonly independence: "opposite-family";
     readonly gate_id: PathSafeId;
   }>;
@@ -224,7 +225,7 @@ const legacySupplementalGate = z.object({ prior_gate_id: pathSafeId, task_id: ta
 const legacySupplementalSlot = z.object({
   role: z.literal("gate-counter-review"), evidence_digest: digest,
   assurance: z.enum(["server-attested", "degraded"]),
-  producer_family: z.enum(["claude", "codex"]), reviewer_family: z.enum(["claude", "codex"]),
+  producer_family: z.enum(MODEL_FAMILIES), reviewer_family: z.enum(MODEL_FAMILIES),
   independence: z.literal("opposite-family"), gate_id: pathSafeId,
 }).strict().superRefine((slot, context) => {
   if (slot.producer_family === slot.reviewer_family) {

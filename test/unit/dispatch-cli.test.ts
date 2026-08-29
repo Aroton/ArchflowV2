@@ -78,6 +78,7 @@ describe("CLI adapter selection", () => {
   it("defaults to the host's opposite family and refuses unknown hosts before launch", () => {
     expect(selectCliAdapter("claude").id).toBe("codex-cli");
     expect(selectCliAdapter("codex").id).toBe("claude-cli");
+    expect(selectCliAdapter("antigravity").id).toBe("claude-cli");
     expect(projectError(() => selectCliAdapter("unknown" as HostIdentity))).toMatchObject({ code: "UNSUPPORTED_HOST", diagnostic: { parameters: { host: "unknown" } } });
   });
 

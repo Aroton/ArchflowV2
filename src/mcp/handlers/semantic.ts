@@ -105,7 +105,7 @@ async function freshSafeView(
 
 function requireProducingHost(invocation: WorkflowInvocationV1 | undefined, context: InvocationContext): SemanticResultV1 | undefined {
   if (invocation !== undefined && context.connection.initialization_candidates.host === "unknown") {
-    return failure("UNSUPPORTED_HOST", "A producing semantic invocation requires an authenticated Claude or Codex host.");
+    return failure("UNSUPPORTED_HOST", "A producing semantic invocation requires an authenticated Claude, Codex, or Antigravity host.");
   }
   return undefined;
 }

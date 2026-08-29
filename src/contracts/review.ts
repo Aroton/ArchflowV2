@@ -9,7 +9,7 @@ import { assertPlainJson } from "./plain-json.js";
 export const REVIEW_VERDICTS = ["pass", "advisory", "fail"] as const;
 export const REVIEW_ROLES = ["counter-review"] as const;
 export const REVIEW_FINDING_SEVERITIES = ["blocker", "major", "minor"] as const;
-export const MODEL_FAMILIES = ["claude", "codex"] as const;
+export const MODEL_FAMILIES = ["claude", "codex", "gemini"] as const;
 export const ADAPTER_IDS = ["claude-cli", "codex-cli"] as const;
 export const EFFORT_VALUES = ["low", "medium", "high", "xhigh", "max", "ultra"] as const;
 

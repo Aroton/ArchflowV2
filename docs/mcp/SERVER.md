@@ -96,7 +96,7 @@ The planning-restart operation inside the internal state service is an additive 
 
 ## Registration and hosts
 
-`archflow-local init` registers the server with both hosts (see `../workflow/SKILLS.md`). Host tool timeouts are set to one hour — that bounds a *call*, not a gate decision; a resumable gate call can safely be retried. Claude Code registration may sit pending until a human approves it; Codex config is inert until a human trusts the repository. Neither approval is ever performed by the tooling.
+`archflow-local init` registers the server with supported hosts (Claude Code, Codex, and Antigravity; see `../workflow/SKILLS.md`). Host tool timeouts are set to one hour — that bounds a *call*, not a gate decision; a resumable gate call can safely be retried. Claude Code registration may sit pending until a human approves it; Codex config is inert until a human trusts the repository; Antigravity config is registered in `~/.gemini/config/mcp_config.json`. Human approval and trust boundaries are never bypassed by the tooling.
 
 ## Multi-repository implementation actions
 

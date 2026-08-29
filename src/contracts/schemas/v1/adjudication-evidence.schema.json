@@ -200,7 +200,8 @@
               "type": "string",
               "enum": [
                 "claude",
-                "codex"
+                "codex",
+                "gemini"
               ]
             },
             {
@@ -457,7 +458,8 @@
           "type": "string",
           "enum": [
             "claude",
-            "codex"
+            "codex",
+            "gemini"
           ]
         },
         "model": {
@@ -854,7 +856,8 @@
               "type": "string",
               "enum": [
                 "claude",
-                "codex"
+                "codex",
+                "gemini"
               ]
             },
             {

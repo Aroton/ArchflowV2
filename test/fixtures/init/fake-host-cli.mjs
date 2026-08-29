@@ -6,7 +6,13 @@ const adapter = process.env.FAKE_HOST_ADAPTER;
 const argv = process.argv.slice(2);
 
 if (argv[0] === "--version") {
-  process.stdout.write(adapter === "claude" ? `${process.env.FAKE_CLAUDE_VERSION ?? "2.1.220"} (Claude Code)\n` : `codex-cli ${process.env.FAKE_CODEX_VERSION ?? "0.146.0"}\n`);
+  if (adapter === "claude") {
+    process.stdout.write(`${process.env.FAKE_CLAUDE_VERSION ?? "2.1.220"} (Claude Code)\n`);
+  } else if (adapter === "codex") {
+    process.stdout.write(`codex-cli ${process.env.FAKE_CODEX_VERSION ?? "0.146.0"}\n`);
+  } else {
+    process.stdout.write(`${process.env.FAKE_AGY_VERSION ?? "1.1.22"}\n`);
+  }
   process.exit(0);
 }
 if (adapter === "claude" && argv.join(" ") === "auth status") {
@@ -42,6 +48,10 @@ if (adapter === "codex" && argv.slice(0, 3).join(" ") === "mcp get archflow") {
     startup_timeout_sec: trusted ? 30 : null,
     tool_timeout_sec: trusted ? 3600 : null,
   }));
+  process.exit(0);
+}
+if (adapter === "agy" && argv.slice(0, 2).join(" ") === "mcp list") {
+  process.stdout.write(process.env.FAKE_AGY_LIST ?? "archflow  stdio  enabled  archflow-mcp\n");
   process.exit(0);
 }
 process.stderr.write(`unexpected ${adapter ?? "unknown"} invocation: ${argv.join(" ")}\n`);

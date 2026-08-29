@@ -6,6 +6,7 @@ import { discoverWorktree } from "../repository/identity.js";
 import { scaffoldRepositoryAssets, type AssetScaffoldReport } from "./assets.js";
 import { collectInitDiagnostics, type InitDiagnostics } from "./diagnostics.js";
 import {
+  registerAntigravityConfig,
   registerClaudeProject,
   registerCodexProject,
   type HostRegistrationReport,
@@ -20,6 +21,8 @@ export type InitReport = Readonly<{
   claude_registration_error: ProjectError | null;
   codex_registration: HostRegistrationReport | null;
   codex_registration_error: ProjectError | null;
+  antigravity_registration: HostRegistrationReport | null;
+  antigravity_registration_error: ProjectError | null;
   diagnostics: InitDiagnostics;
   creates_task_state: false;
   creates_commit: false;
@@ -42,10 +45,13 @@ export async function runInit(input: InitInput): Promise<ProjectResult<InitRepor
   if (!claude.ok && claude.error.code === "CONFIG_INVALID") return claude;
   const codex = await registerCodexProject(rootInput);
   if (!codex.ok && codex.error.code === "CONFIG_INVALID") return codex;
+  const antigravity = await registerAntigravityConfig(rootInput);
+  if (!antigravity.ok && antigravity.error.code === "CONFIG_INVALID") return antigravity;
   const diagnostics = await collectInitDiagnostics({
     working_directory: rootInput.working_directory,
     ...(claude.ok ? { claude_registration: claude.value } : {}),
     ...(codex.ok ? { codex_registration: codex.value } : {}),
+    ...(antigravity.ok ? { antigravity_registration: antigravity.value } : {}),
   });
   return Object.freeze({
     schema_version: "1",
@@ -57,6 +63,8 @@ export async function runInit(input: InitInput): Promise<ProjectResult<InitRepor
       claude_registration_error: claude.ok ? null : claude.error,
       codex_registration: codex.ok ? codex.value : null,
       codex_registration_error: codex.ok ? null : codex.error,
+      antigravity_registration: antigravity.ok ? antigravity.value : null,
+      antigravity_registration_error: antigravity.ok ? null : antigravity.error,
       diagnostics,
       creates_task_state: false,
       creates_commit: false,

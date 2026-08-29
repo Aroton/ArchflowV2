@@ -13,14 +13,16 @@
           "type": "string",
           "enum": [
             "claude",
-            "codex"
+            "codex",
+            "gemini"
           ]
         },
         "reviewer_family": {
           "type": "string",
           "enum": [
             "claude",
-            "codex"
+            "codex",
+            "gemini"
           ]
         },
         "role": {

@@ -6,7 +6,7 @@ const connectionContextBrand: unique symbol = Symbol("ConnectionContext");
 const invocationContextBrand: unique symbol = Symbol("InvocationContext");
 const authenticConnections = new WeakSet<object>();
 const authenticInvocations = new WeakSet<object>();
-export interface ConnectionContext { readonly connection_id: string; readonly startup_repository_candidate: Readonly<{ readonly working_directory: string }>; readonly initialization_candidates: Readonly<{ readonly client: Readonly<{ readonly name: string; readonly version: string }>; readonly host: "claude" | "codex" | "unknown"; readonly protocol_version: string }>; readonly [connectionContextBrand]: true }
+export interface ConnectionContext { readonly connection_id: string; readonly startup_repository_candidate: Readonly<{ readonly working_directory: string }>; readonly initialization_candidates: Readonly<{ readonly client: Readonly<{ readonly name: string; readonly version: string }>; readonly host: "claude" | "codex" | "antigravity" | "unknown"; readonly protocol_version: string }>; readonly [connectionContextBrand]: true }
 export interface InvocationContext { readonly invocation_id: string; readonly connection: ConnectionContext; readonly signal: AbortSignal; readonly transport_metadata: Readonly<{ readonly request_id: string | number; readonly operation: "tools/call" }>; readonly [invocationContextBrand]: true }
 export interface ConnectionContextFactory { readonly captureStartup: (seed: unknown) => Readonly<{ initialize: (candidates: unknown) => ConnectionContext }> }
 export class ProtocolContextError extends Error { public constructor(public readonly protocol_error: ProtocolError) { super(protocol_error.code); this.name = "ProtocolContextError"; } }
@@ -20,7 +20,7 @@ const requestIdSchema = z.union([z.string(), z.number().int().safe()]);
 // so the durable ConnectionContext client shape stays exactly {name, version}.
 const clientImplementationSchema = z.object({ name: z.string(), version: z.string() });
 const startupSchema = z.object({ connection_id: id, startup_repository_candidate: z.object({ working_directory: text }).strict() }).strict();
-const initializationSchema = z.object({ client: clientImplementationSchema, host: z.enum(["claude", "codex", "unknown"]), protocol_version: version }).strict();
+const initializationSchema = z.object({ client: clientImplementationSchema, host: z.enum(["claude", "codex", "antigravity", "unknown"]), protocol_version: version }).strict();
 const invocationSchema = z.object({ invocation_id: id, transport_metadata: z.object({ request_id: requestIdSchema, operation: z.literal("tools/call") }).strict() }).strict();
 function deepFreeze<T>(value: T): T { if (value !== null && typeof value === "object") { for (const nested of Object.values(value)) deepFreeze(nested); Object.freeze(value); } return value; }
 function copy<T>(value: T): T { return structuredClone(value as PlainJsonValue) as T; }

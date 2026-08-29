@@ -59,7 +59,7 @@ function git(root: string, ...argv: string[]): void {
 }
 
 async function installFakeHosts(bin: string): Promise<void> {
-  for (const adapter of ["claude", "codex"] as const) {
+  for (const adapter of ["claude", "codex", "agy"] as const) {
     const launcher = join(bin, adapter);
     await writeFile(launcher, `#!/bin/sh\nFAKE_HOST_ADAPTER=${adapter} exec "${process.execPath}" "${fakeHostFixture}" "$@"\n`);
     await chmod(launcher, 0o755);

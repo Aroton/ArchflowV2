@@ -780,7 +780,13 @@ export function selectCliAdapter(
 ): CliAdapter {
   if (host === "unknown") return fail(createProjectError("UNSUPPORTED_HOST", { host: "unknown" }));
   if (route !== undefined) return route.adapter === "claude-cli" ? claudeAdapter : codexAdapter;
-  return host === "claude" ? codexAdapter : claudeAdapter;
+  switch (host) {
+    case "claude":
+      return codexAdapter;
+    case "codex":
+    case "antigravity":
+      return claudeAdapter;
+  }
 }
 
 /** Binds extracted child output to its validated dispatch provenance. */

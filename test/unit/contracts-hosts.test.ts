@@ -21,14 +21,19 @@ describe("host identity", () => {
   it("derives every recorded supported handshake", async () => {
     const claude = await fixture("claude-code-2.1.220");
     const codex = await fixture("codex-mcp-client-0.146.0");
+    const antigravity = await fixture("antigravity-client-1.0.0");
 
     expect(deriveHostIdentity(claude.params.clientInfo)).toBe("claude");
     expect(deriveHostIdentity(codex.params.clientInfo)).toBe("codex");
+    expect(deriveHostIdentity(antigravity.params.clientInfo)).toBe("antigravity");
   });
 
   it("derives supported hosts across client version updates", () => {
     expect(deriveHostIdentity({ name: "claude-code", version: "2.1.221" })).toBe("claude");
     expect(deriveHostIdentity({ name: "codex-mcp-client", version: "0.147.0" })).toBe("codex");
+    expect(deriveHostIdentity({ name: "antigravity-client", version: "1.0.1" })).toBe("antigravity");
+    expect(deriveHostIdentity({ name: "antigravity", version: "1.0.1" })).toBe("antigravity");
+    expect(deriveHostIdentity({ name: "agy", version: "1.2.0" })).toBe("antigravity");
   });
 
   it.each([

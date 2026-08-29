@@ -1,6 +1,6 @@
 ---
 name: archflow-init
-description: Initialize ArchFlow's repository assets and project-scoped Claude Code and Codex MCP registrations. Use when setting up ArchFlow in a repository for the first time, repairing an incomplete initialization, or checking initialization diagnostics after an install or host configuration change.
+description: Initialize ArchFlow's repository assets and Claude Code, Codex, and Antigravity MCP registrations. Use when setting up ArchFlow in a repository for the first time, repairing an incomplete initialization, or checking initialization diagnostics after an install or host configuration change.
 ---
 
 # Initialize ArchFlow

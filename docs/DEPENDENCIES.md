@@ -49,17 +49,18 @@ There is no ESLint, Prettier, Biome, dotenv loader, web framework, database clie
 - `scripts/probe-mcp-sdk-compatibility.mjs` verifies the installed SDK/core public and behavioral surfaces the adapter relies on.
 - `src/mcp/tools.ts` advertises exactly two purpose-described tools. `archflow_status` and `archflow_apply` use the generated semantic-workflow schema; the four low-level names remain durable-record vocabulary in `TOOL_NAMES` for existing state, but nothing advertises or dispatches them.
 
-Host identity is derived from MCP `clientInfo.name` in `src/contracts/hosts.ts`: `claude-code` maps to Claude, `codex-mcp-client` maps to Codex, and any unrecognized name maps to `unknown`. Recorded versions are evidence fixtures, not a prefix-based identity fallback.
+Host identity is derived from MCP `clientInfo.name` in `src/contracts/hosts.ts`: `claude-code` maps to Claude, `codex-mcp-client` maps to Codex, `antigravity-client` / `antigravity` / `agy` maps to Antigravity, and any unrecognized name maps to `unknown`. Recorded versions are evidence fixtures, not a prefix-based identity fallback.
 
-### Project registration
+### Host and project registration
 
-Initialization (`src/init/index.ts` and `src/init/registration.ts`) integrates with both first-party hosts:
+Initialization (`src/init/index.ts` and `src/init/registration.ts`) integrates with supported hosts:
 
 Before host registration, `src/init/assets.ts` copies `assets/archflow.gitignore` to `.archflow/.gitignore` byte-for-byte. Its sole `/runtime/` rule keeps transient/cache/diagnostic bytes out of Git without taking ownership of the project root `.gitignore`; diagnostics use Git itself to verify the ignore match and enumerate any already tracked runtime paths.
 
 - Claude Code: `claude mcp add --scope project archflow -- archflow-mcp`, followed by `claude mcp get archflow`. The project descriptor is `.mcp.json`; the registered stdio command is `archflow-mcp` with a 3,600,000 ms timeout. Human project approval can remain pending.
 - Codex: ArchFlow atomically maintains only its marked block in `.codex/config.toml`, then checks it with `codex mcp get archflow --json`. The block sets `startup_timeout_sec = 30` and `tool_timeout_sec = 3600`. Repository trust remains a human action; initialization never writes `trust_level`.
-- Both registration paths detect foreign configuration and command collisions instead of overwriting unrelated host settings.
+- Antigravity: ArchFlow atomically maintains its server configuration in `~/.gemini/config/mcp_config.json`, then checks it with `agy mcp list` when the CLI is present.
+- All registration paths detect foreign configuration and command collisions instead of overwriting unrelated host settings.
 
 The repository itself contains current examples in `.mcp.json` and `.codex/config.toml`.
 

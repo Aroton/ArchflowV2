@@ -75,6 +75,7 @@ export type InitDiagnosticsInput = Readonly<{
   working_directory: string;
   claude_registration?: HostRegistrationReport;
   codex_registration?: HostRegistrationReport;
+  antigravity_registration?: HostRegistrationReport;
 }>;
 
 async function presentPaths(paths: readonly string[]): Promise<readonly string[]> {

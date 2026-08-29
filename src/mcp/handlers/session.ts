@@ -4,7 +4,7 @@ import { createProjectError, type ProjectResult } from "../../contracts/errors.j
 import { parseSafeCode, parseSafeInteger } from "../../contracts/evidence.js";
 import type { ParsedToolCall } from "../../contracts/mcp-tools.js";
 import { decodePhaseInstance } from "../../contracts/phase-instance.js";
-import type { HostIdentity } from "../../contracts/hosts.js";
+import { hostToModelFamily, type HostIdentity } from "../../contracts/hosts.js";
 import type { ModelFamily } from "../../contracts/review.js";
 import type { RoutingPhaseKind } from "../../dispatch/routing.js";
 import { createProductionServices, type ProductionServices } from "../../state/production.js";
@@ -96,7 +96,7 @@ export async function openHandlerSession(
       services: repositoryBoundServices,
       config,
       host,
-      producer_family: host,
+      producer_family: hostToModelFamily(host),
       phase_kind,
       measured_at_revision: parseSafeInteger(state?.revision ?? 0),
       repository_set: repositorySet.value,

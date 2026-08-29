@@ -7,10 +7,13 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  ANTIGRAVITY_MANUAL_ENTRY,
+  ANTIGRAVITY_PASTE_GUIDANCE,
   CLAUDE_MCP_TIMEOUT_MS,
   CLAUDE_PASTE_GUIDANCE,
   CODEX_MANAGED_BLOCK,
   CODEX_PASTE_GUIDANCE,
+  registerAntigravityConfig,
   registerClaudeProject,
   registerCodexProject,
 } from "../../src/init/registration.js";
@@ -20,19 +23,21 @@ import { collectInitDiagnostics } from "../../src/init/diagnostics.js";
 const fixture = fileURLToPath(new URL("../fixtures/init/fake-host-cli.mjs", import.meta.url));
 const temporary: string[] = [];
 
-async function setup(): Promise<{ repository: string; env: NodeJS.ProcessEnv }> {
+async function setup(): Promise<{ repository: string; home: string; env: NodeJS.ProcessEnv }> {
   const root = await mkdtemp(join(tmpdir(), "archflow-init-registration-"));
   temporary.push(root);
   const repository = join(root, "repository with ünicode");
+  const home = join(root, "home");
   const bin = join(root, "bin");
   await mkdir(repository, { recursive: true });
+  await mkdir(home, { recursive: true });
   await mkdir(bin);
-  for (const adapter of ["claude", "codex"] as const) {
+  for (const adapter of ["claude", "codex", "agy"] as const) {
     const launcher = join(bin, adapter);
     await writeFile(launcher, `#!/bin/sh\nFAKE_HOST_ADAPTER=${adapter} exec "${process.execPath}" "${fixture}" "$@"\n`);
     await chmod(launcher, 0o755);
   }
-  return { repository, env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ""}` } };
+  return { repository, home, env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH ?? ""}` } };
 }
 
 afterEach(async () => {
@@ -178,17 +183,47 @@ describe("host registration", () => {
     expect(result.ok ? undefined : result.error.code).toBe("CLI_MISSING");
   });
 
+  it("registers Antigravity config and is byte-stable", async () => {
+    const { repository, home, env } = await setup();
+    const first = await registerAntigravityConfig({ working_directory: repository, environment: env });
+    expect(first.ok).toBe(true);
+    const path = join(home, ".gemini", "config", "mcp_config.json");
+    const once = await readFile(path, "utf8");
+    expect(JSON.parse(once).mcpServers.archflow.command).toBe("archflow-mcp");
+    expect(once.endsWith("\n")).toBe(true);
+    const second = await registerAntigravityConfig({ working_directory: repository, environment: env });
+    expect(second.ok).toBe(true);
+    expect(await readFile(path, "utf8")).toBe(once);
+  });
+
+  it("refuses foreign Antigravity top-level keys and command collisions", async () => {
+    const { repository, home, env } = await setup();
+    const configDir = join(home, ".gemini", "config");
+    await mkdir(configDir, { recursive: true });
+    const path = join(configDir, "mcp_config.json");
+    await writeFile(path, JSON.stringify({ $schema: "foreign", mcpServers: {} }));
+    const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const foreign = await registerAntigravityConfig({ working_directory: repository, environment: env });
+    expect(foreign.ok ? undefined : foreign.error.diagnostic.parameters).toEqual({ issue_code: "mcp-json-foreign-keys" });
+    expect(write).toHaveBeenCalledWith(ANTIGRAVITY_PASTE_GUIDANCE);
+    await writeFile(path, JSON.stringify({ mcpServers: { archflow: { command: "other" } } }));
+    const collision = await registerAntigravityConfig({ working_directory: repository, environment: env });
+    expect(collision.ok ? undefined : collision.error.diagnostic.parameters).toEqual({ issue_code: "server-command-collision" });
+    expect(write).toHaveBeenLastCalledWith(ANTIGRAVITY_PASTE_GUIDANCE);
+  });
+
   it("orchestrates scaffold, registration, and scrubbed preflight with fake binaries", async () => {
-    const { repository, env } = await setup();
+    const { repository, home, env } = await setup();
     execFileSync("git", ["-c", "init.defaultBranch=main", "init", "-q"], { cwd: repository });
     vi.stubEnv("PATH", env.PATH!);
-    vi.stubEnv("HOME", join(dirname(repository), "home"));
+    vi.stubEnv("HOME", home);
     const result = await runInit({ working_directory: repository });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.assets.created).toContain(".archflow/workflow.yaml");
     expect(result.value.claude_registration?.command).toBe("archflow-mcp");
     expect(result.value.codex_registration?.command).toBe("archflow-mcp");
+    expect(result.value.antigravity_registration?.command).toBe("archflow-mcp");
     expect(result.value.diagnostics.claude.version).toBe("2.1.220");
     expect(result.value.diagnostics.codex.version).toBe("0.146.0");
     expect(result.value.diagnostics.limitations.join(" ")).toContain("best-effort");

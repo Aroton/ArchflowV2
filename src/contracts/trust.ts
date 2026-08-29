@@ -23,7 +23,7 @@ import {
 import type { PhaseInstanceId } from "./phase-instance.js";
 import { decodePhaseInstance, encodePhaseInstance } from "./phase-instance.js";
 import type { AdapterId, DegradedReview, ModelFamily, ReviewedRepositoryV1, ReviewEvidence, ReviewRole, RouteOverrideRecord, RouteSourceRecord, ServerAttestedReview } from "./review.js";
-import { EFFORT_VALUES, parseAndDeriveReview, parseReferencedReviewEvidence, reviewEvidenceSchema } from "./review.js";
+import { EFFORT_VALUES, MODEL_FAMILIES, parseAndDeriveReview, parseReferencedReviewEvidence, reviewEvidenceSchema } from "./review.js";
 import { assertPlainJson } from "./plain-json.js";
 
 export type EvidenceKind = "review" | "adjudication";
@@ -142,7 +142,7 @@ export type CurrentEvidenceSetRef = { readonly set_digest: Sha256Digest; readonl
 const idSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u) as unknown as z.ZodType<Sha256Digest>;
 const phaseSchema = z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u) as unknown as z.ZodType<PhaseInstanceId>;
-const familySchema = z.enum(["claude", "codex"]);
+const familySchema = z.enum(MODEL_FAMILIES);
 const safeInteger = z.number().int().nonnegative().safe();
 const agentAuthoritySchema = z.object({ kind: z.literal("agent-declared"), result_id: idSchema, result_digest: digestSchema, state_revision: safeInteger }).strict();
 const serverAuthoritySchema = z.object({ kind: z.literal("server"), invocation_id: idSchema, result_id: idSchema, receipt_id: idSchema, state_revision: safeInteger, envelope_input_digest: digestSchema, observed_output_digest: digestSchema, result_digest: digestSchema }).strict();

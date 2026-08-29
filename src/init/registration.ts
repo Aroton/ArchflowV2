@@ -14,8 +14,10 @@ export const CODEX_BLOCK_BEGIN = "# >>> archflow managed MCP server >>>";
 export const CODEX_BLOCK_END = "# <<< archflow managed MCP server <<<";
 export const CODEX_MANAGED_BLOCK = `${CODEX_BLOCK_BEGIN}\n[mcp_servers.archflow]\ncommand = "archflow-mcp"\nargs = []\nstartup_timeout_sec = ${CODEX_STARTUP_TIMEOUT_SEC}\ntool_timeout_sec = ${CODEX_TOOL_TIMEOUT_SEC}\n${CODEX_BLOCK_END}\n`;
 export const CLAUDE_MANUAL_ENTRY = `"archflow": {\n  "type": "stdio",\n  "command": "archflow-mcp",\n  "args": [],\n  "timeout": ${CLAUDE_MCP_TIMEOUT_MS}\n}`;
+export const ANTIGRAVITY_MANUAL_ENTRY = `"archflow": {\n  "command": "archflow-mcp",\n  "args": []\n}`;
 export const CLAUDE_PASTE_GUIDANCE = `Add this exact entry under \"mcpServers\" in .mcp.json after resolving the conflicting content:\n${CLAUDE_MANUAL_ENTRY}\n`;
 export const CODEX_PASTE_GUIDANCE = `Add this exact ArchFlow-owned block to .codex/config.toml after resolving the conflicting content:\n${CODEX_MANAGED_BLOCK}`;
+export const ANTIGRAVITY_PASTE_GUIDANCE = `Add this exact entry under \"mcpServers\" in ~/.gemini/config/mcp_config.json after resolving the conflicting content:\n${ANTIGRAVITY_MANUAL_ENTRY}\n`;
 
 export type RegistrationInput = Readonly<{
   working_directory: string;
@@ -24,7 +26,7 @@ export type RegistrationInput = Readonly<{
 
 export type HostRegistrationReport = Readonly<{
   schema_version: "1";
-  host: "claude" | "codex";
+  host: "claude" | "codex" | "antigravity";
   registration: "created" | "updated" | "unchanged";
   command: "archflow-mcp";
   pending_approval: boolean;
@@ -341,3 +343,69 @@ export async function registerCodexProject(input: RegistrationInput): Promise<Pr
     return ioFailure("codex-registration");
   }
 }
+
+export async function registerAntigravityConfig(input: RegistrationInput): Promise<ProjectResult<HostRegistrationReport>> {
+  const home = input.environment?.HOME ?? process.env.HOME ?? "";
+  if (!home) return ioFailure("antigravity-registration");
+  const configDir = join(home, ".gemini", "config");
+  const path = join(configDir, "mcp_config.json");
+  try {
+    const beforeSource = await readOptional(path);
+    const before = parseMcpJson(beforeSource);
+    if (!before.ok) return refuse("mcp-json-foreign-keys", ANTIGRAVITY_PASTE_GUIDANCE);
+    const existing = before.value.mcpServers.archflow;
+    if (existing !== undefined && serverCommand(existing) !== "archflow-mcp") {
+      return refuse("server-command-collision", ANTIGRAVITY_PASTE_GUIDANCE);
+    }
+
+    let registration: HostRegistrationReport["registration"] = "unchanged";
+    if (existing === undefined) {
+      registration = "created";
+    }
+
+    const updatedServers = {
+      ...before.value.mcpServers,
+      archflow: {
+        command: "archflow-mcp",
+        args: [],
+      },
+    };
+    const serialized = `${JSON.stringify({ mcpServers: updatedServers }, null, 2)}\n`;
+    if (serialized !== beforeSource) {
+      await mkdir(configDir, { recursive: true });
+      await replaceHostConfig(path, serialized);
+    }
+
+    let get: CommandResult | undefined;
+    try {
+      get = await runCommand("agy", ["mcp", "list"], input.working_directory, input.environment);
+    } catch {
+      // agy CLI may not be on PATH (e.g. IDE surface); config file was successfully written
+    }
+
+    let diagnostic = "Antigravity global MCP configuration written to ~/.gemini/config/mcp_config.json.";
+    let masked = false;
+    if (get !== undefined && get.exit_code === 0) {
+      diagnostic = get.stdout.trim();
+      const lines = diagnostic.split("\n");
+      const archflowLine = lines.find((l) => l.startsWith("archflow"));
+      if (archflowLine && !archflowLine.includes("archflow-mcp")) {
+        masked = true;
+      }
+    }
+
+    return ok(Object.freeze({
+      schema_version: "1",
+      host: "antigravity",
+      registration,
+      command: "archflow-mcp",
+      pending_approval: false,
+      project_trusted: true,
+      masked_by_higher_precedence: masked,
+      diagnostic,
+    }));
+  } catch {
+    return ioFailure("antigravity-registration");
+  }
+}
+

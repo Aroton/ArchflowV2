@@ -46,7 +46,9 @@ function deriveModelFamily(model: string): ModelFamily {
 }
 
 function adapterForFamily(family: ModelFamily): AdapterId {
-  return family === "claude" ? "claude-cli" : "codex-cli";
+  if (family === "claude") return "claude-cli";
+  if (family === "codex") return "codex-cli";
+  return fail(createProjectError("CONFIG_FAMILY_UNSUPPORTED", { family }));
 }
 
 const SUPPORTED_EFFORTS: Readonly<Record<AdapterId, ReadonlySet<string>>> = Object.freeze({
