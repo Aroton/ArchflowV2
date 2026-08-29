@@ -23680,6 +23680,149 @@ function gateDecisionEffect(payload) {
   return effects[payload.decision];
 }
 
+// src/contracts/review.ts
+var REVIEW_VERDICTS = ["pass", "advisory", "fail"];
+var REVIEW_ROLES = ["counter-review"];
+var REVIEW_FINDING_SEVERITIES = ["blocker", "major", "minor"];
+var MODEL_FAMILIES = ["claude", "codex", "gemini"];
+var ADAPTER_IDS = ["claude-cli", "codex-cli"];
+var EFFORT_VALUES = ["low", "medium", "high", "xhigh", "max", "ultra"];
+var nonBlank = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
+var id = external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
+var digest2 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var taskSlug = createTaskSlugV1Schema();
+var phaseInstance = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
+var safePositive = external_exports.number().int().positive().safe();
+var repositoryName = external_exports.union([
+  external_exports.literal("primary"),
+  external_exports.string().regex(REPOSITORY_NAME_PATTERN, REPOSITORY_NAME_MESSAGE)
+]);
+var reviewedRepositoryV1Schema = external_exports.object({
+  name: repositoryName,
+  repository_identity_digest: digest2,
+  commit: gitOidV1Schema
+}).strict();
+function validateReviewedRepositories(repositories) {
+  if (repositories.length === 0 || repositories[0]?.name !== "primary") {
+    throw new TypeError("reviewed repositories must begin with primary");
+  }
+  const names = repositories.map((repository) => repository.name);
+  if (new Set(names).size !== names.length || names.some((name, index) => index > 1 && names[index - 1] >= name)) {
+    throw new TypeError("reviewed repositories must contain unique names sorted after primary");
+  }
+}
+var reviewedRepositoriesV1Schema = external_exports.array(reviewedRepositoryV1Schema).superRefine((repositories, context2) => {
+  try {
+    validateReviewedRepositories(repositories);
+  } catch (error51) {
+    context2.addIssue({ code: "custom", message: error51 instanceof Error ? error51.message : "invalid reviewed repositories" });
+  }
+});
+var ruleVersionRefSchema = external_exports.object({ rule_id: id, rule_version: safePositive }).strict();
+var reviewFindingSchema = external_exports.object({
+  finding_id: id,
+  severity: external_exports.enum(REVIEW_FINDING_SEVERITIES),
+  blocking: external_exports.boolean(),
+  summary: nonBlank,
+  evidence: nonBlank,
+  suggested_resolution: nonBlank
+}).strict().superRefine((finding, context2) => {
+  if (finding.blocking !== (finding.severity === "blocker")) {
+    context2.addIssue({ code: "custom", path: ["blocking"], message: "only blocker findings are blocking" });
+  }
+});
+var rawReviewSchema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  task_id: taskSlug,
+  phase_instance: phaseInstance,
+  step: external_exports.literal("counter_review"),
+  role: external_exports.enum(REVIEW_ROLES),
+  subject_digest: digest2,
+  input_fingerprint: digest2,
+  rubric_digest: digest2,
+  producer_family: external_exports.enum(MODEL_FAMILIES),
+  findings: external_exports.array(reviewFindingSchema),
+  matched_rule_versions: external_exports.array(ruleVersionRefSchema),
+  verdict: external_exports.enum(REVIEW_VERDICTS),
+  blocking_count: external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
+}).strict().superRefine((review, context2) => {
+  const findingIds = /* @__PURE__ */ new Set();
+  review.findings.forEach((finding, index) => {
+    if (findingIds.has(finding.finding_id)) context2.addIssue({ code: "custom", path: ["findings", index, "finding_id"], message: "duplicate finding_id" });
+    findingIds.add(finding.finding_id);
+  });
+  const rules2 = /* @__PURE__ */ new Set();
+  review.matched_rule_versions.forEach((rule4, index) => {
+    const key = `${rule4.rule_id}:${rule4.rule_version}`;
+    if (rules2.has(key)) context2.addIssue({ code: "custom", path: ["matched_rule_versions", index], message: "duplicate rule version" });
+    rules2.add(key);
+  });
+  const expected = expectedReviewSummary(review.findings);
+  if (review.blocking_count !== expected.blocking_count) context2.addIssue({ code: "custom", path: ["blocking_count"], message: `review blocking_count must be ${expected.blocking_count}` });
+  if (review.verdict !== expected.verdict) context2.addIssue({ code: "custom", path: ["verdict"], message: `review verdict must be ${expected.verdict}` });
+});
+function expectedReviewSummary(findings) {
+  const blocking_count = findings.filter((finding) => finding.blocking).length;
+  return { blocking_count, verdict: blocking_count > 0 ? "fail" : findings.length > 0 ? "advisory" : "pass" };
+}
+function validateReviewClaims(parsed) {
+  const expected = expectedReviewSummary(parsed.findings);
+  if (parsed.blocking_count !== expected.blocking_count) throw new TypeError(`review blocking_count must be ${expected.blocking_count}`);
+  if (parsed.verdict !== expected.verdict) throw new TypeError(`review verdict must be ${expected.verdict}`);
+}
+function parseAndDeriveReview(value) {
+  assertPlainJson(value, "review");
+  const parsed = rawReviewSchema.parse(value);
+  validateReviewClaims(parsed);
+  return parsed;
+}
+var ROUTE_SOURCE_PROVENANCES = ["configured", "invocation-declared", "route-override"];
+var DISPLACED_ROUTE_SOURCES = ["configured", "invocation-declared"];
+var provenanceBase = rawReviewSchema.safeExtend({
+  model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]),
+  model: nonBlank,
+  effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")])
+});
+var routeOverrideRecordSchema = external_exports.object({
+  reason: nonBlank,
+  pinned_model: nonBlank.optional(),
+  pinned_effort: external_exports.enum(EFFORT_VALUES).optional(),
+  pinned_provider: nonBlank.optional()
+}).strict();
+var displacedRouteRecordSchema = external_exports.object({
+  source: external_exports.enum(DISPLACED_ROUTE_SOURCES),
+  model: nonBlank,
+  effort: external_exports.enum(EFFORT_VALUES),
+  provider: nonBlank.optional()
+}).strict();
+var routeSourceRecordSchema = external_exports.object({
+  provenance: external_exports.enum(ROUTE_SOURCE_PROVENANCES),
+  displaced: displacedRouteRecordSchema.optional()
+}).strict();
+var serverAttestedReviewSchema = provenanceBase.safeExtend({
+  assurance: external_exports.literal("server-attested"),
+  adapter: external_exports.enum(ADAPTER_IDS),
+  cli_version: nonBlank,
+  model_family: external_exports.enum(MODEL_FAMILIES),
+  effort: external_exports.enum(EFFORT_VALUES),
+  invocation_id: id,
+  envelope_input_digest: digest2,
+  observed_output_digest: digest2,
+  result_id: id,
+  provider: nonBlank.optional(),
+  route_source: routeSourceRecordSchema.optional(),
+  route_override: routeOverrideRecordSchema.optional(),
+  repositories: reviewedRepositoriesV1Schema.optional()
+}).strict();
+var degradedReviewSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank }).strict();
+var reviewEvidenceSchema = external_exports.discriminatedUnion("assurance", [serverAttestedReviewSchema, degradedReviewSchema]);
+function parseReviewEvidence(value) {
+  assertPlainJson(value, "review evidence");
+  const parsed = reviewEvidenceSchema.parse(value);
+  validateReviewClaims(parsed);
+  return parsed;
+}
+
 // src/contracts/tool-names.ts
 var TOOL_NAMES = Object.freeze([
   "archflow_state",
@@ -23698,9 +23841,9 @@ function isToolName(value) {
 
 // src/contracts/errors.ts
 var documentScoped = (schema) => schema.clone(schema.def);
-var digest2 = documentScoped(sha256DigestV1Schema);
-var id = documentScoped(safeIdV1Schema);
-var taskSlug = documentScoped(taskSlugV1Schema);
+var digest3 = documentScoped(sha256DigestV1Schema);
+var id2 = documentScoped(safeIdV1Schema);
+var taskSlug2 = documentScoped(taskSlugV1Schema);
 var pathSafeId = documentScoped(pathSafeIdV1Schema);
 var code = documentScoped(safeCodeV1Schema);
 var version2 = documentScoped(safeVersionV1Schema);
@@ -23708,10 +23851,10 @@ var integer2 = documentScoped(safeIntegerV1Schema);
 var repositoryPathClaim = documentScoped(repositoryPathClaimV1Schema);
 var tool = external_exports.enum(TOOL_NAMES);
 var adapter = external_exports.enum(["claude-cli", "codex-cli"]);
-var family = external_exports.enum(["claude", "codex"]);
+var family = external_exports.enum(MODEL_FAMILIES);
 var gateKind = external_exports.enum(GATE_KINDS);
-var repositoryName = external_exports.union([external_exports.literal("primary"), external_exports.string().regex(REPOSITORY_NAME_PATTERN)]);
-var phaseInstance = external_exports.string().regex(/^(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)$/u).refine((value) => {
+var repositoryName2 = external_exports.union([external_exports.literal("primary"), external_exports.string().regex(REPOSITORY_NAME_PATTERN)]);
+var phaseInstance2 = external_exports.string().regex(/^(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)$/u).refine((value) => {
   try {
     decodePhaseInstance(value);
     return true;
@@ -23720,9 +23863,9 @@ var phaseInstance = external_exports.string().regex(/^(prd|design|phase-design-[
   }
 });
 var object2 = (shape) => external_exports.object(shape).strict();
-var digestPair = { expected_digest: digest2, observed_digest: digest2 };
+var digestPair = { expected_digest: digest3, observed_digest: digest3 };
 var pathClass = external_exports.enum(PATH_CLASSES);
-var taskPathClass = { task_id: taskSlug, path_class: pathClass };
+var taskPathClass = { task_id: taskSlug2, path_class: pathClass };
 var adapterAttempt = { adapter, attempt: integer2 };
 var sortedPaths = external_exports.array(repositoryPathClaim).min(1).superRefine((items, context2) => {
   for (let index = 1; index < items.length; index += 1) if (items[index - 1].localeCompare(items[index]) >= 0) context2.addIssue({ code: "custom", message: "offending_paths must be sorted and unique" });
@@ -23746,50 +23889,50 @@ function describeValidationIssues(error51) {
 }
 var PROJECT_PARAMETER_SCHEMAS = {
   CONTRACT_INVALID: object2({ tool: tool.optional(), issue_code: code, schema_version: version2.optional(), issues: validationIssues.optional() }),
-  RESULT_INVALID: object2({ tool, result_id: id, expected_digest: digest2.optional(), observed_digest: digest2.optional() }),
+  RESULT_INVALID: object2({ tool, result_id: id2, expected_digest: digest3.optional(), observed_digest: digest3.optional() }),
   CONTRACT_VERSION_UNSUPPORTED: object2({ schema_version: version2, supported_version: version2 }),
   ENVELOPE_OVERFLOW: object2({ offending_paths: sortedPaths, current_bytes: integer2, byte_cap: integer2 }),
   WORKFLOW_INVALID: issueParams,
   CONFIG_INVALID: object2({ issue_code: code, issues: validationIssues.optional() }),
-  CONFIG_MODEL_UNSUPPORTED: object2({ model: id }),
-  CONFIG_FAMILY_UNSUPPORTED: object2({ family: id }),
-  RUNTIME_VERSION_UNSUPPORTED: object2({ component: id, version: version2 }),
-  REPOSITORY_NOT_FOUND: object2({ repository_candidate_digest: digest2 }),
+  CONFIG_MODEL_UNSUPPORTED: object2({ model: id2 }),
+  CONFIG_FAMILY_UNSUPPORTED: object2({ family: id2 }),
+  RUNTIME_VERSION_UNSUPPORTED: object2({ component: id2, version: version2 }),
+  REPOSITORY_NOT_FOUND: object2({ repository_candidate_digest: digest3 }),
   REPOSITORY_MISMATCH: digestsParams,
-  REPOSITORY_VIEW_UNAVAILABLE: object2({ repository_name: repositoryName }),
-  TASK_INVALID: object2({ task_id: taskSlug, issue_code: code }),
+  REPOSITORY_VIEW_UNAVAILABLE: object2({ repository_name: repositoryName2 }),
+  TASK_INVALID: object2({ task_id: taskSlug2, issue_code: code }),
   PATH_INVALID: taskPathParams,
   PATH_ESCAPE: taskPathParams,
   TASK_SCOPE_VIOLATION: taskPathParams,
   GIT_CONFLICT: object2({ operation: code }),
   GIT_DIVERGED: digestsParams,
-  HANDOFF_REQUIRED: object2({ phase_instance: phaseInstance }),
-  POLICY_BASE_INVALID: object2({ expected_digest: digest2, observed_digest: digest2.optional() }),
+  HANDOFF_REQUIRED: object2({ phase_instance: phaseInstance2 }),
+  POLICY_BASE_INVALID: object2({ expected_digest: digest3, observed_digest: digest3.optional() }),
   WORKFLOW_MISMATCH: digestsParams,
   STALE_SKILLS: digestsParams,
-  STATE_MISSING: object2({ phase_instance: phaseInstance }),
-  STATE_INVALID: object2({ phase_instance: phaseInstance, issue_code: code }),
-  TRANSITION_INVALID: object2({ phase_instance: phaseInstance, from: code, to: code }),
+  STATE_MISSING: object2({ phase_instance: phaseInstance2 }),
+  STATE_INVALID: object2({ phase_instance: phaseInstance2, issue_code: code }),
+  TRANSITION_INVALID: object2({ phase_instance: phaseInstance2, from: code, to: code }),
   INPUT_FINGERPRINT_MISMATCH: digestsParams,
   STATE_CONFLICT: object2({ expected_revision: integer2, observed_revision: integer2 }),
   INTENT_MISMATCH: digestsParams,
   INTENT_NOT_CURRENT: object2({ intent_id: pathSafeId, receipt_revision: integer2, current_revision: integer2 }),
   SNAPSHOT_LIMIT: object2({ limit_scope: external_exports.enum(["result", "task"]), offending_paths: sortedPaths, current_bytes: integer2, byte_cap: integer2 }),
-  SNAPSHOT_INVALID: object2({ snapshot_digest: digest2, issue_code: code, repository_name: repositoryName.optional() }),
+  SNAPSHOT_INVALID: object2({ snapshot_digest: digest3, issue_code: code, repository_name: repositoryName2.optional() }),
   RESTORE_COLLISION: object2({ gate_id: pathSafeId, path_class: pathClass }),
-  RECONCILIATION_REQUIRED: object2({ recorded_digest: digest2, observed_digest: digest2 }),
-  SECRET_DETECTED: object2({ path_class: pathClass, detector_id: id }),
+  RECONCILIATION_REQUIRED: object2({ recorded_digest: digest3, observed_digest: digest3 }),
+  SECRET_DETECTED: object2({ path_class: pathClass, detector_id: id2 }),
   GATE_ACTIVE: gateParams,
   GATE_DECISION_INVALID: object2({ gate_id: pathSafeId, gate_kind: gateKind, issue_code: code }),
   GATE_CANCELLED: gateParams,
-  UNSUPPORTED_HOST: object2({ host: id }),
-  UNSUPPORTED_MODEL: object2({ model: id }),
+  UNSUPPORTED_HOST: object2({ host: id2 }),
+  UNSUPPORTED_MODEL: object2({ model: id2 }),
   FAMILY_MISMATCH: object2({ expected_family: family, observed_family: family }),
   CLI_VERSION_UNSUPPORTED: object2({ adapter, version: version2 }),
   AUTH_UNAVAILABLE: adapterOnlyParams,
   CLI_MISSING: adapterOnlyParams,
-  SANDBOX_UNAVAILABLE: object2({ capability: id }),
-  SANDBOX_PROBE_FAILED: object2({ capability: id, failure_class: code }),
+  SANDBOX_UNAVAILABLE: object2({ capability: id2 }),
+  SANDBOX_PROBE_FAILED: object2({ capability: id2, failure_class: code }),
   RATE_LIMITED: adapterAttemptParams,
   TIMEOUT: object2({ ...adapterAttempt, limit_ms: integer2 }),
   CANCELLED: object2({ source: external_exports.enum(["client", "transport"]), attempt: integer2 }),
@@ -23797,7 +23940,7 @@ var PROJECT_PARAMETER_SCHEMAS = {
   IO_ERROR: object2({ operation: code, attempt: integer2 }),
   OUTPUT_OVERFLOW: object2({ adapter, byte_count: integer2, byte_cap: integer2 }),
   PROCESS_FAILED: object2({ adapter, exit_class: code }),
-  INTERNAL_ERROR: object2({ correlation_id: id })
+  INTERNAL_ERROR: object2({ correlation_id: id2 })
 };
 var protocolDigest = documentScoped(sha256DigestV1Schema);
 var protocolId = documentScoped(safeIdV1Schema);
@@ -23903,7 +24046,7 @@ function parseProjectError(value) {
 var internalErrorSchemaTables = Object.freeze({
   project: Object.freeze({
     parameters: PROJECT_PARAMETER_SCHEMAS,
-    primitives: Object.freeze({ digest: digest2, id, taskSlug, pathSafeId, pathClass, code, version: version2, integer: integer2, tool, adapter, family, gate: gateKind, phase: phaseInstance, repositoryPathClaim }),
+    primitives: Object.freeze({ digest: digest3, id: id2, taskSlug: taskSlug2, pathSafeId, pathClass, code, version: version2, integer: integer2, tool, adapter, family, gate: gateKind, phase: phaseInstance2, repositoryPathClaim }),
     shared: Object.freeze({ issue: issueParams, validationIssues, digests: digestsParams, taskPath: taskPathParams, gateParams, adapterOnly: adapterOnlyParams, adapterAttempt: adapterAttemptParams })
   }),
   protocol: Object.freeze({
@@ -23914,149 +24057,6 @@ var internalErrorSchemaTables = Object.freeze({
 
 // src/contracts/trust.ts
 import { createHash as createHash2 } from "node:crypto";
-
-// src/contracts/review.ts
-var REVIEW_VERDICTS = ["pass", "advisory", "fail"];
-var REVIEW_ROLES = ["counter-review"];
-var REVIEW_FINDING_SEVERITIES = ["blocker", "major", "minor"];
-var MODEL_FAMILIES = ["claude", "codex"];
-var ADAPTER_IDS = ["claude-cli", "codex-cli"];
-var EFFORT_VALUES = ["low", "medium", "high", "xhigh", "max", "ultra"];
-var nonBlank = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
-var id2 = external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
-var digest3 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
-var taskSlug2 = createTaskSlugV1Schema();
-var phaseInstance2 = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
-var safePositive = external_exports.number().int().positive().safe();
-var repositoryName2 = external_exports.union([
-  external_exports.literal("primary"),
-  external_exports.string().regex(REPOSITORY_NAME_PATTERN, REPOSITORY_NAME_MESSAGE)
-]);
-var reviewedRepositoryV1Schema = external_exports.object({
-  name: repositoryName2,
-  repository_identity_digest: digest3,
-  commit: gitOidV1Schema
-}).strict();
-function validateReviewedRepositories(repositories) {
-  if (repositories.length === 0 || repositories[0]?.name !== "primary") {
-    throw new TypeError("reviewed repositories must begin with primary");
-  }
-  const names = repositories.map((repository) => repository.name);
-  if (new Set(names).size !== names.length || names.some((name, index) => index > 1 && names[index - 1] >= name)) {
-    throw new TypeError("reviewed repositories must contain unique names sorted after primary");
-  }
-}
-var reviewedRepositoriesV1Schema = external_exports.array(reviewedRepositoryV1Schema).superRefine((repositories, context2) => {
-  try {
-    validateReviewedRepositories(repositories);
-  } catch (error51) {
-    context2.addIssue({ code: "custom", message: error51 instanceof Error ? error51.message : "invalid reviewed repositories" });
-  }
-});
-var ruleVersionRefSchema = external_exports.object({ rule_id: id2, rule_version: safePositive }).strict();
-var reviewFindingSchema = external_exports.object({
-  finding_id: id2,
-  severity: external_exports.enum(REVIEW_FINDING_SEVERITIES),
-  blocking: external_exports.boolean(),
-  summary: nonBlank,
-  evidence: nonBlank,
-  suggested_resolution: nonBlank
-}).strict().superRefine((finding, context2) => {
-  if (finding.blocking !== (finding.severity === "blocker")) {
-    context2.addIssue({ code: "custom", path: ["blocking"], message: "only blocker findings are blocking" });
-  }
-});
-var rawReviewSchema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  task_id: taskSlug2,
-  phase_instance: phaseInstance2,
-  step: external_exports.literal("counter_review"),
-  role: external_exports.enum(REVIEW_ROLES),
-  subject_digest: digest3,
-  input_fingerprint: digest3,
-  rubric_digest: digest3,
-  producer_family: external_exports.enum(MODEL_FAMILIES),
-  findings: external_exports.array(reviewFindingSchema),
-  matched_rule_versions: external_exports.array(ruleVersionRefSchema),
-  verdict: external_exports.enum(REVIEW_VERDICTS),
-  blocking_count: external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
-}).strict().superRefine((review, context2) => {
-  const findingIds = /* @__PURE__ */ new Set();
-  review.findings.forEach((finding, index) => {
-    if (findingIds.has(finding.finding_id)) context2.addIssue({ code: "custom", path: ["findings", index, "finding_id"], message: "duplicate finding_id" });
-    findingIds.add(finding.finding_id);
-  });
-  const rules2 = /* @__PURE__ */ new Set();
-  review.matched_rule_versions.forEach((rule4, index) => {
-    const key = `${rule4.rule_id}:${rule4.rule_version}`;
-    if (rules2.has(key)) context2.addIssue({ code: "custom", path: ["matched_rule_versions", index], message: "duplicate rule version" });
-    rules2.add(key);
-  });
-  const expected = expectedReviewSummary(review.findings);
-  if (review.blocking_count !== expected.blocking_count) context2.addIssue({ code: "custom", path: ["blocking_count"], message: `review blocking_count must be ${expected.blocking_count}` });
-  if (review.verdict !== expected.verdict) context2.addIssue({ code: "custom", path: ["verdict"], message: `review verdict must be ${expected.verdict}` });
-});
-function expectedReviewSummary(findings) {
-  const blocking_count = findings.filter((finding) => finding.blocking).length;
-  return { blocking_count, verdict: blocking_count > 0 ? "fail" : findings.length > 0 ? "advisory" : "pass" };
-}
-function validateReviewClaims(parsed) {
-  const expected = expectedReviewSummary(parsed.findings);
-  if (parsed.blocking_count !== expected.blocking_count) throw new TypeError(`review blocking_count must be ${expected.blocking_count}`);
-  if (parsed.verdict !== expected.verdict) throw new TypeError(`review verdict must be ${expected.verdict}`);
-}
-function parseAndDeriveReview(value) {
-  assertPlainJson(value, "review");
-  const parsed = rawReviewSchema.parse(value);
-  validateReviewClaims(parsed);
-  return parsed;
-}
-var ROUTE_SOURCE_PROVENANCES = ["configured", "invocation-declared", "route-override"];
-var DISPLACED_ROUTE_SOURCES = ["configured", "invocation-declared"];
-var provenanceBase = rawReviewSchema.safeExtend({
-  model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]),
-  model: nonBlank,
-  effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")])
-});
-var routeOverrideRecordSchema = external_exports.object({
-  reason: nonBlank,
-  pinned_model: nonBlank.optional(),
-  pinned_effort: external_exports.enum(EFFORT_VALUES).optional(),
-  pinned_provider: nonBlank.optional()
-}).strict();
-var displacedRouteRecordSchema = external_exports.object({
-  source: external_exports.enum(DISPLACED_ROUTE_SOURCES),
-  model: nonBlank,
-  effort: external_exports.enum(EFFORT_VALUES),
-  provider: nonBlank.optional()
-}).strict();
-var routeSourceRecordSchema = external_exports.object({
-  provenance: external_exports.enum(ROUTE_SOURCE_PROVENANCES),
-  displaced: displacedRouteRecordSchema.optional()
-}).strict();
-var serverAttestedReviewSchema = provenanceBase.safeExtend({
-  assurance: external_exports.literal("server-attested"),
-  adapter: external_exports.enum(ADAPTER_IDS),
-  cli_version: nonBlank,
-  model_family: external_exports.enum(MODEL_FAMILIES),
-  effort: external_exports.enum(EFFORT_VALUES),
-  invocation_id: id2,
-  envelope_input_digest: digest3,
-  observed_output_digest: digest3,
-  result_id: id2,
-  provider: nonBlank.optional(),
-  route_source: routeSourceRecordSchema.optional(),
-  route_override: routeOverrideRecordSchema.optional(),
-  repositories: reviewedRepositoriesV1Schema.optional()
-}).strict();
-var degradedReviewSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank }).strict();
-var reviewEvidenceSchema = external_exports.discriminatedUnion("assurance", [serverAttestedReviewSchema, degradedReviewSchema]);
-function parseReviewEvidence(value) {
-  assertPlainJson(value, "review evidence");
-  const parsed = reviewEvidenceSchema.parse(value);
-  validateReviewClaims(parsed);
-  return parsed;
-}
 
 // src/contracts/adjudication.ts
 var CONSTITUTION_RESULTS = ["pass", "fail", "uncertain"];
@@ -24224,7 +24224,7 @@ var observationSource = Object.freeze({
 var idSchema = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
 var digestSchema = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var phaseSchema = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
-var familySchema = external_exports.enum(["claude", "codex"]);
+var familySchema = external_exports.enum(MODEL_FAMILIES);
 var safeInteger2 = external_exports.number().int().nonnegative().safe();
 var agentAuthoritySchema = external_exports.object({ kind: external_exports.literal("agent-declared"), result_id: idSchema, result_digest: digestSchema, state_revision: safeInteger2 }).strict();
 var serverAuthoritySchema = external_exports.object({ kind: external_exports.literal("server"), invocation_id: idSchema, result_id: idSchema, receipt_id: idSchema, state_revision: safeInteger2, envelope_input_digest: digestSchema, observed_output_digest: digestSchema, result_digest: digestSchema }).strict();
@@ -24339,8 +24339,8 @@ var legacySupplementalSlot = external_exports.object({
   role: external_exports.literal("gate-counter-review"),
   evidence_digest: digest5,
   assurance: external_exports.enum(["server-attested", "degraded"]),
-  producer_family: external_exports.enum(["claude", "codex"]),
-  reviewer_family: external_exports.enum(["claude", "codex"]),
+  producer_family: external_exports.enum(MODEL_FAMILIES),
+  reviewer_family: external_exports.enum(MODEL_FAMILIES),
   independence: external_exports.literal("opposite-family"),
   gate_id: pathSafeId2
 }).strict().superRefine((slot, context2) => {
@@ -36016,7 +36016,9 @@ function deriveModelFamily(model) {
   return fail14(createProjectError("CONFIG_MODEL_UNSUPPORTED", { model }));
 }
 function adapterForFamily(family2) {
-  return family2 === "claude" ? "claude-cli" : "codex-cli";
+  if (family2 === "claude") return "claude-cli";
+  if (family2 === "codex") return "codex-cli";
+  return fail14(createProjectError("CONFIG_FAMILY_UNSUPPORTED", { family: family2 }));
 }
 var SUPPORTED_EFFORTS = Object.freeze({
   "claude-cli": /* @__PURE__ */ new Set(["low", "medium", "high", "xhigh", "max"]),
@@ -41321,11 +41323,18 @@ var CLAUDE_MANUAL_ENTRY = `"archflow": {
   "args": [],
   "timeout": ${CLAUDE_MCP_TIMEOUT_MS}
 }`;
+var ANTIGRAVITY_MANUAL_ENTRY = `"archflow": {
+  "command": "archflow-mcp",
+  "args": []
+}`;
 var CLAUDE_PASTE_GUIDANCE = `Add this exact entry under "mcpServers" in .mcp.json after resolving the conflicting content:
 ${CLAUDE_MANUAL_ENTRY}
 `;
 var CODEX_PASTE_GUIDANCE = `Add this exact ArchFlow-owned block to .codex/config.toml after resolving the conflicting content:
 ${CODEX_MANAGED_BLOCK}`;
+var ANTIGRAVITY_PASTE_GUIDANCE = `Add this exact entry under "mcpServers" in ~/.gemini/config/mcp_config.json after resolving the conflicting content:
+${ANTIGRAVITY_MANUAL_ENTRY}
+`;
 var ok18 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail17 = (issueCode) => Object.freeze({
   schema_version: "1",
@@ -41590,6 +41599,65 @@ async function registerCodexProject(input) {
     return ioFailure3("codex-registration");
   }
 }
+async function registerAntigravityConfig(input) {
+  const home = input.environment?.HOME ?? process.env.HOME ?? "";
+  if (!home) return ioFailure3("antigravity-registration");
+  const configDir = join11(home, ".gemini", "config");
+  const path2 = join11(configDir, "mcp_config.json");
+  try {
+    const beforeSource = await readOptional(path2);
+    const before = parseMcpJson(beforeSource);
+    if (!before.ok) return refuse("mcp-json-foreign-keys", ANTIGRAVITY_PASTE_GUIDANCE);
+    const existing = before.value.mcpServers.archflow;
+    if (existing !== void 0 && serverCommand(existing) !== "archflow-mcp") {
+      return refuse("server-command-collision", ANTIGRAVITY_PASTE_GUIDANCE);
+    }
+    let registration = "unchanged";
+    if (existing === void 0) {
+      registration = "created";
+    }
+    const updatedServers = {
+      ...before.value.mcpServers,
+      archflow: {
+        command: "archflow-mcp",
+        args: []
+      }
+    };
+    const serialized = `${JSON.stringify({ mcpServers: updatedServers }, null, 2)}
+`;
+    if (serialized !== beforeSource) {
+      await mkdir5(configDir, { recursive: true });
+      await replaceHostConfig(path2, serialized);
+    }
+    let get;
+    try {
+      get = await runCommand("agy", ["mcp", "list"], input.working_directory, input.environment);
+    } catch {
+    }
+    let diagnostic = "Antigravity global MCP configuration written to ~/.gemini/config/mcp_config.json.";
+    let masked = false;
+    if (get !== void 0 && get.exit_code === 0) {
+      diagnostic = get.stdout.trim();
+      const lines = diagnostic.split("\n");
+      const archflowLine = lines.find((l) => l.startsWith("archflow"));
+      if (archflowLine && !archflowLine.includes("archflow-mcp")) {
+        masked = true;
+      }
+    }
+    return ok18(Object.freeze({
+      schema_version: "1",
+      host: "antigravity",
+      registration,
+      command: "archflow-mcp",
+      pending_approval: false,
+      project_trusted: true,
+      masked_by_higher_precedence: masked,
+      diagnostic
+    }));
+  } catch {
+    return ioFailure3("antigravity-registration");
+  }
+}
 
 // src/init/diagnostics.ts
 var GENERATED_ASSET_PATHS = Object.freeze([
@@ -41787,10 +41855,13 @@ async function runInit(input) {
   if (!claude.ok && claude.error.code === "CONFIG_INVALID") return claude;
   const codex = await registerCodexProject(rootInput);
   if (!codex.ok && codex.error.code === "CONFIG_INVALID") return codex;
+  const antigravity = await registerAntigravityConfig(rootInput);
+  if (!antigravity.ok && antigravity.error.code === "CONFIG_INVALID") return antigravity;
   const diagnostics = await collectInitDiagnostics({
     working_directory: rootInput.working_directory,
     ...claude.ok ? { claude_registration: claude.value } : {},
-    ...codex.ok ? { codex_registration: codex.value } : {}
+    ...codex.ok ? { codex_registration: codex.value } : {},
+    ...antigravity.ok ? { antigravity_registration: antigravity.value } : {}
   });
   return Object.freeze({
     schema_version: "1",
@@ -41802,6 +41873,8 @@ async function runInit(input) {
       claude_registration_error: claude.ok ? null : claude.error,
       codex_registration: codex.ok ? codex.value : null,
       codex_registration_error: codex.ok ? null : codex.error,
+      antigravity_registration: antigravity.ok ? antigravity.value : null,
+      antigravity_registration_error: antigravity.ok ? null : antigravity.error,
       diagnostics,
       creates_task_state: false,
       creates_commit: false
