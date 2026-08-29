@@ -6,13 +6,40 @@
 # The producer is whatever client session connects to the server — it needs no
 # config. These roles describe only the children the server dispatches.
 schema_version: "1"
+# Fallback roles used only when a connected client is not listed under `producers` below:
 roles:
   counter-reviewer:
-    model: claude-opus-5
-    effort: medium
+    model: gpt-5.6-sol
+    effort: high
   adjudicator:
-    model: claude-opus-5
-    effort: medium
+    model: gemini-3.7-flash-high
+    effort: high
+
+# Client-specific counter-review and constitution review routing
+producers:
+  claude:
+    counter-reviewer:
+      model: gpt-5.6-sol
+      effort: high
+    adjudicator:
+      model: gemini-3.7-flash-high
+      effort: high
+  antigravity:
+    counter-reviewers:
+      - model: gpt-5.6-sol
+        effort: high
+      - model: claude-fable-5
+        effort: medium
+    adjudicator:
+      model: gemini-3.7-flash-high
+      effort: high
+  codex:
+    counter-reviewer:
+      model: claude-fable-5
+      effort: medium
+    adjudicator:
+      model: gemini-3.7-flash-high
+      effort: high
 
 # Routes accept an optional `provider`: a cc-switch provider id (claude routes
 # only). When set, the dispatched claude child is launched through
@@ -27,6 +54,34 @@ roles:
 # gate opens; defaults to 3. This is a thrash backstop, not the primary brake — the
 # loop ends when triage accepts nothing, so review convergence is a triage judgment.
 # max_attempts: 3
+
+# Optional task repository set. Task creation copies this declaration into the
+# task-local config; that task remains the only source of task resources, policy,
+# and workflow authority. `primary` is reserved for the repository containing
+# `.archflow/` and is always present and writable.
+#
+# Secondary names use task-slug syntax. Paths may be absolute or relative to the
+# primary worktree root. Omitted mode means `context-only`. `writable` allows a
+# phase implementation to declare, review, restore, and commit changes there.
+# Every implementation submission includes one section for every writable
+# secondary, even when its outputs are empty so undeclared changes can be found.
+# Context-only repositories are review context and are never written.
+# Config edits are ordinary informational changes and do not themselves block or
+# reroute the workflow. Status reports primary first, then secondaries in ordinal
+# name order regardless of YAML key order.
+#
+# Reviewers receive one named, pinned view per configured repository. Changed
+# writable members use their exact proposed trees; unchanged writable and
+# context-only members remain commit-pinned context. Approval `content` globs match
+# each repository's own repository-relative path, so `**/*.sql` matches SQL in any
+# writable repository and a rule like `apis/src/**` does not address a secondary by
+# name; humans see matches displayed as `<name>/<path>`.
+# repositories:
+#   apis:
+#     path: ../apis
+#   stripe:
+#     path: /work/services/stripe
+#     mode: writable
 
 # Optional. Per-phase-kind role overrides on top of the default roles above. Each key
 # is a phase kind (explore, prd, design, phase-design, phase-impl) and its value is the
@@ -58,12 +113,3 @@ approval_rules:
     - paths: ["**/*.sql"]
     - paths: [".archflow/tasks/*/design.md", ".archflow/tasks/*/prd.md"]
 
-# Codex-host orientation (replace the active document above with this block):
-# schema_version: "1"
-# roles:
-#   counter-reviewer:
-#     model: claude-opus-5
-#     effort: high
-#   adjudicator:
-#     model: claude-opus-5
-#     effort: high
