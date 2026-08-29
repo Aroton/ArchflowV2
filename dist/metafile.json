@@ -5085,7 +5085,7 @@
       ]
     },
     "src/init/assets.ts": {
-      "bytes": 6109,
+      "bytes": 6819,
       "format": "esm",
       "imports": [
         {
@@ -5167,7 +5167,7 @@
       ]
     },
     "src/init/index.ts": {
-      "bytes": 3408,
+      "bytes": 3482,
       "format": "esm",
       "imports": [
         {
@@ -5600,7 +5600,7 @@
       ]
     },
     "src/local/commands.ts": {
-      "bytes": 19341,
+      "bytes": 19410,
       "format": "esm",
       "imports": [
         {
@@ -5756,7 +5756,7 @@
       ]
     },
     "src/local/main.ts": {
-      "bytes": 5622,
+      "bytes": 5947,
       "format": "esm",
       "imports": [
         {
@@ -9559,7 +9559,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1854200,
+      "bytes": 1854956,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10671,13 +10671,13 @@
           "bytesInOutput": 2216
         },
         "src/init/assets.ts": {
-          "bytesInOutput": 4861
+          "bytesInOutput": 5191
         },
         "src/init/diagnostics.ts": {
           "bytesInOutput": 8333
         },
         "src/init/index.ts": {
-          "bytesInOutput": 1953
+          "bytesInOutput": 2008
         },
         "src/init/legacy-upgrade-stage.ts": {
           "bytesInOutput": 1966
@@ -10701,10 +10701,10 @@
           "bytesInOutput": 4286
         },
         "src/local/commands.ts": {
-          "bytesInOutput": 14110
+          "bytesInOutput": 14158
         },
         "src/local/main.ts": {
-          "bytesInOutput": 4750
+          "bytesInOutput": 5073
         },
         "src/local/status-classification.ts": {
           "bytesInOutput": 3948

@@ -12,7 +12,7 @@ import {
   type HostRegistrationReport,
 } from "./registration.js";
 
-export type InitInput = Readonly<{ working_directory: string }>;
+export type InitInput = Readonly<{ working_directory: string; force?: boolean }>;
 
 export type InitReport = Readonly<{
   schema_version: "1";
@@ -39,7 +39,7 @@ export async function runInit(input: InitInput): Promise<ProjectResult<InitRepor
   if (!discovered.ok) return discovered;
   const rootInput = Object.freeze({ working_directory: discovered.value.location.worktreeRoot });
 
-  const assets = await scaffoldRepositoryAssets(rootInput);
+  const assets = await scaffoldRepositoryAssets({ ...rootInput, ...(input.force === true ? { force: true } : {}) });
   if (!assets.ok) return assets;
   const claude = await registerClaudeProject(rootInput);
   if (!claude.ok && claude.error.code === "CONFIG_INVALID") return claude;

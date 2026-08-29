@@ -28,7 +28,7 @@ archflow-local <command> [--task <task>] [--input <json-file>]
 | `validate` | Run an artifact through its contract parser and echo the parsed value |
 | `hash` | SHA-256 of a value's canonical encoding |
 | `render` | Preview the canonical Markdown projection of a review or constitution-review result, with digest |
-| `init` | Set up the repository: `.archflow/` assets + MCP registrations for both hosts |
+| `init` | Set up the repository: `.archflow/` assets + MCP registrations for every host. Refuses a diverged scaffold file; `init --force` overwrites every diverged file with the shipped template instead |
 
 Initialization diagnostics also list generated ArchFlow assets hidden by an ancestor `.gitignore`. Init does not rewrite repository ignore policy; it names the affected paths so the human can review the rule and explicitly add the intended files.
 

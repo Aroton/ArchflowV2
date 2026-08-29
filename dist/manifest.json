@@ -86,10 +86,10 @@
   ],
   "artifacts": [
     {
-      "digest": "7ace65ec8884f81b2b8e49855f18064b1e615c5fa518cb4aaabb67554a2e6227",
+      "digest": "558b68617e557454dd99fc242e7922afb18c8a408e64f6a343dffc489e316539",
       "path": "archflow-local.mjs",
       "role": "executable",
-      "size": 1854200
+      "size": 1854956
     },
     {
       "digest": "5ab52bbc2896550c0ba87567f1437ad652b0013314f9f47189fa07c7f20c5691",
@@ -210,7 +210,7 @@
       "role": "manifest"
     },
     {
-      "digest": "64d61255f0f85766f540b9e1163d06efe4513d7b0b2f6b1acde2fc096a836397",
+      "digest": "bb827a742c106da9c1962f54f363bdc88624ef216d5ad87dabd9a24e860aa5cf",
       "path": "metafile.json",
       "role": "metafile",
       "size": 351459
@@ -3151,14 +3151,14 @@
       "size": 16895
     },
     {
-      "bytes_in_output": 6594,
-      "digest": "eacff1c7c62c4839b90736cb12f712f445db0475880cac8744b657bbf872aa38",
+      "bytes_in_output": 6924,
+      "digest": "54e3b1ec9428d1694e80e75129645844f70b39ab71b90687907c6644ffdd12f9",
       "key": "src/init/assets.ts",
       "origin": {
         "kind": "repository",
         "path": "src/init/assets.ts"
       },
-      "size": 6109
+      "size": 6819
     },
     {
       "bytes_in_output": 8333,
@@ -3171,14 +3171,14 @@
       "size": 11395
     },
     {
-      "bytes_in_output": 1953,
-      "digest": "f0b9cc55d310e911cc4197b8702b91ef8484daf66b5af44e895e963d3436e8b2",
+      "bytes_in_output": 2008,
+      "digest": "947ae87f0aa7bca7e8f0364a4d0ecdd26cf4ce198a65da87434dab3539df41fc",
       "key": "src/init/index.ts",
       "origin": {
         "kind": "repository",
         "path": "src/init/index.ts"
       },
-      "size": 3408
+      "size": 3482
     },
     {
       "bytes_in_output": 1966,
@@ -3251,24 +3251,24 @@
       "size": 7396
     },
     {
-      "bytes_in_output": 14110,
-      "digest": "fbb9700eb6a0a5aa099f1f511004c8149b7a34f49facc71e1ffc4de571255c10",
+      "bytes_in_output": 14158,
+      "digest": "bf82aca7700ddb3a84624b6bec0bb68746b1dc2e3cc7a45af33d038b1981f3ea",
       "key": "src/local/commands.ts",
       "origin": {
         "kind": "repository",
         "path": "src/local/commands.ts"
       },
-      "size": 19341
+      "size": 19410
     },
     {
-      "bytes_in_output": 4750,
-      "digest": "59ccca68e6c94aa15d2b388a03878a8bd32304b05753e1e7ff81ce119c2d11eb",
+      "bytes_in_output": 5073,
+      "digest": "b82b8a6b10c25237f0cae26810c08c2916ce35b2962d2137c73b6b14f557e9a2",
       "key": "src/local/main.ts",
       "origin": {
         "kind": "repository",
         "path": "src/local/main.ts"
       },
-      "size": 5622
+      "size": 5947
     },
     {
       "bytes_in_output": 3948,
@@ -5242,7 +5242,7 @@
       ],
       "entry_point": "src/local/main.ts",
       "id": "local-cli",
-      "output_digest": "7ace65ec8884f81b2b8e49855f18064b1e615c5fa518cb4aaabb67554a2e6227",
+      "output_digest": "558b68617e557454dd99fc242e7922afb18c8a408e64f6a343dffc489e316539",
       "output_path": "archflow-local.mjs"
     }
   ],

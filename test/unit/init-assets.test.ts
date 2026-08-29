@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
+import { assetRoot, scaffoldRepositoryAssets } from "../../src/init/assets.js";
 import { parseConfigYaml } from "../../src/contracts/config.js";
 
 const roots: string[] = [];
@@ -101,10 +101,36 @@ describe("repository asset scaffolding", () => {
     expect(result.error.code).toBe("CONFIG_INVALID");
     expect(result.error.diagnostic.parameters).toEqual({ issue_code: "scaffold-diverged" });
     expect(stderr).toHaveBeenCalledWith(
-      "ArchFlow scaffold differs at .archflow/workflow.yaml. Review or delete that file, then re-run archflow-local init.\n",
+      "ArchFlow scaffold differs at .archflow/workflow.yaml. Review or delete that file, or re-run archflow-local init --force to overwrite every diverged scaffold file.\n",
     );
     expect(readFileSync(workflow, "utf8")).toBe("human edit\n");
     expect(() => readFileSync(join(root, ".archflow", "config.yaml"))).toThrow();
+  });
+
+  it("overwrites every diverged asset under force, creates the rest, and reports each set", async () => {
+    const root = repository();
+    const { mkdirSync } = await import("node:fs");
+    mkdirSync(join(root, ".archflow", "constitution"), { recursive: true });
+    const workflow = join(root, ".archflow", "workflow.yaml");
+    const readme = join(root, ".archflow", "constitution", "README.md");
+    writeFileSync(workflow, "human edit\n");
+    writeFileSync(readme, "stale template\n");
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    const result = await scaffoldRepositoryAssets({ working_directory: root, force: true });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(stderr).not.toHaveBeenCalled();
+    expect(result.value.overwritten).toEqual([".archflow/workflow.yaml", ".archflow/constitution/README.md"]);
+    expect(result.value.unchanged).toEqual([]);
+    expect(result.value.created).toContain(".archflow/config.yaml");
+    const shipped = await assetRoot();
+    expect(readFileSync(workflow)).toEqual(readFileSync(join(shipped, "workflow.yaml")));
+    expect(readFileSync(readme)).toEqual(readFileSync(join(shipped, "constitution", "README.md")));
+
+    const again = await scaffoldRepositoryAssets({ working_directory: root, force: true });
+    expect(again.ok && again.value.overwritten).toEqual([]);
+    expect(again.ok && again.value.created).toEqual([]);
   });
 
   it("refuses a pre-existing live config instead of adopting new template defaults", async () => {
@@ -123,7 +149,7 @@ describe("repository asset scaffolding", () => {
     expect(result.error.code).toBe("CONFIG_INVALID");
     expect(result.error.diagnostic.parameters).toEqual({ issue_code: "scaffold-diverged" });
     expect(stderr).toHaveBeenCalledWith(
-      "ArchFlow scaffold differs at .archflow/config.yaml. Review or delete that file, then re-run archflow-local init.\n",
+      "ArchFlow scaffold differs at .archflow/config.yaml. Review or delete that file, or re-run archflow-local init --force to overwrite every diverged scaffold file.\n",
     );
     expect(readFileSync(liveConfig, "utf8")).toBe(existing);
     expect(() => readFileSync(join(root, ".archflow", "workflow.yaml"))).toThrow();

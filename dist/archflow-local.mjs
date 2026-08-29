@@ -27585,18 +27585,22 @@ async function scaffoldRepositoryAssets(input) {
     const sources = await Promise.all(ASSETS.map(async ([source, destination]) => Object.freeze({ source: new Uint8Array(await readFile(join4(sourceRoot, source))), destination })));
     const created = [];
     const unchanged = [];
+    const overwritten = [];
     for (const asset of sources) {
       const destination = join4(input.working_directory, asset.destination);
       try {
         const existing = new Uint8Array(await readFile(destination));
-        if (!Buffer.from(existing).equals(Buffer.from(asset.source))) {
+        if (Buffer.from(existing).equals(Buffer.from(asset.source))) {
+          unchanged.push(asset.destination);
+        } else if (input.force === true) {
+          overwritten.push(asset.destination);
+        } else {
           process.stderr.write(
-            `ArchFlow scaffold differs at ${asset.destination}. Review or delete that file, then re-run archflow-local init.
+            `ArchFlow scaffold differs at ${asset.destination}. Review or delete that file, or re-run archflow-local init --force to overwrite every diverged scaffold file.
 `
           );
           return fail6(createProjectError("CONFIG_INVALID", { issue_code: "scaffold-diverged" }));
         }
-        unchanged.push(asset.destination);
       } catch (error51) {
         if (!errno(error51, "ENOENT")) throw error51;
       }
@@ -27604,20 +27608,22 @@ async function scaffoldRepositoryAssets(input) {
     for (const asset of sources) {
       if (unchanged.includes(asset.destination)) continue;
       const destination = join4(input.working_directory, asset.destination);
+      const replacing = overwritten.includes(asset.destination);
       await mkdir2(dirname3(destination), { recursive: true });
-      const handle = await open3(destination, "wx");
+      const handle = await open3(destination, replacing ? "w" : "wx");
       try {
         await handle.writeFile(asset.source);
       } finally {
         await handle.close();
       }
-      created.push(asset.destination);
+      if (!replacing) created.push(asset.destination);
     }
     const gitattributesUpdated = await appendGitAttributes(input.working_directory);
     return ok5(Object.freeze({
       schema_version: "1",
       created: Object.freeze(created),
       unchanged: Object.freeze(unchanged),
+      overwritten: Object.freeze(overwritten),
       gitattributes_updated: gitattributesUpdated,
       runtime_gitignore: created.includes(".archflow/.gitignore") ? "created" : "already-present"
     }));
@@ -42080,7 +42086,7 @@ async function runInit(input) {
   const discovered = await discoverWorktree(createGitRunner({ cwd: input.working_directory }), context2);
   if (!discovered.ok) return discovered;
   const rootInput = Object.freeze({ working_directory: discovered.value.location.worktreeRoot });
-  const assets = await scaffoldRepositoryAssets(rootInput);
+  const assets = await scaffoldRepositoryAssets({ ...rootInput, ...input.force === true ? { force: true } : {} });
   if (!assets.ok) return assets;
   const claude = await registerClaudeProject(rootInput);
   if (!claude.ok && claude.error.code === "CONFIG_INVALID") return claude;
@@ -44013,7 +44019,7 @@ async function services(input) {
   return created;
 }
 async function init(input) {
-  return runInit({ working_directory: input.working_directory });
+  return runInit({ working_directory: input.working_directory, ...input.force === true ? { force: true } : {} });
 }
 async function upgrade(input) {
   const value = recordValue(input);
@@ -44231,7 +44237,8 @@ async function runLocalCommand(input) {
 // src/local/main.ts
 function usageText() {
   return [
-    "usage: archflow-local <command> [--task <task>] [--repository <secondary>] [--input <json-file>]",
+    "usage: archflow-local <command> [--task <task>] [--repository <secondary>] [--input <json-file>] [--force]",
+    "       init --force overwrites every diverged .archflow scaffold file with the shipped template",
     "       payload commands read JSON from --input <json-file>, or from stdin when --input is omitted",
     "       input-free commands never read stdin",
     "commands (payload; --task):",
@@ -44264,7 +44271,7 @@ async function main() {
     args: process3.argv.slice(2),
     allowPositionals: true,
     strict: true,
-    options: { task: { type: "string" }, repository: { type: "string" }, input: { type: "string" }, help: { type: "boolean", short: "h" } }
+    options: { task: { type: "string" }, repository: { type: "string" }, input: { type: "string" }, force: { type: "boolean" }, help: { type: "boolean", short: "h" } }
   });
   if (parsed.values.help || parsed.positionals.length === 0) {
     process3.stdout.write(usageText());
@@ -44284,8 +44291,11 @@ async function main() {
   if (parsed.values.repository !== void 0 && command !== "restore") {
     throw new TypeError(`--repository is supported only by restore`);
   }
+  if (parsed.values.force === true && command !== "init") {
+    throw new TypeError(`--force is supported only by init`);
+  }
   const value = INPUT_FREE_COMMANDS.has(command) ? void 0 : await readInput(command, parsed.values.input);
-  const result = await runLocalCommand({ command, working_directory: process3.cwd(), ...parsed.values.task === void 0 ? {} : { task_id: parsed.values.task }, ...parsed.values.repository === void 0 ? {} : { repository_name: parsed.values.repository }, ...value === void 0 ? {} : { value } });
+  const result = await runLocalCommand({ command, working_directory: process3.cwd(), ...parsed.values.task === void 0 ? {} : { task_id: parsed.values.task }, ...parsed.values.repository === void 0 ? {} : { repository_name: parsed.values.repository }, ...value === void 0 ? {} : { value }, ...parsed.values.force === true ? { force: true } : {} });
   assertPlainJson(result, "local command result");
   if (result !== null && typeof result === "object" && !Array.isArray(result) && result.ok === false) {
     process3.exitCode = 1;

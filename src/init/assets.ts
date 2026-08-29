@@ -29,12 +29,16 @@ export type AssetScaffoldReport = {
   readonly schema_version: "1";
   readonly created: readonly string[];
   readonly unchanged: readonly string[];
+  /** Diverged assets replaced with the shipped bytes; only ever non-empty under `force`. */
+  readonly overwritten: readonly string[];
   readonly gitattributes_updated: boolean;
   readonly runtime_gitignore: "created" | "already-present";
 };
 
 export type ScaffoldRepositoryAssetsInput = {
   readonly working_directory: string;
+  /** Overwrite diverged scaffold files with the shipped template instead of refusing. */
+  readonly force?: boolean;
 };
 
 const ok = <T>(value: T): ProjectResult<T> =>
@@ -100,7 +104,10 @@ async function appendGitAttributes(workingDirectory: string): Promise<boolean> {
   return true;
 }
 
-/** Scaffolds the repository-owned policy assets without overwriting any existing bytes. */
+/**
+ * Scaffolds the repository-owned policy assets. Existing bytes are never overwritten unless
+ * `force` is set, in which case every diverged asset is replaced with the shipped template.
+ */
 export async function scaffoldRepositoryAssets(
   input: ScaffoldRepositoryAssetsInput,
 ): Promise<ProjectResult<AssetScaffoldReport>> {
@@ -110,20 +117,24 @@ export async function scaffoldRepositoryAssets(
       Object.freeze({ source: new Uint8Array(await readFile(join(sourceRoot, source))), destination })));
     const created: string[] = [];
     const unchanged: string[] = [];
+    const overwritten: string[] = [];
 
-    // Inspect every destination before writing any of them. A divergent scaffold is a refusal,
-    // while an identical existing asset is already the desired state.
+    // Inspect every destination before writing any of them. A divergent scaffold is a refusal
+    // unless forced, while an identical existing asset is already the desired state.
     for (const asset of sources) {
       const destination = join(input.working_directory, asset.destination);
       try {
         const existing = new Uint8Array(await readFile(destination));
-        if (!Buffer.from(existing).equals(Buffer.from(asset.source))) {
+        if (Buffer.from(existing).equals(Buffer.from(asset.source))) {
+          unchanged.push(asset.destination);
+        } else if (input.force === true) {
+          overwritten.push(asset.destination);
+        } else {
           process.stderr.write(
-            `ArchFlow scaffold differs at ${asset.destination}. Review or delete that file, then re-run archflow-local init.\n`,
+            `ArchFlow scaffold differs at ${asset.destination}. Review or delete that file, or re-run archflow-local init --force to overwrite every diverged scaffold file.\n`,
           );
           return fail(createProjectError("CONFIG_INVALID", { issue_code: "scaffold-diverged" }));
         }
-        unchanged.push(asset.destination);
       } catch (error) {
         if (!errno(error, "ENOENT")) throw error;
       }
@@ -132,14 +143,15 @@ export async function scaffoldRepositoryAssets(
     for (const asset of sources) {
       if (unchanged.includes(asset.destination)) continue;
       const destination = join(input.working_directory, asset.destination);
+      const replacing = overwritten.includes(asset.destination);
       await mkdir(dirname(destination), { recursive: true });
-      const handle = await open(destination, "wx");
+      const handle = await open(destination, replacing ? "w" : "wx");
       try {
         await handle.writeFile(asset.source);
       } finally {
         await handle.close();
       }
-      created.push(asset.destination);
+      if (!replacing) created.push(asset.destination);
     }
 
     const gitattributesUpdated = await appendGitAttributes(input.working_directory);
@@ -147,6 +159,7 @@ export async function scaffoldRepositoryAssets(
       schema_version: "1",
       created: Object.freeze(created),
       unchanged: Object.freeze(unchanged),
+      overwritten: Object.freeze(overwritten),
       gitattributes_updated: gitattributesUpdated,
       runtime_gitignore: created.includes(".archflow/.gitignore") ? "created" : "already-present",
     }));

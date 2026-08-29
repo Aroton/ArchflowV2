@@ -75,6 +75,7 @@ type CommandInput = Readonly<{
   task_id?: string;
   repository_name?: string;
   value?: unknown;
+  force?: boolean;
 }>;
 
 function requireValue(input: CommandInput): PlainJsonValue {
@@ -114,7 +115,7 @@ async function services(input: CommandInput) {
 }
 
 async function init(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
-  return runInit({ working_directory: input.working_directory });
+  return runInit({ working_directory: input.working_directory, ...(input.force === true ? { force: true } : {}) });
 }
 
 async function upgrade(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
