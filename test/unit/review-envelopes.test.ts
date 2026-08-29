@@ -5,6 +5,7 @@ import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import {
   PRIOR_TRIAGE_INSTRUCTION,
+  REVIEW_INSTRUCTION,
   MULTI_REPOSITORY_VIEW_NOTE,
   PRODUCED_REPOSITORY_VIEW_NOTE,
   REPOSITORY_VIEW_NOTE,
@@ -100,6 +101,7 @@ describe("review dispatch envelopes", () => {
       artifact: visible.artifact as string,
       rubric: visible.rubric as never,
       context: visible.context as never,
+      instructions: visible.instructions as never,
       subject: visible.subject as never,
     }));
   });
@@ -115,7 +117,7 @@ describe("review dispatch envelopes", () => {
     } as const;
     const envelope = buildReviewEnvelope({ ...input(), context: [askEntry] });
     const visible = json(envelope.bytes);
-    expect(Object.keys(visible)).toEqual(["schema_version", "artifact", "rubric", "context", "subject"]);
+    expect(Object.keys(visible)).toEqual(["schema_version", "artifact", "rubric", "context", "instructions", "subject"]);
     expect(visible.context).toEqual([askEntry]);
 
     const unavailable = {
@@ -138,8 +140,8 @@ describe("review dispatch envelopes", () => {
     const bound = buildReviewEnvelope({ ...input(), workspace });
     const visible = json(bound.bytes);
 
-    expect(Object.keys(json(bare.bytes))).toEqual(["schema_version", "artifact", "rubric", "context", "subject"]);
-    expect(Object.keys(visible)).toEqual(["schema_version", "artifact", "rubric", "context", "workspace", "subject"]);
+    expect(Object.keys(json(bare.bytes))).toEqual(["schema_version", "artifact", "rubric", "context", "instructions", "subject"]);
+    expect(Object.keys(visible)).toEqual(["schema_version", "artifact", "rubric", "context", "instructions", "workspace", "subject"]);
     expect(visible.workspace).toEqual(workspace);
     expect(bound.digest).not.toBe(bare.digest);
     expect(bound.digest).toBe(canonicalJsonDigest({
@@ -234,14 +236,21 @@ describe("review dispatch envelopes", () => {
     const bound = buildReviewEnvelope({ ...input(), context: [priorTriage] });
     const visible = json(bound.bytes);
 
-    expect(json(bare.bytes)).not.toHaveProperty("instructions");
+    // The framing literal is always present; the remediation literal only when prior triage is pinned.
+    expect(json(bare.bytes).instructions).toEqual({ review: REVIEW_INSTRUCTION });
     expect(Object.keys(visible)).toEqual([
       "schema_version", "artifact", "rubric", "context", "instructions", "subject",
     ]);
     expect(visible.context).toEqual([priorTriage]);
-    expect(visible.instructions).toEqual({ prior_triage: PRIOR_TRIAGE_INSTRUCTION });
-    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("This is a remediation review");
+    expect(visible.instructions).toEqual({ review: REVIEW_INSTRUCTION, prior_triage: PRIOR_TRIAGE_INSTRUCTION });
+    expect(REVIEW_INSTRUCTION).toContain("independent counter-reviewer");
+    expect(REVIEW_INSTRUCTION).toContain("Read the whole artifact and every pinned context entry before judging");
+    expect(REVIEW_INSTRUCTION).toContain("check that they jointly hold");
+    expect(REVIEW_INSTRUCTION).toContain("recompute derived figures");
+    expect(REVIEW_INSTRUCTION).toContain("Only after that pass apply the rubric's materiality bar");
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("This is a remediation review with two tasks of equal weight");
     expect(PRIOR_TRIAGE_INSTRUCTION).toContain("verify that every accepted revision intent");
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("every section that depends on changed content, exactly as an initial review would");
     expect(PRIOR_TRIAGE_INSTRUCTION).toContain("previously undiscovered issue");
     expect(PRIOR_TRIAGE_INSTRUCTION).toContain("Do not report optional polish");
     // The instruction literal and the entry participate in the recorded envelope digest.

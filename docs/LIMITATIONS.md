@@ -18,7 +18,7 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 **Not deterministic:** A review envelope and its attestation are byte-reproducible, but a fresh Claude or Codex invocation is not guaranteed to return the same findings or verdict for those bytes. Model aliases, provider behavior, managed context, and the model's own search path can change which defect it notices.
 
-**Existing mitigation:** Initial rubrics ask only for defects with a concrete material downstream consequence. When prior triage exists, the sealed instruction makes verification of accepted revision intents the primary task and admits a previously undiscovered issue only when it clears the same materiality bar. Prior-triage now carries the original evidence and suggested resolution together with the producer rationale and revision intent. Non-material suggestions are suppressed rather than deferred to human approval, while the attempt budget and durable human gates remain backstops.
+**Existing mitigation:** Initial rubrics ask only for defects with a concrete material downstream consequence, and every review child receives one fixed framing literal telling it to read everything, trace each stated commitment into the sections that depend on it, recompute derived figures, and verify against the repository view before applying that bar. When prior triage exists, the sealed instruction gives the round two tasks of equal weight — verify accepted revision intents and review the revised and dependent sections as an initial review would — with new issues held to the same materiality bar. Prior-triage now carries the original evidence and suggested resolution together with the producer rationale and revision intent. Non-material suggestions are suppressed rather than deferred to human approval, while the attempt budget and durable human gates remain backstops.
 
 **Why accepted:** The product needs independent semantic judgment, not identical prose from repeated model calls. ArchFlow claims deterministic inputs, provenance, evidence currency, state transitions, and approval authority; it does not claim deterministic model judgment.
 
@@ -109,6 +109,30 @@ These limitations assume a trusted developer account and a filesystem not being 
 **Existing mitigation:** Fresh evidence attests the actual adapter, family, model, effort, optional provider, and route source, plus any raw configured route displaced by invocation selection. A controller that needs assurance compares those retained facts with the route it supplied. Invalid or unavailable invocation routing fails visibly and never falls back silently. Invocation route bytes bind every semantic offer/operation and counter-review request in the run, so drift between status and apply is rejected.
 
 **Why accepted:** ArchFlow has no server-observable authenticated controller channel in this phase. Honest provenance supports automation without claiming an authority boundary that does not exist; adding controller authentication would be a separate product and trust design.
+
+## Same-family and low-effort reviewer routes are legal, and only visible
+
+**Not enforced:** Nothing stops a repository from routing the counter-reviewer to the producer's own model family, or to a low effort. The shipped template routes each producer client to another family (`producers.<host>`), but a repository initialized from an older template, or edited later, can carry `claude-opus-5` at `medium` under a Claude producer indefinitely, and the "opposite-family by default" language in the skills describes the template rather than a check. When several counter-reviewers are configured for one producer, their findings are merged into one evidence record that carries the primary reviewer's provenance, so `review_strength` describes that primary reviewer.
+
+**Existing mitigation:** Every fresh review records the actual producer and reviewer families, model, and effort, and the semantic view projects them as `review_strength` with a `same_family` flag, the attempt number, whether the review was a remediation round, and per-round finding and acceptance counts. Skills present those facts at every human gate with the same prominence as an exceptional reason. A same-family medium-effort review is therefore never mistaken for an independent one at the moment a human relies on it.
+
+**Why accepted:** A same-family or low-effort reviewer is a legitimate operator choice — outages, cost, or a family that is simply better at the domain — and the research this design rests on says the generation–verification gap narrows when the same family writes and reviews, not that it closes. Making the choice visible at the gate preserves the human's judgment; enforcing a family rule would recreate the outage dead end the route override exists to avoid.
+
+## Third-party interface claims are unverifiable outside the snapshot
+
+**Not provided:** A document reviewer sees the repository at HEAD without dependency sources: `git archive` carries no `node_modules/`, `target/`, or cargo registry, the child has no shell or network, and a crate or package the design proposes to *adopt* is not in the lockfile yet. A claim about a third-party API's signature or semantics can be checked only against what the artifact itself states.
+
+**Existing mitigation:** The rubric routes such gaps to the non-blocking `unverifiable-claims` criterion, which triage must reject with an `envelope-gap:` rationale so the gap is recorded rather than guessed at. Design skills instruct the producer to cite version-pinned documentation or source lines for load-bearing third-party claims, which lets the reviewer at least check the design against its own citation, and the framing literal directs it to trace the stated signature through the inputs the system will meet — a decoder declared to take valid text is still reviewable for what it does with invalid bytes.
+
+**Why accepted:** Materializing dependency sources into the sealed view is a transport and provenance problem of its own, and the claim most often at stake is the design's, not the library's. Recording the gap honestly is proportional for a prototype; a later change can pin vendored sources when a task actually needs them.
+
+## The dispatch timeout is fixed, and a high-effort review of a large design can exceed it
+
+**Not adaptive:** Every reviewer child gets the same 15-minute `DISPATCH_TIMEOUT_MS` regardless of artifact size, effort, or whether a repository view was materialized. On 2026-08-28 a replay of a 74 KB design with its 26 KB PRD pinned and a repository view, routed to `gpt-5.6-sol` at `xhigh`, was killed at the timeout with no output; the same envelope at `gpt-5.6-sol`/`high` (the template's route for a Claude producer) returned eight blockers in seven minutes, and `claude-opus-5`/`medium` returned in six and a half.
+
+**Existing mitigation:** The timeout surfaces as a classified `TIMEOUT` dispatch failure with the role and route, the review attempt stays pending rather than being consumed, and the skill offers repair or a one-dispatch human `route_override` (for example the same model at `high`). Nothing is silently downgraded.
+
+**Why accepted:** A per-size or per-effort budget would be a guess dressed as policy, and an unbounded child is worse than a visible failure. The honest control for now is the visible failure plus the human's substitute route; the design skills' guidance to keep artifacts to what a reviewer can recompute also keeps them inside the budget.
 
 ## A reviewer route override is not proof a human chose it
 

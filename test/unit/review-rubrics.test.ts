@@ -14,7 +14,7 @@ import { loadTestRubric } from "../helpers/rubrics.js";
 // installed bundle, and it fails in-flight tasks' input fingerprints closed.
 const PINNED_RUBRIC_DIGESTS = Object.freeze({
   "prd-v1": "1910f0f56ebd54503658d4e5e0f1c44dcb23cc35be2ba1dabbb43f2fc866be56",
-  "design-v2": "5ce90e889bc49767b12a57b407469d261b3cc5ef10aa51c5d5f78b4cad53b96e",
+  "design-v3": "cd7c1d7a1dceaa9a9595076ebf2e89407505103453eab6309b74e8b2598275db",
   "implementation-v1": "9f87225d0d683e19f6e71c1c56929f938ec2df4f3fdebe79fbbe226db683e20b",
 } satisfies Record<CanonicalRubricId, string>);
 
@@ -61,7 +61,7 @@ describe("canonical counter-review rubrics", () => {
     const implementation = await loadTestRubric("phase-impl");
 
     expect(prd.rubric_id).toBe("prd-v1");
-    expect(design.rubric_id).toBe("design-v2");
+    expect(design.rubric_id).toBe("design-v3");
     // design and phase-design select the same file, so the same exact bytes.
     expect(phaseDesign.rubric_id).toBe(design.rubric_id);
     expect(phaseDesign.rubric_digest).toBe(design.rubric_digest);
@@ -81,8 +81,8 @@ describe("canonical counter-review rubrics", () => {
 
   it("reproduces the digests pinned when the rubrics moved from code to config files", async () => {
     expect((await loadTestRubric("prd")).rubric_digest).toBe(PINNED_RUBRIC_DIGESTS["prd-v1"]);
-    expect((await loadTestRubric("design")).rubric_digest).toBe(PINNED_RUBRIC_DIGESTS["design-v2"]);
-    expect((await loadTestRubric("phase-design")).rubric_digest).toBe(PINNED_RUBRIC_DIGESTS["design-v2"]);
+    expect((await loadTestRubric("design")).rubric_digest).toBe(PINNED_RUBRIC_DIGESTS["design-v3"]);
+    expect((await loadTestRubric("phase-design")).rubric_digest).toBe(PINNED_RUBRIC_DIGESTS["design-v3"]);
     expect((await loadTestRubric("phase-impl")).rubric_digest).toBe(PINNED_RUBRIC_DIGESTS["implementation-v1"]);
   });
 
@@ -162,7 +162,7 @@ describe("rubric files fail closed", () => {
   });
 
   it("refuses a rubric_id that does not match the selected rubric", async () => {
-    const result = await loadFromTmp(MINIMAL_PRD.replace("rubric_id: prd-v1", "rubric_id: design-v2"));
+    const result = await loadFromTmp(MINIMAL_PRD.replace("rubric_id: prd-v1", "rubric_id: design-v3"));
     const parameters = expectRubricFailure(result);
     expect(parameters.issue_code).toBe("rubric-file-invalid");
     expect(parameters.issues?.join("\n")).toContain("rubric_id");

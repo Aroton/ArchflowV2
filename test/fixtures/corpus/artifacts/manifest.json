@@ -91,6 +91,30 @@
       "kind": "seeded",
       "expected_outcome": "blocking-finding",
       "seeded_defect": "A required deliverable on the change path is replaced by a stub that returns an empty success result, while the acceptance criteria still require the working behavior in this phase."
+    },
+    {
+      "id": "budget-arithmetic-gap",
+      "artifact": "seeded-budget-arithmetic-gap.md",
+      "artifact_sha256": "c3dfda8794d4d94b94b631e765f7c815f7543dc8ba5f83a3a0a372e97c544d9c",
+      "kind": "seeded",
+      "expected_outcome": "blocking-finding",
+      "seeded_defect": "The 4 MiB RECONCILE_RESERVE is stated to cover the snapshot while all twelve attachments are stalled, but the design's own measured largest snapshot is 7.5 MiB, so a large-project reconnect cannot reach Current under the isolation requirement; the arithmetic contradiction spans the Background and Constants sections and the verification plan never sizes the snapshot."
+    },
+    {
+      "id": "contradictory-constants",
+      "artifact": "seeded-contradictory-constants.md",
+      "artifact_sha256": "9161c77cc04bea387e2d00004c80315bf9da65edabdcf210b66ca947a05d84d6",
+      "kind": "seeded",
+      "expected_outcome": "blocking-finding",
+      "seeded_defect": "OUTPUT_RECORD may be 32 KiB while no transport unit may exceed the 16 KiB DATA_CHUNK, one record is sent per turn, and one unit is in flight per stream: those rules cannot jointly hold, and whichever one yields doubles the derived CONTROL_LATENCY_BOUND or breaks the byte-identical retention record contract."
+    },
+    {
+      "id": "sized-credit-budget",
+      "artifact": "control-sized-credit-budget.md",
+      "artifact_sha256": "85a13bfde0543d5bffdeb421ebf214d53820014b7531d18c7530f10433a63807",
+      "kind": "control",
+      "expected_outcome": "pass",
+      "seeded_defect": null
     }
   ]
 }

@@ -6,6 +6,7 @@ import type {
   ApplySubmissionKindV1,
   HumanPresentationV1,
   PublicReviewContextV1,
+  PublicReviewStrengthV1,
   SemanticActionKindV1,
   SemanticActionOfferV1,
   SemanticNextActionV1,
@@ -131,6 +132,28 @@ function reviewContext(status: TaskStatusV1): PublicReviewContextV1 | undefined 
       ...(rule.review_trigger === undefined ? {} : { review_trigger: rule.review_trigger }),
       ...(rule.enforced_by === undefined ? {} : { enforced_by: Object.freeze([...rule.enforced_by]) }),
     }))),
+  });
+}
+
+/**
+ * Projects the strength of the current review evidence from retained provenance and the
+ * snapshot's per-attempt rounds. Nothing here is judgment: same-family is a string comparison of
+ * recorded families, and a remediation round is any attempt after the first, because the server
+ * pins prior triage into every later dispatch of the same phase instance.
+ */
+function reviewStrength(status: TaskStatusV1, snapshot: SemanticStatusSnapshotV1): PublicReviewStrengthV1 | undefined {
+  const evidence = status.evidence;
+  if (evidence?.available !== true || status.attempt === undefined) return undefined;
+  const provenance = evidence.counter_review_provenance;
+  return Object.freeze({
+    reviewer_model: provenance.model,
+    reviewer_effort: provenance.effort,
+    reviewer_family: provenance.model_family,
+    producer_family: provenance.producer_family,
+    same_family: provenance.model_family === provenance.producer_family,
+    attempt: status.attempt,
+    remediation_round: status.attempt > 1,
+    rounds: Object.freeze((snapshot.review_rounds ?? []).map((round) => Object.freeze({ ...round }))),
   });
 }
 
@@ -471,6 +494,7 @@ export function projectSemanticStatus(
   });
   const position = positionFromPhase(status.phase_instance);
   const context = reviewContext(status);
+  const strength = reviewStrength(status, snapshot);
   const view: WorkflowViewV1 = Object.freeze({
     schema_version: "1",
     task_id: status.task_id,
@@ -484,6 +508,7 @@ export function projectSemanticStatus(
     next_action: nextAction,
     ...(shape.findings !== true ? {} : { findings: snapshot.full_findings }),
     ...(context === undefined ? {} : { review_context: context }),
+    ...(strength === undefined ? {} : { review_strength: strength }),
     ...(shape.presentation === undefined ? {} : { presentation: shape.presentation }),
     ...(status.dispatch_failure === undefined ? {} : { dispatch_failure: status.dispatch_failure }),
     ...(status.repositories === undefined ? {} : { repositories: status.repositories }),

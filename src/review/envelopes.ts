@@ -159,12 +159,26 @@ export type ReviewEnvelopeSeed = Readonly<
 >;
 
 /**
- * The fixed remediation instruction the envelope adds when a `prior-triage` context entry is
- * pinned. It is a literal for the same reason as {@link REPOSITORY_VIEW_NOTE}: variable prose
- * would reopen the caller-instruction channel this envelope deliberately closes.
+ * The fixed framing and method every rubric-review child receives as `instructions.review`. The
+ * child otherwise sees only data — artifact, rubric, pinned context, subject — and the rubric
+ * says what counts as a defect, not how to look for one. This literal supplies the search: read
+ * everything first, trace every stated commitment into the sections that depend on it, recompute,
+ * verify against the view, and only then apply the materiality bar. It is a literal for the same
+ * reason as {@link REPOSITORY_VIEW_NOTE}: variable prose would reopen the caller-instruction
+ * channel this envelope deliberately closes.
+ */
+export const REVIEW_INSTRUCTION =
+  "You are the independent counter-reviewer for the artifact in this envelope. Read the whole artifact and every pinned context entry before judging anything; the pinned approved upstream documents state what the artifact must satisfy. Then work through the artifact section by section: trace each stated constant, budget, invariant, interface claim, and policy into every other section that depends on it and check that they jointly hold; recompute derived figures rather than accepting them; verify repository and interface claims against the pinned evidence and the read-only repository view when one is provided; follow each stated property through the inputs and lifecycle events the system will actually meet. Only after that pass apply the rubric's materiality bar to decide what to report. Every finding cites the exact evidence and names its concrete consequence. Return the structured result the output schema describes and nothing else.";
+
+/**
+ * The fixed remediation instruction the envelope adds as `instructions.prior_triage` when a
+ * `prior-triage` context entry is pinned. It gives the round two tasks of equal weight: verify the
+ * accepted revision intents, and review the revised and dependent sections as an initial review
+ * would. The passing round of most tasks is a remediation round, so narrowing it to intent
+ * verification alone let revision-introduced defects through. Same literal discipline as above.
  */
 export const PRIOR_TRIAGE_INSTRUCTION =
-  "This is a remediation review. First verify that every accepted revision intent in the pinned prior-triage record was carried out without introducing a material defect. Do not re-raise completed or rejected findings in variant form; challenge a prior disposition only by naming its finding_id and showing that the revision intent was not carried out or that the change introduced a material defect. You may report a previously undiscovered issue only when leaving it unchanged is reasonably likely to change a downstream decision, behavior, verification outcome, or important risk. Do not report optional polish, harmless wording refinements, or other non-material observations.";
+  "This is a remediation review with two tasks of equal weight. First, verify that every accepted revision intent in the pinned prior-triage record was carried out. Second, review every section the revision changed, and every section that depends on changed content, exactly as an initial review would: revisions introduce defects, so trace each revised constant, contract, or mechanism into every claim, budget, and verification story that relies on it. Do not re-raise completed or rejected findings in variant form; challenge a prior disposition only by naming its finding_id and showing that the revision intent was not carried out or that the change introduced a material defect. Report a previously undiscovered issue anywhere in the artifact when leaving it unchanged is reasonably likely to change a downstream decision, behavior, verification outcome, or important risk. Do not report optional polish, harmless wording refinements, or other non-material observations.";
 
 export type DispatchEnvelope = Readonly<{
   readonly result_kind: "review" | "adjudication";
@@ -511,8 +525,9 @@ function finishEnvelope(
  * the `prior-triage` kind: the previous round's triage record for this same phase instance,
  * assembled by the server from retained triage and review manifests — admissible because every
  * field restates durable authority (reviewer-authored findings and their recorded dispositions),
- * never producer-curated prose. When such an entry is pinned, the envelope adds the fixed
- * {@link PRIOR_TRIAGE_INSTRUCTION} literal. The optional `workspace` binding names the read-only
+ * never producer-curated prose. The only prose the child receives is server-owned literals:
+ * {@link REVIEW_INSTRUCTION} always, plus {@link PRIOR_TRIAGE_INSTRUCTION} exactly when such an
+ * entry is pinned. The optional `workspace` binding names the read-only
  * repository checkout the dispatcher materializes; its note is a fixed literal so the field can
  * never smuggle caller prose.
  */
@@ -545,11 +560,15 @@ export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelop
     artifact: snapshot.artifact,
     rubric,
     context,
-    // The fixed literal appears exactly when a prior-triage record is pinned; presence is derived
+    // Both instructions are fixed literals. The review framing is always present; the remediation
+    // literal appears exactly when a prior-triage record is pinned, and its presence is derived
     // from validated context, never a caller switch.
-    ...(context.some((entry) => entry.kind === "prior-triage")
-      ? { instructions: { prior_triage: PRIOR_TRIAGE_INSTRUCTION } }
-      : {}),
+    instructions: {
+      review: REVIEW_INSTRUCTION,
+      ...(context.some((entry) => entry.kind === "prior-triage")
+        ? { prior_triage: PRIOR_TRIAGE_INSTRUCTION }
+        : {}),
+    },
     ...(workspace === undefined ? {} : { workspace }),
     subject: validateSubject(snapshot.subject),
   } as const satisfies PlainJsonValue;

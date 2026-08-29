@@ -681,6 +681,88 @@
           ],
           "additionalProperties": false
         },
+        "review_strength": {
+          "type": "object",
+          "properties": {
+            "reviewer_model": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "reviewer_effort": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "reviewer_family": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "producer_family": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "same_family": {
+              "type": "boolean"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "remediation_round": {
+              "type": "boolean"
+            },
+            "rounds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "attempt": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "findings": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "blocking": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "accepted": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "attempt",
+                  "findings",
+                  "blocking",
+                  "accepted"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "reviewer_model",
+            "reviewer_effort",
+            "reviewer_family",
+            "producer_family",
+            "same_family",
+            "attempt",
+            "remediation_round",
+            "rounds"
+          ],
+          "additionalProperties": false
+        },
         "presentation": {
           "type": "object",
           "properties": {
@@ -1719,6 +1801,88 @@
       "required": [
         "rubric",
         "active_rules"
+      ],
+      "additionalProperties": false
+    },
+    "review_strength": {
+      "type": "object",
+      "properties": {
+        "reviewer_model": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "reviewer_effort": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "reviewer_family": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "producer_family": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "same_family": {
+          "type": "boolean"
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "remediation_round": {
+          "type": "boolean"
+        },
+        "rounds": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "attempt": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "findings": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "blocking": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "accepted": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "attempt",
+              "findings",
+              "blocking",
+              "accepted"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "reviewer_model",
+        "reviewer_effort",
+        "reviewer_family",
+        "producer_family",
+        "same_family",
+        "attempt",
+        "remediation_round",
+        "rounds"
       ],
       "additionalProperties": false
     },

@@ -97,6 +97,8 @@ ARCHFLOW_REAL_HOSTS=1 ARCHFLOW_CC_SWITCH_PROVIDER=zai npx vitest run --project r
 
 These commands may use credentials, provider quota, installed CLIs, and long production-derived timeouts. Neither `check` nor `check:deep`, builds, release staging, or release writing invokes them.
 
+The review benchmark reviews the corpus in `test/fixtures/corpus/artifacts/` (thirteen cases: ten seeded with exactly one defect each, three clean controls) in both producer directions with the exact production design rubric (`design-v3`), so its measurements are about the policy tasks actually run under. Seeded classes cover single-statement contradictions, unhandled named results, verification shortcuts, and — added after a real design passed review with a budget that could not fit its own measured snapshot — cross-section arithmetic gaps and constants that cannot jointly hold. The offline half of `review-benchmark.test.ts` pins the rubric digest, matrix size, and the split between immutable observations and human scoring; quality is a human disposition recorded in `docs/validation/`, never a CI assertion.
+
 ## Placement rules
 
 - Put deterministic module behavior and a representative success/failure pair in `unit`.

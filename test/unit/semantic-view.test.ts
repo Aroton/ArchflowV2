@@ -234,6 +234,62 @@ describe("semantic status projection", () => {
     });
   });
 
+  it("projects review strength from recorded provenance and per-round counts, never from prose", () => {
+    const reviewed = fullStatus(action("run-step", { step: "triage" }), {
+      step: "counter_review",
+      status: "succeeded",
+      evidence: {
+        available: true,
+        subject_digest: digestA,
+        current_evidence: { set_digest: digestB, slots: [] },
+        findings: [],
+        counter_review_provenance: {
+          assurance: "server-attested", producer_family: "claude", model_family: "claude",
+          model: "claude-opus-5", effort: "medium", adapter: "claude-cli",
+        },
+        assessment: "current",
+      } as never,
+    });
+    const rounds = [
+      { attempt: 1, findings: 4, blocking: 1, accepted: 3 },
+      { attempt: 2, findings: 0, blocking: 0, accepted: 0 },
+    ];
+    const view = projectSemanticStatus(snapshot(reviewed, { review_rounds: rounds }), invocation).view;
+    expect(view.review_strength).toEqual({
+      reviewer_model: "claude-opus-5",
+      reviewer_effort: "medium",
+      reviewer_family: "claude",
+      producer_family: "claude",
+      same_family: true,
+      attempt: 2,
+      remediation_round: true,
+      rounds,
+    });
+
+    const opposite = fullStatus(action("run-step", { step: "triage" }), {
+      step: "counter_review",
+      status: "succeeded",
+      attempt: 1,
+      evidence: {
+        available: true,
+        subject_digest: digestA,
+        current_evidence: { set_digest: digestB, slots: [] },
+        findings: [],
+        counter_review_provenance: {
+          assurance: "server-attested", producer_family: "claude", model_family: "codex",
+          model: "gpt-5.6-sol", effort: "xhigh", adapter: "codex-cli",
+        },
+        assessment: "current",
+      } as never,
+    });
+    expect(projectSemanticStatus(snapshot(opposite), invocation).view.review_strength).toMatchObject({
+      same_family: false, remediation_round: false, attempt: 1, rounds: [],
+    });
+
+    const unreviewed = fullStatus(action("run-step", { step: "produce" }), { evidence: { available: false } as never });
+    expect(projectSemanticStatus(snapshot(unreviewed), invocation).view).not.toHaveProperty("review_strength");
+  });
+
   it("projects baseline refresh as one server-owned no-submission action", () => {
     const designInvocation: WorkflowInvocationV1 = { skill: "archflow-phase-design", phase: 1, intent: "resume" };
     const phase = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(1) });

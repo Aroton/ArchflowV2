@@ -27629,8 +27629,8 @@ async function scaffoldRepositoryAssets(input) {
 // src/review/rubrics.ts
 var PHASE_KIND_RUBRIC_FILES = Object.freeze({
   prd: Object.freeze({ file: "rubrics/prd.yaml", rubric_id: "prd-v1" }),
-  design: Object.freeze({ file: "rubrics/design.yaml", rubric_id: "design-v2" }),
-  "phase-design": Object.freeze({ file: "rubrics/design.yaml", rubric_id: "design-v2" }),
+  design: Object.freeze({ file: "rubrics/design.yaml", rubric_id: "design-v3" }),
+  "phase-design": Object.freeze({ file: "rubrics/design.yaml", rubric_id: "design-v3" }),
   "phase-impl": Object.freeze({ file: "rubrics/implementation.yaml", rubric_id: "implementation-v1" })
 });
 function canonicalRubric(rubricId, rubric) {
@@ -35355,6 +35355,9 @@ var publicConstitutionRuleV1Schema = external_exports.object({ id: nonBlank4, ve
 var rubricCriterionV1Schema = external_exports.object({ id: nonBlank4, text: nonBlank4, blocking: external_exports.boolean() }).strict();
 var publicRubricV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), kind: external_exports.enum(["artifact", "implementation"]), mode: external_exports.literal("adversarial"), criteria: external_exports.array(rubricCriterionV1Schema).min(1) }).strict();
 var publicReviewContextV1Schema = external_exports.object({ rubric: publicRubricV1Schema, active_rules: external_exports.array(publicConstitutionRuleV1Schema) }).strict();
+var roundCount = external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
+var publicReviewRoundV1Schema = external_exports.object({ attempt: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER), findings: roundCount, blocking: roundCount, accepted: roundCount }).strict();
+var publicReviewStrengthV1Schema = external_exports.object({ reviewer_model: nonBlank4, reviewer_effort: nonBlank4, reviewer_family: nonBlank4, producer_family: nonBlank4, same_family: external_exports.boolean(), attempt: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER), remediation_round: external_exports.boolean(), rounds: external_exports.array(publicReviewRoundV1Schema) }).strict();
 var presentationClass = external_exports.enum(["configured-approval", "exception"]);
 var humanPresentationV1Schema = external_exports.object({ class: presentationClass, title: nonBlank4, summary: nonBlank4, details: external_exports.array(nonBlank4).optional(), question: nonBlank4, reasons: external_exports.array(external_exports.object({ class: presentationClass, text: nonBlank4 }).strict()).min(1), options: external_exports.array(external_exports.object({ token: nonBlank4, label: nonBlank4, consequence: nonBlank4 }).strict()).min(1) }).strict().superRefine((presentation, context2) => {
   const expected = presentation.reasons.some((reason2) => reason2.class === "exception") ? "exception" : "configured-approval";
@@ -35409,7 +35412,7 @@ var repositoryStatusV1Schema = external_exports.object({
   head: gitOidV1Schema.optional(),
   last_reviewed_commit: gitOidV1Schema.optional()
 }).strict();
-var workflowViewV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, condition: external_exports.enum(WORKFLOW_CONDITIONS), headline: nonBlank4, detail: nonBlank4, position: workflowPositionV1Schema.optional(), resources: external_exports.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: external_exports.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), presentation: humanPresentationV1Schema.optional(), dispatch_failure: publicDispatchFailureV1Schema.optional(), repositories: external_exports.array(repositoryStatusV1Schema).optional(), config_change: external_exports.array(configChangeEntryV1Schema).optional() }).strict();
+var workflowViewV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, condition: external_exports.enum(WORKFLOW_CONDITIONS), headline: nonBlank4, detail: nonBlank4, position: workflowPositionV1Schema.optional(), resources: external_exports.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: external_exports.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), review_strength: publicReviewStrengthV1Schema.optional(), presentation: humanPresentationV1Schema.optional(), dispatch_failure: publicDispatchFailureV1Schema.optional(), repositories: external_exports.array(repositoryStatusV1Schema).optional(), config_change: external_exports.array(configChangeEntryV1Schema).optional() }).strict();
 var semanticErrorSummaryV1Schema = external_exports.object({
   code: nonBlank4.max(128),
   message: nonBlank4.max(4096),
@@ -39899,6 +39902,43 @@ function materializeJson(value, label) {
   assertPlainJson(value, label);
   return structuredClone(value);
 }
+function reviewRounds(details) {
+  if (details.status.evidence?.available !== true) return Object.freeze([]);
+  const current = deriveCurrentEvidenceSet(details.retained);
+  const triage = details.retained.get("triage")?.manifest.source_artifact;
+  const rounds = /* @__PURE__ */ new Map();
+  const bump = (attempt, blocking, accepted) => {
+    const round = rounds.get(attempt) ?? { findings: 0, blocking: 0, accepted: 0 };
+    round.findings += 1;
+    if (blocking) round.blocking += 1;
+    if (accepted) round.accepted += 1;
+    rounds.set(attempt, round);
+  };
+  const isAccepted = (disposition) => disposition === "accepted" || disposition === "accepted-editorial";
+  const currentAttempt = details.status.attempt;
+  if (triage?.artifact_kind === "triage") {
+    for (const entry of triage.evidence.disposition_ledger ?? []) {
+      if (currentAttempt !== void 0 && entry.attempt === currentAttempt) continue;
+      bump(entry.attempt, entry.blocking === true, isAccepted(entry.disposition));
+    }
+  }
+  if (currentAttempt !== void 0) {
+    const dispositions = /* @__PURE__ */ new Map();
+    if (triage?.artifact_kind === "triage") {
+      for (const disposition of triage.evidence.dispositions) {
+        dispositions.set(`${disposition.review_evidence_digest}:${disposition.finding_id}`, disposition.disposition);
+      }
+    }
+    rounds.set(currentAttempt, { findings: 0, blocking: 0, accepted: 0 });
+    for (const review of current.reviews) {
+      for (const finding of review.evidence.findings) {
+        const disposition = dispositions.get(`${review.evidence_digest}:${finding.finding_id}`);
+        bump(currentAttempt, finding.blocking, disposition !== void 0 && isAccepted(disposition));
+      }
+    }
+  }
+  return Object.freeze([...rounds.entries()].sort(([left], [right]) => left - right).map(([attempt, round]) => Object.freeze({ attempt, ...round })));
+}
 function fullFindings(details) {
   if (details.status.evidence?.available !== true) return Object.freeze([]);
   const current = deriveCurrentEvidenceSet(details.retained);
@@ -40061,6 +40101,7 @@ async function computeAuthoritativeSemanticStatus(dependencies, authority) {
       legacy_import_initialization: true
     },
     full_findings: fullFindings(detailed.value),
+    review_rounds: reviewRounds(detailed.value),
     ...archives,
     reopen_impacts: state === void 0 ? Object.freeze([]) : reopenImpacts(state, status)
   }));
@@ -40101,6 +40142,7 @@ function computeSemanticStatusSnapshot(status, enrichments) {
     },
     status: statusJson,
     full_findings: Object.freeze(findings),
+    review_rounds: Object.freeze((enrichments.review_rounds ?? []).map((round) => Object.freeze(publicReviewRoundV1Schema.parse(materializeJson(round, "semantic review round"))))),
     ...enrichments.pending_waiver_origin === void 0 ? {} : {
       pending_waiver_origin: materializeJson(enrichments.pending_waiver_origin, "pending waiver origin")
     },
@@ -40187,6 +40229,21 @@ function reviewContext(status) {
       ...rule4.review_trigger === void 0 ? {} : { review_trigger: rule4.review_trigger },
       ...rule4.enforced_by === void 0 ? {} : { enforced_by: Object.freeze([...rule4.enforced_by]) }
     })))
+  });
+}
+function reviewStrength(status, snapshot2) {
+  const evidence = status.evidence;
+  if (evidence?.available !== true || status.attempt === void 0) return void 0;
+  const provenance2 = evidence.counter_review_provenance;
+  return Object.freeze({
+    reviewer_model: provenance2.model,
+    reviewer_effort: provenance2.effort,
+    reviewer_family: provenance2.model_family,
+    producer_family: provenance2.producer_family,
+    same_family: provenance2.model_family === provenance2.producer_family,
+    attempt: status.attempt,
+    remediation_round: status.attempt > 1,
+    rounds: Object.freeze((snapshot2.review_rounds ?? []).map((round) => Object.freeze({ ...round })))
   });
 }
 function publicPresentation(status) {
@@ -40541,6 +40598,7 @@ function projectSemanticStatus(snapshot2, invocation) {
   });
   const position2 = positionFromPhase(status.phase_instance);
   const context2 = reviewContext(status);
+  const strength = reviewStrength(status, snapshot2);
   const view = Object.freeze({
     schema_version: "1",
     task_id: status.task_id,
@@ -40554,6 +40612,7 @@ function projectSemanticStatus(snapshot2, invocation) {
     next_action: nextAction,
     ...shape.findings !== true ? {} : { findings: snapshot2.full_findings },
     ...context2 === void 0 ? {} : { review_context: context2 },
+    ...strength === void 0 ? {} : { review_strength: strength },
     ...shape.presentation === void 0 ? {} : { presentation: shape.presentation },
     ...status.dispatch_failure === void 0 ? {} : { dispatch_failure: status.dispatch_failure },
     ...status.repositories === void 0 ? {} : { repositories: status.repositories },

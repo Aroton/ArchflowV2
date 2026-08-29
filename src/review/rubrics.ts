@@ -13,7 +13,7 @@ import { parseSingleYamlDocument } from "../contracts/yaml.js";
 import { assetRoot } from "../init/assets.js";
 
 export type CounterReviewPhaseKind = "prd" | "design" | "phase-design" | "phase-impl";
-export type CanonicalRubricId = "prd-v1" | "design-v2" | "implementation-v1";
+export type CanonicalRubricId = "prd-v1" | "design-v3" | "implementation-v1";
 
 export type CanonicalRubric = Readonly<{
   rubric_id: CanonicalRubricId;
@@ -26,8 +26,8 @@ const PHASE_KIND_RUBRIC_FILES: Readonly<Record<CounterReviewPhaseKind, Readonly<
   rubric_id: CanonicalRubricId;
 }>>> = Object.freeze({
   prd: Object.freeze({ file: "rubrics/prd.yaml", rubric_id: "prd-v1" }),
-  design: Object.freeze({ file: "rubrics/design.yaml", rubric_id: "design-v2" }),
-  "phase-design": Object.freeze({ file: "rubrics/design.yaml", rubric_id: "design-v2" }),
+  design: Object.freeze({ file: "rubrics/design.yaml", rubric_id: "design-v3" }),
+  "phase-design": Object.freeze({ file: "rubrics/design.yaml", rubric_id: "design-v3" }),
   "phase-impl": Object.freeze({ file: "rubrics/implementation.yaml", rubric_id: "implementation-v1" }),
 });
 

@@ -8,7 +8,7 @@ before use.
 | File | Phase kinds | `rubric_id` |
 | --- | --- | --- |
 | `prd.yaml` | `prd` | `prd-v1` |
-| `design.yaml` | `design`, `phase-design` | `design-v2` |
+| `design.yaml` | `design`, `phase-design` | `design-v3` |
 | `implementation.yaml` | `phase-impl` | `implementation-v1` |
 
 ## Editing rules

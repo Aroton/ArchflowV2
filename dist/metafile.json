@@ -4589,7 +4589,7 @@
       }
     },
     "src/contracts/schemas/v1/semantic-workflow.schema.json": {
-      "bytes": 47869,
+      "bytes": 52295,
       "format": "esm",
       "imports": [],
       "with": {
@@ -4647,7 +4647,7 @@
       ]
     },
     "src/contracts/semantic-workflow.ts": {
-      "bytes": 26335,
+      "bytes": 28510,
       "format": "esm",
       "imports": [
         {
@@ -6991,7 +6991,7 @@
       ]
     },
     "src/review/envelopes.ts": {
-      "bytes": 29296,
+      "bytes": 31643,
       "format": "esm",
       "imports": [
         {
@@ -8964,7 +8964,7 @@
       ]
     },
     "src/state/semantic-status.ts": {
-      "bytes": 23665,
+      "bytes": 26486,
       "format": "esm",
       "imports": [
         {
@@ -9035,7 +9035,7 @@
       ]
     },
     "src/state/semantic-view.ts": {
-      "bytes": 24942,
+      "bytes": 26212,
       "format": "esm",
       "imports": [
         {
@@ -9559,7 +9559,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1849993,
+      "bytes": 1853667,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10632,7 +10632,7 @@
           "bytesInOutput": 1117
         },
         "src/contracts/semantic-workflow.ts": {
-          "bytesInOutput": 13374
+          "bytesInOutput": 14141
         },
         "src/contracts/tool-names.ts": {
           "bytesInOutput": 377
@@ -10818,10 +10818,10 @@
           "bytesInOutput": 4909
         },
         "src/state/semantic-status.ts": {
-          "bytesInOutput": 17836
+          "bytesInOutput": 19945
         },
         "src/state/semantic-view.ts": {
-          "bytesInOutput": 21675
+          "bytesInOutput": 22473
         },
         "src/state/snapshots.ts": {
           "bytesInOutput": 26524
@@ -10838,7 +10838,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3229031,
+      "bytes": 3238330,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12024,7 +12024,7 @@
           "bytesInOutput": 3020
         },
         "src/contracts/schemas/v1/semantic-workflow.schema.json": {
-          "bytesInOutput": 45815
+          "bytesInOutput": 50033
         },
         "src/contracts/schemas/v1/task-initialization.schema.json": {
           "bytesInOutput": 1432
@@ -12039,7 +12039,7 @@
           "bytesInOutput": 1255
         },
         "src/contracts/semantic-workflow.ts": {
-          "bytesInOutput": 14387
+          "bytesInOutput": 15154
         },
         "src/contracts/tool-names.ts": {
           "bytesInOutput": 495
@@ -12165,7 +12165,7 @@
           "bytesInOutput": 15086
         },
         "src/review/envelopes.ts": {
-          "bytesInOutput": 19002
+          "bytesInOutput": 20412
         },
         "src/review/fixed-point.ts": {
           "bytesInOutput": 15705
@@ -12282,10 +12282,10 @@
           "bytesInOutput": 35039
         },
         "src/state/semantic-status.ts": {
-          "bytesInOutput": 17849
+          "bytesInOutput": 19958
         },
         "src/state/semantic-view.ts": {
-          "bytesInOutput": 21656
+          "bytesInOutput": 22451
         },
         "src/state/snapshots.ts": {
           "bytesInOutput": 31944

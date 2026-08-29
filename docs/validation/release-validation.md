@@ -81,9 +81,16 @@ against this bundle.
 
 ## Benchmark disposition and quality decision
 
-`docs/validation/review-benchmark.json` contains 12 of 12 completed real review turns: six corpus
-cases reviewed once in each producer direction, serialized over 469.7 seconds. Its immutable
-observation digest is
+`docs/validation/review-benchmark.json` contains 20 of 20 completed real review turns: ten corpus
+cases reviewed once in each producer direction (the paragraph below records the earlier 12-run
+round it superseded). Those runs used a two-criterion benchmark-only rubric and a ten-case corpus.
+The benchmark now reviews with the production `design-v3` rubric over thirteen cases — three added
+for cross-section arithmetic gaps, constants that cannot jointly hold, and a sized control — so the
+recorded bindings are stale by design until the opt-in `bench:review` run is re-recorded and
+re-dispositioned; see `docs/TESTING.md`.
+
+The superseded 12-run round: six corpus cases reviewed once in each producer direction, serialized
+over 469.7 seconds, immutable observation digest
 `e39457d0ffb34e0727dd085288dc968cda9182fc9bd508d5d5a2a323745f257f`.
 
 The user reviewed every finding against the corpus manifest and approved these dispositions:

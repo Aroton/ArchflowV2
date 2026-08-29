@@ -66,6 +66,32 @@ export type PublicReviewContextV1 = {
   readonly active_rules: readonly PublicConstitutionRuleV1[];
 };
 
+/** One counter-review round of the current phase instance: what it raised and what triage accepted. */
+export type PublicReviewRoundV1 = {
+  readonly attempt: number;
+  readonly findings: number;
+  readonly blocking: number;
+  readonly accepted: number;
+};
+
+/**
+ * How strong the current review evidence is, for the human who is about to approve on it. Every
+ * field restates retained provenance or triage authority; none of it is producer prose. A
+ * same-family reviewer, a low effort, or a pass that came from a remediation round are all legal
+ * configurations — this projection exists so they are never invisible at the gate.
+ */
+export type PublicReviewStrengthV1 = {
+  readonly reviewer_model: string;
+  readonly reviewer_effort: string;
+  readonly reviewer_family: string;
+  readonly producer_family: string;
+  readonly same_family: boolean;
+  readonly attempt: number;
+  /** True when the current review ran against pinned prior triage rather than as a first, full-scope review. */
+  readonly remediation_round: boolean;
+  readonly rounds: readonly PublicReviewRoundV1[];
+};
+
 export type HumanPresentationOptionV1 = { readonly token: string; readonly label: string; readonly consequence: string };
 export type HumanPresentationReasonV1 = {
   readonly class: "configured-approval" | "exception";
@@ -156,6 +182,8 @@ export type WorkflowViewV1 = {
   readonly next_action: SemanticNextActionV1;
   readonly findings?: readonly PublicFindingV1[];
   readonly review_context?: PublicReviewContextV1;
+  /** Present whenever current counter-review evidence exists; see {@link PublicReviewStrengthV1}. */
+  readonly review_strength?: PublicReviewStrengthV1;
   readonly presentation?: HumanPresentationV1;
   readonly dispatch_failure?: PublicDispatchFailureV1;
   /**
@@ -240,6 +268,8 @@ export type SemanticStatusSnapshotV1 = {
   readonly legacy_import_initialization?: true;
   readonly status: PlainJsonValue;
   readonly full_findings: readonly PublicFindingV1[];
+  /** Per-attempt finding and acceptance counts for the current phase instance, from retained review and triage. */
+  readonly review_rounds?: readonly PublicReviewRoundV1[];
   readonly pending_waiver_origin?: PlainJsonValue;
   readonly archived_decision?: PlainJsonValue;
   readonly revision_checkpoint?: PlainJsonValue;
@@ -320,6 +350,9 @@ const publicConstitutionRuleV1Schema = z.object({ id: nonBlank, version: positiv
 const rubricCriterionV1Schema = z.object({ id: nonBlank, text: nonBlank, blocking: z.boolean() }).strict();
 const publicRubricV1Schema = z.object({ schema_version: z.literal("1"), kind: z.enum(["artifact", "implementation"]), mode: z.literal("adversarial"), criteria: z.array(rubricCriterionV1Schema).min(1) }).strict();
 const publicReviewContextV1Schema = z.object({ rubric: publicRubricV1Schema, active_rules: z.array(publicConstitutionRuleV1Schema) }).strict();
+const roundCount = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
+export const publicReviewRoundV1Schema = z.object({ attempt: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER), findings: roundCount, blocking: roundCount, accepted: roundCount }).strict() as unknown as z.ZodType<PublicReviewRoundV1>;
+export const publicReviewStrengthV1Schema = z.object({ reviewer_model: nonBlank, reviewer_effort: nonBlank, reviewer_family: nonBlank, producer_family: nonBlank, same_family: z.boolean(), attempt: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER), remediation_round: z.boolean(), rounds: z.array(publicReviewRoundV1Schema) }).strict() as unknown as z.ZodType<PublicReviewStrengthV1>;
 const presentationClass = z.enum(["configured-approval", "exception"]);
 const humanPresentationV1Schema = z.object({ class: presentationClass, title: nonBlank, summary: nonBlank, details: z.array(nonBlank).optional(), question: nonBlank, reasons: z.array(z.object({ class: presentationClass, text: nonBlank }).strict()).min(1), options: z.array(z.object({ token: nonBlank, label: nonBlank, consequence: nonBlank }).strict()).min(1) }).strict().superRefine((presentation, context) => {
   const expected = presentation.reasons.some((reason) => reason.class === "exception") ? "exception" : "configured-approval";
@@ -383,7 +416,7 @@ export const repositoryStatusV1Schema = z.object({
   last_reviewed_commit: gitOidV1Schema.optional(),
 }).strict() as unknown as z.ZodType<RepositoryStatusV1>;
 
-export const workflowViewV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, condition: z.enum(WORKFLOW_CONDITIONS), headline: nonBlank, detail: nonBlank, position: workflowPositionV1Schema.optional(), resources: z.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: z.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), presentation: humanPresentationV1Schema.optional(), dispatch_failure: publicDispatchFailureV1Schema.optional(), repositories: z.array(repositoryStatusV1Schema).optional(), config_change: z.array(configChangeEntryV1Schema).optional() }).strict() as unknown as z.ZodType<WorkflowViewV1>;
+export const workflowViewV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, condition: z.enum(WORKFLOW_CONDITIONS), headline: nonBlank, detail: nonBlank, position: workflowPositionV1Schema.optional(), resources: z.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: z.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), review_strength: publicReviewStrengthV1Schema.optional(), presentation: humanPresentationV1Schema.optional(), dispatch_failure: publicDispatchFailureV1Schema.optional(), repositories: z.array(repositoryStatusV1Schema).optional(), config_change: z.array(configChangeEntryV1Schema).optional() }).strict() as unknown as z.ZodType<WorkflowViewV1>;
 
 export const semanticErrorSummaryV1Schema = z.object({
   code: nonBlank.max(128),

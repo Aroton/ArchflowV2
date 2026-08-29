@@ -13,6 +13,8 @@ import {
   type PublicFindingV1,
   type SemanticStatusSnapshotV1,
   type WorkflowReopenImpactV1,
+  type PublicReviewRoundV1,
+  publicReviewRoundV1Schema,
 } from "../contracts/semantic-workflow.js";
 import { gateDecisionClaim, gateRequestClaim, resolveTaskPath } from "../repository/paths.js";
 import type { TransactionAuthority } from "./authority.js";
@@ -33,6 +35,7 @@ export type SemanticStatusEnrichmentsV1 = Readonly<{
   live_config_digest?: Sha256Digest;
   legacy_import_initialization?: true;
   full_findings: readonly PublicFindingV1[];
+  review_rounds?: readonly PublicReviewRoundV1[];
   pending_waiver_origin?: PlainJsonValue;
   archived_decision?: PlainJsonValue;
   revision_checkpoint?: PlainJsonValue;
@@ -110,6 +113,52 @@ async function archivedGate(
 function materializeJson<T>(value: T, label: string): T {
   assertPlainJson(value, label);
   return structuredClone(value);
+}
+
+/**
+ * Per-attempt review history of the current phase instance. Earlier rounds come from the retained
+ * triage's carried disposition ledger (every finding of a round is dispositioned, so the ledger is
+ * the round); the current attempt is read from the current review evidence itself, joined to the
+ * current triage when one is installed, so a round whose triage has not yet landed still counts.
+ */
+function reviewRounds(details: DetailedTaskStatusV1): readonly PublicReviewRoundV1[] {
+  if (details.status.evidence?.available !== true) return Object.freeze([]);
+  const current = deriveCurrentEvidenceSet(details.retained);
+  const triage = details.retained.get("triage")?.manifest.source_artifact;
+  const rounds = new Map<number, { findings: number; blocking: number; accepted: number }>();
+  const bump = (attempt: number, blocking: boolean, accepted: boolean): void => {
+    const round = rounds.get(attempt) ?? { findings: 0, blocking: 0, accepted: 0 };
+    round.findings += 1;
+    if (blocking) round.blocking += 1;
+    if (accepted) round.accepted += 1;
+    rounds.set(attempt, round);
+  };
+  const isAccepted = (disposition: string): boolean => disposition === "accepted" || disposition === "accepted-editorial";
+  const currentAttempt = details.status.attempt;
+  if (triage?.artifact_kind === "triage") {
+    for (const entry of triage.evidence.disposition_ledger ?? []) {
+      if (currentAttempt !== undefined && entry.attempt === currentAttempt) continue;
+      bump(entry.attempt, entry.blocking === true, isAccepted(entry.disposition));
+    }
+  }
+  if (currentAttempt !== undefined) {
+    const dispositions = new Map<string, string>();
+    if (triage?.artifact_kind === "triage") {
+      for (const disposition of triage.evidence.dispositions) {
+        dispositions.set(`${disposition.review_evidence_digest}:${disposition.finding_id}`, disposition.disposition);
+      }
+    }
+    rounds.set(currentAttempt, { findings: 0, blocking: 0, accepted: 0 });
+    for (const review of current.reviews) {
+      for (const finding of review.evidence.findings) {
+        const disposition = dispositions.get(`${review.evidence_digest}:${finding.finding_id}`);
+        bump(currentAttempt, finding.blocking, disposition !== undefined && isAccepted(disposition));
+      }
+    }
+  }
+  return Object.freeze([...rounds.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([attempt, round]) => Object.freeze({ attempt, ...round })));
 }
 
 function fullFindings(details: DetailedTaskStatusV1): readonly PublicFindingV1[] {
@@ -353,6 +402,7 @@ export async function computeAuthoritativeSemanticStatus(
       legacy_import_initialization: true,
     }),
     full_findings: fullFindings(detailed.value),
+    review_rounds: reviewRounds(detailed.value),
     ...archives,
     reopen_impacts: state === undefined ? Object.freeze([]) : reopenImpacts(state, status),
   }));
@@ -414,6 +464,8 @@ export function computeSemanticStatusSnapshot(
     }),
     status: statusJson,
     full_findings: Object.freeze(findings),
+    review_rounds: Object.freeze((enrichments.review_rounds ?? []).map((round) =>
+      Object.freeze(publicReviewRoundV1Schema.parse(materializeJson(round, "semantic review round"))) as PublicReviewRoundV1)),
     ...(enrichments.pending_waiver_origin === undefined ? {} : {
       pending_waiver_origin: materializeJson(enrichments.pending_waiver_origin, "pending waiver origin"),
     }),

@@ -10,8 +10,8 @@ import { parseConfigYaml } from "../../src/contracts/config.js";
 import { parseSafeId, parseSafeInteger, parseSha256Digest } from "../../src/contracts/evidence.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
-import { parseRubricV1 } from "../../src/contracts/rubric.js";
 import { createJsonSchemaValidator } from "../helpers/json-schema.js";
+import { loadTestRubric } from "../helpers/rubrics.js";
 import { mintReviewObservation, serializeDispatch } from "../../src/dispatch/cli.js";
 import { createDispatchCoordinator } from "../../src/dispatch/coordinator.js";
 import { resolveDispatchRoute } from "../../src/dispatch/routing.js";
@@ -72,25 +72,13 @@ roles:
     effort: high
 `;
 
-const rubric = parseRubricV1({
-  schema_version: "1",
-  kind: "artifact",
-  mode: "adversarial",
-  criteria: [
-    {
-      id: "substantive-correctness",
-      text: "Report a blocking defect only when it requires producer action, and cite the specific artifact statement it contradicts or stated requirement it leaves unmet; citation is necessary but not sufficient. The violation must follow from the artifact's own text without assuming implementation behavior, ordering, or environment it does not specify. A contradiction that depends on such an assumption, or a debatable reading of whether stated text satisfies a criterion, is not blocking. Missing handling is a defect only for a condition the artifact claims to cover or a stated requirement demands. Local edge-case handling belongs to the implementer. A sound artifact is expected to yield zero blocking findings; that is successful review, not under-performance.",
-      blocking: true,
-    },
-    {
-      id: "advisory-observations",
-      text: "Use non-blocking findings for completeness suggestions, debatable readings, and observations, including handling for conditions outside the artifact's stated scope. Do not inflate them into blockers merely to report them.",
-      blocking: false,
-    },
-  ],
-});
-const rubricDigest = canonicalJsonDigest(rubric as unknown as PlainJsonValue);
-const phase = parsePhaseInstanceId("prd");
+// The benchmark reviews with the exact production design rubric so its measurements are about the
+// policy tasks actually run under. Earlier rounds used a two-criterion benchmark-only rubric, which
+// measured a rubric no task ever saw; the recorded thresholds in docs/validation say which.
+const designRubric = await loadTestRubric("design");
+const rubric = designRubric.rubric;
+const rubricDigest = designRubric.rubric_digest;
+const phase = parsePhaseInstanceId("design");
 const validateReviewOutput = createJsonSchemaValidator<Record<string, unknown>>(
   reviewOutputSchema,
 );
@@ -125,18 +113,21 @@ const benchmarkAvailable = benchmarkEnabled() && realHostsAvailable();
 requireRealHostsAvailable(!benchmarkEnabled() || benchmarkAvailable);
 
 describe("benchmark digest contract", () => {
-  it("pins the recalibrated rubric and twenty-run matrix without real model calls", async () => {
-    expect(rubric.criteria).toEqual([
-      {
-        id: "substantive-correctness",
-        text: "Report a blocking defect only when it requires producer action, and cite the specific artifact statement it contradicts or stated requirement it leaves unmet; citation is necessary but not sufficient. The violation must follow from the artifact's own text without assuming implementation behavior, ordering, or environment it does not specify. A contradiction that depends on such an assumption, or a debatable reading of whether stated text satisfies a criterion, is not blocking. Missing handling is a defect only for a condition the artifact claims to cover or a stated requirement demands. Local edge-case handling belongs to the implementer. A sound artifact is expected to yield zero blocking findings; that is successful review, not under-performance.",
-        blocking: true,
-      },
-      {
-        id: "advisory-observations",
-        text: "Use non-blocking findings for completeness suggestions, debatable readings, and observations, including handling for conditions outside the artifact's stated scope. Do not inflate them into blockers merely to report them.",
-        blocking: false,
-      },
+  it("pins the production design rubric and the twenty-six-run matrix without real model calls", async () => {
+    expect(designRubric.rubric_id).toBe("design-v3");
+    expect(rubricDigest).toBe("cd7c1d7a1dceaa9a9595076ebf2e89407505103453eab6309b74e8b2598275db");
+    expect(rubric.criteria.map((criterion) => criterion.id)).toEqual([
+      "substantive-correctness",
+      "upstream-coverage",
+      "interface-reality",
+      "quantitative-consistency",
+      "boundary-and-mechanism-coverage",
+      "evidence-completeness",
+      "proportionality",
+      "phase-plan-soundness",
+      "unverifiable-claims",
+      "reviewer-confidence",
+      "advisory-observations",
     ]);
 
     const manifest = await loadManifest();
@@ -145,7 +136,7 @@ describe("benchmark digest contract", () => {
       { id: "codex-to-claude", producer_family: "codex", reviewer_family: "claude" },
     ]);
     expect(repeatCount).toBe(1);
-    expect(manifest.value.cases.length * directions.length * repeatCount).toBe(20);
+    expect(manifest.value.cases.length * directions.length * repeatCount).toBe(26);
   });
 
   it("keeps human dispositions and derived metrics outside the immutable observation digest", () => {
@@ -226,7 +217,7 @@ async function loadManifest(): Promise<Readonly<{ bytes: Uint8Array; value: Corp
     seeded: ["seed-detected", "unrelated-blocker", "missed"],
     control: ["clean-pass", "false-blocker"],
   });
-  expect(value.cases).toHaveLength(10);
+  expect(value.cases).toHaveLength(13);
   return { bytes, value };
 }
 
@@ -234,7 +225,7 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
   it("records both opposite-family directions without asserting a quality threshold", async () => {
     const manifest = await loadManifest();
     const plannedTurns = manifest.value.cases.length * directions.length * repeatCount;
-    expect(plannedTurns).toBe(20);
+    expect(plannedTurns).toBe(26);
 
     const benchmarkInput = {
       schema_version: "1",

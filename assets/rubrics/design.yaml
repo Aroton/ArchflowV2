@@ -5,7 +5,7 @@
 # cross-checked against the phase kind that selects this file and is excluded
 # from the rubric digest. Criterion order is significant: the digest and the
 # review contract both depend on it. See README.md for the editing rules.
-rubric_id: design-v2
+rubric_id: design-v3
 schema_version: "1"
 kind: artifact
 mode: adversarial
@@ -18,6 +18,12 @@ criteria:
     blocking: true
   - id: interface-reality
     text: "Report a repository or interface claim only when pinned or repository evidence materially contradicts it. Use unverifiable-claims only when missing evidence prevents a material judgment."
+    blocking: true
+  - id: quantitative-consistency
+    text: "Numeric budgets, bounds, constants, and capacity claims are design commitments. Report when stated constants, invariants, or arithmetic cannot jointly hold; when a stated bound or budget depends on a quantity the design neither states nor schedules to measure before the phase that relies on it; or when a derived figure does not follow from its inputs. Recompute rather than accept. A finding shows the arithmetic or the contradiction and names its concrete consequence for a requirement, verification result, or important risk; a number that is merely unexplained but affects nothing is not a finding."
+    blocking: true
+  - id: boundary-and-mechanism-coverage
+    text: "Report when an isolation, safety, ordering, or recovery property rests on a mechanism the verification plan does not exercise directly — inferring the mechanism from a neighboring test is not exercising it — or when a stated policy leaves unhandled an input or lifecycle class the system will meet, such as malformed or out-of-domain bytes, restarts and identity changes, limit exhaustion, or state retained across those events, and the omission is reasonably likely to change behavior. Apply the same materiality bar; a class the design cannot meet or a stated non-goal is not a finding."
     blocking: true
   - id: evidence-completeness
     text: "Report an unaddressed adjacent component only when the omission is reasonably likely to break a stated design element, interface, verification result, or important risk boundary."
