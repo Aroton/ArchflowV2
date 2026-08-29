@@ -44,17 +44,18 @@ cd ArchflowV2
 
 This verifies the tracked offline payload, installs the server and local-helper bundle under
 `${ARCHFLOW_HOME:-$HOME/.archflow}/bundle/`, creates `archflow-mcp` and `archflow-local`
-launchers under `${ARCHFLOW_BIN:-$HOME/.local/bin}/`, and installs both skill integrations:
+launchers under `${ARCHFLOW_BIN:-$HOME/.local/bin}/`, and installs all skill integrations:
 
 - Claude Code skills in `~/.claude/skills/`
 - Codex skills in `~/.agents/skills/`
+- Antigravity skills in `~/.gemini/config/skills/`
 
 The launcher directory must already be on `PATH`; otherwise the installer prints the exact
 `export PATH=...` line and stops. Install just one skill integration with
-`./install.sh --claude` or `./install.sh --codex`. Restart Codex after installing if the skills
+`./install.sh --claude`, `./install.sh --codex`, or `./install.sh --antigravity`. Restart Codex after installing if the skills
 are not listed yet.
 
-From the repository you want to initialize, run `/archflow-init` in Claude Code or
+From the repository you want to initialize, run `/archflow-init` in Claude Code / Antigravity or
 `$archflow-init` in Codex. Initialization scaffolds the repository-owned ArchFlow assets and
 project MCP registrations, then reports the host approval/trust steps that still require you.
 It also creates `.archflow/.gitignore` with the single `/runtime/` rule and diagnoses whether that

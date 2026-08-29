@@ -7,31 +7,34 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SKILLS_SOURCE_DIR="$SCRIPT_DIR/skills"
 CLAUDE_TARGET_DIR="$HOME/.claude/skills"
 CODEX_TARGET_DIR="$HOME/.agents/skills"
+ANTIGRAVITY_TARGET_DIR="$HOME/.gemini/config/skills"
 ARCHFLOW_ROOT="${ARCHFLOW_HOME:-$HOME/.archflow}"
 ARCHFLOW_BIN_DIR="${ARCHFLOW_BIN:-$HOME/.local/bin}"
 BUNDLE_DIR="$ARCHFLOW_ROOT/bundle"
 
 install_claude=true
 install_codex=true
+install_antigravity=true
 
 case "${1:-}" in
   "") ;;
-  --claude) install_codex=false ;;
-  --codex) install_claude=false ;;
+  --claude) install_codex=false; install_antigravity=false ;;
+  --codex) install_claude=false; install_antigravity=false ;;
+  --antigravity|--agy) install_claude=false; install_codex=false ;;
   --help|-h)
-    echo "Usage: ./install.sh [--claude|--codex]"
+    echo "Usage: ./install.sh [--claude|--codex|--antigravity|--agy]"
     exit 0
     ;;
   *)
     echo "Unknown option: $1" >&2
-    echo "Usage: ./install.sh [--claude|--codex]" >&2
+    echo "Usage: ./install.sh [--claude|--codex|--antigravity|--agy]" >&2
     exit 1
     ;;
 esac
 
 if [ "$#" -gt 1 ]; then
   echo "Unexpected extra arguments: $*" >&2
-  echo "Usage: ./install.sh [--claude|--codex]" >&2
+  echo "Usage: ./install.sh [--claude|--codex|--antigravity|--agy]" >&2
   exit 1
 fi
 
@@ -157,6 +160,11 @@ if [ "$install_codex" = true ]; then
   echo "ArchFlow Codex skills installed to $CODEX_TARGET_DIR/"
 fi
 
+if [ "$install_antigravity" = true ]; then
+  install_skills "$ANTIGRAVITY_TARGET_DIR"
+  echo "ArchFlow Antigravity skills installed to $ANTIGRAVITY_TARGET_DIR/"
+fi
+
 echo "ArchFlow bundle installed to $BUNDLE_DIR/"
 echo "ArchFlow launchers installed to $ARCHFLOW_BIN_DIR/"
 echo ""
@@ -166,4 +174,7 @@ fi
 if [ "$install_codex" = true ]; then
   echo 'Codex: $archflow-init, $archflow-constitution, $archflow-upgrade, $archflow-explore, $archflow-prd, $archflow-design, $archflow-phase-design, $archflow-phase-impl, $archflow-status'
   echo "Restart Codex if the skills do not appear immediately."
+fi
+if [ "$install_antigravity" = true ]; then
+  echo "Antigravity: /archflow-init, /archflow-constitution, /archflow-upgrade, /archflow-explore, /archflow-prd, /archflow-design, /archflow-phase-design, /archflow-phase-impl, /archflow-status"
 fi

@@ -31,8 +31,9 @@ function runInstaller(
   bin: string,
   path = `${bin}${delimiter}${process.env.PATH ?? ""}`,
   environment: NodeJS.ProcessEnv = {},
+  args: string[] = ["--claude"],
 ) {
-  return spawnSync(join(root, "install.sh"), ["--claude"], {
+  return spawnSync(join(root, "install.sh"), args, {
     cwd: root,
     encoding: "utf8",
     env: { ...process.env, ...environment, HOME: home, ARCHFLOW_HOME: join(home, "archflow-home"), ARCHFLOW_BIN: bin, PATH: path },
@@ -105,7 +106,51 @@ describe("installer", () => {
     });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("Unexpected extra arguments: --claude --bogus");
-    expect(result.stderr).toContain("Usage: ./install.sh [--claude|--codex]");
+    expect(result.stderr).toContain("Usage: ./install.sh [--claude|--codex|--antigravity|--agy]");
+  });
+
+  it.each(["--antigravity", "--agy"])("installs skills selectively for Antigravity with %s", async (flag) => {
+    const root = await checkoutCopy();
+    const home = join(root, "home");
+    const bin = join(home, "bin");
+    const antigravitySkillRoot = join(home, ".gemini", "config", "skills");
+    const claudeSkillRoot = join(home, ".claude", "skills");
+    const codexSkillRoot = join(home, ".agents", "skills");
+
+    const installed = runInstaller(root, home, bin, undefined, {}, [flag]);
+    expect(installed.error).toBeUndefined();
+    expect(installed.status, installed.stderr).toBe(0);
+    expect(installed.stdout).toContain("ArchFlow Antigravity skills installed to");
+    expect(installed.stdout).toContain("Antigravity: /archflow-init");
+    expect(installed.stdout).not.toContain("Claude Code: /archflow-init");
+    expect(installed.stdout).not.toContain("Codex: $archflow-init");
+
+    expect(await readFile(join(antigravitySkillRoot, "archflow-init", "SKILL.md"), "utf8"))
+      .toBe(await readFile(join(root, "skills", "archflow-init", "SKILL.md"), "utf8"));
+    expect(await readFile(join(antigravitySkillRoot, ".archflow-installed"), "utf8")).toContain("archflow-init/SKILL.md");
+
+    await expect(readFile(join(claudeSkillRoot, "archflow-init", "SKILL.md"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(join(codexSkillRoot, "archflow-init", "SKILL.md"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("installs to Claude, Codex, and Antigravity when invoked without flags", async () => {
+    const root = await checkoutCopy();
+    const home = join(root, "home");
+    const bin = join(home, "bin");
+    const claudeSkillRoot = join(home, ".claude", "skills");
+    const codexSkillRoot = join(home, ".agents", "skills");
+    const antigravitySkillRoot = join(home, ".gemini", "config", "skills");
+
+    const installed = runInstaller(root, home, bin, undefined, {}, []);
+    expect(installed.error).toBeUndefined();
+    expect(installed.status, installed.stderr).toBe(0);
+    expect(installed.stdout).toContain("ArchFlow Claude Code skills installed to");
+    expect(installed.stdout).toContain("ArchFlow Codex skills installed to");
+    expect(installed.stdout).toContain("ArchFlow Antigravity skills installed to");
+
+    expect(await readFile(join(claudeSkillRoot, "archflow-init", "SKILL.md"), "utf8")).toBeDefined();
+    expect(await readFile(join(codexSkillRoot, "archflow-init", "SKILL.md"), "utf8")).toBeDefined();
+    expect(await readFile(join(antigravitySkillRoot, "archflow-init", "SKILL.md"), "utf8")).toBeDefined();
   });
 
   it("installs a verified offline bundle and prunes only previously owned skill files", async () => {
