@@ -4854,7 +4854,7 @@
       ]
     },
     "src/dispatch/cli.ts": {
-      "bytes": 42128,
+      "bytes": 41846,
       "format": "esm",
       "imports": [
         {
@@ -4956,7 +4956,7 @@
       ]
     },
     "src/dispatch/failure-observation.ts": {
-      "bytes": 8494,
+      "bytes": 8465,
       "format": "esm",
       "imports": [
         {
@@ -5009,6 +5009,57 @@
           "kind": "import-statement",
           "original": "../contracts/errors.js",
           "path": "src/contracts/errors.ts"
+        }
+      ]
+    },
+    "src/dispatch/retained-child-output.ts": {
+      "bytes": 9886,
+      "format": "esm",
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "kind": "import-statement",
+          "original": "zod",
+          "path": "node_modules/zod/index.js"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/canonical.js",
+          "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/evidence.js",
+          "path": "src/contracts/evidence.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/phase-instance.js",
+          "path": "src/contracts/phase-instance.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/review.js",
+          "path": "src/contracts/review.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../repository/paths.js",
+          "path": "src/repository/paths.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../state/layout.js",
+          "path": "src/state/layout.ts"
         }
       ]
     },
@@ -5895,7 +5946,7 @@
       "imports": []
     },
     "src/mcp/handlers/counter-review.ts": {
-      "bytes": 29992,
+      "bytes": 30881,
       "format": "esm",
       "imports": [
         {
@@ -5932,6 +5983,11 @@
           "kind": "import-statement",
           "original": "../../dispatch/failure-observation.js",
           "path": "src/dispatch/failure-observation.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../dispatch/retained-child-output.js",
+          "path": "src/dispatch/retained-child-output.ts"
         },
         {
           "kind": "import-statement",
@@ -6899,7 +6955,7 @@
       ]
     },
     "src/review/counter-review.ts": {
-      "bytes": 26942,
+      "bytes": 33770,
       "format": "esm",
       "imports": [
         {
@@ -6987,11 +7043,16 @@
           "kind": "import-statement",
           "original": "./pinned-context.js",
           "path": "src/review/pinned-context.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./reviewer-tags.js",
+          "path": "src/review/reviewer-tags.ts"
         }
       ]
     },
     "src/review/envelopes.ts": {
-      "bytes": 32593,
+      "bytes": 32994,
       "format": "esm",
       "imports": [
         {
@@ -7068,7 +7129,7 @@
       ]
     },
     "src/review/pinned-context.ts": {
-      "bytes": 30793,
+      "bytes": 33931,
       "format": "esm",
       "imports": [
         {
@@ -7132,6 +7193,11 @@
           "path": "src/review/envelopes.ts"
         }
       ]
+    },
+    "src/review/reviewer-tags.ts": {
+      "bytes": 1623,
+      "format": "esm",
+      "imports": []
     },
     "src/review/rubrics.ts": {
       "bytes": 4877,
@@ -10838,7 +10904,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3252698,
+      "bytes": 3264291,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -11306,6 +11372,16 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:os"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
         },
         {
           "external": true,
@@ -12077,6 +12153,9 @@
         "src/dispatch/process.ts": {
           "bytesInOutput": 7822
         },
+        "src/dispatch/retained-child-output.ts": {
+          "bytesInOutput": 5660
+        },
         "src/dispatch/routing.ts": {
           "bytesInOutput": 6006
         },
@@ -12102,7 +12181,7 @@
           "bytesInOutput": 2638
         },
         "src/mcp/handlers/counter-review.ts": {
-          "bytesInOutput": 20589
+          "bytesInOutput": 21107
         },
         "src/mcp/handlers/errors.ts": {
           "bytesInOutput": 908
@@ -12162,16 +12241,19 @@
           "bytesInOutput": 5798
         },
         "src/review/counter-review.ts": {
-          "bytesInOutput": 15086
+          "bytesInOutput": 18402
         },
         "src/review/envelopes.ts": {
-          "bytesInOutput": 21299
+          "bytesInOutput": 21490
         },
         "src/review/fixed-point.ts": {
           "bytesInOutput": 15705
         },
         "src/review/pinned-context.ts": {
-          "bytesInOutput": 19655
+          "bytesInOutput": 20736
+        },
+        "src/review/reviewer-tags.ts": {
+          "bytesInOutput": 753
         },
         "src/review/rubrics.ts": {
           "bytesInOutput": 3091

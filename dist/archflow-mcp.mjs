@@ -75713,7 +75713,7 @@ var REPOSITORY_VIEW_NOTE = "Your working directory is a read-only checkout of th
 var PRODUCED_REPOSITORY_VIEW_NOTE = "Your working directory is a sealed read-only post-change repository snapshot reconstructed from the authenticated implementation output, excluding .archflow/tasks. The artifact names the changed paths and baseline; inspect the files in this snapshot as the review subject.";
 var MULTI_REPOSITORY_VIEW_NOTE = "Your working directory contains read-only repository snapshots at `./<name>`; cite files as `<name>/<path>`. A repository entry with `snapshot_digest` is a sealed post-change tree reconstructed from authenticated implementation output and is part of the review subject. An entry without `snapshot_digest` is commit-pinned read-only context and may not contain this phase's work; the artifact and pinned context remain the review subject and take precedence on conflict.";
 var REVIEW_INSTRUCTION = "You are the independent counter-reviewer for the artifact in this envelope. Read the whole artifact and every pinned context entry before judging anything; the pinned approved upstream documents state what the artifact must satisfy. Then work through the artifact section by section: trace each stated constant, budget, invariant, interface claim, and policy into every other section that depends on it and check that they jointly hold; recompute derived figures rather than accepting them; verify repository and interface claims against the pinned evidence and the read-only repository view when one is provided; follow each stated property through the inputs and lifecycle events the system will actually meet. Frame your evaluation around the finite question: 'What would break in production or fail execution?' A true observation or discrepancy that does not change downstream implementation, break an approved boundary, or alter verification is not a defect and must not be reported. Only after that pass apply the rubric's materiality bar to decide what to report. Every finding cites the exact evidence and names its concrete consequence. Return the structured result the output schema describes and nothing else.";
-var PRIOR_TRIAGE_INSTRUCTION = "This is a remediation review. The artifact already received a full review; the pinned prior-triage record is that round's outcome. Two tasks: first, verify that every accepted revision intent in the pinned prior-triage record was carried out. Second, review every section the revision changed, and every section that depends on changed content, at the same materiality bar as an initial review: revisions introduce defects, so trace each revised constant, contract, or mechanism into the claims, budgets, and verification stories that rely on it. Do not re-raise completed or rejected findings in variant form; challenge a prior disposition only by naming its finding_id and showing that the revision intent was not carried out or that the change introduced a material defect. Do not open a new sweep of unchanged sections: report an issue outside the changed and dependent sections only when it would break production or fail execution and the revision made it visible. Do not report optional polish, harmless wording refinements, true-but-inconsequential observations, or other non-material items that induce specification drift. A remediation round that finds nothing material must return no findings; that is the intended terminal state of review, not a failure of diligence.";
+var PRIOR_TRIAGE_INSTRUCTION = "This is a remediation review, not a second full review. The artifact already received a full review; the pinned prior-triage record lists the findings from earlier rounds that you are responsible for, each with the producer's disposition and revision intent. First task, confirmation: for every accepted revision intent in that record, verify in the artifact that it was carried out, and report a finding only where it was not. Second task, regression: in the sections the revision changed and the sections that depend on changed content, report a defect only if the revision itself introduced it or made it visible, and only if it is a blocker \u2014 one that would break production, alter downstream implementation, fail execution or verification, or breach an approved boundary. Non-blocking findings are not reportable in a remediation round, with one exception: an unverifiable- or escalate- finding that names evidence you needed and lacked to make the confirmation judgment itself. Do not re-evaluate changed content against the full rubric, do not open a new sweep of unchanged sections, and do not re-raise completed or rejected findings in variant form; challenge a prior disposition only by naming its finding_id and showing that the revision intent was not carried out or that the change introduced a blocker. A remediation round that finds nothing to report must return no findings; that is the intended terminal state of review, not a failure of diligence.";
 var ReviewEnvelopeError = class extends Error {
   project_error;
   /** The serialized size that failed the byte cap, when that is what failed. */
@@ -76488,6 +76488,142 @@ function createDispatchCoordinator(input) {
       }
     }
   };
+}
+
+// src/dispatch/retained-child-output.ts
+import { readdir as readdir4, readFile as readFile15 } from "node:fs/promises";
+import { join as join15 } from "node:path";
+var nonBlank5 = external_exports.string().min(1);
+var retainedRouteSchema = external_exports.object({
+  adapter: external_exports.enum(ADAPTER_IDS),
+  family: external_exports.enum(MODEL_FAMILIES),
+  model: nonBlank5,
+  effort: external_exports.enum(EFFORT_VALUES),
+  provider: nonBlank5.optional()
+}).strict();
+var retainedChildOutputSchema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: external_exports.literal("counter_review"),
+  attempt: safeIntegerV1Schema,
+  role: external_exports.enum(["counter-reviewer", "adjudicator"]),
+  envelope_digest: sha256DigestV1Schema,
+  route: retainedRouteSchema,
+  route_source: routeSourceRecordSchema,
+  cli_version: nonBlank5,
+  output_base64: external_exports.string().min(1),
+  observed_output_digest: sha256DigestV1Schema
+}).strict();
+function plainRoute(route2) {
+  return {
+    adapter: route2.adapter,
+    family: route2.family,
+    model: route2.model,
+    effort: route2.effort,
+    ...route2.provider === void 0 ? {} : { provider: route2.provider }
+  };
+}
+function plainSource(source) {
+  const displaced = source.displaced;
+  return {
+    provenance: source.provenance,
+    ...displaced === void 0 ? {} : {
+      displaced: {
+        source: displaced.source,
+        model: displaced.model,
+        effort: displaced.effort,
+        ...displaced.provider === void 0 ? {} : { provider: displaced.provider }
+      }
+    }
+  };
+}
+function retainedChildOutputKey(binding) {
+  return canonicalJsonDigest({
+    digest_kind: "retained-child-output",
+    envelope_digest: binding.envelope_digest,
+    role: binding.role,
+    route: plainRoute(binding.selection.route),
+    source: plainSource(binding.selection.source)
+  });
+}
+function roundPrefix(envelopeDigest) {
+  return `round-${envelopeDigest.slice(0, 16)}-`;
+}
+function recordClaim(phaseInstance4, binding) {
+  const key = retainedChildOutputKey(binding);
+  return parseWorkspacePathClaim(
+    `diagnostics/attempts/${phaseInstance4}/${roundPrefix(binding.envelope_digest)}${binding.role}-${key.slice(0, 16)}.json`
+  );
+}
+async function resolveRecord(context2, claim) {
+  return resolveTaskWorkspacePath({
+    runner: context2.dependencies.runner,
+    taskId: context2.authority.task_id,
+    claim,
+    expectedClass: "workspace-attempt",
+    context: context2.authority.context
+  });
+}
+function createRetainedChildOutputStore(context2) {
+  const writer = context2.dependencies.projection_writer;
+  if (writer === void 0) return void 0;
+  const matches = (record3, binding) => record3.task_id === context2.authority.task_id && record3.phase_instance === context2.phase_instance && record3.attempt === context2.attempt && record3.role === binding.role && record3.envelope_digest === binding.envelope_digest && canonicalJsonDigest(plainRoute(record3.route)) === canonicalJsonDigest(plainRoute(binding.selection.route)) && canonicalJsonDigest(plainSource(record3.route_source)) === canonicalJsonDigest(plainSource(binding.selection.source));
+  return Object.freeze({
+    async read(binding) {
+      let target2;
+      try {
+        target2 = await resolveRecord(context2, recordClaim(context2.phase_instance, binding));
+        if (!target2.ok) return void 0;
+        const record3 = retainedChildOutputSchema.parse(JSON.parse(await readFile15(target2.value.absolute, "utf8")));
+        const bytes = new Uint8Array(Buffer.from(record3.output_base64, "base64"));
+        if (matches(record3, binding) && sha256Bytes(bytes) === record3.observed_output_digest) {
+          return Object.freeze({ cli_version: record3.cli_version, extracted_output_bytes: bytes });
+        }
+      } catch {
+      }
+      if (target2?.ok) await writer.remove(target2.value).catch(() => void 0);
+      return void 0;
+    },
+    async write(binding, result) {
+      try {
+        await ensureAttemptDirectory(context2.authority, context2.phase_instance);
+        const target2 = await resolveRecord(context2, recordClaim(context2.phase_instance, binding));
+        if (!target2.ok) return;
+        const record3 = retainedChildOutputSchema.parse({
+          schema_version: "1",
+          task_id: context2.authority.task_id,
+          phase_instance: context2.phase_instance,
+          step: "counter_review",
+          attempt: context2.attempt,
+          role: binding.role,
+          envelope_digest: binding.envelope_digest,
+          route: plainRoute(binding.selection.route),
+          route_source: plainSource(binding.selection.source),
+          cli_version: result.cli_version,
+          output_base64: Buffer.from(result.extracted_output_bytes).toString("base64"),
+          observed_output_digest: sha256Bytes(result.extracted_output_bytes)
+        });
+        await writer.replaceRegular(target2.value, canonicalJsonBytes(record3), false);
+      } catch {
+      }
+    },
+    async discard(envelopeDigest) {
+      try {
+        const directory = join15(context2.authority.workspace_root, "diagnostics", "attempts", context2.phase_instance);
+        const prefix = roundPrefix(envelopeDigest);
+        for (const name of await readdir4(directory)) {
+          if (!name.startsWith(prefix) || !name.endsWith(".json")) continue;
+          const target2 = await resolveRecord(
+            context2,
+            parseWorkspacePathClaim(`diagnostics/attempts/${context2.phase_instance}/${name}`)
+          );
+          if (target2.ok) await writer.remove(target2.value).catch(() => void 0);
+        }
+      } catch {
+      }
+    }
+  });
 }
 
 // src/contracts/schemas/v1/adjudication.schema.json
@@ -77781,8 +77917,8 @@ async function runStateTransaction(dependencies, request, prepare) {
 }
 
 // src/review/pinned-context.ts
-import { readFile as readFile15 } from "node:fs/promises";
-import { join as join15, posix } from "node:path";
+import { readFile as readFile16 } from "node:fs/promises";
+import { join as join16, posix } from "node:path";
 
 // src/contracts/utf8.ts
 import { Buffer as Buffer3 } from "node:buffer";
@@ -77811,7 +77947,6 @@ var CAP_PRIORITY = [
   "repo-map"
 ];
 var CAP_DROPPABLE_KINDS = /* @__PURE__ */ new Set([
-  "prior-triage",
   "interface-excerpt",
   "conventions",
   "repo-map"
@@ -77885,7 +78020,7 @@ var fail24 = (phase3, issue_code) => Object.freeze({
 });
 async function assembleReviewContext(input) {
   const phase3 = decodePhaseInstance(input.state.phase_instance);
-  const priorTriage = await priorTriageEvidence(input.dependencies, input.state);
+  const priorTriage = await priorTriageEvidence(input.dependencies, input.state, input.prior_triage);
   if (!priorTriage.ok) return priorTriage;
   if (phase3.kind !== "prd") {
     const upstreams = await assembleUpstreamContext(input);
@@ -77976,7 +78111,7 @@ async function assembleUpstreamContext(input) {
           context: input.authority.context
         });
         if (!target2.ok) return target2;
-        const bytes = new Uint8Array(await readFile15(target2.value.absolute));
+        const bytes = new Uint8Array(await readFile16(target2.value.absolute));
         const reference = imported.value.staged_payload_refs.find((item) => item.legacy_path === mapping.legacy_path);
         if (reference === void 0 || sha256Bytes(bytes) !== reference.digest) return fail24(input.state.phase_instance, "imported-reference-changed");
         entries.push(pinnedContextEntry("imported-reference", relativePath, bytes));
@@ -78092,7 +78227,7 @@ async function verificationTranscriptEvidence(runner, authority, state, subject)
   }
   let bytes;
   try {
-    bytes = new Uint8Array(await readFile15(resolved.value.absolute));
+    bytes = new Uint8Array(await readFile16(resolved.value.absolute));
   } catch {
     return [unavailableContextEntry(
       "verification-transcript",
@@ -78174,10 +78309,10 @@ async function implementationMechanicalEvidence(runner, subject, projectionPlan)
     return [failedMechanicalEvidence("interface-excerpt", "changed-imports")];
   }
 }
-async function priorTriageEvidence(dependencies, state) {
+async function loadPriorTriageRecord(dependencies, state) {
   const triageRef = state.authoritative_results.find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "triage");
   if (triageRef === void 0 || dependencies.load_retained_result === void 0) {
-    return ok25(Object.freeze([]));
+    return ok25(void 0);
   }
   const triage = await dependencies.load_retained_result(triageRef);
   if (!triage.ok) return triage;
@@ -78216,7 +78351,9 @@ async function priorTriageEvidence(dependencies, state) {
     };
   });
   const merged = /* @__PURE__ */ new Map();
+  for (const disposition of dispositions) merged.set(disposition.finding_id, disposition);
   for (const entry of triageSource.evidence.disposition_ledger ?? []) {
+    if (merged.has(entry.finding_id)) continue;
     merged.set(entry.finding_id, {
       finding_id: entry.finding_id,
       attempt: entry.attempt,
@@ -78229,23 +78366,39 @@ async function priorTriageEvidence(dependencies, state) {
       ...entry.revision_intent === void 0 ? {} : { revision_intent: entry.revision_intent }
     });
   }
-  for (const disposition of dispositions) merged.set(disposition.finding_id, disposition);
-  const record3 = {
-    schema_version: "1",
-    record_kind: "prior-triage",
+  return ok25(Object.freeze({
     phase_instance: state.phase_instance,
     current_attempt: state.attempt,
-    coverage: "all retained rounds of this phase instance: the current dispositions plus the carried ledger; rounds whose triage predates reviewer memory or never installed are absent",
-    dispositions: [...merged.values()]
+    dispositions: Object.freeze([...merged.values()]),
+    current: Object.freeze(dispositions.map((disposition) => Object.freeze({
+      finding_id: disposition.finding_id,
+      disposition: disposition.disposition
+    })))
+  }));
+}
+function priorTriageContextEntry(record3, owns) {
+  const dispositions = owns === void 0 ? record3.dispositions : record3.dispositions.filter((disposition) => owns(disposition.finding_id));
+  const rendered = {
+    schema_version: "1",
+    record_kind: "prior-triage",
+    phase_instance: record3.phase_instance,
+    current_attempt: record3.current_attempt,
+    coverage: owns === void 0 ? "all retained rounds of this phase instance: the current dispositions plus the carried ledger; rounds whose triage predates reviewer memory or never installed are absent" : "the findings this reviewer raised in the retained rounds of this phase instance, with the producer's disposition of each; sibling reviewers' findings are confirmed by the reviewers that raised them",
+    dispositions
   };
-  const bytes = new TextEncoder().encode(`${JSON.stringify(record3, null, 2)}
+  const bytes = new TextEncoder().encode(`${JSON.stringify(rendered, null, 2)}
 `);
-  return ok25(Object.freeze([excerptContextEntry("prior-triage", "prior-round-triage", bytes)]));
+  return pinnedContextEntry("prior-triage", "prior-round-triage", bytes);
+}
+async function priorTriageEvidence(dependencies, state, preloaded) {
+  const record3 = preloaded !== void 0 ? ok25(preloaded) : await loadPriorTriageRecord(dependencies, state);
+  if (!record3.ok) return record3;
+  return ok25(Object.freeze(record3.value === void 0 ? [] : [priorTriageContextEntry(record3.value)]));
 }
 async function conventionsEvidence(runner) {
   let bytes;
   try {
-    bytes = new Uint8Array(await readFile15(join15(runner.location.worktreeRoot, "CLAUDE.md")));
+    bytes = new Uint8Array(await readFile16(join16(runner.location.worktreeRoot, "CLAUDE.md")));
   } catch {
     return Object.freeze([]);
   }
@@ -78267,6 +78420,19 @@ function dropCandidateIndex(context2) {
   return candidate;
 }
 
+// src/review/reviewer-tags.ts
+function reviewerFindingTag(model, index) {
+  const modelSlug = model.toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "");
+  return modelSlug.includes("sol") ? "sol" : modelSlug.includes("fable") ? "fable" : modelSlug.includes("opus") ? "opus" : modelSlug.includes("sonnet") ? "sonnet" : modelSlug.includes("haiku") ? "haiku" : modelSlug.includes("flash") ? "flash" : modelSlug.includes("pro") ? "pro" : `r${index + 1}`;
+}
+function taggedFindingId(tag, totalReviewers, findingId) {
+  if (totalReviewers <= 1) return findingId;
+  return findingId.startsWith(`${tag}-`) ? findingId : `${tag}-${findingId}`;
+}
+function reviewerOwnsFinding(tag, totalReviewers, findingId) {
+  return totalReviewers <= 1 || findingId.startsWith(`${tag}-`);
+}
+
 // src/review/counter-review.ts
 function adjudicationOutputIssueCode(error51) {
   if (error51 instanceof SyntaxError) return "adjudication-json-invalid";
@@ -78277,6 +78443,12 @@ function adjudicationOutputIssueCode(error51) {
   if (/Unrecognized key/u.test(message)) return "adjudication-unexpected-fields";
   if (/does not match observation capability/u.test(message)) return "adjudication-binding-mismatch";
   return "adjudication-schema-invalid";
+}
+function reviewOutputIssueCode(error51) {
+  if (error51 instanceof SyntaxError) return "review-json-invalid";
+  const message = error51 instanceof Error ? error51.message : "";
+  if (/does not match observation capability/u.test(message)) return "review-binding-mismatch";
+  return "review-schema-invalid";
 }
 async function planCounterReviewCommit(inputs, current, call) {
   const constitutionEvidence = inputs.constitution_evidence;
@@ -78401,12 +78573,35 @@ async function runCounterReview(dependencies, input) {
     ...input.envelope.subject,
     attempt: input.authority.context.attempt
   });
-  const envelope = buildReviewEnvelopeWithCap({ ...input.envelope, subject });
-  const serializeAll = dependencies.serialize_dispatch_all ?? (dependencies.serialize_dispatch ? async (ops) => Promise.all(ops.map((op) => op())) : serializeDispatchAll);
+  const serializeAll = dependencies.serialize_dispatch_all ?? (dependencies.serialize_dispatch ? async (ops2) => Promise.all(ops2.map((op) => op())) : serializeDispatchAll);
   const plan = input.constitution;
-  const reviewRoutes = await selectRoutes("counter-reviewer");
+  const configuredReviewRoutes = await selectRoutes("counter-reviewer");
   const constitutionRoutes = plan === void 0 ? void 0 : await selectRoutes("adjudicator");
   const constitutionRoute = constitutionRoutes?.[0];
+  const totalReviewers = configuredReviewRoutes.length;
+  const taggedRoutes = configuredReviewRoutes.map((routeEntry, index) => Object.freeze({
+    ...routeEntry,
+    tag: reviewerFindingTag(routeEntry.selection.route.model, index)
+  }));
+  const sharedPriorTriage = input.envelope.context.find((entry) => entry.kind === "prior-triage");
+  const priorTriage = sharedPriorTriage === void 0 ? void 0 : input.prior_triage;
+  const dispositioned = priorTriage === void 0 ? [] : priorTriage.current.filter((disposition) => disposition.disposition !== "accepted-editorial");
+  const owners = (findingId) => taggedRoutes.filter((routeEntry) => reviewerOwnsFinding(routeEntry.tag, totalReviewers, findingId));
+  const fallback = priorTriage === void 0 || totalReviewers <= 1 || dispositioned.some((disposition) => owners(disposition.finding_id).length === 0);
+  const reviewRoutes = fallback ? taggedRoutes : taggedRoutes.filter((routeEntry) => dispositioned.some((disposition) => reviewerOwnsFinding(routeEntry.tag, totalReviewers, disposition.finding_id)));
+  const envelopeFor = (routeEntry) => {
+    if (priorTriage === void 0 || fallback) {
+      return buildReviewEnvelopeWithCap({ ...input.envelope, subject });
+    }
+    const scoped = priorTriageContextEntry(priorTriage, (findingId) => reviewerOwnsFinding(routeEntry.tag, totalReviewers, findingId));
+    return buildReviewEnvelopeWithCap({
+      ...input.envelope,
+      subject,
+      context: input.envelope.context.map((entry) => entry.kind === "prior-triage" ? scoped : entry)
+    });
+  };
+  const reviewEnvelopes = reviewRoutes.map(envelopeFor);
+  const envelope = reviewEnvelopes[0];
   const constitutionSubject = plan === void 0 || constitutionRoute === void 0 ? void 0 : Object.freeze({
     task_id: input.envelope.subject.task_id,
     phase_instance: input.envelope.subject.phase_instance,
@@ -78428,49 +78623,133 @@ async function runCounterReview(dependencies, input) {
     workspace: plan.workspace,
     subject: constitutionSubject
   });
-  const dispatchReviewOps = reviewRoutes.map(
-    (routeEntry) => () => dispatchObserved("counter-reviewer", routeEntry, (route2) => dependencies.dispatch(route2, envelope, review_schema_default))
-  );
-  let dispatchConstitution;
-  if (plan !== void 0 && constitutionRoute !== void 0 && constitutionSubject !== void 0 && constitutionEnvelope !== void 0) {
-    dispatchConstitution = () => dispatchObserved("adjudicator", constitutionRoute, (route2) => plan.dispatch(route2, constitutionEnvelope, adjudication_schema_default));
-  }
-  const allOps = [...dispatchReviewOps];
-  if (dispatchConstitution !== void 0) {
-    allOps.push(dispatchConstitution);
-  }
-  const allDispatched = await serializeAll(allOps);
-  const reviewDispatchedList = allDispatched.slice(0, reviewRoutes.length);
-  const constitutionDispatched = dispatchConstitution !== void 0 ? allDispatched[reviewRoutes.length] : void 0;
-  const singleObservations = reviewDispatchedList.map((reviewDispatched, index) => {
-    const routeEntry = reviewRoutes[index];
+  const retained = dependencies.retained_outputs;
+  const failures = [];
+  const noteFailure = (outcome) => {
+    if (!outcome.ok) failures.push(outcome);
+    return outcome;
+  };
+  const reviewOp = (routeEntry, reviewEnvelope) => async () => {
     const route2 = routeEntry.selection.route;
-    return mintReviewObservation({
+    const mint = (dispatched2) => mintReviewObservation({
       subject,
       adapter: route2.adapter,
-      cli_version: reviewDispatched.cli_version,
+      cli_version: dispatched2.cli_version,
       route: route2,
       route_source: routeEntry.selection.source,
-      envelope_input_digest: envelope.digest,
-      extracted_output_bytes: reviewDispatched.extracted_output_bytes,
+      envelope_input_digest: reviewEnvelope.digest,
+      extracted_output_bytes: dispatched2.extracted_output_bytes,
       repositories: input.repositories,
       ...reviewOverride === void 0 ? {} : { route_override: reviewOverride }
     });
-  });
-  const makeFindingId = (model, findingId, index, total) => {
-    if (total <= 1) return findingId;
-    const modelSlug = model.toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "");
-    const shortTag = modelSlug.includes("sol") ? "sol" : modelSlug.includes("fable") ? "fable" : modelSlug.includes("opus") ? "opus" : modelSlug.includes("sonnet") ? "sonnet" : modelSlug.includes("haiku") ? "haiku" : modelSlug.includes("flash") ? "flash" : modelSlug.includes("pro") ? "pro" : `r${index + 1}`;
-    if (findingId.startsWith(`${shortTag}-`)) return findingId;
-    return `${shortTag}-${findingId}`;
+    const binding = { envelope_digest: reviewEnvelope.digest, role: "counter-reviewer", selection: routeEntry.selection };
+    const kept = await retained?.read(binding);
+    if (kept !== void 0) {
+      try {
+        return { ok: true, value: { kind: "review", observation: mint(kept) } };
+      } catch {
+      }
+    }
+    let dispatched;
+    try {
+      dispatched = await dispatchObserved("counter-reviewer", routeEntry, (selectedRoute) => dependencies.dispatch(selectedRoute, reviewEnvelope, review_schema_default));
+    } catch (error51) {
+      return { ok: false, error: error51 };
+    }
+    let observation;
+    try {
+      observation = mint(dispatched);
+    } catch (error51) {
+      return {
+        ok: false,
+        error: error51,
+        project_error: createProjectError("MODEL_OUTPUT_INVALID", {
+          adapter: route2.adapter,
+          attempt: 1,
+          issue_code: reviewOutputIssueCode(error51)
+        })
+      };
+    }
+    await retained?.write(binding, dispatched);
+    return { ok: true, value: { kind: "review", observation } };
   };
+  const ops = reviewRoutes.map((routeEntry, index) => reviewOp(routeEntry, reviewEnvelopes[index]));
+  if (plan !== void 0 && constitutionRoute !== void 0 && constitutionSubject !== void 0 && constitutionEnvelope !== void 0) {
+    const constitutionOverride = overrideRecordFor("adjudicator");
+    const route2 = constitutionRoute.selection.route;
+    const mint = (dispatched) => crossCheckRuleFindings(
+      plan.registry,
+      mintAdjudicationObservation({
+        subject: constitutionSubject,
+        adapter: route2.adapter,
+        cli_version: dispatched.cli_version,
+        route: route2,
+        route_source: constitutionRoute.selection.source,
+        envelope_input_digest: constitutionEnvelope.digest,
+        extracted_output_bytes: dispatched.extracted_output_bytes,
+        repositories: input.repositories,
+        ...constitutionOverride === void 0 ? {} : { route_override: constitutionOverride }
+      }).evidence,
+      route2.adapter
+    );
+    const binding = { envelope_digest: constitutionEnvelope.digest, role: "adjudicator", selection: constitutionRoute.selection };
+    ops.push(async () => {
+      const kept = await retained?.read(binding);
+      if (kept !== void 0) {
+        try {
+          return { ok: true, value: { kind: "adjudication", evidence: mint(kept) } };
+        } catch {
+        }
+      }
+      let dispatched;
+      try {
+        dispatched = await dispatchObserved("adjudicator", constitutionRoute, (selectedRoute) => plan.dispatch(selectedRoute, constitutionEnvelope, adjudication_schema_default));
+      } catch (error51) {
+        return { ok: false, error: error51 };
+      }
+      let evidence;
+      try {
+        evidence = mint(dispatched);
+      } catch (error51) {
+        return {
+          ok: false,
+          error: error51,
+          project_error: error51 instanceof AdjudicationServiceError ? error51.project_error : createProjectError("MODEL_OUTPUT_INVALID", {
+            adapter: route2.adapter,
+            attempt: 1,
+            issue_code: adjudicationOutputIssueCode(error51)
+          })
+        };
+      }
+      await retained?.write(binding, dispatched);
+      return { ok: true, value: { kind: "adjudication", evidence } };
+    });
+  }
+  const settled = await serializeAll(ops.map((op) => async () => noteFailure(await op())));
+  const failed = failures[0];
+  if (failed !== void 0) {
+    if (failed.project_error !== void 0) {
+      return { schema_version: "1", ok: false, error: failed.project_error };
+    }
+    throw failed.error;
+  }
+  const singleObservations = [];
+  let constitutionEvidence;
+  for (const outcome of settled) {
+    if (!outcome.ok) continue;
+    if (outcome.value.kind === "review") singleObservations.push(outcome.value.observation);
+    else constitutionEvidence = outcome.value.evidence;
+  }
+  if (singleObservations.length !== reviewRoutes.length) {
+    throw new TypeError("counter-review settled without an observation for every selected reviewer");
+  }
   const allFindings = [];
   const seenIds = /* @__PURE__ */ new Set();
   for (let i = 0; i < singleObservations.length; i += 1) {
     const obs = singleObservations[i];
-    const model = obs.evidence.model;
+    const tag = reviewRoutes[i].tag;
     for (const f of obs.evidence.findings) {
-      const rawId = makeFindingId(model, f.finding_id, i, singleObservations.length);
+      const rawId = taggedFindingId(tag, totalReviewers, f.finding_id);
       let uniqueId = rawId;
       let disambig = 2;
       while (seenIds.has(uniqueId)) {
@@ -78503,38 +78782,6 @@ async function runCounterReview(dependencies, input) {
     blocking_count: mergedBlockingCount,
     matched_rule_versions: Object.freeze(mergedMatchedRules)
   });
-  let constitutionEvidence;
-  if (plan !== void 0 && constitutionSubject !== void 0 && constitutionEnvelope !== void 0 && constitutionRoute !== void 0 && constitutionDispatched !== void 0) {
-    const constitutionOverride = overrideRecordFor("adjudicator");
-    try {
-      const observedConstitution = mintAdjudicationObservation({
-        subject: constitutionSubject,
-        adapter: constitutionRoute.selection.route.adapter,
-        cli_version: constitutionDispatched.cli_version,
-        route: constitutionRoute.selection.route,
-        route_source: constitutionRoute.selection.source,
-        envelope_input_digest: constitutionEnvelope.digest,
-        extracted_output_bytes: constitutionDispatched.extracted_output_bytes,
-        repositories: input.repositories,
-        ...constitutionOverride === void 0 ? {} : { route_override: constitutionOverride }
-      });
-      constitutionEvidence = crossCheckRuleFindings(
-        plan.registry,
-        observedConstitution.evidence,
-        constitutionRoute.selection.route.adapter
-      );
-    } catch (error51) {
-      return {
-        schema_version: "1",
-        ok: false,
-        error: error51 instanceof AdjudicationServiceError ? error51.project_error : createProjectError("MODEL_OUTPUT_INVALID", {
-          adapter: constitutionRoute.selection.route.adapter,
-          attempt: 1,
-          issue_code: adjudicationOutputIssueCode(error51)
-        })
-      };
-    }
-  }
   const summarizedConstitution = constitutionEvidence;
   const currentProjection = await dependencies.reobserve_projection_digest();
   if (!currentProjection.ok) return currentProjection;
@@ -78597,6 +78844,10 @@ async function runCounterReview(dependencies, input) {
     }, current, call)
   );
   if (!committed2.ok) return committed2;
+  for (const digest9 of new Set(reviewEnvelopes.map((reviewEnvelope) => reviewEnvelope.digest))) {
+    await retained?.discard(digest9);
+  }
+  if (constitutionEnvelope !== void 0) await retained?.discard(constitutionEnvelope.digest);
   return {
     schema_version: "1",
     ok: true,
@@ -79062,7 +79313,7 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
         rules: rulesForEnvelope(constitution.value.rules),
         approved_upstreams: upstreams.value.inputs,
         approved_upstream_digests: approvedUpstreamDigests,
-        invocation_id: stableId("adjudication-invocation", context2.invocation_id),
+        invocation_id: stableId("adjudication-invocation", call.input.intent_id),
         result_id: constitutionResultId,
         workspace: workspaceBinding,
         dispatch: constitutionCoordinator,
@@ -79075,6 +79326,8 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
         )
       });
     }
+    const priorTriage = await loadPriorTriageRecord(services.dependencies, state.value);
+    if (!priorTriage.ok) return priorTriage;
     const context_entries = await assembleReviewContext({
       runner: services.runner,
       authority: services.authority,
@@ -79082,7 +79335,8 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
       state: state.value,
       subject: produce.value,
       projection_bytes: projection.value.bytes,
-      ...projectionPlan === void 0 ? {} : { projection_plan: projectionPlan }
+      ...projectionPlan === void 0 ? {} : { projection_plan: projectionPlan },
+      ...priorTriage.value === void 0 ? {} : { prior_triage: priorTriage.value }
     });
     if (!context_entries.ok) return context_entries;
     const resultId = dispatchId("result", call.input.intent_id);
@@ -79096,6 +79350,12 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
       cancellation_source: "client",
       shared_workspace: sharedWorkspace
     });
+    const retainedOutputs = createRetainedChildOutputStore({
+      authority: services.authority,
+      dependencies: services.dependencies,
+      phase_instance: state.value.phase_instance,
+      attempt: state.value.attempt
+    });
     const result = await runCounterReview({
       transaction: services.dependencies,
       dispatch: coordinator,
@@ -79106,9 +79366,9 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
         attempt: state.value.attempt,
         observed_at_revision: state.value.revision
       }),
+      ...retainedOutputs === void 0 ? {} : { retained_outputs: retainedOutputs },
       ...dispatchAlreadySerialized ? {
         serialize_dispatch: async (operation) => operation(),
-        serialize_dispatch_pair: async (first, second) => Promise.all([first(), second()]),
         serialize_dispatch_all: async (ops) => Promise.all(ops.map((op) => op()))
       } : {},
       prepare_evidence: (evidence, measuredAtRevision) => prepareDispatchEvidence(
@@ -79150,11 +79410,12 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
           input_fingerprint: call.input.input_fingerprint,
           rubric_digest: canonicalRubric2.rubric_digest,
           producer_family: session.value.producer_family,
-          invocation_id: dispatchId("invocation", context2.invocation_id),
+          invocation_id: dispatchId("invocation", call.input.intent_id),
           result_id: resultId
         }
       },
       projection_digest: produceProjectionSetDigest(projections.value),
+      ...priorTriage.value === void 0 ? {} : { prior_triage: priorTriage.value },
       ...constitutionPlan === void 0 ? {} : { constitution: constitutionPlan }
     }).catch((error51) => {
       const overflow = envelopeOverflowError(error51, produce.value);
