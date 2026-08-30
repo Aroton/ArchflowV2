@@ -5661,7 +5661,7 @@
       ]
     },
     "src/local/commands.ts": {
-      "bytes": 21820,
+      "bytes": 22838,
       "format": "esm",
       "imports": [
         {
@@ -9660,7 +9660,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2123902,
+      "bytes": 2124931,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10843,7 +10843,7 @@
           "bytesInOutput": 4286
         },
         "src/local/commands.ts": {
-          "bytesInOutput": 16152
+          "bytesInOutput": 17181
         },
         "src/local/main.ts": {
           "bytesInOutput": 5073

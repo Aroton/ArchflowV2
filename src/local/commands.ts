@@ -360,12 +360,40 @@ async function setCommitAuthority(input: CommandInput): Promise<PlainJsonValue |
   const reason = typeof value.reason === "string" ? value.reason : "Re-anchored commit authority via archflow-local";
   const scope = Array.isArray(value.scope) ? value.scope as ("milestone" | "policy")[] : undefined;
 
-  const call = parseToolCall("archflow_state", {
+  const config = await created.value.dependencies.read_config(created.value.authority.config);
+  if (config.kind !== "valid") throw new TypeError("task configuration is unreadable");
+
+  const provisionalCall = parseToolCall("archflow_state", {
     schema_version: "1",
     task_id: created.value.authority.task_id,
     intent_id: parsePathSafeId(`local-set-commit-auth-${Date.now()}`),
     expected_revision: state.revision,
     input_fingerprint: state.input_fingerprint,
+    phase_instance: state.phase_instance,
+    step: state.step,
+    status: state.status,
+    operation: "set_commit_authority",
+    target_commit: targetCommit,
+    reason,
+    ...(scope === undefined ? {} : { scope }),
+  });
+
+  const resolved = await created.value.dependencies.resolve_input_fingerprint({
+    runner: created.value.runner,
+    authority: created.value.authority,
+    state: created.value.state,
+    call: provisionalCall,
+    live_config: config.snapshot,
+    context: created.value.authority.context,
+  });
+  if (!resolved.ok) return resolved;
+
+  const call = parseToolCall("archflow_state", {
+    schema_version: "1",
+    task_id: created.value.authority.task_id,
+    intent_id: provisionalCall.input.intent_id,
+    expected_revision: state.revision,
+    input_fingerprint: resolved.value.fingerprint,
     phase_instance: state.phase_instance,
     step: state.step,
     status: state.status,

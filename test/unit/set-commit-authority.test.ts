@@ -179,4 +179,27 @@ describe("archflow_state set_commit_authority operation", () => {
     expect(result.ok).toBe(true);
     expect(result.value.status).toBe("running");
   });
+
+  it("recomputes the live input fingerprint when task state input_fingerprint is stale", async () => {
+    const workspace = await createTaskWorkspace({ taskId: "set-stale-fp-test", label: "set-stale-fp-test" });
+    workspaces.push(workspace);
+
+    // Modify a document in the workspace so live input fingerprint differs from state.input_fingerprint
+    const prdPath = join(workspace.root, ".archflow", "tasks", workspace.taskId, "prd.md");
+    writeFileSync(prdPath, "# Modified PRD content\n\nFresh live edit.\n", "utf8");
+
+    const result = await runLocalCommand({
+      command: "set-commit-authority",
+      working_directory: workspace.root,
+      task_id: workspace.taskId,
+      value: {
+        target_commit: "HEAD",
+        reason: "Re-anchor with modified PRD",
+        scope: ["milestone"],
+      },
+    }) as { ok: boolean; value: { revision: number; status: string } };
+
+    expect(result.ok).toBe(true);
+    expect(result.value.status).toBe("running");
+  });
 });
