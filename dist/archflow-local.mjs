@@ -41453,7 +41453,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     pendingGates = pendingAdjudicationGates(state, constitution, retained, authenticatedApprovals);
   }
   const adjudicationGateKind = pendingGates[0]?.kind;
-  const eligibleTriggerSettlement = produceSubject === void 0 ? void 0 : latestEligibleRuleSettlement(
+  let eligibleTriggerSettlement = produceSubject === void 0 ? void 0 : latestEligibleRuleSettlement(
     state,
     produceSubject.artifact_digest,
     produceSubject.artifact.phase_instance
@@ -41462,6 +41462,27 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     produceSubject.artifact.editorial_predecessor.subject_digest,
     produceSubject.artifact.phase_instance
   ) : void 0);
+  if (eligibleTriggerSettlement === void 0 && produceSubject !== void 0 && config2.verified === true && parsedConfig !== void 0 && liveConfigDigest !== void 0) {
+    const changedDocs = await changedCoProducedDocumentPaths(dependencies, state, produceSubject);
+    const changedPaths = changedDocs.ok ? changedDocs.value : [];
+    const ruleContext = approvalRuleContext(state, produceSubject, parsedConfig, changedPaths);
+    const conclusion = evaluateApprovalRules(
+      ruleContext.config,
+      ruleContext.subject,
+      ruleContext.changedPaths,
+      ruleContext.secondaryChangedPaths
+    );
+    eligibleTriggerSettlement = Object.freeze({
+      schema_version: "1",
+      task_id: state.task_id,
+      phase_instance: state.phase_instance,
+      step: produceSubject.artifact.step,
+      subject_digest: produceSubject.artifact_digest,
+      config_digest: liveConfigDigest,
+      settled_at_revision: state.revision,
+      conclusion
+    });
+  }
   const currentSimpleRevision = produceSubject === void 0 ? void 0 : [...state.human_revision_history ?? []].filter((record2) => record2.phase_instance === state.phase_instance && record2.classification === "simple" && record2.resulting_subject_digest === produceSubject.artifact_digest && record2.resulting_result_digest === produceSubject.reference.result_digest).sort((left, right) => right.resulting_attempt - left.resulting_attempt)[0];
   const currentOrdinaryApproval = produceSubject === void 0 ? void 0 : matchingOrdinaryApproval(
     state,

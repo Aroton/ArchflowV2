@@ -69761,7 +69761,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     pendingGates = pendingAdjudicationGates(state, constitution, retained, authenticatedApprovals);
   }
   const adjudicationGateKind = pendingGates[0]?.kind;
-  const eligibleTriggerSettlement = produceSubject === void 0 ? void 0 : latestEligibleRuleSettlement(
+  let eligibleTriggerSettlement = produceSubject === void 0 ? void 0 : latestEligibleRuleSettlement(
     state,
     produceSubject.artifact_digest,
     produceSubject.artifact.phase_instance
@@ -69770,6 +69770,27 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     produceSubject.artifact.editorial_predecessor.subject_digest,
     produceSubject.artifact.phase_instance
   ) : void 0);
+  if (eligibleTriggerSettlement === void 0 && produceSubject !== void 0 && config2.verified === true && parsedConfig !== void 0 && liveConfigDigest !== void 0) {
+    const changedDocs = await changedCoProducedDocumentPaths(dependencies, state, produceSubject);
+    const changedPaths = changedDocs.ok ? changedDocs.value : [];
+    const ruleContext = approvalRuleContext(state, produceSubject, parsedConfig, changedPaths);
+    const conclusion = evaluateApprovalRules(
+      ruleContext.config,
+      ruleContext.subject,
+      ruleContext.changedPaths,
+      ruleContext.secondaryChangedPaths
+    );
+    eligibleTriggerSettlement = Object.freeze({
+      schema_version: "1",
+      task_id: state.task_id,
+      phase_instance: state.phase_instance,
+      step: produceSubject.artifact.step,
+      subject_digest: produceSubject.artifact_digest,
+      config_digest: liveConfigDigest,
+      settled_at_revision: state.revision,
+      conclusion
+    });
+  }
   const currentSimpleRevision = produceSubject === void 0 ? void 0 : [...state.human_revision_history ?? []].filter((record3) => record3.phase_instance === state.phase_instance && record3.classification === "simple" && record3.resulting_subject_digest === produceSubject.artifact_digest && record3.resulting_result_digest === produceSubject.reference.result_digest).sort((left, right) => right.resulting_attempt - left.resulting_attempt)[0];
   const currentOrdinaryApproval = produceSubject === void 0 ? void 0 : matchingOrdinaryApproval(
     state,
@@ -73296,11 +73317,35 @@ async function composeGate(services, state, intentId, snapshot) {
   const subject = await loadCurrentProduceSubject(services.dependencies, state);
   if (!subject.ok) return subject;
   const editorialPredecessorDigest = subject.value.artifact.artifact_kind === "document" ? subject.value.artifact.editorial_predecessor?.subject_digest : void 0;
-  const settledRule = latestEligibleRuleSettlement(
+  let settledRule = latestEligibleRuleSettlement(
     state,
     subject.value.artifact_digest,
     state.phase_instance
   ) ?? (editorialPredecessorDigest === void 0 ? void 0 : latestEligibleRuleSettlement(state, editorialPredecessorDigest, state.phase_instance));
+  if (settledRule === void 0) {
+    const configRead = await services.dependencies.read_config(services.authority.config);
+    if (configRead.kind === "valid") {
+      const changedDocs = await changedCoProducedDocumentPaths(services.dependencies, state, subject.value);
+      const changedPaths = changedDocs.ok ? changedDocs.value : [];
+      const ruleContext = approvalRuleContext(state, subject.value, configRead.snapshot.parsed, changedPaths);
+      const conclusion = evaluateApprovalRules(
+        ruleContext.config,
+        ruleContext.subject,
+        ruleContext.changedPaths,
+        ruleContext.secondaryChangedPaths
+      );
+      settledRule = Object.freeze({
+        schema_version: "1",
+        task_id: state.task_id,
+        phase_instance: state.phase_instance,
+        step: subject.value.artifact.step,
+        subject_digest: subject.value.artifact_digest,
+        config_digest: configRead.snapshot.digest,
+        settled_at_revision: state.revision,
+        conclusion
+      });
+    }
+  }
   const approvalSummary = settledRule?.conclusion.wait === true ? approvalRuleGateSummary(summary, settledRule.conclusion.match) : summary;
   const loadRetainedManifest = services.dependencies.load_retained_manifest;
   if (loadRetainedManifest === void 0) throw new TypeError("retained evidence loading is unavailable");

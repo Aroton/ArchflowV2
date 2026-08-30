@@ -35,7 +35,7 @@ import {
   planningRestartAskBaseDigest,
   type PhaseImplParentDocument,
 } from "./phase-documents.js";
-import { loadCurrentProduceSubject, type CurrentProduceSubject } from "./produce-subject.js";
+import { changedCoProducedDocumentPaths, loadCurrentProduceSubject, type CurrentProduceSubject } from "./produce-subject.js";
 import { reconcileCurrentAuthority } from "./reconciliation.js";
 import { discoverReconciliationInput } from "./reconciliation-discovery.js";
 import { canonicalDocument } from "../contracts/canonical.js";
@@ -71,7 +71,7 @@ import { computeCallEnvelope, type CallEnvelope } from "../local/call-envelope.j
 import { planningRestartTarget, semanticPlanningRestartId } from "./planning-restart.js";
 import { resolveTaskPath } from "../repository/paths.js";
 import { derivePendingWaiverRequest } from "./pending-waiver.js";
-import { approvalRuleGateSummary } from "./approval-rules.js";
+import { approvalRuleContext, approvalRuleGateSummary, evaluateApprovalRules } from "./approval-rules.js";
 import type { ConfigV1, RepositoryName } from "../contracts/config.js";
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
@@ -744,11 +744,32 @@ async function composeGate(
   const editorialPredecessorDigest = subject.value.artifact.artifact_kind === "document"
     ? subject.value.artifact.editorial_predecessor?.subject_digest
     : undefined;
-  const settledRule = latestEligibleRuleSettlement(
+  let settledRule = latestEligibleRuleSettlement(
     state, subject.value.artifact_digest, state.phase_instance,
   ) ?? (editorialPredecessorDigest === undefined
     ? undefined
     : latestEligibleRuleSettlement(state, editorialPredecessorDigest, state.phase_instance));
+  if (settledRule === undefined) {
+    const configRead = await services.dependencies.read_config(services.authority.config);
+    if (configRead.kind === "valid") {
+      const changedDocs = await changedCoProducedDocumentPaths(services.dependencies, state, subject.value);
+      const changedPaths = changedDocs.ok ? changedDocs.value : [];
+      const ruleContext = approvalRuleContext(state, subject.value, configRead.snapshot.parsed, changedPaths);
+      const conclusion = evaluateApprovalRules(
+        ruleContext.config, ruleContext.subject, ruleContext.changedPaths, ruleContext.secondaryChangedPaths,
+      );
+      settledRule = Object.freeze({
+        schema_version: "1" as const,
+        task_id: state.task_id,
+        phase_instance: state.phase_instance,
+        step: subject.value.artifact.step,
+        subject_digest: subject.value.artifact_digest,
+        config_digest: configRead.snapshot.digest,
+        settled_at_revision: state.revision,
+        conclusion,
+      });
+    }
+  }
   const approvalSummary = settledRule?.conclusion.wait === true
     ? approvalRuleGateSummary(summary, settledRule.conclusion.match)
     : summary;

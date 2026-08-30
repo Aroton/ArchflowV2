@@ -56,8 +56,9 @@ import {
 } from "./gate-decision-interface.js";
 import { activeProjection, type GateLifecycleDependencies } from "./gate-core.js";
 import { deriveNextAction, type NextAction, type PolicyReentryFindings } from "./next-action.js";
-import { expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject, produceOwnedTaskDocumentPaths, produceProjectionPins, produceUpstreamBindingsForSubject, readProduceProjection, readProduceProjectionSet } from "./produce-subject.js";
+import { changedCoProducedDocumentPaths, expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject, produceOwnedTaskDocumentPaths, produceProjectionPins, produceUpstreamBindingsForSubject, readProduceProjection, readProduceProjectionSet } from "./produce-subject.js";
 import type { CurrentProduceSubject } from "./produce-subject.js";
+import { approvalRuleContext, evaluateApprovalRules } from "./approval-rules.js";
 import {
   resolveAutonomousDesignMilestoneProof,
   resolveAutonomousImplementationMilestoneProof,
@@ -2076,7 +2077,7 @@ async function computeTaskStatusDetailedInternal(
     pendingGates = pendingAdjudicationGates(state, constitution, retained, authenticatedApprovals);
   }
   const adjudicationGateKind = pendingGates[0]?.kind;
-  const eligibleTriggerSettlement = produceSubject === undefined
+  let eligibleTriggerSettlement = produceSubject === undefined
     ? undefined
     : (latestEligibleRuleSettlement(
         state, produceSubject.artifact_digest, produceSubject.artifact.phase_instance,
@@ -2087,6 +2088,27 @@ async function computeTaskStatusDetailedInternal(
             produceSubject.artifact.phase_instance,
           )
         : undefined));
+  if (
+    eligibleTriggerSettlement === undefined && produceSubject !== undefined &&
+    config.verified === true && parsedConfig !== undefined && liveConfigDigest !== undefined
+  ) {
+    const changedDocs = await changedCoProducedDocumentPaths(dependencies, state, produceSubject);
+    const changedPaths = changedDocs.ok ? changedDocs.value : [];
+    const ruleContext = approvalRuleContext(state, produceSubject, parsedConfig, changedPaths);
+    const conclusion = evaluateApprovalRules(
+      ruleContext.config, ruleContext.subject, ruleContext.changedPaths, ruleContext.secondaryChangedPaths,
+    );
+    eligibleTriggerSettlement = Object.freeze({
+      schema_version: "1",
+      task_id: state.task_id,
+      phase_instance: state.phase_instance,
+      step: produceSubject.artifact.step,
+      subject_digest: produceSubject.artifact_digest,
+      config_digest: liveConfigDigest,
+      settled_at_revision: state.revision,
+      conclusion,
+    });
+  }
   const currentSimpleRevision = produceSubject === undefined
     ? undefined
     : [...(state.human_revision_history ?? [])]

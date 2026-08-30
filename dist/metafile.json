@@ -8740,7 +8740,7 @@
       ]
     },
     "src/state/request-composition.ts": {
-      "bytes": 59449,
+      "bytes": 60529,
       "format": "esm",
       "imports": [
         {
@@ -9233,7 +9233,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 115461,
+      "bytes": 116537,
       "format": "esm",
       "imports": [
         {
@@ -9360,6 +9360,11 @@
           "kind": "import-statement",
           "original": "./produce-subject.js",
           "path": "src/state/produce-subject.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./approval-rules.js",
+          "path": "src/state/approval-rules.ts"
         },
         {
           "kind": "import-statement",
@@ -9660,7 +9665,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2125218,
+      "bytes": 2126173,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10996,7 +11001,7 @@
           "bytesInOutput": 31803
         },
         "src/state/status.ts": {
-          "bytesInOutput": 76239
+          "bytesInOutput": 77194
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 50592
@@ -11013,7 +11018,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3293141,
+      "bytes": 3295110,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12465,7 +12470,7 @@
           "bytesInOutput": 10042
         },
         "src/state/request-composition.ts": {
-          "bytesInOutput": 44867
+          "bytesInOutput": 45881
         },
         "src/state/request.ts": {
           "bytesInOutput": 5244
@@ -12492,7 +12497,7 @@
           "bytesInOutput": 31944
         },
         "src/state/status.ts": {
-          "bytesInOutput": 73883
+          "bytesInOutput": 74838
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 50590
