@@ -5105,7 +5105,7 @@
       ]
     },
     "src/dispatch/workspace.ts": {
-      "bytes": 16895,
+      "bytes": 16984,
       "format": "esm",
       "imports": [
         {
@@ -10919,7 +10919,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3284443,
+      "bytes": 3284535,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12185,7 +12185,7 @@
           "bytesInOutput": 6481
         },
         "src/dispatch/workspace.ts": {
-          "bytesInOutput": 11205
+          "bytesInOutput": 11297
         },
         "src/init/assets.ts": {
           "bytesInOutput": 1733

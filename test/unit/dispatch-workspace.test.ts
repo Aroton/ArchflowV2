@@ -165,6 +165,7 @@ describe("dispatch workspace", () => {
     const { repository: { path: repository }, commit } = seededRepository("view-repository", {
       "src/index.ts": "export {};\n",
       ".archflow/context/map.md": "# context\n",
+      ".archflow/constitution/00-rule.md": "rule\n",
       ".archflow/tasks/example/state.json": "{}\n",
     });
 
@@ -176,6 +177,7 @@ describe("dispatch workspace", () => {
     await expect(readFile(join(view, ".archflow", "context", "map.md"), "utf8")).resolves.toBe("# context\n");
     await expect(lstat(join(view, ".git"))).rejects.toMatchObject({ code: "ENOENT" });
     await expect(lstat(join(view, ".archflow", "tasks"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(lstat(join(view, ".archflow", "constitution"))).rejects.toMatchObject({ code: "ENOENT" });
 
     await workspace.dispose();
     await expect(lstat(workspace.root)).rejects.toMatchObject({ code: "ENOENT" });
@@ -255,7 +257,7 @@ describe("dispatch workspace", () => {
 
     expect(workspace.repository_view_root).toBe(join(workspace.root, "repos"));
     await expect(readFile(join(workspace.repository_view_root!, "primary", "tracked.txt"), "utf8")).resolves.toBe("primary\n");
-    await expect(readFile(join(workspace.repository_view_root!, "primary", ".archflow", "constitution", "rule.md"), "utf8")).resolves.toBe("rule\n");
+    await expect(lstat(join(workspace.repository_view_root!, "primary", ".archflow", "constitution"))).rejects.toMatchObject({ code: "ENOENT" });
     await expect(lstat(join(workspace.repository_view_root!, "primary", ".archflow", "tasks"))).rejects.toMatchObject({ code: "ENOENT" });
     await expect(readFile(join(workspace.repository_view_root!, "api", "tracked.txt"), "utf8")).resolves.toBe("api proposed\n");
     await expect(lstat(join(workspace.repository_view_root!, "api", ".archflow"))).rejects.toMatchObject({ code: "ENOENT" });

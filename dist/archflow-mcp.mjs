@@ -76686,6 +76686,7 @@ async function materializeRepositoryArchive(view, member) {
   });
   if (member.member_kind === "primary") {
     await rm3(join14(view, ".archflow", "tasks"), { recursive: true, force: true });
+    await rm3(join14(view, ".archflow", "constitution"), { recursive: true, force: true });
   } else {
     await rm3(join14(view, ".archflow"), { recursive: true, force: true });
   }
