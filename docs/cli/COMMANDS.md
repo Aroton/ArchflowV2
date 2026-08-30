@@ -50,6 +50,7 @@ In its normal classification, `manual-status` carries the same `TaskStatusV1.rep
 | `snapshot` / `restore` | Install / read back a content-addressed retained result |
 | `clean` | Remove only unreferenced authority plus stale or reconstructible work; reports removed/retained file and byte counts |
 | `reconcile` | Compare recorded projections against what's on disk |
+| `set-commit-authority` | Explicitly re-anchor task milestone or policy commit authority to a target Git commit (e.g. `HEAD`) |
 | `upgrade` | The legacy-adoption adapter, below |
 
 ## upgrade: the legacy-adoption adapter

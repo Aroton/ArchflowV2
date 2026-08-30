@@ -4,10 +4,10 @@ import { canonicalJsonDigest } from "../../src/contracts/canonical.js";
 import { INPUT_FREE_COMMANDS, LOCAL_COMMANDS, LOCAL_COMMAND_CONTRACTS, runLocalCommand } from "../../src/local/commands.js";
 
 describe("archflow-local pure adapters", () => {
-  it("publishes exactly the twelve supported local commands", () => {
+  it("publishes exactly the thirteen supported local commands", () => {
     expect([...LOCAL_COMMANDS].sort()).toEqual([
       "automation-status", "clean", "hash", "init", "manual-status", "reconcile", "render", "restore",
-      "snapshot", "upgrade", "upgrade-adopt", "validate",
+      "set-commit-authority", "snapshot", "upgrade", "upgrade-adopt", "validate",
     ]);
   });
 

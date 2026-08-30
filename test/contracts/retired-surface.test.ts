@@ -102,7 +102,7 @@ describe("retired workflow surface", () => {
   it("ships only the surviving local commands and rejects the retired ones at the entry", async () => {
     expect([...LOCAL_COMMANDS].sort()).toEqual([
       "automation-status", "clean", "hash", "init", "manual-status", "reconcile", "render", "restore",
-      "snapshot", "upgrade", "upgrade-adopt", "validate",
+      "set-commit-authority", "snapshot", "upgrade", "upgrade-adopt", "validate",
     ]);
     for (const command of ["build-request", "envelope", "decide", "commit", "status", "gate-preview"]) {
       expect(LOCAL_COMMANDS).not.toContain(command);

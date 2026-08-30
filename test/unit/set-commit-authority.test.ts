@@ -6,8 +6,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
 import { parseToolCall } from "../../src/contracts/mcp-tools.js";
-import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { handleState } from "../../src/mcp/handlers/state.js";
+import { runLocalCommand } from "../../src/local/commands.js";
 import { createTaskWorkspace, type TaskWorkspace } from "../helpers/task-workspace.js";
 
 const workspaces: TaskWorkspace[] = [];
@@ -159,5 +159,24 @@ describe("archflow_state set_commit_authority operation", () => {
     if (!replay.ok) return;
     expect(replay.value.revision).toBe(first.value.revision);
     expect(replay.value.request_digest).toBe(first.value.request_digest);
+  });
+
+  it("executes set-commit-authority via archflow-local runLocalCommand", async () => {
+    const workspace = await createTaskWorkspace({ taskId: "set-cli-test", label: "set-cli-test" });
+    workspaces.push(workspace);
+
+    const result = await runLocalCommand({
+      command: "set-commit-authority",
+      working_directory: workspace.root,
+      task_id: workspace.taskId,
+      value: {
+        target_commit: "HEAD",
+        reason: "Re-anchor from CLI",
+        scope: ["milestone"],
+      },
+    }) as { ok: boolean; value: { revision: number; status: string } };
+
+    expect(result.ok).toBe(true);
+    expect(result.value.status).toBe("running");
   });
 });

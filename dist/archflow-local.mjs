@@ -26,9 +26,9 @@ var __commonJS = (cb, mod) => function __require2() {
     throw mod = 0, e;
   }
 };
-var __export = (target, all) => {
+var __export = (target2, all) => {
   for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+    __defProp(target2, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -38,12 +38,12 @@ var __copyProps = (to, from, except, desc) => {
   }
   return to;
 };
-var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+var __toESM = (mod, isNodeMode, target2) => (target2 = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
   // If the importer is in node compatibility mode or this is not an ESM
   // file that has been converted to a CommonJS file using a Babel-
   // compatible transform (i.e. "__esModule" has not been set), then set
   // "default" to the CommonJS "module.exports" for node compatibility.
-  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target2, "default", { value: mod, enumerable: true }) : target2,
   mod
 ));
 
@@ -285,9 +285,9 @@ var require_directives = __commonJS({
         this.tags = Object.assign({}, _Directives.defaultTags, tags);
       }
       clone() {
-        const copy = new _Directives(this.yaml, this.tags);
-        copy.docStart = this.docStart;
-        return copy;
+        const copy2 = new _Directives(this.yaml, this.tags);
+        copy2.docStart = this.docStart;
+        return copy2;
       }
       /**
        * During parsing, get a Directives instance for the current document and
@@ -339,13 +339,13 @@ var require_directives = __commonJS({
               onError(0, "%YAML directive should contain exactly one part");
               return false;
             }
-            const [version3] = parts;
-            if (version3 === "1.1" || version3 === "1.2") {
-              this.yaml.version = version3;
+            const [version4] = parts;
+            if (version4 === "1.1" || version4 === "1.2") {
+              this.yaml.version = version4;
               return true;
             } else {
-              const isValid = /^\d+\.\d+$/.test(version3);
-              onError(6, `Unsupported YAML version ${version3}`, isValid);
+              const isValid = /^\d+\.\d+$/.test(version4);
+              onError(6, `Unsupported YAML version ${version4}`, isValid);
               return false;
             }
           }
@@ -596,10 +596,10 @@ var require_Node = __commonJS({
       }
       /** Create a copy of this node.  */
       clone() {
-        const copy = Object.create(Object.getPrototypeOf(this), Object.getOwnPropertyDescriptors(this));
+        const copy2 = Object.create(Object.getPrototypeOf(this), Object.getOwnPropertyDescriptors(this));
         if (this.range)
-          copy.range = this.range.slice();
-        return copy;
+          copy2.range = this.range.slice();
+        return copy2;
       }
       /** A plain JavaScript representation of this node. */
       toJS(doc, { mapAsMap, maxAliasCount, onAnchor, reviver } = {}) {
@@ -891,13 +891,13 @@ var require_Collection = __commonJS({
        * @param schema - If defined, overwrites the original's schema
        */
       clone(schema) {
-        const copy = Object.create(Object.getPrototypeOf(this), Object.getOwnPropertyDescriptors(this));
+        const copy2 = Object.create(Object.getPrototypeOf(this), Object.getOwnPropertyDescriptors(this));
         if (schema)
-          copy.schema = schema;
-        copy.items = copy.items.map((it) => identity.isNode(it) || identity.isPair(it) ? it.clone(schema) : it);
+          copy2.schema = schema;
+        copy2.items = copy2.items.map((it) => identity.isNode(it) || identity.isPair(it) ? it.clone(schema) : it);
         if (this.range)
-          copy.range = this.range.slice();
-        return copy;
+          copy2.range = this.range.slice();
+        return copy2;
       }
       /**
        * Adds a value to the collection. For `!!map` and `!!omap` the value must
@@ -1012,14 +1012,14 @@ var require_foldFlowLines = __commonJS({
     var FOLD_FLOW = "flow";
     var FOLD_BLOCK = "block";
     var FOLD_QUOTED = "quoted";
-    function foldFlowLines(text3, indent, mode = "flow", { indentAtStart, lineWidth = 80, minContentWidth = 20, onFold, onOverflow } = {}) {
+    function foldFlowLines(text4, indent, mode = "flow", { indentAtStart, lineWidth = 80, minContentWidth = 20, onFold, onOverflow } = {}) {
       if (!lineWidth || lineWidth < 0)
-        return text3;
+        return text4;
       if (lineWidth < minContentWidth)
         minContentWidth = 0;
       const endStep = Math.max(1 + minContentWidth, 1 + lineWidth - indent.length);
-      if (text3.length <= endStep)
-        return text3;
+      if (text4.length <= endStep)
+        return text4;
       const folds = [];
       const escapedFolds = {};
       let end = lineWidth - indent.length;
@@ -1036,14 +1036,14 @@ var require_foldFlowLines = __commonJS({
       let escStart = -1;
       let escEnd = -1;
       if (mode === FOLD_BLOCK) {
-        i = consumeMoreIndentedLines(text3, i, indent.length);
+        i = consumeMoreIndentedLines(text4, i, indent.length);
         if (i !== -1)
           end = i + endStep;
       }
-      for (let ch; ch = text3[i += 1]; ) {
+      for (let ch; ch = text4[i += 1]; ) {
         if (mode === FOLD_QUOTED && ch === "\\") {
           escStart = i;
-          switch (text3[i + 1]) {
+          switch (text4[i + 1]) {
             case "x":
               i += 3;
               break;
@@ -1060,12 +1060,12 @@ var require_foldFlowLines = __commonJS({
         }
         if (ch === "\n") {
           if (mode === FOLD_BLOCK)
-            i = consumeMoreIndentedLines(text3, i, indent.length);
+            i = consumeMoreIndentedLines(text4, i, indent.length);
           end = i + indent.length + endStep;
           split = void 0;
         } else {
           if (ch === " " && prev && prev !== " " && prev !== "\n" && prev !== "	") {
-            const next = text3[i + 1];
+            const next = text4[i + 1];
             if (next && next !== " " && next !== "\n" && next !== "	")
               split = i;
           }
@@ -1077,12 +1077,12 @@ var require_foldFlowLines = __commonJS({
             } else if (mode === FOLD_QUOTED) {
               while (prev === " " || prev === "	") {
                 prev = ch;
-                ch = text3[i += 1];
+                ch = text4[i += 1];
                 overflow = true;
               }
               const j = i > escEnd + 1 ? i - 2 : escStart - 1;
               if (escapedFolds[j])
-                return text3;
+                return text4;
               folds.push(j);
               escapedFolds[j] = true;
               end = j + endStep;
@@ -1097,39 +1097,39 @@ var require_foldFlowLines = __commonJS({
       if (overflow && onOverflow)
         onOverflow();
       if (folds.length === 0)
-        return text3;
+        return text4;
       if (onFold)
         onFold();
-      let res = text3.slice(0, folds[0]);
+      let res = text4.slice(0, folds[0]);
       for (let i2 = 0; i2 < folds.length; ++i2) {
         const fold = folds[i2];
-        const end2 = folds[i2 + 1] || text3.length;
+        const end2 = folds[i2 + 1] || text4.length;
         if (fold === 0)
           res = `
-${indent}${text3.slice(0, end2)}`;
+${indent}${text4.slice(0, end2)}`;
         else {
           if (mode === FOLD_QUOTED && escapedFolds[fold])
-            res += `${text3[fold]}\\`;
+            res += `${text4[fold]}\\`;
           res += `
-${indent}${text3.slice(fold + 1, end2)}`;
+${indent}${text4.slice(fold + 1, end2)}`;
         }
       }
       return res;
     }
-    function consumeMoreIndentedLines(text3, i, indent) {
+    function consumeMoreIndentedLines(text4, i, indent) {
       let end = i;
       let start = i + 1;
-      let ch = text3[start];
+      let ch = text4[start];
       while (ch === " " || ch === "	") {
         if (i < start + indent) {
-          ch = text3[++i];
+          ch = text4[++i];
         } else {
           do {
-            ch = text3[++i];
+            ch = text4[++i];
           } while (ch && ch !== "\n");
           end = i;
           start = i + 1;
-          ch = text3[start];
+          ch = text4[start];
         }
       }
       return end;
@@ -3316,9 +3316,9 @@ var require_Schema = __commonJS({
         this.sortMapEntries = typeof sortMapEntries === "function" ? sortMapEntries : sortMapEntries === true ? sortMapEntriesByKey : null;
       }
       clone() {
-        const copy = Object.create(_Schema.prototype, Object.getOwnPropertyDescriptors(this));
-        copy.tags = this.tags.slice();
-        return copy;
+        const copy2 = Object.create(_Schema.prototype, Object.getOwnPropertyDescriptors(this));
+        copy2.tags = this.tags.slice();
+        return copy2;
       }
     };
     exports.Schema = Schema;
@@ -3445,14 +3445,14 @@ var require_Document = __commonJS({
           version: "1.2"
         }, options);
         this.options = opt;
-        let { version: version3 } = opt;
+        let { version: version4 } = opt;
         if (options?._directives) {
           this.directives = options._directives.atDocument();
           if (this.directives.yaml.explicit)
-            version3 = this.directives.yaml.version;
+            version4 = this.directives.yaml.version;
         } else
-          this.directives = new directives.Directives({ version: version3 });
-        this.setSchema(version3, options);
+          this.directives = new directives.Directives({ version: version4 });
+        this.setSchema(version4, options);
         this.contents = value === void 0 ? null : this.createNode(value, _replacer, options);
       }
       /**
@@ -3461,21 +3461,21 @@ var require_Document = __commonJS({
        * Custom Node values that inherit from `Object` still refer to their original instances.
        */
       clone() {
-        const copy = Object.create(_Document.prototype, {
+        const copy2 = Object.create(_Document.prototype, {
           [identity.NODE_TYPE]: { value: identity.DOC }
         });
-        copy.commentBefore = this.commentBefore;
-        copy.comment = this.comment;
-        copy.errors = this.errors.slice();
-        copy.warnings = this.warnings.slice();
-        copy.options = Object.assign({}, this.options);
+        copy2.commentBefore = this.commentBefore;
+        copy2.comment = this.comment;
+        copy2.errors = this.errors.slice();
+        copy2.warnings = this.warnings.slice();
+        copy2.options = Object.assign({}, this.options);
         if (this.directives)
-          copy.directives = this.directives.clone();
-        copy.schema = this.schema.clone();
-        copy.contents = identity.isNode(this.contents) ? this.contents.clone(copy.schema) : this.contents;
+          copy2.directives = this.directives.clone();
+        copy2.schema = this.schema.clone();
+        copy2.contents = identity.isNode(this.contents) ? this.contents.clone(copy2.schema) : this.contents;
         if (this.range)
-          copy.range = this.range.slice();
-        return copy;
+          copy2.range = this.range.slice();
+        return copy2;
       }
       /** Adds a value to the document. */
       add(value) {
@@ -3632,11 +3632,11 @@ var require_Document = __commonJS({
        *
        * Overrides all previously set schema options.
        */
-      setSchema(version3, options = {}) {
-        if (typeof version3 === "number")
-          version3 = String(version3);
+      setSchema(version4, options = {}) {
+        if (typeof version4 === "number")
+          version4 = String(version4);
         let opt;
-        switch (version3) {
+        switch (version4) {
           case "1.1":
             if (this.directives)
               this.directives.yaml.version = "1.1";
@@ -3647,9 +3647,9 @@ var require_Document = __commonJS({
           case "1.2":
           case "next":
             if (this.directives)
-              this.directives.yaml.version = version3;
+              this.directives.yaml.version = version4;
             else
-              this.directives = new directives.Directives({ version: version3 });
+              this.directives = new directives.Directives({ version: version4 });
             opt = { resolveKnownTags: true, schema: "core" };
             break;
           case null:
@@ -3658,7 +3658,7 @@ var require_Document = __commonJS({
             opt = null;
             break;
           default: {
-            const sv = JSON.stringify(version3);
+            const sv = JSON.stringify(version4);
             throw new Error(`Expected '1.1', '1.2' or null as first argument, but found: ${sv}`);
           }
         }
@@ -4839,8 +4839,8 @@ var require_resolve_flow_scalar = __commonJS({
     };
     function parseCharCode(source, offset, length, onError) {
       const cc = source.substr(offset, length);
-      const ok24 = cc.length === length && /^[0-9a-fA-F]+$/.test(cc);
-      const code2 = ok24 ? parseInt(cc, 16) : NaN;
+      const ok28 = cc.length === length && /^[0-9a-fA-F]+$/.test(cc);
+      const code2 = ok28 ? parseInt(cc, 16) : NaN;
       try {
         return String.fromCodePoint(code2);
       } catch {
@@ -6422,12 +6422,12 @@ var require_parser = __commonJS({
       }
       return prev.splice(i, prev.length);
     }
-    function arrayPushArray(target, source) {
+    function arrayPushArray(target2, source) {
       if (source.length < 1e5)
-        Array.prototype.push.apply(target, source);
+        Array.prototype.push.apply(target2, source);
       else
         for (let i = 0; i < source.length; ++i)
-          target.push(source[i]);
+          target2.push(source[i]);
     }
     function fixFlowSeqItems(fc) {
       if (fc.start.type === "flow-seq-start") {
@@ -7403,6 +7403,12 @@ function authenticQualifiedEvidence(value, kind, assurance) {
 function registerCurrentReviewSet(value) {
   currentReviewSets.add(value);
 }
+function authenticCurrentReviewSet(value) {
+  return currentReviewSets.has(value);
+}
+function registerValidatedTriage(value) {
+  validatedTriages.add(value);
+}
 function authenticValidatedTriage(value) {
   return validatedTriages.has(value);
 }
@@ -8348,7 +8354,7 @@ var require_src = __commonJS({
 });
 
 // src/local/main.ts
-import { readFile as readFile15 } from "node:fs/promises";
+import { readFile as readFile16 } from "node:fs/promises";
 import process3 from "node:process";
 import { parseArgs } from "node:util";
 
@@ -9102,8 +9108,8 @@ function defineLazy(object3, key, getter) {
 function objectClone(obj) {
   return Object.create(Object.getPrototypeOf(obj), Object.getOwnPropertyDescriptors(obj));
 }
-function assignProp(target, prop, value) {
-  Object.defineProperty(target, prop, {
+function assignProp(target2, prop, value) {
+  Object.defineProperty(target2, prop, {
     value,
     writable: true,
     enumerable: true,
@@ -9286,35 +9292,35 @@ function normalizeParams(_params) {
   return params;
 }
 function createTransparentProxy(getter) {
-  let target;
+  let target2;
   return new Proxy({}, {
     get(_, prop, receiver) {
-      target ?? (target = getter());
-      return Reflect.get(target, prop, receiver);
+      target2 ?? (target2 = getter());
+      return Reflect.get(target2, prop, receiver);
     },
     set(_, prop, value, receiver) {
-      target ?? (target = getter());
-      return Reflect.set(target, prop, value, receiver);
+      target2 ?? (target2 = getter());
+      return Reflect.set(target2, prop, value, receiver);
     },
     has(_, prop) {
-      target ?? (target = getter());
-      return Reflect.has(target, prop);
+      target2 ?? (target2 = getter());
+      return Reflect.has(target2, prop);
     },
     deleteProperty(_, prop) {
-      target ?? (target = getter());
-      return Reflect.deleteProperty(target, prop);
+      target2 ?? (target2 = getter());
+      return Reflect.deleteProperty(target2, prop);
     },
     ownKeys(_) {
-      target ?? (target = getter());
-      return Reflect.ownKeys(target);
+      target2 ?? (target2 = getter());
+      return Reflect.ownKeys(target2);
     },
     getOwnPropertyDescriptor(_, prop) {
-      target ?? (target = getter());
-      return Reflect.getOwnPropertyDescriptor(target, prop);
+      target2 ?? (target2 = getter());
+      return Reflect.getOwnPropertyDescriptor(target2, prop);
     },
     defineProperty(_, prop, descriptor) {
-      target ?? (target = getter());
-      return Reflect.defineProperty(target, prop, descriptor);
+      target2 ?? (target2 = getter());
+      return Reflect.defineProperty(target2, prop, descriptor);
     }
   });
 }
@@ -9669,7 +9675,7 @@ var initializer = (inst, def2) => {
 };
 var $ZodError = $constructor("$ZodError", initializer);
 var $ZodRealError = $constructor("$ZodError", initializer, { Parent: Error });
-function flattenError(error51, mapper = (issue3) => issue3.message) {
+function flattenError(error51, mapper = (issue4) => issue4.message) {
   const fieldErrors = {};
   const formErrors = [];
   for (const sub of error51.issues) {
@@ -9682,20 +9688,20 @@ function flattenError(error51, mapper = (issue3) => issue3.message) {
   }
   return { formErrors, fieldErrors };
 }
-function formatError(error51, mapper = (issue3) => issue3.message) {
+function formatError(error51, mapper = (issue4) => issue4.message) {
   const fieldErrors = { _errors: [] };
   const processError = (error52, path2 = []) => {
-    for (const issue3 of error52.issues) {
-      if (issue3.code === "invalid_union" && issue3.errors.length) {
-        issue3.errors.map((issues) => processError({ issues }, [...path2, ...issue3.path]));
-      } else if (issue3.code === "invalid_key") {
-        processError({ issues: issue3.issues }, [...path2, ...issue3.path]);
-      } else if (issue3.code === "invalid_element") {
-        processError({ issues: issue3.issues }, [...path2, ...issue3.path]);
+    for (const issue4 of error52.issues) {
+      if (issue4.code === "invalid_union" && issue4.errors.length) {
+        issue4.errors.map((issues) => processError({ issues }, [...path2, ...issue4.path]));
+      } else if (issue4.code === "invalid_key") {
+        processError({ issues: issue4.issues }, [...path2, ...issue4.path]);
+      } else if (issue4.code === "invalid_element") {
+        processError({ issues: issue4.issues }, [...path2, ...issue4.path]);
       } else {
-        const fullpath = [...path2, ...issue3.path];
+        const fullpath = [...path2, ...issue4.path];
         if (fullpath.length === 0) {
-          fieldErrors._errors.push(mapper(issue3));
+          fieldErrors._errors.push(mapper(issue4));
         } else {
           let curr = fieldErrors;
           let i = 0;
@@ -9706,7 +9712,7 @@ function formatError(error51, mapper = (issue3) => issue3.message) {
               curr[el] = curr[el] || { _errors: [] };
             } else {
               curr[el] = curr[el] || { _errors: [] };
-              curr[el]._errors.push(mapper(issue3));
+              curr[el]._errors.push(mapper(issue4));
             }
             curr = curr[el];
             i++;
@@ -9718,21 +9724,21 @@ function formatError(error51, mapper = (issue3) => issue3.message) {
   processError(error51);
   return fieldErrors;
 }
-function treeifyError(error51, mapper = (issue3) => issue3.message) {
+function treeifyError(error51, mapper = (issue4) => issue4.message) {
   const result = { errors: [] };
   const processError = (error52, path2 = []) => {
     var _a3, _b;
-    for (const issue3 of error52.issues) {
-      if (issue3.code === "invalid_union" && issue3.errors.length) {
-        issue3.errors.map((issues) => processError({ issues }, [...path2, ...issue3.path]));
-      } else if (issue3.code === "invalid_key") {
-        processError({ issues: issue3.issues }, [...path2, ...issue3.path]);
-      } else if (issue3.code === "invalid_element") {
-        processError({ issues: issue3.issues }, [...path2, ...issue3.path]);
+    for (const issue4 of error52.issues) {
+      if (issue4.code === "invalid_union" && issue4.errors.length) {
+        issue4.errors.map((issues) => processError({ issues }, [...path2, ...issue4.path]));
+      } else if (issue4.code === "invalid_key") {
+        processError({ issues: issue4.issues }, [...path2, ...issue4.path]);
+      } else if (issue4.code === "invalid_element") {
+        processError({ issues: issue4.issues }, [...path2, ...issue4.path]);
       } else {
-        const fullpath = [...path2, ...issue3.path];
+        const fullpath = [...path2, ...issue4.path];
         if (fullpath.length === 0) {
-          result.errors.push(mapper(issue3));
+          result.errors.push(mapper(issue4));
           continue;
         }
         let curr = result;
@@ -9750,7 +9756,7 @@ function treeifyError(error51, mapper = (issue3) => issue3.message) {
             curr = curr.items[el];
           }
           if (terminal) {
-            curr.errors.push(mapper(issue3));
+            curr.errors.push(mapper(issue4));
           }
           i++;
         }
@@ -9781,10 +9787,10 @@ function toDotPath(_path) {
 function prettifyError(error51) {
   const lines = [];
   const issues = [...error51.issues].sort((a, b) => (a.path ?? []).length - (b.path ?? []).length);
-  for (const issue3 of issues) {
-    lines.push(`\u2716 ${issue3.message}`);
-    if (issue3.path?.length)
-      lines.push(`  \u2192 at ${toDotPath(issue3.path)}`);
+  for (const issue4 of issues) {
+    lines.push(`\u2716 ${issue4.message}`);
+    if (issue4.path?.length)
+      lines.push(`  \u2192 at ${toDotPath(issue4.path)}`);
   }
   return lines.join("\n");
 }
@@ -9949,10 +9955,10 @@ var nanoid = /^[a-zA-Z0-9_-]{21}$/;
 var duration = /^P(?:(\d+W)|(?!.*W)(?=\d|T\d)(\d+Y)?(\d+M)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+([.,]\d+)?S)?)?)$/;
 var extendedDuration = /^[-+]?P(?!$)(?:(?:[-+]?\d+Y)|(?:[-+]?\d+[.,]\d+Y$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:(?:[-+]?\d+W)|(?:[-+]?\d+[.,]\d+W$))?(?:(?:[-+]?\d+D)|(?:[-+]?\d+[.,]\d+D$))?(?:T(?=[\d+-])(?:(?:[-+]?\d+H)|(?:[-+]?\d+[.,]\d+H$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:[-+]?\d+(?:[.,]\d+)?S)?)??$/;
 var guid = /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/;
-var uuid = (version3) => {
-  if (!version3)
+var uuid = (version4) => {
+  if (!version4)
     return /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/;
-  return new RegExp(`^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-${version3}[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$`);
+  return new RegExp(`^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-${version4}[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$`);
 };
 var uuid4 = /* @__PURE__ */ uuid(4);
 var uuid6 = /* @__PURE__ */ uuid(6);
@@ -11447,42 +11453,42 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def2) =
     }
     doc.write(`const newResult = {};`);
     for (const key of normalized.keys) {
-      const id5 = ids[key];
+      const id6 = ids[key];
       const k = esc(key);
       const schema = shape[key];
       const isOptionalIn = schema?._zod?.optin === "optional";
       const isOptionalOut = schema?._zod?.optout === "optional";
-      doc.write(`const ${id5} = ${parseStr(key)};`);
+      doc.write(`const ${id6} = ${parseStr(key)};`);
       if (isOptionalIn && isOptionalOut) {
         doc.write(`
-        if (${id5}.issues.length) {
+        if (${id6}.issues.length) {
           if (${k} in input) {
-            payload.issues = payload.issues.concat(${id5}.issues.map(iss => ({
+            payload.issues = payload.issues.concat(${id6}.issues.map(iss => ({
               ...iss,
               path: iss.path ? [${k}, ...iss.path] : [${k}]
             })));
           }
         }
         
-        if (${id5}.value === undefined) {
+        if (${id6}.value === undefined) {
           if (${k} in input) {
             newResult[${k}] = undefined;
           }
         } else {
-          newResult[${k}] = ${id5}.value;
+          newResult[${k}] = ${id6}.value;
         }
         
       `);
       } else if (!isOptionalIn) {
         doc.write(`
-        const ${id5}_present = ${k} in input;
-        if (${id5}.issues.length) {
-          payload.issues = payload.issues.concat(${id5}.issues.map(iss => ({
+        const ${id6}_present = ${k} in input;
+        if (${id6}.issues.length) {
+          payload.issues = payload.issues.concat(${id6}.issues.map(iss => ({
             ...iss,
             path: iss.path ? [${k}, ...iss.path] : [${k}]
           })));
         }
-        if (!${id5}_present && !${id5}.issues.length) {
+        if (!${id6}_present && !${id6}.issues.length) {
           payload.issues.push({
             code: "invalid_type",
             expected: "nonoptional",
@@ -11491,30 +11497,30 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def2) =
           });
         }
 
-        if (${id5}_present) {
-          if (${id5}.value === undefined) {
+        if (${id6}_present) {
+          if (${id6}.value === undefined) {
             newResult[${k}] = undefined;
           } else {
-            newResult[${k}] = ${id5}.value;
+            newResult[${k}] = ${id6}.value;
           }
         }
 
       `);
       } else {
         doc.write(`
-        if (${id5}.issues.length) {
-          payload.issues = payload.issues.concat(${id5}.issues.map(iss => ({
+        if (${id6}.issues.length) {
+          payload.issues = payload.issues.concat(${id6}.issues.map(iss => ({
             ...iss,
             path: iss.path ? [${k}, ...iss.path] : [${k}]
           })));
         }
         
-        if (${id5}.value === undefined) {
+        if (${id6}.value === undefined) {
           if (${k} in input) {
             newResult[${k}] = undefined;
           }
         } else {
-          newResult[${k}] = ${id5}.value;
+          newResult[${k}] = ${id6}.value;
         }
         
       `);
@@ -12821,58 +12827,58 @@ var error = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\u0645\u062F\u062E\u0644\u0627\u062A \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644\u0629: \u064A\u0641\u062A\u0631\u0636 \u0625\u062F\u062E\u0627\u0644 instanceof ${issue3.expected}\u060C \u0648\u0644\u0643\u0646 \u062A\u0645 \u0625\u062F\u062E\u0627\u0644 ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\u0645\u062F\u062E\u0644\u0627\u062A \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644\u0629: \u064A\u0641\u062A\u0631\u0636 \u0625\u062F\u062E\u0627\u0644 instanceof ${issue4.expected}\u060C \u0648\u0644\u0643\u0646 \u062A\u0645 \u0625\u062F\u062E\u0627\u0644 ${received}`;
         }
         return `\u0645\u062F\u062E\u0644\u0627\u062A \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644\u0629: \u064A\u0641\u062A\u0631\u0636 \u0625\u062F\u062E\u0627\u0644 ${expected}\u060C \u0648\u0644\u0643\u0646 \u062A\u0645 \u0625\u062F\u062E\u0627\u0644 ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `\u0645\u062F\u062E\u0644\u0627\u062A \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644\u0629: \u064A\u0641\u062A\u0631\u0636 \u0625\u062F\u062E\u0627\u0644 ${stringifyPrimitive(issue3.values[0])}`;
-        return `\u0627\u062E\u062A\u064A\u0627\u0631 \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644: \u064A\u062A\u0648\u0642\u0639 \u0627\u0646\u062A\u0642\u0627\u0621 \u0623\u062D\u062F \u0647\u0630\u0647 \u0627\u0644\u062E\u064A\u0627\u0631\u0627\u062A: ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `\u0645\u062F\u062E\u0644\u0627\u062A \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644\u0629: \u064A\u0641\u062A\u0631\u0636 \u0625\u062F\u062E\u0627\u0644 ${stringifyPrimitive(issue4.values[0])}`;
+        return `\u0627\u062E\u062A\u064A\u0627\u0631 \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644: \u064A\u062A\u0648\u0642\u0639 \u0627\u0646\u062A\u0642\u0627\u0621 \u0623\u062D\u062F \u0647\u0630\u0647 \u0627\u0644\u062E\u064A\u0627\u0631\u0627\u062A: ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return ` \u0623\u0643\u0628\u0631 \u0645\u0646 \u0627\u0644\u0644\u0627\u0632\u0645: \u064A\u0641\u062A\u0631\u0636 \u0623\u0646 \u062A\u0643\u0648\u0646 ${issue3.origin ?? "\u0627\u0644\u0642\u064A\u0645\u0629"} ${adj} ${issue3.maximum.toString()} ${sizing.unit ?? "\u0639\u0646\u0635\u0631"}`;
-        return `\u0623\u0643\u0628\u0631 \u0645\u0646 \u0627\u0644\u0644\u0627\u0632\u0645: \u064A\u0641\u062A\u0631\u0636 \u0623\u0646 \u062A\u0643\u0648\u0646 ${issue3.origin ?? "\u0627\u0644\u0642\u064A\u0645\u0629"} ${adj} ${issue3.maximum.toString()}`;
+          return ` \u0623\u0643\u0628\u0631 \u0645\u0646 \u0627\u0644\u0644\u0627\u0632\u0645: \u064A\u0641\u062A\u0631\u0636 \u0623\u0646 \u062A\u0643\u0648\u0646 ${issue4.origin ?? "\u0627\u0644\u0642\u064A\u0645\u0629"} ${adj} ${issue4.maximum.toString()} ${sizing.unit ?? "\u0639\u0646\u0635\u0631"}`;
+        return `\u0623\u0643\u0628\u0631 \u0645\u0646 \u0627\u0644\u0644\u0627\u0632\u0645: \u064A\u0641\u062A\u0631\u0636 \u0623\u0646 \u062A\u0643\u0648\u0646 ${issue4.origin ?? "\u0627\u0644\u0642\u064A\u0645\u0629"} ${adj} ${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `\u0623\u0635\u063A\u0631 \u0645\u0646 \u0627\u0644\u0644\u0627\u0632\u0645: \u064A\u0641\u062A\u0631\u0636 \u0644\u0640 ${issue3.origin} \u0623\u0646 \u064A\u0643\u0648\u0646 ${adj} ${issue3.minimum.toString()} ${sizing.unit}`;
+          return `\u0623\u0635\u063A\u0631 \u0645\u0646 \u0627\u0644\u0644\u0627\u0632\u0645: \u064A\u0641\u062A\u0631\u0636 \u0644\u0640 ${issue4.origin} \u0623\u0646 \u064A\u0643\u0648\u0646 ${adj} ${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `\u0623\u0635\u063A\u0631 \u0645\u0646 \u0627\u0644\u0644\u0627\u0632\u0645: \u064A\u0641\u062A\u0631\u0636 \u0644\u0640 ${issue3.origin} \u0623\u0646 \u064A\u0643\u0648\u0646 ${adj} ${issue3.minimum.toString()}`;
+        return `\u0623\u0635\u063A\u0631 \u0645\u0646 \u0627\u0644\u0644\u0627\u0632\u0645: \u064A\u0641\u062A\u0631\u0636 \u0644\u0640 ${issue4.origin} \u0623\u0646 \u064A\u0643\u0648\u0646 ${adj} ${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
-          return `\u0646\u064E\u0635 \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644: \u064A\u062C\u0628 \u0623\u0646 \u064A\u0628\u062F\u0623 \u0628\u0640 "${issue3.prefix}"`;
+          return `\u0646\u064E\u0635 \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644: \u064A\u062C\u0628 \u0623\u0646 \u064A\u0628\u062F\u0623 \u0628\u0640 "${issue4.prefix}"`;
         if (_issue.format === "ends_with")
           return `\u0646\u064E\u0635 \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644: \u064A\u062C\u0628 \u0623\u0646 \u064A\u0646\u062A\u0647\u064A \u0628\u0640 "${_issue.suffix}"`;
         if (_issue.format === "includes")
           return `\u0646\u064E\u0635 \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644: \u064A\u062C\u0628 \u0623\u0646 \u064A\u062A\u0636\u0645\u0651\u064E\u0646 "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `\u0646\u064E\u0635 \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644: \u064A\u062C\u0628 \u0623\u0646 \u064A\u0637\u0627\u0628\u0642 \u0627\u0644\u0646\u0645\u0637 ${_issue.pattern}`;
-        return `${FormatDictionary[_issue.format] ?? issue3.format} \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644`;
+        return `${FormatDictionary[_issue.format] ?? issue4.format} \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644`;
       }
       case "not_multiple_of":
-        return `\u0631\u0642\u0645 \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644: \u064A\u062C\u0628 \u0623\u0646 \u064A\u0643\u0648\u0646 \u0645\u0646 \u0645\u0636\u0627\u0639\u0641\u0627\u062A ${issue3.divisor}`;
+        return `\u0631\u0642\u0645 \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644: \u064A\u062C\u0628 \u0623\u0646 \u064A\u0643\u0648\u0646 \u0645\u0646 \u0645\u0636\u0627\u0639\u0641\u0627\u062A ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `\u0645\u0639\u0631\u0641${issue3.keys.length > 1 ? "\u0627\u062A" : ""} \u063A\u0631\u064A\u0628${issue3.keys.length > 1 ? "\u0629" : ""}: ${joinValues(issue3.keys, "\u060C ")}`;
+        return `\u0645\u0639\u0631\u0641${issue4.keys.length > 1 ? "\u0627\u062A" : ""} \u063A\u0631\u064A\u0628${issue4.keys.length > 1 ? "\u0629" : ""}: ${joinValues(issue4.keys, "\u060C ")}`;
       case "invalid_key":
-        return `\u0645\u0639\u0631\u0641 \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644 \u0641\u064A ${issue3.origin}`;
+        return `\u0645\u0639\u0631\u0641 \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644 \u0641\u064A ${issue4.origin}`;
       case "invalid_union":
         return "\u0645\u062F\u062E\u0644 \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644";
       case "invalid_element":
-        return `\u0645\u062F\u062E\u0644 \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644 \u0641\u064A ${issue3.origin}`;
+        return `\u0645\u062F\u062E\u0644 \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644 \u0641\u064A ${issue4.origin}`;
       default:
         return "\u0645\u062F\u062E\u0644 \u063A\u064A\u0631 \u0645\u0642\u0628\u0648\u0644";
     }
@@ -12928,37 +12934,37 @@ var error2 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Yanl\u0131\u015F d\u0259y\u0259r: g\xF6zl\u0259nil\u0259n instanceof ${issue3.expected}, daxil olan ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Yanl\u0131\u015F d\u0259y\u0259r: g\xF6zl\u0259nil\u0259n instanceof ${issue4.expected}, daxil olan ${received}`;
         }
         return `Yanl\u0131\u015F d\u0259y\u0259r: g\xF6zl\u0259nil\u0259n ${expected}, daxil olan ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Yanl\u0131\u015F d\u0259y\u0259r: g\xF6zl\u0259nil\u0259n ${stringifyPrimitive(issue3.values[0])}`;
-        return `Yanl\u0131\u015F se\xE7im: a\u015Fa\u011F\u0131dak\u0131lardan biri olmal\u0131d\u0131r: ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Yanl\u0131\u015F d\u0259y\u0259r: g\xF6zl\u0259nil\u0259n ${stringifyPrimitive(issue4.values[0])}`;
+        return `Yanl\u0131\u015F se\xE7im: a\u015Fa\u011F\u0131dak\u0131lardan biri olmal\u0131d\u0131r: ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `\xC7ox b\xF6y\xFCk: g\xF6zl\u0259nil\u0259n ${issue3.origin ?? "d\u0259y\u0259r"} ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "element"}`;
-        return `\xC7ox b\xF6y\xFCk: g\xF6zl\u0259nil\u0259n ${issue3.origin ?? "d\u0259y\u0259r"} ${adj}${issue3.maximum.toString()}`;
+          return `\xC7ox b\xF6y\xFCk: g\xF6zl\u0259nil\u0259n ${issue4.origin ?? "d\u0259y\u0259r"} ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "element"}`;
+        return `\xC7ox b\xF6y\xFCk: g\xF6zl\u0259nil\u0259n ${issue4.origin ?? "d\u0259y\u0259r"} ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `\xC7ox ki\xE7ik: g\xF6zl\u0259nil\u0259n ${issue3.origin} ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
-        return `\xC7ox ki\xE7ik: g\xF6zl\u0259nil\u0259n ${issue3.origin} ${adj}${issue3.minimum.toString()}`;
+          return `\xC7ox ki\xE7ik: g\xF6zl\u0259nil\u0259n ${issue4.origin} ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
+        return `\xC7ox ki\xE7ik: g\xF6zl\u0259nil\u0259n ${issue4.origin} ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `Yanl\u0131\u015F m\u0259tn: "${_issue.prefix}" il\u0259 ba\u015Flamal\u0131d\u0131r`;
         if (_issue.format === "ends_with")
@@ -12967,18 +12973,18 @@ var error2 = () => {
           return `Yanl\u0131\u015F m\u0259tn: "${_issue.includes}" daxil olmal\u0131d\u0131r`;
         if (_issue.format === "regex")
           return `Yanl\u0131\u015F m\u0259tn: ${_issue.pattern} \u015Fablonuna uy\u011Fun olmal\u0131d\u0131r`;
-        return `Yanl\u0131\u015F ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Yanl\u0131\u015F ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `Yanl\u0131\u015F \u0259d\u0259d: ${issue3.divisor} il\u0259 b\xF6l\xFCn\u0259 bil\u0259n olmal\u0131d\u0131r`;
+        return `Yanl\u0131\u015F \u0259d\u0259d: ${issue4.divisor} il\u0259 b\xF6l\xFCn\u0259 bil\u0259n olmal\u0131d\u0131r`;
       case "unrecognized_keys":
-        return `Tan\u0131nmayan a\xE7ar${issue3.keys.length > 1 ? "lar" : ""}: ${joinValues(issue3.keys, ", ")}`;
+        return `Tan\u0131nmayan a\xE7ar${issue4.keys.length > 1 ? "lar" : ""}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `${issue3.origin} daxilind\u0259 yanl\u0131\u015F a\xE7ar`;
+        return `${issue4.origin} daxilind\u0259 yanl\u0131\u015F a\xE7ar`;
       case "invalid_union":
         return "Yanl\u0131\u015F d\u0259y\u0259r";
       case "invalid_element":
-        return `${issue3.origin} daxilind\u0259 yanl\u0131\u015F d\u0259y\u0259r`;
+        return `${issue4.origin} daxilind\u0259 yanl\u0131\u015F d\u0259y\u0259r`;
       default:
         return `Yanl\u0131\u015F d\u0259y\u0259r`;
     }
@@ -13079,43 +13085,43 @@ var error3 = () => {
     number: "\u043B\u0456\u043A",
     array: "\u043C\u0430\u0441\u0456\u045E"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u044B \u045E\u0432\u043E\u0434: \u0447\u0430\u043A\u0430\u045E\u0441\u044F instanceof ${issue3.expected}, \u0430\u0442\u0440\u044B\u043C\u0430\u043D\u0430 ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u044B \u045E\u0432\u043E\u0434: \u0447\u0430\u043A\u0430\u045E\u0441\u044F instanceof ${issue4.expected}, \u0430\u0442\u0440\u044B\u043C\u0430\u043D\u0430 ${received}`;
         }
         return `\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u044B \u045E\u0432\u043E\u0434: \u0447\u0430\u043A\u0430\u045E\u0441\u044F ${expected}, \u0430\u0442\u0440\u044B\u043C\u0430\u043D\u0430 ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u044B \u045E\u0432\u043E\u0434: \u0447\u0430\u043A\u0430\u043B\u0430\u0441\u044F ${stringifyPrimitive(issue3.values[0])}`;
-        return `\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u044B \u0432\u0430\u0440\u044B\u044F\u043D\u0442: \u0447\u0430\u043A\u0430\u045E\u0441\u044F \u0430\u0434\u0437\u0456\u043D \u0437 ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u044B \u045E\u0432\u043E\u0434: \u0447\u0430\u043A\u0430\u043B\u0430\u0441\u044F ${stringifyPrimitive(issue4.values[0])}`;
+        return `\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u044B \u0432\u0430\u0440\u044B\u044F\u043D\u0442: \u0447\u0430\u043A\u0430\u045E\u0441\u044F \u0430\u0434\u0437\u0456\u043D \u0437 ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          const maxValue = Number(issue3.maximum);
+          const maxValue = Number(issue4.maximum);
           const unit = getBelarusianPlural(maxValue, sizing.unit.one, sizing.unit.few, sizing.unit.many);
-          return `\u0417\u0430\u043D\u0430\u0434\u0442\u0430 \u0432\u044F\u043B\u0456\u043A\u0456: \u0447\u0430\u043A\u0430\u043B\u0430\u0441\u044F, \u0448\u0442\u043E ${issue3.origin ?? "\u0437\u043D\u0430\u0447\u044D\u043D\u043D\u0435"} \u043F\u0430\u0432\u0456\u043D\u043D\u0430 ${sizing.verb} ${adj}${issue3.maximum.toString()} ${unit}`;
+          return `\u0417\u0430\u043D\u0430\u0434\u0442\u0430 \u0432\u044F\u043B\u0456\u043A\u0456: \u0447\u0430\u043A\u0430\u043B\u0430\u0441\u044F, \u0448\u0442\u043E ${issue4.origin ?? "\u0437\u043D\u0430\u0447\u044D\u043D\u043D\u0435"} \u043F\u0430\u0432\u0456\u043D\u043D\u0430 ${sizing.verb} ${adj}${issue4.maximum.toString()} ${unit}`;
         }
-        return `\u0417\u0430\u043D\u0430\u0434\u0442\u0430 \u0432\u044F\u043B\u0456\u043A\u0456: \u0447\u0430\u043A\u0430\u043B\u0430\u0441\u044F, \u0448\u0442\u043E ${issue3.origin ?? "\u0437\u043D\u0430\u0447\u044D\u043D\u043D\u0435"} \u043F\u0430\u0432\u0456\u043D\u043D\u0430 \u0431\u044B\u0446\u044C ${adj}${issue3.maximum.toString()}`;
+        return `\u0417\u0430\u043D\u0430\u0434\u0442\u0430 \u0432\u044F\u043B\u0456\u043A\u0456: \u0447\u0430\u043A\u0430\u043B\u0430\u0441\u044F, \u0448\u0442\u043E ${issue4.origin ?? "\u0437\u043D\u0430\u0447\u044D\u043D\u043D\u0435"} \u043F\u0430\u0432\u0456\u043D\u043D\u0430 \u0431\u044B\u0446\u044C ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          const minValue = Number(issue3.minimum);
+          const minValue = Number(issue4.minimum);
           const unit = getBelarusianPlural(minValue, sizing.unit.one, sizing.unit.few, sizing.unit.many);
-          return `\u0417\u0430\u043D\u0430\u0434\u0442\u0430 \u043C\u0430\u043B\u044B: \u0447\u0430\u043A\u0430\u043B\u0430\u0441\u044F, \u0448\u0442\u043E ${issue3.origin} \u043F\u0430\u0432\u0456\u043D\u043D\u0430 ${sizing.verb} ${adj}${issue3.minimum.toString()} ${unit}`;
+          return `\u0417\u0430\u043D\u0430\u0434\u0442\u0430 \u043C\u0430\u043B\u044B: \u0447\u0430\u043A\u0430\u043B\u0430\u0441\u044F, \u0448\u0442\u043E ${issue4.origin} \u043F\u0430\u0432\u0456\u043D\u043D\u0430 ${sizing.verb} ${adj}${issue4.minimum.toString()} ${unit}`;
         }
-        return `\u0417\u0430\u043D\u0430\u0434\u0442\u0430 \u043C\u0430\u043B\u044B: \u0447\u0430\u043A\u0430\u043B\u0430\u0441\u044F, \u0448\u0442\u043E ${issue3.origin} \u043F\u0430\u0432\u0456\u043D\u043D\u0430 \u0431\u044B\u0446\u044C ${adj}${issue3.minimum.toString()}`;
+        return `\u0417\u0430\u043D\u0430\u0434\u0442\u0430 \u043C\u0430\u043B\u044B: \u0447\u0430\u043A\u0430\u043B\u0430\u0441\u044F, \u0448\u0442\u043E ${issue4.origin} \u043F\u0430\u0432\u0456\u043D\u043D\u0430 \u0431\u044B\u0446\u044C ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u044B \u0440\u0430\u0434\u043E\u043A: \u043F\u0430\u0432\u0456\u043D\u0435\u043D \u043F\u0430\u0447\u044B\u043D\u0430\u0446\u0446\u0430 \u0437 "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -13124,18 +13130,18 @@ var error3 = () => {
           return `\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u044B \u0440\u0430\u0434\u043E\u043A: \u043F\u0430\u0432\u0456\u043D\u0435\u043D \u0437\u043C\u044F\u0448\u0447\u0430\u0446\u044C "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u044B \u0440\u0430\u0434\u043E\u043A: \u043F\u0430\u0432\u0456\u043D\u0435\u043D \u0430\u0434\u043F\u0430\u0432\u044F\u0434\u0430\u0446\u044C \u0448\u0430\u0431\u043B\u043E\u043D\u0443 ${_issue.pattern}`;
-        return `\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u044B ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u044B ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u044B \u043B\u0456\u043A: \u043F\u0430\u0432\u0456\u043D\u0435\u043D \u0431\u044B\u0446\u044C \u043A\u0440\u0430\u0442\u043D\u044B\u043C ${issue3.divisor}`;
+        return `\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u044B \u043B\u0456\u043A: \u043F\u0430\u0432\u0456\u043D\u0435\u043D \u0431\u044B\u0446\u044C \u043A\u0440\u0430\u0442\u043D\u044B\u043C ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `\u041D\u0435\u0440\u0430\u0441\u043F\u0430\u0437\u043D\u0430\u043D\u044B ${issue3.keys.length > 1 ? "\u043A\u043B\u044E\u0447\u044B" : "\u043A\u043B\u044E\u0447"}: ${joinValues(issue3.keys, ", ")}`;
+        return `\u041D\u0435\u0440\u0430\u0441\u043F\u0430\u0437\u043D\u0430\u043D\u044B ${issue4.keys.length > 1 ? "\u043A\u043B\u044E\u0447\u044B" : "\u043A\u043B\u044E\u0447"}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u044B \u043A\u043B\u044E\u0447 \u0443 ${issue3.origin}`;
+        return `\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u044B \u043A\u043B\u044E\u0447 \u0443 ${issue4.origin}`;
       case "invalid_union":
         return "\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u044B \u045E\u0432\u043E\u0434";
       case "invalid_element":
-        return `\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u0430\u0435 \u0437\u043D\u0430\u0447\u044D\u043D\u043D\u0435 \u045E ${issue3.origin}`;
+        return `\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u0430\u0435 \u0437\u043D\u0430\u0447\u044D\u043D\u043D\u0435 \u045E ${issue4.origin}`;
       default:
         return `\u041D\u044F\u043F\u0440\u0430\u0432\u0456\u043B\u044C\u043D\u044B \u045E\u0432\u043E\u0434`;
     }
@@ -13193,38 +13199,38 @@ var error4 = () => {
     number: "\u0447\u0438\u0441\u043B\u043E",
     array: "\u043C\u0430\u0441\u0438\u0432"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\u041D\u0435\u0432\u0430\u043B\u0438\u0434\u0435\u043D \u0432\u0445\u043E\u0434: \u043E\u0447\u0430\u043A\u0432\u0430\u043D instanceof ${issue3.expected}, \u043F\u043E\u043B\u0443\u0447\u0435\u043D ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\u041D\u0435\u0432\u0430\u043B\u0438\u0434\u0435\u043D \u0432\u0445\u043E\u0434: \u043E\u0447\u0430\u043A\u0432\u0430\u043D instanceof ${issue4.expected}, \u043F\u043E\u043B\u0443\u0447\u0435\u043D ${received}`;
         }
         return `\u041D\u0435\u0432\u0430\u043B\u0438\u0434\u0435\u043D \u0432\u0445\u043E\u0434: \u043E\u0447\u0430\u043A\u0432\u0430\u043D ${expected}, \u043F\u043E\u043B\u0443\u0447\u0435\u043D ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `\u041D\u0435\u0432\u0430\u043B\u0438\u0434\u0435\u043D \u0432\u0445\u043E\u0434: \u043E\u0447\u0430\u043A\u0432\u0430\u043D ${stringifyPrimitive(issue3.values[0])}`;
-        return `\u041D\u0435\u0432\u0430\u043B\u0438\u0434\u043D\u0430 \u043E\u043F\u0446\u0438\u044F: \u043E\u0447\u0430\u043A\u0432\u0430\u043D\u043E \u0435\u0434\u043D\u043E \u043E\u0442 ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `\u041D\u0435\u0432\u0430\u043B\u0438\u0434\u0435\u043D \u0432\u0445\u043E\u0434: \u043E\u0447\u0430\u043A\u0432\u0430\u043D ${stringifyPrimitive(issue4.values[0])}`;
+        return `\u041D\u0435\u0432\u0430\u043B\u0438\u0434\u043D\u0430 \u043E\u043F\u0446\u0438\u044F: \u043E\u0447\u0430\u043A\u0432\u0430\u043D\u043E \u0435\u0434\u043D\u043E \u043E\u0442 ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `\u0422\u0432\u044A\u0440\u0434\u0435 \u0433\u043E\u043B\u044F\u043C\u043E: \u043E\u0447\u0430\u043A\u0432\u0430 \u0441\u0435 ${issue3.origin ?? "\u0441\u0442\u043E\u0439\u043D\u043E\u0441\u0442"} \u0434\u0430 \u0441\u044A\u0434\u044A\u0440\u0436\u0430 ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "\u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0430"}`;
-        return `\u0422\u0432\u044A\u0440\u0434\u0435 \u0433\u043E\u043B\u044F\u043C\u043E: \u043E\u0447\u0430\u043A\u0432\u0430 \u0441\u0435 ${issue3.origin ?? "\u0441\u0442\u043E\u0439\u043D\u043E\u0441\u0442"} \u0434\u0430 \u0431\u044A\u0434\u0435 ${adj}${issue3.maximum.toString()}`;
+          return `\u0422\u0432\u044A\u0440\u0434\u0435 \u0433\u043E\u043B\u044F\u043C\u043E: \u043E\u0447\u0430\u043A\u0432\u0430 \u0441\u0435 ${issue4.origin ?? "\u0441\u0442\u043E\u0439\u043D\u043E\u0441\u0442"} \u0434\u0430 \u0441\u044A\u0434\u044A\u0440\u0436\u0430 ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "\u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0430"}`;
+        return `\u0422\u0432\u044A\u0440\u0434\u0435 \u0433\u043E\u043B\u044F\u043C\u043E: \u043E\u0447\u0430\u043A\u0432\u0430 \u0441\u0435 ${issue4.origin ?? "\u0441\u0442\u043E\u0439\u043D\u043E\u0441\u0442"} \u0434\u0430 \u0431\u044A\u0434\u0435 ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `\u0422\u0432\u044A\u0440\u0434\u0435 \u043C\u0430\u043B\u043A\u043E: \u043E\u0447\u0430\u043A\u0432\u0430 \u0441\u0435 ${issue3.origin} \u0434\u0430 \u0441\u044A\u0434\u044A\u0440\u0436\u0430 ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `\u0422\u0432\u044A\u0440\u0434\u0435 \u043C\u0430\u043B\u043A\u043E: \u043E\u0447\u0430\u043A\u0432\u0430 \u0441\u0435 ${issue4.origin} \u0434\u0430 \u0441\u044A\u0434\u044A\u0440\u0436\u0430 ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `\u0422\u0432\u044A\u0440\u0434\u0435 \u043C\u0430\u043B\u043A\u043E: \u043E\u0447\u0430\u043A\u0432\u0430 \u0441\u0435 ${issue3.origin} \u0434\u0430 \u0431\u044A\u0434\u0435 ${adj}${issue3.minimum.toString()}`;
+        return `\u0422\u0432\u044A\u0440\u0434\u0435 \u043C\u0430\u043B\u043A\u043E: \u043E\u0447\u0430\u043A\u0432\u0430 \u0441\u0435 ${issue4.origin} \u0434\u0430 \u0431\u044A\u0434\u0435 ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `\u041D\u0435\u0432\u0430\u043B\u0438\u0434\u0435\u043D \u043D\u0438\u0437: \u0442\u0440\u044F\u0431\u0432\u0430 \u0434\u0430 \u0437\u0430\u043F\u043E\u0447\u0432\u0430 \u0441 "${_issue.prefix}"`;
         }
@@ -13245,18 +13251,18 @@ var error4 = () => {
           invalid_adj = "\u041D\u0435\u0432\u0430\u043B\u0438\u0434\u043D\u043E";
         if (_issue.format === "duration")
           invalid_adj = "\u041D\u0435\u0432\u0430\u043B\u0438\u0434\u043D\u0430";
-        return `${invalid_adj} ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `${invalid_adj} ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `\u041D\u0435\u0432\u0430\u043B\u0438\u0434\u043D\u043E \u0447\u0438\u0441\u043B\u043E: \u0442\u0440\u044F\u0431\u0432\u0430 \u0434\u0430 \u0431\u044A\u0434\u0435 \u043A\u0440\u0430\u0442\u043D\u043E \u043D\u0430 ${issue3.divisor}`;
+        return `\u041D\u0435\u0432\u0430\u043B\u0438\u0434\u043D\u043E \u0447\u0438\u0441\u043B\u043E: \u0442\u0440\u044F\u0431\u0432\u0430 \u0434\u0430 \u0431\u044A\u0434\u0435 \u043A\u0440\u0430\u0442\u043D\u043E \u043D\u0430 ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `\u041D\u0435\u0440\u0430\u0437\u043F\u043E\u0437\u043D\u0430\u0442${issue3.keys.length > 1 ? "\u0438" : ""} \u043A\u043B\u044E\u0447${issue3.keys.length > 1 ? "\u043E\u0432\u0435" : ""}: ${joinValues(issue3.keys, ", ")}`;
+        return `\u041D\u0435\u0440\u0430\u0437\u043F\u043E\u0437\u043D\u0430\u0442${issue4.keys.length > 1 ? "\u0438" : ""} \u043A\u043B\u044E\u0447${issue4.keys.length > 1 ? "\u043E\u0432\u0435" : ""}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `\u041D\u0435\u0432\u0430\u043B\u0438\u0434\u0435\u043D \u043A\u043B\u044E\u0447 \u0432 ${issue3.origin}`;
+        return `\u041D\u0435\u0432\u0430\u043B\u0438\u0434\u0435\u043D \u043A\u043B\u044E\u0447 \u0432 ${issue4.origin}`;
       case "invalid_union":
         return "\u041D\u0435\u0432\u0430\u043B\u0438\u0434\u0435\u043D \u0432\u0445\u043E\u0434";
       case "invalid_element":
-        return `\u041D\u0435\u0432\u0430\u043B\u0438\u0434\u043D\u0430 \u0441\u0442\u043E\u0439\u043D\u043E\u0441\u0442 \u0432 ${issue3.origin}`;
+        return `\u041D\u0435\u0432\u0430\u043B\u0438\u0434\u043D\u0430 \u0441\u0442\u043E\u0439\u043D\u043E\u0441\u0442 \u0432 ${issue4.origin}`;
       default:
         return `\u041D\u0435\u0432\u0430\u043B\u0438\u0434\u0435\u043D \u0432\u0445\u043E\u0434`;
     }
@@ -13312,38 +13318,38 @@ var error5 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Tipus inv\xE0lid: s'esperava instanceof ${issue3.expected}, s'ha rebut ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Tipus inv\xE0lid: s'esperava instanceof ${issue4.expected}, s'ha rebut ${received}`;
         }
         return `Tipus inv\xE0lid: s'esperava ${expected}, s'ha rebut ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Valor inv\xE0lid: s'esperava ${stringifyPrimitive(issue3.values[0])}`;
-        return `Opci\xF3 inv\xE0lida: s'esperava una de ${joinValues(issue3.values, " o ")}`;
+        if (issue4.values.length === 1)
+          return `Valor inv\xE0lid: s'esperava ${stringifyPrimitive(issue4.values[0])}`;
+        return `Opci\xF3 inv\xE0lida: s'esperava una de ${joinValues(issue4.values, " o ")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "com a m\xE0xim" : "menys de";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "com a m\xE0xim" : "menys de";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `Massa gran: s'esperava que ${issue3.origin ?? "el valor"} contingu\xE9s ${adj} ${issue3.maximum.toString()} ${sizing.unit ?? "elements"}`;
-        return `Massa gran: s'esperava que ${issue3.origin ?? "el valor"} fos ${adj} ${issue3.maximum.toString()}`;
+          return `Massa gran: s'esperava que ${issue4.origin ?? "el valor"} contingu\xE9s ${adj} ${issue4.maximum.toString()} ${sizing.unit ?? "elements"}`;
+        return `Massa gran: s'esperava que ${issue4.origin ?? "el valor"} fos ${adj} ${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? "com a m\xEDnim" : "m\xE9s de";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "com a m\xEDnim" : "m\xE9s de";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Massa petit: s'esperava que ${issue3.origin} contingu\xE9s ${adj} ${issue3.minimum.toString()} ${sizing.unit}`;
+          return `Massa petit: s'esperava que ${issue4.origin} contingu\xE9s ${adj} ${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `Massa petit: s'esperava que ${issue3.origin} fos ${adj} ${issue3.minimum.toString()}`;
+        return `Massa petit: s'esperava que ${issue4.origin} fos ${adj} ${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `Format inv\xE0lid: ha de comen\xE7ar amb "${_issue.prefix}"`;
         }
@@ -13353,19 +13359,19 @@ var error5 = () => {
           return `Format inv\xE0lid: ha d'incloure "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Format inv\xE0lid: ha de coincidir amb el patr\xF3 ${_issue.pattern}`;
-        return `Format inv\xE0lid per a ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Format inv\xE0lid per a ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `N\xFAmero inv\xE0lid: ha de ser m\xFAltiple de ${issue3.divisor}`;
+        return `N\xFAmero inv\xE0lid: ha de ser m\xFAltiple de ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `Clau${issue3.keys.length > 1 ? "s" : ""} no reconeguda${issue3.keys.length > 1 ? "s" : ""}: ${joinValues(issue3.keys, ", ")}`;
+        return `Clau${issue4.keys.length > 1 ? "s" : ""} no reconeguda${issue4.keys.length > 1 ? "s" : ""}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Clau inv\xE0lida a ${issue3.origin}`;
+        return `Clau inv\xE0lida a ${issue4.origin}`;
       case "invalid_union":
         return "Entrada inv\xE0lida";
       // Could also be "Tipus d'unió invàlid" but "Entrada invàlida" is more general
       case "invalid_element":
-        return `Element inv\xE0lid a ${issue3.origin}`;
+        return `Element inv\xE0lid a ${issue4.origin}`;
       default:
         return `Entrada inv\xE0lida`;
     }
@@ -13425,39 +13431,39 @@ var error6 = () => {
     function: "funkce",
     array: "pole"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Neplatn\xFD vstup: o\u010Dek\xE1v\xE1no instanceof ${issue3.expected}, obdr\u017Eeno ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Neplatn\xFD vstup: o\u010Dek\xE1v\xE1no instanceof ${issue4.expected}, obdr\u017Eeno ${received}`;
         }
         return `Neplatn\xFD vstup: o\u010Dek\xE1v\xE1no ${expected}, obdr\u017Eeno ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Neplatn\xFD vstup: o\u010Dek\xE1v\xE1no ${stringifyPrimitive(issue3.values[0])}`;
-        return `Neplatn\xE1 mo\u017Enost: o\u010Dek\xE1v\xE1na jedna z hodnot ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Neplatn\xFD vstup: o\u010Dek\xE1v\xE1no ${stringifyPrimitive(issue4.values[0])}`;
+        return `Neplatn\xE1 mo\u017Enost: o\u010Dek\xE1v\xE1na jedna z hodnot ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Hodnota je p\u0159\xEDli\u0161 velk\xE1: ${issue3.origin ?? "hodnota"} mus\xED m\xEDt ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "prvk\u016F"}`;
+          return `Hodnota je p\u0159\xEDli\u0161 velk\xE1: ${issue4.origin ?? "hodnota"} mus\xED m\xEDt ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "prvk\u016F"}`;
         }
-        return `Hodnota je p\u0159\xEDli\u0161 velk\xE1: ${issue3.origin ?? "hodnota"} mus\xED b\xFDt ${adj}${issue3.maximum.toString()}`;
+        return `Hodnota je p\u0159\xEDli\u0161 velk\xE1: ${issue4.origin ?? "hodnota"} mus\xED b\xFDt ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Hodnota je p\u0159\xEDli\u0161 mal\xE1: ${issue3.origin ?? "hodnota"} mus\xED m\xEDt ${adj}${issue3.minimum.toString()} ${sizing.unit ?? "prvk\u016F"}`;
+          return `Hodnota je p\u0159\xEDli\u0161 mal\xE1: ${issue4.origin ?? "hodnota"} mus\xED m\xEDt ${adj}${issue4.minimum.toString()} ${sizing.unit ?? "prvk\u016F"}`;
         }
-        return `Hodnota je p\u0159\xEDli\u0161 mal\xE1: ${issue3.origin ?? "hodnota"} mus\xED b\xFDt ${adj}${issue3.minimum.toString()}`;
+        return `Hodnota je p\u0159\xEDli\u0161 mal\xE1: ${issue4.origin ?? "hodnota"} mus\xED b\xFDt ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `Neplatn\xFD \u0159et\u011Bzec: mus\xED za\u010D\xEDnat na "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -13466,18 +13472,18 @@ var error6 = () => {
           return `Neplatn\xFD \u0159et\u011Bzec: mus\xED obsahovat "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Neplatn\xFD \u0159et\u011Bzec: mus\xED odpov\xEDdat vzoru ${_issue.pattern}`;
-        return `Neplatn\xFD form\xE1t ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Neplatn\xFD form\xE1t ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `Neplatn\xE9 \u010D\xEDslo: mus\xED b\xFDt n\xE1sobkem ${issue3.divisor}`;
+        return `Neplatn\xE9 \u010D\xEDslo: mus\xED b\xFDt n\xE1sobkem ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `Nezn\xE1m\xE9 kl\xED\u010De: ${joinValues(issue3.keys, ", ")}`;
+        return `Nezn\xE1m\xE9 kl\xED\u010De: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Neplatn\xFD kl\xED\u010D v ${issue3.origin}`;
+        return `Neplatn\xFD kl\xED\u010D v ${issue4.origin}`;
       case "invalid_union":
         return "Neplatn\xFD vstup";
       case "invalid_element":
-        return `Neplatn\xE1 hodnota v ${issue3.origin}`;
+        return `Neplatn\xE1 hodnota v ${issue4.origin}`;
       default:
         return `Neplatn\xFD vstup`;
     }
@@ -13540,40 +13546,40 @@ var error7 = () => {
     set: "s\xE6t",
     file: "fil"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Ugyldigt input: forventede instanceof ${issue3.expected}, fik ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Ugyldigt input: forventede instanceof ${issue4.expected}, fik ${received}`;
         }
         return `Ugyldigt input: forventede ${expected}, fik ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Ugyldig v\xE6rdi: forventede ${stringifyPrimitive(issue3.values[0])}`;
-        return `Ugyldigt valg: forventede en af f\xF8lgende ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Ugyldig v\xE6rdi: forventede ${stringifyPrimitive(issue4.values[0])}`;
+        return `Ugyldigt valg: forventede en af f\xF8lgende ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
-        const origin2 = TypeDictionary[issue3.origin] ?? issue3.origin;
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
+        const origin2 = TypeDictionary[issue4.origin] ?? issue4.origin;
         if (sizing)
-          return `For stor: forventede ${origin2 ?? "value"} ${sizing.verb} ${adj} ${issue3.maximum.toString()} ${sizing.unit ?? "elementer"}`;
-        return `For stor: forventede ${origin2 ?? "value"} havde ${adj} ${issue3.maximum.toString()}`;
+          return `For stor: forventede ${origin2 ?? "value"} ${sizing.verb} ${adj} ${issue4.maximum.toString()} ${sizing.unit ?? "elementer"}`;
+        return `For stor: forventede ${origin2 ?? "value"} havde ${adj} ${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
-        const origin2 = TypeDictionary[issue3.origin] ?? issue3.origin;
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
+        const origin2 = TypeDictionary[issue4.origin] ?? issue4.origin;
         if (sizing) {
-          return `For lille: forventede ${origin2} ${sizing.verb} ${adj} ${issue3.minimum.toString()} ${sizing.unit}`;
+          return `For lille: forventede ${origin2} ${sizing.verb} ${adj} ${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `For lille: forventede ${origin2} havde ${adj} ${issue3.minimum.toString()}`;
+        return `For lille: forventede ${origin2} havde ${adj} ${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `Ugyldig streng: skal starte med "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -13582,18 +13588,18 @@ var error7 = () => {
           return `Ugyldig streng: skal indeholde "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Ugyldig streng: skal matche m\xF8nsteret ${_issue.pattern}`;
-        return `Ugyldig ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Ugyldig ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `Ugyldigt tal: skal v\xE6re deleligt med ${issue3.divisor}`;
+        return `Ugyldigt tal: skal v\xE6re deleligt med ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `${issue3.keys.length > 1 ? "Ukendte n\xF8gler" : "Ukendt n\xF8gle"}: ${joinValues(issue3.keys, ", ")}`;
+        return `${issue4.keys.length > 1 ? "Ukendte n\xF8gler" : "Ukendt n\xF8gle"}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Ugyldig n\xF8gle i ${issue3.origin}`;
+        return `Ugyldig n\xF8gle i ${issue4.origin}`;
       case "invalid_union":
         return "Ugyldigt input: matcher ingen af de tilladte typer";
       case "invalid_element":
-        return `Ugyldig v\xE6rdi i ${issue3.origin}`;
+        return `Ugyldig v\xE6rdi i ${issue4.origin}`;
       default:
         return `Ugyldigt input`;
     }
@@ -13651,38 +13657,38 @@ var error8 = () => {
     number: "Zahl",
     array: "Array"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Ung\xFCltige Eingabe: erwartet instanceof ${issue3.expected}, erhalten ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Ung\xFCltige Eingabe: erwartet instanceof ${issue4.expected}, erhalten ${received}`;
         }
         return `Ung\xFCltige Eingabe: erwartet ${expected}, erhalten ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Ung\xFCltige Eingabe: erwartet ${stringifyPrimitive(issue3.values[0])}`;
-        return `Ung\xFCltige Option: erwartet eine von ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Ung\xFCltige Eingabe: erwartet ${stringifyPrimitive(issue4.values[0])}`;
+        return `Ung\xFCltige Option: erwartet eine von ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `Zu gro\xDF: erwartet, dass ${issue3.origin ?? "Wert"} ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "Elemente"} hat`;
-        return `Zu gro\xDF: erwartet, dass ${issue3.origin ?? "Wert"} ${adj}${issue3.maximum.toString()} ist`;
+          return `Zu gro\xDF: erwartet, dass ${issue4.origin ?? "Wert"} ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "Elemente"} hat`;
+        return `Zu gro\xDF: erwartet, dass ${issue4.origin ?? "Wert"} ${adj}${issue4.maximum.toString()} ist`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Zu klein: erwartet, dass ${issue3.origin} ${adj}${issue3.minimum.toString()} ${sizing.unit} hat`;
+          return `Zu klein: erwartet, dass ${issue4.origin} ${adj}${issue4.minimum.toString()} ${sizing.unit} hat`;
         }
-        return `Zu klein: erwartet, dass ${issue3.origin} ${adj}${issue3.minimum.toString()} ist`;
+        return `Zu klein: erwartet, dass ${issue4.origin} ${adj}${issue4.minimum.toString()} ist`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `Ung\xFCltiger String: muss mit "${_issue.prefix}" beginnen`;
         if (_issue.format === "ends_with")
@@ -13691,18 +13697,18 @@ var error8 = () => {
           return `Ung\xFCltiger String: muss "${_issue.includes}" enthalten`;
         if (_issue.format === "regex")
           return `Ung\xFCltiger String: muss dem Muster ${_issue.pattern} entsprechen`;
-        return `Ung\xFCltig: ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Ung\xFCltig: ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `Ung\xFCltige Zahl: muss ein Vielfaches von ${issue3.divisor} sein`;
+        return `Ung\xFCltige Zahl: muss ein Vielfaches von ${issue4.divisor} sein`;
       case "unrecognized_keys":
-        return `${issue3.keys.length > 1 ? "Unbekannte Schl\xFCssel" : "Unbekannter Schl\xFCssel"}: ${joinValues(issue3.keys, ", ")}`;
+        return `${issue4.keys.length > 1 ? "Unbekannte Schl\xFCssel" : "Unbekannter Schl\xFCssel"}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Ung\xFCltiger Schl\xFCssel in ${issue3.origin}`;
+        return `Ung\xFCltiger Schl\xFCssel in ${issue4.origin}`;
       case "invalid_union":
         return "Ung\xFCltige Eingabe";
       case "invalid_element":
-        return `Ung\xFCltiger Wert in ${issue3.origin}`;
+        return `Ung\xFCltiger Wert in ${issue4.origin}`;
       default:
         return `Ung\xFCltige Eingabe`;
     }
@@ -13760,38 +13766,38 @@ var error9 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (typeof issue3.expected === "string" && /^[A-Z]/.test(issue3.expected)) {
-          return `\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03B7 \u03B5\u03AF\u03C3\u03BF\u03B4\u03BF\u03C2: \u03B1\u03BD\u03B1\u03BC\u03B5\u03BD\u03CC\u03C4\u03B1\u03BD instanceof ${issue3.expected}, \u03BB\u03AE\u03C6\u03B8\u03B7\u03BA\u03B5 ${received}`;
+        if (typeof issue4.expected === "string" && /^[A-Z]/.test(issue4.expected)) {
+          return `\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03B7 \u03B5\u03AF\u03C3\u03BF\u03B4\u03BF\u03C2: \u03B1\u03BD\u03B1\u03BC\u03B5\u03BD\u03CC\u03C4\u03B1\u03BD instanceof ${issue4.expected}, \u03BB\u03AE\u03C6\u03B8\u03B7\u03BA\u03B5 ${received}`;
         }
         return `\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03B7 \u03B5\u03AF\u03C3\u03BF\u03B4\u03BF\u03C2: \u03B1\u03BD\u03B1\u03BC\u03B5\u03BD\u03CC\u03C4\u03B1\u03BD ${expected}, \u03BB\u03AE\u03C6\u03B8\u03B7\u03BA\u03B5 ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03B7 \u03B5\u03AF\u03C3\u03BF\u03B4\u03BF\u03C2: \u03B1\u03BD\u03B1\u03BC\u03B5\u03BD\u03CC\u03C4\u03B1\u03BD ${stringifyPrimitive(issue3.values[0])}`;
-        return `\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03B7 \u03B5\u03C0\u03B9\u03BB\u03BF\u03B3\u03AE: \u03B1\u03BD\u03B1\u03BC\u03B5\u03BD\u03CC\u03C4\u03B1\u03BD \u03AD\u03BD\u03B1 \u03B1\u03C0\u03CC ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03B7 \u03B5\u03AF\u03C3\u03BF\u03B4\u03BF\u03C2: \u03B1\u03BD\u03B1\u03BC\u03B5\u03BD\u03CC\u03C4\u03B1\u03BD ${stringifyPrimitive(issue4.values[0])}`;
+        return `\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03B7 \u03B5\u03C0\u03B9\u03BB\u03BF\u03B3\u03AE: \u03B1\u03BD\u03B1\u03BC\u03B5\u03BD\u03CC\u03C4\u03B1\u03BD \u03AD\u03BD\u03B1 \u03B1\u03C0\u03CC ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `\u03A0\u03BF\u03BB\u03CD \u03BC\u03B5\u03B3\u03AC\u03BB\u03BF: \u03B1\u03BD\u03B1\u03BC\u03B5\u03BD\u03CC\u03C4\u03B1\u03BD ${issue3.origin ?? "\u03C4\u03B9\u03BC\u03AE"} \u03BD\u03B1 \u03AD\u03C7\u03B5\u03B9 ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "\u03C3\u03C4\u03BF\u03B9\u03C7\u03B5\u03AF\u03B1"}`;
-        return `\u03A0\u03BF\u03BB\u03CD \u03BC\u03B5\u03B3\u03AC\u03BB\u03BF: \u03B1\u03BD\u03B1\u03BC\u03B5\u03BD\u03CC\u03C4\u03B1\u03BD ${issue3.origin ?? "\u03C4\u03B9\u03BC\u03AE"} \u03BD\u03B1 \u03B5\u03AF\u03BD\u03B1\u03B9 ${adj}${issue3.maximum.toString()}`;
+          return `\u03A0\u03BF\u03BB\u03CD \u03BC\u03B5\u03B3\u03AC\u03BB\u03BF: \u03B1\u03BD\u03B1\u03BC\u03B5\u03BD\u03CC\u03C4\u03B1\u03BD ${issue4.origin ?? "\u03C4\u03B9\u03BC\u03AE"} \u03BD\u03B1 \u03AD\u03C7\u03B5\u03B9 ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "\u03C3\u03C4\u03BF\u03B9\u03C7\u03B5\u03AF\u03B1"}`;
+        return `\u03A0\u03BF\u03BB\u03CD \u03BC\u03B5\u03B3\u03AC\u03BB\u03BF: \u03B1\u03BD\u03B1\u03BC\u03B5\u03BD\u03CC\u03C4\u03B1\u03BD ${issue4.origin ?? "\u03C4\u03B9\u03BC\u03AE"} \u03BD\u03B1 \u03B5\u03AF\u03BD\u03B1\u03B9 ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `\u03A0\u03BF\u03BB\u03CD \u03BC\u03B9\u03BA\u03C1\u03CC: \u03B1\u03BD\u03B1\u03BC\u03B5\u03BD\u03CC\u03C4\u03B1\u03BD ${issue3.origin} \u03BD\u03B1 \u03AD\u03C7\u03B5\u03B9 ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `\u03A0\u03BF\u03BB\u03CD \u03BC\u03B9\u03BA\u03C1\u03CC: \u03B1\u03BD\u03B1\u03BC\u03B5\u03BD\u03CC\u03C4\u03B1\u03BD ${issue4.origin} \u03BD\u03B1 \u03AD\u03C7\u03B5\u03B9 ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `\u03A0\u03BF\u03BB\u03CD \u03BC\u03B9\u03BA\u03C1\u03CC: \u03B1\u03BD\u03B1\u03BC\u03B5\u03BD\u03CC\u03C4\u03B1\u03BD ${issue3.origin} \u03BD\u03B1 \u03B5\u03AF\u03BD\u03B1\u03B9 ${adj}${issue3.minimum.toString()}`;
+        return `\u03A0\u03BF\u03BB\u03CD \u03BC\u03B9\u03BA\u03C1\u03CC: \u03B1\u03BD\u03B1\u03BC\u03B5\u03BD\u03CC\u03C4\u03B1\u03BD ${issue4.origin} \u03BD\u03B1 \u03B5\u03AF\u03BD\u03B1\u03B9 ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03B7 \u03C3\u03C5\u03BC\u03B2\u03BF\u03BB\u03BF\u03C3\u03B5\u03B9\u03C1\u03AC: \u03C0\u03C1\u03AD\u03C0\u03B5\u03B9 \u03BD\u03B1 \u03BE\u03B5\u03BA\u03B9\u03BD\u03AC \u03BC\u03B5 "${_issue.prefix}"`;
         }
@@ -13801,18 +13807,18 @@ var error9 = () => {
           return `\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03B7 \u03C3\u03C5\u03BC\u03B2\u03BF\u03BB\u03BF\u03C3\u03B5\u03B9\u03C1\u03AC: \u03C0\u03C1\u03AD\u03C0\u03B5\u03B9 \u03BD\u03B1 \u03C0\u03B5\u03C1\u03B9\u03AD\u03C7\u03B5\u03B9 "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03B7 \u03C3\u03C5\u03BC\u03B2\u03BF\u03BB\u03BF\u03C3\u03B5\u03B9\u03C1\u03AC: \u03C0\u03C1\u03AD\u03C0\u03B5\u03B9 \u03BD\u03B1 \u03C4\u03B1\u03B9\u03C1\u03B9\u03AC\u03B6\u03B5\u03B9 \u03BC\u03B5 \u03C4\u03BF \u03BC\u03BF\u03C4\u03AF\u03B2\u03BF ${_issue.pattern}`;
-        return `\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03BF: ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03BF: ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03BF\u03C2 \u03B1\u03C1\u03B9\u03B8\u03BC\u03CC\u03C2: \u03C0\u03C1\u03AD\u03C0\u03B5\u03B9 \u03BD\u03B1 \u03B5\u03AF\u03BD\u03B1\u03B9 \u03C0\u03BF\u03BB\u03BB\u03B1\u03C0\u03BB\u03AC\u03C3\u03B9\u03BF \u03C4\u03BF\u03C5 ${issue3.divisor}`;
+        return `\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03BF\u03C2 \u03B1\u03C1\u03B9\u03B8\u03BC\u03CC\u03C2: \u03C0\u03C1\u03AD\u03C0\u03B5\u03B9 \u03BD\u03B1 \u03B5\u03AF\u03BD\u03B1\u03B9 \u03C0\u03BF\u03BB\u03BB\u03B1\u03C0\u03BB\u03AC\u03C3\u03B9\u03BF \u03C4\u03BF\u03C5 ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `\u0386\u03B3\u03BD\u03C9\u03C3\u03C4${issue3.keys.length > 1 ? "\u03B1" : "\u03BF"} \u03BA\u03BB\u03B5\u03B9\u03B4${issue3.keys.length > 1 ? "\u03B9\u03AC" : "\u03AF"}: ${joinValues(issue3.keys, ", ")}`;
+        return `\u0386\u03B3\u03BD\u03C9\u03C3\u03C4${issue4.keys.length > 1 ? "\u03B1" : "\u03BF"} \u03BA\u03BB\u03B5\u03B9\u03B4${issue4.keys.length > 1 ? "\u03B9\u03AC" : "\u03AF"}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03BF \u03BA\u03BB\u03B5\u03B9\u03B4\u03AF \u03C3\u03C4\u03BF ${issue3.origin}`;
+        return `\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03BF \u03BA\u03BB\u03B5\u03B9\u03B4\u03AF \u03C3\u03C4\u03BF ${issue4.origin}`;
       case "invalid_union":
         return "\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03B7 \u03B5\u03AF\u03C3\u03BF\u03B4\u03BF\u03C2";
       case "invalid_element":
-        return `\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03B7 \u03C4\u03B9\u03BC\u03AE \u03C3\u03C4\u03BF ${issue3.origin}`;
+        return `\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03B7 \u03C4\u03B9\u03BC\u03AE \u03C3\u03C4\u03BF ${issue4.origin}`;
       default:
         return `\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03B7 \u03B5\u03AF\u03C3\u03BF\u03B4\u03BF\u03C2`;
     }
@@ -13872,35 +13878,35 @@ var error10 = () => {
     nan: "NaN"
     // All other type names omitted - they fall back to raw values via ?? operator
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
         return `Invalid input: expected ${expected}, received ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Invalid input: expected ${stringifyPrimitive(issue3.values[0])}`;
-        return `Invalid option: expected one of ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Invalid input: expected ${stringifyPrimitive(issue4.values[0])}`;
+        return `Invalid option: expected one of ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `Too big: expected ${issue3.origin ?? "value"} to have ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "elements"}`;
-        return `Too big: expected ${issue3.origin ?? "value"} to be ${adj}${issue3.maximum.toString()}`;
+          return `Too big: expected ${issue4.origin ?? "value"} to have ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "elements"}`;
+        return `Too big: expected ${issue4.origin ?? "value"} to be ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Too small: expected ${issue3.origin} to have ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `Too small: expected ${issue4.origin} to have ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `Too small: expected ${issue3.origin} to be ${adj}${issue3.minimum.toString()}`;
+        return `Too small: expected ${issue4.origin} to be ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `Invalid string: must start with "${_issue.prefix}"`;
         }
@@ -13910,22 +13916,22 @@ var error10 = () => {
           return `Invalid string: must include "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Invalid string: must match pattern ${_issue.pattern}`;
-        return `Invalid ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Invalid ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `Invalid number: must be a multiple of ${issue3.divisor}`;
+        return `Invalid number: must be a multiple of ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `Unrecognized key${issue3.keys.length > 1 ? "s" : ""}: ${joinValues(issue3.keys, ", ")}`;
+        return `Unrecognized key${issue4.keys.length > 1 ? "s" : ""}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Invalid key in ${issue3.origin}`;
+        return `Invalid key in ${issue4.origin}`;
       case "invalid_union":
-        if (issue3.options && Array.isArray(issue3.options) && issue3.options.length > 0) {
-          const opts = issue3.options.map((o) => `'${o}'`).join(" | ");
+        if (issue4.options && Array.isArray(issue4.options) && issue4.options.length > 0) {
+          const opts = issue4.options.map((o) => `'${o}'`).join(" | ");
           return `Invalid discriminator value. Expected ${opts}`;
         }
         return "Invalid input";
       case "invalid_element":
-        return `Invalid value in ${issue3.origin}`;
+        return `Invalid value in ${issue4.origin}`;
       default:
         return `Invalid input`;
     }
@@ -13984,38 +13990,38 @@ var error11 = () => {
     array: "tabelo",
     null: "senvalora"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Nevalida enigo: atendi\u011Dis instanceof ${issue3.expected}, ricevi\u011Dis ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Nevalida enigo: atendi\u011Dis instanceof ${issue4.expected}, ricevi\u011Dis ${received}`;
         }
         return `Nevalida enigo: atendi\u011Dis ${expected}, ricevi\u011Dis ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Nevalida enigo: atendi\u011Dis ${stringifyPrimitive(issue3.values[0])}`;
-        return `Nevalida opcio: atendi\u011Dis unu el ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Nevalida enigo: atendi\u011Dis ${stringifyPrimitive(issue4.values[0])}`;
+        return `Nevalida opcio: atendi\u011Dis unu el ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `Tro granda: atendi\u011Dis ke ${issue3.origin ?? "valoro"} havu ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "elementojn"}`;
-        return `Tro granda: atendi\u011Dis ke ${issue3.origin ?? "valoro"} havu ${adj}${issue3.maximum.toString()}`;
+          return `Tro granda: atendi\u011Dis ke ${issue4.origin ?? "valoro"} havu ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "elementojn"}`;
+        return `Tro granda: atendi\u011Dis ke ${issue4.origin ?? "valoro"} havu ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Tro malgranda: atendi\u011Dis ke ${issue3.origin} havu ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `Tro malgranda: atendi\u011Dis ke ${issue4.origin} havu ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `Tro malgranda: atendi\u011Dis ke ${issue3.origin} estu ${adj}${issue3.minimum.toString()}`;
+        return `Tro malgranda: atendi\u011Dis ke ${issue4.origin} estu ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `Nevalida karaktraro: devas komenci\u011Di per "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -14024,18 +14030,18 @@ var error11 = () => {
           return `Nevalida karaktraro: devas inkluzivi "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Nevalida karaktraro: devas kongrui kun la modelo ${_issue.pattern}`;
-        return `Nevalida ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Nevalida ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `Nevalida nombro: devas esti oblo de ${issue3.divisor}`;
+        return `Nevalida nombro: devas esti oblo de ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `Nekonata${issue3.keys.length > 1 ? "j" : ""} \u015Dlosilo${issue3.keys.length > 1 ? "j" : ""}: ${joinValues(issue3.keys, ", ")}`;
+        return `Nekonata${issue4.keys.length > 1 ? "j" : ""} \u015Dlosilo${issue4.keys.length > 1 ? "j" : ""}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Nevalida \u015Dlosilo en ${issue3.origin}`;
+        return `Nevalida \u015Dlosilo en ${issue4.origin}`;
       case "invalid_union":
         return "Nevalida enigo";
       case "invalid_element":
-        return `Nevalida valoro en ${issue3.origin}`;
+        return `Nevalida valoro en ${issue4.origin}`;
       default:
         return `Nevalida enigo`;
     }
@@ -14115,40 +14121,40 @@ var error12 = () => {
     unknown: "desconocido",
     any: "cualquiera"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Entrada inv\xE1lida: se esperaba instanceof ${issue3.expected}, recibido ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Entrada inv\xE1lida: se esperaba instanceof ${issue4.expected}, recibido ${received}`;
         }
         return `Entrada inv\xE1lida: se esperaba ${expected}, recibido ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Entrada inv\xE1lida: se esperaba ${stringifyPrimitive(issue3.values[0])}`;
-        return `Opci\xF3n inv\xE1lida: se esperaba una de ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Entrada inv\xE1lida: se esperaba ${stringifyPrimitive(issue4.values[0])}`;
+        return `Opci\xF3n inv\xE1lida: se esperaba una de ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
-        const origin2 = TypeDictionary[issue3.origin] ?? issue3.origin;
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
+        const origin2 = TypeDictionary[issue4.origin] ?? issue4.origin;
         if (sizing)
-          return `Demasiado grande: se esperaba que ${origin2 ?? "valor"} tuviera ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "elementos"}`;
-        return `Demasiado grande: se esperaba que ${origin2 ?? "valor"} fuera ${adj}${issue3.maximum.toString()}`;
+          return `Demasiado grande: se esperaba que ${origin2 ?? "valor"} tuviera ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "elementos"}`;
+        return `Demasiado grande: se esperaba que ${origin2 ?? "valor"} fuera ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
-        const origin2 = TypeDictionary[issue3.origin] ?? issue3.origin;
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
+        const origin2 = TypeDictionary[issue4.origin] ?? issue4.origin;
         if (sizing) {
-          return `Demasiado peque\xF1o: se esperaba que ${origin2} tuviera ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `Demasiado peque\xF1o: se esperaba que ${origin2} tuviera ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `Demasiado peque\xF1o: se esperaba que ${origin2} fuera ${adj}${issue3.minimum.toString()}`;
+        return `Demasiado peque\xF1o: se esperaba que ${origin2} fuera ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `Cadena inv\xE1lida: debe comenzar con "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -14157,18 +14163,18 @@ var error12 = () => {
           return `Cadena inv\xE1lida: debe incluir "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Cadena inv\xE1lida: debe coincidir con el patr\xF3n ${_issue.pattern}`;
-        return `Inv\xE1lido ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Inv\xE1lido ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `N\xFAmero inv\xE1lido: debe ser m\xFAltiplo de ${issue3.divisor}`;
+        return `N\xFAmero inv\xE1lido: debe ser m\xFAltiplo de ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `Llave${issue3.keys.length > 1 ? "s" : ""} desconocida${issue3.keys.length > 1 ? "s" : ""}: ${joinValues(issue3.keys, ", ")}`;
+        return `Llave${issue4.keys.length > 1 ? "s" : ""} desconocida${issue4.keys.length > 1 ? "s" : ""}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Llave inv\xE1lida en ${TypeDictionary[issue3.origin] ?? issue3.origin}`;
+        return `Llave inv\xE1lida en ${TypeDictionary[issue4.origin] ?? issue4.origin}`;
       case "invalid_union":
         return "Entrada inv\xE1lida";
       case "invalid_element":
-        return `Valor inv\xE1lido en ${TypeDictionary[issue3.origin] ?? issue3.origin}`;
+        return `Valor inv\xE1lido en ${TypeDictionary[issue4.origin] ?? issue4.origin}`;
       default:
         return `Entrada inv\xE1lida`;
     }
@@ -14226,40 +14232,40 @@ var error13 = () => {
     number: "\u0639\u062F\u062F",
     array: "\u0622\u0631\u0627\u06CC\u0647"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\u0648\u0631\u0648\u062F\u06CC \u0646\u0627\u0645\u0639\u062A\u0628\u0631: \u0645\u06CC\u200C\u0628\u0627\u06CC\u0633\u062A instanceof ${issue3.expected} \u0645\u06CC\u200C\u0628\u0648\u062F\u060C ${received} \u062F\u0631\u06CC\u0627\u0641\u062A \u0634\u062F`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\u0648\u0631\u0648\u062F\u06CC \u0646\u0627\u0645\u0639\u062A\u0628\u0631: \u0645\u06CC\u200C\u0628\u0627\u06CC\u0633\u062A instanceof ${issue4.expected} \u0645\u06CC\u200C\u0628\u0648\u062F\u060C ${received} \u062F\u0631\u06CC\u0627\u0641\u062A \u0634\u062F`;
         }
         return `\u0648\u0631\u0648\u062F\u06CC \u0646\u0627\u0645\u0639\u062A\u0628\u0631: \u0645\u06CC\u200C\u0628\u0627\u06CC\u0633\u062A ${expected} \u0645\u06CC\u200C\u0628\u0648\u062F\u060C ${received} \u062F\u0631\u06CC\u0627\u0641\u062A \u0634\u062F`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1) {
-          return `\u0648\u0631\u0648\u062F\u06CC \u0646\u0627\u0645\u0639\u062A\u0628\u0631: \u0645\u06CC\u200C\u0628\u0627\u06CC\u0633\u062A ${stringifyPrimitive(issue3.values[0])} \u0645\u06CC\u200C\u0628\u0648\u062F`;
+        if (issue4.values.length === 1) {
+          return `\u0648\u0631\u0648\u062F\u06CC \u0646\u0627\u0645\u0639\u062A\u0628\u0631: \u0645\u06CC\u200C\u0628\u0627\u06CC\u0633\u062A ${stringifyPrimitive(issue4.values[0])} \u0645\u06CC\u200C\u0628\u0648\u062F`;
         }
-        return `\u06AF\u0632\u06CC\u0646\u0647 \u0646\u0627\u0645\u0639\u062A\u0628\u0631: \u0645\u06CC\u200C\u0628\u0627\u06CC\u0633\u062A \u06CC\u06A9\u06CC \u0627\u0632 ${joinValues(issue3.values, "|")} \u0645\u06CC\u200C\u0628\u0648\u062F`;
+        return `\u06AF\u0632\u06CC\u0646\u0647 \u0646\u0627\u0645\u0639\u062A\u0628\u0631: \u0645\u06CC\u200C\u0628\u0627\u06CC\u0633\u062A \u06CC\u06A9\u06CC \u0627\u0632 ${joinValues(issue4.values, "|")} \u0645\u06CC\u200C\u0628\u0648\u062F`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `\u062E\u06CC\u0644\u06CC \u0628\u0632\u0631\u06AF: ${issue3.origin ?? "\u0645\u0642\u062F\u0627\u0631"} \u0628\u0627\u06CC\u062F ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "\u0639\u0646\u0635\u0631"} \u0628\u0627\u0634\u062F`;
+          return `\u062E\u06CC\u0644\u06CC \u0628\u0632\u0631\u06AF: ${issue4.origin ?? "\u0645\u0642\u062F\u0627\u0631"} \u0628\u0627\u06CC\u062F ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "\u0639\u0646\u0635\u0631"} \u0628\u0627\u0634\u062F`;
         }
-        return `\u062E\u06CC\u0644\u06CC \u0628\u0632\u0631\u06AF: ${issue3.origin ?? "\u0645\u0642\u062F\u0627\u0631"} \u0628\u0627\u06CC\u062F ${adj}${issue3.maximum.toString()} \u0628\u0627\u0634\u062F`;
+        return `\u062E\u06CC\u0644\u06CC \u0628\u0632\u0631\u06AF: ${issue4.origin ?? "\u0645\u0642\u062F\u0627\u0631"} \u0628\u0627\u06CC\u062F ${adj}${issue4.maximum.toString()} \u0628\u0627\u0634\u062F`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `\u062E\u06CC\u0644\u06CC \u06A9\u0648\u0686\u06A9: ${issue3.origin} \u0628\u0627\u06CC\u062F ${adj}${issue3.minimum.toString()} ${sizing.unit} \u0628\u0627\u0634\u062F`;
+          return `\u062E\u06CC\u0644\u06CC \u06A9\u0648\u0686\u06A9: ${issue4.origin} \u0628\u0627\u06CC\u062F ${adj}${issue4.minimum.toString()} ${sizing.unit} \u0628\u0627\u0634\u062F`;
         }
-        return `\u062E\u06CC\u0644\u06CC \u06A9\u0648\u0686\u06A9: ${issue3.origin} \u0628\u0627\u06CC\u062F ${adj}${issue3.minimum.toString()} \u0628\u0627\u0634\u062F`;
+        return `\u062E\u06CC\u0644\u06CC \u06A9\u0648\u0686\u06A9: ${issue4.origin} \u0628\u0627\u06CC\u062F ${adj}${issue4.minimum.toString()} \u0628\u0627\u0634\u062F`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `\u0631\u0634\u062A\u0647 \u0646\u0627\u0645\u0639\u062A\u0628\u0631: \u0628\u0627\u06CC\u062F \u0628\u0627 "${_issue.prefix}" \u0634\u0631\u0648\u0639 \u0634\u0648\u062F`;
         }
@@ -14272,18 +14278,18 @@ var error13 = () => {
         if (_issue.format === "regex") {
           return `\u0631\u0634\u062A\u0647 \u0646\u0627\u0645\u0639\u062A\u0628\u0631: \u0628\u0627\u06CC\u062F \u0628\u0627 \u0627\u0644\u06AF\u0648\u06CC ${_issue.pattern} \u0645\u0637\u0627\u0628\u0642\u062A \u062F\u0627\u0634\u062A\u0647 \u0628\u0627\u0634\u062F`;
         }
-        return `${FormatDictionary[_issue.format] ?? issue3.format} \u0646\u0627\u0645\u0639\u062A\u0628\u0631`;
+        return `${FormatDictionary[_issue.format] ?? issue4.format} \u0646\u0627\u0645\u0639\u062A\u0628\u0631`;
       }
       case "not_multiple_of":
-        return `\u0639\u062F\u062F \u0646\u0627\u0645\u0639\u062A\u0628\u0631: \u0628\u0627\u06CC\u062F \u0645\u0636\u0631\u0628 ${issue3.divisor} \u0628\u0627\u0634\u062F`;
+        return `\u0639\u062F\u062F \u0646\u0627\u0645\u0639\u062A\u0628\u0631: \u0628\u0627\u06CC\u062F \u0645\u0636\u0631\u0628 ${issue4.divisor} \u0628\u0627\u0634\u062F`;
       case "unrecognized_keys":
-        return `\u06A9\u0644\u06CC\u062F${issue3.keys.length > 1 ? "\u0647\u0627\u06CC" : ""} \u0646\u0627\u0634\u0646\u0627\u0633: ${joinValues(issue3.keys, ", ")}`;
+        return `\u06A9\u0644\u06CC\u062F${issue4.keys.length > 1 ? "\u0647\u0627\u06CC" : ""} \u0646\u0627\u0634\u0646\u0627\u0633: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `\u06A9\u0644\u06CC\u062F \u0646\u0627\u0634\u0646\u0627\u0633 \u062F\u0631 ${issue3.origin}`;
+        return `\u06A9\u0644\u06CC\u062F \u0646\u0627\u0634\u0646\u0627\u0633 \u062F\u0631 ${issue4.origin}`;
       case "invalid_union":
         return `\u0648\u0631\u0648\u062F\u06CC \u0646\u0627\u0645\u0639\u062A\u0628\u0631`;
       case "invalid_element":
-        return `\u0645\u0642\u062F\u0627\u0631 \u0646\u0627\u0645\u0639\u062A\u0628\u0631 \u062F\u0631 ${issue3.origin}`;
+        return `\u0645\u0642\u062F\u0627\u0631 \u0646\u0627\u0645\u0639\u062A\u0628\u0631 \u062F\u0631 ${issue4.origin}`;
       default:
         return `\u0648\u0631\u0648\u062F\u06CC \u0646\u0627\u0645\u0639\u062A\u0628\u0631`;
     }
@@ -14343,39 +14349,39 @@ var error14 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Virheellinen tyyppi: odotettiin instanceof ${issue3.expected}, oli ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Virheellinen tyyppi: odotettiin instanceof ${issue4.expected}, oli ${received}`;
         }
         return `Virheellinen tyyppi: odotettiin ${expected}, oli ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Virheellinen sy\xF6te: t\xE4ytyy olla ${stringifyPrimitive(issue3.values[0])}`;
-        return `Virheellinen valinta: t\xE4ytyy olla yksi seuraavista: ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Virheellinen sy\xF6te: t\xE4ytyy olla ${stringifyPrimitive(issue4.values[0])}`;
+        return `Virheellinen valinta: t\xE4ytyy olla yksi seuraavista: ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Liian suuri: ${sizing.subject} t\xE4ytyy olla ${adj}${issue3.maximum.toString()} ${sizing.unit}`.trim();
+          return `Liian suuri: ${sizing.subject} t\xE4ytyy olla ${adj}${issue4.maximum.toString()} ${sizing.unit}`.trim();
         }
-        return `Liian suuri: arvon t\xE4ytyy olla ${adj}${issue3.maximum.toString()}`;
+        return `Liian suuri: arvon t\xE4ytyy olla ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Liian pieni: ${sizing.subject} t\xE4ytyy olla ${adj}${issue3.minimum.toString()} ${sizing.unit}`.trim();
+          return `Liian pieni: ${sizing.subject} t\xE4ytyy olla ${adj}${issue4.minimum.toString()} ${sizing.unit}`.trim();
         }
-        return `Liian pieni: arvon t\xE4ytyy olla ${adj}${issue3.minimum.toString()}`;
+        return `Liian pieni: arvon t\xE4ytyy olla ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `Virheellinen sy\xF6te: t\xE4ytyy alkaa "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -14385,12 +14391,12 @@ var error14 = () => {
         if (_issue.format === "regex") {
           return `Virheellinen sy\xF6te: t\xE4ytyy vastata s\xE4\xE4nn\xF6llist\xE4 lauseketta ${_issue.pattern}`;
         }
-        return `Virheellinen ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Virheellinen ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `Virheellinen luku: t\xE4ytyy olla luvun ${issue3.divisor} monikerta`;
+        return `Virheellinen luku: t\xE4ytyy olla luvun ${issue4.divisor} monikerta`;
       case "unrecognized_keys":
-        return `${issue3.keys.length > 1 ? "Tuntemattomat avaimet" : "Tuntematon avain"}: ${joinValues(issue3.keys, ", ")}`;
+        return `${issue4.keys.length > 1 ? "Tuntemattomat avaimet" : "Tuntematon avain"}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
         return "Virheellinen avain tietueessa";
       case "invalid_union":
@@ -14472,37 +14478,37 @@ var error15 = () => {
     nan: "NaN",
     function: "fonction"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Entr\xE9e invalide : instanceof ${issue3.expected} attendu, ${received} re\xE7u`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Entr\xE9e invalide : instanceof ${issue4.expected} attendu, ${received} re\xE7u`;
         }
         return `Entr\xE9e invalide : ${expected} attendu, ${received} re\xE7u`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Entr\xE9e invalide : ${stringifyPrimitive(issue3.values[0])} attendu`;
-        return `Option invalide : une valeur parmi ${joinValues(issue3.values, "|")} attendue`;
+        if (issue4.values.length === 1)
+          return `Entr\xE9e invalide : ${stringifyPrimitive(issue4.values[0])} attendu`;
+        return `Option invalide : une valeur parmi ${joinValues(issue4.values, "|")} attendue`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `Trop grand : ${TypeDictionary[issue3.origin] ?? "valeur"} doit ${sizing.verb} ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "\xE9l\xE9ment(s)"}`;
-        return `Trop grand : ${TypeDictionary[issue3.origin] ?? "valeur"} doit \xEAtre ${adj}${issue3.maximum.toString()}`;
+          return `Trop grand : ${TypeDictionary[issue4.origin] ?? "valeur"} doit ${sizing.verb} ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "\xE9l\xE9ment(s)"}`;
+        return `Trop grand : ${TypeDictionary[issue4.origin] ?? "valeur"} doit \xEAtre ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `Trop petit : ${TypeDictionary[issue3.origin] ?? "valeur"} doit ${sizing.verb} ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
-        return `Trop petit : ${TypeDictionary[issue3.origin] ?? "valeur"} doit \xEAtre ${adj}${issue3.minimum.toString()}`;
+          return `Trop petit : ${TypeDictionary[issue4.origin] ?? "valeur"} doit ${sizing.verb} ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
+        return `Trop petit : ${TypeDictionary[issue4.origin] ?? "valeur"} doit \xEAtre ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `Cha\xEEne invalide : doit commencer par "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -14511,18 +14517,18 @@ var error15 = () => {
           return `Cha\xEEne invalide : doit inclure "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Cha\xEEne invalide : doit correspondre au mod\xE8le ${_issue.pattern}`;
-        return `${FormatDictionary[_issue.format] ?? issue3.format} invalide`;
+        return `${FormatDictionary[_issue.format] ?? issue4.format} invalide`;
       }
       case "not_multiple_of":
-        return `Nombre invalide : doit \xEAtre un multiple de ${issue3.divisor}`;
+        return `Nombre invalide : doit \xEAtre un multiple de ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `Cl\xE9${issue3.keys.length > 1 ? "s" : ""} non reconnue${issue3.keys.length > 1 ? "s" : ""} : ${joinValues(issue3.keys, ", ")}`;
+        return `Cl\xE9${issue4.keys.length > 1 ? "s" : ""} non reconnue${issue4.keys.length > 1 ? "s" : ""} : ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Cl\xE9 invalide dans ${issue3.origin}`;
+        return `Cl\xE9 invalide dans ${issue4.origin}`;
       case "invalid_union":
         return "Entr\xE9e invalide";
       case "invalid_element":
-        return `Valeur invalide dans ${issue3.origin}`;
+        return `Valeur invalide dans ${issue4.origin}`;
       default:
         return `Entr\xE9e invalide`;
     }
@@ -14578,38 +14584,38 @@ var error16 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Entr\xE9e invalide : attendu instanceof ${issue3.expected}, re\xE7u ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Entr\xE9e invalide : attendu instanceof ${issue4.expected}, re\xE7u ${received}`;
         }
         return `Entr\xE9e invalide : attendu ${expected}, re\xE7u ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Entr\xE9e invalide : attendu ${stringifyPrimitive(issue3.values[0])}`;
-        return `Option invalide : attendu l'une des valeurs suivantes ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Entr\xE9e invalide : attendu ${stringifyPrimitive(issue4.values[0])}`;
+        return `Option invalide : attendu l'une des valeurs suivantes ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "\u2264" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "\u2264" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `Trop grand : attendu que ${issue3.origin ?? "la valeur"} ait ${adj}${issue3.maximum.toString()} ${sizing.unit}`;
-        return `Trop grand : attendu que ${issue3.origin ?? "la valeur"} soit ${adj}${issue3.maximum.toString()}`;
+          return `Trop grand : attendu que ${issue4.origin ?? "la valeur"} ait ${adj}${issue4.maximum.toString()} ${sizing.unit}`;
+        return `Trop grand : attendu que ${issue4.origin ?? "la valeur"} soit ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? "\u2265" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "\u2265" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Trop petit : attendu que ${issue3.origin} ait ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `Trop petit : attendu que ${issue4.origin} ait ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `Trop petit : attendu que ${issue3.origin} soit ${adj}${issue3.minimum.toString()}`;
+        return `Trop petit : attendu que ${issue4.origin} soit ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `Cha\xEEne invalide : doit commencer par "${_issue.prefix}"`;
         }
@@ -14619,18 +14625,18 @@ var error16 = () => {
           return `Cha\xEEne invalide : doit inclure "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Cha\xEEne invalide : doit correspondre au motif ${_issue.pattern}`;
-        return `${FormatDictionary[_issue.format] ?? issue3.format} invalide`;
+        return `${FormatDictionary[_issue.format] ?? issue4.format} invalide`;
       }
       case "not_multiple_of":
-        return `Nombre invalide : doit \xEAtre un multiple de ${issue3.divisor}`;
+        return `Nombre invalide : doit \xEAtre un multiple de ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `Cl\xE9${issue3.keys.length > 1 ? "s" : ""} non reconnue${issue3.keys.length > 1 ? "s" : ""} : ${joinValues(issue3.keys, ", ")}`;
+        return `Cl\xE9${issue4.keys.length > 1 ? "s" : ""} non reconnue${issue4.keys.length > 1 ? "s" : ""} : ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Cl\xE9 invalide dans ${issue3.origin}`;
+        return `Cl\xE9 invalide dans ${issue4.origin}`;
       case "invalid_union":
         return "Entr\xE9e invalide";
       case "invalid_element":
-        return `Valeur invalide dans ${issue3.origin}`;
+        return `Valeur invalide dans ${issue4.origin}`;
       default:
         return `Entr\xE9e invalide`;
     }
@@ -14725,24 +14731,24 @@ var error17 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expectedKey = issue3.expected;
+        const expectedKey = issue4.expected;
         const expected = TypeDictionary[expectedKey ?? ""] ?? typeLabel(expectedKey);
-        const receivedType = parsedType(issue3.input);
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? TypeNames[receivedType]?.label ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\u05E7\u05DC\u05D8 \u05DC\u05D0 \u05EA\u05E7\u05D9\u05DF: \u05E6\u05E8\u05D9\u05DA \u05DC\u05D4\u05D9\u05D5\u05EA instanceof ${issue3.expected}, \u05D4\u05EA\u05E7\u05D1\u05DC ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\u05E7\u05DC\u05D8 \u05DC\u05D0 \u05EA\u05E7\u05D9\u05DF: \u05E6\u05E8\u05D9\u05DA \u05DC\u05D4\u05D9\u05D5\u05EA instanceof ${issue4.expected}, \u05D4\u05EA\u05E7\u05D1\u05DC ${received}`;
         }
         return `\u05E7\u05DC\u05D8 \u05DC\u05D0 \u05EA\u05E7\u05D9\u05DF: \u05E6\u05E8\u05D9\u05DA \u05DC\u05D4\u05D9\u05D5\u05EA ${expected}, \u05D4\u05EA\u05E7\u05D1\u05DC ${received}`;
       }
       case "invalid_value": {
-        if (issue3.values.length === 1) {
-          return `\u05E2\u05E8\u05DA \u05DC\u05D0 \u05EA\u05E7\u05D9\u05DF: \u05D4\u05E2\u05E8\u05DA \u05D7\u05D9\u05D9\u05D1 \u05DC\u05D4\u05D9\u05D5\u05EA ${stringifyPrimitive(issue3.values[0])}`;
+        if (issue4.values.length === 1) {
+          return `\u05E2\u05E8\u05DA \u05DC\u05D0 \u05EA\u05E7\u05D9\u05DF: \u05D4\u05E2\u05E8\u05DA \u05D7\u05D9\u05D9\u05D1 \u05DC\u05D4\u05D9\u05D5\u05EA ${stringifyPrimitive(issue4.values[0])}`;
         }
-        const stringified = issue3.values.map((v) => stringifyPrimitive(v));
-        if (issue3.values.length === 2) {
+        const stringified = issue4.values.map((v) => stringifyPrimitive(v));
+        if (issue4.values.length === 2) {
           return `\u05E2\u05E8\u05DA \u05DC\u05D0 \u05EA\u05E7\u05D9\u05DF: \u05D4\u05D0\u05E4\u05E9\u05E8\u05D5\u05D9\u05D5\u05EA \u05D4\u05DE\u05EA\u05D0\u05D9\u05DE\u05D5\u05EA \u05D4\u05DF ${stringified[0]} \u05D0\u05D5 ${stringified[1]}`;
         }
         const lastValue = stringified[stringified.length - 1];
@@ -14750,55 +14756,55 @@ var error17 = () => {
         return `\u05E2\u05E8\u05DA \u05DC\u05D0 \u05EA\u05E7\u05D9\u05DF: \u05D4\u05D0\u05E4\u05E9\u05E8\u05D5\u05D9\u05D5\u05EA \u05D4\u05DE\u05EA\u05D0\u05D9\u05DE\u05D5\u05EA \u05D4\u05DF ${restValues} \u05D0\u05D5 ${lastValue}`;
       }
       case "too_big": {
-        const sizing = getSizing(issue3.origin);
-        const subject = withDefinite(issue3.origin ?? "value");
-        if (issue3.origin === "string") {
-          return `${sizing?.longLabel ?? "\u05D0\u05E8\u05D5\u05DA"} \u05DE\u05D3\u05D9: ${subject} \u05E6\u05E8\u05D9\u05DB\u05D4 \u05DC\u05D4\u05DB\u05D9\u05DC ${issue3.maximum.toString()} ${sizing?.unit ?? ""} ${issue3.inclusive ? "\u05D0\u05D5 \u05E4\u05D7\u05D5\u05EA" : "\u05DC\u05DB\u05DC \u05D4\u05D9\u05D5\u05EA\u05E8"}`.trim();
+        const sizing = getSizing(issue4.origin);
+        const subject = withDefinite(issue4.origin ?? "value");
+        if (issue4.origin === "string") {
+          return `${sizing?.longLabel ?? "\u05D0\u05E8\u05D5\u05DA"} \u05DE\u05D3\u05D9: ${subject} \u05E6\u05E8\u05D9\u05DB\u05D4 \u05DC\u05D4\u05DB\u05D9\u05DC ${issue4.maximum.toString()} ${sizing?.unit ?? ""} ${issue4.inclusive ? "\u05D0\u05D5 \u05E4\u05D7\u05D5\u05EA" : "\u05DC\u05DB\u05DC \u05D4\u05D9\u05D5\u05EA\u05E8"}`.trim();
         }
-        if (issue3.origin === "number") {
-          const comparison = issue3.inclusive ? `\u05E7\u05D8\u05DF \u05D0\u05D5 \u05E9\u05D5\u05D5\u05D4 \u05DC-${issue3.maximum}` : `\u05E7\u05D8\u05DF \u05DE-${issue3.maximum}`;
+        if (issue4.origin === "number") {
+          const comparison = issue4.inclusive ? `\u05E7\u05D8\u05DF \u05D0\u05D5 \u05E9\u05D5\u05D5\u05D4 \u05DC-${issue4.maximum}` : `\u05E7\u05D8\u05DF \u05DE-${issue4.maximum}`;
           return `\u05D2\u05D3\u05D5\u05DC \u05DE\u05D3\u05D9: ${subject} \u05E6\u05E8\u05D9\u05DA \u05DC\u05D4\u05D9\u05D5\u05EA ${comparison}`;
         }
-        if (issue3.origin === "array" || issue3.origin === "set") {
-          const verb = issue3.origin === "set" ? "\u05E6\u05E8\u05D9\u05DB\u05D4" : "\u05E6\u05E8\u05D9\u05DA";
-          const comparison = issue3.inclusive ? `${issue3.maximum} ${sizing?.unit ?? ""} \u05D0\u05D5 \u05E4\u05D7\u05D5\u05EA` : `\u05E4\u05D7\u05D5\u05EA \u05DE-${issue3.maximum} ${sizing?.unit ?? ""}`;
+        if (issue4.origin === "array" || issue4.origin === "set") {
+          const verb = issue4.origin === "set" ? "\u05E6\u05E8\u05D9\u05DB\u05D4" : "\u05E6\u05E8\u05D9\u05DA";
+          const comparison = issue4.inclusive ? `${issue4.maximum} ${sizing?.unit ?? ""} \u05D0\u05D5 \u05E4\u05D7\u05D5\u05EA` : `\u05E4\u05D7\u05D5\u05EA \u05DE-${issue4.maximum} ${sizing?.unit ?? ""}`;
           return `\u05D2\u05D3\u05D5\u05DC \u05DE\u05D3\u05D9: ${subject} ${verb} \u05DC\u05D4\u05DB\u05D9\u05DC ${comparison}`.trim();
         }
-        const adj = issue3.inclusive ? "<=" : "<";
-        const be = verbFor(issue3.origin ?? "value");
+        const adj = issue4.inclusive ? "<=" : "<";
+        const be = verbFor(issue4.origin ?? "value");
         if (sizing?.unit) {
-          return `${sizing.longLabel} \u05DE\u05D3\u05D9: ${subject} ${be} ${adj}${issue3.maximum.toString()} ${sizing.unit}`;
+          return `${sizing.longLabel} \u05DE\u05D3\u05D9: ${subject} ${be} ${adj}${issue4.maximum.toString()} ${sizing.unit}`;
         }
-        return `${sizing?.longLabel ?? "\u05D2\u05D3\u05D5\u05DC"} \u05DE\u05D3\u05D9: ${subject} ${be} ${adj}${issue3.maximum.toString()}`;
+        return `${sizing?.longLabel ?? "\u05D2\u05D3\u05D5\u05DC"} \u05DE\u05D3\u05D9: ${subject} ${be} ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const sizing = getSizing(issue3.origin);
-        const subject = withDefinite(issue3.origin ?? "value");
-        if (issue3.origin === "string") {
-          return `${sizing?.shortLabel ?? "\u05E7\u05E6\u05E8"} \u05DE\u05D3\u05D9: ${subject} \u05E6\u05E8\u05D9\u05DB\u05D4 \u05DC\u05D4\u05DB\u05D9\u05DC ${issue3.minimum.toString()} ${sizing?.unit ?? ""} ${issue3.inclusive ? "\u05D0\u05D5 \u05D9\u05D5\u05EA\u05E8" : "\u05DC\u05E4\u05D7\u05D5\u05EA"}`.trim();
+        const sizing = getSizing(issue4.origin);
+        const subject = withDefinite(issue4.origin ?? "value");
+        if (issue4.origin === "string") {
+          return `${sizing?.shortLabel ?? "\u05E7\u05E6\u05E8"} \u05DE\u05D3\u05D9: ${subject} \u05E6\u05E8\u05D9\u05DB\u05D4 \u05DC\u05D4\u05DB\u05D9\u05DC ${issue4.minimum.toString()} ${sizing?.unit ?? ""} ${issue4.inclusive ? "\u05D0\u05D5 \u05D9\u05D5\u05EA\u05E8" : "\u05DC\u05E4\u05D7\u05D5\u05EA"}`.trim();
         }
-        if (issue3.origin === "number") {
-          const comparison = issue3.inclusive ? `\u05D2\u05D3\u05D5\u05DC \u05D0\u05D5 \u05E9\u05D5\u05D5\u05D4 \u05DC-${issue3.minimum}` : `\u05D2\u05D3\u05D5\u05DC \u05DE-${issue3.minimum}`;
+        if (issue4.origin === "number") {
+          const comparison = issue4.inclusive ? `\u05D2\u05D3\u05D5\u05DC \u05D0\u05D5 \u05E9\u05D5\u05D5\u05D4 \u05DC-${issue4.minimum}` : `\u05D2\u05D3\u05D5\u05DC \u05DE-${issue4.minimum}`;
           return `\u05E7\u05D8\u05DF \u05DE\u05D3\u05D9: ${subject} \u05E6\u05E8\u05D9\u05DA \u05DC\u05D4\u05D9\u05D5\u05EA ${comparison}`;
         }
-        if (issue3.origin === "array" || issue3.origin === "set") {
-          const verb = issue3.origin === "set" ? "\u05E6\u05E8\u05D9\u05DB\u05D4" : "\u05E6\u05E8\u05D9\u05DA";
-          if (issue3.minimum === 1 && issue3.inclusive) {
-            const singularPhrase = issue3.origin === "set" ? "\u05DC\u05E4\u05D7\u05D5\u05EA \u05E4\u05E8\u05D9\u05D8 \u05D0\u05D7\u05D3" : "\u05DC\u05E4\u05D7\u05D5\u05EA \u05E4\u05E8\u05D9\u05D8 \u05D0\u05D7\u05D3";
+        if (issue4.origin === "array" || issue4.origin === "set") {
+          const verb = issue4.origin === "set" ? "\u05E6\u05E8\u05D9\u05DB\u05D4" : "\u05E6\u05E8\u05D9\u05DA";
+          if (issue4.minimum === 1 && issue4.inclusive) {
+            const singularPhrase = issue4.origin === "set" ? "\u05DC\u05E4\u05D7\u05D5\u05EA \u05E4\u05E8\u05D9\u05D8 \u05D0\u05D7\u05D3" : "\u05DC\u05E4\u05D7\u05D5\u05EA \u05E4\u05E8\u05D9\u05D8 \u05D0\u05D7\u05D3";
             return `\u05E7\u05D8\u05DF \u05DE\u05D3\u05D9: ${subject} ${verb} \u05DC\u05D4\u05DB\u05D9\u05DC ${singularPhrase}`;
           }
-          const comparison = issue3.inclusive ? `${issue3.minimum} ${sizing?.unit ?? ""} \u05D0\u05D5 \u05D9\u05D5\u05EA\u05E8` : `\u05D9\u05D5\u05EA\u05E8 \u05DE-${issue3.minimum} ${sizing?.unit ?? ""}`;
+          const comparison = issue4.inclusive ? `${issue4.minimum} ${sizing?.unit ?? ""} \u05D0\u05D5 \u05D9\u05D5\u05EA\u05E8` : `\u05D9\u05D5\u05EA\u05E8 \u05DE-${issue4.minimum} ${sizing?.unit ?? ""}`;
           return `\u05E7\u05D8\u05DF \u05DE\u05D3\u05D9: ${subject} ${verb} \u05DC\u05D4\u05DB\u05D9\u05DC ${comparison}`.trim();
         }
-        const adj = issue3.inclusive ? ">=" : ">";
-        const be = verbFor(issue3.origin ?? "value");
+        const adj = issue4.inclusive ? ">=" : ">";
+        const be = verbFor(issue4.origin ?? "value");
         if (sizing?.unit) {
-          return `${sizing.shortLabel} \u05DE\u05D3\u05D9: ${subject} ${be} ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `${sizing.shortLabel} \u05DE\u05D3\u05D9: ${subject} ${be} ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `${sizing?.shortLabel ?? "\u05E7\u05D8\u05DF"} \u05DE\u05D3\u05D9: ${subject} ${be} ${adj}${issue3.minimum.toString()}`;
+        return `${sizing?.shortLabel ?? "\u05E7\u05D8\u05DF"} \u05DE\u05D3\u05D9: ${subject} ${be} ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `\u05D4\u05DE\u05D7\u05E8\u05D5\u05D6\u05EA \u05D7\u05D9\u05D9\u05D1\u05EA \u05DC\u05D4\u05EA\u05D7\u05D9\u05DC \u05D1 "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -14814,16 +14820,16 @@ var error17 = () => {
         return `${noun} \u05DC\u05D0 ${adjective}`;
       }
       case "not_multiple_of":
-        return `\u05DE\u05E1\u05E4\u05E8 \u05DC\u05D0 \u05EA\u05E7\u05D9\u05DF: \u05D7\u05D9\u05D9\u05D1 \u05DC\u05D4\u05D9\u05D5\u05EA \u05DE\u05DB\u05E4\u05DC\u05D4 \u05E9\u05DC ${issue3.divisor}`;
+        return `\u05DE\u05E1\u05E4\u05E8 \u05DC\u05D0 \u05EA\u05E7\u05D9\u05DF: \u05D7\u05D9\u05D9\u05D1 \u05DC\u05D4\u05D9\u05D5\u05EA \u05DE\u05DB\u05E4\u05DC\u05D4 \u05E9\u05DC ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `\u05DE\u05E4\u05EA\u05D7${issue3.keys.length > 1 ? "\u05D5\u05EA" : ""} \u05DC\u05D0 \u05DE\u05D6\u05D5\u05D4${issue3.keys.length > 1 ? "\u05D9\u05DD" : "\u05D4"}: ${joinValues(issue3.keys, ", ")}`;
+        return `\u05DE\u05E4\u05EA\u05D7${issue4.keys.length > 1 ? "\u05D5\u05EA" : ""} \u05DC\u05D0 \u05DE\u05D6\u05D5\u05D4${issue4.keys.length > 1 ? "\u05D9\u05DD" : "\u05D4"}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key": {
         return `\u05E9\u05D3\u05D4 \u05DC\u05D0 \u05EA\u05E7\u05D9\u05DF \u05D1\u05D0\u05D5\u05D1\u05D9\u05D9\u05E7\u05D8`;
       }
       case "invalid_union":
         return "\u05E7\u05DC\u05D8 \u05DC\u05D0 \u05EA\u05E7\u05D9\u05DF";
       case "invalid_element": {
-        const place = withDefinite(issue3.origin ?? "array");
+        const place = withDefinite(issue4.origin ?? "array");
         return `\u05E2\u05E8\u05DA \u05DC\u05D0 \u05EA\u05E7\u05D9\u05DF \u05D1${place}`;
       }
       default:
@@ -14895,40 +14901,40 @@ var error18 = () => {
     function: "funkcija",
     map: "mapa"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Neispravan unos: o\u010Dekuje se instanceof ${issue3.expected}, a primljeno je ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Neispravan unos: o\u010Dekuje se instanceof ${issue4.expected}, a primljeno je ${received}`;
         }
         return `Neispravan unos: o\u010Dekuje se ${expected}, a primljeno je ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Neispravna vrijednost: o\u010Dekivano ${stringifyPrimitive(issue3.values[0])}`;
-        return `Neispravna opcija: o\u010Dekivano jedno od ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Neispravna vrijednost: o\u010Dekivano ${stringifyPrimitive(issue4.values[0])}`;
+        return `Neispravna opcija: o\u010Dekivano jedno od ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
-        const origin2 = TypeDictionary[issue3.origin] ?? issue3.origin;
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
+        const origin2 = TypeDictionary[issue4.origin] ?? issue4.origin;
         if (sizing)
-          return `Preveliko: o\u010Dekivano da ${origin2 ?? "vrijednost"} ima ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "elemenata"}`;
-        return `Preveliko: o\u010Dekivano da ${origin2 ?? "vrijednost"} bude ${adj}${issue3.maximum.toString()}`;
+          return `Preveliko: o\u010Dekivano da ${origin2 ?? "vrijednost"} ima ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "elemenata"}`;
+        return `Preveliko: o\u010Dekivano da ${origin2 ?? "vrijednost"} bude ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
-        const origin2 = TypeDictionary[issue3.origin] ?? issue3.origin;
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
+        const origin2 = TypeDictionary[issue4.origin] ?? issue4.origin;
         if (sizing) {
-          return `Premalo: o\u010Dekivano da ${origin2} ima ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `Premalo: o\u010Dekivano da ${origin2} ima ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `Premalo: o\u010Dekivano da ${origin2} bude ${adj}${issue3.minimum.toString()}`;
+        return `Premalo: o\u010Dekivano da ${origin2} bude ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `Neispravan tekst: mora zapo\u010Dinjati s "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -14937,18 +14943,18 @@ var error18 = () => {
           return `Neispravan tekst: mora sadr\u017Eavati "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Neispravan tekst: mora odgovarati uzorku ${_issue.pattern}`;
-        return `Neispravna ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Neispravna ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `Neispravan broj: mora biti vi\u0161ekratnik od ${issue3.divisor}`;
+        return `Neispravan broj: mora biti vi\u0161ekratnik od ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `Neprepoznat${issue3.keys.length > 1 ? "i klju\u010Devi" : " klju\u010D"}: ${joinValues(issue3.keys, ", ")}`;
+        return `Neprepoznat${issue4.keys.length > 1 ? "i klju\u010Devi" : " klju\u010D"}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Neispravan klju\u010D u ${TypeDictionary[issue3.origin] ?? issue3.origin}`;
+        return `Neispravan klju\u010D u ${TypeDictionary[issue4.origin] ?? issue4.origin}`;
       case "invalid_union":
         return "Neispravan unos";
       case "invalid_element":
-        return `Neispravna vrijednost u ${TypeDictionary[issue3.origin] ?? issue3.origin}`;
+        return `Neispravna vrijednost u ${TypeDictionary[issue4.origin] ?? issue4.origin}`;
       default:
         return `Neispravan unos`;
     }
@@ -15006,38 +15012,38 @@ var error19 = () => {
     number: "sz\xE1m",
     array: "t\xF6mb"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\xC9rv\xE9nytelen bemenet: a v\xE1rt \xE9rt\xE9k instanceof ${issue3.expected}, a kapott \xE9rt\xE9k ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\xC9rv\xE9nytelen bemenet: a v\xE1rt \xE9rt\xE9k instanceof ${issue4.expected}, a kapott \xE9rt\xE9k ${received}`;
         }
         return `\xC9rv\xE9nytelen bemenet: a v\xE1rt \xE9rt\xE9k ${expected}, a kapott \xE9rt\xE9k ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `\xC9rv\xE9nytelen bemenet: a v\xE1rt \xE9rt\xE9k ${stringifyPrimitive(issue3.values[0])}`;
-        return `\xC9rv\xE9nytelen opci\xF3: valamelyik \xE9rt\xE9k v\xE1rt ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `\xC9rv\xE9nytelen bemenet: a v\xE1rt \xE9rt\xE9k ${stringifyPrimitive(issue4.values[0])}`;
+        return `\xC9rv\xE9nytelen opci\xF3: valamelyik \xE9rt\xE9k v\xE1rt ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `T\xFAl nagy: ${issue3.origin ?? "\xE9rt\xE9k"} m\xE9rete t\xFAl nagy ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "elem"}`;
-        return `T\xFAl nagy: a bemeneti \xE9rt\xE9k ${issue3.origin ?? "\xE9rt\xE9k"} t\xFAl nagy: ${adj}${issue3.maximum.toString()}`;
+          return `T\xFAl nagy: ${issue4.origin ?? "\xE9rt\xE9k"} m\xE9rete t\xFAl nagy ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "elem"}`;
+        return `T\xFAl nagy: a bemeneti \xE9rt\xE9k ${issue4.origin ?? "\xE9rt\xE9k"} t\xFAl nagy: ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `T\xFAl kicsi: a bemeneti \xE9rt\xE9k ${issue3.origin} m\xE9rete t\xFAl kicsi ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `T\xFAl kicsi: a bemeneti \xE9rt\xE9k ${issue4.origin} m\xE9rete t\xFAl kicsi ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `T\xFAl kicsi: a bemeneti \xE9rt\xE9k ${issue3.origin} t\xFAl kicsi ${adj}${issue3.minimum.toString()}`;
+        return `T\xFAl kicsi: a bemeneti \xE9rt\xE9k ${issue4.origin} t\xFAl kicsi ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `\xC9rv\xE9nytelen string: "${_issue.prefix}" \xE9rt\xE9kkel kell kezd\u0151dnie`;
         if (_issue.format === "ends_with")
@@ -15046,18 +15052,18 @@ var error19 = () => {
           return `\xC9rv\xE9nytelen string: "${_issue.includes}" \xE9rt\xE9ket kell tartalmaznia`;
         if (_issue.format === "regex")
           return `\xC9rv\xE9nytelen string: ${_issue.pattern} mint\xE1nak kell megfelelnie`;
-        return `\xC9rv\xE9nytelen ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `\xC9rv\xE9nytelen ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `\xC9rv\xE9nytelen sz\xE1m: ${issue3.divisor} t\xF6bbsz\xF6r\xF6s\xE9nek kell lennie`;
+        return `\xC9rv\xE9nytelen sz\xE1m: ${issue4.divisor} t\xF6bbsz\xF6r\xF6s\xE9nek kell lennie`;
       case "unrecognized_keys":
-        return `Ismeretlen kulcs${issue3.keys.length > 1 ? "s" : ""}: ${joinValues(issue3.keys, ", ")}`;
+        return `Ismeretlen kulcs${issue4.keys.length > 1 ? "s" : ""}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `\xC9rv\xE9nytelen kulcs ${issue3.origin}`;
+        return `\xC9rv\xE9nytelen kulcs ${issue4.origin}`;
       case "invalid_union":
         return "\xC9rv\xE9nytelen bemenet";
       case "invalid_element":
-        return `\xC9rv\xE9nytelen \xE9rt\xE9k: ${issue3.origin}`;
+        return `\xC9rv\xE9nytelen \xE9rt\xE9k: ${issue4.origin}`;
       default:
         return `\xC9rv\xE9nytelen bemenet`;
     }
@@ -15149,43 +15155,43 @@ var error20 = () => {
     number: "\u0569\u056B\u057E",
     array: "\u0566\u0561\u0576\u0563\u057E\u0561\u056E"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\u054D\u056D\u0561\u056C \u0574\u0578\u0582\u057F\u0584\u0561\u0563\u0580\u0578\u0582\u0574\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567\u0580 instanceof ${issue3.expected}, \u057D\u057F\u0561\u0581\u057E\u0565\u056C \u0567 ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\u054D\u056D\u0561\u056C \u0574\u0578\u0582\u057F\u0584\u0561\u0563\u0580\u0578\u0582\u0574\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567\u0580 instanceof ${issue4.expected}, \u057D\u057F\u0561\u0581\u057E\u0565\u056C \u0567 ${received}`;
         }
         return `\u054D\u056D\u0561\u056C \u0574\u0578\u0582\u057F\u0584\u0561\u0563\u0580\u0578\u0582\u0574\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567\u0580 ${expected}, \u057D\u057F\u0561\u0581\u057E\u0565\u056C \u0567 ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `\u054D\u056D\u0561\u056C \u0574\u0578\u0582\u057F\u0584\u0561\u0563\u0580\u0578\u0582\u0574\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567\u0580 ${stringifyPrimitive(issue3.values[1])}`;
-        return `\u054D\u056D\u0561\u056C \u057F\u0561\u0580\u0562\u0565\u0580\u0561\u056F\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567\u0580 \u0570\u0565\u057F\u0587\u0575\u0561\u056C\u0576\u0565\u0580\u056B\u0581 \u0574\u0565\u056F\u0568\u055D ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `\u054D\u056D\u0561\u056C \u0574\u0578\u0582\u057F\u0584\u0561\u0563\u0580\u0578\u0582\u0574\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567\u0580 ${stringifyPrimitive(issue4.values[1])}`;
+        return `\u054D\u056D\u0561\u056C \u057F\u0561\u0580\u0562\u0565\u0580\u0561\u056F\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567\u0580 \u0570\u0565\u057F\u0587\u0575\u0561\u056C\u0576\u0565\u0580\u056B\u0581 \u0574\u0565\u056F\u0568\u055D ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          const maxValue = Number(issue3.maximum);
+          const maxValue = Number(issue4.maximum);
           const unit = getArmenianPlural(maxValue, sizing.unit.one, sizing.unit.many);
-          return `\u0549\u0561\u0583\u0561\u0566\u0561\u0576\u0581 \u0574\u0565\u056E \u0561\u0580\u056A\u0565\u0584\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567, \u0578\u0580 ${withDefiniteArticle(issue3.origin ?? "\u0561\u0580\u056A\u0565\u0584")} \u056F\u0578\u0582\u0576\u0565\u0576\u0561 ${adj}${issue3.maximum.toString()} ${unit}`;
+          return `\u0549\u0561\u0583\u0561\u0566\u0561\u0576\u0581 \u0574\u0565\u056E \u0561\u0580\u056A\u0565\u0584\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567, \u0578\u0580 ${withDefiniteArticle(issue4.origin ?? "\u0561\u0580\u056A\u0565\u0584")} \u056F\u0578\u0582\u0576\u0565\u0576\u0561 ${adj}${issue4.maximum.toString()} ${unit}`;
         }
-        return `\u0549\u0561\u0583\u0561\u0566\u0561\u0576\u0581 \u0574\u0565\u056E \u0561\u0580\u056A\u0565\u0584\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567, \u0578\u0580 ${withDefiniteArticle(issue3.origin ?? "\u0561\u0580\u056A\u0565\u0584")} \u056C\u056B\u0576\u056B ${adj}${issue3.maximum.toString()}`;
+        return `\u0549\u0561\u0583\u0561\u0566\u0561\u0576\u0581 \u0574\u0565\u056E \u0561\u0580\u056A\u0565\u0584\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567, \u0578\u0580 ${withDefiniteArticle(issue4.origin ?? "\u0561\u0580\u056A\u0565\u0584")} \u056C\u056B\u0576\u056B ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          const minValue = Number(issue3.minimum);
+          const minValue = Number(issue4.minimum);
           const unit = getArmenianPlural(minValue, sizing.unit.one, sizing.unit.many);
-          return `\u0549\u0561\u0583\u0561\u0566\u0561\u0576\u0581 \u0583\u0578\u0584\u0580 \u0561\u0580\u056A\u0565\u0584\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567, \u0578\u0580 ${withDefiniteArticle(issue3.origin)} \u056F\u0578\u0582\u0576\u0565\u0576\u0561 ${adj}${issue3.minimum.toString()} ${unit}`;
+          return `\u0549\u0561\u0583\u0561\u0566\u0561\u0576\u0581 \u0583\u0578\u0584\u0580 \u0561\u0580\u056A\u0565\u0584\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567, \u0578\u0580 ${withDefiniteArticle(issue4.origin)} \u056F\u0578\u0582\u0576\u0565\u0576\u0561 ${adj}${issue4.minimum.toString()} ${unit}`;
         }
-        return `\u0549\u0561\u0583\u0561\u0566\u0561\u0576\u0581 \u0583\u0578\u0584\u0580 \u0561\u0580\u056A\u0565\u0584\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567, \u0578\u0580 ${withDefiniteArticle(issue3.origin)} \u056C\u056B\u0576\u056B ${adj}${issue3.minimum.toString()}`;
+        return `\u0549\u0561\u0583\u0561\u0566\u0561\u0576\u0581 \u0583\u0578\u0584\u0580 \u0561\u0580\u056A\u0565\u0584\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567, \u0578\u0580 ${withDefiniteArticle(issue4.origin)} \u056C\u056B\u0576\u056B ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `\u054D\u056D\u0561\u056C \u057F\u0578\u0572\u2024 \u057A\u0565\u057F\u0584 \u0567 \u057D\u056F\u057D\u057E\u056B "${_issue.prefix}"-\u0578\u057E`;
         if (_issue.format === "ends_with")
@@ -15194,18 +15200,18 @@ var error20 = () => {
           return `\u054D\u056D\u0561\u056C \u057F\u0578\u0572\u2024 \u057A\u0565\u057F\u0584 \u0567 \u057A\u0561\u0580\u0578\u0582\u0576\u0561\u056F\u056B "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `\u054D\u056D\u0561\u056C \u057F\u0578\u0572\u2024 \u057A\u0565\u057F\u0584 \u0567 \u0570\u0561\u0574\u0561\u057A\u0561\u057F\u0561\u057D\u056D\u0561\u0576\u056B ${_issue.pattern} \u0571\u0587\u0561\u0579\u0561\u0583\u056B\u0576`;
-        return `\u054D\u056D\u0561\u056C ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `\u054D\u056D\u0561\u056C ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `\u054D\u056D\u0561\u056C \u0569\u056B\u057E\u2024 \u057A\u0565\u057F\u0584 \u0567 \u0562\u0561\u0566\u0574\u0561\u057A\u0561\u057F\u056B\u056F \u056C\u056B\u0576\u056B ${issue3.divisor}-\u056B`;
+        return `\u054D\u056D\u0561\u056C \u0569\u056B\u057E\u2024 \u057A\u0565\u057F\u0584 \u0567 \u0562\u0561\u0566\u0574\u0561\u057A\u0561\u057F\u056B\u056F \u056C\u056B\u0576\u056B ${issue4.divisor}-\u056B`;
       case "unrecognized_keys":
-        return `\u0549\u0573\u0561\u0576\u0561\u0579\u057E\u0561\u056E \u0562\u0561\u0576\u0561\u056C\u056B${issue3.keys.length > 1 ? "\u0576\u0565\u0580" : ""}. ${joinValues(issue3.keys, ", ")}`;
+        return `\u0549\u0573\u0561\u0576\u0561\u0579\u057E\u0561\u056E \u0562\u0561\u0576\u0561\u056C\u056B${issue4.keys.length > 1 ? "\u0576\u0565\u0580" : ""}. ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `\u054D\u056D\u0561\u056C \u0562\u0561\u0576\u0561\u056C\u056B ${withDefiniteArticle(issue3.origin)}-\u0578\u0582\u0574`;
+        return `\u054D\u056D\u0561\u056C \u0562\u0561\u0576\u0561\u056C\u056B ${withDefiniteArticle(issue4.origin)}-\u0578\u0582\u0574`;
       case "invalid_union":
         return "\u054D\u056D\u0561\u056C \u0574\u0578\u0582\u057F\u0584\u0561\u0563\u0580\u0578\u0582\u0574";
       case "invalid_element":
-        return `\u054D\u056D\u0561\u056C \u0561\u0580\u056A\u0565\u0584 ${withDefiniteArticle(issue3.origin)}-\u0578\u0582\u0574`;
+        return `\u054D\u056D\u0561\u056C \u0561\u0580\u056A\u0565\u0584 ${withDefiniteArticle(issue4.origin)}-\u0578\u0582\u0574`;
       default:
         return `\u054D\u056D\u0561\u056C \u0574\u0578\u0582\u057F\u0584\u0561\u0563\u0580\u0578\u0582\u0574`;
     }
@@ -15261,38 +15267,38 @@ var error21 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Input tidak valid: diharapkan instanceof ${issue3.expected}, diterima ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Input tidak valid: diharapkan instanceof ${issue4.expected}, diterima ${received}`;
         }
         return `Input tidak valid: diharapkan ${expected}, diterima ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Input tidak valid: diharapkan ${stringifyPrimitive(issue3.values[0])}`;
-        return `Pilihan tidak valid: diharapkan salah satu dari ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Input tidak valid: diharapkan ${stringifyPrimitive(issue4.values[0])}`;
+        return `Pilihan tidak valid: diharapkan salah satu dari ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `Terlalu besar: diharapkan ${issue3.origin ?? "value"} memiliki ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "elemen"}`;
-        return `Terlalu besar: diharapkan ${issue3.origin ?? "value"} menjadi ${adj}${issue3.maximum.toString()}`;
+          return `Terlalu besar: diharapkan ${issue4.origin ?? "value"} memiliki ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "elemen"}`;
+        return `Terlalu besar: diharapkan ${issue4.origin ?? "value"} menjadi ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Terlalu kecil: diharapkan ${issue3.origin} memiliki ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `Terlalu kecil: diharapkan ${issue4.origin} memiliki ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `Terlalu kecil: diharapkan ${issue3.origin} menjadi ${adj}${issue3.minimum.toString()}`;
+        return `Terlalu kecil: diharapkan ${issue4.origin} menjadi ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `String tidak valid: harus dimulai dengan "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -15301,18 +15307,18 @@ var error21 = () => {
           return `String tidak valid: harus menyertakan "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `String tidak valid: harus sesuai pola ${_issue.pattern}`;
-        return `${FormatDictionary[_issue.format] ?? issue3.format} tidak valid`;
+        return `${FormatDictionary[_issue.format] ?? issue4.format} tidak valid`;
       }
       case "not_multiple_of":
-        return `Angka tidak valid: harus kelipatan dari ${issue3.divisor}`;
+        return `Angka tidak valid: harus kelipatan dari ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `Kunci tidak dikenali ${issue3.keys.length > 1 ? "s" : ""}: ${joinValues(issue3.keys, ", ")}`;
+        return `Kunci tidak dikenali ${issue4.keys.length > 1 ? "s" : ""}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Kunci tidak valid di ${issue3.origin}`;
+        return `Kunci tidak valid di ${issue4.origin}`;
       case "invalid_union":
         return "Input tidak valid";
       case "invalid_element":
-        return `Nilai tidak valid di ${issue3.origin}`;
+        return `Nilai tidak valid di ${issue4.origin}`;
       default:
         return `Input tidak valid`;
     }
@@ -15370,38 +15376,38 @@ var error22 = () => {
     number: "n\xFAmer",
     array: "fylki"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Rangt gildi: \xDE\xFA sl\xF3st inn ${received} \xFEar sem \xE1 a\xF0 vera instanceof ${issue3.expected}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Rangt gildi: \xDE\xFA sl\xF3st inn ${received} \xFEar sem \xE1 a\xF0 vera instanceof ${issue4.expected}`;
         }
         return `Rangt gildi: \xDE\xFA sl\xF3st inn ${received} \xFEar sem \xE1 a\xF0 vera ${expected}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Rangt gildi: gert r\xE1\xF0 fyrir ${stringifyPrimitive(issue3.values[0])}`;
-        return `\xD3gilt val: m\xE1 vera eitt af eftirfarandi ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Rangt gildi: gert r\xE1\xF0 fyrir ${stringifyPrimitive(issue4.values[0])}`;
+        return `\xD3gilt val: m\xE1 vera eitt af eftirfarandi ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `Of st\xF3rt: gert er r\xE1\xF0 fyrir a\xF0 ${issue3.origin ?? "gildi"} hafi ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "hluti"}`;
-        return `Of st\xF3rt: gert er r\xE1\xF0 fyrir a\xF0 ${issue3.origin ?? "gildi"} s\xE9 ${adj}${issue3.maximum.toString()}`;
+          return `Of st\xF3rt: gert er r\xE1\xF0 fyrir a\xF0 ${issue4.origin ?? "gildi"} hafi ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "hluti"}`;
+        return `Of st\xF3rt: gert er r\xE1\xF0 fyrir a\xF0 ${issue4.origin ?? "gildi"} s\xE9 ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Of l\xEDti\xF0: gert er r\xE1\xF0 fyrir a\xF0 ${issue3.origin} hafi ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `Of l\xEDti\xF0: gert er r\xE1\xF0 fyrir a\xF0 ${issue4.origin} hafi ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `Of l\xEDti\xF0: gert er r\xE1\xF0 fyrir a\xF0 ${issue3.origin} s\xE9 ${adj}${issue3.minimum.toString()}`;
+        return `Of l\xEDti\xF0: gert er r\xE1\xF0 fyrir a\xF0 ${issue4.origin} s\xE9 ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `\xD3gildur strengur: ver\xF0ur a\xF0 byrja \xE1 "${_issue.prefix}"`;
         }
@@ -15411,18 +15417,18 @@ var error22 = () => {
           return `\xD3gildur strengur: ver\xF0ur a\xF0 innihalda "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `\xD3gildur strengur: ver\xF0ur a\xF0 fylgja mynstri ${_issue.pattern}`;
-        return `Rangt ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Rangt ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `R\xF6ng tala: ver\xF0ur a\xF0 vera margfeldi af ${issue3.divisor}`;
+        return `R\xF6ng tala: ver\xF0ur a\xF0 vera margfeldi af ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `\xD3\xFEekkt ${issue3.keys.length > 1 ? "ir lyklar" : "ur lykill"}: ${joinValues(issue3.keys, ", ")}`;
+        return `\xD3\xFEekkt ${issue4.keys.length > 1 ? "ir lyklar" : "ur lykill"}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Rangur lykill \xED ${issue3.origin}`;
+        return `Rangur lykill \xED ${issue4.origin}`;
       case "invalid_union":
         return "Rangt gildi";
       case "invalid_element":
-        return `Rangt gildi \xED ${issue3.origin}`;
+        return `Rangt gildi \xED ${issue4.origin}`;
       default:
         return `Rangt gildi`;
     }
@@ -15480,38 +15486,38 @@ var error23 = () => {
     number: "numero",
     array: "vettore"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Input non valido: atteso instanceof ${issue3.expected}, ricevuto ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Input non valido: atteso instanceof ${issue4.expected}, ricevuto ${received}`;
         }
         return `Input non valido: atteso ${expected}, ricevuto ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Input non valido: atteso ${stringifyPrimitive(issue3.values[0])}`;
-        return `Opzione non valida: atteso uno tra ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Input non valido: atteso ${stringifyPrimitive(issue4.values[0])}`;
+        return `Opzione non valida: atteso uno tra ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `Troppo grande: ${issue3.origin ?? "valore"} deve avere ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "elementi"}`;
-        return `Troppo grande: ${issue3.origin ?? "valore"} deve essere ${adj}${issue3.maximum.toString()}`;
+          return `Troppo grande: ${issue4.origin ?? "valore"} deve avere ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "elementi"}`;
+        return `Troppo grande: ${issue4.origin ?? "valore"} deve essere ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Troppo piccolo: ${issue3.origin} deve avere ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `Troppo piccolo: ${issue4.origin} deve avere ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `Troppo piccolo: ${issue3.origin} deve essere ${adj}${issue3.minimum.toString()}`;
+        return `Troppo piccolo: ${issue4.origin} deve essere ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `Stringa non valida: deve iniziare con "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -15520,18 +15526,18 @@ var error23 = () => {
           return `Stringa non valida: deve includere "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Stringa non valida: deve corrispondere al pattern ${_issue.pattern}`;
-        return `Input non valido: ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Input non valido: ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `Numero non valido: deve essere un multiplo di ${issue3.divisor}`;
+        return `Numero non valido: deve essere un multiplo di ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `Chiav${issue3.keys.length > 1 ? "i" : "e"} non riconosciut${issue3.keys.length > 1 ? "e" : "a"}: ${joinValues(issue3.keys, ", ")}`;
+        return `Chiav${issue4.keys.length > 1 ? "i" : "e"} non riconosciut${issue4.keys.length > 1 ? "e" : "a"}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Chiave non valida in ${issue3.origin}`;
+        return `Chiave non valida in ${issue4.origin}`;
       case "invalid_union":
         return "Input non valido";
       case "invalid_element":
-        return `Valore non valido in ${issue3.origin}`;
+        return `Valore non valido in ${issue4.origin}`;
       default:
         return `Input non valido`;
     }
@@ -15589,37 +15595,37 @@ var error24 = () => {
     number: "\u6570\u5024",
     array: "\u914D\u5217"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\u7121\u52B9\u306A\u5165\u529B: instanceof ${issue3.expected}\u304C\u671F\u5F85\u3055\u308C\u307E\u3057\u305F\u304C\u3001${received}\u304C\u5165\u529B\u3055\u308C\u307E\u3057\u305F`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\u7121\u52B9\u306A\u5165\u529B: instanceof ${issue4.expected}\u304C\u671F\u5F85\u3055\u308C\u307E\u3057\u305F\u304C\u3001${received}\u304C\u5165\u529B\u3055\u308C\u307E\u3057\u305F`;
         }
         return `\u7121\u52B9\u306A\u5165\u529B: ${expected}\u304C\u671F\u5F85\u3055\u308C\u307E\u3057\u305F\u304C\u3001${received}\u304C\u5165\u529B\u3055\u308C\u307E\u3057\u305F`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `\u7121\u52B9\u306A\u5165\u529B: ${stringifyPrimitive(issue3.values[0])}\u304C\u671F\u5F85\u3055\u308C\u307E\u3057\u305F`;
-        return `\u7121\u52B9\u306A\u9078\u629E: ${joinValues(issue3.values, "\u3001")}\u306E\u3044\u305A\u308C\u304B\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059`;
+        if (issue4.values.length === 1)
+          return `\u7121\u52B9\u306A\u5165\u529B: ${stringifyPrimitive(issue4.values[0])}\u304C\u671F\u5F85\u3055\u308C\u307E\u3057\u305F`;
+        return `\u7121\u52B9\u306A\u9078\u629E: ${joinValues(issue4.values, "\u3001")}\u306E\u3044\u305A\u308C\u304B\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059`;
       case "too_big": {
-        const adj = issue3.inclusive ? "\u4EE5\u4E0B\u3067\u3042\u308B" : "\u3088\u308A\u5C0F\u3055\u3044";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "\u4EE5\u4E0B\u3067\u3042\u308B" : "\u3088\u308A\u5C0F\u3055\u3044";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `\u5927\u304D\u3059\u304E\u308B\u5024: ${issue3.origin ?? "\u5024"}\u306F${issue3.maximum.toString()}${sizing.unit ?? "\u8981\u7D20"}${adj}\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059`;
-        return `\u5927\u304D\u3059\u304E\u308B\u5024: ${issue3.origin ?? "\u5024"}\u306F${issue3.maximum.toString()}${adj}\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059`;
+          return `\u5927\u304D\u3059\u304E\u308B\u5024: ${issue4.origin ?? "\u5024"}\u306F${issue4.maximum.toString()}${sizing.unit ?? "\u8981\u7D20"}${adj}\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059`;
+        return `\u5927\u304D\u3059\u304E\u308B\u5024: ${issue4.origin ?? "\u5024"}\u306F${issue4.maximum.toString()}${adj}\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? "\u4EE5\u4E0A\u3067\u3042\u308B" : "\u3088\u308A\u5927\u304D\u3044";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "\u4EE5\u4E0A\u3067\u3042\u308B" : "\u3088\u308A\u5927\u304D\u3044";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `\u5C0F\u3055\u3059\u304E\u308B\u5024: ${issue3.origin}\u306F${issue3.minimum.toString()}${sizing.unit}${adj}\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059`;
-        return `\u5C0F\u3055\u3059\u304E\u308B\u5024: ${issue3.origin}\u306F${issue3.minimum.toString()}${adj}\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059`;
+          return `\u5C0F\u3055\u3059\u304E\u308B\u5024: ${issue4.origin}\u306F${issue4.minimum.toString()}${sizing.unit}${adj}\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059`;
+        return `\u5C0F\u3055\u3059\u304E\u308B\u5024: ${issue4.origin}\u306F${issue4.minimum.toString()}${adj}\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `\u7121\u52B9\u306A\u6587\u5B57\u5217: "${_issue.prefix}"\u3067\u59CB\u307E\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059`;
         if (_issue.format === "ends_with")
@@ -15628,18 +15634,18 @@ var error24 = () => {
           return `\u7121\u52B9\u306A\u6587\u5B57\u5217: "${_issue.includes}"\u3092\u542B\u3080\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059`;
         if (_issue.format === "regex")
           return `\u7121\u52B9\u306A\u6587\u5B57\u5217: \u30D1\u30BF\u30FC\u30F3${_issue.pattern}\u306B\u4E00\u81F4\u3059\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059`;
-        return `\u7121\u52B9\u306A${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `\u7121\u52B9\u306A${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `\u7121\u52B9\u306A\u6570\u5024: ${issue3.divisor}\u306E\u500D\u6570\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059`;
+        return `\u7121\u52B9\u306A\u6570\u5024: ${issue4.divisor}\u306E\u500D\u6570\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059`;
       case "unrecognized_keys":
-        return `\u8A8D\u8B58\u3055\u308C\u3066\u3044\u306A\u3044\u30AD\u30FC${issue3.keys.length > 1 ? "\u7FA4" : ""}: ${joinValues(issue3.keys, "\u3001")}`;
+        return `\u8A8D\u8B58\u3055\u308C\u3066\u3044\u306A\u3044\u30AD\u30FC${issue4.keys.length > 1 ? "\u7FA4" : ""}: ${joinValues(issue4.keys, "\u3001")}`;
       case "invalid_key":
-        return `${issue3.origin}\u5185\u306E\u7121\u52B9\u306A\u30AD\u30FC`;
+        return `${issue4.origin}\u5185\u306E\u7121\u52B9\u306A\u30AD\u30FC`;
       case "invalid_union":
         return "\u7121\u52B9\u306A\u5165\u529B";
       case "invalid_element":
-        return `${issue3.origin}\u5185\u306E\u7121\u52B9\u306A\u5024`;
+        return `${issue4.origin}\u5185\u306E\u7121\u52B9\u306A\u5024`;
       default:
         return `\u7121\u52B9\u306A\u5165\u529B`;
     }
@@ -15700,38 +15706,38 @@ var error25 = () => {
     function: "\u10E4\u10E3\u10DC\u10E5\u10EA\u10D8\u10D0",
     array: "\u10DB\u10D0\u10E1\u10D8\u10D5\u10D8"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 \u10E8\u10D4\u10E7\u10D5\u10D0\u10DC\u10D0: \u10DB\u10DD\u10E1\u10D0\u10DA\u10DD\u10D3\u10DC\u10D4\u10DA\u10D8 instanceof ${issue3.expected}, \u10DB\u10D8\u10E6\u10D4\u10D1\u10E3\u10DA\u10D8 ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 \u10E8\u10D4\u10E7\u10D5\u10D0\u10DC\u10D0: \u10DB\u10DD\u10E1\u10D0\u10DA\u10DD\u10D3\u10DC\u10D4\u10DA\u10D8 instanceof ${issue4.expected}, \u10DB\u10D8\u10E6\u10D4\u10D1\u10E3\u10DA\u10D8 ${received}`;
         }
         return `\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 \u10E8\u10D4\u10E7\u10D5\u10D0\u10DC\u10D0: \u10DB\u10DD\u10E1\u10D0\u10DA\u10DD\u10D3\u10DC\u10D4\u10DA\u10D8 ${expected}, \u10DB\u10D8\u10E6\u10D4\u10D1\u10E3\u10DA\u10D8 ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 \u10E8\u10D4\u10E7\u10D5\u10D0\u10DC\u10D0: \u10DB\u10DD\u10E1\u10D0\u10DA\u10DD\u10D3\u10DC\u10D4\u10DA\u10D8 ${stringifyPrimitive(issue3.values[0])}`;
-        return `\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 \u10D5\u10D0\u10E0\u10D8\u10D0\u10DC\u10E2\u10D8: \u10DB\u10DD\u10E1\u10D0\u10DA\u10DD\u10D3\u10DC\u10D4\u10DA\u10D8\u10D0 \u10D4\u10E0\u10D7-\u10D4\u10E0\u10D7\u10D8 ${joinValues(issue3.values, "|")}-\u10D3\u10D0\u10DC`;
+        if (issue4.values.length === 1)
+          return `\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 \u10E8\u10D4\u10E7\u10D5\u10D0\u10DC\u10D0: \u10DB\u10DD\u10E1\u10D0\u10DA\u10DD\u10D3\u10DC\u10D4\u10DA\u10D8 ${stringifyPrimitive(issue4.values[0])}`;
+        return `\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 \u10D5\u10D0\u10E0\u10D8\u10D0\u10DC\u10E2\u10D8: \u10DB\u10DD\u10E1\u10D0\u10DA\u10DD\u10D3\u10DC\u10D4\u10DA\u10D8\u10D0 \u10D4\u10E0\u10D7-\u10D4\u10E0\u10D7\u10D8 ${joinValues(issue4.values, "|")}-\u10D3\u10D0\u10DC`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `\u10D6\u10D4\u10D3\u10DB\u10D4\u10E2\u10D0\u10D3 \u10D3\u10D8\u10D3\u10D8: \u10DB\u10DD\u10E1\u10D0\u10DA\u10DD\u10D3\u10DC\u10D4\u10DA\u10D8 ${issue3.origin ?? "\u10DB\u10DC\u10D8\u10E8\u10D5\u10DC\u10D4\u10DA\u10DD\u10D1\u10D0"} ${sizing.verb} ${adj}${issue3.maximum.toString()} ${sizing.unit}`;
-        return `\u10D6\u10D4\u10D3\u10DB\u10D4\u10E2\u10D0\u10D3 \u10D3\u10D8\u10D3\u10D8: \u10DB\u10DD\u10E1\u10D0\u10DA\u10DD\u10D3\u10DC\u10D4\u10DA\u10D8 ${issue3.origin ?? "\u10DB\u10DC\u10D8\u10E8\u10D5\u10DC\u10D4\u10DA\u10DD\u10D1\u10D0"} \u10D8\u10E7\u10DD\u10E1 ${adj}${issue3.maximum.toString()}`;
+          return `\u10D6\u10D4\u10D3\u10DB\u10D4\u10E2\u10D0\u10D3 \u10D3\u10D8\u10D3\u10D8: \u10DB\u10DD\u10E1\u10D0\u10DA\u10DD\u10D3\u10DC\u10D4\u10DA\u10D8 ${issue4.origin ?? "\u10DB\u10DC\u10D8\u10E8\u10D5\u10DC\u10D4\u10DA\u10DD\u10D1\u10D0"} ${sizing.verb} ${adj}${issue4.maximum.toString()} ${sizing.unit}`;
+        return `\u10D6\u10D4\u10D3\u10DB\u10D4\u10E2\u10D0\u10D3 \u10D3\u10D8\u10D3\u10D8: \u10DB\u10DD\u10E1\u10D0\u10DA\u10DD\u10D3\u10DC\u10D4\u10DA\u10D8 ${issue4.origin ?? "\u10DB\u10DC\u10D8\u10E8\u10D5\u10DC\u10D4\u10DA\u10DD\u10D1\u10D0"} \u10D8\u10E7\u10DD\u10E1 ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `\u10D6\u10D4\u10D3\u10DB\u10D4\u10E2\u10D0\u10D3 \u10DE\u10D0\u10E2\u10D0\u10E0\u10D0: \u10DB\u10DD\u10E1\u10D0\u10DA\u10DD\u10D3\u10DC\u10D4\u10DA\u10D8 ${issue3.origin} ${sizing.verb} ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `\u10D6\u10D4\u10D3\u10DB\u10D4\u10E2\u10D0\u10D3 \u10DE\u10D0\u10E2\u10D0\u10E0\u10D0: \u10DB\u10DD\u10E1\u10D0\u10DA\u10DD\u10D3\u10DC\u10D4\u10DA\u10D8 ${issue4.origin} ${sizing.verb} ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `\u10D6\u10D4\u10D3\u10DB\u10D4\u10E2\u10D0\u10D3 \u10DE\u10D0\u10E2\u10D0\u10E0\u10D0: \u10DB\u10DD\u10E1\u10D0\u10DA\u10DD\u10D3\u10DC\u10D4\u10DA\u10D8 ${issue3.origin} \u10D8\u10E7\u10DD\u10E1 ${adj}${issue3.minimum.toString()}`;
+        return `\u10D6\u10D4\u10D3\u10DB\u10D4\u10E2\u10D0\u10D3 \u10DE\u10D0\u10E2\u10D0\u10E0\u10D0: \u10DB\u10DD\u10E1\u10D0\u10DA\u10DD\u10D3\u10DC\u10D4\u10DA\u10D8 ${issue4.origin} \u10D8\u10E7\u10DD\u10E1 ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 \u10D5\u10D4\u10DA\u10D8: \u10E3\u10DC\u10D3\u10D0 \u10D8\u10EC\u10E7\u10D4\u10D1\u10DD\u10D3\u10D4\u10E1 "${_issue.prefix}"-\u10D8\u10D7`;
         }
@@ -15741,18 +15747,18 @@ var error25 = () => {
           return `\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 \u10D5\u10D4\u10DA\u10D8: \u10E3\u10DC\u10D3\u10D0 \u10E8\u10D4\u10D8\u10EA\u10D0\u10D5\u10D3\u10D4\u10E1 "${_issue.includes}"-\u10E1`;
         if (_issue.format === "regex")
           return `\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 \u10D5\u10D4\u10DA\u10D8: \u10E3\u10DC\u10D3\u10D0 \u10E8\u10D4\u10D4\u10E1\u10D0\u10D1\u10D0\u10DB\u10D4\u10D1\u10DD\u10D3\u10D4\u10E1 \u10E8\u10D0\u10D1\u10DA\u10DD\u10DC\u10E1 ${_issue.pattern}`;
-        return `\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 \u10E0\u10D8\u10EA\u10EE\u10D5\u10D8: \u10E3\u10DC\u10D3\u10D0 \u10D8\u10E7\u10DD\u10E1 ${issue3.divisor}-\u10D8\u10E1 \u10EF\u10D4\u10E0\u10D0\u10D3\u10D8`;
+        return `\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 \u10E0\u10D8\u10EA\u10EE\u10D5\u10D8: \u10E3\u10DC\u10D3\u10D0 \u10D8\u10E7\u10DD\u10E1 ${issue4.divisor}-\u10D8\u10E1 \u10EF\u10D4\u10E0\u10D0\u10D3\u10D8`;
       case "unrecognized_keys":
-        return `\u10E3\u10EA\u10DC\u10DD\u10D1\u10D8 \u10D2\u10D0\u10E1\u10D0\u10E6\u10D4\u10D1${issue3.keys.length > 1 ? "\u10D4\u10D1\u10D8" : "\u10D8"}: ${joinValues(issue3.keys, ", ")}`;
+        return `\u10E3\u10EA\u10DC\u10DD\u10D1\u10D8 \u10D2\u10D0\u10E1\u10D0\u10E6\u10D4\u10D1${issue4.keys.length > 1 ? "\u10D4\u10D1\u10D8" : "\u10D8"}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 \u10D2\u10D0\u10E1\u10D0\u10E6\u10D4\u10D1\u10D8 ${issue3.origin}-\u10E8\u10D8`;
+        return `\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 \u10D2\u10D0\u10E1\u10D0\u10E6\u10D4\u10D1\u10D8 ${issue4.origin}-\u10E8\u10D8`;
       case "invalid_union":
         return "\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 \u10E8\u10D4\u10E7\u10D5\u10D0\u10DC\u10D0";
       case "invalid_element":
-        return `\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 \u10DB\u10DC\u10D8\u10E8\u10D5\u10DC\u10D4\u10DA\u10DD\u10D1\u10D0 ${issue3.origin}-\u10E8\u10D8`;
+        return `\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 \u10DB\u10DC\u10D8\u10E8\u10D5\u10DC\u10D4\u10DA\u10DD\u10D1\u10D0 ${issue4.origin}-\u10E8\u10D8`;
       default:
         return `\u10D0\u10E0\u10D0\u10E1\u10EC\u10DD\u10E0\u10D8 \u10E8\u10D4\u10E7\u10D5\u10D0\u10DC\u10D0`;
     }
@@ -15811,38 +15817,38 @@ var error26 = () => {
     array: "\u17A2\u17B6\u179A\u17C1 (Array)",
     null: "\u1782\u17D2\u1798\u17B6\u1793\u178F\u1798\u17D2\u179B\u17C3 (null)"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\u1791\u17B7\u1793\u17D2\u1793\u1793\u17D0\u1799\u1794\u1789\u17D2\u1785\u17BC\u179B\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u1780\u17B6\u179A instanceof ${issue3.expected} \u1794\u17C9\u17BB\u1793\u17D2\u178F\u17C2\u1791\u1791\u17BD\u179B\u1794\u17B6\u1793 ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\u1791\u17B7\u1793\u17D2\u1793\u1793\u17D0\u1799\u1794\u1789\u17D2\u1785\u17BC\u179B\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u1780\u17B6\u179A instanceof ${issue4.expected} \u1794\u17C9\u17BB\u1793\u17D2\u178F\u17C2\u1791\u1791\u17BD\u179B\u1794\u17B6\u1793 ${received}`;
         }
         return `\u1791\u17B7\u1793\u17D2\u1793\u1793\u17D0\u1799\u1794\u1789\u17D2\u1785\u17BC\u179B\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u1780\u17B6\u179A ${expected} \u1794\u17C9\u17BB\u1793\u17D2\u178F\u17C2\u1791\u1791\u17BD\u179B\u1794\u17B6\u1793 ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `\u1791\u17B7\u1793\u17D2\u1793\u1793\u17D0\u1799\u1794\u1789\u17D2\u1785\u17BC\u179B\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u1780\u17B6\u179A ${stringifyPrimitive(issue3.values[0])}`;
-        return `\u1787\u1798\u17D2\u179A\u17BE\u179F\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u1787\u17B6\u1798\u17BD\u1799\u1780\u17D2\u1793\u17BB\u1784\u1785\u17C6\u178E\u17C4\u1798 ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `\u1791\u17B7\u1793\u17D2\u1793\u1793\u17D0\u1799\u1794\u1789\u17D2\u1785\u17BC\u179B\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u1780\u17B6\u179A ${stringifyPrimitive(issue4.values[0])}`;
+        return `\u1787\u1798\u17D2\u179A\u17BE\u179F\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u1787\u17B6\u1798\u17BD\u1799\u1780\u17D2\u1793\u17BB\u1784\u1785\u17C6\u178E\u17C4\u1798 ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `\u1792\u17C6\u1796\u17C1\u1780\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u1780\u17B6\u179A ${issue3.origin ?? "\u178F\u1798\u17D2\u179B\u17C3"} ${adj} ${issue3.maximum.toString()} ${sizing.unit ?? "\u1792\u17B6\u178F\u17BB"}`;
-        return `\u1792\u17C6\u1796\u17C1\u1780\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u1780\u17B6\u179A ${issue3.origin ?? "\u178F\u1798\u17D2\u179B\u17C3"} ${adj} ${issue3.maximum.toString()}`;
+          return `\u1792\u17C6\u1796\u17C1\u1780\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u1780\u17B6\u179A ${issue4.origin ?? "\u178F\u1798\u17D2\u179B\u17C3"} ${adj} ${issue4.maximum.toString()} ${sizing.unit ?? "\u1792\u17B6\u178F\u17BB"}`;
+        return `\u1792\u17C6\u1796\u17C1\u1780\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u1780\u17B6\u179A ${issue4.origin ?? "\u178F\u1798\u17D2\u179B\u17C3"} ${adj} ${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `\u178F\u17BC\u1785\u1796\u17C1\u1780\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u1780\u17B6\u179A ${issue3.origin} ${adj} ${issue3.minimum.toString()} ${sizing.unit}`;
+          return `\u178F\u17BC\u1785\u1796\u17C1\u1780\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u1780\u17B6\u179A ${issue4.origin} ${adj} ${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `\u178F\u17BC\u1785\u1796\u17C1\u1780\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u1780\u17B6\u179A ${issue3.origin} ${adj} ${issue3.minimum.toString()}`;
+        return `\u178F\u17BC\u1785\u1796\u17C1\u1780\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u1780\u17B6\u179A ${issue4.origin} ${adj} ${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `\u1781\u17D2\u179F\u17C2\u17A2\u1780\u17D2\u179F\u179A\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u1785\u17B6\u1794\u17CB\u1795\u17D2\u178F\u17BE\u1798\u178A\u17C4\u1799 "${_issue.prefix}"`;
         }
@@ -15852,18 +15858,18 @@ var error26 = () => {
           return `\u1781\u17D2\u179F\u17C2\u17A2\u1780\u17D2\u179F\u179A\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u1798\u17B6\u1793 "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `\u1781\u17D2\u179F\u17C2\u17A2\u1780\u17D2\u179F\u179A\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u178F\u17C2\u1795\u17D2\u1782\u17BC\u1795\u17D2\u1782\u1784\u1793\u17B9\u1784\u1791\u1798\u17D2\u179A\u1784\u17CB\u178A\u17C2\u179B\u1794\u17B6\u1793\u1780\u17C6\u178E\u178F\u17CB ${_issue.pattern}`;
-        return `\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C\u17D6 ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C\u17D6 ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `\u179B\u17C1\u1781\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u178F\u17C2\u1787\u17B6\u1796\u17A0\u17BB\u1782\u17BB\u178E\u1793\u17C3 ${issue3.divisor}`;
+        return `\u179B\u17C1\u1781\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C\u17D6 \u178F\u17D2\u179A\u17BC\u179C\u178F\u17C2\u1787\u17B6\u1796\u17A0\u17BB\u1782\u17BB\u178E\u1793\u17C3 ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `\u179A\u1780\u1783\u17BE\u1789\u179F\u17C4\u1798\u17B7\u1793\u179F\u17D2\u1782\u17B6\u179B\u17CB\u17D6 ${joinValues(issue3.keys, ", ")}`;
+        return `\u179A\u1780\u1783\u17BE\u1789\u179F\u17C4\u1798\u17B7\u1793\u179F\u17D2\u1782\u17B6\u179B\u17CB\u17D6 ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `\u179F\u17C4\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C\u1793\u17C5\u1780\u17D2\u1793\u17BB\u1784 ${issue3.origin}`;
+        return `\u179F\u17C4\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C\u1793\u17C5\u1780\u17D2\u1793\u17BB\u1784 ${issue4.origin}`;
       case "invalid_union":
         return `\u1791\u17B7\u1793\u17D2\u1793\u1793\u17D0\u1799\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C`;
       case "invalid_element":
-        return `\u1791\u17B7\u1793\u17D2\u1793\u1793\u17D0\u1799\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C\u1793\u17C5\u1780\u17D2\u1793\u17BB\u1784 ${issue3.origin}`;
+        return `\u1791\u17B7\u1793\u17D2\u1793\u1793\u17D0\u1799\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C\u1793\u17C5\u1780\u17D2\u1793\u17BB\u1784 ${issue4.origin}`;
       default:
         return `\u1791\u17B7\u1793\u17D2\u1793\u1793\u17D0\u1799\u1798\u17B7\u1793\u178F\u17D2\u179A\u17B9\u1798\u178F\u17D2\u179A\u17BC\u179C`;
     }
@@ -15924,42 +15930,42 @@ var error27 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\uC798\uBABB\uB41C \uC785\uB825: \uC608\uC0C1 \uD0C0\uC785\uC740 instanceof ${issue3.expected}, \uBC1B\uC740 \uD0C0\uC785\uC740 ${received}\uC785\uB2C8\uB2E4`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\uC798\uBABB\uB41C \uC785\uB825: \uC608\uC0C1 \uD0C0\uC785\uC740 instanceof ${issue4.expected}, \uBC1B\uC740 \uD0C0\uC785\uC740 ${received}\uC785\uB2C8\uB2E4`;
         }
         return `\uC798\uBABB\uB41C \uC785\uB825: \uC608\uC0C1 \uD0C0\uC785\uC740 ${expected}, \uBC1B\uC740 \uD0C0\uC785\uC740 ${received}\uC785\uB2C8\uB2E4`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `\uC798\uBABB\uB41C \uC785\uB825: \uAC12\uC740 ${stringifyPrimitive(issue3.values[0])} \uC774\uC5B4\uC57C \uD569\uB2C8\uB2E4`;
-        return `\uC798\uBABB\uB41C \uC635\uC158: ${joinValues(issue3.values, "\uB610\uB294 ")} \uC911 \uD558\uB098\uC5EC\uC57C \uD569\uB2C8\uB2E4`;
+        if (issue4.values.length === 1)
+          return `\uC798\uBABB\uB41C \uC785\uB825: \uAC12\uC740 ${stringifyPrimitive(issue4.values[0])} \uC774\uC5B4\uC57C \uD569\uB2C8\uB2E4`;
+        return `\uC798\uBABB\uB41C \uC635\uC158: ${joinValues(issue4.values, "\uB610\uB294 ")} \uC911 \uD558\uB098\uC5EC\uC57C \uD569\uB2C8\uB2E4`;
       case "too_big": {
-        const adj = issue3.inclusive ? "\uC774\uD558" : "\uBBF8\uB9CC";
+        const adj = issue4.inclusive ? "\uC774\uD558" : "\uBBF8\uB9CC";
         const suffix = adj === "\uBBF8\uB9CC" ? "\uC774\uC5B4\uC57C \uD569\uB2C8\uB2E4" : "\uC5EC\uC57C \uD569\uB2C8\uB2E4";
-        const sizing = getSizing(issue3.origin);
+        const sizing = getSizing(issue4.origin);
         const unit = sizing?.unit ?? "\uC694\uC18C";
         if (sizing)
-          return `${issue3.origin ?? "\uAC12"}\uC774 \uB108\uBB34 \uD07D\uB2C8\uB2E4: ${issue3.maximum.toString()}${unit} ${adj}${suffix}`;
-        return `${issue3.origin ?? "\uAC12"}\uC774 \uB108\uBB34 \uD07D\uB2C8\uB2E4: ${issue3.maximum.toString()} ${adj}${suffix}`;
+          return `${issue4.origin ?? "\uAC12"}\uC774 \uB108\uBB34 \uD07D\uB2C8\uB2E4: ${issue4.maximum.toString()}${unit} ${adj}${suffix}`;
+        return `${issue4.origin ?? "\uAC12"}\uC774 \uB108\uBB34 \uD07D\uB2C8\uB2E4: ${issue4.maximum.toString()} ${adj}${suffix}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? "\uC774\uC0C1" : "\uCD08\uACFC";
+        const adj = issue4.inclusive ? "\uC774\uC0C1" : "\uCD08\uACFC";
         const suffix = adj === "\uC774\uC0C1" ? "\uC774\uC5B4\uC57C \uD569\uB2C8\uB2E4" : "\uC5EC\uC57C \uD569\uB2C8\uB2E4";
-        const sizing = getSizing(issue3.origin);
+        const sizing = getSizing(issue4.origin);
         const unit = sizing?.unit ?? "\uC694\uC18C";
         if (sizing) {
-          return `${issue3.origin ?? "\uAC12"}\uC774 \uB108\uBB34 \uC791\uC2B5\uB2C8\uB2E4: ${issue3.minimum.toString()}${unit} ${adj}${suffix}`;
+          return `${issue4.origin ?? "\uAC12"}\uC774 \uB108\uBB34 \uC791\uC2B5\uB2C8\uB2E4: ${issue4.minimum.toString()}${unit} ${adj}${suffix}`;
         }
-        return `${issue3.origin ?? "\uAC12"}\uC774 \uB108\uBB34 \uC791\uC2B5\uB2C8\uB2E4: ${issue3.minimum.toString()} ${adj}${suffix}`;
+        return `${issue4.origin ?? "\uAC12"}\uC774 \uB108\uBB34 \uC791\uC2B5\uB2C8\uB2E4: ${issue4.minimum.toString()} ${adj}${suffix}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `\uC798\uBABB\uB41C \uBB38\uC790\uC5F4: "${_issue.prefix}"(\uC73C)\uB85C \uC2DC\uC791\uD574\uC57C \uD569\uB2C8\uB2E4`;
         }
@@ -15969,18 +15975,18 @@ var error27 = () => {
           return `\uC798\uBABB\uB41C \uBB38\uC790\uC5F4: "${_issue.includes}"\uC744(\uB97C) \uD3EC\uD568\uD574\uC57C \uD569\uB2C8\uB2E4`;
         if (_issue.format === "regex")
           return `\uC798\uBABB\uB41C \uBB38\uC790\uC5F4: \uC815\uADDC\uC2DD ${_issue.pattern} \uD328\uD134\uACFC \uC77C\uCE58\uD574\uC57C \uD569\uB2C8\uB2E4`;
-        return `\uC798\uBABB\uB41C ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `\uC798\uBABB\uB41C ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `\uC798\uBABB\uB41C \uC22B\uC790: ${issue3.divisor}\uC758 \uBC30\uC218\uC5EC\uC57C \uD569\uB2C8\uB2E4`;
+        return `\uC798\uBABB\uB41C \uC22B\uC790: ${issue4.divisor}\uC758 \uBC30\uC218\uC5EC\uC57C \uD569\uB2C8\uB2E4`;
       case "unrecognized_keys":
-        return `\uC778\uC2DD\uD560 \uC218 \uC5C6\uB294 \uD0A4: ${joinValues(issue3.keys, ", ")}`;
+        return `\uC778\uC2DD\uD560 \uC218 \uC5C6\uB294 \uD0A4: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `\uC798\uBABB\uB41C \uD0A4: ${issue3.origin}`;
+        return `\uC798\uBABB\uB41C \uD0A4: ${issue4.origin}`;
       case "invalid_union":
         return `\uC798\uBABB\uB41C \uC785\uB825`;
       case "invalid_element":
-        return `\uC798\uBABB\uB41C \uAC12: ${issue3.origin}`;
+        return `\uC798\uBABB\uB41C \uAC12: ${issue4.origin}`;
       default:
         return `\uC798\uBABB\uB41C \uC785\uB825`;
     }
@@ -15993,8 +15999,8 @@ function ko_default() {
 }
 
 // node_modules/zod/v4/locales/lt.js
-var capitalizeFirstCharacter = (text3) => {
-  return text3.charAt(0).toUpperCase() + text3.slice(1);
+var capitalizeFirstCharacter = (text4) => {
+  return text4.charAt(0).toUpperCase() + text4.slice(1);
 };
 function getUnitTypeFromNumber(number4) {
   const abs = Math.abs(number4);
@@ -16129,39 +16135,39 @@ var error28 = () => {
     object: "objektas",
     null: "nulin\u0117 reik\u0161m\u0117"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Gautas tipas ${received}, o tik\u0117tasi - instanceof ${issue3.expected}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Gautas tipas ${received}, o tik\u0117tasi - instanceof ${issue4.expected}`;
         }
         return `Gautas tipas ${received}, o tik\u0117tasi - ${expected}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Privalo b\u016Bti ${stringifyPrimitive(issue3.values[0])}`;
-        return `Privalo b\u016Bti vienas i\u0161 ${joinValues(issue3.values, "|")} pasirinkim\u0173`;
+        if (issue4.values.length === 1)
+          return `Privalo b\u016Bti ${stringifyPrimitive(issue4.values[0])}`;
+        return `Privalo b\u016Bti vienas i\u0161 ${joinValues(issue4.values, "|")} pasirinkim\u0173`;
       case "too_big": {
-        const origin2 = TypeDictionary[issue3.origin] ?? issue3.origin;
-        const sizing = getSizing(issue3.origin, getUnitTypeFromNumber(Number(issue3.maximum)), issue3.inclusive ?? false, "smaller");
+        const origin2 = TypeDictionary[issue4.origin] ?? issue4.origin;
+        const sizing = getSizing(issue4.origin, getUnitTypeFromNumber(Number(issue4.maximum)), issue4.inclusive ?? false, "smaller");
         if (sizing?.verb)
-          return `${capitalizeFirstCharacter(origin2 ?? issue3.origin ?? "reik\u0161m\u0117")} ${sizing.verb} ${issue3.maximum.toString()} ${sizing.unit ?? "element\u0173"}`;
-        const adj = issue3.inclusive ? "ne didesnis kaip" : "ma\u017Eesnis kaip";
-        return `${capitalizeFirstCharacter(origin2 ?? issue3.origin ?? "reik\u0161m\u0117")} turi b\u016Bti ${adj} ${issue3.maximum.toString()} ${sizing?.unit}`;
+          return `${capitalizeFirstCharacter(origin2 ?? issue4.origin ?? "reik\u0161m\u0117")} ${sizing.verb} ${issue4.maximum.toString()} ${sizing.unit ?? "element\u0173"}`;
+        const adj = issue4.inclusive ? "ne didesnis kaip" : "ma\u017Eesnis kaip";
+        return `${capitalizeFirstCharacter(origin2 ?? issue4.origin ?? "reik\u0161m\u0117")} turi b\u016Bti ${adj} ${issue4.maximum.toString()} ${sizing?.unit}`;
       }
       case "too_small": {
-        const origin2 = TypeDictionary[issue3.origin] ?? issue3.origin;
-        const sizing = getSizing(issue3.origin, getUnitTypeFromNumber(Number(issue3.minimum)), issue3.inclusive ?? false, "bigger");
+        const origin2 = TypeDictionary[issue4.origin] ?? issue4.origin;
+        const sizing = getSizing(issue4.origin, getUnitTypeFromNumber(Number(issue4.minimum)), issue4.inclusive ?? false, "bigger");
         if (sizing?.verb)
-          return `${capitalizeFirstCharacter(origin2 ?? issue3.origin ?? "reik\u0161m\u0117")} ${sizing.verb} ${issue3.minimum.toString()} ${sizing.unit ?? "element\u0173"}`;
-        const adj = issue3.inclusive ? "ne ma\u017Eesnis kaip" : "didesnis kaip";
-        return `${capitalizeFirstCharacter(origin2 ?? issue3.origin ?? "reik\u0161m\u0117")} turi b\u016Bti ${adj} ${issue3.minimum.toString()} ${sizing?.unit}`;
+          return `${capitalizeFirstCharacter(origin2 ?? issue4.origin ?? "reik\u0161m\u0117")} ${sizing.verb} ${issue4.minimum.toString()} ${sizing.unit ?? "element\u0173"}`;
+        const adj = issue4.inclusive ? "ne ma\u017Eesnis kaip" : "didesnis kaip";
+        return `${capitalizeFirstCharacter(origin2 ?? issue4.origin ?? "reik\u0161m\u0117")} turi b\u016Bti ${adj} ${issue4.minimum.toString()} ${sizing?.unit}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `Eilut\u0117 privalo prasid\u0117ti "${_issue.prefix}"`;
         }
@@ -16171,19 +16177,19 @@ var error28 = () => {
           return `Eilut\u0117 privalo \u012Ftraukti "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Eilut\u0117 privalo atitikti ${_issue.pattern}`;
-        return `Neteisingas ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Neteisingas ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `Skai\u010Dius privalo b\u016Bti ${issue3.divisor} kartotinis.`;
+        return `Skai\u010Dius privalo b\u016Bti ${issue4.divisor} kartotinis.`;
       case "unrecognized_keys":
-        return `Neatpa\u017Eint${issue3.keys.length > 1 ? "i" : "as"} rakt${issue3.keys.length > 1 ? "ai" : "as"}: ${joinValues(issue3.keys, ", ")}`;
+        return `Neatpa\u017Eint${issue4.keys.length > 1 ? "i" : "as"} rakt${issue4.keys.length > 1 ? "ai" : "as"}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
         return "Rastas klaidingas raktas";
       case "invalid_union":
         return "Klaidinga \u012Fvestis";
       case "invalid_element": {
-        const origin2 = TypeDictionary[issue3.origin] ?? issue3.origin;
-        return `${capitalizeFirstCharacter(origin2 ?? issue3.origin ?? "reik\u0161m\u0117")} turi klaiding\u0105 \u012Fvest\u012F`;
+        const origin2 = TypeDictionary[issue4.origin] ?? issue4.origin;
+        return `${capitalizeFirstCharacter(origin2 ?? issue4.origin ?? "reik\u0161m\u0117")} turi klaiding\u0105 \u012Fvest\u012F`;
       }
       default:
         return "Klaidinga \u012Fvestis";
@@ -16242,38 +16248,38 @@ var error29 = () => {
     number: "\u0431\u0440\u043E\u0458",
     array: "\u043D\u0438\u0437\u0430"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\u0413\u0440\u0435\u0448\u0435\u043D \u0432\u043D\u0435\u0441: \u0441\u0435 \u043E\u0447\u0435\u043A\u0443\u0432\u0430 instanceof ${issue3.expected}, \u043F\u0440\u0438\u043C\u0435\u043D\u043E ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\u0413\u0440\u0435\u0448\u0435\u043D \u0432\u043D\u0435\u0441: \u0441\u0435 \u043E\u0447\u0435\u043A\u0443\u0432\u0430 instanceof ${issue4.expected}, \u043F\u0440\u0438\u043C\u0435\u043D\u043E ${received}`;
         }
         return `\u0413\u0440\u0435\u0448\u0435\u043D \u0432\u043D\u0435\u0441: \u0441\u0435 \u043E\u0447\u0435\u043A\u0443\u0432\u0430 ${expected}, \u043F\u0440\u0438\u043C\u0435\u043D\u043E ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Invalid input: expected ${stringifyPrimitive(issue3.values[0])}`;
-        return `\u0413\u0440\u0435\u0448\u0430\u043D\u0430 \u043E\u043F\u0446\u0438\u0458\u0430: \u0441\u0435 \u043E\u0447\u0435\u043A\u0443\u0432\u0430 \u0435\u0434\u043D\u0430 ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Invalid input: expected ${stringifyPrimitive(issue4.values[0])}`;
+        return `\u0413\u0440\u0435\u0448\u0430\u043D\u0430 \u043E\u043F\u0446\u0438\u0458\u0430: \u0441\u0435 \u043E\u0447\u0435\u043A\u0443\u0432\u0430 \u0435\u0434\u043D\u0430 ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `\u041F\u0440\u0435\u043C\u043D\u043E\u0433\u0443 \u0433\u043E\u043B\u0435\u043C: \u0441\u0435 \u043E\u0447\u0435\u043A\u0443\u0432\u0430 ${issue3.origin ?? "\u0432\u0440\u0435\u0434\u043D\u043E\u0441\u0442\u0430"} \u0434\u0430 \u0438\u043C\u0430 ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "\u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0438"}`;
-        return `\u041F\u0440\u0435\u043C\u043D\u043E\u0433\u0443 \u0433\u043E\u043B\u0435\u043C: \u0441\u0435 \u043E\u0447\u0435\u043A\u0443\u0432\u0430 ${issue3.origin ?? "\u0432\u0440\u0435\u0434\u043D\u043E\u0441\u0442\u0430"} \u0434\u0430 \u0431\u0438\u0434\u0435 ${adj}${issue3.maximum.toString()}`;
+          return `\u041F\u0440\u0435\u043C\u043D\u043E\u0433\u0443 \u0433\u043E\u043B\u0435\u043C: \u0441\u0435 \u043E\u0447\u0435\u043A\u0443\u0432\u0430 ${issue4.origin ?? "\u0432\u0440\u0435\u0434\u043D\u043E\u0441\u0442\u0430"} \u0434\u0430 \u0438\u043C\u0430 ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "\u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0438"}`;
+        return `\u041F\u0440\u0435\u043C\u043D\u043E\u0433\u0443 \u0433\u043E\u043B\u0435\u043C: \u0441\u0435 \u043E\u0447\u0435\u043A\u0443\u0432\u0430 ${issue4.origin ?? "\u0432\u0440\u0435\u0434\u043D\u043E\u0441\u0442\u0430"} \u0434\u0430 \u0431\u0438\u0434\u0435 ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `\u041F\u0440\u0435\u043C\u043D\u043E\u0433\u0443 \u043C\u0430\u043B: \u0441\u0435 \u043E\u0447\u0435\u043A\u0443\u0432\u0430 ${issue3.origin} \u0434\u0430 \u0438\u043C\u0430 ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `\u041F\u0440\u0435\u043C\u043D\u043E\u0433\u0443 \u043C\u0430\u043B: \u0441\u0435 \u043E\u0447\u0435\u043A\u0443\u0432\u0430 ${issue4.origin} \u0434\u0430 \u0438\u043C\u0430 ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `\u041F\u0440\u0435\u043C\u043D\u043E\u0433\u0443 \u043C\u0430\u043B: \u0441\u0435 \u043E\u0447\u0435\u043A\u0443\u0432\u0430 ${issue3.origin} \u0434\u0430 \u0431\u0438\u0434\u0435 ${adj}${issue3.minimum.toString()}`;
+        return `\u041F\u0440\u0435\u043C\u043D\u043E\u0433\u0443 \u043C\u0430\u043B: \u0441\u0435 \u043E\u0447\u0435\u043A\u0443\u0432\u0430 ${issue4.origin} \u0434\u0430 \u0431\u0438\u0434\u0435 ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `\u041D\u0435\u0432\u0430\u0436\u0435\u0447\u043A\u0430 \u043D\u0438\u0437\u0430: \u043C\u043E\u0440\u0430 \u0434\u0430 \u0437\u0430\u043F\u043E\u0447\u043D\u0443\u0432\u0430 \u0441\u043E "${_issue.prefix}"`;
         }
@@ -16283,18 +16289,18 @@ var error29 = () => {
           return `\u041D\u0435\u0432\u0430\u0436\u0435\u0447\u043A\u0430 \u043D\u0438\u0437\u0430: \u043C\u043E\u0440\u0430 \u0434\u0430 \u0432\u043A\u043B\u0443\u0447\u0443\u0432\u0430 "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `\u041D\u0435\u0432\u0430\u0436\u0435\u0447\u043A\u0430 \u043D\u0438\u0437\u0430: \u043C\u043E\u0440\u0430 \u0434\u0430 \u043E\u0434\u0433\u043E\u0430\u0440\u0430 \u043D\u0430 \u043F\u0430\u0442\u0435\u0440\u043D\u043E\u0442 ${_issue.pattern}`;
-        return `Invalid ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Invalid ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `\u0413\u0440\u0435\u0448\u0435\u043D \u0431\u0440\u043E\u0458: \u043C\u043E\u0440\u0430 \u0434\u0430 \u0431\u0438\u0434\u0435 \u0434\u0435\u043B\u0438\u0432 \u0441\u043E ${issue3.divisor}`;
+        return `\u0413\u0440\u0435\u0448\u0435\u043D \u0431\u0440\u043E\u0458: \u043C\u043E\u0440\u0430 \u0434\u0430 \u0431\u0438\u0434\u0435 \u0434\u0435\u043B\u0438\u0432 \u0441\u043E ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `${issue3.keys.length > 1 ? "\u041D\u0435\u043F\u0440\u0435\u043F\u043E\u0437\u043D\u0430\u0435\u043D\u0438 \u043A\u043B\u0443\u0447\u0435\u0432\u0438" : "\u041D\u0435\u043F\u0440\u0435\u043F\u043E\u0437\u043D\u0430\u0435\u043D \u043A\u043B\u0443\u0447"}: ${joinValues(issue3.keys, ", ")}`;
+        return `${issue4.keys.length > 1 ? "\u041D\u0435\u043F\u0440\u0435\u043F\u043E\u0437\u043D\u0430\u0435\u043D\u0438 \u043A\u043B\u0443\u0447\u0435\u0432\u0438" : "\u041D\u0435\u043F\u0440\u0435\u043F\u043E\u0437\u043D\u0430\u0435\u043D \u043A\u043B\u0443\u0447"}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `\u0413\u0440\u0435\u0448\u0435\u043D \u043A\u043B\u0443\u0447 \u0432\u043E ${issue3.origin}`;
+        return `\u0413\u0440\u0435\u0448\u0435\u043D \u043A\u043B\u0443\u0447 \u0432\u043E ${issue4.origin}`;
       case "invalid_union":
         return "\u0413\u0440\u0435\u0448\u0435\u043D \u0432\u043D\u0435\u0441";
       case "invalid_element":
-        return `\u0413\u0440\u0435\u0448\u043D\u0430 \u0432\u0440\u0435\u0434\u043D\u043E\u0441\u0442 \u0432\u043E ${issue3.origin}`;
+        return `\u0413\u0440\u0435\u0448\u043D\u0430 \u0432\u0440\u0435\u0434\u043D\u043E\u0441\u0442 \u0432\u043E ${issue4.origin}`;
       default:
         return `\u0413\u0440\u0435\u0448\u0435\u043D \u0432\u043D\u0435\u0441`;
     }
@@ -16351,38 +16357,38 @@ var error30 = () => {
     nan: "NaN",
     number: "nombor"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Input tidak sah: dijangka instanceof ${issue3.expected}, diterima ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Input tidak sah: dijangka instanceof ${issue4.expected}, diterima ${received}`;
         }
         return `Input tidak sah: dijangka ${expected}, diterima ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Input tidak sah: dijangka ${stringifyPrimitive(issue3.values[0])}`;
-        return `Pilihan tidak sah: dijangka salah satu daripada ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Input tidak sah: dijangka ${stringifyPrimitive(issue4.values[0])}`;
+        return `Pilihan tidak sah: dijangka salah satu daripada ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `Terlalu besar: dijangka ${issue3.origin ?? "nilai"} ${sizing.verb} ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "elemen"}`;
-        return `Terlalu besar: dijangka ${issue3.origin ?? "nilai"} adalah ${adj}${issue3.maximum.toString()}`;
+          return `Terlalu besar: dijangka ${issue4.origin ?? "nilai"} ${sizing.verb} ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "elemen"}`;
+        return `Terlalu besar: dijangka ${issue4.origin ?? "nilai"} adalah ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Terlalu kecil: dijangka ${issue3.origin} ${sizing.verb} ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `Terlalu kecil: dijangka ${issue4.origin} ${sizing.verb} ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `Terlalu kecil: dijangka ${issue3.origin} adalah ${adj}${issue3.minimum.toString()}`;
+        return `Terlalu kecil: dijangka ${issue4.origin} adalah ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `String tidak sah: mesti bermula dengan "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -16391,18 +16397,18 @@ var error30 = () => {
           return `String tidak sah: mesti mengandungi "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `String tidak sah: mesti sepadan dengan corak ${_issue.pattern}`;
-        return `${FormatDictionary[_issue.format] ?? issue3.format} tidak sah`;
+        return `${FormatDictionary[_issue.format] ?? issue4.format} tidak sah`;
       }
       case "not_multiple_of":
-        return `Nombor tidak sah: perlu gandaan ${issue3.divisor}`;
+        return `Nombor tidak sah: perlu gandaan ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `Kunci tidak dikenali: ${joinValues(issue3.keys, ", ")}`;
+        return `Kunci tidak dikenali: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Kunci tidak sah dalam ${issue3.origin}`;
+        return `Kunci tidak sah dalam ${issue4.origin}`;
       case "invalid_union":
         return "Input tidak sah";
       case "invalid_element":
-        return `Nilai tidak sah dalam ${issue3.origin}`;
+        return `Nilai tidak sah dalam ${issue4.origin}`;
       default:
         return `Input tidak sah`;
     }
@@ -16459,40 +16465,40 @@ var error31 = () => {
     nan: "NaN",
     number: "getal"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Ongeldige invoer: verwacht instanceof ${issue3.expected}, ontving ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Ongeldige invoer: verwacht instanceof ${issue4.expected}, ontving ${received}`;
         }
         return `Ongeldige invoer: verwacht ${expected}, ontving ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Ongeldige invoer: verwacht ${stringifyPrimitive(issue3.values[0])}`;
-        return `Ongeldige optie: verwacht \xE9\xE9n van ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Ongeldige invoer: verwacht ${stringifyPrimitive(issue4.values[0])}`;
+        return `Ongeldige optie: verwacht \xE9\xE9n van ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
-        const longName = issue3.origin === "date" ? "laat" : issue3.origin === "string" ? "lang" : "groot";
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
+        const longName = issue4.origin === "date" ? "laat" : issue4.origin === "string" ? "lang" : "groot";
         if (sizing)
-          return `Te ${longName}: verwacht dat ${issue3.origin ?? "waarde"} ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "elementen"} ${sizing.verb}`;
-        return `Te ${longName}: verwacht dat ${issue3.origin ?? "waarde"} ${adj}${issue3.maximum.toString()} is`;
+          return `Te ${longName}: verwacht dat ${issue4.origin ?? "waarde"} ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "elementen"} ${sizing.verb}`;
+        return `Te ${longName}: verwacht dat ${issue4.origin ?? "waarde"} ${adj}${issue4.maximum.toString()} is`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
-        const shortName = issue3.origin === "date" ? "vroeg" : issue3.origin === "string" ? "kort" : "klein";
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
+        const shortName = issue4.origin === "date" ? "vroeg" : issue4.origin === "string" ? "kort" : "klein";
         if (sizing) {
-          return `Te ${shortName}: verwacht dat ${issue3.origin} ${adj}${issue3.minimum.toString()} ${sizing.unit} ${sizing.verb}`;
+          return `Te ${shortName}: verwacht dat ${issue4.origin} ${adj}${issue4.minimum.toString()} ${sizing.unit} ${sizing.verb}`;
         }
-        return `Te ${shortName}: verwacht dat ${issue3.origin} ${adj}${issue3.minimum.toString()} is`;
+        return `Te ${shortName}: verwacht dat ${issue4.origin} ${adj}${issue4.minimum.toString()} is`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `Ongeldige tekst: moet met "${_issue.prefix}" beginnen`;
         }
@@ -16502,18 +16508,18 @@ var error31 = () => {
           return `Ongeldige tekst: moet "${_issue.includes}" bevatten`;
         if (_issue.format === "regex")
           return `Ongeldige tekst: moet overeenkomen met patroon ${_issue.pattern}`;
-        return `Ongeldig: ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Ongeldig: ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `Ongeldig getal: moet een veelvoud van ${issue3.divisor} zijn`;
+        return `Ongeldig getal: moet een veelvoud van ${issue4.divisor} zijn`;
       case "unrecognized_keys":
-        return `Onbekende key${issue3.keys.length > 1 ? "s" : ""}: ${joinValues(issue3.keys, ", ")}`;
+        return `Onbekende key${issue4.keys.length > 1 ? "s" : ""}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Ongeldige key in ${issue3.origin}`;
+        return `Ongeldige key in ${issue4.origin}`;
       case "invalid_union":
         return "Ongeldige invoer";
       case "invalid_element":
-        return `Ongeldige waarde in ${issue3.origin}`;
+        return `Ongeldige waarde in ${issue4.origin}`;
       default:
         return `Ongeldige invoer`;
     }
@@ -16571,38 +16577,38 @@ var error32 = () => {
     number: "tall",
     array: "liste"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Ugyldig input: forventet instanceof ${issue3.expected}, fikk ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Ugyldig input: forventet instanceof ${issue4.expected}, fikk ${received}`;
         }
         return `Ugyldig input: forventet ${expected}, fikk ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Ugyldig verdi: forventet ${stringifyPrimitive(issue3.values[0])}`;
-        return `Ugyldig valg: forventet en av ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Ugyldig verdi: forventet ${stringifyPrimitive(issue4.values[0])}`;
+        return `Ugyldig valg: forventet en av ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `For stor(t): forventet ${issue3.origin ?? "value"} til \xE5 ha ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "elementer"}`;
-        return `For stor(t): forventet ${issue3.origin ?? "value"} til \xE5 ha ${adj}${issue3.maximum.toString()}`;
+          return `For stor(t): forventet ${issue4.origin ?? "value"} til \xE5 ha ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "elementer"}`;
+        return `For stor(t): forventet ${issue4.origin ?? "value"} til \xE5 ha ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `For lite(n): forventet ${issue3.origin} til \xE5 ha ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `For lite(n): forventet ${issue4.origin} til \xE5 ha ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `For lite(n): forventet ${issue3.origin} til \xE5 ha ${adj}${issue3.minimum.toString()}`;
+        return `For lite(n): forventet ${issue4.origin} til \xE5 ha ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `Ugyldig streng: m\xE5 starte med "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -16611,18 +16617,18 @@ var error32 = () => {
           return `Ugyldig streng: m\xE5 inneholde "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Ugyldig streng: m\xE5 matche m\xF8nsteret ${_issue.pattern}`;
-        return `Ugyldig ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Ugyldig ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `Ugyldig tall: m\xE5 v\xE6re et multiplum av ${issue3.divisor}`;
+        return `Ugyldig tall: m\xE5 v\xE6re et multiplum av ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `${issue3.keys.length > 1 ? "Ukjente n\xF8kler" : "Ukjent n\xF8kkel"}: ${joinValues(issue3.keys, ", ")}`;
+        return `${issue4.keys.length > 1 ? "Ukjente n\xF8kler" : "Ukjent n\xF8kkel"}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Ugyldig n\xF8kkel i ${issue3.origin}`;
+        return `Ugyldig n\xF8kkel i ${issue4.origin}`;
       case "invalid_union":
         return "Ugyldig input";
       case "invalid_element":
-        return `Ugyldig verdi i ${issue3.origin}`;
+        return `Ugyldig verdi i ${issue4.origin}`;
       default:
         return `Ugyldig input`;
     }
@@ -16681,38 +16687,38 @@ var error33 = () => {
     array: "saf",
     null: "gayb"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `F\xE2sit giren: umulan instanceof ${issue3.expected}, al\u0131nan ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `F\xE2sit giren: umulan instanceof ${issue4.expected}, al\u0131nan ${received}`;
         }
         return `F\xE2sit giren: umulan ${expected}, al\u0131nan ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `F\xE2sit giren: umulan ${stringifyPrimitive(issue3.values[0])}`;
-        return `F\xE2sit tercih: m\xFBteberler ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `F\xE2sit giren: umulan ${stringifyPrimitive(issue4.values[0])}`;
+        return `F\xE2sit tercih: m\xFBteberler ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `Fazla b\xFCy\xFCk: ${issue3.origin ?? "value"}, ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "elements"} sahip olmal\u0131yd\u0131.`;
-        return `Fazla b\xFCy\xFCk: ${issue3.origin ?? "value"}, ${adj}${issue3.maximum.toString()} olmal\u0131yd\u0131.`;
+          return `Fazla b\xFCy\xFCk: ${issue4.origin ?? "value"}, ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "elements"} sahip olmal\u0131yd\u0131.`;
+        return `Fazla b\xFCy\xFCk: ${issue4.origin ?? "value"}, ${adj}${issue4.maximum.toString()} olmal\u0131yd\u0131.`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Fazla k\xFC\xE7\xFCk: ${issue3.origin}, ${adj}${issue3.minimum.toString()} ${sizing.unit} sahip olmal\u0131yd\u0131.`;
+          return `Fazla k\xFC\xE7\xFCk: ${issue4.origin}, ${adj}${issue4.minimum.toString()} ${sizing.unit} sahip olmal\u0131yd\u0131.`;
         }
-        return `Fazla k\xFC\xE7\xFCk: ${issue3.origin}, ${adj}${issue3.minimum.toString()} olmal\u0131yd\u0131.`;
+        return `Fazla k\xFC\xE7\xFCk: ${issue4.origin}, ${adj}${issue4.minimum.toString()} olmal\u0131yd\u0131.`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `F\xE2sit metin: "${_issue.prefix}" ile ba\u015Flamal\u0131.`;
         if (_issue.format === "ends_with")
@@ -16721,18 +16727,18 @@ var error33 = () => {
           return `F\xE2sit metin: "${_issue.includes}" ihtiv\xE2 etmeli.`;
         if (_issue.format === "regex")
           return `F\xE2sit metin: ${_issue.pattern} nak\u015F\u0131na uymal\u0131.`;
-        return `F\xE2sit ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `F\xE2sit ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `F\xE2sit say\u0131: ${issue3.divisor} kat\u0131 olmal\u0131yd\u0131.`;
+        return `F\xE2sit say\u0131: ${issue4.divisor} kat\u0131 olmal\u0131yd\u0131.`;
       case "unrecognized_keys":
-        return `Tan\u0131nmayan anahtar ${issue3.keys.length > 1 ? "s" : ""}: ${joinValues(issue3.keys, ", ")}`;
+        return `Tan\u0131nmayan anahtar ${issue4.keys.length > 1 ? "s" : ""}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `${issue3.origin} i\xE7in tan\u0131nmayan anahtar var.`;
+        return `${issue4.origin} i\xE7in tan\u0131nmayan anahtar var.`;
       case "invalid_union":
         return "Giren tan\u0131namad\u0131.";
       case "invalid_element":
-        return `${issue3.origin} i\xE7in tan\u0131nmayan k\u0131ymet var.`;
+        return `${issue4.origin} i\xE7in tan\u0131nmayan k\u0131ymet var.`;
       default:
         return `K\u0131ymet tan\u0131namad\u0131.`;
     }
@@ -16790,40 +16796,40 @@ var error34 = () => {
     number: "\u0639\u062F\u062F",
     array: "\u0627\u0631\u06D0"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\u0646\u0627\u0633\u0645 \u0648\u0631\u0648\u062F\u064A: \u0628\u0627\u06CC\u062F instanceof ${issue3.expected} \u0648\u0627\u06CC, \u0645\u06AB\u0631 ${received} \u062A\u0631\u0644\u0627\u0633\u0647 \u0634\u0648`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\u0646\u0627\u0633\u0645 \u0648\u0631\u0648\u062F\u064A: \u0628\u0627\u06CC\u062F instanceof ${issue4.expected} \u0648\u0627\u06CC, \u0645\u06AB\u0631 ${received} \u062A\u0631\u0644\u0627\u0633\u0647 \u0634\u0648`;
         }
         return `\u0646\u0627\u0633\u0645 \u0648\u0631\u0648\u062F\u064A: \u0628\u0627\u06CC\u062F ${expected} \u0648\u0627\u06CC, \u0645\u06AB\u0631 ${received} \u062A\u0631\u0644\u0627\u0633\u0647 \u0634\u0648`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1) {
-          return `\u0646\u0627\u0633\u0645 \u0648\u0631\u0648\u062F\u064A: \u0628\u0627\u06CC\u062F ${stringifyPrimitive(issue3.values[0])} \u0648\u0627\u06CC`;
+        if (issue4.values.length === 1) {
+          return `\u0646\u0627\u0633\u0645 \u0648\u0631\u0648\u062F\u064A: \u0628\u0627\u06CC\u062F ${stringifyPrimitive(issue4.values[0])} \u0648\u0627\u06CC`;
         }
-        return `\u0646\u0627\u0633\u0645 \u0627\u0646\u062A\u062E\u0627\u0628: \u0628\u0627\u06CC\u062F \u06CC\u0648 \u0644\u0647 ${joinValues(issue3.values, "|")} \u0685\u062E\u0647 \u0648\u0627\u06CC`;
+        return `\u0646\u0627\u0633\u0645 \u0627\u0646\u062A\u062E\u0627\u0628: \u0628\u0627\u06CC\u062F \u06CC\u0648 \u0644\u0647 ${joinValues(issue4.values, "|")} \u0685\u062E\u0647 \u0648\u0627\u06CC`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `\u0689\u06CC\u0631 \u0644\u0648\u06CC: ${issue3.origin ?? "\u0627\u0631\u0632\u069A\u062A"} \u0628\u0627\u06CC\u062F ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "\u0639\u0646\u0635\u0631\u0648\u0646\u0647"} \u0648\u0644\u0631\u064A`;
+          return `\u0689\u06CC\u0631 \u0644\u0648\u06CC: ${issue4.origin ?? "\u0627\u0631\u0632\u069A\u062A"} \u0628\u0627\u06CC\u062F ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "\u0639\u0646\u0635\u0631\u0648\u0646\u0647"} \u0648\u0644\u0631\u064A`;
         }
-        return `\u0689\u06CC\u0631 \u0644\u0648\u06CC: ${issue3.origin ?? "\u0627\u0631\u0632\u069A\u062A"} \u0628\u0627\u06CC\u062F ${adj}${issue3.maximum.toString()} \u0648\u064A`;
+        return `\u0689\u06CC\u0631 \u0644\u0648\u06CC: ${issue4.origin ?? "\u0627\u0631\u0632\u069A\u062A"} \u0628\u0627\u06CC\u062F ${adj}${issue4.maximum.toString()} \u0648\u064A`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `\u0689\u06CC\u0631 \u06A9\u0648\u0686\u0646\u06CC: ${issue3.origin} \u0628\u0627\u06CC\u062F ${adj}${issue3.minimum.toString()} ${sizing.unit} \u0648\u0644\u0631\u064A`;
+          return `\u0689\u06CC\u0631 \u06A9\u0648\u0686\u0646\u06CC: ${issue4.origin} \u0628\u0627\u06CC\u062F ${adj}${issue4.minimum.toString()} ${sizing.unit} \u0648\u0644\u0631\u064A`;
         }
-        return `\u0689\u06CC\u0631 \u06A9\u0648\u0686\u0646\u06CC: ${issue3.origin} \u0628\u0627\u06CC\u062F ${adj}${issue3.minimum.toString()} \u0648\u064A`;
+        return `\u0689\u06CC\u0631 \u06A9\u0648\u0686\u0646\u06CC: ${issue4.origin} \u0628\u0627\u06CC\u062F ${adj}${issue4.minimum.toString()} \u0648\u064A`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `\u0646\u0627\u0633\u0645 \u0645\u062A\u0646: \u0628\u0627\u06CC\u062F \u062F "${_issue.prefix}" \u0633\u0631\u0647 \u067E\u06CC\u0644 \u0634\u064A`;
         }
@@ -16836,18 +16842,18 @@ var error34 = () => {
         if (_issue.format === "regex") {
           return `\u0646\u0627\u0633\u0645 \u0645\u062A\u0646: \u0628\u0627\u06CC\u062F \u062F ${_issue.pattern} \u0633\u0631\u0647 \u0645\u0637\u0627\u0628\u0642\u062A \u0648\u0644\u0631\u064A`;
         }
-        return `${FormatDictionary[_issue.format] ?? issue3.format} \u0646\u0627\u0633\u0645 \u062F\u06CC`;
+        return `${FormatDictionary[_issue.format] ?? issue4.format} \u0646\u0627\u0633\u0645 \u062F\u06CC`;
       }
       case "not_multiple_of":
-        return `\u0646\u0627\u0633\u0645 \u0639\u062F\u062F: \u0628\u0627\u06CC\u062F \u062F ${issue3.divisor} \u0645\u0636\u0631\u0628 \u0648\u064A`;
+        return `\u0646\u0627\u0633\u0645 \u0639\u062F\u062F: \u0628\u0627\u06CC\u062F \u062F ${issue4.divisor} \u0645\u0636\u0631\u0628 \u0648\u064A`;
       case "unrecognized_keys":
-        return `\u0646\u0627\u0633\u0645 ${issue3.keys.length > 1 ? "\u06A9\u0644\u06CC\u0689\u0648\u0646\u0647" : "\u06A9\u0644\u06CC\u0689"}: ${joinValues(issue3.keys, ", ")}`;
+        return `\u0646\u0627\u0633\u0645 ${issue4.keys.length > 1 ? "\u06A9\u0644\u06CC\u0689\u0648\u0646\u0647" : "\u06A9\u0644\u06CC\u0689"}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `\u0646\u0627\u0633\u0645 \u06A9\u0644\u06CC\u0689 \u067E\u0647 ${issue3.origin} \u06A9\u06D0`;
+        return `\u0646\u0627\u0633\u0645 \u06A9\u0644\u06CC\u0689 \u067E\u0647 ${issue4.origin} \u06A9\u06D0`;
       case "invalid_union":
         return `\u0646\u0627\u0633\u0645\u0647 \u0648\u0631\u0648\u062F\u064A`;
       case "invalid_element":
-        return `\u0646\u0627\u0633\u0645 \u0639\u0646\u0635\u0631 \u067E\u0647 ${issue3.origin} \u06A9\u06D0`;
+        return `\u0646\u0627\u0633\u0645 \u0639\u0646\u0635\u0631 \u067E\u0647 ${issue4.origin} \u06A9\u06D0`;
       default:
         return `\u0646\u0627\u0633\u0645\u0647 \u0648\u0631\u0648\u062F\u064A`;
     }
@@ -16905,39 +16911,39 @@ var error35 = () => {
     number: "liczba",
     array: "tablica"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Nieprawid\u0142owe dane wej\u015Bciowe: oczekiwano instanceof ${issue3.expected}, otrzymano ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Nieprawid\u0142owe dane wej\u015Bciowe: oczekiwano instanceof ${issue4.expected}, otrzymano ${received}`;
         }
         return `Nieprawid\u0142owe dane wej\u015Bciowe: oczekiwano ${expected}, otrzymano ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Nieprawid\u0142owe dane wej\u015Bciowe: oczekiwano ${stringifyPrimitive(issue3.values[0])}`;
-        return `Nieprawid\u0142owa opcja: oczekiwano jednej z warto\u015Bci ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Nieprawid\u0142owe dane wej\u015Bciowe: oczekiwano ${stringifyPrimitive(issue4.values[0])}`;
+        return `Nieprawid\u0142owa opcja: oczekiwano jednej z warto\u015Bci ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Za du\u017Ca warto\u015B\u0107: oczekiwano, \u017Ce ${issue3.origin ?? "warto\u015B\u0107"} b\u0119dzie mie\u0107 ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "element\xF3w"}`;
+          return `Za du\u017Ca warto\u015B\u0107: oczekiwano, \u017Ce ${issue4.origin ?? "warto\u015B\u0107"} b\u0119dzie mie\u0107 ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "element\xF3w"}`;
         }
-        return `Zbyt du\u017C(y/a/e): oczekiwano, \u017Ce ${issue3.origin ?? "warto\u015B\u0107"} b\u0119dzie wynosi\u0107 ${adj}${issue3.maximum.toString()}`;
+        return `Zbyt du\u017C(y/a/e): oczekiwano, \u017Ce ${issue4.origin ?? "warto\u015B\u0107"} b\u0119dzie wynosi\u0107 ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Za ma\u0142a warto\u015B\u0107: oczekiwano, \u017Ce ${issue3.origin ?? "warto\u015B\u0107"} b\u0119dzie mie\u0107 ${adj}${issue3.minimum.toString()} ${sizing.unit ?? "element\xF3w"}`;
+          return `Za ma\u0142a warto\u015B\u0107: oczekiwano, \u017Ce ${issue4.origin ?? "warto\u015B\u0107"} b\u0119dzie mie\u0107 ${adj}${issue4.minimum.toString()} ${sizing.unit ?? "element\xF3w"}`;
         }
-        return `Zbyt ma\u0142(y/a/e): oczekiwano, \u017Ce ${issue3.origin ?? "warto\u015B\u0107"} b\u0119dzie wynosi\u0107 ${adj}${issue3.minimum.toString()}`;
+        return `Zbyt ma\u0142(y/a/e): oczekiwano, \u017Ce ${issue4.origin ?? "warto\u015B\u0107"} b\u0119dzie wynosi\u0107 ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `Nieprawid\u0142owy ci\u0105g znak\xF3w: musi zaczyna\u0107 si\u0119 od "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -16946,18 +16952,18 @@ var error35 = () => {
           return `Nieprawid\u0142owy ci\u0105g znak\xF3w: musi zawiera\u0107 "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Nieprawid\u0142owy ci\u0105g znak\xF3w: musi odpowiada\u0107 wzorcowi ${_issue.pattern}`;
-        return `Nieprawid\u0142ow(y/a/e) ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Nieprawid\u0142ow(y/a/e) ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `Nieprawid\u0142owa liczba: musi by\u0107 wielokrotno\u015Bci\u0105 ${issue3.divisor}`;
+        return `Nieprawid\u0142owa liczba: musi by\u0107 wielokrotno\u015Bci\u0105 ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `Nierozpoznane klucze${issue3.keys.length > 1 ? "s" : ""}: ${joinValues(issue3.keys, ", ")}`;
+        return `Nierozpoznane klucze${issue4.keys.length > 1 ? "s" : ""}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Nieprawid\u0142owy klucz w ${issue3.origin}`;
+        return `Nieprawid\u0142owy klucz w ${issue4.origin}`;
       case "invalid_union":
         return "Nieprawid\u0142owe dane wej\u015Bciowe";
       case "invalid_element":
-        return `Nieprawid\u0142owa warto\u015B\u0107 w ${issue3.origin}`;
+        return `Nieprawid\u0142owa warto\u015B\u0107 w ${issue4.origin}`;
       default:
         return `Nieprawid\u0142owe dane wej\u015Bciowe`;
     }
@@ -17015,38 +17021,38 @@ var error36 = () => {
     number: "n\xFAmero",
     null: "nulo"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Tipo inv\xE1lido: esperado instanceof ${issue3.expected}, recebido ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Tipo inv\xE1lido: esperado instanceof ${issue4.expected}, recebido ${received}`;
         }
         return `Tipo inv\xE1lido: esperado ${expected}, recebido ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Entrada inv\xE1lida: esperado ${stringifyPrimitive(issue3.values[0])}`;
-        return `Op\xE7\xE3o inv\xE1lida: esperada uma das ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Entrada inv\xE1lida: esperado ${stringifyPrimitive(issue4.values[0])}`;
+        return `Op\xE7\xE3o inv\xE1lida: esperada uma das ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `Muito grande: esperado que ${issue3.origin ?? "valor"} tivesse ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "elementos"}`;
-        return `Muito grande: esperado que ${issue3.origin ?? "valor"} fosse ${adj}${issue3.maximum.toString()}`;
+          return `Muito grande: esperado que ${issue4.origin ?? "valor"} tivesse ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "elementos"}`;
+        return `Muito grande: esperado que ${issue4.origin ?? "valor"} fosse ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Muito pequeno: esperado que ${issue3.origin} tivesse ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `Muito pequeno: esperado que ${issue4.origin} tivesse ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `Muito pequeno: esperado que ${issue3.origin} fosse ${adj}${issue3.minimum.toString()}`;
+        return `Muito pequeno: esperado que ${issue4.origin} fosse ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `Texto inv\xE1lido: deve come\xE7ar com "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -17055,18 +17061,18 @@ var error36 = () => {
           return `Texto inv\xE1lido: deve incluir "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Texto inv\xE1lido: deve corresponder ao padr\xE3o ${_issue.pattern}`;
-        return `${FormatDictionary[_issue.format] ?? issue3.format} inv\xE1lido`;
+        return `${FormatDictionary[_issue.format] ?? issue4.format} inv\xE1lido`;
       }
       case "not_multiple_of":
-        return `N\xFAmero inv\xE1lido: deve ser m\xFAltiplo de ${issue3.divisor}`;
+        return `N\xFAmero inv\xE1lido: deve ser m\xFAltiplo de ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `Chave${issue3.keys.length > 1 ? "s" : ""} desconhecida${issue3.keys.length > 1 ? "s" : ""}: ${joinValues(issue3.keys, ", ")}`;
+        return `Chave${issue4.keys.length > 1 ? "s" : ""} desconhecida${issue4.keys.length > 1 ? "s" : ""}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Chave inv\xE1lida em ${issue3.origin}`;
+        return `Chave inv\xE1lida em ${issue4.origin}`;
       case "invalid_union":
         return "Entrada inv\xE1lida";
       case "invalid_element":
-        return `Valor inv\xE1lido em ${issue3.origin}`;
+        return `Valor inv\xE1lido em ${issue4.origin}`;
       default:
         return `Campo inv\xE1lido`;
     }
@@ -17137,35 +17143,35 @@ var error37 = () => {
     map: "hart\u0103",
     set: "set"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
         return `Intrare invalid\u0103: a\u0219teptat ${expected}, primit ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Intrare invalid\u0103: a\u0219teptat ${stringifyPrimitive(issue3.values[0])}`;
-        return `Op\u021Biune invalid\u0103: a\u0219teptat una dintre ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Intrare invalid\u0103: a\u0219teptat ${stringifyPrimitive(issue4.values[0])}`;
+        return `Op\u021Biune invalid\u0103: a\u0219teptat una dintre ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `Prea mare: a\u0219teptat ca ${issue3.origin ?? "valoarea"} ${sizing.verb} ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "elemente"}`;
-        return `Prea mare: a\u0219teptat ca ${issue3.origin ?? "valoarea"} s\u0103 fie ${adj}${issue3.maximum.toString()}`;
+          return `Prea mare: a\u0219teptat ca ${issue4.origin ?? "valoarea"} ${sizing.verb} ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "elemente"}`;
+        return `Prea mare: a\u0219teptat ca ${issue4.origin ?? "valoarea"} s\u0103 fie ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Prea mic: a\u0219teptat ca ${issue3.origin} ${sizing.verb} ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `Prea mic: a\u0219teptat ca ${issue4.origin} ${sizing.verb} ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `Prea mic: a\u0219teptat ca ${issue3.origin} s\u0103 fie ${adj}${issue3.minimum.toString()}`;
+        return `Prea mic: a\u0219teptat ca ${issue4.origin} s\u0103 fie ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `\u0218ir invalid: trebuie s\u0103 \xEEnceap\u0103 cu "${_issue.prefix}"`;
         }
@@ -17175,18 +17181,18 @@ var error37 = () => {
           return `\u0218ir invalid: trebuie s\u0103 includ\u0103 "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `\u0218ir invalid: trebuie s\u0103 se potriveasc\u0103 cu modelul ${_issue.pattern}`;
-        return `Format invalid: ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Format invalid: ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `Num\u0103r invalid: trebuie s\u0103 fie multiplu de ${issue3.divisor}`;
+        return `Num\u0103r invalid: trebuie s\u0103 fie multiplu de ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `Chei nerecunoscute: ${joinValues(issue3.keys, ", ")}`;
+        return `Chei nerecunoscute: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Cheie invalid\u0103 \xEEn ${issue3.origin}`;
+        return `Cheie invalid\u0103 \xEEn ${issue4.origin}`;
       case "invalid_union":
         return "Intrare invalid\u0103";
       case "invalid_element":
-        return `Valoare invalid\u0103 \xEEn ${issue3.origin}`;
+        return `Valoare invalid\u0103 \xEEn ${issue4.origin}`;
       default:
         return `Intrare invalid\u0103`;
     }
@@ -17287,43 +17293,43 @@ var error38 = () => {
     number: "\u0447\u0438\u0441\u043B\u043E",
     array: "\u043C\u0430\u0441\u0441\u0438\u0432"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0432\u0432\u043E\u0434: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C instanceof ${issue3.expected}, \u043F\u043E\u043B\u0443\u0447\u0435\u043D\u043E ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0432\u0432\u043E\u0434: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C instanceof ${issue4.expected}, \u043F\u043E\u043B\u0443\u0447\u0435\u043D\u043E ${received}`;
         }
         return `\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0432\u0432\u043E\u0434: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C ${expected}, \u043F\u043E\u043B\u0443\u0447\u0435\u043D\u043E ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0432\u0432\u043E\u0434: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C ${stringifyPrimitive(issue3.values[0])}`;
-        return `\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0432\u0430\u0440\u0438\u0430\u043D\u0442: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0434\u043D\u043E \u0438\u0437 ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0432\u0432\u043E\u0434: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C ${stringifyPrimitive(issue4.values[0])}`;
+        return `\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0432\u0430\u0440\u0438\u0430\u043D\u0442: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0434\u043D\u043E \u0438\u0437 ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          const maxValue = Number(issue3.maximum);
+          const maxValue = Number(issue4.maximum);
           const unit = getRussianPlural(maxValue, sizing.unit.one, sizing.unit.few, sizing.unit.many);
-          return `\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u0431\u043E\u043B\u044C\u0448\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C, \u0447\u0442\u043E ${issue3.origin ?? "\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435"} \u0431\u0443\u0434\u0435\u0442 \u0438\u043C\u0435\u0442\u044C ${adj}${issue3.maximum.toString()} ${unit}`;
+          return `\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u0431\u043E\u043B\u044C\u0448\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C, \u0447\u0442\u043E ${issue4.origin ?? "\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435"} \u0431\u0443\u0434\u0435\u0442 \u0438\u043C\u0435\u0442\u044C ${adj}${issue4.maximum.toString()} ${unit}`;
         }
-        return `\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u0431\u043E\u043B\u044C\u0448\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C, \u0447\u0442\u043E ${issue3.origin ?? "\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435"} \u0431\u0443\u0434\u0435\u0442 ${adj}${issue3.maximum.toString()}`;
+        return `\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u0431\u043E\u043B\u044C\u0448\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C, \u0447\u0442\u043E ${issue4.origin ?? "\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435"} \u0431\u0443\u0434\u0435\u0442 ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          const minValue = Number(issue3.minimum);
+          const minValue = Number(issue4.minimum);
           const unit = getRussianPlural(minValue, sizing.unit.one, sizing.unit.few, sizing.unit.many);
-          return `\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u0430\u043B\u0435\u043D\u044C\u043A\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C, \u0447\u0442\u043E ${issue3.origin} \u0431\u0443\u0434\u0435\u0442 \u0438\u043C\u0435\u0442\u044C ${adj}${issue3.minimum.toString()} ${unit}`;
+          return `\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u0430\u043B\u0435\u043D\u044C\u043A\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C, \u0447\u0442\u043E ${issue4.origin} \u0431\u0443\u0434\u0435\u0442 \u0438\u043C\u0435\u0442\u044C ${adj}${issue4.minimum.toString()} ${unit}`;
         }
-        return `\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u0430\u043B\u0435\u043D\u044C\u043A\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C, \u0447\u0442\u043E ${issue3.origin} \u0431\u0443\u0434\u0435\u0442 ${adj}${issue3.minimum.toString()}`;
+        return `\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u0430\u043B\u0435\u043D\u044C\u043A\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C, \u0447\u0442\u043E ${issue4.origin} \u0431\u0443\u0434\u0435\u0442 ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `\u041D\u0435\u0432\u0435\u0440\u043D\u0430\u044F \u0441\u0442\u0440\u043E\u043A\u0430: \u0434\u043E\u043B\u0436\u043D\u0430 \u043D\u0430\u0447\u0438\u043D\u0430\u0442\u044C\u0441\u044F \u0441 "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -17332,18 +17338,18 @@ var error38 = () => {
           return `\u041D\u0435\u0432\u0435\u0440\u043D\u0430\u044F \u0441\u0442\u0440\u043E\u043A\u0430: \u0434\u043E\u043B\u0436\u043D\u0430 \u0441\u043E\u0434\u0435\u0440\u0436\u0430\u0442\u044C "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `\u041D\u0435\u0432\u0435\u0440\u043D\u0430\u044F \u0441\u0442\u0440\u043E\u043A\u0430: \u0434\u043E\u043B\u0436\u043D\u0430 \u0441\u043E\u043E\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u043E\u0432\u0430\u0442\u044C \u0448\u0430\u0431\u043B\u043E\u043D\u0443 ${_issue.pattern}`;
-        return `\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `\u041D\u0435\u0432\u0435\u0440\u043D\u043E\u0435 \u0447\u0438\u0441\u043B\u043E: \u0434\u043E\u043B\u0436\u043D\u043E \u0431\u044B\u0442\u044C \u043A\u0440\u0430\u0442\u043D\u044B\u043C ${issue3.divisor}`;
+        return `\u041D\u0435\u0432\u0435\u0440\u043D\u043E\u0435 \u0447\u0438\u0441\u043B\u043E: \u0434\u043E\u043B\u0436\u043D\u043E \u0431\u044B\u0442\u044C \u043A\u0440\u0430\u0442\u043D\u044B\u043C ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `\u041D\u0435\u0440\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u043D\u043D${issue3.keys.length > 1 ? "\u044B\u0435" : "\u044B\u0439"} \u043A\u043B\u044E\u0447${issue3.keys.length > 1 ? "\u0438" : ""}: ${joinValues(issue3.keys, ", ")}`;
+        return `\u041D\u0435\u0440\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u043D\u043D${issue4.keys.length > 1 ? "\u044B\u0435" : "\u044B\u0439"} \u043A\u043B\u044E\u0447${issue4.keys.length > 1 ? "\u0438" : ""}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u043A\u043B\u044E\u0447 \u0432 ${issue3.origin}`;
+        return `\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u043A\u043B\u044E\u0447 \u0432 ${issue4.origin}`;
       case "invalid_union":
         return "\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0435 \u0432\u0445\u043E\u0434\u043D\u044B\u0435 \u0434\u0430\u043D\u043D\u044B\u0435";
       case "invalid_element":
-        return `\u041D\u0435\u0432\u0435\u0440\u043D\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435 \u0432 ${issue3.origin}`;
+        return `\u041D\u0435\u0432\u0435\u0440\u043D\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435 \u0432 ${issue4.origin}`;
       default:
         return `\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0435 \u0432\u0445\u043E\u0434\u043D\u044B\u0435 \u0434\u0430\u043D\u043D\u044B\u0435`;
     }
@@ -17401,38 +17407,38 @@ var error39 = () => {
     number: "\u0161tevilo",
     array: "tabela"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Neveljaven vnos: pri\u010Dakovano instanceof ${issue3.expected}, prejeto ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Neveljaven vnos: pri\u010Dakovano instanceof ${issue4.expected}, prejeto ${received}`;
         }
         return `Neveljaven vnos: pri\u010Dakovano ${expected}, prejeto ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Neveljaven vnos: pri\u010Dakovano ${stringifyPrimitive(issue3.values[0])}`;
-        return `Neveljavna mo\u017Enost: pri\u010Dakovano eno izmed ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Neveljaven vnos: pri\u010Dakovano ${stringifyPrimitive(issue4.values[0])}`;
+        return `Neveljavna mo\u017Enost: pri\u010Dakovano eno izmed ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `Preveliko: pri\u010Dakovano, da bo ${issue3.origin ?? "vrednost"} imelo ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "elementov"}`;
-        return `Preveliko: pri\u010Dakovano, da bo ${issue3.origin ?? "vrednost"} ${adj}${issue3.maximum.toString()}`;
+          return `Preveliko: pri\u010Dakovano, da bo ${issue4.origin ?? "vrednost"} imelo ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "elementov"}`;
+        return `Preveliko: pri\u010Dakovano, da bo ${issue4.origin ?? "vrednost"} ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Premajhno: pri\u010Dakovano, da bo ${issue3.origin} imelo ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `Premajhno: pri\u010Dakovano, da bo ${issue4.origin} imelo ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `Premajhno: pri\u010Dakovano, da bo ${issue3.origin} ${adj}${issue3.minimum.toString()}`;
+        return `Premajhno: pri\u010Dakovano, da bo ${issue4.origin} ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `Neveljaven niz: mora se za\u010Deti z "${_issue.prefix}"`;
         }
@@ -17442,18 +17448,18 @@ var error39 = () => {
           return `Neveljaven niz: mora vsebovati "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Neveljaven niz: mora ustrezati vzorcu ${_issue.pattern}`;
-        return `Neveljaven ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Neveljaven ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `Neveljavno \u0161tevilo: mora biti ve\u010Dkratnik ${issue3.divisor}`;
+        return `Neveljavno \u0161tevilo: mora biti ve\u010Dkratnik ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `Neprepoznan${issue3.keys.length > 1 ? "i klju\u010Di" : " klju\u010D"}: ${joinValues(issue3.keys, ", ")}`;
+        return `Neprepoznan${issue4.keys.length > 1 ? "i klju\u010Di" : " klju\u010D"}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Neveljaven klju\u010D v ${issue3.origin}`;
+        return `Neveljaven klju\u010D v ${issue4.origin}`;
       case "invalid_union":
         return "Neveljaven vnos";
       case "invalid_element":
-        return `Neveljavna vrednost v ${issue3.origin}`;
+        return `Neveljavna vrednost v ${issue4.origin}`;
       default:
         return "Neveljaven vnos";
     }
@@ -17511,39 +17517,39 @@ var error40 = () => {
     number: "antal",
     array: "lista"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Ogiltig inmatning: f\xF6rv\xE4ntat instanceof ${issue3.expected}, fick ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Ogiltig inmatning: f\xF6rv\xE4ntat instanceof ${issue4.expected}, fick ${received}`;
         }
         return `Ogiltig inmatning: f\xF6rv\xE4ntat ${expected}, fick ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Ogiltig inmatning: f\xF6rv\xE4ntat ${stringifyPrimitive(issue3.values[0])}`;
-        return `Ogiltigt val: f\xF6rv\xE4ntade en av ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Ogiltig inmatning: f\xF6rv\xE4ntat ${stringifyPrimitive(issue4.values[0])}`;
+        return `Ogiltigt val: f\xF6rv\xE4ntade en av ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `F\xF6r stor(t): f\xF6rv\xE4ntade ${issue3.origin ?? "v\xE4rdet"} att ha ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "element"}`;
+          return `F\xF6r stor(t): f\xF6rv\xE4ntade ${issue4.origin ?? "v\xE4rdet"} att ha ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "element"}`;
         }
-        return `F\xF6r stor(t): f\xF6rv\xE4ntat ${issue3.origin ?? "v\xE4rdet"} att ha ${adj}${issue3.maximum.toString()}`;
+        return `F\xF6r stor(t): f\xF6rv\xE4ntat ${issue4.origin ?? "v\xE4rdet"} att ha ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `F\xF6r lite(t): f\xF6rv\xE4ntade ${issue3.origin ?? "v\xE4rdet"} att ha ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `F\xF6r lite(t): f\xF6rv\xE4ntade ${issue4.origin ?? "v\xE4rdet"} att ha ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `F\xF6r lite(t): f\xF6rv\xE4ntade ${issue3.origin ?? "v\xE4rdet"} att ha ${adj}${issue3.minimum.toString()}`;
+        return `F\xF6r lite(t): f\xF6rv\xE4ntade ${issue4.origin ?? "v\xE4rdet"} att ha ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `Ogiltig str\xE4ng: m\xE5ste b\xF6rja med "${_issue.prefix}"`;
         }
@@ -17553,18 +17559,18 @@ var error40 = () => {
           return `Ogiltig str\xE4ng: m\xE5ste inneh\xE5lla "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Ogiltig str\xE4ng: m\xE5ste matcha m\xF6nstret "${_issue.pattern}"`;
-        return `Ogiltig(t) ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Ogiltig(t) ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `Ogiltigt tal: m\xE5ste vara en multipel av ${issue3.divisor}`;
+        return `Ogiltigt tal: m\xE5ste vara en multipel av ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `${issue3.keys.length > 1 ? "Ok\xE4nda nycklar" : "Ok\xE4nd nyckel"}: ${joinValues(issue3.keys, ", ")}`;
+        return `${issue4.keys.length > 1 ? "Ok\xE4nda nycklar" : "Ok\xE4nd nyckel"}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Ogiltig nyckel i ${issue3.origin ?? "v\xE4rdet"}`;
+        return `Ogiltig nyckel i ${issue4.origin ?? "v\xE4rdet"}`;
       case "invalid_union":
         return "Ogiltig input";
       case "invalid_element":
-        return `Ogiltigt v\xE4rde i ${issue3.origin ?? "v\xE4rdet"}`;
+        return `Ogiltigt v\xE4rde i ${issue4.origin ?? "v\xE4rdet"}`;
       default:
         return `Ogiltig input`;
     }
@@ -17623,39 +17629,39 @@ var error41 = () => {
     array: "\u0B85\u0BA3\u0BBF",
     null: "\u0BB5\u0BC6\u0BB1\u0BC1\u0BAE\u0BC8"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 \u0B89\u0BB3\u0BCD\u0BB3\u0BC0\u0B9F\u0BC1: \u0B8E\u0BA4\u0BBF\u0BB0\u0BCD\u0BAA\u0BBE\u0BB0\u0BCD\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1 instanceof ${issue3.expected}, \u0BAA\u0BC6\u0BB1\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1 ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 \u0B89\u0BB3\u0BCD\u0BB3\u0BC0\u0B9F\u0BC1: \u0B8E\u0BA4\u0BBF\u0BB0\u0BCD\u0BAA\u0BBE\u0BB0\u0BCD\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1 instanceof ${issue4.expected}, \u0BAA\u0BC6\u0BB1\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1 ${received}`;
         }
         return `\u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 \u0B89\u0BB3\u0BCD\u0BB3\u0BC0\u0B9F\u0BC1: \u0B8E\u0BA4\u0BBF\u0BB0\u0BCD\u0BAA\u0BBE\u0BB0\u0BCD\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1 ${expected}, \u0BAA\u0BC6\u0BB1\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1 ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `\u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 \u0B89\u0BB3\u0BCD\u0BB3\u0BC0\u0B9F\u0BC1: \u0B8E\u0BA4\u0BBF\u0BB0\u0BCD\u0BAA\u0BBE\u0BB0\u0BCD\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1 ${stringifyPrimitive(issue3.values[0])}`;
-        return `\u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 \u0BB5\u0BBF\u0BB0\u0BC1\u0BAA\u0BCD\u0BAA\u0BAE\u0BCD: \u0B8E\u0BA4\u0BBF\u0BB0\u0BCD\u0BAA\u0BBE\u0BB0\u0BCD\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1 ${joinValues(issue3.values, "|")} \u0B87\u0BB2\u0BCD \u0B92\u0BA9\u0BCD\u0BB1\u0BC1`;
+        if (issue4.values.length === 1)
+          return `\u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 \u0B89\u0BB3\u0BCD\u0BB3\u0BC0\u0B9F\u0BC1: \u0B8E\u0BA4\u0BBF\u0BB0\u0BCD\u0BAA\u0BBE\u0BB0\u0BCD\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1 ${stringifyPrimitive(issue4.values[0])}`;
+        return `\u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 \u0BB5\u0BBF\u0BB0\u0BC1\u0BAA\u0BCD\u0BAA\u0BAE\u0BCD: \u0B8E\u0BA4\u0BBF\u0BB0\u0BCD\u0BAA\u0BBE\u0BB0\u0BCD\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1 ${joinValues(issue4.values, "|")} \u0B87\u0BB2\u0BCD \u0B92\u0BA9\u0BCD\u0BB1\u0BC1`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `\u0BAE\u0BBF\u0B95 \u0BAA\u0BC6\u0BB0\u0BBF\u0BAF\u0BA4\u0BC1: \u0B8E\u0BA4\u0BBF\u0BB0\u0BCD\u0BAA\u0BBE\u0BB0\u0BCD\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1 ${issue3.origin ?? "\u0BAE\u0BA4\u0BBF\u0BAA\u0BCD\u0BAA\u0BC1"} ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "\u0B89\u0BB1\u0BC1\u0BAA\u0BCD\u0BAA\u0BC1\u0B95\u0BB3\u0BCD"} \u0B86\u0B95 \u0B87\u0BB0\u0BC1\u0B95\u0BCD\u0B95 \u0BB5\u0BC7\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD`;
+          return `\u0BAE\u0BBF\u0B95 \u0BAA\u0BC6\u0BB0\u0BBF\u0BAF\u0BA4\u0BC1: \u0B8E\u0BA4\u0BBF\u0BB0\u0BCD\u0BAA\u0BBE\u0BB0\u0BCD\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1 ${issue4.origin ?? "\u0BAE\u0BA4\u0BBF\u0BAA\u0BCD\u0BAA\u0BC1"} ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "\u0B89\u0BB1\u0BC1\u0BAA\u0BCD\u0BAA\u0BC1\u0B95\u0BB3\u0BCD"} \u0B86\u0B95 \u0B87\u0BB0\u0BC1\u0B95\u0BCD\u0B95 \u0BB5\u0BC7\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD`;
         }
-        return `\u0BAE\u0BBF\u0B95 \u0BAA\u0BC6\u0BB0\u0BBF\u0BAF\u0BA4\u0BC1: \u0B8E\u0BA4\u0BBF\u0BB0\u0BCD\u0BAA\u0BBE\u0BB0\u0BCD\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1 ${issue3.origin ?? "\u0BAE\u0BA4\u0BBF\u0BAA\u0BCD\u0BAA\u0BC1"} ${adj}${issue3.maximum.toString()} \u0B86\u0B95 \u0B87\u0BB0\u0BC1\u0B95\u0BCD\u0B95 \u0BB5\u0BC7\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD`;
+        return `\u0BAE\u0BBF\u0B95 \u0BAA\u0BC6\u0BB0\u0BBF\u0BAF\u0BA4\u0BC1: \u0B8E\u0BA4\u0BBF\u0BB0\u0BCD\u0BAA\u0BBE\u0BB0\u0BCD\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1 ${issue4.origin ?? "\u0BAE\u0BA4\u0BBF\u0BAA\u0BCD\u0BAA\u0BC1"} ${adj}${issue4.maximum.toString()} \u0B86\u0B95 \u0B87\u0BB0\u0BC1\u0B95\u0BCD\u0B95 \u0BB5\u0BC7\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `\u0BAE\u0BBF\u0B95\u0B9A\u0BCD \u0B9A\u0BBF\u0BB1\u0BBF\u0BAF\u0BA4\u0BC1: \u0B8E\u0BA4\u0BBF\u0BB0\u0BCD\u0BAA\u0BBE\u0BB0\u0BCD\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1 ${issue3.origin} ${adj}${issue3.minimum.toString()} ${sizing.unit} \u0B86\u0B95 \u0B87\u0BB0\u0BC1\u0B95\u0BCD\u0B95 \u0BB5\u0BC7\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD`;
+          return `\u0BAE\u0BBF\u0B95\u0B9A\u0BCD \u0B9A\u0BBF\u0BB1\u0BBF\u0BAF\u0BA4\u0BC1: \u0B8E\u0BA4\u0BBF\u0BB0\u0BCD\u0BAA\u0BBE\u0BB0\u0BCD\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1 ${issue4.origin} ${adj}${issue4.minimum.toString()} ${sizing.unit} \u0B86\u0B95 \u0B87\u0BB0\u0BC1\u0B95\u0BCD\u0B95 \u0BB5\u0BC7\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD`;
         }
-        return `\u0BAE\u0BBF\u0B95\u0B9A\u0BCD \u0B9A\u0BBF\u0BB1\u0BBF\u0BAF\u0BA4\u0BC1: \u0B8E\u0BA4\u0BBF\u0BB0\u0BCD\u0BAA\u0BBE\u0BB0\u0BCD\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1 ${issue3.origin} ${adj}${issue3.minimum.toString()} \u0B86\u0B95 \u0B87\u0BB0\u0BC1\u0B95\u0BCD\u0B95 \u0BB5\u0BC7\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD`;
+        return `\u0BAE\u0BBF\u0B95\u0B9A\u0BCD \u0B9A\u0BBF\u0BB1\u0BBF\u0BAF\u0BA4\u0BC1: \u0B8E\u0BA4\u0BBF\u0BB0\u0BCD\u0BAA\u0BBE\u0BB0\u0BCD\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1 ${issue4.origin} ${adj}${issue4.minimum.toString()} \u0B86\u0B95 \u0B87\u0BB0\u0BC1\u0B95\u0BCD\u0B95 \u0BB5\u0BC7\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `\u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 \u0B9A\u0BB0\u0BAE\u0BCD: "${_issue.prefix}" \u0B87\u0BB2\u0BCD \u0BA4\u0BCA\u0B9F\u0B99\u0BCD\u0B95 \u0BB5\u0BC7\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD`;
         if (_issue.format === "ends_with")
@@ -17664,18 +17670,18 @@ var error41 = () => {
           return `\u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 \u0B9A\u0BB0\u0BAE\u0BCD: "${_issue.includes}" \u0B90 \u0B89\u0BB3\u0BCD\u0BB3\u0B9F\u0B95\u0BCD\u0B95 \u0BB5\u0BC7\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD`;
         if (_issue.format === "regex")
           return `\u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 \u0B9A\u0BB0\u0BAE\u0BCD: ${_issue.pattern} \u0BAE\u0BC1\u0BB1\u0BC8\u0BAA\u0BBE\u0B9F\u0BCD\u0B9F\u0BC1\u0B9F\u0BA9\u0BCD \u0BAA\u0BCA\u0BB0\u0BC1\u0BA8\u0BCD\u0BA4 \u0BB5\u0BC7\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD`;
-        return `\u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `\u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `\u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 \u0B8E\u0BA3\u0BCD: ${issue3.divisor} \u0B87\u0BA9\u0BCD \u0BAA\u0BB2\u0BAE\u0BBE\u0B95 \u0B87\u0BB0\u0BC1\u0B95\u0BCD\u0B95 \u0BB5\u0BC7\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD`;
+        return `\u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 \u0B8E\u0BA3\u0BCD: ${issue4.divisor} \u0B87\u0BA9\u0BCD \u0BAA\u0BB2\u0BAE\u0BBE\u0B95 \u0B87\u0BB0\u0BC1\u0B95\u0BCD\u0B95 \u0BB5\u0BC7\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD`;
       case "unrecognized_keys":
-        return `\u0B85\u0B9F\u0BC8\u0BAF\u0BBE\u0BB3\u0BAE\u0BCD \u0BA4\u0BC6\u0BB0\u0BBF\u0BAF\u0BBE\u0BA4 \u0BB5\u0BBF\u0B9A\u0BC8${issue3.keys.length > 1 ? "\u0B95\u0BB3\u0BCD" : ""}: ${joinValues(issue3.keys, ", ")}`;
+        return `\u0B85\u0B9F\u0BC8\u0BAF\u0BBE\u0BB3\u0BAE\u0BCD \u0BA4\u0BC6\u0BB0\u0BBF\u0BAF\u0BBE\u0BA4 \u0BB5\u0BBF\u0B9A\u0BC8${issue4.keys.length > 1 ? "\u0B95\u0BB3\u0BCD" : ""}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `${issue3.origin} \u0B87\u0BB2\u0BCD \u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 \u0BB5\u0BBF\u0B9A\u0BC8`;
+        return `${issue4.origin} \u0B87\u0BB2\u0BCD \u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 \u0BB5\u0BBF\u0B9A\u0BC8`;
       case "invalid_union":
         return "\u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 \u0B89\u0BB3\u0BCD\u0BB3\u0BC0\u0B9F\u0BC1";
       case "invalid_element":
-        return `${issue3.origin} \u0B87\u0BB2\u0BCD \u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 \u0BAE\u0BA4\u0BBF\u0BAA\u0BCD\u0BAA\u0BC1`;
+        return `${issue4.origin} \u0B87\u0BB2\u0BCD \u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 \u0BAE\u0BA4\u0BBF\u0BAA\u0BCD\u0BAA\u0BC1`;
       default:
         return `\u0BA4\u0BB5\u0BB1\u0BBE\u0BA9 \u0B89\u0BB3\u0BCD\u0BB3\u0BC0\u0B9F\u0BC1`;
     }
@@ -17734,38 +17740,38 @@ var error42 = () => {
     array: "\u0E2D\u0E32\u0E23\u0E4C\u0E40\u0E23\u0E22\u0E4C (Array)",
     null: "\u0E44\u0E21\u0E48\u0E21\u0E35\u0E04\u0E48\u0E32 (null)"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\u0E1B\u0E23\u0E30\u0E40\u0E20\u0E17\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07: \u0E04\u0E27\u0E23\u0E40\u0E1B\u0E47\u0E19 instanceof ${issue3.expected} \u0E41\u0E15\u0E48\u0E44\u0E14\u0E49\u0E23\u0E31\u0E1A ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\u0E1B\u0E23\u0E30\u0E40\u0E20\u0E17\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07: \u0E04\u0E27\u0E23\u0E40\u0E1B\u0E47\u0E19 instanceof ${issue4.expected} \u0E41\u0E15\u0E48\u0E44\u0E14\u0E49\u0E23\u0E31\u0E1A ${received}`;
         }
         return `\u0E1B\u0E23\u0E30\u0E40\u0E20\u0E17\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07: \u0E04\u0E27\u0E23\u0E40\u0E1B\u0E47\u0E19 ${expected} \u0E41\u0E15\u0E48\u0E44\u0E14\u0E49\u0E23\u0E31\u0E1A ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `\u0E04\u0E48\u0E32\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07: \u0E04\u0E27\u0E23\u0E40\u0E1B\u0E47\u0E19 ${stringifyPrimitive(issue3.values[0])}`;
-        return `\u0E15\u0E31\u0E27\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07: \u0E04\u0E27\u0E23\u0E40\u0E1B\u0E47\u0E19\u0E2B\u0E19\u0E36\u0E48\u0E07\u0E43\u0E19 ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `\u0E04\u0E48\u0E32\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07: \u0E04\u0E27\u0E23\u0E40\u0E1B\u0E47\u0E19 ${stringifyPrimitive(issue4.values[0])}`;
+        return `\u0E15\u0E31\u0E27\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07: \u0E04\u0E27\u0E23\u0E40\u0E1B\u0E47\u0E19\u0E2B\u0E19\u0E36\u0E48\u0E07\u0E43\u0E19 ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "\u0E44\u0E21\u0E48\u0E40\u0E01\u0E34\u0E19" : "\u0E19\u0E49\u0E2D\u0E22\u0E01\u0E27\u0E48\u0E32";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "\u0E44\u0E21\u0E48\u0E40\u0E01\u0E34\u0E19" : "\u0E19\u0E49\u0E2D\u0E22\u0E01\u0E27\u0E48\u0E32";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `\u0E40\u0E01\u0E34\u0E19\u0E01\u0E33\u0E2B\u0E19\u0E14: ${issue3.origin ?? "\u0E04\u0E48\u0E32"} \u0E04\u0E27\u0E23\u0E21\u0E35${adj} ${issue3.maximum.toString()} ${sizing.unit ?? "\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23"}`;
-        return `\u0E40\u0E01\u0E34\u0E19\u0E01\u0E33\u0E2B\u0E19\u0E14: ${issue3.origin ?? "\u0E04\u0E48\u0E32"} \u0E04\u0E27\u0E23\u0E21\u0E35${adj} ${issue3.maximum.toString()}`;
+          return `\u0E40\u0E01\u0E34\u0E19\u0E01\u0E33\u0E2B\u0E19\u0E14: ${issue4.origin ?? "\u0E04\u0E48\u0E32"} \u0E04\u0E27\u0E23\u0E21\u0E35${adj} ${issue4.maximum.toString()} ${sizing.unit ?? "\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23"}`;
+        return `\u0E40\u0E01\u0E34\u0E19\u0E01\u0E33\u0E2B\u0E19\u0E14: ${issue4.origin ?? "\u0E04\u0E48\u0E32"} \u0E04\u0E27\u0E23\u0E21\u0E35${adj} ${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? "\u0E2D\u0E22\u0E48\u0E32\u0E07\u0E19\u0E49\u0E2D\u0E22" : "\u0E21\u0E32\u0E01\u0E01\u0E27\u0E48\u0E32";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "\u0E2D\u0E22\u0E48\u0E32\u0E07\u0E19\u0E49\u0E2D\u0E22" : "\u0E21\u0E32\u0E01\u0E01\u0E27\u0E48\u0E32";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `\u0E19\u0E49\u0E2D\u0E22\u0E01\u0E27\u0E48\u0E32\u0E01\u0E33\u0E2B\u0E19\u0E14: ${issue3.origin} \u0E04\u0E27\u0E23\u0E21\u0E35${adj} ${issue3.minimum.toString()} ${sizing.unit}`;
+          return `\u0E19\u0E49\u0E2D\u0E22\u0E01\u0E27\u0E48\u0E32\u0E01\u0E33\u0E2B\u0E19\u0E14: ${issue4.origin} \u0E04\u0E27\u0E23\u0E21\u0E35${adj} ${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `\u0E19\u0E49\u0E2D\u0E22\u0E01\u0E27\u0E48\u0E32\u0E01\u0E33\u0E2B\u0E19\u0E14: ${issue3.origin} \u0E04\u0E27\u0E23\u0E21\u0E35${adj} ${issue3.minimum.toString()}`;
+        return `\u0E19\u0E49\u0E2D\u0E22\u0E01\u0E27\u0E48\u0E32\u0E01\u0E33\u0E2B\u0E19\u0E14: ${issue4.origin} \u0E04\u0E27\u0E23\u0E21\u0E35${adj} ${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `\u0E23\u0E39\u0E1B\u0E41\u0E1A\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07: \u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21\u0E15\u0E49\u0E2D\u0E07\u0E02\u0E36\u0E49\u0E19\u0E15\u0E49\u0E19\u0E14\u0E49\u0E27\u0E22 "${_issue.prefix}"`;
         }
@@ -17775,18 +17781,18 @@ var error42 = () => {
           return `\u0E23\u0E39\u0E1B\u0E41\u0E1A\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07: \u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21\u0E15\u0E49\u0E2D\u0E07\u0E21\u0E35 "${_issue.includes}" \u0E2D\u0E22\u0E39\u0E48\u0E43\u0E19\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21`;
         if (_issue.format === "regex")
           return `\u0E23\u0E39\u0E1B\u0E41\u0E1A\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07: \u0E15\u0E49\u0E2D\u0E07\u0E15\u0E23\u0E07\u0E01\u0E31\u0E1A\u0E23\u0E39\u0E1B\u0E41\u0E1A\u0E1A\u0E17\u0E35\u0E48\u0E01\u0E33\u0E2B\u0E19\u0E14 ${_issue.pattern}`;
-        return `\u0E23\u0E39\u0E1B\u0E41\u0E1A\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07: ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `\u0E23\u0E39\u0E1B\u0E41\u0E1A\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07: ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `\u0E15\u0E31\u0E27\u0E40\u0E25\u0E02\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07: \u0E15\u0E49\u0E2D\u0E07\u0E40\u0E1B\u0E47\u0E19\u0E08\u0E33\u0E19\u0E27\u0E19\u0E17\u0E35\u0E48\u0E2B\u0E32\u0E23\u0E14\u0E49\u0E27\u0E22 ${issue3.divisor} \u0E44\u0E14\u0E49\u0E25\u0E07\u0E15\u0E31\u0E27`;
+        return `\u0E15\u0E31\u0E27\u0E40\u0E25\u0E02\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07: \u0E15\u0E49\u0E2D\u0E07\u0E40\u0E1B\u0E47\u0E19\u0E08\u0E33\u0E19\u0E27\u0E19\u0E17\u0E35\u0E48\u0E2B\u0E32\u0E23\u0E14\u0E49\u0E27\u0E22 ${issue4.divisor} \u0E44\u0E14\u0E49\u0E25\u0E07\u0E15\u0E31\u0E27`;
       case "unrecognized_keys":
-        return `\u0E1E\u0E1A\u0E04\u0E35\u0E22\u0E4C\u0E17\u0E35\u0E48\u0E44\u0E21\u0E48\u0E23\u0E39\u0E49\u0E08\u0E31\u0E01: ${joinValues(issue3.keys, ", ")}`;
+        return `\u0E1E\u0E1A\u0E04\u0E35\u0E22\u0E4C\u0E17\u0E35\u0E48\u0E44\u0E21\u0E48\u0E23\u0E39\u0E49\u0E08\u0E31\u0E01: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `\u0E04\u0E35\u0E22\u0E4C\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E43\u0E19 ${issue3.origin}`;
+        return `\u0E04\u0E35\u0E22\u0E4C\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E43\u0E19 ${issue4.origin}`;
       case "invalid_union":
         return "\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07: \u0E44\u0E21\u0E48\u0E15\u0E23\u0E07\u0E01\u0E31\u0E1A\u0E23\u0E39\u0E1B\u0E41\u0E1A\u0E1A\u0E22\u0E39\u0E40\u0E19\u0E35\u0E22\u0E19\u0E17\u0E35\u0E48\u0E01\u0E33\u0E2B\u0E19\u0E14\u0E44\u0E27\u0E49";
       case "invalid_element":
-        return `\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E43\u0E19 ${issue3.origin}`;
+        return `\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E43\u0E19 ${issue4.origin}`;
       default:
         return `\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07`;
     }
@@ -17842,37 +17848,37 @@ var error43 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Ge\xE7ersiz de\u011Fer: beklenen instanceof ${issue3.expected}, al\u0131nan ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Ge\xE7ersiz de\u011Fer: beklenen instanceof ${issue4.expected}, al\u0131nan ${received}`;
         }
         return `Ge\xE7ersiz de\u011Fer: beklenen ${expected}, al\u0131nan ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Ge\xE7ersiz de\u011Fer: beklenen ${stringifyPrimitive(issue3.values[0])}`;
-        return `Ge\xE7ersiz se\xE7enek: a\u015Fa\u011F\u0131dakilerden biri olmal\u0131: ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Ge\xE7ersiz de\u011Fer: beklenen ${stringifyPrimitive(issue4.values[0])}`;
+        return `Ge\xE7ersiz se\xE7enek: a\u015Fa\u011F\u0131dakilerden biri olmal\u0131: ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `\xC7ok b\xFCy\xFCk: beklenen ${issue3.origin ?? "de\u011Fer"} ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "\xF6\u011Fe"}`;
-        return `\xC7ok b\xFCy\xFCk: beklenen ${issue3.origin ?? "de\u011Fer"} ${adj}${issue3.maximum.toString()}`;
+          return `\xC7ok b\xFCy\xFCk: beklenen ${issue4.origin ?? "de\u011Fer"} ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "\xF6\u011Fe"}`;
+        return `\xC7ok b\xFCy\xFCk: beklenen ${issue4.origin ?? "de\u011Fer"} ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `\xC7ok k\xFC\xE7\xFCk: beklenen ${issue3.origin} ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
-        return `\xC7ok k\xFC\xE7\xFCk: beklenen ${issue3.origin} ${adj}${issue3.minimum.toString()}`;
+          return `\xC7ok k\xFC\xE7\xFCk: beklenen ${issue4.origin} ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
+        return `\xC7ok k\xFC\xE7\xFCk: beklenen ${issue4.origin} ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `Ge\xE7ersiz metin: "${_issue.prefix}" ile ba\u015Flamal\u0131`;
         if (_issue.format === "ends_with")
@@ -17881,18 +17887,18 @@ var error43 = () => {
           return `Ge\xE7ersiz metin: "${_issue.includes}" i\xE7ermeli`;
         if (_issue.format === "regex")
           return `Ge\xE7ersiz metin: ${_issue.pattern} desenine uymal\u0131`;
-        return `Ge\xE7ersiz ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Ge\xE7ersiz ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `Ge\xE7ersiz say\u0131: ${issue3.divisor} ile tam b\xF6l\xFCnebilmeli`;
+        return `Ge\xE7ersiz say\u0131: ${issue4.divisor} ile tam b\xF6l\xFCnebilmeli`;
       case "unrecognized_keys":
-        return `Tan\u0131nmayan anahtar${issue3.keys.length > 1 ? "lar" : ""}: ${joinValues(issue3.keys, ", ")}`;
+        return `Tan\u0131nmayan anahtar${issue4.keys.length > 1 ? "lar" : ""}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `${issue3.origin} i\xE7inde ge\xE7ersiz anahtar`;
+        return `${issue4.origin} i\xE7inde ge\xE7ersiz anahtar`;
       case "invalid_union":
         return "Ge\xE7ersiz de\u011Fer";
       case "invalid_element":
-        return `${issue3.origin} i\xE7inde ge\xE7ersiz de\u011Fer`;
+        return `${issue4.origin} i\xE7inde ge\xE7ersiz de\u011Fer`;
       default:
         return `Ge\xE7ersiz de\u011Fer`;
     }
@@ -17950,38 +17956,38 @@ var error44 = () => {
     number: "\u0447\u0438\u0441\u043B\u043E",
     array: "\u043C\u0430\u0441\u0438\u0432"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0456 \u0432\u0445\u0456\u0434\u043D\u0456 \u0434\u0430\u043D\u0456: \u043E\u0447\u0456\u043A\u0443\u0454\u0442\u044C\u0441\u044F instanceof ${issue3.expected}, \u043E\u0442\u0440\u0438\u043C\u0430\u043D\u043E ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0456 \u0432\u0445\u0456\u0434\u043D\u0456 \u0434\u0430\u043D\u0456: \u043E\u0447\u0456\u043A\u0443\u0454\u0442\u044C\u0441\u044F instanceof ${issue4.expected}, \u043E\u0442\u0440\u0438\u043C\u0430\u043D\u043E ${received}`;
         }
         return `\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0456 \u0432\u0445\u0456\u0434\u043D\u0456 \u0434\u0430\u043D\u0456: \u043E\u0447\u0456\u043A\u0443\u0454\u0442\u044C\u0441\u044F ${expected}, \u043E\u0442\u0440\u0438\u043C\u0430\u043D\u043E ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0456 \u0432\u0445\u0456\u0434\u043D\u0456 \u0434\u0430\u043D\u0456: \u043E\u0447\u0456\u043A\u0443\u0454\u0442\u044C\u0441\u044F ${stringifyPrimitive(issue3.values[0])}`;
-        return `\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0430 \u043E\u043F\u0446\u0456\u044F: \u043E\u0447\u0456\u043A\u0443\u0454\u0442\u044C\u0441\u044F \u043E\u0434\u043D\u0435 \u0437 ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0456 \u0432\u0445\u0456\u0434\u043D\u0456 \u0434\u0430\u043D\u0456: \u043E\u0447\u0456\u043A\u0443\u0454\u0442\u044C\u0441\u044F ${stringifyPrimitive(issue4.values[0])}`;
+        return `\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0430 \u043E\u043F\u0446\u0456\u044F: \u043E\u0447\u0456\u043A\u0443\u0454\u0442\u044C\u0441\u044F \u043E\u0434\u043D\u0435 \u0437 ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `\u0417\u0430\u043D\u0430\u0434\u0442\u043E \u0432\u0435\u043B\u0438\u043A\u0435: \u043E\u0447\u0456\u043A\u0443\u0454\u0442\u044C\u0441\u044F, \u0449\u043E ${issue3.origin ?? "\u0437\u043D\u0430\u0447\u0435\u043D\u043D\u044F"} ${sizing.verb} ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "\u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0456\u0432"}`;
-        return `\u0417\u0430\u043D\u0430\u0434\u0442\u043E \u0432\u0435\u043B\u0438\u043A\u0435: \u043E\u0447\u0456\u043A\u0443\u0454\u0442\u044C\u0441\u044F, \u0449\u043E ${issue3.origin ?? "\u0437\u043D\u0430\u0447\u0435\u043D\u043D\u044F"} \u0431\u0443\u0434\u0435 ${adj}${issue3.maximum.toString()}`;
+          return `\u0417\u0430\u043D\u0430\u0434\u0442\u043E \u0432\u0435\u043B\u0438\u043A\u0435: \u043E\u0447\u0456\u043A\u0443\u0454\u0442\u044C\u0441\u044F, \u0449\u043E ${issue4.origin ?? "\u0437\u043D\u0430\u0447\u0435\u043D\u043D\u044F"} ${sizing.verb} ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "\u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0456\u0432"}`;
+        return `\u0417\u0430\u043D\u0430\u0434\u0442\u043E \u0432\u0435\u043B\u0438\u043A\u0435: \u043E\u0447\u0456\u043A\u0443\u0454\u0442\u044C\u0441\u044F, \u0449\u043E ${issue4.origin ?? "\u0437\u043D\u0430\u0447\u0435\u043D\u043D\u044F"} \u0431\u0443\u0434\u0435 ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `\u0417\u0430\u043D\u0430\u0434\u0442\u043E \u043C\u0430\u043B\u0435: \u043E\u0447\u0456\u043A\u0443\u0454\u0442\u044C\u0441\u044F, \u0449\u043E ${issue3.origin} ${sizing.verb} ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `\u0417\u0430\u043D\u0430\u0434\u0442\u043E \u043C\u0430\u043B\u0435: \u043E\u0447\u0456\u043A\u0443\u0454\u0442\u044C\u0441\u044F, \u0449\u043E ${issue4.origin} ${sizing.verb} ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `\u0417\u0430\u043D\u0430\u0434\u0442\u043E \u043C\u0430\u043B\u0435: \u043E\u0447\u0456\u043A\u0443\u0454\u0442\u044C\u0441\u044F, \u0449\u043E ${issue3.origin} \u0431\u0443\u0434\u0435 ${adj}${issue3.minimum.toString()}`;
+        return `\u0417\u0430\u043D\u0430\u0434\u0442\u043E \u043C\u0430\u043B\u0435: \u043E\u0447\u0456\u043A\u0443\u0454\u0442\u044C\u0441\u044F, \u0449\u043E ${issue4.origin} \u0431\u0443\u0434\u0435 ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0438\u0439 \u0440\u044F\u0434\u043E\u043A: \u043F\u043E\u0432\u0438\u043D\u0435\u043D \u043F\u043E\u0447\u0438\u043D\u0430\u0442\u0438\u0441\u044F \u0437 "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -17990,18 +17996,18 @@ var error44 = () => {
           return `\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0438\u0439 \u0440\u044F\u0434\u043E\u043A: \u043F\u043E\u0432\u0438\u043D\u0435\u043D \u043C\u0456\u0441\u0442\u0438\u0442\u0438 "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0438\u0439 \u0440\u044F\u0434\u043E\u043A: \u043F\u043E\u0432\u0438\u043D\u0435\u043D \u0432\u0456\u0434\u043F\u043E\u0432\u0456\u0434\u0430\u0442\u0438 \u0448\u0430\u0431\u043B\u043E\u043D\u0443 ${_issue.pattern}`;
-        return `\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0438\u0439 ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0438\u0439 ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0435 \u0447\u0438\u0441\u043B\u043E: \u043F\u043E\u0432\u0438\u043D\u043D\u043E \u0431\u0443\u0442\u0438 \u043A\u0440\u0430\u0442\u043D\u0438\u043C ${issue3.divisor}`;
+        return `\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0435 \u0447\u0438\u0441\u043B\u043E: \u043F\u043E\u0432\u0438\u043D\u043D\u043E \u0431\u0443\u0442\u0438 \u043A\u0440\u0430\u0442\u043D\u0438\u043C ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `\u041D\u0435\u0440\u043E\u0437\u043F\u0456\u0437\u043D\u0430\u043D\u0438\u0439 \u043A\u043B\u044E\u0447${issue3.keys.length > 1 ? "\u0456" : ""}: ${joinValues(issue3.keys, ", ")}`;
+        return `\u041D\u0435\u0440\u043E\u0437\u043F\u0456\u0437\u043D\u0430\u043D\u0438\u0439 \u043A\u043B\u044E\u0447${issue4.keys.length > 1 ? "\u0456" : ""}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0438\u0439 \u043A\u043B\u044E\u0447 \u0443 ${issue3.origin}`;
+        return `\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0438\u0439 \u043A\u043B\u044E\u0447 \u0443 ${issue4.origin}`;
       case "invalid_union":
         return "\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0456 \u0432\u0445\u0456\u0434\u043D\u0456 \u0434\u0430\u043D\u0456";
       case "invalid_element":
-        return `\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u043D\u044F \u0443 ${issue3.origin}`;
+        return `\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u043D\u044F \u0443 ${issue4.origin}`;
       default:
         return `\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0456 \u0432\u0445\u0456\u0434\u043D\u0456 \u0434\u0430\u043D\u0456`;
     }
@@ -18065,38 +18071,38 @@ var error45 = () => {
     array: "\u0622\u0631\u06D2",
     null: "\u0646\u0644"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\u063A\u0644\u0637 \u0627\u0646 \u067E\u0679: instanceof ${issue3.expected} \u0645\u062A\u0648\u0642\u0639 \u062A\u06BE\u0627\u060C ${received} \u0645\u0648\u0635\u0648\u0644 \u06C1\u0648\u0627`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\u063A\u0644\u0637 \u0627\u0646 \u067E\u0679: instanceof ${issue4.expected} \u0645\u062A\u0648\u0642\u0639 \u062A\u06BE\u0627\u060C ${received} \u0645\u0648\u0635\u0648\u0644 \u06C1\u0648\u0627`;
         }
         return `\u063A\u0644\u0637 \u0627\u0646 \u067E\u0679: ${expected} \u0645\u062A\u0648\u0642\u0639 \u062A\u06BE\u0627\u060C ${received} \u0645\u0648\u0635\u0648\u0644 \u06C1\u0648\u0627`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `\u063A\u0644\u0637 \u0627\u0646 \u067E\u0679: ${stringifyPrimitive(issue3.values[0])} \u0645\u062A\u0648\u0642\u0639 \u062A\u06BE\u0627`;
-        return `\u063A\u0644\u0637 \u0622\u067E\u0634\u0646: ${joinValues(issue3.values, "|")} \u0645\u06CC\u06BA \u0633\u06D2 \u0627\u06CC\u06A9 \u0645\u062A\u0648\u0642\u0639 \u062A\u06BE\u0627`;
+        if (issue4.values.length === 1)
+          return `\u063A\u0644\u0637 \u0627\u0646 \u067E\u0679: ${stringifyPrimitive(issue4.values[0])} \u0645\u062A\u0648\u0642\u0639 \u062A\u06BE\u0627`;
+        return `\u063A\u0644\u0637 \u0622\u067E\u0634\u0646: ${joinValues(issue4.values, "|")} \u0645\u06CC\u06BA \u0633\u06D2 \u0627\u06CC\u06A9 \u0645\u062A\u0648\u0642\u0639 \u062A\u06BE\u0627`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `\u0628\u06C1\u062A \u0628\u0691\u0627: ${issue3.origin ?? "\u0648\u06CC\u0644\u06CC\u0648"} \u06A9\u06D2 ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "\u0639\u0646\u0627\u0635\u0631"} \u06C1\u0648\u0646\u06D2 \u0645\u062A\u0648\u0642\u0639 \u062A\u06BE\u06D2`;
-        return `\u0628\u06C1\u062A \u0628\u0691\u0627: ${issue3.origin ?? "\u0648\u06CC\u0644\u06CC\u0648"} \u06A9\u0627 ${adj}${issue3.maximum.toString()} \u06C1\u0648\u0646\u0627 \u0645\u062A\u0648\u0642\u0639 \u062A\u06BE\u0627`;
+          return `\u0628\u06C1\u062A \u0628\u0691\u0627: ${issue4.origin ?? "\u0648\u06CC\u0644\u06CC\u0648"} \u06A9\u06D2 ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "\u0639\u0646\u0627\u0635\u0631"} \u06C1\u0648\u0646\u06D2 \u0645\u062A\u0648\u0642\u0639 \u062A\u06BE\u06D2`;
+        return `\u0628\u06C1\u062A \u0628\u0691\u0627: ${issue4.origin ?? "\u0648\u06CC\u0644\u06CC\u0648"} \u06A9\u0627 ${adj}${issue4.maximum.toString()} \u06C1\u0648\u0646\u0627 \u0645\u062A\u0648\u0642\u0639 \u062A\u06BE\u0627`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `\u0628\u06C1\u062A \u0686\u06BE\u0648\u0679\u0627: ${issue3.origin} \u06A9\u06D2 ${adj}${issue3.minimum.toString()} ${sizing.unit} \u06C1\u0648\u0646\u06D2 \u0645\u062A\u0648\u0642\u0639 \u062A\u06BE\u06D2`;
+          return `\u0628\u06C1\u062A \u0686\u06BE\u0648\u0679\u0627: ${issue4.origin} \u06A9\u06D2 ${adj}${issue4.minimum.toString()} ${sizing.unit} \u06C1\u0648\u0646\u06D2 \u0645\u062A\u0648\u0642\u0639 \u062A\u06BE\u06D2`;
         }
-        return `\u0628\u06C1\u062A \u0686\u06BE\u0648\u0679\u0627: ${issue3.origin} \u06A9\u0627 ${adj}${issue3.minimum.toString()} \u06C1\u0648\u0646\u0627 \u0645\u062A\u0648\u0642\u0639 \u062A\u06BE\u0627`;
+        return `\u0628\u06C1\u062A \u0686\u06BE\u0648\u0679\u0627: ${issue4.origin} \u06A9\u0627 ${adj}${issue4.minimum.toString()} \u06C1\u0648\u0646\u0627 \u0645\u062A\u0648\u0642\u0639 \u062A\u06BE\u0627`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `\u063A\u0644\u0637 \u0633\u0679\u0631\u0646\u06AF: "${_issue.prefix}" \u0633\u06D2 \u0634\u0631\u0648\u0639 \u06C1\u0648\u0646\u0627 \u0686\u0627\u06C1\u06CC\u06D2`;
         }
@@ -18106,18 +18112,18 @@ var error45 = () => {
           return `\u063A\u0644\u0637 \u0633\u0679\u0631\u0646\u06AF: "${_issue.includes}" \u0634\u0627\u0645\u0644 \u06C1\u0648\u0646\u0627 \u0686\u0627\u06C1\u06CC\u06D2`;
         if (_issue.format === "regex")
           return `\u063A\u0644\u0637 \u0633\u0679\u0631\u0646\u06AF: \u067E\u06CC\u0679\u0631\u0646 ${_issue.pattern} \u0633\u06D2 \u0645\u06CC\u0686 \u06C1\u0648\u0646\u0627 \u0686\u0627\u06C1\u06CC\u06D2`;
-        return `\u063A\u0644\u0637 ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `\u063A\u0644\u0637 ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `\u063A\u0644\u0637 \u0646\u0645\u0628\u0631: ${issue3.divisor} \u06A9\u0627 \u0645\u0636\u0627\u0639\u0641 \u06C1\u0648\u0646\u0627 \u0686\u0627\u06C1\u06CC\u06D2`;
+        return `\u063A\u0644\u0637 \u0646\u0645\u0628\u0631: ${issue4.divisor} \u06A9\u0627 \u0645\u0636\u0627\u0639\u0641 \u06C1\u0648\u0646\u0627 \u0686\u0627\u06C1\u06CC\u06D2`;
       case "unrecognized_keys":
-        return `\u063A\u06CC\u0631 \u062A\u0633\u0644\u06CC\u0645 \u0634\u062F\u06C1 \u06A9\u06CC${issue3.keys.length > 1 ? "\u0632" : ""}: ${joinValues(issue3.keys, "\u060C ")}`;
+        return `\u063A\u06CC\u0631 \u062A\u0633\u0644\u06CC\u0645 \u0634\u062F\u06C1 \u06A9\u06CC${issue4.keys.length > 1 ? "\u0632" : ""}: ${joinValues(issue4.keys, "\u060C ")}`;
       case "invalid_key":
-        return `${issue3.origin} \u0645\u06CC\u06BA \u063A\u0644\u0637 \u06A9\u06CC`;
+        return `${issue4.origin} \u0645\u06CC\u06BA \u063A\u0644\u0637 \u06A9\u06CC`;
       case "invalid_union":
         return "\u063A\u0644\u0637 \u0627\u0646 \u067E\u0679";
       case "invalid_element":
-        return `${issue3.origin} \u0645\u06CC\u06BA \u063A\u0644\u0637 \u0648\u06CC\u0644\u06CC\u0648`;
+        return `${issue4.origin} \u0645\u06CC\u06BA \u063A\u0644\u0637 \u0648\u06CC\u0644\u06CC\u0648`;
       default:
         return `\u063A\u0644\u0637 \u0627\u0646 \u067E\u0679`;
     }
@@ -18177,38 +18183,38 @@ var error46 = () => {
     number: "raqam",
     array: "massiv"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `Noto\u2018g\u2018ri kirish: kutilgan instanceof ${issue3.expected}, qabul qilingan ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `Noto\u2018g\u2018ri kirish: kutilgan instanceof ${issue4.expected}, qabul qilingan ${received}`;
         }
         return `Noto\u2018g\u2018ri kirish: kutilgan ${expected}, qabul qilingan ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `Noto\u2018g\u2018ri kirish: kutilgan ${stringifyPrimitive(issue3.values[0])}`;
-        return `Noto\u2018g\u2018ri variant: quyidagilardan biri kutilgan ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `Noto\u2018g\u2018ri kirish: kutilgan ${stringifyPrimitive(issue4.values[0])}`;
+        return `Noto\u2018g\u2018ri variant: quyidagilardan biri kutilgan ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `Juda katta: kutilgan ${issue3.origin ?? "qiymat"} ${adj}${issue3.maximum.toString()} ${sizing.unit} ${sizing.verb}`;
-        return `Juda katta: kutilgan ${issue3.origin ?? "qiymat"} ${adj}${issue3.maximum.toString()}`;
+          return `Juda katta: kutilgan ${issue4.origin ?? "qiymat"} ${adj}${issue4.maximum.toString()} ${sizing.unit} ${sizing.verb}`;
+        return `Juda katta: kutilgan ${issue4.origin ?? "qiymat"} ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Juda kichik: kutilgan ${issue3.origin} ${adj}${issue3.minimum.toString()} ${sizing.unit} ${sizing.verb}`;
+          return `Juda kichik: kutilgan ${issue4.origin} ${adj}${issue4.minimum.toString()} ${sizing.unit} ${sizing.verb}`;
         }
-        return `Juda kichik: kutilgan ${issue3.origin} ${adj}${issue3.minimum.toString()}`;
+        return `Juda kichik: kutilgan ${issue4.origin} ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `Noto\u2018g\u2018ri satr: "${_issue.prefix}" bilan boshlanishi kerak`;
         if (_issue.format === "ends_with")
@@ -18217,18 +18223,18 @@ var error46 = () => {
           return `Noto\u2018g\u2018ri satr: "${_issue.includes}" ni o\u2018z ichiga olishi kerak`;
         if (_issue.format === "regex")
           return `Noto\u2018g\u2018ri satr: ${_issue.pattern} shabloniga mos kelishi kerak`;
-        return `Noto\u2018g\u2018ri ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `Noto\u2018g\u2018ri ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `Noto\u2018g\u2018ri raqam: ${issue3.divisor} ning karralisi bo\u2018lishi kerak`;
+        return `Noto\u2018g\u2018ri raqam: ${issue4.divisor} ning karralisi bo\u2018lishi kerak`;
       case "unrecognized_keys":
-        return `Noma\u2019lum kalit${issue3.keys.length > 1 ? "lar" : ""}: ${joinValues(issue3.keys, ", ")}`;
+        return `Noma\u2019lum kalit${issue4.keys.length > 1 ? "lar" : ""}: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `${issue3.origin} dagi kalit noto\u2018g\u2018ri`;
+        return `${issue4.origin} dagi kalit noto\u2018g\u2018ri`;
       case "invalid_union":
         return "Noto\u2018g\u2018ri kirish";
       case "invalid_element":
-        return `${issue3.origin} da noto\u2018g\u2018ri qiymat`;
+        return `${issue4.origin} da noto\u2018g\u2018ri qiymat`;
       default:
         return `Noto\u2018g\u2018ri kirish`;
     }
@@ -18286,38 +18292,38 @@ var error47 = () => {
     number: "s\u1ED1",
     array: "m\u1EA3ng"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\u0110\u1EA7u v\xE0o kh\xF4ng h\u1EE3p l\u1EC7: mong \u0111\u1EE3i instanceof ${issue3.expected}, nh\u1EADn \u0111\u01B0\u1EE3c ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\u0110\u1EA7u v\xE0o kh\xF4ng h\u1EE3p l\u1EC7: mong \u0111\u1EE3i instanceof ${issue4.expected}, nh\u1EADn \u0111\u01B0\u1EE3c ${received}`;
         }
         return `\u0110\u1EA7u v\xE0o kh\xF4ng h\u1EE3p l\u1EC7: mong \u0111\u1EE3i ${expected}, nh\u1EADn \u0111\u01B0\u1EE3c ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `\u0110\u1EA7u v\xE0o kh\xF4ng h\u1EE3p l\u1EC7: mong \u0111\u1EE3i ${stringifyPrimitive(issue3.values[0])}`;
-        return `T\xF9y ch\u1ECDn kh\xF4ng h\u1EE3p l\u1EC7: mong \u0111\u1EE3i m\u1ED9t trong c\xE1c gi\xE1 tr\u1ECB ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `\u0110\u1EA7u v\xE0o kh\xF4ng h\u1EE3p l\u1EC7: mong \u0111\u1EE3i ${stringifyPrimitive(issue4.values[0])}`;
+        return `T\xF9y ch\u1ECDn kh\xF4ng h\u1EE3p l\u1EC7: mong \u0111\u1EE3i m\u1ED9t trong c\xE1c gi\xE1 tr\u1ECB ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `Qu\xE1 l\u1EDBn: mong \u0111\u1EE3i ${issue3.origin ?? "gi\xE1 tr\u1ECB"} ${sizing.verb} ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "ph\u1EA7n t\u1EED"}`;
-        return `Qu\xE1 l\u1EDBn: mong \u0111\u1EE3i ${issue3.origin ?? "gi\xE1 tr\u1ECB"} ${adj}${issue3.maximum.toString()}`;
+          return `Qu\xE1 l\u1EDBn: mong \u0111\u1EE3i ${issue4.origin ?? "gi\xE1 tr\u1ECB"} ${sizing.verb} ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "ph\u1EA7n t\u1EED"}`;
+        return `Qu\xE1 l\u1EDBn: mong \u0111\u1EE3i ${issue4.origin ?? "gi\xE1 tr\u1ECB"} ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `Qu\xE1 nh\u1ECF: mong \u0111\u1EE3i ${issue3.origin} ${sizing.verb} ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `Qu\xE1 nh\u1ECF: mong \u0111\u1EE3i ${issue4.origin} ${sizing.verb} ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `Qu\xE1 nh\u1ECF: mong \u0111\u1EE3i ${issue3.origin} ${adj}${issue3.minimum.toString()}`;
+        return `Qu\xE1 nh\u1ECF: mong \u0111\u1EE3i ${issue4.origin} ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `Chu\u1ED7i kh\xF4ng h\u1EE3p l\u1EC7: ph\u1EA3i b\u1EAFt \u0111\u1EA7u b\u1EB1ng "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -18326,18 +18332,18 @@ var error47 = () => {
           return `Chu\u1ED7i kh\xF4ng h\u1EE3p l\u1EC7: ph\u1EA3i bao g\u1ED3m "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `Chu\u1ED7i kh\xF4ng h\u1EE3p l\u1EC7: ph\u1EA3i kh\u1EDBp v\u1EDBi m\u1EABu ${_issue.pattern}`;
-        return `${FormatDictionary[_issue.format] ?? issue3.format} kh\xF4ng h\u1EE3p l\u1EC7`;
+        return `${FormatDictionary[_issue.format] ?? issue4.format} kh\xF4ng h\u1EE3p l\u1EC7`;
       }
       case "not_multiple_of":
-        return `S\u1ED1 kh\xF4ng h\u1EE3p l\u1EC7: ph\u1EA3i l\xE0 b\u1ED9i s\u1ED1 c\u1EE7a ${issue3.divisor}`;
+        return `S\u1ED1 kh\xF4ng h\u1EE3p l\u1EC7: ph\u1EA3i l\xE0 b\u1ED9i s\u1ED1 c\u1EE7a ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `Kh\xF3a kh\xF4ng \u0111\u01B0\u1EE3c nh\u1EADn d\u1EA1ng: ${joinValues(issue3.keys, ", ")}`;
+        return `Kh\xF3a kh\xF4ng \u0111\u01B0\u1EE3c nh\u1EADn d\u1EA1ng: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `Kh\xF3a kh\xF4ng h\u1EE3p l\u1EC7 trong ${issue3.origin}`;
+        return `Kh\xF3a kh\xF4ng h\u1EE3p l\u1EC7 trong ${issue4.origin}`;
       case "invalid_union":
         return "\u0110\u1EA7u v\xE0o kh\xF4ng h\u1EE3p l\u1EC7";
       case "invalid_element":
-        return `Gi\xE1 tr\u1ECB kh\xF4ng h\u1EE3p l\u1EC7 trong ${issue3.origin}`;
+        return `Gi\xE1 tr\u1ECB kh\xF4ng h\u1EE3p l\u1EC7 trong ${issue4.origin}`;
       default:
         return `\u0110\u1EA7u v\xE0o kh\xF4ng h\u1EE3p l\u1EC7`;
     }
@@ -18396,38 +18402,38 @@ var error48 = () => {
     array: "\u6570\u7EC4",
     null: "\u7A7A\u503C(null)"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\u65E0\u6548\u8F93\u5165\uFF1A\u671F\u671B instanceof ${issue3.expected}\uFF0C\u5B9E\u9645\u63A5\u6536 ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\u65E0\u6548\u8F93\u5165\uFF1A\u671F\u671B instanceof ${issue4.expected}\uFF0C\u5B9E\u9645\u63A5\u6536 ${received}`;
         }
         return `\u65E0\u6548\u8F93\u5165\uFF1A\u671F\u671B ${expected}\uFF0C\u5B9E\u9645\u63A5\u6536 ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `\u65E0\u6548\u8F93\u5165\uFF1A\u671F\u671B ${stringifyPrimitive(issue3.values[0])}`;
-        return `\u65E0\u6548\u9009\u9879\uFF1A\u671F\u671B\u4EE5\u4E0B\u4E4B\u4E00 ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `\u65E0\u6548\u8F93\u5165\uFF1A\u671F\u671B ${stringifyPrimitive(issue4.values[0])}`;
+        return `\u65E0\u6548\u9009\u9879\uFF1A\u671F\u671B\u4EE5\u4E0B\u4E4B\u4E00 ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `\u6570\u503C\u8FC7\u5927\uFF1A\u671F\u671B ${issue3.origin ?? "\u503C"} ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "\u4E2A\u5143\u7D20"}`;
-        return `\u6570\u503C\u8FC7\u5927\uFF1A\u671F\u671B ${issue3.origin ?? "\u503C"} ${adj}${issue3.maximum.toString()}`;
+          return `\u6570\u503C\u8FC7\u5927\uFF1A\u671F\u671B ${issue4.origin ?? "\u503C"} ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "\u4E2A\u5143\u7D20"}`;
+        return `\u6570\u503C\u8FC7\u5927\uFF1A\u671F\u671B ${issue4.origin ?? "\u503C"} ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `\u6570\u503C\u8FC7\u5C0F\uFF1A\u671F\u671B ${issue3.origin} ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `\u6570\u503C\u8FC7\u5C0F\uFF1A\u671F\u671B ${issue4.origin} ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `\u6570\u503C\u8FC7\u5C0F\uFF1A\u671F\u671B ${issue3.origin} ${adj}${issue3.minimum.toString()}`;
+        return `\u6570\u503C\u8FC7\u5C0F\uFF1A\u671F\u671B ${issue4.origin} ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `\u65E0\u6548\u5B57\u7B26\u4E32\uFF1A\u5FC5\u987B\u4EE5 "${_issue.prefix}" \u5F00\u5934`;
         if (_issue.format === "ends_with")
@@ -18436,18 +18442,18 @@ var error48 = () => {
           return `\u65E0\u6548\u5B57\u7B26\u4E32\uFF1A\u5FC5\u987B\u5305\u542B "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `\u65E0\u6548\u5B57\u7B26\u4E32\uFF1A\u5FC5\u987B\u6EE1\u8DB3\u6B63\u5219\u8868\u8FBE\u5F0F ${_issue.pattern}`;
-        return `\u65E0\u6548${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `\u65E0\u6548${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `\u65E0\u6548\u6570\u5B57\uFF1A\u5FC5\u987B\u662F ${issue3.divisor} \u7684\u500D\u6570`;
+        return `\u65E0\u6548\u6570\u5B57\uFF1A\u5FC5\u987B\u662F ${issue4.divisor} \u7684\u500D\u6570`;
       case "unrecognized_keys":
-        return `\u51FA\u73B0\u672A\u77E5\u7684\u952E(key): ${joinValues(issue3.keys, ", ")}`;
+        return `\u51FA\u73B0\u672A\u77E5\u7684\u952E(key): ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `${issue3.origin} \u4E2D\u7684\u952E(key)\u65E0\u6548`;
+        return `${issue4.origin} \u4E2D\u7684\u952E(key)\u65E0\u6548`;
       case "invalid_union":
         return "\u65E0\u6548\u8F93\u5165";
       case "invalid_element":
-        return `${issue3.origin} \u4E2D\u5305\u542B\u65E0\u6548\u503C(value)`;
+        return `${issue4.origin} \u4E2D\u5305\u542B\u65E0\u6548\u503C(value)`;
       default:
         return `\u65E0\u6548\u8F93\u5165`;
     }
@@ -18503,38 +18509,38 @@ var error49 = () => {
   const TypeDictionary = {
     nan: "NaN"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\u7121\u6548\u7684\u8F38\u5165\u503C\uFF1A\u9810\u671F\u70BA instanceof ${issue3.expected}\uFF0C\u4F46\u6536\u5230 ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\u7121\u6548\u7684\u8F38\u5165\u503C\uFF1A\u9810\u671F\u70BA instanceof ${issue4.expected}\uFF0C\u4F46\u6536\u5230 ${received}`;
         }
         return `\u7121\u6548\u7684\u8F38\u5165\u503C\uFF1A\u9810\u671F\u70BA ${expected}\uFF0C\u4F46\u6536\u5230 ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `\u7121\u6548\u7684\u8F38\u5165\u503C\uFF1A\u9810\u671F\u70BA ${stringifyPrimitive(issue3.values[0])}`;
-        return `\u7121\u6548\u7684\u9078\u9805\uFF1A\u9810\u671F\u70BA\u4EE5\u4E0B\u5176\u4E2D\u4E4B\u4E00 ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `\u7121\u6548\u7684\u8F38\u5165\u503C\uFF1A\u9810\u671F\u70BA ${stringifyPrimitive(issue4.values[0])}`;
+        return `\u7121\u6548\u7684\u9078\u9805\uFF1A\u9810\u671F\u70BA\u4EE5\u4E0B\u5176\u4E2D\u4E4B\u4E00 ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `\u6578\u503C\u904E\u5927\uFF1A\u9810\u671F ${issue3.origin ?? "\u503C"} \u61C9\u70BA ${adj}${issue3.maximum.toString()} ${sizing.unit ?? "\u500B\u5143\u7D20"}`;
-        return `\u6578\u503C\u904E\u5927\uFF1A\u9810\u671F ${issue3.origin ?? "\u503C"} \u61C9\u70BA ${adj}${issue3.maximum.toString()}`;
+          return `\u6578\u503C\u904E\u5927\uFF1A\u9810\u671F ${issue4.origin ?? "\u503C"} \u61C9\u70BA ${adj}${issue4.maximum.toString()} ${sizing.unit ?? "\u500B\u5143\u7D20"}`;
+        return `\u6578\u503C\u904E\u5927\uFF1A\u9810\u671F ${issue4.origin ?? "\u503C"} \u61C9\u70BA ${adj}${issue4.maximum.toString()}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing) {
-          return `\u6578\u503C\u904E\u5C0F\uFF1A\u9810\u671F ${issue3.origin} \u61C9\u70BA ${adj}${issue3.minimum.toString()} ${sizing.unit}`;
+          return `\u6578\u503C\u904E\u5C0F\uFF1A\u9810\u671F ${issue4.origin} \u61C9\u70BA ${adj}${issue4.minimum.toString()} ${sizing.unit}`;
         }
-        return `\u6578\u503C\u904E\u5C0F\uFF1A\u9810\u671F ${issue3.origin} \u61C9\u70BA ${adj}${issue3.minimum.toString()}`;
+        return `\u6578\u503C\u904E\u5C0F\uFF1A\u9810\u671F ${issue4.origin} \u61C9\u70BA ${adj}${issue4.minimum.toString()}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with") {
           return `\u7121\u6548\u7684\u5B57\u4E32\uFF1A\u5FC5\u9808\u4EE5 "${_issue.prefix}" \u958B\u982D`;
         }
@@ -18544,18 +18550,18 @@ var error49 = () => {
           return `\u7121\u6548\u7684\u5B57\u4E32\uFF1A\u5FC5\u9808\u5305\u542B "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `\u7121\u6548\u7684\u5B57\u4E32\uFF1A\u5FC5\u9808\u7B26\u5408\u683C\u5F0F ${_issue.pattern}`;
-        return `\u7121\u6548\u7684 ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `\u7121\u6548\u7684 ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `\u7121\u6548\u7684\u6578\u5B57\uFF1A\u5FC5\u9808\u70BA ${issue3.divisor} \u7684\u500D\u6578`;
+        return `\u7121\u6548\u7684\u6578\u5B57\uFF1A\u5FC5\u9808\u70BA ${issue4.divisor} \u7684\u500D\u6578`;
       case "unrecognized_keys":
-        return `\u7121\u6CD5\u8B58\u5225\u7684\u9375\u503C${issue3.keys.length > 1 ? "\u5011" : ""}\uFF1A${joinValues(issue3.keys, "\u3001")}`;
+        return `\u7121\u6CD5\u8B58\u5225\u7684\u9375\u503C${issue4.keys.length > 1 ? "\u5011" : ""}\uFF1A${joinValues(issue4.keys, "\u3001")}`;
       case "invalid_key":
-        return `${issue3.origin} \u4E2D\u6709\u7121\u6548\u7684\u9375\u503C`;
+        return `${issue4.origin} \u4E2D\u6709\u7121\u6548\u7684\u9375\u503C`;
       case "invalid_union":
         return "\u7121\u6548\u7684\u8F38\u5165\u503C";
       case "invalid_element":
-        return `${issue3.origin} \u4E2D\u6709\u7121\u6548\u7684\u503C`;
+        return `${issue4.origin} \u4E2D\u6709\u7121\u6548\u7684\u503C`;
       default:
         return `\u7121\u6548\u7684\u8F38\u5165\u503C`;
     }
@@ -18613,37 +18619,37 @@ var error50 = () => {
     number: "n\u1ECD\u0301mb\xE0",
     array: "akop\u1ECD"
   };
-  return (issue3) => {
-    switch (issue3.code) {
+  return (issue4) => {
+    switch (issue4.code) {
       case "invalid_type": {
-        const expected = TypeDictionary[issue3.expected] ?? issue3.expected;
-        const receivedType = parsedType(issue3.input);
+        const expected = TypeDictionary[issue4.expected] ?? issue4.expected;
+        const receivedType = parsedType(issue4.input);
         const received = TypeDictionary[receivedType] ?? receivedType;
-        if (/^[A-Z]/.test(issue3.expected)) {
-          return `\xCCb\xE1w\u1ECDl\xE9 a\u1E63\xEC\u1E63e: a n\xED l\xE1ti fi instanceof ${issue3.expected}, \xE0m\u1ECD\u0300 a r\xED ${received}`;
+        if (/^[A-Z]/.test(issue4.expected)) {
+          return `\xCCb\xE1w\u1ECDl\xE9 a\u1E63\xEC\u1E63e: a n\xED l\xE1ti fi instanceof ${issue4.expected}, \xE0m\u1ECD\u0300 a r\xED ${received}`;
         }
         return `\xCCb\xE1w\u1ECDl\xE9 a\u1E63\xEC\u1E63e: a n\xED l\xE1ti fi ${expected}, \xE0m\u1ECD\u0300 a r\xED ${received}`;
       }
       case "invalid_value":
-        if (issue3.values.length === 1)
-          return `\xCCb\xE1w\u1ECDl\xE9 a\u1E63\xEC\u1E63e: a n\xED l\xE1ti fi ${stringifyPrimitive(issue3.values[0])}`;
-        return `\xC0\u1E63\xE0y\xE0n a\u1E63\xEC\u1E63e: yan \u1ECD\u0300kan l\xE1ra ${joinValues(issue3.values, "|")}`;
+        if (issue4.values.length === 1)
+          return `\xCCb\xE1w\u1ECDl\xE9 a\u1E63\xEC\u1E63e: a n\xED l\xE1ti fi ${stringifyPrimitive(issue4.values[0])}`;
+        return `\xC0\u1E63\xE0y\xE0n a\u1E63\xEC\u1E63e: yan \u1ECD\u0300kan l\xE1ra ${joinValues(issue4.values, "|")}`;
       case "too_big": {
-        const adj = issue3.inclusive ? "<=" : "<";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? "<=" : "<";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `T\xF3 p\u1ECD\u0300 j\xF9: a n\xED l\xE1ti j\u1EB9\u0301 p\xE9 ${issue3.origin ?? "iye"} ${sizing.verb} ${adj}${issue3.maximum} ${sizing.unit}`;
-        return `T\xF3 p\u1ECD\u0300 j\xF9: a n\xED l\xE1ti j\u1EB9\u0301 ${adj}${issue3.maximum}`;
+          return `T\xF3 p\u1ECD\u0300 j\xF9: a n\xED l\xE1ti j\u1EB9\u0301 p\xE9 ${issue4.origin ?? "iye"} ${sizing.verb} ${adj}${issue4.maximum} ${sizing.unit}`;
+        return `T\xF3 p\u1ECD\u0300 j\xF9: a n\xED l\xE1ti j\u1EB9\u0301 ${adj}${issue4.maximum}`;
       }
       case "too_small": {
-        const adj = issue3.inclusive ? ">=" : ">";
-        const sizing = getSizing(issue3.origin);
+        const adj = issue4.inclusive ? ">=" : ">";
+        const sizing = getSizing(issue4.origin);
         if (sizing)
-          return `K\xE9r\xE9 ju: a n\xED l\xE1ti j\u1EB9\u0301 p\xE9 ${issue3.origin} ${sizing.verb} ${adj}${issue3.minimum} ${sizing.unit}`;
-        return `K\xE9r\xE9 ju: a n\xED l\xE1ti j\u1EB9\u0301 ${adj}${issue3.minimum}`;
+          return `K\xE9r\xE9 ju: a n\xED l\xE1ti j\u1EB9\u0301 p\xE9 ${issue4.origin} ${sizing.verb} ${adj}${issue4.minimum} ${sizing.unit}`;
+        return `K\xE9r\xE9 ju: a n\xED l\xE1ti j\u1EB9\u0301 ${adj}${issue4.minimum}`;
       }
       case "invalid_format": {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.format === "starts_with")
           return `\u1ECC\u0300r\u1ECD\u0300 a\u1E63\xEC\u1E63e: gb\u1ECD\u0301d\u1ECD\u0300 b\u1EB9\u0300r\u1EB9\u0300 p\u1EB9\u0300l\xFA "${_issue.prefix}"`;
         if (_issue.format === "ends_with")
@@ -18652,18 +18658,18 @@ var error50 = () => {
           return `\u1ECC\u0300r\u1ECD\u0300 a\u1E63\xEC\u1E63e: gb\u1ECD\u0301d\u1ECD\u0300 n\xED "${_issue.includes}"`;
         if (_issue.format === "regex")
           return `\u1ECC\u0300r\u1ECD\u0300 a\u1E63\xEC\u1E63e: gb\u1ECD\u0301d\u1ECD\u0300 b\xE1 \xE0p\u1EB9\u1EB9r\u1EB9 mu ${_issue.pattern}`;
-        return `A\u1E63\xEC\u1E63e: ${FormatDictionary[_issue.format] ?? issue3.format}`;
+        return `A\u1E63\xEC\u1E63e: ${FormatDictionary[_issue.format] ?? issue4.format}`;
       }
       case "not_multiple_of":
-        return `N\u1ECD\u0301mb\xE0 a\u1E63\xEC\u1E63e: gb\u1ECD\u0301d\u1ECD\u0300 j\u1EB9\u0301 \xE8y\xE0 p\xEDp\xEDn ti ${issue3.divisor}`;
+        return `N\u1ECD\u0301mb\xE0 a\u1E63\xEC\u1E63e: gb\u1ECD\u0301d\u1ECD\u0300 j\u1EB9\u0301 \xE8y\xE0 p\xEDp\xEDn ti ${issue4.divisor}`;
       case "unrecognized_keys":
-        return `B\u1ECDt\xECn\xEC \xE0\xECm\u1ECD\u0300: ${joinValues(issue3.keys, ", ")}`;
+        return `B\u1ECDt\xECn\xEC \xE0\xECm\u1ECD\u0300: ${joinValues(issue4.keys, ", ")}`;
       case "invalid_key":
-        return `B\u1ECDt\xECn\xEC a\u1E63\xEC\u1E63e n\xEDn\xFA ${issue3.origin}`;
+        return `B\u1ECDt\xECn\xEC a\u1E63\xEC\u1E63e n\xEDn\xFA ${issue4.origin}`;
       case "invalid_union":
         return "\xCCb\xE1w\u1ECDl\xE9 a\u1E63\xEC\u1E63e";
       case "invalid_element":
-        return `Iye a\u1E63\xEC\u1E63e n\xEDn\xFA ${issue3.origin}`;
+        return `Iye a\u1E63\xEC\u1E63e n\xEDn\xFA ${issue4.origin}`;
       default:
         return "\xCCb\xE1w\u1ECDl\xE9 a\u1E63\xEC\u1E63e";
     }
@@ -19642,11 +19648,11 @@ function _refine(Class2, fn, _params) {
 // @__NO_SIDE_EFFECTS__
 function _superRefine(fn, params) {
   const ch = /* @__PURE__ */ _check((payload) => {
-    payload.addIssue = (issue3) => {
-      if (typeof issue3 === "string") {
-        payload.issues.push(issue(issue3, payload.value, ch._zod.def));
+    payload.addIssue = (issue4) => {
+      if (typeof issue4 === "string") {
+        payload.issues.push(issue(issue4, payload.value, ch._zod.def));
       } else {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.fatal)
           _issue.continue = false;
         _issue.code ?? (_issue.code = "custom");
@@ -19766,15 +19772,15 @@ function _stringFormat(Class2, format, fnOrRegex, _params = {}) {
 
 // node_modules/zod/v4/core/to-json-schema.js
 function initializeContext(params) {
-  let target = params?.target ?? "draft-2020-12";
-  if (target === "draft-4")
-    target = "draft-04";
-  if (target === "draft-7")
-    target = "draft-07";
+  let target2 = params?.target ?? "draft-2020-12";
+  if (target2 === "draft-4")
+    target2 = "draft-04";
+  if (target2 === "draft-7")
+    target2 = "draft-07";
   return {
     processors: params.processors ?? {},
     metadataRegistry: params?.metadata ?? globalRegistry,
-    target,
+    target: target2,
     unrepresentable: params?.unrepresentable ?? "throw",
     override: params?.override ?? (() => {
     }),
@@ -19846,26 +19852,26 @@ function extractDefs(ctx, schema) {
     throw new Error("Unprocessed schema. This is a bug in Zod.");
   const idToSchema = /* @__PURE__ */ new Map();
   for (const entry of ctx.seen.entries()) {
-    const id5 = ctx.metadataRegistry.get(entry[0])?.id;
-    if (id5) {
-      const existing = idToSchema.get(id5);
+    const id6 = ctx.metadataRegistry.get(entry[0])?.id;
+    if (id6) {
+      const existing = idToSchema.get(id6);
       if (existing && existing !== entry[0]) {
-        throw new Error(`Duplicate schema id "${id5}" detected during JSON Schema conversion. Two different schemas cannot share the same id when converted together.`);
+        throw new Error(`Duplicate schema id "${id6}" detected during JSON Schema conversion. Two different schemas cannot share the same id when converted together.`);
       }
-      idToSchema.set(id5, entry[0]);
+      idToSchema.set(id6, entry[0]);
     }
   }
   const makeURI = (entry) => {
     const defsSegment = ctx.target === "draft-2020-12" ? "$defs" : "definitions";
     if (ctx.external) {
       const externalId = ctx.external.registry.get(entry[0])?.id;
-      const uriGenerator = ctx.external.uri ?? ((id6) => id6);
+      const uriGenerator = ctx.external.uri ?? ((id7) => id7);
       if (externalId) {
         return { ref: uriGenerator(externalId) };
       }
-      const id5 = entry[1].defId ?? entry[1].schema.id ?? `schema${ctx.counter++}`;
-      entry[1].defId = id5;
-      return { defId: id5, ref: `${uriGenerator("__shared")}#/${defsSegment}/${id5}` };
+      const id6 = entry[1].defId ?? entry[1].schema.id ?? `schema${ctx.counter++}`;
+      entry[1].defId = id6;
+      return { defId: id6, ref: `${uriGenerator("__shared")}#/${defsSegment}/${id6}` };
     }
     if (entry[1] === root) {
       return { ref: "#" };
@@ -19913,8 +19919,8 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
         continue;
       }
     }
-    const id5 = ctx.metadataRegistry.get(entry[0])?.id;
-    if (id5) {
+    const id6 = ctx.metadataRegistry.get(entry[0])?.id;
+    if (id6) {
       extractToDef(entry);
       continue;
     }
@@ -20010,10 +20016,10 @@ function finalize(ctx, schema) {
   } else {
   }
   if (ctx.external?.uri) {
-    const id5 = ctx.external.registry.get(schema)?.id;
-    if (!id5)
+    const id6 = ctx.external.registry.get(schema)?.id;
+    if (!id6)
       throw new Error("Schema is missing an `id` property");
-    result.$id = ctx.external.uri(id5);
+    result.$id = ctx.external.uri(id6);
   }
   Object.assign(result, root.def ?? root.schema);
   const rootMetaId = ctx.metadataRegistry.get(schema)?.id;
@@ -20115,9 +20121,9 @@ var createToJSONSchemaMethod = (schema, processors = {}) => (params) => {
   extractDefs(ctx, schema);
   return finalize(ctx, schema);
 };
-var createStandardJSONSchemaMethod = (schema, io4, processors = {}) => (params) => {
-  const { libraryOptions, target } = params ?? {};
-  const ctx = initializeContext({ ...libraryOptions ?? {}, target, io: io4, processors });
+var createStandardJSONSchemaMethod = (schema, io5, processors = {}) => (params) => {
+  const { libraryOptions, target: target2 } = params ?? {};
+  const ctx = initializeContext({ ...libraryOptions ?? {}, target: target2, io: io5, processors });
   process2(schema, ctx);
   extractDefs(ctx, schema);
   return finalize(ctx, schema);
@@ -21005,8 +21011,8 @@ var initializer2 = (inst, issues) => {
       // enumerable: false,
     },
     addIssue: {
-      value: (issue3) => {
-        inst.issues.push(issue3);
+      value: (issue4) => {
+        inst.issues.push(issue4);
         inst.message = JSON.stringify(inst.issues, jsonStringifyReplacer, 2);
       }
       // enumerable: false,
@@ -21176,8 +21182,8 @@ var ZodType = /* @__PURE__ */ $constructor("ZodType", (inst, def2) => {
     catch(params) {
       return _catch2(this, params);
     },
-    pipe(target) {
-      return pipe(this, target);
+    pipe(target2) {
+      return pipe(this, target2);
     },
     readonly() {
       return readonly(this);
@@ -22019,11 +22025,11 @@ var ZodTransform = /* @__PURE__ */ $constructor("ZodTransform", (inst, def2) => 
     if (_ctx.direction === "backward") {
       throw new $ZodEncodeError(inst.constructor.name);
     }
-    payload.addIssue = (issue3) => {
-      if (typeof issue3 === "string") {
-        payload.issues.push(util_exports.issue(issue3, payload.value, def2));
+    payload.addIssue = (issue4) => {
+      if (typeof issue4 === "string") {
+        payload.issues.push(util_exports.issue(issue4, payload.value, def2));
       } else {
-        const _issue = issue3;
+        const _issue = issue4;
         if (_issue.fatal)
           _issue.continue = false;
         _issue.code ?? (_issue.code = "custom");
@@ -22828,10 +22834,10 @@ function fromJSONSchema(schema, params) {
   } catch {
     throw new Error("fromJSONSchema input is not valid JSON (possibly cyclic); use $defs/$ref for recursive schemas");
   }
-  const version3 = detectVersion(normalized, params?.defaultTarget);
+  const version4 = detectVersion(normalized, params?.defaultTarget);
   const defs = normalized.$defs || normalized.definitions || {};
   const ctx = {
-    version: version3,
+    version: version4,
     defs,
     refs: /* @__PURE__ */ new Map(),
     processing: /* @__PURE__ */ new Set(),
@@ -22968,6 +22974,16 @@ function parseGitOid(value) {
   assertPlainJson(value, "git object name");
   return gitOidV1Schema.parse(value);
 }
+function parseGitTreeMode(value) {
+  if (value === "040000" || value === "100644" || value === "100755" || value === "120000" || value === "160000") {
+    return value;
+  }
+  assertPlainJson(value, "git tree mode");
+  return gitTreeModeV1Schema.parse(value);
+}
+function normalizeGitTreeMode(value) {
+  return parseGitTreeMode(value === "40000" ? "040000" : value);
+}
 var encoder = new TextEncoder();
 var decoder = new TextDecoder("utf-8", { fatal: true });
 function ordinal(a, b) {
@@ -23036,15 +23052,15 @@ function bytesEqual(a, b) {
 }
 function parseCanonicalDocument(bytes, label = "JSON document") {
   if (!(bytes instanceof Uint8Array)) throw new TypeError(`${label} must be bytes`);
-  let text3;
+  let text4;
   try {
-    text3 = decoder.decode(bytes);
+    text4 = decoder.decode(bytes);
   } catch (error51) {
     throw new TypeError(`${label} is not valid UTF-8: ${error51.message}`);
   }
   let value;
   try {
-    value = JSON.parse(text3);
+    value = JSON.parse(text4);
   } catch (error51) {
     throw new TypeError(`${label} is not valid JSON: ${error51.message}`);
   }
@@ -23291,8 +23307,8 @@ function comparePhaseInstances(left, right) {
   if (a.kind === b.kind) return 0;
   return a.kind === "phase-design" ? -1 : 1;
 }
-function isStrictlyEarlierPlanningPhase(target, current) {
-  return decodePhaseInstance(target).kind !== "phase-impl" && comparePhaseInstances(target, current) < 0;
+function isStrictlyEarlierPlanningPhase(target2, current) {
+  return decodePhaseInstance(target2).kind !== "phase-impl" && comparePhaseInstances(target2, current) < 0;
 }
 var phaseInstanceIdV1Schema = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u).refine((value) => {
   try {
@@ -23548,14 +23564,14 @@ var contexts = {
       drifted_projections: external_exports.array(external_exports.object({ path: repositoryPathClaimV1Schema, recorded_digest: digest, observed_digest: digest }).strict()),
       deleted_projections: external_exports.array(external_exports.object({ path: repositoryPathClaimV1Schema, recorded_digest: digest }).strict()).optional(),
       uncommitted_paths: external_exports.array(repositoryPathClaimV1Schema)
-    }).strict().superRefine((target, targetContext) => {
-      const deleted = target.deleted_projections ?? [];
-      if (!sortedUnique(target.drifted_projections, (left, right) => left.path.localeCompare(right.path))) targetContext.addIssue({ code: "custom", path: ["drifted_projections"], message: "drifted projections must be sorted by path with no duplicates" });
-      if (target.drifted_projections.some((item) => item.recorded_digest === item.observed_digest)) targetContext.addIssue({ code: "custom", path: ["drifted_projections"], message: "a drifted projection must differ between its recorded and observed digests" });
+    }).strict().superRefine((target2, targetContext) => {
+      const deleted = target2.deleted_projections ?? [];
+      if (!sortedUnique(target2.drifted_projections, (left, right) => left.path.localeCompare(right.path))) targetContext.addIssue({ code: "custom", path: ["drifted_projections"], message: "drifted projections must be sorted by path with no duplicates" });
+      if (target2.drifted_projections.some((item) => item.recorded_digest === item.observed_digest)) targetContext.addIssue({ code: "custom", path: ["drifted_projections"], message: "a drifted projection must differ between its recorded and observed digests" });
       if (!sortedUnique(deleted, (left, right) => left.path.localeCompare(right.path))) targetContext.addIssue({ code: "custom", path: ["deleted_projections"], message: "deleted projections must be sorted by path with no duplicates" });
-      if (!sortedUnique(target.uncommitted_paths, (left, right) => left.localeCompare(right))) targetContext.addIssue({ code: "custom", path: ["uncommitted_paths"], message: "uncommitted paths must be sorted with no duplicates" });
-      if (target.drifted_projections.length === 0 && deleted.length === 0) targetContext.addIssue({ code: "custom", message: "a secondary baseline target must name drifted or deleted projections" });
-      if (target.uncommitted_paths.some((path2) => !target.drifted_projections.some((entry) => entry.path === path2) && !deleted.some((entry) => entry.path === path2))) targetContext.addIssue({ code: "custom", path: ["uncommitted_paths"], message: "uncommitted paths must belong to the target drift set" });
+      if (!sortedUnique(target2.uncommitted_paths, (left, right) => left.localeCompare(right))) targetContext.addIssue({ code: "custom", path: ["uncommitted_paths"], message: "uncommitted paths must be sorted with no duplicates" });
+      if (target2.drifted_projections.length === 0 && deleted.length === 0) targetContext.addIssue({ code: "custom", message: "a secondary baseline target must name drifted or deleted projections" });
+      if (target2.uncommitted_paths.some((path2) => !target2.drifted_projections.some((entry) => entry.path === path2) && !deleted.some((entry) => entry.path === path2))) targetContext.addIssue({ code: "custom", path: ["uncommitted_paths"], message: "uncommitted paths must belong to the target drift set" });
     })).refine((items) => sortedUnique(items, (left, right) => left.repository < right.repository ? -1 : left.repository > right.repository ? 1 : 0), "secondary_targets must be sorted by repository with no duplicates").optional()
   }).strict().superRefine((value, context2) => {
     const deleted = value.deleted_projections ?? [];
@@ -24003,9 +24019,9 @@ var adapterOnlyParams = object2({ adapter });
 var adapterAttemptParams = object2(adapterAttempt);
 function describeValidationIssues(error51) {
   if (error51 instanceof external_exports.ZodError) {
-    const issues = error51.issues.slice(0, 5).map((issue3) => {
-      const path2 = issue3.path.length === 0 ? "input" : issue3.path.map(String).join(".");
-      return `${path2}: ${issue3.message}`.slice(0, 256);
+    const issues = error51.issues.slice(0, 5).map((issue4) => {
+      const path2 = issue4.path.length === 0 ? "input" : issue4.path.map(String).join(".");
+      return `${path2}: ${issue4.message}`.slice(0, 256);
     });
     if (issues.length > 0) return issues;
   }
@@ -24154,6 +24170,9 @@ function constructError(registry2, code2, parameters) {
 }
 function createProjectError(code2, parameters) {
   return constructError(PROJECT_ERROR_DEFINITIONS, code2, parameters);
+}
+function createProtocolError(code2, parameters) {
+  return constructError(PROTOCOL_ERROR_DEFINITIONS, code2, parameters);
 }
 var errorShellSchema = object2({ schema_version: external_exports.literal("1"), code: external_exports.string(), owner: external_exports.string(), retryable: external_exports.boolean(), diagnostic: object2({ template_id: external_exports.string(), parameters: external_exports.record(external_exports.string(), external_exports.unknown()) }), next_action: external_exports.string() });
 function parseSerializedError(registry2, value, label) {
@@ -24305,8 +24324,8 @@ function deepFreezeJson(value) {
 }
 var copyFreezeJson = (value) => deepFreezeJson(structuredClone(value));
 function decodeJson(bytes) {
-  const text3 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  return JSON.parse(text3);
+  const text4 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  return JSON.parse(text4);
 }
 var digestBytes = (bytes) => parseSha256Digest(createHash2("sha256").update(bytes).digest("hex"));
 var copiedBytes = (bytes) => Uint8Array.from(bytes);
@@ -24938,6 +24957,10 @@ var secretScanResultV1Schema = external_exports.discriminatedUnion("outcome", [
     reason: safeCodeV1Schema
   }).strict()
 ]);
+function parseSecretScanResult(value) {
+  assertPlainJson(value, "secret scan result");
+  return secretScanResultV1Schema.parse(value);
+}
 
 // src/contracts/durable-implementation-output.ts
 var sha256Digest2 = sha256DigestV1Schema;
@@ -25067,6 +25090,52 @@ function parseTriageCandidate(value) {
     ...accepted_editorial_count === void 0 ? {} : { accepted_editorial_count },
     ...disposition_ledger === void 0 ? {} : { disposition_ledger }
   };
+}
+var refKey = (value) => `${value.review_evidence_digest}:${value.finding_id}`;
+function validateTriage(current, candidate, dispositionLedger) {
+  if (!authenticCurrentReviewSet(current)) throw new TypeError("an authenticated current review set is required");
+  const parsed = parseTriageCandidate(candidate);
+  if (parsed.disposition_ledger !== void 0) {
+    throw new TypeError("disposition_ledger is server-computed; triage candidates must not carry one");
+  }
+  if (parsed.task_id !== current.task_id || parsed.phase_instance !== current.phase_instance || parsed.subject_digest !== current.subject_digest || parsed.input_fingerprint !== current.input_fingerprint || parsed.current_evidence_set_digest !== current.current_evidence_set.set_digest) throw new TypeError("triage scope does not match current review set");
+  const expectedDigests = current.current_evidence_set.slots.map((slot) => slot.evidence_digest);
+  if (parsed.source_evidence_digests.length !== expectedDigests.length || parsed.source_evidence_digests.some((digestValue, index) => digestValue !== expectedDigests[index])) throw new TypeError("source_evidence_digests must exactly match canonical current slots");
+  const expected = /* @__PURE__ */ new Set();
+  const blocking = /* @__PURE__ */ new Set();
+  for (const review of current.reviews) {
+    const localIds = /* @__PURE__ */ new Set();
+    for (const finding of review.evidence.findings) {
+      if (localIds.has(finding.finding_id)) throw new TypeError(`review ${review.evidence_digest} has duplicate finding_id ${finding.finding_id}`);
+      localIds.add(finding.finding_id);
+      const key = refKey({ review_evidence_digest: review.evidence_digest, finding_id: finding.finding_id });
+      expected.add(key);
+      if (finding.blocking) blocking.add(key);
+    }
+  }
+  const actual = /* @__PURE__ */ new Set();
+  for (const disposition of parsed.dispositions) {
+    const key = refKey(disposition);
+    if (actual.has(key)) throw new TypeError(`duplicate triage disposition ${key}`);
+    if (!expected.has(key)) throw new TypeError(`foreign or stale triage disposition ${key}`);
+    if (disposition.disposition === "accepted-editorial" && blocking.has(key)) throw new TypeError(`accepted-editorial is refused for blocking finding ${key}; a blocking finding's fix is never purely editorial`);
+    actual.add(key);
+  }
+  if (actual.size !== expected.size || [...expected].some((key) => !actual.has(key))) throw new TypeError("triage dispositions must exactly cover every current finding");
+  const accepted = parsed.dispositions.filter((value) => value.disposition === "accepted").length;
+  const acceptedEditorial = parsed.dispositions.filter((value) => value.disposition === "accepted-editorial").length;
+  const rejected = parsed.dispositions.length - accepted - acceptedEditorial;
+  if (parsed.accepted_editorial_count === void 0) throw new TypeError("triage requires accepted_editorial_count");
+  if (parsed.accepted_count !== accepted || parsed.rejected_count !== rejected || parsed.accepted_editorial_count !== acceptedEditorial) throw new TypeError("triage disposition counts are contradictory");
+  const validated = Object.freeze({
+    ...parsed,
+    accepted_editorial_count: parsed.accepted_editorial_count,
+    ...dispositionLedger === void 0 ? {} : { disposition_ledger: Object.freeze(dispositionLedger.map((entry) => Object.freeze({ ...entry }))) },
+    source_evidence_digests: Object.freeze([...parsed.source_evidence_digests]),
+    dispositions: Object.freeze(parsed.dispositions.map((value) => Object.freeze({ ...value })))
+  });
+  registerValidatedTriage(validated);
+  return validated;
 }
 
 // src/contracts/durable-result-manifest.ts
@@ -25201,6 +25270,21 @@ function resultAuthorityClaim(resultDigest) {
 }
 function intentReceiptClaim(intentId) {
   return parseWorkspacePathClaim(`transient/intents/${intentId}.json`);
+}
+function verificationTranscriptClaim(phase3) {
+  if (!Number.isSafeInteger(phase3) || phase3 < 1) {
+    throw new TypeError("phase must be a positive safe integer");
+  }
+  return parseWorkspacePathClaim(`cache/phases/${phase3}/verification.txt`);
+}
+function counterReviewClaim(phaseInstance4) {
+  return parseWorkspacePathClaim(`cache/reviews/${phaseInstance4}.counter.md`);
+}
+function triageReviewClaim(phaseInstance4) {
+  return parseWorkspacePathClaim(`cache/reviews/${phaseInstance4}.triage.md`);
+}
+function adjudicationReviewClaim(phaseInstance4) {
+  return parseWorkspacePathClaim(`cache/reviews/${phaseInstance4}.adjudication.md`);
 }
 var PATH_SAFE_ID = "[A-Za-z0-9][A-Za-z0-9._-]{0,127}";
 var SHA256 = "[0-9a-f]{64}";
@@ -25347,6 +25431,9 @@ function classifyWorkspacePath(taskId, claim) {
   const matched = classifyIn(WORKSPACE_CLASS_RULES, claim);
   if (matched === void 0) return fail2(pathInvalid(taskId, "task-state"));
   return ok(matched);
+}
+function classifyRepositoryPath(claim) {
+  return classifyRepositoryPathFor(UNSCOPED_TASK_ID, claim, void 0);
 }
 function isRepositoryControlPath(claim) {
   return claim === ".git" || claim.startsWith(".git/");
@@ -25543,8 +25630,8 @@ async function resolveTaskWorkspaceCleanupTarget(options) {
   }
   const worktreeRoot = runner.location.worktreeRoot;
   const workspaceRoot = resolvePath(worktreeRoot, ARCHFLOW_TREE, "runtime", "tasks", taskId);
-  const target = resolvePath(worktreeRoot, repositoryRelative);
-  const parent = dirname(target);
+  const target2 = resolvePath(worktreeRoot, repositoryRelative);
+  const parent = dirname(target2);
   const parentRepositoryRelative = relative(worktreeRoot, parent);
   const withinWorktree = await containedUnder(worktreeRoot, parentRepositoryRelative);
   if (withinWorktree.kind === "io") return fail2(ioError(context2));
@@ -25566,14 +25653,14 @@ async function resolveTaskWorkspaceCleanupTarget(options) {
   }
   let leafKind;
   try {
-    leafKind = await cleanupLeafKind(target);
+    leafKind = await cleanupLeafKind(target2);
   } catch {
     return fail2(ioError(context2));
   }
   return ok(Object.freeze({
     workspaceRelative: claim ?? "",
     repositoryRelative,
-    absolute: target,
+    absolute: target2,
     leaf_kind: leafKind
   }));
 }
@@ -25622,6 +25709,28 @@ async function resolveDeclaredOutputPath(options) {
     expectedClass: pathClass3,
     context: context2
   });
+}
+async function resolveDeclaredRename(options) {
+  const previous = await resolveDeclaredOutputPath({
+    runner: options.runner,
+    taskId: options.taskId,
+    claim: options.previousPath,
+    pathClass: options.pathClass,
+    context: options.context
+  });
+  if (!previous.ok) return previous;
+  const next = await resolveDeclaredOutputPath({
+    runner: options.runner,
+    taskId: options.taskId,
+    claim: options.path,
+    pathClass: options.pathClass,
+    context: options.context
+  });
+  if (!next.ok) return next;
+  if (previous.value.path_class !== next.value.path_class) {
+    return fail2(pathInvalid(options.taskId, options.pathClass));
+  }
+  return ok(Object.freeze({ previous: previous.value, next: next.value }));
 }
 async function openResolved(path2, flags) {
   const noFollow = fsConstants.O_NOFOLLOW ?? 0;
@@ -25762,24 +25871,24 @@ function createGitRunner(options) {
   async function runText(spec) {
     const result = await run(spec);
     if (result.absent) return "";
-    const text3 = decodeFatal(result.stdout, spec.operation);
-    return text3.endsWith("\n") ? text3.slice(0, -1) : text3;
+    const text4 = decodeFatal(result.stdout, spec.operation);
+    return text4.endsWith("\n") ? text4.slice(0, -1) : text4;
   }
   async function runNulFields(spec) {
     const result = await run(spec);
     if (result.absent) return Object.freeze([]);
-    const text3 = decodeFatal(result.stdout, spec.operation);
-    if (text3.length === 0) return Object.freeze([]);
+    const text4 = decodeFatal(result.stdout, spec.operation);
+    if (text4.length === 0) return Object.freeze([]);
     const fields = [];
     let start = 0;
-    let index = text3.indexOf("\0");
+    let index = text4.indexOf("\0");
     while (index !== -1) {
-      fields.push(text3.slice(start, index));
+      fields.push(text4.slice(start, index));
       start = index + 1;
-      index = text3.indexOf("\0", start);
+      index = text4.indexOf("\0", start);
     }
-    if (start < text3.length) {
-      fields.push(text3.slice(start));
+    if (start < text4.length) {
+      fields.push(text4.slice(start));
     }
     return Object.freeze(fields);
   }
@@ -25922,22 +26031,22 @@ async function isCommitAncestor(runner, ancestor, descendant) {
 async function isCommitAncestorOfHead(runner, ancestor) {
   return isCommitAncestor(runner, ancestor, "HEAD");
 }
-async function readFirstParentChildAfter(runner, baseline, target) {
-  if (baseline === target) return void 0;
-  const isImmutable = GIT_OID.test(baseline) && GIT_OID.test(target);
-  const cacheKey = isImmutable ? `${baseline}\0${target}` : void 0;
+async function readFirstParentChildAfter(runner, baseline, target2) {
+  if (baseline === target2) return void 0;
+  const isImmutable = GIT_OID.test(baseline) && GIT_OID.test(target2);
+  const cacheKey = isImmutable ? `${baseline}\0${target2}` : void 0;
   const cache = getRunnerCache(runner);
   if (cacheKey !== void 0 && cache.firstParentChild.has(cacheKey)) {
     return cache.firstParentChild.get(cacheKey);
   }
-  if (!await isCommitAncestor(runner, baseline, target)) {
+  if (!await isCommitAncestor(runner, baseline, target2)) {
     if (cacheKey !== void 0) {
       setBoundedCache(cache.firstParentChild, cacheKey, void 0, MAX_FIRST_PARENT_CHILD_CACHE_ENTRIES);
     }
     return void 0;
   }
   const commits = await runner.runText({
-    argv: ["rev-list", "--first-parent", target],
+    argv: ["rev-list", "--first-parent", target2],
     operation: FIRST_PARENT_PATH_OPERATION
   });
   const chain = commits === "" ? [] : commits.split("\n");
@@ -26137,8 +26246,8 @@ var SAFE_VERSION = /^[A-Za-z0-9.-]{1,64}$/u;
 function safeVersionOf(value) {
   return SAFE_VERSION.test(value) ? value : "unknown";
 }
-function unsupportedRuntime(component, version3) {
-  return createProjectError("RUNTIME_VERSION_UNSUPPORTED", { component, version: version3 });
+function unsupportedRuntime(component, version4) {
+  return createProjectError("RUNTIME_VERSION_UNSUPPORTED", { component, version: version4 });
 }
 var VERSION_OPERATION = "git-version";
 var OBJECT_FORMAT_OPERATION = "git-object-format";
@@ -26154,11 +26263,11 @@ async function preflightGit(runner, context2) {
   }
   const reported = /(?<major>\d+)\.(?<minor>\d+)(?:\.[^\s]*)?/u.exec(versionOutput);
   const token = /^git version (?<token>\S+)/u.exec(versionOutput)?.groups?.["token"] ?? versionOutput.trim();
-  const version3 = safeVersionOf(token);
+  const version4 = safeVersionOf(token);
   const major = Number(reported?.groups?.["major"] ?? Number.NaN);
   const minor = Number(reported?.groups?.["minor"] ?? Number.NaN);
   if (!Number.isInteger(major) || !Number.isInteger(minor) || major < GIT_MAJOR_FLOOR || major === GIT_MAJOR_FLOOR && minor < GIT_MINOR_FLOOR) {
-    return fail3(unsupportedRuntime("git", version3));
+    return fail3(unsupportedRuntime("git", version4));
   }
   let objectFormat;
   try {
@@ -26175,7 +26284,7 @@ async function preflightGit(runner, context2) {
   if (objectFormat !== "sha1") {
     return fail3(unsupportedRuntime("git-object-format", safeVersionOf(objectFormat.trim())));
   }
-  return ok2(Object.freeze({ version: version3, object_format: "sha1" }));
+  return ok2(Object.freeze({ version: version4, object_format: "sha1" }));
 }
 
 // src/repository/identity.ts
@@ -26504,11 +26613,11 @@ async function ensureResultDirectory(authority, digest10) {
     await ensureRealDirectory(current);
   }
 }
-async function ensurePayloadParent(authority, digest10, target) {
+async function ensurePayloadParent(authority, digest10, target2) {
   assertInternalTransactionAuthority(authority);
   if (!/^[0-9a-f]{64}$/u.test(digest10)) throw new TypeError("result digest must be lowercase SHA-256");
   const root = join2(authority.workspace_root, "cache", "results", digest10, "payload");
-  const parent = join2(target, "..");
+  const parent = join2(target2, "..");
   const rel = relative2(root, parent);
   if (rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute2(rel)) throw new TypeError("payload parent escaped result directory");
   let current = root;
@@ -26517,15 +26626,26 @@ async function ensurePayloadParent(authority, digest10, target) {
     await ensureRealDirectory(current);
   }
 }
-async function ensureWorkspaceProjectionParent(authority, target) {
+async function ensureWorkspaceProjectionParent(authority, target2) {
   assertInternalTransactionAuthority(authority);
-  const parent = join2(target, "..");
+  const parent = join2(target2, "..");
   const rel = relative2(authority.workspace_root, parent);
   if (rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute2(rel)) {
     throw new TypeError("workspace projection parent escaped task workspace");
   }
   await ensureWorkspaceRoot(authority);
   let current = authority.workspace_root;
+  for (const part of rel.split(sep2).filter((candidate) => candidate !== "" && candidate !== ".")) {
+    current = join2(current, part);
+    await ensureRealDirectory(current);
+  }
+}
+async function ensureTaskProjectionParent(authority, target2) {
+  assertInternalTransactionAuthority(authority);
+  const parent = join2(target2, "..");
+  const rel = relative2(authority.task_root, parent);
+  if (rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute2(rel)) return;
+  let current = authority.task_root;
   for (const part of rel.split(sep2).filter((candidate) => candidate !== "" && candidate !== ".")) {
     current = join2(current, part);
     await ensureRealDirectory(current);
@@ -27280,6 +27400,14 @@ function createInternalResultExpectation(value) {
   resultExpectations.add(expectation);
   return expectation;
 }
+function correlateProjectResult(call, expectation, result) {
+  const requestDigest = requestDigests.get(call);
+  if (requestDigest === void 0 || !parsedCalls.has(call) || !resultExpectations.has(expectation) || !structuralResults.has(result)) throw new TypeError("authentic request/result identities are required");
+  if (expectation[resultExpectationBrand] !== call.name || result[structuralResultBrand] !== call.name || expectation.tool !== call.name) throw new TypeError("result correlation tool mismatch");
+  if (expectation.request_digest !== requestDigest || expectation.task_id !== call.input.task_id || expectation.intent_id !== call.input.intent_id || expectation.input_fingerprint !== call.input.input_fingerprint) throw new TypeError("expectation invocation mismatch");
+  if (result.ok && (expectation.resulting_revision !== result.value.revision || !isDeepStrictEqual3(expectation.success, result.value))) throw new TypeError("result expectation mismatch");
+  return result;
+}
 
 // src/repository/repository-set.ts
 import { isAbsolute as isAbsolute3, relative as relative3, resolve as resolveDirectory, sep as sep3 } from "node:path";
@@ -27395,6 +27523,10 @@ async function resolveRepositorySet(primaryBinding, config2, context2) {
 import { randomUUID } from "node:crypto";
 import { link, open as open2, rename, symlink, unlink } from "node:fs/promises";
 import { basename as basename2, dirname as dirname2, join as join3 } from "node:path";
+async function replaceTaskAsk(writer, path2, bytes) {
+  if (path2.path_class !== "task-ask") throw new TypeError("task ask replacement requires task-ask authority");
+  await writer.replaceTaskAsk(path2, bytes);
+}
 var AtomicReplaceError = class extends Error {
   operation;
   target_may_have_changed;
@@ -27424,10 +27556,10 @@ async function createExclusive(path2, bytes) {
   if (path2.path_class !== "workspace-intent" && path2.path_class !== "workspace-result-payload" && path2.path_class !== "authority-result" && path2.path_class !== "authority-decision" && path2.path_class !== "authority-initialization") {
     throw new TypeError("createExclusive requires an immutable resolved path");
   }
-  const target = path2.absolute;
+  const target2 = path2.absolute;
   const temporary = join3(
-    dirname2(target),
-    `.${basename2(target)}.${process.pid}.${randomUUID()}.tmp`
+    dirname2(target2),
+    `.${basename2(target2)}.${process.pid}.${randomUUID()}.tmp`
   );
   let handle;
   let linkAttempted = false;
@@ -27439,7 +27571,7 @@ async function createExclusive(path2, bytes) {
     handle = void 0;
     linkAttempted = true;
     try {
-      await link(temporary, target);
+      await link(temporary, target2);
     } catch (error51) {
       if (errnoOf3(error51) === "EEXIST") return "exists";
       throw error51;
@@ -27505,8 +27637,8 @@ var PROJECTABLE = /* @__PURE__ */ new Set([
 function requireProjectable(path2) {
   if (!PROJECTABLE.has(path2.path_class)) throw new TypeError("projection requires a declared output path");
 }
-async function replaceRegularBytes(target, bytes, mode) {
-  const temporary = join3(dirname2(target), `.${basename2(target)}.${process.pid}.${randomUUID()}.tmp`);
+async function replaceRegularBytes(target2, bytes, mode) {
+  const temporary = join3(dirname2(target2), `.${basename2(target2)}.${process.pid}.${randomUUID()}.tmp`);
   let handle;
   let renameAttempted = false;
   try {
@@ -27516,7 +27648,7 @@ async function replaceRegularBytes(target, bytes, mode) {
     await handle.close();
     handle = void 0;
     renameAttempted = true;
-    await rename(temporary, target);
+    await rename(temporary, target2);
   } catch (error51) {
     throw new AtomicReplaceError({
       operation: "replace",
@@ -27533,12 +27665,12 @@ async function replaceRegular(path2, bytes, executable) {
   requireProjectable(path2);
   await replaceRegularBytes(path2.absolute, bytes, executable ? 493 : 420);
 }
-async function replaceSymlink(path2, target) {
+async function replaceSymlink(path2, target2) {
   requireProjectable(path2);
   const temporary = join3(dirname2(path2.absolute), `.${basename2(path2.absolute)}.${process.pid}.${randomUUID()}.tmp`);
   let created = false;
   try {
-    await symlink(target, temporary);
+    await symlink(target2, temporary);
     created = true;
     await rename(temporary, path2.absolute);
     created = false;
@@ -27894,9 +28026,9 @@ async function appendGitAttributes(workingDirectory) {
     }
     return true;
   }
-  const text3 = new TextDecoder("utf-8", { fatal: true }).decode(current);
-  if (text3.split(/\r?\n/u).includes(ARCHFLOW_GITATTRIBUTES_LINE)) return false;
-  const prefix = current.byteLength === 0 || text3.endsWith("\n") ? "" : "\n";
+  const text4 = new TextDecoder("utf-8", { fatal: true }).decode(current);
+  if (text4.split(/\r?\n/u).includes(ARCHFLOW_GITATTRIBUTES_LINE)) return false;
+  const prefix = current.byteLength === 0 || text4.endsWith("\n") ? "" : "\n";
   const handle = await open3(path2, "a");
   try {
     await handle.writeFile(`${prefix}${ARCHFLOW_GITATTRIBUTES_LINE}
@@ -28017,12 +28149,12 @@ async function loadRubricFile(input) {
     const issues = describeValidationIssues(error51);
     return rubricFailure(
       "rubric-file-invalid",
-      issues === void 0 ? [`${label}: rubric rejected`] : issues.map((issue3) => `${label}: ${issue3}`)
+      issues === void 0 ? [`${label}: rubric rejected`] : issues.map((issue4) => `${label}: ${issue4}`)
     );
   }
 }
-async function loadCanonicalRubricForPhaseKind(phaseKind) {
-  const expected = PHASE_KIND_RUBRIC_FILES[phaseKind];
+async function loadCanonicalRubricForPhaseKind(phaseKind2) {
+  const expected = PHASE_KIND_RUBRIC_FILES[phaseKind2];
   let root;
   try {
     root = await assetRoot();
@@ -28163,8 +28295,8 @@ function parseConstitutionRuleMarkdown(source, label) {
   const close = normalized.indexOf("\n---\n", 4);
   if (close < 0) throw new Error(`${label}: expected closing YAML frontmatter delimiter`);
   const frontmatter = parseSingleYamlDocument(normalized.slice(4, close), `${label} frontmatter`);
-  const text3 = normalized.slice(close + 5).trim();
-  return parseConstitutionRuleV1({ ...frontmatter, text: text3 });
+  const text4 = normalized.slice(close + 5).trim();
+  return parseConstitutionRuleV1({ ...frontmatter, text: text4 });
 }
 function registryFromRules(rules2) {
   const registry2 = /* @__PURE__ */ new Map();
@@ -28242,7 +28374,7 @@ function normalizedSelectedRule(rule4) {
 function authenticateRuleAcceptancePolicy(state, constitution) {
   assertResolvedConstitution(constitution);
   if (constitution.policy_base_commit !== state.policy_base_commit || constitution.digest !== state.constitution_digest) return void 0;
-  const selected = SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3.map(({ id: id5 }) => constitution.rules.get(id5));
+  const selected = SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3.map(({ id: id6 }) => constitution.rules.get(id6));
   if (selected.some((rule4) => rule4 === void 0 || rule4.status !== "active")) return void 0;
   const normalized = selected.map((rule4) => normalizedSelectedRule(rule4)).sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
   const digest10 = canonicalJsonDigest(normalized);
@@ -28263,12 +28395,12 @@ function assertAuthenticatedRuleAcceptancePolicy(value) {
   }
 }
 function immutableRegistry(rules2) {
-  const entries = [...rules2].map(([id5, rule4]) => {
+  const entries = [...rules2].map(([id6, rule4]) => {
     const frozenRule = Object.freeze({
       ...rule4,
       ...rule4.enforced_by === void 0 ? {} : { enforced_by: Object.freeze([...rule4.enforced_by]) }
     });
-    return Object.freeze([id5, frozenRule]);
+    return Object.freeze([id6, frozenRule]);
   });
   const backing = new Map(entries);
   let registry2;
@@ -31132,12 +31264,12 @@ function requireRegexpStringMatcher() {
     var isEqualMatchPatternResult = function(a, b) {
       return a.startIndex === b.startIndex && a.endIndex === b.endIndex && a.match === b.match;
     };
-    var matchPatterns = function(text3, regExpLikeStrings) {
+    var matchPatterns = function(text4, regExpLikeStrings) {
       var matchPatternResults = [];
       regExpLikeStrings.map(function(patternString) {
         return (0, exports.createRegExp)(patternString);
       }).forEach(function(regExp) {
-        var results = text3.matchAll(regExp);
+        var results = text4.matchAll(regExp);
         Array.from(results).forEach(function(result) {
           if (result.index === void 0) {
             return;
@@ -31356,11 +31488,11 @@ var MAX_MAC_ITERATIONS = 1e6;
 function parsePkcs12(buf) {
   const pfx = readTlv(buf, 0);
   expectTag(pfx, TAG_SEQUENCE, "PFX SEQUENCE");
-  const version3 = readTlv(pfx.content, 0);
-  if (readInteger(version3) !== 3) {
+  const version4 = readTlv(pfx.content, 0);
+  if (readInteger(version4) !== 3) {
     throw new Error("PKCS12: unsupported version");
   }
-  const authSafeInfo = readTlv(pfx.content, version3.end);
+  const authSafeInfo = readTlv(pfx.content, version4.end);
   expectTag(authSafeInfo, TAG_SEQUENCE, "ContentInfo SEQUENCE");
   const contentType = readTlv(authSafeInfo.content, 0);
   expectTag(contentType, TAG_OID, "contentType OID");
@@ -31410,9 +31542,9 @@ function parsePkcs12(buf) {
   };
 }
 function toBufferSource(data) {
-  const copy = new Uint8Array(data.length);
-  copy.set(data);
-  return copy;
+  const copy2 = new Uint8Array(data.length);
+  copy2.set(data);
+  return copy2;
 }
 async function digest8(hash3, data) {
   return new Uint8Array(await globalThis.crypto.subtle.digest(hash3.name, toBufferSource(data)));
@@ -33370,7 +33502,7 @@ var utf8 = new TextDecoder("utf-8", { fatal: true });
 var ordinal5 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 var enabledCreators = rules.filter((creator) => creator.meta.id !== FILTER_RULE);
 var enabledRuleIds = Object.freeze(enabledCreators.map((creator) => creator.meta.id).sort());
-if (new Set(enabledRuleIds).size !== enabledRuleIds.length || enabledRuleIds.some((id5) => !RULE_ID.test(id5))) {
+if (new Set(enabledRuleIds).size !== enabledRuleIds.length || enabledRuleIds.some((id6) => !RULE_ID.test(id6))) {
   throw new TypeError("Secretlint preset exported duplicate or unsupported public rule identifiers");
 }
 var SECRETLINT_DETECTOR_SET_ID = parseSafeId(`secretlint:v1:${canonicalJsonDigest({
@@ -33387,9 +33519,9 @@ function secretScanText(bytes) {
   try {
     return utf8.decode(materialized);
   } catch {
-    let text3 = "";
-    for (const byte of materialized) text3 += String.fromCharCode(byte);
-    return text3;
+    let text4 = "";
+    for (const byte of materialized) text4 += String.fromCharCode(byte);
+    return text4;
   }
 }
 function secretScanCandidateFromBytes(candidate) {
@@ -34000,23 +34132,23 @@ function validateDurableSemantics(subject) {
         }
       }
       const declaredPaths = new Set(section.outputs.map((output) => output.path));
-      for (const target of section.restore_targets) {
-        if (!declaredPaths.has(target)) {
+      for (const target2 of section.restore_targets) {
+        if (!declaredPaths.has(target2)) {
           return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.restoreTargetNotDeclared));
         }
       }
     }
-    const accounting = artifact.accounting;
+    const accounting2 = artifact.accounting;
     let storedTotal = 0;
-    for (const entry of accounting.counted_entries) storedTotal += entry.stored_bytes;
-    if (accounting.result_bytes !== storedTotal) {
+    for (const entry of accounting2.counted_entries) storedTotal += entry.stored_bytes;
+    if (accounting2.result_bytes !== storedTotal) {
       return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingResultBytesSum));
     }
-    if (accounting.task_bytes < accounting.result_bytes) {
+    if (accounting2.task_bytes < accounting2.result_bytes) {
       return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingTaskBytesBelowResult));
     }
     const aggregateResultBytes = sections.reduce((sum, section) => sum + section.accounting.result_bytes, 0);
-    if (aggregateResultBytes > accounting.result_byte_cap || accounting.task_bytes < aggregateResultBytes) {
+    if (aggregateResultBytes > accounting2.result_byte_cap || accounting2.task_bytes < aggregateResultBytes) {
       return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.implementationAggregateAccountingInvalid));
     }
     const outputsByPath = /* @__PURE__ */ new Map();
@@ -34026,12 +34158,12 @@ function validateDurableSemantics(subject) {
       else bucket.push(output);
     }
     const entriesByPath = /* @__PURE__ */ new Map();
-    for (const entry of accounting.counted_entries) {
+    for (const entry of accounting2.counted_entries) {
       const bucket = entriesByPath.get(entry.path);
       if (bucket === void 0) entriesByPath.set(entry.path, [entry]);
       else bucket.push(entry);
     }
-    for (const entry of accounting.counted_entries) {
+    for (const entry of accounting2.counted_entries) {
       if (outputsByPath.get(entry.path)?.length !== 1) {
         return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingEntryUnmatched));
       }
@@ -34041,13 +34173,13 @@ function validateDurableSemantics(subject) {
         return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingOutputUnmatched));
       }
     }
-    for (const entry of accounting.counted_entries) {
+    for (const entry of accounting2.counted_entries) {
       const output = outputsByPath.get(entry.path)[0];
       if (output.storage !== entry.storage) {
         return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingStorageMismatch));
       }
     }
-    for (const entry of accounting.counted_entries) {
+    for (const entry of accounting2.counted_entries) {
       const output = outputsByPath.get(entry.path)[0];
       if (entry.storage === "raw-payload" && output.storage === "raw-payload") {
         if (entry.stored_bytes !== output.payload_bytes) {
@@ -34183,6 +34315,94 @@ function validateDurableSemantics(subject) {
 import { lstat as lstat5, readFile as readFile4, readlink } from "node:fs/promises";
 import { resolve as resolvePath4 } from "node:path";
 import { isDeepStrictEqual as isDeepStrictEqual5 } from "node:util";
+
+// src/repository/index-entries.ts
+var LS_FILES_OPERATION = "git-ls-files";
+var TREE_MODE_ILLEGAL = "archflow-tree-mode-illegal";
+var PATH_MISMATCH = "git-path-mismatch";
+var ARCHFLOW_PREFIX = ".archflow/";
+var GITLINK_MODE = "160000";
+function ok10(value) {
+  return Object.freeze({ schema_version: "1", ok: true, value });
+}
+function fail10(error51) {
+  return Object.freeze({ schema_version: "1", ok: false, error: error51 });
+}
+function taskInvalid(context2, issueCode) {
+  return createProjectError("TASK_INVALID", {
+    task_id: context2.task_id,
+    issue_code: issueCode
+  });
+}
+function assertArchflowIndexEntry(entry) {
+  if (entry.mode !== "100644") {
+    throw new TypeError(
+      `${entry.path} has index mode ${entry.mode}; only 100644 is legal below .archflow/`
+    );
+  }
+}
+function parseStage(value) {
+  return value === "0" ? 0 : value === "1" ? 1 : value === "2" ? 2 : value === "3" ? 3 : void 0;
+}
+async function readIndexEntries(runner, paths, context2) {
+  if (paths.length === 0) return ok10(Object.freeze([]));
+  let fields;
+  try {
+    fields = await runner.runNulFields({
+      argv: [
+        "ls-files",
+        "-s",
+        "-z",
+        "--",
+        ...paths.map((claim) => `:(top,literal)${claim}`)
+      ],
+      operation: LS_FILES_OPERATION
+    });
+  } catch (error51) {
+    if (error51 instanceof GitInvocationError) {
+      return fail10(projectErrorForGitFailure(error51, runner, context2));
+    }
+    throw error51;
+  }
+  const requested = new Map(paths.map((claim) => [claim, claim]));
+  const entries = [];
+  for (const field of fields) {
+    const tab = field.indexOf("	");
+    if (tab < 0) return fail10(taskInvalid(context2, PATH_MISMATCH));
+    const meta3 = field.slice(0, tab).split(" ");
+    if (meta3.length !== 3) return fail10(taskInvalid(context2, PATH_MISMATCH));
+    const [modeText, oidText, stageText] = meta3;
+    const claim = requested.get(field.slice(tab + 1));
+    if (claim === void 0) return fail10(taskInvalid(context2, PATH_MISMATCH));
+    let mode;
+    try {
+      mode = normalizeGitTreeMode(modeText);
+    } catch {
+      return fail10(taskInvalid(context2, TREE_MODE_ILLEGAL));
+    }
+    if (mode === GITLINK_MODE) return fail10(taskInvalid(context2, TREE_MODE_ILLEGAL));
+    let oid;
+    try {
+      oid = parseGitOid(oidText);
+    } catch {
+      return fail10(taskInvalid(context2, PATH_MISMATCH));
+    }
+    const stage = parseStage(stageText);
+    if (stage === void 0) return fail10(taskInvalid(context2, PATH_MISMATCH));
+    const entry = Object.freeze({ path: claim, mode, oid, stage });
+    if (claim.startsWith(ARCHFLOW_PREFIX)) {
+      try {
+        assertArchflowIndexEntry(entry);
+      } catch {
+        return fail10(taskInvalid(context2, TREE_MODE_ILLEGAL));
+      }
+    }
+    entries.push(entry);
+  }
+  return ok10(Object.freeze(entries));
+}
+
+// src/state/implementation-manifest.ts
 function missing(targetRef, targetHead, reason2, paths) {
   return Object.freeze({
     kind: "missing-from-history",
@@ -34336,6 +34556,11 @@ async function observeSecondaryCommitProgress(output, facts, repositories) {
   }
   return Object.freeze({ kind: "proven" });
 }
+async function secondaryImplementationMilestonesProven(output, facts, repositories) {
+  const sections = (output.secondary_repositories ?? []).filter((section) => section.outputs.length > 0);
+  if (facts.length !== sections.length) return false;
+  return (await observeSecondaryCommitProgress(output, facts, repositories)).kind === "proven";
+}
 async function resolveAutonomousImplementationMilestoneProof(runner, output, targetRef, commitMessage) {
   return resolveImplementationMilestoneProof(runner, output, {
     target_ref: targetRef,
@@ -34456,9 +34681,9 @@ async function resolveAutonomousDesignMilestoneProofUnchecked(runner, state, art
   }
   const unauthorized = unauthorizedDocuments(changed);
   if (unauthorized.length !== 0) return missing(pin.target_ref, pin.target_head, "unauthorized-task-document", unauthorized);
-  const committedState = await readCommitTreeBlob(runner, pin.candidate, `${prefix}state.json`);
-  if (committedState === void 0) return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
-  const committedStateBytes = await readGitBlobBytes(runner, committedState.oid);
+  const committedState2 = await readCommitTreeBlob(runner, pin.candidate, `${prefix}state.json`);
+  if (committedState2 === void 0) return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
+  const committedStateBytes = await readGitBlobBytes(runner, committedState2.oid);
   let historicalState;
   try {
     const decoded = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(committedStateBytes));
@@ -34499,6 +34724,24 @@ async function resolveAutonomousDesignMilestoneProof(runner, state, artifact, ou
     });
   }
 }
+function legacyDesignObservation(proof) {
+  if (proof.kind === "proven") return Object.freeze({ observed: true });
+  if (proof.kind === "not-created") {
+    return Object.freeze({ observed: false, reason: "not-committed", blocking: false });
+  }
+  if (proof.kind === "unverifiable") {
+    throw new TypeError(`milestone proof unavailable: ${proof.reason}`);
+  }
+  return Object.freeze({
+    observed: false,
+    reason: proof.reason,
+    blocking: true,
+    ...proof.paths === void 0 ? {} : { paths: proof.paths }
+  });
+}
+async function designArtifactCommittedAtCurrentTarget(runner, taskId, artifact, outputs, context2) {
+  return legacyDesignObservation(await resolveDesignMilestoneProof(runner, taskId, artifact, outputs, context2));
+}
 async function approvedDesignWorktreeMatchesRetainedArtifact(runner, taskId, artifact, outputs, context2) {
   if (artifact.task_id !== taskId) return false;
   const approvedPaths = [
@@ -34522,6 +34765,13 @@ async function approvedDesignWorktreeMatchesRetainedArtifact(runner, taskId, art
   return true;
 }
 var ordinal6 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+function ownEnumerableData(value, key) {
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  if (descriptor === void 0 || !("value" in descriptor) || !descriptor.enumerable) {
+    throw new TypeError(`${key} must be an own enumerable data property`);
+  }
+  return descriptor.value;
+}
 function sortedUniqueImplementationPaths(output) {
   const paths = /* @__PURE__ */ new Set();
   for (const entry of output.outputs) {
@@ -34543,6 +34793,42 @@ function deriveSnapshotDigest(entries) {
     entries: [...entries].sort((left, right) => ordinal6(left.path, right.path))
   });
 }
+function deriveImplementationDiffDigest(baseCommit, outputs) {
+  const entries = outputs.map((entry) => {
+    const common3 = {
+      path: entry.path,
+      path_class: entry.path_class,
+      operation: entry.operation,
+      file_type: entry.file_type
+    };
+    if (entry.operation === "add") return { ...common3, after: entry.after };
+    if (entry.operation === "delete") return { ...common3, before: entry.before };
+    if (entry.operation === "rename") {
+      return { ...common3, previous_path: entry.previous_path, before: entry.before, after: entry.after };
+    }
+    return { ...common3, before: entry.before, after: entry.after };
+  });
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "implementation-diff",
+    base_commit: baseCommit,
+    entries: entries.sort((left, right) => ordinal6(left.path, right.path))
+  });
+}
+function deriveOverallImplementationDiffDigest(primaryDigest, sections) {
+  if (sections.length === 0) return primaryDigest;
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "multi-repository-implementation-diff",
+    primary_diff_digest: primaryDigest,
+    secondary_repositories: [...sections].sort((a, b) => ordinal6(a.repository, b.repository)).map((section) => ({
+      repository: section.repository,
+      repository_identity_digest: section.repository_identity_digest,
+      base_commit: section.base_commit,
+      diff_digest: section.diff_digest
+    }))
+  });
+}
 function deriveOverallImplementationSnapshotDigest(primaryDigest, sections) {
   if (sections.length === 0) return primaryDigest;
   return canonicalJsonDigest({
@@ -34555,6 +34841,22 @@ function deriveOverallImplementationSnapshotDigest(primaryDigest, sections) {
       base_commit: section.base_commit,
       snapshot_digest: section.snapshot_digest
     }))
+  });
+}
+function deriveIndexIdentityDigest(entries, undeclaredChanges) {
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "declared-index-identity",
+    entries: [...entries].sort((left, right) => ordinal6(left.path, right.path)),
+    undeclared_changes: undeclaredChanges
+  });
+}
+function deriveWorktreeIdentityDigest(entries, undeclaredChanges) {
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "declared-worktree-identity",
+    entries: [...entries].sort((left, right) => ordinal6(left.path, right.path)),
+    undeclared_changes: undeclaredChanges
   });
 }
 function sameIdentity(observed, expected) {
@@ -34621,6 +34923,416 @@ async function observePath(runner, resolved) {
     bytes
   };
 }
+async function resolveAll(runner, output, context2) {
+  const resolved = /* @__PURE__ */ new Map();
+  for (const entry of output.outputs) {
+    if (entry.operation === "rename") {
+      const result = await resolveDeclaredRename({ runner, taskId: output.task_id, previousPath: entry.previous_path, path: entry.path, pathClass: entry.path_class, context: context2 });
+      if (!result.ok) throw result.error;
+      resolved.set(entry.previous_path, result.value.previous);
+      resolved.set(entry.path, result.value.next);
+    } else {
+      const result = await resolveDeclaredOutputPath({ runner, taskId: output.task_id, claim: entry.path, pathClass: entry.path_class, context: context2 });
+      if (!result.ok) throw result.error;
+      resolved.set(entry.path, result.value);
+    }
+  }
+  return resolved;
+}
+async function baseIdentity(runner, commit, path2) {
+  const entry = await readCommitTreeBlob(runner, commit, path2);
+  if (entry === void 0) return void 0;
+  return Object.freeze({ oid: parseGitOid(entry.oid), mode: entry.mode, size_bytes: parseSafeInteger(await readGitBlobSize(runner, entry.oid)) });
+}
+async function readRegularBytes(path2, label) {
+  const stat5 = await lstat5(path2.absolute);
+  if (!stat5.isFile()) throw new TypeError(`${label} is not a regular file`);
+  return new Uint8Array(await readFile4(path2.absolute));
+}
+async function readRenameSources(runner, baseCommit) {
+  const fields = await runner.runNulFields({
+    argv: ["diff", "--name-status", "-z", "--find-renames", baseCommit, "--"],
+    operation: "git-diff-implementation-output"
+  });
+  const renames = /* @__PURE__ */ new Map();
+  const deleted = [];
+  for (let index = 0; index < fields.length; ) {
+    const status = fields[index++];
+    if (status === void 0) throw new TypeError("git diff name-status output is malformed");
+    if (/^R[0-9]+$/u.test(status)) {
+      const previous = fields[index++];
+      const next = fields[index++];
+      if (previous === void 0 || next === void 0) throw new TypeError("git diff rename output is malformed");
+      renames.set(next, parseRepositoryPathClaim(previous));
+    } else {
+      const path2 = fields[index++];
+      if (path2 === void 0) throw new TypeError("git diff name-status output is malformed");
+      if (status === "D") deleted.push(parseRepositoryPathClaim(path2));
+    }
+  }
+  return Object.freeze({ renames, deleted: Object.freeze(deleted.sort(ordinal6)) });
+}
+function identityOf(observation) {
+  return Object.freeze({
+    oid: observation.oid,
+    mode: observation.mode,
+    size_bytes: parseSafeInteger(observation.size_bytes)
+  });
+}
+async function resolveBaseCommit(runner, revision2) {
+  try {
+    return Object.freeze({ schema_version: "1", ok: true, value: await resolveCommit(runner, revision2) });
+  } catch {
+    return Object.freeze({
+      schema_version: "1",
+      ok: false,
+      error: createProjectError("CONTRACT_INVALID", { issue_code: "base-commit-unresolvable" })
+    });
+  }
+}
+async function buildSecondaryRepositorySection(authority, member, declaration, measuredAtRevision) {
+  const runner = member.binding.runner;
+  const base2 = await resolveBaseCommit(runner, declaration.base_commit);
+  if (!base2.ok) return base2;
+  if (base2.value !== member.head) {
+    return Object.freeze({
+      schema_version: "1",
+      ok: false,
+      error: createProjectError("CONTRACT_INVALID", { issue_code: "secondary-base-commit-mismatch" })
+    });
+  }
+  const outputPaths = [...declaration.outputs].sort(ordinal6);
+  if (new Set(outputPaths).size !== outputPaths.length) throw new TypeError(`secondary repository ${member.name} outputs must be unique`);
+  const renameChanges = await readRenameSources(runner, base2.value);
+  const observations = /* @__PURE__ */ new Map();
+  const resolvedPaths = /* @__PURE__ */ new Map();
+  const resolveOutput = async (path2) => {
+    const classified = classifyRepositoryPath(path2);
+    if (!classified.ok) return classified;
+    if (classified.value !== "repository-source" || path2 === ".archflow" || path2.startsWith(".archflow/")) {
+      throw new TypeError(`secondary repository ${member.name} path is not repository source`);
+    }
+    const resolved = await resolveRepositoryPath({ runner, claim: path2, context: authority.context });
+    if (!resolved.ok) return resolved;
+    resolvedPaths.set(path2, resolved.value);
+    observations.set(path2, await observePath(runner, resolved.value));
+    return resolved;
+  };
+  const outputs = [];
+  for (const path2 of outputPaths) {
+    const resolved = await resolveOutput(path2);
+    if (!resolved.ok) return resolved;
+    const after = observations.get(path2);
+    const before = await baseIdentity(runner, base2.value, path2);
+    let previousPath = before === void 0 && after.observation.state === "present" ? renameChanges.renames.get(path2) : void 0;
+    if (previousPath === void 0 && before === void 0 && after.observation.state === "present") {
+      const candidates = [];
+      for (const deletedPath of renameChanges.deleted) {
+        const deletedIdentity = await baseIdentity(runner, base2.value, deletedPath);
+        if (deletedIdentity !== void 0 && isDeepStrictEqual5(deletedIdentity, identityOf(after.observation))) candidates.push(deletedPath);
+      }
+      if (candidates.length === 1) previousPath = candidates[0];
+    }
+    if (previousPath !== void 0) {
+      const previous = await resolveOutput(previousPath);
+      if (!previous.ok) return previous;
+      const previousIdentity = await baseIdentity(runner, base2.value, previousPath);
+      if (previousIdentity === void 0 || after.observation.state !== "present") throw new TypeError("secondary rename does not match base/worktree state");
+      const afterIdentity = identityOf(after.observation);
+      const retainedByGit = isDeepStrictEqual5(previousIdentity, afterIdentity) && await isCommitAncestorOfHead(runner, base2.value);
+      outputs.push(Object.freeze(retainedByGit ? {
+        path: path2,
+        path_class: "repository-source",
+        operation: "rename",
+        storage: "git-object",
+        file_type: after.observation.file_type,
+        before: previousIdentity,
+        after: afterIdentity,
+        previous_path: previousPath
+      } : {
+        path: path2,
+        path_class: "repository-source",
+        operation: "rename",
+        storage: "raw-payload",
+        payload_bytes: parseSafeInteger(after.bytes.byteLength),
+        payload_digest: sha256Bytes(after.bytes),
+        file_type: after.observation.file_type,
+        before: previousIdentity,
+        after: afterIdentity,
+        previous_path: previousPath
+      }));
+    } else if (before === void 0 && after.observation.state === "present") {
+      outputs.push(Object.freeze({
+        path: path2,
+        path_class: "repository-source",
+        operation: "add",
+        storage: "raw-payload",
+        payload_bytes: parseSafeInteger(after.bytes.byteLength),
+        payload_digest: sha256Bytes(after.bytes),
+        file_type: after.observation.file_type,
+        after: identityOf(after.observation)
+      }));
+    } else if (before !== void 0 && after.observation.state === "absent") {
+      outputs.push(Object.freeze({
+        path: path2,
+        path_class: "repository-source",
+        operation: "delete",
+        storage: "git-object",
+        file_type: before.mode === "120000" ? "symlink" : "regular",
+        before
+      }));
+    } else if (before !== void 0 && after.observation.state === "present") {
+      outputs.push(Object.freeze({
+        path: path2,
+        path_class: "repository-source",
+        operation: "modify",
+        storage: "raw-payload",
+        payload_bytes: parseSafeInteger(after.bytes.byteLength),
+        payload_digest: sha256Bytes(after.bytes),
+        file_type: after.observation.file_type,
+        before,
+        after: identityOf(after.observation)
+      }));
+    } else throw new TypeError("secondary declared output is absent from both base and worktree");
+  }
+  outputs.sort((a, b) => ordinal6(a.path, b.path));
+  const restoreTargets = [...declaration.restore_targets].sort(ordinal6);
+  if (new Set(restoreTargets).size !== restoreTargets.length || restoreTargets.some((path2) => !outputPaths.includes(path2))) {
+    throw new TypeError(`secondary repository ${member.name} restore targets must be unique declared outputs`);
+  }
+  const scope3 = [...new Set(outputs.flatMap((output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]))].sort(ordinal6);
+  const changed = await readChangedGitPaths(runner);
+  const scopeSet = new Set(scope3);
+  const callerChanges = changed.paths.filter((path2) => !path2.startsWith(".archflow/runtime/"));
+  const undeclaredChanges = Object.freeze({
+    scanned: true,
+    undeclared_paths: Object.freeze(callerChanges.filter((path2) => !scopeSet.has(path2)).map(rawGitPath)),
+    unrepresentable_count: parseSafeInteger(changed.unrepresentable_count)
+  });
+  const snapshotEntries = Object.freeze(scope3.map((path2) => observations.get(path2).observation));
+  const indexResult = await readIndexEntries(runner, scope3, authority.context);
+  if (!indexResult.ok) return indexResult;
+  const indexByPath = new Map(indexResult.value.map((entry) => [entry.path, entry]));
+  const indexEntries = scope3.map((path2) => {
+    const entry = indexByPath.get(path2);
+    if (entry === void 0) return Object.freeze({ path: path2, state: "absent" });
+    if (entry.stage !== 0) throw new TypeError("secondary declared index path is unmerged");
+    return Object.freeze({ path: path2, state: "present", stage: 0, mode: entry.mode, oid: entry.oid });
+  });
+  const declaredInputs = [];
+  for (const declared of [...declaration.declared_inputs].sort((a, b) => ordinal6(a.input_id, b.input_id))) {
+    if (declared.path === ".archflow" || declared.path.startsWith(".archflow/")) throw new TypeError(`secondary repository ${member.name} input is not repository source`);
+    const resolved = await resolveRepositoryPath({ runner, claim: declared.path, context: authority.context });
+    if (!resolved.ok) return resolved;
+    declaredInputs.push(Object.freeze({ input_id: declared.input_id, path: declared.path, digest: sha256Bytes(await readRegularBytes(resolved.value, "secondary declared input")) }));
+  }
+  const countedEntries = outputs.map((output) => Object.freeze(output.storage === "raw-payload" ? { path: output.path, storage: "raw-payload", stored_bytes: output.payload_bytes } : { path: output.path, storage: "git-object", stored_bytes: 0 }));
+  const resultBytes = parseSafeInteger(countedEntries.reduce((sum, entry) => sum + entry.stored_bytes, 0));
+  return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({
+    section: Object.freeze({
+      repository: declaration.name,
+      repository_identity_digest: member.identity.digest,
+      base_commit: base2.value,
+      index_identity_digest: deriveIndexIdentityDigest(indexEntries, undeclaredChanges),
+      worktree_identity_digest: deriveWorktreeIdentityDigest(snapshotEntries, undeclaredChanges),
+      outputs: Object.freeze(outputs),
+      diff_digest: deriveImplementationDiffDigest(base2.value, outputs),
+      snapshot_digest: deriveSnapshotDigest(snapshotEntries),
+      restore_targets: Object.freeze(restoreTargets),
+      accounting: Object.freeze({
+        schema_version: "1",
+        result_bytes: resultBytes,
+        task_bytes: resultBytes,
+        result_byte_cap: 26214400,
+        task_byte_cap: 262144e3,
+        counted_entries: Object.freeze(countedEntries),
+        measured_at_revision: measuredAtRevision
+      }),
+      undeclared_changes: undeclaredChanges,
+      declared_inputs: Object.freeze(declaredInputs)
+    }),
+    observations
+  }) });
+}
+async function verifyImplementationRepositorySection(authority, member, section) {
+  const built = await buildSecondaryRepositorySection(authority, member, {
+    name: section.repository,
+    base_commit: section.base_commit,
+    outputs: section.outputs.map((output) => output.path),
+    restore_targets: section.restore_targets,
+    declared_inputs: section.declared_inputs.map((input) => ({ input_id: input.input_id, path: input.path }))
+  }, section.accounting.measured_at_revision);
+  if (!built.ok) throw built.error;
+  if (!isDeepStrictEqual5(built.value.section, section)) {
+    throw new TypeError(`secondary repository ${section.repository} manifest disagrees with authenticated observations`);
+  }
+  const snapshotEntries = sortedUniqueImplementationPaths(section).map((path2) => built.value.observations.get(path2)?.observation);
+  const rawPayloads = /* @__PURE__ */ new Map();
+  for (const output of section.outputs) {
+    if (output.storage !== "raw-payload") continue;
+    const bytes = built.value.observations.get(output.path)?.bytes;
+    if (bytes === void 0) throw new TypeError("secondary raw payload bytes unavailable");
+    rawPayloads.set(output.path, new Uint8Array(bytes));
+  }
+  return Object.freeze({ snapshot_entries: Object.freeze(snapshotEntries), raw_payloads: rawPayloads });
+}
+async function verifyImplementationManifest(runner, supplied, context2, suppliedCurrentSources = []) {
+  assertPlainJson(supplied, "implementation output");
+  const output = structuredClone(supplied);
+  const decodedPhase = decodePhaseInstance(output.phase_instance);
+  if (decodedPhase.kind !== "phase-impl") throw new TypeError("implementation output phase must be phase-impl");
+  const transcript = await resolveTaskWorkspacePath({
+    runner,
+    taskId: output.task_id,
+    claim: verificationTranscriptClaim(decodedPhase.phase),
+    expectedClass: "workspace-verification-transcript",
+    context: context2
+  });
+  if (!transcript.ok) throw transcript.error;
+  const transcriptBytes = await readRegularBytes(transcript.value, "verification transcript");
+  if (sha256Bytes(transcriptBytes) !== output.verification_evidence.transcript_digest || transcriptBytes.byteLength !== output.verification_evidence.byte_count) {
+    throw new TypeError("verification transcript disagrees with durable verification evidence");
+  }
+  const currentSources = /* @__PURE__ */ new Map();
+  for (const suppliedSource of suppliedCurrentSources) {
+    if (suppliedSource === null || typeof suppliedSource !== "object") {
+      throw new TypeError("current authoritative output source must be an object");
+    }
+    const state = ownEnumerableData(suppliedSource, "state");
+    const path2 = ownEnumerableData(suppliedSource, "path");
+    let source;
+    if (state === "absent") {
+      source = Object.freeze({ path: path2, state });
+    } else if (state === "present") {
+      const suppliedIdentity = ownEnumerableData(suppliedSource, "identity");
+      assertPlainJson(suppliedIdentity, "current authoritative output identity");
+      const bytesDescriptor = Object.getOwnPropertyDescriptor(suppliedSource, "bytes");
+      if (bytesDescriptor !== void 0 && (!("value" in bytesDescriptor) || !bytesDescriptor.enumerable)) {
+        throw new TypeError("bytes must be an own enumerable data property");
+      }
+      const suppliedBytes = bytesDescriptor?.value;
+      if (suppliedBytes !== void 0 && !(suppliedBytes instanceof Uint8Array)) {
+        throw new TypeError("current authoritative output bytes must be bytes");
+      }
+      source = Object.freeze({
+        path: path2,
+        state,
+        identity: structuredClone(suppliedIdentity),
+        ...suppliedBytes === void 0 ? {} : { bytes: new Uint8Array(suppliedBytes) }
+      });
+    } else {
+      throw new TypeError("current authoritative output source state is invalid");
+    }
+    if (currentSources.has(source.path)) throw new TypeError("duplicate current authoritative output source");
+    if (source.state === "present" && source.bytes !== void 0) {
+      const identity = source.identity.mode === "120000" ? { oid: gitBlobOid(source.bytes), size_bytes: source.bytes.byteLength } : await hashGitBlobIdentity(runner, source.bytes, source.path);
+      if (identity.oid !== source.identity.oid || identity.size_bytes !== source.identity.size_bytes) {
+        throw new TypeError("current authoritative output bytes disagree with their identity");
+      }
+    }
+    currentSources.set(source.path, source);
+  }
+  const scope3 = sortedUniqueImplementationPaths(output);
+  const changed = await readChangedGitPaths(runner);
+  const scopeSet = new Set(scope3);
+  const callerChanges = changed.paths.filter((path2) => !path2.startsWith(".archflow/runtime/"));
+  const undeclaredChanges = {
+    scanned: true,
+    undeclared_paths: callerChanges.filter((path2) => !scopeSet.has(path2)).map(rawGitPath),
+    unrepresentable_count: parseSafeInteger(changed.unrepresentable_count)
+  };
+  if (!isDeepStrictEqual5(undeclaredChanges, output.undeclared_changes)) {
+    throw new TypeError("undeclared change report does not match the live Git working set");
+  }
+  const resolved = await resolveAll(runner, output, context2);
+  const observed = /* @__PURE__ */ new Map();
+  for (const path2 of scope3) {
+    const target2 = resolved.get(path2);
+    if (target2 === void 0) throw new TypeError("declared scope path was not resolved");
+    observed.set(path2, await observePath(runner, target2));
+  }
+  const ancestryRetained = await isCommitAncestorOfHead(runner, output.base_commit);
+  const rawPayloads = /* @__PURE__ */ new Map();
+  const snapshot2 = /* @__PURE__ */ new Map();
+  for (const entry of output.outputs) {
+    const after = observed.get(entry.path);
+    if (after === void 0) throw new TypeError("missing output observation");
+    const beforePath = entry.operation === "rename" ? entry.previous_path : entry.path;
+    const currentBefore = currentSources.get(beforePath);
+    const baseBefore = await baseIdentity(runner, output.base_commit, beforePath);
+    const before = currentBefore === void 0 ? baseBefore : currentBefore.state === "present" ? currentBefore.identity : void 0;
+    const currentDestination = currentSources.get(entry.path);
+    const destinationBefore = entry.operation === "rename" ? currentDestination === void 0 ? await baseIdentity(runner, output.base_commit, entry.path) : currentDestination.state === "present" ? currentDestination.identity : void 0 : before;
+    if (entry.operation === "add") {
+      if (before !== void 0 || after.observation.state !== "present") throw new TypeError("add does not match base/worktree state");
+    } else if (entry.operation === "modify") {
+      if (before === void 0 || !sameIdentity({ ...after.observation, path: beforePath }, entry.after) || before.oid !== entry.before.oid || before.mode !== entry.before.mode || before.size_bytes !== entry.before.size_bytes) {
+        throw new TypeError("modify identity does not match base/worktree state");
+      }
+    } else if (entry.operation === "delete") {
+      if (before === void 0 || after.observation.state !== "absent" || before.oid !== entry.before.oid || before.mode !== entry.before.mode || before.size_bytes !== entry.before.size_bytes) {
+        throw new TypeError("delete identity does not match base/worktree state");
+      }
+    } else {
+      const previous = observed.get(entry.previous_path)?.observation;
+      if (before === void 0 || destinationBefore !== void 0 || previous?.state !== "absent" || !sameIdentity(after.observation, entry.after) || before.oid !== entry.before.oid || before.mode !== entry.before.mode || before.size_bytes !== entry.before.size_bytes) {
+        throw new TypeError("rename identity or non-overwrite condition does not match base/worktree state");
+      }
+      snapshot2.set(entry.previous_path, previous);
+    }
+    if (entry.operation !== "delete" && !sameIdentity(after.observation, entry.after)) {
+      throw new TypeError(`after identity does not match projected bytes for ${entry.path}`);
+    }
+    if (entry.storage === "raw-payload") {
+      if (after.bytes === void 0 || entry.payload_bytes !== after.bytes.byteLength || entry.payload_digest !== sha256Bytes(after.bytes)) {
+        throw new TypeError("raw payload facts do not match projected bytes");
+      }
+      rawPayloads.set(entry.path, new Uint8Array(after.bytes));
+    } else if (entry.operation !== "delete") {
+      const proofPath = entry.operation === "rename" ? entry.previous_path : entry.path;
+      const proof = await baseIdentity(runner, output.base_commit, proofPath);
+      if (!ancestryRetained || proof === void 0 || !sameIdentity(after.observation, proof)) {
+        throw new TypeError("git-object storage lacks a reachable base-tree proof");
+      }
+      const projected = entry.file_type === "regular" ? await readGitBlobProjectedBytes(runner, proof.oid, entry.path) : await readGitBlobBytes(runner, proof.oid);
+      if (after.bytes === void 0 || sha256Bytes(projected) !== sha256Bytes(after.bytes)) {
+        throw new TypeError("git-object storage cannot reproduce the projected worktree bytes");
+      }
+    }
+    snapshot2.set(entry.path, after.observation);
+  }
+  const worktreeEntries = Object.freeze(scope3.map((path2) => observed.get(path2)?.observation));
+  const snapshotEntries = Object.freeze(scope3.map((path2) => snapshot2.get(path2) ?? observed.get(path2)?.observation));
+  const indexResult = await readIndexEntries(runner, scope3, context2);
+  if (!indexResult.ok) throw indexResult.error;
+  const byIndexPath = new Map(indexResult.value.map((entry) => [entry.path, entry]));
+  const indexEntries = scope3.map((path2) => {
+    const entry = byIndexPath.get(path2);
+    if (entry === void 0) return Object.freeze({ path: path2, state: "absent" });
+    if (entry.stage !== 0) throw new TypeError("declared index path is unmerged");
+    return Object.freeze({ path: path2, state: "present", stage: 0, mode: entry.mode, oid: entry.oid });
+  });
+  const facts = Object.freeze({
+    snapshot_digest: deriveOverallImplementationSnapshotDigest(
+      deriveSnapshotDigest(snapshotEntries),
+      output.secondary_repositories ?? []
+    ),
+    diff_digest: deriveOverallImplementationDiffDigest(
+      deriveImplementationDiffDigest(output.base_commit, output.outputs),
+      output.secondary_repositories ?? []
+    ),
+    index_identity_digest: deriveIndexIdentityDigest(indexEntries, undeclaredChanges),
+    worktree_identity_digest: deriveWorktreeIdentityDigest(worktreeEntries, undeclaredChanges),
+    snapshot_entries: snapshotEntries,
+    index_entries: Object.freeze(indexEntries),
+    worktree_entries: worktreeEntries,
+    raw_payloads: rawPayloads
+  });
+  if (facts.snapshot_digest !== output.snapshot_digest || facts.diff_digest !== output.diff_digest || facts.index_identity_digest !== output.index_identity_digest || facts.worktree_identity_digest !== output.worktree_identity_digest) {
+    throw new TypeError("implementation identity digest does not match authenticated observations");
+  }
+  return facts;
+}
 
 // src/state/snapshots.ts
 function repositoryPathKey(repository, path2) {
@@ -34628,8 +35340,8 @@ function repositoryPathKey(repository, path2) {
 }
 var RESULT_BYTE_CAP2 = 25 * 1024 * 1024;
 var TASK_BYTE_CAP2 = 250 * 1024 * 1024;
-var ok10 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail10 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var ok11 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail11 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function deriveDeclaredSnapshotDigest(outputs, projections) {
   const projectionDigests = new Map(projections.map((projection) => [projection.path, projection.content_digest]));
   if (projectionDigests.size !== projections.length) throw new TypeError("duplicate snapshot projection path");
@@ -34660,9 +35372,9 @@ function deriveDeclaredSnapshotDigest(outputs, projections) {
   return deriveSnapshotDigest([...entries.values()]);
 }
 function snapshotInvalid(digest10, issue_code) {
-  return fail10(createProjectError("SNAPSHOT_INVALID", { snapshot_digest: digest10, issue_code }));
+  return fail11(createProjectError("SNAPSHOT_INVALID", { snapshot_digest: digest10, issue_code }));
 }
-function ownEnumerableData(value, key) {
+function ownEnumerableData2(value, key) {
   const descriptor = Object.getOwnPropertyDescriptor(value, key);
   if (descriptor === void 0 || !("value" in descriptor) || !descriptor.enumerable) {
     throw new TypeError(`${key} must be an own enumerable data property`);
@@ -34678,7 +35390,7 @@ function atLexicalLeaf(path2, worktreeRoot) {
   return "workspaceRelative" in path2 ? Object.freeze({ ...path2, absolute }) : Object.freeze({ ...path2, absolute });
 }
 function prepareSnapshot(input) {
-  const rawManifest = ownEnumerableData(input, "manifest");
+  const rawManifest = ownEnumerableData2(input, "manifest");
   assertPlainJson(rawManifest, "result manifest");
   const manifest = structuredClone(rawManifest);
   input.validate_manifest(manifest);
@@ -34688,14 +35400,14 @@ function prepareSnapshot(input) {
     return snapshotInvalid(manifest.snapshot_digest, "snapshot-digest-mismatch");
   }
   const document2 = canonicalDocument(manifest);
-  const rawPayloads = ownEnumerableData(input, "payloads");
+  const rawPayloads = ownEnumerableData2(input, "payloads");
   if (!Array.isArray(rawPayloads)) throw new TypeError("payloads must be an array");
   const payloads = rawPayloads.map((item, index) => {
     if (item === null || typeof item !== "object") throw new TypeError(`payloads[${index}] must be an object`);
-    const path2 = ownEnumerableData(item, "path");
-    const target = ownEnumerableData(item, "target");
-    const bytes = cloneBytes(ownEnumerableData(item, "bytes"), `payloads[${index}].bytes`);
-    if (typeof path2 !== "string" || target === null || typeof target !== "object") {
+    const path2 = ownEnumerableData2(item, "path");
+    const target2 = ownEnumerableData2(item, "target");
+    const bytes = cloneBytes(ownEnumerableData2(item, "bytes"), `payloads[${index}].bytes`);
+    if (typeof path2 !== "string" || target2 === null || typeof target2 !== "object") {
       throw new TypeError(`payloads[${index}] has invalid path or target`);
     }
     const repositoryDescriptor = Object.getOwnPropertyDescriptor(item, "repository");
@@ -34705,7 +35417,7 @@ function prepareSnapshot(input) {
     return Object.freeze({
       ...repositoryDescriptor?.value === void 0 ? {} : { repository: repositoryDescriptor.value },
       path: path2,
-      target,
+      target: target2,
       bytes
     });
   });
@@ -34732,7 +35444,7 @@ function prepareSnapshot(input) {
     }
   }
   if (resultBytes > RESULT_BYTE_CAP2) {
-    return fail10(createProjectError("SNAPSHOT_LIMIT", {
+    return fail11(createProjectError("SNAPSHOT_LIMIT", {
       limit_scope: "result",
       offending_paths: payloads.map((payload) => `${payload.repository === void 0 ? "" : `${payload.repository}/`}${payload.path}`).sort(),
       current_bytes: resultBytes,
@@ -34741,7 +35453,7 @@ function prepareSnapshot(input) {
   }
   const taskBytes = input.retained_task_bytes + resultBytes;
   if (taskBytes > TASK_BYTE_CAP2) {
-    return fail10(createProjectError("SNAPSHOT_LIMIT", {
+    return fail11(createProjectError("SNAPSHOT_LIMIT", {
       limit_scope: "task",
       offending_paths: payloads.map((payload) => `${payload.repository === void 0 ? "" : `${payload.repository}/`}${payload.path}`).sort(),
       current_bytes: taskBytes,
@@ -34752,14 +35464,46 @@ function prepareSnapshot(input) {
   if (accountedResultBytes !== resultBytes || manifest.accounting.task_bytes !== taskBytes) {
     return snapshotInvalid(manifest.snapshot_digest, "accounting-mismatch");
   }
-  return ok10(Object.freeze({ manifest: document2, result_digest: document2.digest, payloads: Object.freeze(payloads) }));
+  return ok11(Object.freeze({ manifest: document2, result_digest: document2.digest, payloads: Object.freeze(payloads) }));
 }
-async function installOne(atomic, target, bytes) {
-  const created = await atomic.createExclusive(target, bytes);
+async function prepareDocumentSnapshot(input) {
+  const manifestValue = ownEnumerableData2(input, "manifest");
+  const payloadValue = ownEnumerableData2(input, "payloads");
+  if (manifestValue === null || typeof manifestValue !== "object" || !Array.isArray(payloadValue)) {
+    throw new TypeError("document snapshot input is invalid");
+  }
+  const prepared = prepareSnapshot({
+    manifest: manifestValue,
+    payloads: payloadValue,
+    retained_task_bytes: input.retained_task_bytes,
+    validate_manifest: parseResultManifest
+  });
+  if (!prepared.ok) return prepared;
+  const manifest = prepared.value.manifest.value;
+  if (manifest.source_artifact.artifact_kind !== "document") throw new TypeError("document snapshot requires a document artifact");
+  const expectedCount = 1 + (manifest.source_artifact.additional_documents?.length ?? 0);
+  if (manifest.outputs.length !== expectedCount || prepared.value.payloads.length !== expectedCount) {
+    return snapshotInvalid(manifest.snapshot_digest, "document-output-shape-mismatch");
+  }
+  const payloads = new Map(prepared.value.payloads.map((payload) => [payload.path, payload]));
+  for (const output of manifest.outputs) {
+    const payload = payloads.get(output.path);
+    if (output.operation === "delete" || payload === void 0) {
+      return snapshotInvalid(manifest.snapshot_digest, "document-output-shape-mismatch");
+    }
+    const identity = await hashGitBlobIdentity(input.runner, payload.bytes, output.path);
+    if (output.after.oid !== identity.oid || output.after.size_bytes !== identity.size_bytes) {
+      return snapshotInvalid(manifest.snapshot_digest, "document-git-identity-mismatch");
+    }
+  }
+  return prepared;
+}
+async function installOne(atomic, target2, bytes) {
+  const created = await atomic.createExclusive(target2, bytes);
   if (created === "created") return "created";
   let existing;
   try {
-    const handle = await openResolved(target.absolute, 0);
+    const handle = await openResolved(target2.absolute, 0);
     existing = new Uint8Array(await handle.readFile().finally(() => handle.close()));
   } catch {
     throw new TypeError("immutable snapshot target became unreadable");
@@ -34775,7 +35519,7 @@ async function installSnapshot(atomic, prepared, manifestTarget, worktreeRoot) {
       if (await installOne(atomic, atLexicalLeaf(payload.target, worktreeRoot), payload.bytes) === "created") payloadsCreated += 1;
     }
     const manifest = await installOne(atomic, atLexicalLeaf(manifestTarget, worktreeRoot), prepared.manifest.bytes);
-    return ok10(Object.freeze({ manifest, payloads_created: payloadsCreated }));
+    return ok11(Object.freeze({ manifest, payloads_created: payloadsCreated }));
   } catch {
     return snapshotInvalid(prepared.manifest.value.snapshot_digest, "immutable-install-disagreement");
   }
@@ -34836,7 +35580,7 @@ async function readSnapshot(input) {
       }
     }
   }
-  return ok10(document2);
+  return ok11(document2);
 }
 var retainedAccountingProjectionSchema = external_exports.object({
   result_id: external_exports.string(),
@@ -34871,7 +35615,7 @@ async function readSnapshotAccounting(input) {
   if (projection.source_artifact.artifact_kind === "implementation-output") {
     total += (projection.source_artifact.secondary_repositories ?? []).reduce((sum, section) => sum + section.accounting.result_bytes, 0);
   }
-  return ok10(parseSafeInteger(total));
+  return ok11(parseSafeInteger(total));
 }
 async function restoreSnapshotOutput(input) {
   const read = await readSnapshot({
@@ -34883,7 +35627,7 @@ async function restoreSnapshotOutput(input) {
   if (!read.ok) return read;
   const output = read.value.value.outputs.find((candidate) => candidate.path === input.output_path);
   if (output === void 0) return snapshotInvalid(read.value.value.snapshot_digest, "output-not-declared");
-  if (output.operation === "delete") return ok10(Object.freeze({ state: "absent" }));
+  if (output.operation === "delete") return ok11(Object.freeze({ state: "absent" }));
   let bytes;
   if (output.storage === "git-object") {
     try {
@@ -34911,9 +35655,9 @@ async function restoreSnapshotOutput(input) {
     bytes = payload.value;
   }
   if (output.file_type === "symlink") {
-    return ok10(Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes }));
+    return ok11(Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes }));
   }
-  return ok10(Object.freeze({ state: "present", file_type: "regular", mode: output.after.mode, bytes }));
+  return ok11(Object.freeze({ state: "present", file_type: "regular", mode: output.after.mode, bytes }));
 }
 async function readSnapshotPayload(input) {
   if (input.target.path_class !== "workspace-result-payload") throw new TypeError("payload target has wrong class");
@@ -34923,7 +35667,7 @@ async function readSnapshotPayload(input) {
     if (bytes.byteLength !== input.expected_bytes || sha256Bytes(bytes) !== input.expected_digest) {
       return snapshotInvalid(input.snapshot_digest, "payload-identity-mismatch");
     }
-    return ok10(bytes);
+    return ok11(bytes);
   } catch {
     return snapshotInvalid(input.snapshot_digest, "payload-unreadable");
   }
@@ -34970,11 +35714,11 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
   if (!Array.isArray(sources)) throw new TypeError("projection sources must be an array");
   const materialized = sources.map((source, index) => {
     if (source === null || typeof source !== "object") throw new TypeError(`projection source ${index} must be an object`);
-    const path2 = ownEnumerableData(source, "path");
-    const targetValue = ownEnumerableData(source, "target");
-    const desiredValue = ownEnumerableData(source, "desired");
-    const beforeValue = ownEnumerableData(source, "authenticated_before");
-    const tracked = ownEnumerableData(source, "git_tracked");
+    const path2 = ownEnumerableData2(source, "path");
+    const targetValue = ownEnumerableData2(source, "target");
+    const desiredValue = ownEnumerableData2(source, "desired");
+    const beforeValue = ownEnumerableData2(source, "authenticated_before");
+    const tracked = ownEnumerableData2(source, "git_tracked");
     assertPlainJson(beforeValue, `projection source ${index} before-image`);
     if (typeof path2 !== "string" || targetValue === null || typeof targetValue !== "object" || typeof tracked !== "boolean" || desiredValue === null || typeof desiredValue !== "object") {
       throw new TypeError(`projection source ${index} has invalid fields`);
@@ -34982,35 +35726,35 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
     assertPlainJson(targetValue, `projection source ${index} target`);
     const suppliedTarget = structuredClone(targetValue);
     if (suppliedTarget.repositoryRelative !== path2) throw new TypeError(`projection source ${index} target path disagrees`);
-    const target = Object.freeze({
+    const target2 = Object.freeze({
       ...suppliedTarget,
       absolute: resolvePath5(worktreeRoot, suppliedTarget.repositoryRelative)
     });
-    const desiredState = ownEnumerableData(desiredValue, "state");
+    const desiredState = ownEnumerableData2(desiredValue, "state");
     let desired;
     if (desiredState === "absent") desired = Object.freeze({ state: "absent" });
     else {
-      const fileType = ownEnumerableData(desiredValue, "file_type");
-      const mode = ownEnumerableData(desiredValue, "mode");
-      const bytes = cloneBytes(ownEnumerableData(desiredValue, "bytes"), `projection source ${index} desired bytes`);
+      const fileType = ownEnumerableData2(desiredValue, "file_type");
+      const mode = ownEnumerableData2(desiredValue, "mode");
+      const bytes = cloneBytes(ownEnumerableData2(desiredValue, "bytes"), `projection source ${index} desired bytes`);
       if (fileType === "regular" && (mode === "100644" || mode === "100755")) desired = Object.freeze({ state: "present", file_type: fileType, mode, bytes });
       else if (fileType === "symlink" && mode === "120000") desired = Object.freeze({ state: "present", file_type: fileType, mode, bytes });
       else throw new TypeError(`projection source ${index} has invalid desired identity`);
     }
     const rollbackDescriptor = Object.getOwnPropertyDescriptor(source, "rollback");
-    let rollback;
+    let rollback2;
     if (rollbackDescriptor !== void 0) {
       if (!("value" in rollbackDescriptor) || !rollbackDescriptor.enumerable) throw new TypeError("rollback must be an own enumerable data property");
       const value = rollbackDescriptor.value;
       if (value === null || typeof value !== "object") throw new TypeError("rollback must be a projection image");
-      const state = ownEnumerableData(value, "state");
-      if (state === "absent") rollback = Object.freeze({ state: "absent" });
+      const state = ownEnumerableData2(value, "state");
+      if (state === "absent") rollback2 = Object.freeze({ state: "absent" });
       else {
-        const fileType = ownEnumerableData(value, "file_type");
-        const mode = ownEnumerableData(value, "mode");
-        const bytes = cloneBytes(ownEnumerableData(value, "bytes"), `projection source ${index} rollback bytes`);
-        if (fileType === "regular" && (mode === "100644" || mode === "100755")) rollback = Object.freeze({ state: "present", file_type: fileType, mode, bytes });
-        else if (fileType === "symlink" && mode === "120000") rollback = Object.freeze({ state: "present", file_type: fileType, mode, bytes });
+        const fileType = ownEnumerableData2(value, "file_type");
+        const mode = ownEnumerableData2(value, "mode");
+        const bytes = cloneBytes(ownEnumerableData2(value, "bytes"), `projection source ${index} rollback bytes`);
+        if (fileType === "regular" && (mode === "100644" || mode === "100755")) rollback2 = Object.freeze({ state: "present", file_type: fileType, mode, bytes });
+        else if (fileType === "symlink" && mode === "120000") rollback2 = Object.freeze({ state: "present", file_type: fileType, mode, bytes });
         else throw new TypeError(`projection source ${index} has invalid rollback identity`);
       }
     }
@@ -35020,18 +35764,18 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
       if (!("value" in renameDescriptor) || !renameDescriptor.enumerable) throw new TypeError("rename_pair must be an own enumerable data property");
       const value = renameDescriptor.value;
       if (value === null || typeof value !== "object") throw new TypeError("rename_pair must be an object");
-      const role = ownEnumerableData(value, "role");
-      const peerPath = ownEnumerableData(value, "peer_path");
+      const role = ownEnumerableData2(value, "role");
+      const peerPath = ownEnumerableData2(value, "peer_path");
       if (role !== "source" && role !== "destination" || typeof peerPath !== "string") throw new TypeError("rename_pair is invalid");
       renamePair = Object.freeze({ role, peer_path: peerPath });
     }
     return Object.freeze({
       path: path2,
-      target,
+      target: target2,
       desired,
       authenticated_before: structuredClone(beforeValue),
       git_tracked: tracked,
-      ...rollback === void 0 ? {} : { rollback },
+      ...rollback2 === void 0 ? {} : { rollback: rollback2 },
       ...renamePair === void 0 ? {} : { rename_pair: renamePair }
     });
   });
@@ -35047,11 +35791,11 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
   if (scan.outcome === "detected") {
     const finding = scan.findings[0];
     if (finding === void 0) throw new TypeError("detected scan must contain a finding");
-    return fail10(createProjectError("SECRET_DETECTED", { path_class: finding.path_class, detector_id: finding.detector_id }));
+    return fail11(createProjectError("SECRET_DETECTED", { path_class: finding.path_class, detector_id: finding.detector_id }));
   }
   if (scan.outcome === "unavailable") {
     const first = materialized.find((source) => source.git_tracked);
-    return fail10(createProjectError("SECRET_DETECTED", { path_class: first?.target.path_class ?? "repository-source", detector_id: "scanner-unavailable" }));
+    return fail11(createProjectError("SECRET_DETECTED", { path_class: first?.target.path_class ?? "repository-source", detector_id: "scanner-unavailable" }));
   }
   const entries = [];
   for (const source of materialized) {
@@ -35078,11 +35822,86 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
     }));
   }
   const collisions = entries.filter((entry) => entry.disposition === "collision").map((entry) => Object.freeze({ path: entry.path, path_class: entry.target.path_class }));
-  return ok10(Object.freeze({
+  return ok11(Object.freeze({
     entries: Object.freeze(entries),
     collisions: Object.freeze(collisions),
     collision_choices: Object.freeze(["discard-and-restore", "adopt-as-new-generation", "abort"])
   }));
+}
+async function applyDesired(writer, entry) {
+  if (entry.desired.state === "absent") return writer.remove(entry.target);
+  if (entry.desired.file_type === "symlink") return writer.replaceSymlink(entry.target, new TextDecoder().decode(entry.desired.bytes));
+  await writer.replaceRegular(entry.target, entry.desired.bytes, entry.desired.mode === "100755");
+  await chmod(entry.target.absolute, entry.desired.mode === "100755" ? 493 : 420);
+}
+async function applyProjectionPlan(writer, plan) {
+  if (plan.collisions.length !== 0) return Object.freeze({ outcome: "collision", path: plan.collisions[0].path, writes: 0 });
+  for (const entry of plan.entries) {
+    if (!isDeepStrictEqual6(await observe(entry.target), entry.observed_before)) {
+      return Object.freeze({ outcome: "collision", path: entry.path, writes: 0 });
+    }
+  }
+  const applied = [];
+  for (const entry of plan.entries) {
+    if (entry.disposition === "exact") continue;
+    if (!isDeepStrictEqual6(await observe(entry.target), entry.observed_before)) {
+      return rollback(writer, applied, entry.path);
+    }
+    if (entry.rename_pair?.role === "destination" && (await observe(entry.target)).state !== "absent") {
+      return rollback(writer, applied, entry.path);
+    }
+    await applyDesired(writer, entry);
+    applied.push(entry);
+  }
+  return Object.freeze({ outcome: "applied" });
+}
+async function rollback(writer, applied, collisionPath) {
+  const repair = await rollbackEntries(writer, applied);
+  return repair ?? Object.freeze({ outcome: "rolled-back", path: collisionPath });
+}
+async function rollbackEntries(writer, applied) {
+  for (const entry of [...applied].reverse()) {
+    if (!isDeepStrictEqual6(await observe(entry.target), desiredObservation(entry.desired))) {
+      return Object.freeze({ outcome: "repair-required", path: entry.path });
+    }
+    if (entry.observed_before.state === "absent") await writer.remove(entry.target);
+    else if (entry.rollback !== void 0) await applyDesired(writer, { ...entry, desired: entry.rollback });
+    else return Object.freeze({ outcome: "repair-required", path: entry.path });
+  }
+  return void 0;
+}
+async function applyRepositoryProjectionPlans(writer, plans) {
+  for (const repositoryPlan of plans) {
+    const collision = repositoryPlan.plan.collisions[0];
+    if (collision !== void 0) {
+      return Object.freeze({ outcome: "collision", repository: repositoryPlan.repository, path: collision.path });
+    }
+    for (const entry of repositoryPlan.plan.entries) {
+      if (!isDeepStrictEqual6(await observe(entry.target), entry.observed_before)) {
+        return Object.freeze({ outcome: "collision", repository: repositoryPlan.repository, path: entry.path });
+      }
+    }
+  }
+  const completed = [];
+  for (const repositoryPlan of plans) {
+    const result = await applyProjectionPlan(writer, repositoryPlan.plan);
+    if (result.outcome === "applied") {
+      completed.push(repositoryPlan);
+      continue;
+    }
+    for (const prior of [...completed].reverse()) {
+      const repair = await rollbackEntries(writer, prior.plan.entries.filter((entry) => entry.disposition !== "exact"));
+      if (repair !== void 0) {
+        return Object.freeze({ outcome: "repair-required", repository: prior.repository, path: repair.path });
+      }
+    }
+    return Object.freeze({
+      outcome: result.outcome === "collision" ? "rolled-back" : result.outcome,
+      repository: repositoryPlan.repository,
+      path: result.path
+    });
+  }
+  return Object.freeze({ outcome: "applied" });
 }
 
 // src/state/retained-result-graph.ts
@@ -35106,13 +35925,13 @@ function retainedResultDigests(state) {
 }
 
 // src/state/production.ts
-var ok11 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail11 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var ok12 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail12 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function context(input, phase3, attempt) {
   return Object.freeze({ task_id: input.task_id, phase_instance: phase3, operation: input.operation, attempt });
 }
-function stateFailure(phase3, issue3) {
-  return fail11(createProjectError("STATE_INVALID", { phase_instance: phase3, issue_code: issue3 }));
+function stateFailure(phase3, issue4) {
+  return fail12(createProjectError("STATE_INVALID", { phase_instance: phase3, issue_code: issue4 }));
 }
 async function resolvePath6(runner, authority, claim, expectedClass) {
   return resolveTaskPath({
@@ -35140,7 +35959,7 @@ async function readRetainedManifest(runner, authority, reference) {
   if (!read.ok) return read;
   const manifest = read.value.value;
   if (manifest.result_id !== reference.result_id || manifest.phase_instance !== reference.phase_instance || manifest.step !== reference.step || manifest.input_fingerprint !== reference.input_fingerprint) return stateFailure(authority.context.phase_instance, "retained-result-reference-mismatch");
-  return ok11(Object.freeze({ manifest: read.value, manifest_target: manifestTarget.value }));
+  return ok12(Object.freeze({ manifest: read.value, manifest_target: manifestTarget.value }));
 }
 async function beforeImageForRunner(runner, identity, path2) {
   const symlink3 = identity.mode === "120000";
@@ -35166,16 +35985,16 @@ async function readRetainedResult(runner, authority, reference, repositorySet) {
   const payloadBytes = /* @__PURE__ */ new Map();
   for (const output of manifest.outputs) {
     if (output.storage !== "raw-payload") continue;
-    const payloadTarget = await resolveTaskWorkspacePath({
+    const payloadTarget2 = await resolveTaskWorkspacePath({
       runner,
       taskId: authority.task_id,
       claim: parseWorkspacePathClaim(`cache/results/${reference.result_digest}/payload/${output.path}`),
       expectedClass: "workspace-result-payload",
       context: authority.context
     });
-    if (!payloadTarget.ok) return payloadTarget;
+    if (!payloadTarget2.ok) return payloadTarget2;
     let bytes = await readSnapshotPayload({
-      target: payloadTarget.value,
+      target: payloadTarget2.value,
       expected_digest: output.payload_digest,
       expected_bytes: output.payload_bytes,
       snapshot_digest: manifest.snapshot_digest,
@@ -35206,15 +36025,15 @@ async function readRetainedResult(runner, authority, reference, repositorySet) {
         if (restored.byteLength !== output.payload_bytes || sha256Bytes(restored) !== output.payload_digest) {
           return bytes;
         }
-        bytes = ok11(restored);
+        bytes = ok12(restored);
       } catch {
         return stateFailure(authority.context.phase_instance, "active-result-cache-missing-rerun-required");
       }
     }
     if (!bytes.ok) return bytes;
     const retainedBytes = bytes.value;
-    payloads.push(Object.freeze({ path: output.path, bytes: retainedBytes, target: payloadTarget.value }));
-    payloadTargets.set(output.path, payloadTarget.value);
+    payloads.push(Object.freeze({ path: output.path, bytes: retainedBytes, target: payloadTarget2.value }));
+    payloadTargets.set(output.path, payloadTarget2.value);
     payloadBytes.set(output.path, retainedBytes);
   }
   const resolveOutput = async (claim, output) => {
@@ -35238,8 +36057,8 @@ async function readRetainedResult(runner, authority, reference, repositorySet) {
   const beforeImage = async (identity, path2) => beforeImageForRunner(runner, identity, path2);
   const sources = [];
   for (const output of manifest.outputs) {
-    const target = await resolveOutput(output.path, output);
-    if (!target.ok) return target;
+    const target2 = await resolveOutput(output.path, output);
+    if (!target2.ok) return target2;
     const cached2 = payloadBytes.get(output.path);
     if (cached2 !== void 0 && output.operation === "delete") {
       return stateFailure(authority.context.phase_instance, "retained-result-payload-operation-mismatch");
@@ -35250,12 +36069,12 @@ async function readRetainedResult(runner, authority, reference, repositorySet) {
       runner,
       worktree_root: runner.location.worktreeRoot,
       output_path: output.path
-    }) : ok11(output.file_type === "symlink" ? Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes: cached2 }) : Object.freeze({ state: "present", file_type: "regular", mode: output.operation === "delete" ? "100644" : output.after.mode, bytes: cached2 }));
+    }) : ok12(output.file_type === "symlink" ? Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes: cached2 }) : Object.freeze({ state: "present", file_type: "regular", mode: output.operation === "delete" ? "100644" : output.after.mode, bytes: cached2 }));
     if (!desired.ok) return desired;
     const before = output.operation === "add" ? void 0 : await beforeImage(output.before, output.operation === "rename" ? output.previous_path : output.path);
     sources.push(Object.freeze({
       path: output.path,
-      target: target.value,
+      target: target2.value,
       desired: desired.value,
       authenticated_before: before?.observation ?? Object.freeze({ state: "absent" }),
       ...before === void 0 ? {} : { rollback: before.desired },
@@ -35306,15 +36125,15 @@ async function readRetainedResult(runner, authority, reference, repositorySet) {
       if (!source.ok) return source;
       secondarySources.push(source.value);
       if (output.storage === "raw-payload" && source.value.desired.state === "present") {
-        const payloadTarget = await resolveTaskWorkspacePath({
+        const payloadTarget2 = await resolveTaskWorkspacePath({
           runner,
           taskId: authority.task_id,
           claim: parseWorkspacePathClaim(`cache/results/${reference.result_digest}/repositories/${section.repository}/payload/${output.path}`),
           expectedClass: "workspace-result-payload",
           context: authority.context
         });
-        if (!payloadTarget.ok) return payloadTarget;
-        payloads.push(Object.freeze({ repository: section.repository, path: output.path, bytes: source.value.desired.bytes, target: payloadTarget.value }));
+        if (!payloadTarget2.ok) return payloadTarget2;
+        payloads.push(Object.freeze({ repository: section.repository, path: output.path, bytes: source.value.desired.bytes, target: payloadTarget2.value }));
       }
       if (output.operation === "rename") {
         const previousTarget = await resolveRepositoryPath({
@@ -35350,7 +36169,7 @@ async function readRetainedResult(runner, authority, reference, repositorySet) {
       worktree_root: member.binding.runner.location.worktreeRoot
     }));
   }
-  return ok11(Object.freeze({
+  return ok12(Object.freeze({
     prepared: Object.freeze({ manifest: manifestDocument, result_digest: manifestDocument.digest, payloads: Object.freeze(payloads) }),
     manifest_target: manifestTarget,
     projection_plan: projectionPlan.value,
@@ -35373,28 +36192,28 @@ async function readRetainedRepositoryOutput(input) {
   }
   const output = section.outputs.find((item) => item.path === input.output_path);
   if (output === void 0) return stateFailure(input.authority.context.phase_instance, "retained-secondary-output-not-declared");
-  const target = await resolveRepositoryPath({
+  const target2 = await resolveRepositoryPath({
     runner: member.binding.runner,
     claim: input.output_path,
     context: input.authority.context
   });
-  if (!target.ok) return target;
+  if (!target2.ok) return target2;
   let desired;
   if (output.operation === "delete") {
     desired = Object.freeze({ state: "absent" });
   } else {
     let bytes;
     if (output.storage === "raw-payload") {
-      const payloadTarget = await resolveTaskWorkspacePath({
+      const payloadTarget2 = await resolveTaskWorkspacePath({
         runner: input.primary_runner,
         taskId: input.authority.task_id,
         claim: parseWorkspacePathClaim(`cache/results/${input.reference.result_digest}/repositories/${input.repository}/payload/${output.path}`),
         expectedClass: "workspace-result-payload",
         context: input.authority.context
       });
-      if (!payloadTarget.ok) return payloadTarget;
+      if (!payloadTarget2.ok) return payloadTarget2;
       const payload = await readSnapshotPayload({
-        target: payloadTarget.value,
+        target: payloadTarget2.value,
         expected_digest: output.payload_digest,
         expected_bytes: output.payload_bytes,
         snapshot_digest: section.snapshot_digest,
@@ -35416,9 +36235,9 @@ async function readRetainedRepositoryOutput(input) {
     desired = output.file_type === "symlink" ? Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes }) : Object.freeze({ state: "present", file_type: "regular", mode: output.after.mode, bytes });
   }
   const before = output.operation === "add" || output.operation === "rename" ? Object.freeze({ observation: Object.freeze({ state: "absent" }), desired: Object.freeze({ state: "absent" }) }) : await beforeImageForRunner(member.binding.runner, output.before, output.path);
-  return ok11(Object.freeze({
+  return ok12(Object.freeze({
     path: output.path,
-    target: target.value,
+    target: target2.value,
     desired,
     authenticated_before: before.observation,
     rollback: before.desired,
@@ -35443,7 +36262,7 @@ async function createProductionServices(input) {
   if (!provisionalAuthority.ok) return provisionalAuthority;
   const observed = await readTaskState(provisionalAuthority.value.state);
   if (observed.kind === "unreadable") {
-    return fail11(createProjectError("IO_ERROR", { operation: input.operation, attempt: provisionalContext.attempt }));
+    return fail12(createProjectError("IO_ERROR", { operation: input.operation, attempt: provisionalContext.attempt }));
   }
   if (observed.kind === "noncanonical") return stateFailure(provisionalPhase, "task-state-noncanonical");
   const resolvedContext = observed.kind === "canonical" ? context(input, observed.document.value.phase_instance, observed.document.value.attempt) : provisionalContext;
@@ -35498,11 +36317,11 @@ async function createProductionServices(input) {
   };
   const resolver = createProductionInputFingerprintResolver(async ({ state }) => {
     const reference = [...state.value.authoritative_results].reverse().find((candidate) => candidate.phase_instance === state.value.phase_instance && candidate.step === "produce");
-    if (reference === void 0) return ok11(void 0);
+    if (reference === void 0) return ok12(void 0);
     const retained = await loadRetainedManifest(reference);
     if (!retained.ok) return retained;
     const artifact = retained.value.manifest.value.source_artifact;
-    return artifact.artifact_kind === "document" || artifact.artifact_kind === "implementation-output" ? ok11(artifact) : ok11(void 0);
+    return artifact.artifact_kind === "document" || artifact.artifact_kind === "implementation-output" ? ok12(artifact) : ok12(void 0);
   });
   const dependencies = Object.freeze({
     runner: discovered.value,
@@ -35567,10 +36386,10 @@ async function createProductionServices(input) {
         ...expected_input_fingerprint !== void 0 ? { expected_input_fingerprint } : {},
         context: authority.context
       });
-      return resolved.ok ? ok11(resolved.value.fingerprint) : resolved;
+      return resolved.ok ? ok12(resolved.value.fingerprint) : resolved;
     }
   });
-  return ok11(Object.freeze({
+  return ok12(Object.freeze({
     runner: discovered.value,
     environment: environment.value,
     authority,
@@ -35580,7 +36399,7 @@ async function createProductionServices(input) {
 }
 
 // src/state/semantic-status.ts
-import { isDeepStrictEqual as isDeepStrictEqual9 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual10 } from "node:util";
 
 // src/contracts/dispatch-failure.ts
 var DISPATCH_FAILURE_CODES = [
@@ -35849,10 +36668,10 @@ function deepFreezeGateJson(value) {
   }
   return value;
 }
-var ok12 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail12 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-var issue2 = (code2, state, issueCode) => fail12(code2 === "STATE_INVALID" ? createProjectError(code2, { phase_instance: state.phase_instance, issue_code: issueCode }) : createProjectError(code2, { issue_code: issueCode }));
-var io = (authority, operation) => fail12(createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt }));
+var ok13 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail13 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var issue2 = (code2, state, issueCode) => fail13(code2 === "STATE_INVALID" ? createProjectError(code2, { phase_instance: state.phase_instance, issue_code: issueCode }) : createProjectError(code2, { issue_code: issueCode }));
+var io = (authority, operation) => fail13(createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt }));
 async function resolvePath7(dependencies, authority, claim, expectedClass) {
   if (expectedClass === "workspace-gate-interface") {
     return resolveTaskWorkspacePath({
@@ -35908,10 +36727,31 @@ function waiverContext(value) {
 }
 async function stateOrFailure(dependencies, authority) {
   const read = await dependencies.read_state(authority.state);
-  return read.kind === "canonical" ? ok12(read.document) : read.kind === "unreadable" ? io(authority, "gate-state-read") : issue2("CONTRACT_INVALID", void 0, `gate-state-${read.kind}`);
+  return read.kind === "canonical" ? ok13(read.document) : read.kind === "unreadable" ? io(authority, "gate-state-read") : issue2("CONTRACT_INVALID", void 0, `gate-state-${read.kind}`);
 }
 
 // src/state/legacy-import-resume.ts
+async function findLegacyImportResumePhase(dependencies, authority, state) {
+  const loaded = await loadLegacyImportInitialization(dependencies, authority, state);
+  if (!loaded.ok) return loaded;
+  if (loaded.value === void 0) return ok13(void 0);
+  const document2 = loaded.value;
+  if (document2.resume_phase !== void 0) return ok13(document2.resume_phase);
+  const designs = /* @__PURE__ */ new Set();
+  const implementations = /* @__PURE__ */ new Set();
+  for (const entry of document2.mapping) {
+    const decoded = decodePhaseInstance(entry.phase_instance);
+    if (decoded.kind === "phase-design") designs.add(Number(decoded.phase));
+    if (decoded.kind === "phase-impl") implementations.add(Number(decoded.phase));
+  }
+  let highest = 0;
+  while (implementations.has(highest + 1)) highest += 1;
+  const next = highest + 1;
+  return ok13(encodePhaseInstance({
+    kind: designs.has(next) ? "phase-impl" : "phase-design",
+    phase: parsePositiveSafePhaseNumber(next)
+  }));
+}
 async function loadLegacyImportInitialization(dependencies, authority, state) {
   const resolved = await resolveTaskPath({
     runner: dependencies.runner,
@@ -35927,10 +36767,13 @@ async function loadLegacyImportInitialization(dependencies, authority, state) {
     parseLegacyImportInitialization
   );
   if (document2 === "missing" || document2 === "invalid" || document2.digest !== state.initialization_digest) {
-    return ok12(void 0);
+    return ok13(void 0);
   }
-  return ok12(document2.value);
+  return ok13(document2.value);
 }
+
+// src/state/restart-authority.ts
+import { isDeepStrictEqual as isDeepStrictEqual8 } from "node:util";
 
 // src/state/gate-approvals.ts
 import { isDeepStrictEqual as isDeepStrictEqual7 } from "node:util";
@@ -36001,7 +36844,7 @@ async function loadAuthenticatedGateApproval(dependencies, authority, approval) 
   });
   Object.freeze(authenticated);
   authenticatedGateApprovals.add(authenticated);
-  return ok12(authenticated);
+  return ok13(authenticated);
 }
 
 // src/state/restart-authority.ts
@@ -36068,6 +36911,81 @@ function approvalRequestAuthorityPhase(authenticated) {
 }
 function authenticatedApprovalIsEligibleAfterLatestRestart(state, authenticated, authorityPhase = approvalRequestAuthorityPhase(authenticated)) {
   return approvalIsEligibleAfterLatestRestart(state, authenticated.approval, authorityPhase);
+}
+function isExactPlanningRestartDraft(current, next) {
+  if (current.terminal !== void 0 || current.open_gate !== void 0 || next.open_gate !== void 0) return false;
+  const previous = current.restart_history ?? [];
+  const following = next.restart_history ?? [];
+  if (following.length !== previous.length + 1) return false;
+  const previousById = new Map(previous.map((record2) => [record2.restart_id, record2]));
+  const additions = following.filter((record2) => !previousById.has(record2.restart_id));
+  if (additions.length !== 1 || previous.some((record2) => !isDeepStrictEqual8(record2, following.find((candidate) => candidate.restart_id === record2.restart_id)))) return false;
+  const restart = additions[0];
+  if (restart.source_phase_instance !== current.phase_instance || restart.target_phase_instance !== next.phase_instance || restart.restarted_at_revision !== current.revision + 1 || restart.reason.trim() === "" || comparePhaseInstances(restart.target_phase_instance, current.phase_instance) >= 0 || decodePhaseInstance(restart.target_phase_instance).kind === "phase-impl" || next.step !== "produce" || next.status !== "running" || next.attempt !== 1 || !isDeepStrictEqual8(restart.cleared_waivers, current.waivers) || next.waivers.length !== 0 || !isDeepStrictEqual8(restart.cleared_pending_human_revision, current.pending_human_revision) || next.pending_human_revision !== void 0 || !isDeepStrictEqual8(next.approvals, current.approvals)) return false;
+  const retained = current.authoritative_results.filter((reference) => comparePhaseInstances(reference.phase_instance, restart.target_phase_instance) < 0);
+  const superseded = current.authoritative_results.filter((reference) => comparePhaseInstances(reference.phase_instance, restart.target_phase_instance) >= 0);
+  if (!isDeepStrictEqual8(next.authoritative_results, retained) || !isDeepStrictEqual8(restart.superseded_results, superseded)) return false;
+  const targetKind = decodePhaseInstance(restart.target_phase_instance).kind;
+  if (targetKind === "prd" || targetKind === "design" ? next.planned_final_phase !== void 0 : next.planned_final_phase !== current.planned_final_phase) return false;
+  const {
+    revision: _revision,
+    last_transition: _lastTransition,
+    pending_human_revision: _pendingHumanRevision,
+    planned_final_phase: plannedFinalPhase,
+    ...preserved
+  } = current;
+  const expectedHistory = Object.freeze(
+    [...previous, restart].sort((left, right) => left.restart_id.localeCompare(right.restart_id))
+  );
+  if (!isDeepStrictEqual8(following, expectedHistory)) return false;
+  const expected = {
+    ...preserved,
+    phase_instance: restart.target_phase_instance,
+    step: "produce",
+    status: "running",
+    attempt: 1,
+    input_fingerprint: next.input_fingerprint,
+    authoritative_results: retained,
+    waivers: [],
+    restart_history: expectedHistory,
+    ...targetKind === "prd" || targetKind === "design" || plannedFinalPhase === void 0 ? {} : { planned_final_phase: plannedFinalPhase }
+  };
+  return isDeepStrictEqual8(next, expected);
+}
+function isExactMilestoneRecoveryDraft(current, next) {
+  if (current.terminal !== void 0 || current.open_gate !== void 0 || next.open_gate !== void 0) return false;
+  const previous = current.milestone_recovery_history ?? [];
+  const following = next.milestone_recovery_history ?? [];
+  if (following.length !== previous.length + 1) return false;
+  const priorById = new Map(previous.map((record2) => [record2.recovery_id, record2]));
+  const additions = following.filter((record2) => !priorById.has(record2.recovery_id));
+  if (additions.length !== 1 || previous.some((record2) => !isDeepStrictEqual8(record2, following.find((candidate) => candidate.recovery_id === record2.recovery_id)))) return false;
+  const recovery = additions[0];
+  if (recovery.phase_instance !== current.phase_instance || next.phase_instance !== current.phase_instance || recovery.recovered_at_revision !== current.revision + 1 || recovery.target_ref.trim() === "" || next.step !== "produce" || next.status !== "running" || next.attempt !== 1 || !isDeepStrictEqual8(recovery.cleared_waivers, current.waivers) || next.waivers.length !== 0 || !isDeepStrictEqual8(recovery.cleared_pending_human_revision, current.pending_human_revision) || next.pending_human_revision !== void 0 || !isDeepStrictEqual8(next.approvals, current.approvals) || next.planned_final_phase !== current.planned_final_phase) return false;
+  const superseded = current.authoritative_results.filter((reference) => reference.phase_instance === current.phase_instance);
+  const retained = current.authoritative_results.filter((reference) => reference.phase_instance !== current.phase_instance);
+  if (!isDeepStrictEqual8(recovery.superseded_results, superseded) || !isDeepStrictEqual8(next.authoritative_results, retained)) return false;
+  const {
+    revision: _revision,
+    last_transition: _lastTransition,
+    pending_human_revision: _pendingHumanRevision,
+    milestone_recovery_history: _recoveryHistory,
+    ...preserved
+  } = current;
+  const expectedHistory = Object.freeze(
+    [...previous, recovery].sort((left, right) => left.recovery_id.localeCompare(right.recovery_id))
+  );
+  const expected = {
+    ...preserved,
+    step: "produce",
+    status: "running",
+    attempt: 1,
+    input_fingerprint: next.input_fingerprint,
+    authoritative_results: retained,
+    waivers: [],
+    milestone_recovery_history: expectedHistory
+  };
+  return isDeepStrictEqual8(next, expected);
 }
 
 // src/state/produce-subject.ts
@@ -36144,28 +37062,28 @@ async function loadProduceUpstreamSubject(dependencies, authority, state, bindin
       })
     });
   }
-  if (retainedOwnerExists) return fail13(state.phase_instance, "upstream-approval-missing");
+  if (retainedOwnerExists) return fail14(state.phase_instance, "upstream-approval-missing");
   const initialization = await loadLegacyImportInitialization(
     dependencies,
     authority,
     state
   );
   if (!initialization.ok || initialization.value === void 0) {
-    return fail13(state.phase_instance, "current-upstream-produce-result-missing");
+    return fail14(state.phase_instance, "current-upstream-produce-result-missing");
   }
   const destination = `.archflow/tasks/${state.task_id}/${binding.path}`;
   const mapping = initialization.value.mapping.find((entry) => entry.destination_path === destination);
   const staged = mapping === void 0 ? void 0 : initialization.value.staged_payload_refs.find((entry) => entry.legacy_path === mapping.legacy_path);
-  if (mapping === void 0 || staged === void 0) return fail13(state.phase_instance, "current-upstream-import-missing");
-  const target = await resolveTaskPath({ runner: dependencies.runner, taskId: authority.task_id, claim: binding.path, context: authority.context });
-  if (!target.ok) return target;
+  if (mapping === void 0 || staged === void 0) return fail14(state.phase_instance, "current-upstream-import-missing");
+  const target2 = await resolveTaskPath({ runner: dependencies.runner, taskId: authority.task_id, claim: binding.path, context: authority.context });
+  if (!target2.ok) return target2;
   let bytes;
   try {
-    bytes = new Uint8Array(await readFile6(target.value.absolute));
+    bytes = new Uint8Array(await readFile6(target2.value.absolute));
   } catch {
-    return fail13(state.phase_instance, "current-upstream-import-unavailable");
+    return fail14(state.phase_instance, "current-upstream-import-unavailable");
   }
-  if (sha256Bytes(bytes) !== staged.digest) return fail13(state.phase_instance, "current-upstream-import-changed");
+  if (sha256Bytes(bytes) !== staged.digest) return fail14(state.phase_instance, "current-upstream-import-changed");
   const artifact = Object.freeze({
     schema_version: "1",
     artifact_kind: "document",
@@ -36179,7 +37097,7 @@ async function loadProduceUpstreamSubject(dependencies, authority, state, bindin
     declared_inputs: Object.freeze([]),
     input_fingerprint: state.input_fingerprint,
     snapshot_digest: canonicalJsonDigest({ schema_version: "1", imported_document: binding.path, content_digest: staged.digest }),
-    projection_target: target.value.repositoryRelative
+    projection_target: target2.value.repositoryRelative
   });
   return Object.freeze({
     schema_version: "1",
@@ -36191,7 +37109,7 @@ async function loadProduceUpstreamSubject(dependencies, authority, state, bindin
     })
   });
 }
-var fail13 = (phase3, issue_code) => Object.freeze({
+var fail14 = (phase3, issue_code) => Object.freeze({
   schema_version: "1",
   ok: false,
   error: createProjectError("STATE_INVALID", { phase_instance: phase3, issue_code })
@@ -36199,17 +37117,17 @@ var fail13 = (phase3, issue_code) => Object.freeze({
 async function loadCurrentProduceSubject(dependencies, state) {
   const reference = [...state.authoritative_results].reverse().find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "produce");
   if (reference === void 0 || dependencies.load_retained_manifest === void 0) {
-    return fail13(state.phase_instance, "current-produce-result-missing");
+    return fail14(state.phase_instance, "current-produce-result-missing");
   }
   const retained = await dependencies.load_retained_manifest(reference);
   if (!retained.ok) return retained;
   const manifest = retained.value.manifest.value;
   const artifact = manifest.source_artifact;
   if (artifact.artifact_kind !== "document" && artifact.artifact_kind !== "implementation-output") {
-    return fail13(state.phase_instance, "current-produce-artifact-invalid");
+    return fail14(state.phase_instance, "current-produce-artifact-invalid");
   }
   if (canonicalJsonDigest(artifact) !== manifest.artifact_digest) {
-    return fail13(state.phase_instance, "current-produce-artifact-digest-mismatch");
+    return fail14(state.phase_instance, "current-produce-artifact-digest-mismatch");
   }
   return Object.freeze({
     schema_version: "1",
@@ -36249,25 +37167,54 @@ function produceUpstreamBindingsForSubject(state, artifact) {
   const owned = new Set(produceOwnedTaskDocumentPaths(artifact));
   return Object.freeze(bindings.filter((binding) => !owned.has(binding.path)));
 }
+async function changedCoProducedDocumentPaths(dependencies, state, subject) {
+  const artifact = subject.artifact;
+  const loadManifest = dependencies.load_retained_manifest;
+  const documents = artifact.artifact_kind === "document" ? artifact.additional_documents ?? [] : [];
+  const changed = [];
+  if (loadManifest !== void 0 && documents.length > 0) {
+    const earlier = [...state.authoritative_results].reverse().filter((reference) => reference.step === "produce" && reference.phase_instance !== state.phase_instance);
+    for (const document2 of documents) {
+      let previous;
+      for (const reference of earlier) {
+        const retained = await loadManifest(reference);
+        if (!retained.ok) return retained;
+        const projection = retained.value.manifest.value.projections.find((entry) => entry.repository === void 0 && entry.path === document2.projection_target);
+        if (projection !== void 0) {
+          previous = projection.content_digest;
+          break;
+        }
+      }
+      if (previous !== void 0 && previous !== document2.content_digest) {
+        changed.push(String(document2.projection_target));
+      }
+    }
+  }
+  return Object.freeze({
+    schema_version: "1",
+    ok: true,
+    value: Object.freeze([...new Set(changed)].sort())
+  });
+}
 async function readProduceProjection(runner, authority, subject, artifactPath) {
-  const target = await resolveTaskPath({
+  const target2 = await resolveTaskPath({
     runner,
     taskId: authority.task_id,
     claim: artifactPath,
     context: authority.context
   });
-  if (!target.ok) return target;
+  if (!target2.ok) return target2;
   const retainedDigest = "imported_projection" in subject ? subject.imported_projection.path === artifactPath ? subject.imported_projection.content_digest : void 0 : subject.artifact.artifact_kind === "implementation-output" ? subject.artifact.parent_documents.find((candidate) => candidate.document_path === artifactPath)?.content_digest : documentProjectionDescriptors(subject.artifact).find((candidate) => candidate.document_path === artifactPath)?.content_digest;
-  if (retainedDigest === void 0) return fail13(authority.context.phase_instance, "produce-projection-not-retained");
+  if (retainedDigest === void 0) return fail14(authority.context.phase_instance, "produce-projection-not-retained");
   let bytes;
   try {
-    bytes = new Uint8Array(await readFile6(target.value.absolute));
+    bytes = new Uint8Array(await readFile6(target2.value.absolute));
   } catch {
-    return fail13(authority.context.phase_instance, "produce-projection-unavailable");
+    return fail14(authority.context.phase_instance, "produce-projection-unavailable");
   }
   const digest10 = sha256Bytes(bytes);
   if (digest10 !== retainedDigest) {
-    return fail13(authority.context.phase_instance, "produce-projection-not-current");
+    return fail14(authority.context.phase_instance, "produce-projection-not-current");
   }
   return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ path: artifactPath, bytes, digest: digest10 }) });
 }
@@ -36294,7 +37241,215 @@ async function readProduceProjectionSet(runner, authority, subject, selectedPath
 }
 
 // src/state/evidence-results.ts
-var ok13 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok14 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+function qualifyAndRender(value, dispositionLedger) {
+  if (value.kind === "review") {
+    const verified = createVerifiedEvidenceReference(value.evidence);
+    return Object.freeze({
+      artifact: Object.freeze({
+        schema_version: "1",
+        artifact_kind: "review-evidence",
+        evidence: verified.evidence
+      }),
+      bytes: renderReviewEvidence(verified),
+      evidence_digest: verified.evidence_digest,
+      phase_instance: verified.evidence.phase_instance,
+      step: verified.evidence.step,
+      task_id: verified.evidence.task_id,
+      input_fingerprint: verified.evidence.input_fingerprint
+    });
+  }
+  if (value.kind === "adjudication") {
+    const verified = createVerifiedEvidenceReference(value.evidence);
+    return Object.freeze({
+      artifact: Object.freeze({
+        schema_version: "1",
+        artifact_kind: "adjudication-evidence",
+        evidence: verified.evidence
+      }),
+      bytes: renderAdjudicationEvidence(verified),
+      evidence_digest: verified.evidence_digest,
+      phase_instance: verified.evidence.phase_instance,
+      step: verified.evidence.step,
+      task_id: verified.evidence.task_id,
+      input_fingerprint: verified.evidence.input_fingerprint
+    });
+  }
+  const triage = validateTriage(value.current_reviews, value.evidence, dispositionLedger);
+  return Object.freeze({
+    artifact: Object.freeze({
+      schema_version: "1",
+      artifact_kind: "triage",
+      evidence: triage
+    }),
+    bytes: renderTriage(triage),
+    evidence_digest: canonicalJsonDigest(triage),
+    phase_instance: triage.phase_instance,
+    step: triage.step,
+    task_id: triage.task_id,
+    input_fingerprint: triage.input_fingerprint
+  });
+}
+async function computeDispositionLedger(dispositions, sources, loadRetainedResult) {
+  const merged = /* @__PURE__ */ new Map();
+  if (sources.previous_triage_ref !== void 0) {
+    const previous = await loadRetainedResult(sources.previous_triage_ref);
+    if (previous.ok) {
+      const source = previous.value.prepared.manifest.value.source_artifact;
+      if (source.artifact_kind === "triage" && source.evidence.disposition_ledger !== void 0) {
+        for (const entry of source.evidence.disposition_ledger) merged.set(entry.finding_id, entry);
+      }
+    }
+  }
+  const findingDetails = /* @__PURE__ */ new Map();
+  if (sources.review_ref !== void 0) {
+    const review = await loadRetainedResult(sources.review_ref);
+    if (review.ok) {
+      const manifest = review.value.prepared.manifest.value;
+      if (manifest.source_artifact.artifact_kind === "review-evidence") {
+        for (const finding of manifest.source_artifact.evidence.findings) {
+          findingDetails.set(`${manifest.artifact_digest}:${finding.finding_id}`, finding);
+        }
+      }
+    }
+  }
+  for (const disposition of dispositions) {
+    const finding = findingDetails.get(`${disposition.review_evidence_digest}:${disposition.finding_id}`);
+    merged.set(disposition.finding_id, Object.freeze({
+      review_evidence_digest: disposition.review_evidence_digest,
+      finding_id: disposition.finding_id,
+      disposition: disposition.disposition,
+      attempt: sources.attempt,
+      rationale: disposition.rationale,
+      ...disposition.disposition === "rejected" ? { evidence: disposition.evidence } : {
+        revision_intent: disposition.revision_intent,
+        ...finding === void 0 ? {} : { evidence: finding.evidence }
+      },
+      ...finding === void 0 ? {} : {
+        severity: finding.severity,
+        blocking: finding.blocking,
+        summary: finding.summary,
+        suggested_resolution: finding.suggested_resolution
+      }
+    }));
+  }
+  return Object.freeze([...merged.values()]);
+}
+async function triageLedgerFrom(input) {
+  if (input.value.kind !== "triage" || input.disposition_ledger === void 0) return void 0;
+  if (input.load_retained_result === void 0) {
+    throw new TypeError("disposition ledger sources require a retained-result loader");
+  }
+  return computeDispositionLedger(
+    input.value.evidence.dispositions,
+    input.disposition_ledger,
+    input.load_retained_result
+  );
+}
+async function prepareEvidenceResult(input) {
+  assertInternalTransactionAuthority(input.authority);
+  const dispositionLedger = input.value.kind === "triage" ? await triageLedgerFrom(input) : void 0;
+  const qualified = qualifyAndRender(input.value, dispositionLedger);
+  if (qualified.task_id !== input.authority.task_id || qualified.phase_instance !== input.authority.context.phase_instance) {
+    throw new TypeError("evidence scope does not match transaction authority");
+  }
+  if (input.value.kind !== "triage" && input.value.evidence.assurance === "server-attested" && input.value.evidence.result_id !== input.result_id) {
+    throw new TypeError("server-attested evidence result_id does not match prepared result");
+  }
+  const renderedDigest = sha256Bytes(qualified.bytes);
+  const snapshotDigest = deriveDeclaredSnapshotDigest([], []);
+  const workspaceClaim = input.value.kind === "triage" ? triageReviewClaim(qualified.phase_instance) : input.value.kind === "adjudication" ? adjudicationReviewClaim(qualified.phase_instance) : counterReviewClaim(qualified.phase_instance);
+  const projectionTarget = await resolveTaskWorkspacePath({
+    runner: input.runner,
+    taskId: input.authority.task_id,
+    claim: workspaceClaim,
+    expectedClass: "workspace-review",
+    context: input.authority.context
+  });
+  if (!projectionTarget.ok) return projectionTarget;
+  const repositoryClaim = projectionTarget.value.repositoryRelative;
+  const captured = await captureProjectionTarget(projectionTarget.value);
+  let secretScan;
+  const capturingScanner = Object.freeze({
+    scan: async (candidates) => {
+      const result = parseSecretScanResult(await input.scanner.scan(candidates));
+      secretScan = result;
+      return result;
+    }
+  });
+  const source = Object.freeze({
+    path: repositoryClaim,
+    target: projectionTarget.value,
+    desired: Object.freeze({ state: "present", file_type: "regular", mode: "100644", bytes: qualified.bytes }),
+    authenticated_before: captured.observation,
+    ...captured.observation.state === "present" ? { rollback: captured.rollback } : {},
+    git_tracked: false
+  });
+  const projectionPlan = await prepareProjectionPlan(
+    [source],
+    capturingScanner,
+    input.runner.location.worktreeRoot
+  );
+  if (!projectionPlan.ok) return projectionPlan;
+  if (secretScan === void 0 || secretScan.outcome !== "clean") {
+    throw new TypeError("successful evidence projection requires a clean secret scan");
+  }
+  const manifestValue = Object.freeze({
+    schema_version: "1",
+    task_id: qualified.task_id,
+    repository_identity_digest: input.authority.repository_identity_digest,
+    result_id: input.result_id,
+    phase_instance: qualified.phase_instance,
+    step: qualified.step,
+    artifact_digest: qualified.evidence_digest,
+    source_artifact: qualified.artifact,
+    input_fingerprint: qualified.input_fingerprint,
+    snapshot_digest: snapshotDigest,
+    outputs: Object.freeze([]),
+    projections: Object.freeze([]),
+    accounting: Object.freeze({
+      schema_version: "1",
+      result_bytes: parseSafeInteger(0),
+      task_bytes: input.retained_task_bytes,
+      result_byte_cap: 26214400,
+      task_byte_cap: 262144e3,
+      counted_entries: Object.freeze([]),
+      measured_at_revision: input.measured_at_revision
+    }),
+    secret_scan: secretScan
+  });
+  const manifest = canonicalDocument(manifestValue);
+  const manifestTarget = await resolveTaskPath({
+    runner: input.runner,
+    taskId: input.authority.task_id,
+    claim: resultAuthorityClaim(manifest.digest),
+    expectedClass: "authority-result",
+    context: input.authority.context
+  });
+  if (!manifestTarget.ok) return manifestTarget;
+  const prepared = prepareSnapshot({
+    manifest: manifestValue,
+    payloads: Object.freeze([]),
+    retained_task_bytes: input.retained_task_bytes,
+    validate_manifest: parseResultManifest
+  });
+  if (!prepared.ok) return prepared;
+  const reference = Object.freeze({
+    phase_instance: qualified.phase_instance,
+    step: qualified.step,
+    result_digest: prepared.value.result_digest,
+    result_id: input.result_id,
+    input_fingerprint: qualified.input_fingerprint
+  });
+  return ok14(Object.freeze({
+    reference,
+    prepared: prepared.value,
+    manifest_target: manifestTarget.value,
+    projection_plan: projectionPlan.value,
+    evidence_digest: qualified.evidence_digest,
+    rendered_digest: renderedDigest
+  }));
+}
 function expectedSourceKind(step) {
   if (step === "counter_review") return "review-evidence";
   if (step === "triage") return "triage";
@@ -36340,7 +37495,7 @@ async function loadRetainedEvidence(dependencies, state, phase_instance) {
       manifest
     }));
   }
-  return ok13(retained);
+  return ok14(retained);
 }
 function deriveCurrentEvidenceSet(retained) {
   const counterEntry = retained.get("counter_review");
@@ -36384,9 +37539,100 @@ function retainedReviewEnvelopeDigest(retained) {
   const source = retained.get("counter_review")?.manifest.source_artifact;
   return source?.artifact_kind === "review-evidence" && source.evidence.assurance === "server-attested" ? source.evidence.envelope_input_digest : void 0;
 }
+async function currentProduceSubject(dependencies, state) {
+  return loadCurrentProduceSubject(dependencies, state);
+}
+function retainedEditorialTriage(retained) {
+  const entry = retained.get("triage");
+  const source = entry?.manifest.source_artifact;
+  if (entry === void 0 || source?.artifact_kind !== "triage") return void 0;
+  const triage = source.evidence;
+  if (triage.accepted_count !== 0 || (triage.accepted_editorial_count ?? 0) === 0) return void 0;
+  let derived;
+  try {
+    derived = deriveCurrentEvidenceSet(retained);
+  } catch {
+    return void 0;
+  }
+  if (triage.subject_digest !== derived.subject_digest || triage.input_fingerprint !== derived.input_fingerprint || triage.current_evidence_set_digest !== derived.current_evidence_set.set_digest || triage.source_evidence_digests.length !== derived.current_evidence_set.slots.length || triage.source_evidence_digests.some((digest10, index) => digest10 !== derived.current_evidence_set.slots[index].evidence_digest)) return void 0;
+  return Object.freeze({ triage, triage_result_digest: entry.reference.result_digest });
+}
+async function validateEditorialPredecessorDeclaration(dependencies, state, artifact) {
+  const declared = artifact.editorial_predecessor;
+  if (declared === void 0) return ok14(void 0);
+  const invalid2 = (issue4) => Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("STATE_INVALID", {
+      phase_instance: state.phase_instance,
+      issue_code: issue4
+    })
+  });
+  const produced = await currentProduceSubject(dependencies, state);
+  if (!produced.ok || produced.value.artifact.artifact_kind !== "document" || produced.value.artifact_digest !== declared.subject_digest) return invalid2("editorial-predecessor-not-current-produce");
+  const retained = await loadRetainedEvidence(dependencies, state, state.phase_instance);
+  if (!retained.ok) return invalid2("editorial-authorizing-triage-invalid");
+  const editorial = retainedEditorialTriage(retained.value);
+  if (editorial === void 0 || editorial.triage.subject_digest !== declared.subject_digest || editorial.triage.input_fingerprint !== declared.input_fingerprint || editorial.triage_result_digest !== declared.triage_result_digest) return invalid2("editorial-authorizing-triage-invalid");
+  if (artifact.content_digest === produced.value.artifact.content_digest) {
+    return invalid2("editorial-revision-unchanged-bytes");
+  }
+  const companionSet = (document2) => JSON.stringify(
+    (document2.additional_documents ?? []).map((entry) => ({
+      document_path: entry.document_path,
+      content_digest: entry.content_digest,
+      projection_target: entry.projection_target
+    }))
+  );
+  if (companionSet(artifact) !== companionSet(produced.value.artifact)) {
+    return invalid2("editorial-revision-companion-changed");
+  }
+  return ok14(void 0);
+}
+async function loadCurrentReviewSet(dependencies, authority, phase_instance) {
+  assertInternalTransactionAuthority(authority);
+  if (authority.context.phase_instance !== phase_instance) {
+    throw new TypeError("current review phase does not match transaction authority");
+  }
+  const stateRead = await dependencies.read_state(authority.state);
+  if (stateRead.kind !== "canonical") {
+    throw new TypeError("current review reconstruction requires canonical durable state");
+  }
+  const stateDocument = canonicalDocument(stateRead.document.value);
+  if (stateDocument.digest !== stateRead.document.digest || !Buffer.from(stateDocument.bytes).equals(Buffer.from(stateRead.document.bytes)) || stateDocument.value.task_id !== authority.task_id || stateDocument.value.repository_identity_digest !== authority.repository_identity_digest || stateDocument.value.phase_instance !== phase_instance) {
+    throw new TypeError("durable state does not match current review authority");
+  }
+  const semantics = validateDurableSemantics({ state: stateDocument });
+  if (!semantics.ok) return semantics;
+  const retained = await loadRetainedEvidence(
+    { load_retained_manifest: dependencies.load_retained_manifest },
+    stateDocument.value,
+    phase_instance
+  );
+  if (!retained.ok) return retained;
+  const derived = deriveCurrentEvidenceSet(retained.value);
+  if (derived.task_id !== authority.task_id || derived.phase_instance !== phase_instance) {
+    throw new TypeError("retained reviews do not form one current review set");
+  }
+  if (derived.input_fingerprint !== stateDocument.value.input_fingerprint) {
+    const produced = await currentProduceSubject(
+      { load_retained_manifest: dependencies.load_retained_manifest },
+      stateDocument.value
+    );
+    const predecessor = produced.ok && produced.value.artifact.artifact_kind === "document" ? produced.value.artifact.editorial_predecessor : void 0;
+    if (predecessor === void 0 || derived.subject_digest !== predecessor.subject_digest || derived.input_fingerprint !== predecessor.input_fingerprint) {
+      throw new TypeError("retained reviews do not form one current review set");
+    }
+  }
+  const current = Object.freeze({
+    ...derived
+  });
+  registerCurrentReviewSet(current);
+  return ok14(current);
+}
 
 // src/state/status.ts
-import { readFile as readFile9 } from "node:fs/promises";
+import { readFile as readFile10 } from "node:fs/promises";
 
 // src/dispatch/routing.ts
 var DispatchRoutingError = class extends Error {
@@ -36397,20 +37643,20 @@ var DispatchRoutingError = class extends Error {
   }
   project_error;
 };
-var fail14 = (error51) => {
+var fail15 = (error51) => {
   throw new DispatchRoutingError(error51);
 };
 function deriveModelFamily(model) {
   if (model.startsWith("claude-")) return "claude";
   if (model.startsWith("gpt-")) return "codex";
   if (model.startsWith("gemini-")) return "gemini";
-  return fail14(createProjectError("CONFIG_MODEL_UNSUPPORTED", { model }));
+  return fail15(createProjectError("CONFIG_MODEL_UNSUPPORTED", { model }));
 }
 function adapterForFamily(family2) {
   if (family2 === "claude") return "claude-cli";
   if (family2 === "codex") return "codex-cli";
   if (family2 === "gemini") return "antigravity-cli";
-  return fail14(createProjectError("CONFIG_FAMILY_UNSUPPORTED", { family: family2 }));
+  return fail15(createProjectError("CONFIG_FAMILY_UNSUPPORTED", { family: family2 }));
 }
 var SUPPORTED_EFFORTS = Object.freeze({
   "claude-cli": /* @__PURE__ */ new Set(["low", "medium", "high", "xhigh", "max"]),
@@ -36420,15 +37666,15 @@ var SUPPORTED_EFFORTS = Object.freeze({
 });
 function assertSupportedEffort(adapter2, effort) {
   if (!SUPPORTED_EFFORTS[adapter2].has(effort)) {
-    fail14(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
+    fail15(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
   }
 }
 function routeFromConfiguredRoute(configured) {
   if (!safeIdV1Schema.safeParse(configured.model).success) {
-    return fail14(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
+    return fail15(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
   }
   if (configured.provider !== void 0 && (configured.model.startsWith("gpt-") || configured.model.startsWith("gemini-"))) {
-    return fail14(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
+    return fail15(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
   }
   const family2 = configured.provider !== void 0 ? "claude" : deriveModelFamily(configured.model);
   const adapter2 = adapterForFamily(family2);
@@ -36447,7 +37693,7 @@ function normalizeRawRoutes(value) {
   if (Array.isArray(value)) return value;
   return [value];
 }
-function configuredRoutes(config2, phaseKind, role, host) {
+function configuredRoutes(config2, phaseKind2, role, host) {
   if (host !== void 0 && host !== "unknown" && config2.producers?.[host] !== void 0) {
     const producerRoles = config2.producers[host];
     if (role === "counter-reviewer") {
@@ -36459,7 +37705,7 @@ function configuredRoutes(config2, phaseKind, role, host) {
       return [producerRoles.adjudicator];
     }
   }
-  const phaseOverrides = config2.overrides?.[phaseKind];
+  const phaseOverrides = config2.overrides?.[phaseKind2];
   if (phaseOverrides !== void 0) {
     if (role === "counter-reviewer") {
       const candidates = normalizeRawRoutes(phaseOverrides["counter-reviewers"] ?? phaseOverrides["counter-reviewer"]);
@@ -36481,8 +37727,8 @@ function configuredRoutes(config2, phaseKind, role, host) {
   }
   return [];
 }
-function configuredRoute(config2, phaseKind, role, host) {
-  return configuredRoutes(config2, phaseKind, role, host)[0];
+function configuredRoute(config2, phaseKind2, role, host) {
+  return configuredRoutes(config2, phaseKind2, role, host)[0];
 }
 var displacedRoute = (source, route2) => Object.freeze({
   source,
@@ -36490,8 +37736,8 @@ var displacedRoute = (source, route2) => Object.freeze({
   effort: route2.effort,
   ...route2.provider === void 0 ? {} : { provider: route2.provider }
 });
-function selectDispatchRouteCandidates(config2, phaseKind, role, invocationRoute, humanOverride, host) {
-  const configured = configuredRoutes(config2, phaseKind, role, host);
+function selectDispatchRouteCandidates(config2, phaseKind2, role, invocationRoute, humanOverride, host) {
+  const configured = configuredRoutes(config2, phaseKind2, role, host);
   const primaryConfigured = configured[0];
   const normallySelected = invocationRoute ?? primaryConfigured;
   if (humanOverride !== void 0) {
@@ -36513,15 +37759,15 @@ function selectDispatchRouteCandidates(config2, phaseKind, role, invocationRoute
     }]);
   }
   if (configured.length === 0) {
-    return fail14(createProjectError("CONFIG_INVALID", { issue_code: "route-missing" }));
+    return fail15(createProjectError("CONFIG_INVALID", { issue_code: "route-missing" }));
   }
   return Object.freeze(configured.map((raw_route) => Object.freeze({
     raw_route,
     source: Object.freeze({ provenance: "configured" })
   })));
 }
-function selectDispatchRouteCandidate(config2, phaseKind, role, invocationRoute, humanOverride, host) {
-  const candidates = selectDispatchRouteCandidates(config2, phaseKind, role, invocationRoute, humanOverride, host);
+function selectDispatchRouteCandidate(config2, phaseKind2, role, invocationRoute, humanOverride, host) {
+  const candidates = selectDispatchRouteCandidates(config2, phaseKind2, role, invocationRoute, humanOverride, host);
   return candidates[0];
 }
 function validateSelectedDispatchRoute(selected) {
@@ -36531,21 +37777,29 @@ function validateSelectedDispatchRoute(selected) {
     source: selected.source
   });
 }
-function selectDispatchRoute(config2, phaseKind, role, invocationRoute, humanOverride, host) {
+function selectDispatchRoute(config2, phaseKind2, role, invocationRoute, humanOverride, host) {
   return validateSelectedDispatchRoute(selectDispatchRouteCandidate(
     config2,
-    phaseKind,
+    phaseKind2,
     role,
     invocationRoute,
     humanOverride,
     host
   ));
 }
-function resolveDispatchRoute(config2, phaseKind, role, host) {
-  return selectDispatchRoute(config2, phaseKind, role, void 0, void 0, host).route;
+function resolveDispatchRoute(config2, phaseKind2, role, host) {
+  return selectDispatchRoute(config2, phaseKind2, role, void 0, void 0, host).route;
 }
 
 // src/review/adjudication.ts
+var AdjudicationServiceError = class extends Error {
+  constructor(project_error) {
+    super(project_error.code);
+    this.project_error = project_error;
+    this.name = "AdjudicationServiceError";
+  }
+  project_error;
+};
 function refs(rules2) {
   return canonicalRuleRefs(rules2.map((rule4) => Object.freeze({ rule_id: rule4.id, rule_version: rule4.version })));
 }
@@ -36884,7 +38138,7 @@ function waiverInForce(state, rule4, subjectDigest, scope3) {
 }
 
 // src/state/config-change.ts
-import { isDeepStrictEqual as isDeepStrictEqual8 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual9 } from "node:util";
 function normalizeForChangeDetection(config2) {
   if (config2.roles.producer === void 0) return config2;
   const { producer: _retired, ...roles } = config2.roles;
@@ -36963,7 +38217,7 @@ function withLastSeenConfig(draft, parsedLiveConfig, repositorySet) {
   const checkpoint = repositoryBindingsCheckpoint(repositorySet);
   const priorCheckpoint = draft.last_seen_repository_bindings;
   const configUnchanged = seen !== void 0 && computeConfigChange(seen, normalized).length === 0;
-  const checkpointUnchanged = priorCheckpoint !== void 0 && isDeepStrictEqual8(priorCheckpoint, checkpoint);
+  const checkpointUnchanged = priorCheckpoint !== void 0 && isDeepStrictEqual9(priorCheckpoint, checkpoint);
   if (configUnchanged && checkpointUnchanged) return draft;
   return {
     ...draft,
@@ -36984,12 +38238,113 @@ function describeMatchedPath(path2) {
   if (governing === null) return path2;
   return governing[1] === "design.md" ? `${path2} (this phase changed the architecture design)` : `${path2} (this phase changed the PRD)`;
 }
+function segmentMatches(pattern, segment, patternAt, segmentAt) {
+  while (patternAt < pattern.length) {
+    const character = pattern[patternAt];
+    if (character === "*") {
+      for (let skip = segmentAt; skip <= segment.length; skip += 1) {
+        if (segmentMatches(pattern, segment, patternAt + 1, skip)) return true;
+      }
+      return false;
+    }
+    if (segmentAt >= segment.length) return false;
+    if (character !== "?" && character !== segment[segmentAt]) return false;
+    patternAt += 1;
+    segmentAt += 1;
+  }
+  return segmentAt === segment.length;
+}
+function segmentsMatch(pattern, path2, patternAt, pathAt) {
+  while (patternAt < pattern.length) {
+    const segment = pattern[patternAt];
+    if (segment === "**") {
+      for (let skip = pathAt; skip <= path2.length; skip += 1) {
+        if (segmentsMatch(pattern, path2, patternAt + 1, skip)) return true;
+      }
+      return false;
+    }
+    if (pathAt >= path2.length || !segmentMatches(segment, path2[pathAt], 0, 0)) return false;
+    patternAt += 1;
+    pathAt += 1;
+  }
+  return pathAt === path2.length;
+}
+function globPatternMatches(pattern, path2) {
+  return segmentsMatch(pattern.split("/"), path2.split("/"), 0, 0);
+}
+function evaluateApprovalRules(config2, subject, changedPaths, secondaryChangedPaths = []) {
+  const rules2 = config2?.approval_rules;
+  if (rules2 !== void 0 && rules2.subjects.includes(subject)) {
+    return Object.freeze({ wait: true, match: Object.freeze({ kind: "subject", subject }) });
+  }
+  if (rules2 !== void 0) {
+    const matched = [...new Set(changedPaths.filter((path2) => rules2.content.some((rule4) => rule4.paths.some((pattern) => globPatternMatches(pattern, path2)))))].sort();
+    const secondaryMatched = secondaryChangedPaths.flatMap((section) => {
+      const paths = [...new Set(section.paths.filter((path2) => rules2.content.some((rule4) => rule4.paths.some((pattern) => globPatternMatches(pattern, path2)))))].sort();
+      return paths.length === 0 ? [] : [Object.freeze({ repository: section.repository, paths: Object.freeze(paths) })];
+    }).sort((left, right) => left.repository < right.repository ? -1 : left.repository > right.repository ? 1 : 0);
+    if (matched.length > 0 || secondaryMatched.length > 0) {
+      return Object.freeze({ wait: true, match: Object.freeze({
+        kind: "content",
+        paths: Object.freeze(matched),
+        ...secondaryMatched.length === 0 ? {} : { secondary_paths: Object.freeze(secondaryMatched) }
+      }) });
+    }
+  }
+  return Object.freeze({ wait: false, match: null });
+}
 var subjectGateKind = Object.freeze({
   prd: "artifact-approval",
   design: "design-approval",
   "phase-design": "design-approval",
   "phase-impl": "commit-authorization"
 });
+function approvalRuleContext(state, produceSubject, config2, changedDocumentPaths = []) {
+  const artifact = produceSubject?.artifact;
+  const changedPaths = artifact?.artifact_kind === "implementation-output" ? [...new Set(artifact.outputs.flatMap(
+    (output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]
+  ))].sort() : artifact?.artifact_kind === "document" ? [...new Set(changedDocumentPaths)].sort() : [];
+  const secondaryChangedPaths = artifact?.artifact_kind === "implementation-output" ? (artifact.secondary_repositories ?? []).flatMap((section) => {
+    const paths = [...new Set(section.outputs.flatMap(
+      (output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]
+    ))].sort();
+    return paths.length === 0 ? [] : [Object.freeze({ repository: section.repository, paths: Object.freeze(paths) })];
+  }) : [];
+  return Object.freeze({
+    subject: decodePhaseInstance(state.phase_instance).kind,
+    changedPaths: Object.freeze(changedPaths),
+    secondaryChangedPaths: Object.freeze(secondaryChangedPaths),
+    config: config2
+  });
+}
+function buildRuleSettlement(state, subjectDigest, configDigest, conclusion, milestoneBaselineCommit, milestoneTarget, secondaryMilestones = []) {
+  const kind = decodePhaseInstance(state.phase_instance).kind;
+  const baselineAllowed = !conclusion.wait && (kind === "design" || kind === "phase-design" || kind === "phase-impl");
+  if (milestoneBaselineCommit !== void 0 !== baselineAllowed) {
+    throw new TypeError("a milestone baseline is required exactly for milestone-bearing wait:false settlements");
+  }
+  if (milestoneTarget !== void 0 !== baselineAllowed) {
+    throw new TypeError("milestone target facts are required exactly for milestone-bearing wait:false settlements");
+  }
+  if (!baselineAllowed && secondaryMilestones.length !== 0) {
+    throw new TypeError("secondary milestones are allowed only for milestone-bearing wait:false settlements");
+  }
+  return Object.freeze({
+    task_id: state.task_id,
+    phase_instance: state.phase_instance,
+    step: state.step,
+    subject_digest: subjectDigest,
+    conclusion: structuredClone(conclusion),
+    config_digest: configDigest,
+    ...milestoneBaselineCommit === void 0 ? {} : { milestone_baseline_commit: milestoneBaselineCommit },
+    ...milestoneTarget === void 0 ? {} : {
+      milestone_target_ref: milestoneTarget.ref,
+      milestone_target_head: milestoneTarget.head
+    },
+    ...secondaryMilestones.length === 0 ? {} : { secondary_milestones: Object.freeze([...secondaryMilestones]) },
+    settled_at_revision: parseSafeInteger(state.revision + 1)
+  });
+}
 
 // src/state/gate-decision-interface.ts
 var TEMPLATE_REASON = "Record the human decision reason.";
@@ -37029,8 +38384,8 @@ function buildGateDecisionTemplates(active) {
     ]);
   }
   const templates = [];
-  const baselineLiveCount = request.kind === "baseline-adoption" ? request.context.drifted_projections.length + (request.context.secondary_targets ?? []).reduce((count, target) => count + target.drifted_projections.length, 0) : 0;
-  const baselineDeletedCount = request.kind === "baseline-adoption" ? (request.context.deleted_projections?.length ?? 0) + (request.context.secondary_targets ?? []).reduce((count, target) => count + (target.deleted_projections?.length ?? 0), 0) : 0;
+  const baselineLiveCount = request.kind === "baseline-adoption" ? request.context.drifted_projections.length + (request.context.secondary_targets ?? []).reduce((count, target2) => count + target2.drifted_projections.length, 0) : 0;
+  const baselineDeletedCount = request.kind === "baseline-adoption" ? (request.context.deleted_projections?.length ?? 0) + (request.context.secondary_targets ?? []).reduce((count, target2) => count + (target2.deleted_projections?.length ?? 0), 0) : 0;
   for (const decision3 of request.allowed_decisions) {
     if (decision3 === "cancel") {
       templates.push(cancellation);
@@ -37235,7 +38590,7 @@ function ordinaryReasons(active) {
   return Object.freeze(reasons);
 }
 function baselineAffectedCount(context2) {
-  return context2.drifted_projections.length + (context2.deleted_projections?.length ?? 0) + (context2.secondary_targets ?? []).reduce((count, target) => count + target.drifted_projections.length + (target.deleted_projections?.length ?? 0), 0);
+  return context2.drifted_projections.length + (context2.deleted_projections?.length ?? 0) + (context2.secondary_targets ?? []).reduce((count, target2) => count + target2.drifted_projections.length + (target2.deleted_projections?.length ?? 0), 0);
 }
 function baselineProjectionDetails(context2) {
   const projectionLines = (repository, drifted, deleted) => {
@@ -37260,15 +38615,15 @@ function baselineProjectionDetails(context2) {
       `${context2.uncommitted_paths.length} drifted path${context2.uncommitted_paths.length === 1 ? " is" : "s are"} uncommitted; the remaining drift is committed on that target.`
     ],
     ...projectionLines(void 0, context2.drifted_projections, context2.deleted_projections ?? []),
-    ...(context2.secondary_targets ?? []).flatMap((target) => [
-      `Repository ${target.repository} target ${target.target_ref} was observed at ${target.target_head}.`,
-      `${target.uncommitted_paths.length} drifted path${target.uncommitted_paths.length === 1 ? " is" : "s are"} uncommitted in repository ${target.repository}; the remaining drift there is committed.`,
-      ...projectionLines(target.repository, target.drifted_projections, target.deleted_projections ?? [])
+    ...(context2.secondary_targets ?? []).flatMap((target2) => [
+      `Repository ${target2.repository} target ${target2.target_ref} was observed at ${target2.target_head}.`,
+      `${target2.uncommitted_paths.length} drifted path${target2.uncommitted_paths.length === 1 ? " is" : "s are"} uncommitted in repository ${target2.repository}; the remaining drift there is committed.`,
+      ...projectionLines(target2.repository, target2.drifted_projections, target2.deleted_projections ?? [])
     ])
   ]);
 }
 function exceptionalReasons(active) {
-  const text3 = (() => {
+  const text4 = (() => {
     switch (active.kind) {
       case "constitution-review":
         return waiverContext(active.context) === void 0 ? "This archived constitution-review policy boundary requires human judgment." : "A separate human decision must grant, deny, or cancel the requested policy exception.";
@@ -37292,7 +38647,7 @@ function exceptionalReasons(active) {
         throw new TypeError("ordinary gate reasons must be derived from its approval trigger");
     }
   })();
-  return Object.freeze([Object.freeze({ class: "exception", text: text3 })]);
+  return Object.freeze([Object.freeze({ class: "exception", text: text4 })]);
 }
 function presentationReasons(active) {
   return ordinaryReasons(active) ?? exceptionalReasons(active);
@@ -37321,7 +38676,7 @@ function buildHumanGatePresentation(active, authenticatedDetails = {}) {
     throw new TypeError("internal invariant: baseline adoption has no reviewed repository details");
   }
   const waiver = waiverContext(request.context);
-  const copy = waiver === void 0 ? PRESENTATION_COPY[request.kind] : Object.freeze({
+  const copy2 = waiver === void 0 ? PRESENTATION_COPY[request.kind] : Object.freeze({
     title: "Decide a policy exception",
     question: "Should this narrowly scoped policy exception be granted?"
   });
@@ -37334,10 +38689,10 @@ function buildHumanGatePresentation(active, authenticatedDetails = {}) {
   ];
   return Object.freeze({
     class: reasons.some((reason2) => reason2.class === "exception") ? "exception" : "configured-approval",
-    title: copy.title,
+    title: copy2.title,
     summary: request.summary,
     ...details.length === 0 ? {} : { details: Object.freeze(details) },
-    question: `${copy.question} Choose an option and briefly explain why.`,
+    question: `${copy2.question} Choose an option and briefly explain why.`,
     reasons,
     options: Object.freeze(presentationBindings(request).map((binding) => binding.option))
   });
@@ -37529,8 +38884,8 @@ function advanceAction(input, state) {
       skill_args: Object.freeze([String(phase3.phase)])
     });
   }
-  const target = designPhase && migrationApproval && input.legacy_resume_phase !== void 0 ? input.legacy_resume_phase : nextPhaseInstance(state.phase_instance);
-  if (target === void 0) {
+  const target2 = designPhase && migrationApproval && input.legacy_resume_phase !== void 0 ? input.legacy_resume_phase : nextPhaseInstance(state.phase_instance);
+  if (target2 === void 0) {
     return action(
       "inspect-state",
       "Inspect the phase plan: the current phase has no representable fixed-workflow successor.",
@@ -37538,13 +38893,13 @@ function advanceAction(input, state) {
       state
     );
   }
-  const targetPhase = decodePhaseInstance(target);
+  const targetPhase = decodePhaseInstance(target2);
   const targetSkill = WORKFLOW_V1.phases.find((candidate) => candidate.id === targetPhase.kind)?.skill;
   if (targetSkill === void 0) {
     return action("inspect-state", "Inspect the fixed workflow: the successor phase has no skill.", true, state);
   }
   return action("advance-phase", "Advance to the next phase in the fixed workflow.", false, state, {
-    target_phase_instance: target,
+    target_phase_instance: target2,
     skill: targetSkill,
     skill_args: targetPhase.kind === "phase-design" || targetPhase.kind === "phase-impl" ? Object.freeze([String(targetPhase.phase)]) : Object.freeze([])
   });
@@ -37776,6 +39131,7 @@ function deriveNextAction(input) {
 }
 
 // src/state/phase-documents.ts
+import { readFile as readFile7 } from "node:fs/promises";
 var STATUS_RESOURCE_ROLES = Object.freeze([
   "current-artifact",
   "user-ask",
@@ -37840,11 +39196,101 @@ function phaseStatusResources(taskId, phaseInstance4) {
   }
   return Object.freeze(resources.map((resource) => Object.freeze(resource)));
 }
+function phaseDocumentDefaults(taskId, phaseInstance4) {
+  const phase3 = decodePhaseInstance(phaseInstance4);
+  const task = (path2) => `.archflow/tasks/${taskId}/${path2}`;
+  switch (phase3.kind) {
+    case "prd":
+      return {
+        document_path: "prd.md",
+        declared_inputs: [{ input_id: "user-ask", path: task("ask.md") }]
+      };
+    case "design":
+    case "phase-design": {
+      const taskPrefix = task("");
+      const additionalDocumentPaths = phaseStatusResources(taskId, phaseInstance4).filter((resource) => resource.access === "read-write" && resource.path.startsWith(taskPrefix)).map((resource) => resource.path.slice(taskPrefix.length)).sort();
+      if (phase3.kind === "design") return {
+        document_path: "design.md",
+        additional_document_paths: additionalDocumentPaths,
+        declared_inputs: [{ input_id: "prd", path: task("prd.md") }]
+      };
+      return {
+        document_path: `phases/${phase3.phase}/design.md`,
+        additional_document_paths: additionalDocumentPaths,
+        declared_inputs: [
+          { input_id: "design", path: task("design.md") },
+          { input_id: "prd", path: task("prd.md") }
+        ]
+      };
+    }
+    case "phase-impl":
+      return void 0;
+  }
+}
+async function validatePlanningRestartAskAppend(input) {
+  if (input.target.path_class !== "task-ask") return false;
+  const existing = new Uint8Array(await readFile7(input.target.absolute));
+  const suffix = restartAskSuffix(input.restart_id, input.request);
+  if (!bytesEndWith(existing, suffix)) return false;
+  return sha256Bytes(existing.subarray(0, existing.byteLength - suffix.byteLength)) === input.expected_base_digest;
+}
+function restartAskSuffix(restartId, request) {
+  const requestBytes = new TextEncoder().encode(request);
+  const framing = new TextEncoder().encode(
+    `
+
+## Reopening and corrections
+
+<!-- archflow-restart:${restartId};request-bytes:${requestBytes.byteLength};request-sha256:${sha256Bytes(requestBytes)} -->
+
+`
+  );
+  const suffix = new Uint8Array(framing.byteLength + requestBytes.byteLength);
+  suffix.set(framing);
+  suffix.set(requestBytes, framing.byteLength);
+  return suffix;
+}
+function bytesEndWith(bytes, suffix) {
+  if (suffix.byteLength > bytes.byteLength) return false;
+  const offset = bytes.byteLength - suffix.byteLength;
+  return suffix.every((byte, index) => bytes[offset + index] === byte);
+}
+async function installPlanningRestartAskAppend(writer, input) {
+  if (input.target.path_class !== "task-ask") {
+    throw new TypeError("planning restart ask append requires the canonical ask document");
+  }
+  if (input.request.trim() === "") throw new TypeError("planning restart request must not be blank");
+  const existing = new Uint8Array(await readFile7(input.target.absolute));
+  const suffix = restartAskSuffix(input.restart_id, input.request);
+  const existingDigest = sha256Bytes(existing);
+  if (bytesEndWith(existing, suffix)) {
+    const prefix = existing.subarray(0, existing.byteLength - suffix.byteLength);
+    if (input.expected_base_digest === void 0 || sha256Bytes(prefix) === input.expected_base_digest) {
+      return Object.freeze({
+        status: "replayed",
+        content_digest: sha256Bytes(existing),
+        byte_count: existing.byteLength
+      });
+    }
+  }
+  if (input.expected_base_digest === void 0 || existingDigest === input.expected_base_digest) {
+    const combined = new Uint8Array(existing.byteLength + suffix.byteLength);
+    combined.set(existing);
+    combined.set(suffix, existing.byteLength);
+    await replaceTaskAsk(writer, input.target, combined);
+    return Object.freeze({
+      status: "appended",
+      content_digest: sha256Bytes(combined),
+      byte_count: combined.byteLength
+    });
+  }
+  throw new TypeError("planning restart ask append conflicts with current ask bytes");
+}
 
 // src/state/workspace-cleanup.ts
-import { lstat as lstat8, readFile as readFile7, readdir as readdir2, rm, rmdir as rmdir2, stat, unlink as unlink2 } from "node:fs/promises";
+import { lstat as lstat8, readFile as readFile8, readdir as readdir2, rm, rmdir as rmdir2, stat, unlink as unlink2 } from "node:fs/promises";
 import { basename as basename3, dirname as dirname5, join as join7, relative as relative4, sep as sep4 } from "node:path";
-var ok14 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok15 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function io2(authority, operation) {
   return Object.freeze({
     schema_version: "1",
@@ -37894,7 +39340,7 @@ function phaseNumber(phaseInstance4) {
 async function receiptIsRecoveryBuffer(entry, state) {
   if (!/^transient\/intents\/.+\.json$/u.test(entry.relative) || entry.relative.endsWith(".request.json")) return false;
   try {
-    const document2 = parseCanonicalDocument(await readFile7(entry.absolute), "intent receipt");
+    const document2 = parseCanonicalDocument(await readFile8(entry.absolute), "intent receipt");
     const receipt = parseIntentReceipt(document2.value);
     return receipt.prior_revision === state.revision && receipt.resulting_revision === state.revision + 1;
   } catch {
@@ -37939,8 +39385,8 @@ async function referencedDecisionDigests(authority) {
   const pattern = /\b[0-9a-f]{64}\b/gu;
   for (const file2 of files) {
     if (file2.symlink) return /* @__PURE__ */ new Set(["*"]);
-    const text3 = await readFile7(file2.absolute, "utf8").catch(() => "");
-    for (const match of text3.matchAll(pattern)) digests.add(match[0]);
+    const text4 = await readFile8(file2.absolute, "utf8").catch(() => "");
+    for (const match of text4.matchAll(pattern)) digests.add(match[0]);
   }
   return digests;
 }
@@ -37960,7 +39406,7 @@ async function decisionProtectedAuthorityResults(authority) {
     if (digest10 === void 0) continue;
     try {
       const document2 = parseCanonicalDocument(
-        await readFile7(file2.absolute),
+        await readFile8(file2.absolute),
         "result manifest"
       );
       const manifest = parseResultManifest(document2.value);
@@ -38035,9 +39481,9 @@ async function unreferencedAuthorityDecisions(authority, state) {
       }
       for (const entry of entries) {
         if (entry.symlink) return Object.freeze([]);
-        const text3 = await readFile7(entry.absolute, "utf8").catch(() => "");
+        const text4 = await readFile8(entry.absolute, "utf8").catch(() => "");
         for (const candidate of known) {
-          if (!live.has(candidate) && text3.includes(`"${candidate}"`)) {
+          if (!live.has(candidate) && text4.includes(`"${candidate}"`)) {
             live.add(candidate);
             changed = true;
           }
@@ -38096,10 +39542,10 @@ async function cleanupTarget(dependencies, authority) {
 }
 async function inspectWorkspaceCleanup(dependencies, authority, state) {
   assertInternalTransactionAuthority(authority, { runner: dependencies.runner, environment: dependencies.environment });
-  const target = await cleanupTarget(dependencies, authority);
-  if (!target.ok) return target;
+  const target2 = await cleanupTarget(dependencies, authority);
+  if (!target2.ok) return target2;
   try {
-    const workspaceFiles = await filesBelow(target.value.absolute);
+    const workspaceFiles = await filesBelow(target2.value.absolute);
     const authorityFiles = await filesBelow(join7(authority.task_root, "authority"));
     const decisionProtectedResults = await decisionProtectedAuthorityResults(authority);
     const authorityCandidates = [
@@ -38121,7 +39567,7 @@ async function inspectWorkspaceCleanup(dependencies, authority, state) {
         removableBytes += entry.byte_count;
       }
     }
-    return ok14(Object.freeze({
+    return ok15(Object.freeze({
       removed_files: parseSafeInteger(0),
       removed_bytes: parseSafeInteger(0),
       retained_files: parseSafeInteger(retainedFiles),
@@ -38134,10 +39580,10 @@ async function inspectWorkspaceCleanup(dependencies, authority, state) {
 }
 async function cleanTaskWorkspace(dependencies, authority, state) {
   assertInternalTransactionAuthority(authority, { runner: dependencies.runner, environment: dependencies.environment });
-  const target = await cleanupTarget(dependencies, authority);
-  if (!target.ok) return target;
+  const target2 = await cleanupTarget(dependencies, authority);
+  if (!target2.ok) return target2;
   try {
-    const workspaceFiles = await filesBelow(target.value.absolute);
+    const workspaceFiles = await filesBelow(target2.value.absolute);
     const authorityFiles = await filesBelow(join7(authority.task_root, "authority"));
     const decisionProtectedResults = await decisionProtectedAuthorityResults(authority);
     const authorityCandidates = [
@@ -38158,16 +39604,16 @@ async function cleanTaskWorkspace(dependencies, authority, state) {
         continue;
       }
       await removeFile(entry);
-      await removeEmptyParents(dirname5(entry.absolute), authorityFile ? join7(authority.task_root, "authority") : target.value.absolute);
+      await removeEmptyParents(dirname5(entry.absolute), authorityFile ? join7(authority.task_root, "authority") : target2.value.absolute);
       removedFiles += 1;
       removedBytes += entry.byte_count;
     }
-    await removeEmptyDirectories(target.value.absolute, /* @__PURE__ */ new Set([
-      join7(target.value.absolute, "transient", ".transaction-lock")
+    await removeEmptyDirectories(target2.value.absolute, /* @__PURE__ */ new Set([
+      join7(target2.value.absolute, "transient", ".transaction-lock")
     ]));
     await removeEmptyDirectories(join7(authority.task_root, "authority", "results"));
     await removeEmptyDirectories(join7(authority.task_root, "authority", "decisions"));
-    return ok14(Object.freeze({
+    return ok15(Object.freeze({
       removed_files: parseSafeInteger(removedFiles),
       removed_bytes: parseSafeInteger(removedBytes),
       retained_files: parseSafeInteger(retainedFiles),
@@ -38178,13 +39624,46 @@ async function cleanTaskWorkspace(dependencies, authority, state) {
     return io2(authority, "clean-task-workspace");
   }
 }
+async function removeSupersededPhaseDocuments(dependencies, authority, targetPhaseInstance) {
+  const planning = /^phase-design-([1-9][0-9]*)$/u.exec(targetPhaseInstance);
+  const target2 = targetPhaseInstance === "prd" || targetPhaseInstance === "design" ? 0 : planning === null ? NaN : Number(planning[1]);
+  if (!Number.isInteger(target2)) return Object.freeze([]);
+  const prefix = `.archflow/tasks/${authority.task_id}/`;
+  const untracked = await dependencies.runner.runNulFields({
+    argv: [
+      "ls-files",
+      "--others",
+      "--exclude-standard",
+      "-z",
+      "--",
+      `:(top,literal)${prefix}phases`
+    ],
+    operation: "git-restart-superseded-documents"
+  });
+  const removed = [];
+  for (const path2 of untracked) {
+    if (!path2.startsWith(prefix)) continue;
+    const relative9 = path2.slice(prefix.length);
+    const document2 = /^phases\/([1-9][0-9]*)\/(design|impl-notes)\.md$/u.exec(relative9);
+    if (document2 === null) continue;
+    const phase3 = Number(document2[1]);
+    const superseded = document2[2] === "impl-notes" ? phase3 >= target2 : phase3 > target2;
+    if (!superseded) continue;
+    const absolute = join7(authority.task_root, ...relative9.split("/"));
+    if (!inside(authority.task_root, absolute)) throw new TypeError("superseded document escaped its task root");
+    await unlink2(absolute).catch(() => void 0);
+    await removeEmptyParents(dirname5(absolute), join7(authority.task_root, "phases"));
+    removed.push(relative9);
+  }
+  return Object.freeze(removed.sort());
+}
 async function cleanTerminalTaskWorkspace(dependencies, authority) {
-  const target = await cleanupTarget(dependencies, authority);
-  if (!target.ok) return target;
+  const target2 = await cleanupTarget(dependencies, authority);
+  if (!target2.ok) return target2;
   try {
-    const files = await filesBelow(target.value.absolute);
-    await rm(target.value.absolute, { recursive: true, force: true });
-    return ok14(Object.freeze({
+    const files = await filesBelow(target2.value.absolute);
+    await rm(target2.value.absolute, { recursive: true, force: true });
+    return ok15(Object.freeze({
       removed_files: parseSafeInteger(files.length),
       removed_bytes: parseSafeInteger(files.reduce((sum, entry) => sum + entry.byte_count, 0)),
       retained_files: parseSafeInteger(0),
@@ -38200,7 +39679,7 @@ async function cleanTerminalTaskWorkspace(dependencies, authority) {
 import { constants as fsConstants5 } from "node:fs";
 import { lstat as lstat9, readdir as readdir3, readlink as readlink4 } from "node:fs/promises";
 import { join as join8 } from "node:path";
-var ok15 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok16 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var stateInvalid2 = (authority, issueCode) => Object.freeze({
   schema_version: "1",
   ok: false,
@@ -38294,14 +39773,14 @@ async function discoverNewestProjections(dependencies, authority, state, reposit
       for (const projection of manifest.projections) {
         const pathClass3 = outputClassFor(manifest, projection.path);
         if (pathClass3 === void 0) return stateInvalid2(authority, "reconciliation-projection-unbound");
-        const target = await resolveDeclaredOutputPath({
+        const target2 = await resolveDeclaredOutputPath({
           runner: primaryRunner,
           taskId: authority.task_id,
           claim: projection.path,
           pathClass: pathClass3,
           context: authority.context
         });
-        if (!target.ok) return target;
+        if (!target2.ok) return target2;
         const measuredAtRevision = manifest.accounting.measured_at_revision;
         const prior = newest.get(repositoryPathKey(void 0, projection.path));
         if (prior === void 0 || measuredAtRevision > prior.measured_at_revision) {
@@ -38310,7 +39789,7 @@ async function discoverNewestProjections(dependencies, authority, state, reposit
             path: projection.path,
             projection,
             measured_at_revision: measuredAtRevision,
-            target: target.value,
+            target: target2.value,
             reference,
             runner: primaryRunner
           });
@@ -38345,14 +39824,14 @@ async function discoverNewestProjections(dependencies, authority, state, reposit
         for (const projection of section.projections) {
           const output = outputSection.outputs.find((candidate) => candidate.path === projection.path || candidate.operation === "rename" && candidate.previous_path === projection.path);
           if (output === void 0) return stateInvalid2(authority, "reconciliation-projection-unbound");
-          const target = await resolveDeclaredOutputPath({
+          const target2 = await resolveDeclaredOutputPath({
             runner: member.binding.runner,
             taskId: authority.task_id,
             claim: projection.path,
             pathClass: output.path_class,
             context: authority.context
           });
-          if (!target.ok) return target;
+          if (!target2.ok) return target2;
           const prior = newest.get(repositoryPathKey(projection.repository, projection.path));
           if (prior === void 0 || manifest.accounting.measured_at_revision > prior.measured_at_revision) {
             newest.set(repositoryPathKey(projection.repository, projection.path), Object.freeze({
@@ -38361,7 +39840,7 @@ async function discoverNewestProjections(dependencies, authority, state, reposit
               path: projection.path,
               projection,
               measured_at_revision: manifest.accounting.measured_at_revision,
-              target: target.value,
+              target: target2.value,
               reference,
               runner: member.binding.runner
             }));
@@ -38405,7 +39884,7 @@ async function discoverNewestProjections(dependencies, authority, state, reposit
         }
       }
     }
-    return ok15(newest);
+    return ok16(newest);
   } catch {
     return ioFailure2(authority, "discover-reconciliation-projections");
   }
@@ -38434,7 +39913,7 @@ async function discoverProjections(dependencies, authority, state, repositorySet
         committedAbsent.push(identity);
       }
     }
-    return ok15(Object.freeze({
+    return ok16(Object.freeze({
       recorded: Object.freeze(recorded),
       current: Object.freeze(current),
       unrestorable: Object.freeze(unrestorable),
@@ -38454,7 +39933,7 @@ async function committedAtHead(runner, authority, path2) {
 }
 async function discoverGateHead(dependencies, authority, state) {
   const open7 = state.value.open_gate;
-  if (open7 === void 0) return ok15(Object.freeze({}));
+  if (open7 === void 0) return ok16(Object.freeze({}));
   const requestPath = await resolveTaskPath({
     runner: dependencies.runner,
     taskId: authority.task_id,
@@ -38464,19 +39943,19 @@ async function discoverGateHead(dependencies, authority, state) {
   });
   if (!requestPath.ok) return requestPath;
   const request = await readCanonical2(requestPath.value, "gate request", parsePersistedGateRequest);
-  if (request === "missing") return ok15(Object.freeze({ blocker: "active-gate-request-missing" }));
-  if (request === "invalid") return ok15(Object.freeze({ blocker: "active-gate-request-invalid" }));
+  if (request === "missing") return ok16(Object.freeze({ blocker: "active-gate-request-missing" }));
+  if (request === "invalid") return ok16(Object.freeze({ blocker: "active-gate-request-invalid" }));
   try {
     if (request.value.gate_id !== open7.gate_id || request.value.subject_digest !== open7.subject_digest || request.value.context_digest !== open7.context_digest) {
-      return ok15(Object.freeze({ blocker: "active-gate-request-mismatch" }));
+      return ok16(Object.freeze({ blocker: "active-gate-request-mismatch" }));
     }
-    return ok15(Object.freeze({ head: Object.freeze({
+    return ok16(Object.freeze({ head: Object.freeze({
       gate_id: request.value.gate_id,
       subject_digest: request.value.subject_digest,
       context_digest: request.value.context_digest
     }) }));
   } catch {
-    return ok15(Object.freeze({ blocker: "active-gate-request-mismatch" }));
+    return ok16(Object.freeze({ blocker: "active-gate-request-mismatch" }));
   }
 }
 async function discoverIntent(dependencies, authority, state) {
@@ -38484,32 +39963,32 @@ async function discoverIntent(dependencies, authority, state) {
   try {
     names = await readdir3(join8(authority.workspace_root, "transient", "intents"));
   } catch (error51) {
-    if (error51.code === "ENOENT") return ok15(Object.freeze({}));
+    if (error51.code === "ENOENT") return ok16(Object.freeze({}));
     return ioFailure2(authority, "discover-reconciliation-intents");
   }
   const candidates = [];
   for (const name of names.sort()) {
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.json$/u.test(name)) continue;
     if (name.endsWith(".request.json")) continue;
-    const target = await resolveTaskWorkspacePath({
+    const target2 = await resolveTaskWorkspacePath({
       runner: dependencies.runner,
       taskId: authority.task_id,
       claim: intentReceiptClaim(parsePathSafeId(name.slice(0, -5))),
       expectedClass: "workspace-intent",
       context: authority.context
     });
-    if (!target.ok) return target;
-    const receipt2 = await readCanonical2(target.value, "intent receipt", parseIntentReceipt);
+    if (!target2.ok) return target2;
+    const receipt2 = await readCanonical2(target2.value, "intent receipt", parseIntentReceipt);
     if (receipt2 === "missing" || receipt2 === "invalid") continue;
     if (receipt2.value.prior_revision !== state.value.revision || receipt2.value.resulting_revision !== state.value.revision + 1 || receipt2.value.prepared_state.revision !== receipt2.value.resulting_revision) continue;
     if (!validateDurableSemantics(createPreparedIntentSubject(state, receipt2)).ok) continue;
     candidates.push(receipt2);
   }
   if (candidates.length > 1) {
-    return ok15(Object.freeze({ blocker: "retained-receipt-ambiguity" }));
+    return ok16(Object.freeze({ blocker: "retained-receipt-ambiguity" }));
   }
   const receipt = candidates[0];
-  return receipt === void 0 ? ok15(Object.freeze({})) : ok15(Object.freeze({ intent: Object.freeze({ request_digest: receipt.value.request_digest, receipt }) }));
+  return receipt === void 0 ? ok16(Object.freeze({})) : ok16(Object.freeze({ intent: Object.freeze({ request_digest: receipt.value.request_digest, receipt }) }));
 }
 async function discoverReconciliationInput(dependencies, authority, state, repositorySet) {
   assertInternalTransactionAuthority(authority, dependencies);
@@ -38520,7 +39999,7 @@ async function discoverReconciliationInput(dependencies, authority, state, repos
   const intent = await discoverIntent(dependencies, authority, state);
   if (!intent.ok) return intent;
   const blockers = [gate.value.blocker, intent.value.blocker].filter((value) => value !== void 0);
-  return ok15(Object.freeze({
+  return ok16(Object.freeze({
     state,
     recorded_projections: projections.value.recorded,
     current_projections: projections.value.current,
@@ -38546,9 +40025,9 @@ function activeGateHead(active, request) {
 function baselinePresentedTargets(context2) {
   return Object.freeze([
     ...context2.target_head === void 0 ? [] : [Object.freeze({ repository: "primary", target_head: context2.target_head })],
-    ...(context2.secondary_targets ?? []).map((target) => Object.freeze({
-      repository: target.repository,
-      target_head: target.target_head
+    ...(context2.secondary_targets ?? []).map((target2) => Object.freeze({
+      repository: target2.repository,
+      target_head: target2.target_head
     }))
   ]);
 }
@@ -38556,14 +40035,14 @@ function assessBaselineSubjectFreshness(request, liveContext, presentedHeadOnCur
   assertPlainJson(request, "baseline adoption request");
   assertPlainJson(liveContext, "live baseline adoption context");
   const live = structuredClone(liveContext);
-  const presented = new Map((request.context.secondary_targets ?? []).map((target) => [target.repository, target.target_head]));
+  const presented = new Map((request.context.secondary_targets ?? []).map((target2) => [target2.repository, target2.target_head]));
   const context2 = presentedHeadOnCurrentFirstParent ? {
     ...live,
     ...request.context.target_head === void 0 ? {} : { target_head: request.context.target_head },
     ...live.secondary_targets === void 0 ? {} : {
-      secondary_targets: live.secondary_targets.map((target) => {
-        const targetHead = presented.get(target.repository);
-        return targetHead === void 0 ? target : { ...target, target_head: targetHead };
+      secondary_targets: live.secondary_targets.map((target2) => {
+        const targetHead = presented.get(target2.repository);
+        return targetHead === void 0 ? target2 : { ...target2, target_head: targetHead };
       })
     }
   } : live;
@@ -38725,7 +40204,7 @@ function reconcileCurrentAuthority(value) {
 }
 
 // src/dispatch/failure-observation.ts
-import { readFile as readFile8 } from "node:fs/promises";
+import { readFile as readFile9 } from "node:fs/promises";
 var supportedCodes = new Set(DISPATCH_FAILURE_CODES);
 var SAFE_MESSAGES = Object.freeze({
   CONFIG_INVALID: "The selected reviewer route configuration is invalid.",
@@ -38746,16 +40225,16 @@ function observationClaim(phaseInstance4, attempt) {
 async function readCurrentDispatchFailure(dependencies, authority, state) {
   if (state.terminal !== void 0 || state.task_id !== authority.task_id || state.step !== "counter_review" || state.status !== "running") return void 0;
   try {
-    const target = await resolveTaskWorkspacePath({
+    const target2 = await resolveTaskWorkspacePath({
       runner: dependencies.runner,
       taskId: authority.task_id,
       claim: observationClaim(state.phase_instance, state.attempt),
       expectedClass: "workspace-attempt",
       context: authority.context
     });
-    if (!target.ok) return void 0;
+    if (!target2.ok) return void 0;
     const parsed = dispatchFailureObservationV1Schema.parse(JSON.parse(
-      await readFile8(target.value.absolute, "utf8")
+      await readFile9(target2.value.absolute, "utf8")
     ));
     return parsed.task_id === state.task_id && parsed.phase_instance === state.phase_instance && parsed.step === state.step && parsed.attempt === state.attempt && parsed.observed_at_revision === state.revision ? Object.freeze(parsed) : void 0;
   } catch {
@@ -38764,7 +40243,7 @@ async function readCurrentDispatchFailure(dependencies, authority, state) {
 }
 
 // src/state/status.ts
-var ok16 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok17 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function currentReviewedRepositoryPins(review, taskId, phaseInstance4) {
   if (review === void 0 || review.assurance !== "server-attested" || review.task_id !== taskId || review.phase_instance !== phaseInstance4 || !("repositories" in review) || review.repositories === void 0) return void 0;
   return Object.freeze(review.repositories.map((repository) => Object.freeze({
@@ -38797,13 +40276,13 @@ function reviewedRepositoryGateDetails(active, currentEvidence, reviewed, reposi
 async function baselinePresentedTargetsOnCurrentFirstParent(dependencies, context2, live, repositorySet) {
   const presented = baselinePresentedTargets(context2);
   if (presented.length === 0) return false;
-  return (await Promise.all(presented.map(async (target) => {
-    const liveTarget = target.repository === "primary" ? live : live.secondary_targets?.find((candidate) => candidate.repository === target.repository);
-    const runner = target.repository === "primary" ? dependencies.runner : repositorySet?.members.find((member) => member.name === target.repository)?.binding.runner;
-    return liveTarget !== void 0 && runner !== void 0 && (target.target_head === liveTarget.target_head || await readFirstParentChildAfter(runner, target.target_head, liveTarget.target_head) !== void 0);
+  return (await Promise.all(presented.map(async (target2) => {
+    const liveTarget = target2.repository === "primary" ? live : live.secondary_targets?.find((candidate) => candidate.repository === target2.repository);
+    const runner = target2.repository === "primary" ? dependencies.runner : repositorySet?.members.find((member) => member.name === target2.repository)?.binding.runner;
+    return liveTarget !== void 0 && runner !== void 0 && (target2.target_head === liveTarget.target_head || await readFirstParentChildAfter(runner, target2.target_head, liveTarget.target_head) !== void 0);
   }))).every(Boolean);
 }
-function baselineAdoptionInputFromFindings(task_id, state, findings, target) {
+function baselineAdoptionInputFromFindings(task_id, state, findings, target2) {
   const mismatches = findings.filter((finding) => finding.kind === "projection-mismatch");
   const primaryMismatches = mismatches.filter((finding) => finding.repository === void 0);
   const drifted = primaryMismatches.filter((finding) => finding.observed_digest !== void 0);
@@ -38812,7 +40291,7 @@ function baselineAdoptionInputFromFindings(task_id, state, findings, target) {
     const repositoryMismatches = mismatches.filter((finding) => finding.repository === repository);
     const repositoryDrifted = repositoryMismatches.filter((finding) => finding.observed_digest !== void 0);
     const repositoryDeleted = repositoryMismatches.filter((finding) => finding.observed_digest === void 0 && finding.restore_unavailable === true && finding.committed_absent === true);
-    const facts = target?.secondary_targets?.find((candidate) => candidate.repository === repository);
+    const facts = target2?.secondary_targets?.find((candidate) => candidate.repository === repository);
     if (facts === void 0 || repositoryDrifted.length + repositoryDeleted.length !== repositoryMismatches.length) return void 0;
     return Object.freeze({
       ...facts,
@@ -38833,10 +40312,10 @@ function baselineAdoptionInputFromFindings(task_id, state, findings, target) {
   const context2 = Object.freeze({
     drifted_projections: Object.freeze(drifted.map((finding) => Object.freeze({ path: finding.path, recorded_digest: finding.recorded_digest, observed_digest: finding.observed_digest })).sort((left, right) => left.path.localeCompare(right.path))),
     deleted_projections: Object.freeze(deleted.map((finding) => Object.freeze({ path: finding.path, recorded_digest: finding.recorded_digest })).sort((left, right) => left.path.localeCompare(right.path))),
-    ...target === void 0 || primaryMismatches.length === 0 ? {} : {
-      target_ref: target.target_ref,
-      target_head: target.target_head,
-      uncommitted_paths: Object.freeze([...target.uncommitted_paths].sort((left, right) => left.localeCompare(right)))
+    ...target2 === void 0 || primaryMismatches.length === 0 ? {} : {
+      target_ref: target2.target_ref,
+      target_head: target2.target_head,
+      uncommitted_paths: Object.freeze([...target2.uncommitted_paths].sort((left, right) => left.localeCompare(right)))
     },
     ...secondaryTargets.length === 0 ? {} : { secondary_targets: Object.freeze(secondaryTargets) }
   });
@@ -38856,8 +40335,8 @@ function baselineAdoptionInputFromFindings(task_id, state, findings, target) {
   });
 }
 async function currentBaselineTargetFacts(dependencies, findings, repositorySet) {
-  const target = await currentTargetRef(dependencies);
-  const targetHead = await resolveCommit(dependencies.runner, target.value);
+  const target2 = await currentTargetRef(dependencies);
+  const targetHead = await resolveCommit(dependencies.runner, target2.value);
   const changed = await readChangedGitPaths(dependencies.runner);
   const driftPaths = findings.filter((finding) => finding.kind === "projection-mismatch" && finding.repository === void 0).map((finding) => finding.path);
   const changedPaths = new Set(changed.paths);
@@ -38879,7 +40358,7 @@ async function currentBaselineTargetFacts(dependencies, findings, repositorySet)
     }));
   }
   return Object.freeze({
-    target_ref: target.value,
+    target_ref: target2.value,
     target_head: targetHead,
     uncommitted_paths: Object.freeze(driftPaths.filter((path2) => changedPaths.has(path2)).sort((left, right) => left.localeCompare(right))),
     ...secondaryTargets.length === 0 ? {} : { secondary_targets: Object.freeze(secondaryTargets) }
@@ -38928,24 +40407,24 @@ function partitionExpectedReentryEdits(findings, assessment, produceSubject, sta
     expected_reentry_edits: Object.freeze(expected)
   });
 }
-function unavailableConfig(issue3, issues) {
+function unavailableConfig(issue4, issues) {
   return Object.freeze({
     verified: false,
-    ...issue3 === void 0 ? {} : { issue: issue3 },
+    ...issue4 === void 0 ? {} : { issue: issue4 },
     ...issues === void 0 ? {} : { issues: Object.freeze([...issues]) }
   });
 }
 async function readActiveGateProjection(dependencies, authority) {
   try {
-    const target = await resolveTaskWorkspacePath({
+    const target2 = await resolveTaskWorkspacePath({
       runner: dependencies.runner,
       taskId: authority.task_id,
       claim: parseWorkspacePathClaim("cache/gates/gate.json"),
       expectedClass: "workspace-gate-interface",
       context: authority.context
     });
-    if (!target.ok) return void 0;
-    const bytes = new Uint8Array(await readFile9(target.value.absolute));
+    if (!target2.ok) return void 0;
+    const bytes = new Uint8Array(await readFile10(target2.value.absolute));
     return parseActiveGate(parseCanonicalDocument(bytes, "active gate").value);
   } catch {
     return void 0;
@@ -38953,15 +40432,15 @@ async function readActiveGateProjection(dependencies, authority) {
 }
 async function readArchivedGateRequest(dependencies, authority, gateId) {
   try {
-    const target = await resolveTaskPath({
+    const target2 = await resolveTaskPath({
       runner: dependencies.runner,
       taskId: authority.task_id,
       claim: gateRequestClaim(gateId),
       expectedClass: "authority-decision",
       context: authority.context
     });
-    if (!target.ok) return void 0;
-    const bytes = new Uint8Array(await readFile9(target.value.absolute));
+    if (!target2.ok) return void 0;
+    const bytes = new Uint8Array(await readFile10(target2.value.absolute));
     return parsePersistedGateRequest(parseCanonicalDocument(bytes, "gate request").value);
   } catch (error51) {
     if (error51.code === "ENOENT") return void 0;
@@ -39171,11 +40650,11 @@ async function buildSecondaryCommitAuthorizationFacts(output, repositories) {
     if (member === void 0 || member.mode !== "writable" || member.identity.digest !== section.repository_identity_digest) {
       throw new SecondaryCommitObservationError(section.repository, "repository-observation-failed");
     }
-    let target;
+    let target2;
     let targetHead;
     try {
-      target = await currentTargetRefForRunner(member.binding.runner);
-      targetHead = await resolveCommit(member.binding.runner, target.value);
+      target2 = await currentTargetRefForRunner(member.binding.runner);
+      targetHead = await resolveCommit(member.binding.runner, target2.value);
     } catch (error51) {
       if (error51 instanceof SecondaryCommitObservationError) throw error51;
       throw new SecondaryCommitObservationError(section.repository, "repository-observation-failed");
@@ -39184,7 +40663,7 @@ async function buildSecondaryCommitAuthorizationFacts(output, repositories) {
     facts.push(Object.freeze({
       repository: section.repository,
       repository_identity_digest: section.repository_identity_digest,
-      target_ref: target.value,
+      target_ref: target2.value,
       target_head: targetHead,
       baseline_commit: section.base_commit,
       commit_message: implementationCommitMessage(output),
@@ -39211,7 +40690,7 @@ var SecondaryCommitObservationError = class extends TypeError {
   repository;
   reason;
 };
-function buildCommitAuthorizationInput(subject, currentEvidence, target, baselineCommit, secondaryCommits = []) {
+function buildCommitAuthorizationInput(subject, currentEvidence, target2, baselineCommit, secondaryCommits = []) {
   if (subject.artifact.artifact_kind !== "implementation-output") {
     throw new TypeError("commit authorization requires retained implementation output");
   }
@@ -39230,7 +40709,7 @@ function buildCommitAuthorizationInput(subject, currentEvidence, target, baselin
     subject_digest: subject.artifact_digest,
     current_evidence: currentEvidence,
     context: Object.freeze({
-      target_ref: target.value,
+      target_ref: target2.value,
       baseline_commit: baselineCommit,
       commit_message: `ArchFlow: Implement ${subject.artifact.task_id} phase ${phase3.kind === "phase-impl" ? String(phase3.phase) : subject.artifact.phase_instance}`,
       paths: Object.freeze([...paths].sort()),
@@ -39239,7 +40718,7 @@ function buildCommitAuthorizationInput(subject, currentEvidence, target, baselin
       parent_document_digests: Object.freeze(subject.artifact.parent_documents.map((item) => item.content_digest).sort()),
       ...secondaryCommits.length === 0 ? {} : { secondary_commits: Object.freeze([...secondaryCommits]) }
     }),
-    target_ref_guidance: target.guidance
+    target_ref_guidance: target2.guidance
   });
 }
 function buildAutonomousImplementationCommitInput(output, targetRef) {
@@ -39284,7 +40763,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       blocking_reasons: Object.freeze(["status-authority-invalid"]),
       next_action: next
     });
-    return ok16(Object.freeze({ status: status2, retained: /* @__PURE__ */ new Map() }));
+    return ok17(Object.freeze({ status: status2, retained: /* @__PURE__ */ new Map() }));
   }
   if (stateRead.kind !== "canonical") {
     const reason2 = stateRead.kind === "missing" ? "state-missing" : `state-${stateRead.kind}`;
@@ -39303,7 +40782,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       blocking_reasons: Object.freeze([reason2]),
       next_action: next
     });
-    return ok16(Object.freeze({
+    return ok17(Object.freeze({
       status: status2,
       ...liveConfigDigest2 === void 0 ? {} : { live_config_digest: liveConfigDigest2 },
       retained: /* @__PURE__ */ new Map()
@@ -39359,10 +40838,10 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   if (parsedConfig !== void 0) {
     try {
       const decodedPhase = decodePhaseInstance(state.phase_instance);
-      const phaseKind = decodedPhase.kind;
-      const counterReviewer = resolveDispatchRoute(parsedConfig, phaseKind, "counter-reviewer");
-      const testReviewer = configuredRoute(parsedConfig, phaseKind, "test-reviewer") === void 0 ? void 0 : resolveDispatchRoute(parsedConfig, phaseKind, "test-reviewer");
-      const adjudicator = resolveDispatchRoute(parsedConfig, phaseKind, "adjudicator");
+      const phaseKind2 = decodedPhase.kind;
+      const counterReviewer = resolveDispatchRoute(parsedConfig, phaseKind2, "counter-reviewer");
+      const testReviewer = configuredRoute(parsedConfig, phaseKind2, "test-reviewer") === void 0 ? void 0 : resolveDispatchRoute(parsedConfig, phaseKind2, "test-reviewer");
+      const adjudicator = resolveDispatchRoute(parsedConfig, phaseKind2, "adjudicator");
       routes = Object.freeze({
         counter_reviewer: counterReviewer,
         ...testReviewer === void 0 ? {} : { test_reviewer: testReviewer },
@@ -39566,16 +41045,16 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     if (milestoneRecoveryRequired) implementationCommit = void 0;
     if (!commitObserved && !humanImplementationCommitAuthority && implementationCommit === void 0 && acceptedSettlement !== void 0) {
       const legacyTarget = acceptedSettlement.milestone_target_ref === void 0;
-      const target = legacyTarget ? await currentTargetRef(dependencies) : Object.freeze({ value: acceptedSettlement.milestone_target_ref, guidance: "Pinned autonomous milestone target." });
+      const target2 = legacyTarget ? await currentTargetRef(dependencies) : Object.freeze({ value: acceptedSettlement.milestone_target_ref, guidance: "Pinned autonomous milestone target." });
       const autonomousCommit = buildAutonomousImplementationCommitInput(
         produceSubject.artifact,
-        target.value
+        target2.value
       );
       try {
         const observedProof = await resolveAutonomousImplementationMilestoneProof(
           dependencies.runner,
           produceSubject.artifact,
-          target.value,
+          target2.value,
           autonomousCommit.message
         );
         const proof = legacyTarget && observedProof.kind === "proven" && observedProof.commit !== observedProof.target_head ? Object.freeze({
@@ -39660,15 +41139,15 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     }
     if (!commitObserved && designCommit === void 0 && acceptedSettlement?.milestone_baseline_commit !== void 0) {
       const legacyTarget = acceptedSettlement.milestone_target_ref === void 0;
-      const target = legacyTarget ? await currentTargetRef(dependencies) : Object.freeze({ value: acceptedSettlement.milestone_target_ref, guidance: "Pinned autonomous milestone target." });
-      designCommit = buildAutonomousDesignCommitInput(state, acceptedSettlement, target.value);
+      const target2 = legacyTarget ? await currentTargetRef(dependencies) : Object.freeze({ value: acceptedSettlement.milestone_target_ref, guidance: "Pinned autonomous milestone target." });
+      designCommit = buildAutonomousDesignCommitInput(state, acceptedSettlement, target2.value);
       try {
         const observedProof = await resolveAutonomousDesignMilestoneProof(
           dependencies.runner,
           state,
           produceSubject.artifact,
           produceSubject.retained.manifest.value.outputs,
-          target.value,
+          target2.value,
           acceptedSettlement.milestone_baseline_commit,
           designCommit.message,
           authority.context
@@ -39808,22 +41287,22 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     const governingPaths = partitioned.remaining.filter((finding) => finding.kind === "projection-mismatch").map((finding) => finding.path).filter((path2) => path2 === `${taskRoot}prd.md` || path2 === `${taskRoot}design.md` || path2.startsWith(`${taskRoot}phases/`) && path2.endsWith("/design.md"));
     if (governingPaths.length !== 0 && !midProduce && state.open_gate === void 0) {
       const decodedPhase = decodePhaseInstance(state.phase_instance);
-      const phaseKind = decodedPhase.kind;
-      const ownedPath = phaseKind === "prd" ? `${taskRoot}prd.md` : phaseKind === "design" ? `${taskRoot}design.md` : phaseKind === "phase-design" ? `${taskRoot}phases/${decodedPhase.phase}/design.md` : void 0;
+      const phaseKind2 = decodedPhase.kind;
+      const ownedPath = phaseKind2 === "prd" ? `${taskRoot}prd.md` : phaseKind2 === "design" ? `${taskRoot}design.md` : phaseKind2 === "phase-design" ? `${taskRoot}phases/${decodedPhase.phase}/design.md` : void 0;
       const ownedGoverningPaths = ownedPath === void 0 ? [] : governingPaths.filter((path2) => path2 === ownedPath);
       const recoverableOwnedGoverningPaths = ownedGoverningPaths.filter((path2) => !produceSubjectDrift.includes(path2));
       const dependentGoverningPaths = governingPaths.filter((path2) => path2 !== ownedPath);
       const governingRecoverySubjectDigest = subjectDigest ?? retained.get("produce")?.manifest.artifact_digest;
       upstreamDocumentDrift.push(...dependentGoverningPaths.filter((path2) => !upstreamDocumentDrift.includes(path2)));
-      if (recoverableOwnedGoverningPaths.length !== 0 && (phaseKind === "prd" || phaseKind === "design" || phaseKind === "phase-design") && governingRecoverySubjectDigest !== void 0) {
+      if (recoverableOwnedGoverningPaths.length !== 0 && (phaseKind2 === "prd" || phaseKind2 === "design" || phaseKind2 === "phase-design") && governingRecoverySubjectDigest !== void 0) {
         try {
-          const target = await currentTargetRef(dependencies);
+          const target2 = await currentTargetRef(dependencies);
           governingDocumentRecoveryRequired = true;
           milestoneRecoveryRequired = true;
           milestoneRecoveryFacts = Object.freeze({
             cause: "governing-document-drift",
-            target_ref: target.value,
-            target_head: await resolveCommit(dependencies.runner, target.value),
+            target_ref: target2.value,
+            target_head: await resolveCommit(dependencies.runner, target2.value),
             subject_digest: governingRecoverySubjectDigest
           });
         } catch {
@@ -39910,18 +41389,18 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         gateBindingBlocker = "active-gate-mismatch";
       } else {
         if (request?.kind === "baseline-adoption" && statusReconciliation !== void 0) {
-          const target = await currentBaselineTargetFacts(dependencies, statusReconciliation.findings, repositorySet);
+          const target2 = await currentBaselineTargetFacts(dependencies, statusReconciliation.findings, repositorySet);
           const live = baselineAdoptionInputFromFindings(
             authority.task_id,
             state,
             statusReconciliation.findings,
-            target
+            target2
           );
           if (live !== void 0) {
             const continuous = await baselinePresentedTargetsOnCurrentFirstParent(
               dependencies,
               request.context,
-              target,
+              target2,
               repositorySet
             );
             staleBaselineRefreshRequired = assessBaselineSubjectFreshness(
@@ -40033,12 +41512,12 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   let baselineAdoptionInput;
   if (nextAction.code === "open-gate" && nextAction.gate_kind === "commit-authorization" && produceSubject?.artifact.artifact_kind === "implementation-output" && evidence.available) {
     try {
-      const target = await currentTargetRef(dependencies);
+      const target2 = await currentTargetRef(dependencies);
       const secondaryCommits = repositorySet === void 0 ? Object.freeze([]) : await buildSecondaryCommitAuthorizationFacts(produceSubject.artifact, repositorySet);
       gateInput = buildCommitAuthorizationInput(
         produceSubject,
         evidence.current_evidence,
-        target,
+        target2,
         await resolveCommit(dependencies.runner, "HEAD"),
         secondaryCommits
       );
@@ -40054,12 +41533,12 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   }
   if (nextAction.code === "open-gate" && nextAction.gate_kind === "baseline-adoption" && statusReconciliation !== void 0) {
     try {
-      const target = await currentBaselineTargetFacts(dependencies, statusReconciliation.findings, repositorySet);
+      const target2 = await currentBaselineTargetFacts(dependencies, statusReconciliation.findings, repositorySet);
       baselineAdoptionInput = baselineAdoptionInputFromFindings(
         authority.task_id,
         state,
         statusReconciliation.findings,
-        target
+        target2
       );
     } catch (error51) {
       if (!(error51 instanceof BaselineRepositoryUnavailableError)) throw error51;
@@ -40126,7 +41605,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     blocking_reasons: Object.freeze([...new Set(blockers)]),
     next_action: nextAction
   });
-  return ok16(Object.freeze({
+  return ok17(Object.freeze({
     status,
     state,
     state_document_digest: stateDocument.digest,
@@ -40140,11 +41619,11 @@ async function computeTaskStatusDetailed(dependencies, authority) {
 }
 async function computeTaskStatus(dependencies, authority) {
   const detailed = await computeTaskStatusDetailedInternal(dependencies, authority);
-  return detailed.ok ? ok16(detailed.value.status) : detailed;
+  return detailed.ok ? ok17(detailed.value.status) : detailed;
 }
 async function recoverStatePosition(statePath) {
   try {
-    const raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(await readFile9(statePath))));
+    const raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(await readFile10(statePath))));
     if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return void 0;
     const candidate = raw;
     const position2 = Object.freeze({
@@ -40221,7 +41700,7 @@ function isWaiverOriginRequest(request) {
 }
 
 // src/state/semantic-status.ts
-var ok17 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok18 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function workflowPosition(phase3) {
   const decoded = decodePhaseInstance(phase3);
   return decoded.kind === "prd" || decoded.kind === "design" ? Object.freeze({ kind: decoded.kind }) : Object.freeze({ kind: decoded.kind, phase: Number(decoded.phase) });
@@ -40234,27 +41713,27 @@ function planningTargetsBefore(current) {
   ];
   const maximum = decoded.kind === "phase-design" || decoded.kind === "phase-impl" ? decoded.phase : 0;
   for (let phase3 = 1; phase3 <= maximum; phase3 += 1) {
-    const target = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(phase3) });
-    if (comparePhaseInstances(target, current) < 0) candidates.push(target);
+    const target2 = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(phase3) });
+    if (comparePhaseInstances(target2, current) < 0) candidates.push(target2);
   }
-  return Object.freeze(candidates.filter((target) => comparePhaseInstances(target, current) < 0));
+  return Object.freeze(candidates.filter((target2) => comparePhaseInstances(target2, current) < 0));
 }
 function reopenImpacts(state, status) {
   if (state.terminal !== void 0 || state.open_gate !== void 0 || status.blocking_reasons.length !== 0) return Object.freeze([]);
-  return Object.freeze(planningTargetsBefore(state.phase_instance).map((target) => {
+  return Object.freeze(planningTargetsBefore(state.phase_instance).map((target2) => {
     const affected = /* @__PURE__ */ new Set([state.phase_instance]);
     for (const reference of state.authoritative_results) {
-      if (comparePhaseInstances(reference.phase_instance, target) >= 0) affected.add(reference.phase_instance);
+      if (comparePhaseInstances(reference.phase_instance, target2) >= 0) affected.add(reference.phase_instance);
     }
-    const targetKind = decodePhaseInstance(target).kind;
+    const targetKind = decodePhaseInstance(target2).kind;
     const authorityEffects = [];
-    if (state.authoritative_results.some((reference) => comparePhaseInstances(reference.phase_instance, target) >= 0)) authorityEffects.push("supersede-results");
+    if (state.authoritative_results.some((reference) => comparePhaseInstances(reference.phase_instance, target2) >= 0)) authorityEffects.push("supersede-results");
     if (state.waivers.length !== 0) authorityEffects.push("clear-active-waivers");
     if (state.pending_human_revision !== void 0) authorityEffects.push("clear-pending-human-revision");
     if ((targetKind === "prd" || targetKind === "design") && state.planned_final_phase !== void 0) authorityEffects.push("clear-planned-final-phase");
     return Object.freeze({
-      target: workflowPosition(target),
-      affected_positions: Object.freeze([...affected].filter((phase3) => comparePhaseInstances(phase3, target) >= 0).sort(comparePhaseInstances).map(workflowPosition)),
+      target: workflowPosition(target2),
+      affected_positions: Object.freeze([...affected].filter((phase3) => comparePhaseInstances(phase3, target2) >= 0).sort(comparePhaseInstances).map(workflowPosition)),
       authority_effects: Object.freeze(authorityEffects),
       planned_final_phase: targetKind === "prd" || targetKind === "design" ? "clear" : "retain",
       preserves_existing_git_index_and_worktree_bytes: true,
@@ -40340,7 +41819,7 @@ function archiveBinds(state, request, decision3) {
 function transitionCarriesDecision(outcome, decision3) {
   if (decision3.outcome !== "decided" || outcome === null || Array.isArray(outcome) || typeof outcome !== "object") return false;
   const descriptor = Object.getOwnPropertyDescriptor(outcome, "decision");
-  return descriptor?.enumerable === true && "value" in descriptor && isDeepStrictEqual9(descriptor.value, decision3.envelope);
+  return descriptor?.enumerable === true && "value" in descriptor && isDeepStrictEqual10(descriptor.value, decision3.envelope);
 }
 function decisionReenters(record2) {
   if (record2.outcome !== "decided") return false;
@@ -40437,10 +41916,10 @@ async function deriveArchiveEnrichments(dependencies, authority, details) {
       } : {}
     }) });
   }
-  if (!commonTransitionBinding || request.value.request_digest !== transition.request_digest || request.value.intent_id !== transition.intent_id || transition.operation !== "gate" || payload.decision !== "waiver-requested" || !isWaiverOriginRequest(request.value) || !("eligible_waivers" in request.value.context) || !request.value.context.eligible_waivers.some((eligible) => isDeepStrictEqual9(eligible.rule, payload.rule) && eligible.scope.operation === payload.operation)) {
+  if (!commonTransitionBinding || request.value.request_digest !== transition.request_digest || request.value.intent_id !== transition.intent_id || transition.operation !== "gate" || payload.decision !== "waiver-requested" || !isWaiverOriginRequest(request.value) || !("eligible_waivers" in request.value.context) || !request.value.context.eligible_waivers.some((eligible) => isDeepStrictEqual10(eligible.rule, payload.rule) && eligible.scope.operation === payload.operation)) {
     return Object.freeze({});
   }
-  const scope3 = request.value.context.eligible_waivers.find((eligible) => isDeepStrictEqual9(eligible.rule, payload.rule) && eligible.scope.operation === payload.operation).scope;
+  const scope3 = request.value.context.eligible_waivers.find((eligible) => isDeepStrictEqual10(eligible.rule, payload.rule) && eligible.scope.operation === payload.operation).scope;
   return Object.freeze({ pending_waiver_origin: Object.freeze({
     origin_gate_id: request.value.gate_id,
     origin_decision_digest: decision3.digest,
@@ -40462,7 +41941,7 @@ async function computeAuthoritativeSemanticStatus(dependencies, authority) {
     throw new TypeError("semantic status repository identity does not match durable state");
   }
   const archives = await deriveArchiveEnrichments(dependencies, authority, detailed.value);
-  return ok17(computeSemanticStatusSnapshot(status, {
+  return ok18(computeSemanticStatusSnapshot(status, {
     repository_identity_digest: authority.repository_identity_digest,
     ...state === void 0 ? {} : { state },
     ...detailed.value.state_document_digest === void 0 ? {} : {
@@ -40559,11 +42038,11 @@ function invocationOwnsCurrentPosition(invocation, status, actionKind) {
   if (!semanticInvocationEnabled(invocation)) return false;
   if (status.state === "missing") return invocation.skill === "archflow-prd" && invocation.intent === "resume";
   if (invocation.intent !== "resume") return false;
-  const target = invocationTarget(invocation);
+  const target2 = invocationTarget(invocation);
   if (actionKind === "start-next-skill") {
-    return status.next_action.code === "advance-phase" && target === status.next_action.target_phase_instance;
+    return status.next_action.code === "advance-phase" && target2 === status.next_action.target_phase_instance;
   }
-  return status.phase_instance !== void 0 && target === status.phase_instance;
+  return status.phase_instance !== void 0 && target2 === status.phase_instance;
 }
 function samePosition(left, right) {
   if (left.kind !== right.kind) return false;
@@ -40572,8 +42051,8 @@ function samePosition(left, right) {
 }
 function reopenImpactFor(snapshot2, invocation) {
   if (invocation.intent !== "reopen") return void 0;
-  const target = positionFromPhase(invocationTarget(invocation));
-  return target === void 0 ? void 0 : snapshot2.reopen_impacts.find((impact) => samePosition(impact.target, target));
+  const target2 = positionFromPhase(invocationTarget(invocation));
+  return target2 === void 0 ? void 0 : snapshot2.reopen_impacts.find((impact) => samePosition(impact.target, target2));
 }
 function markerStatus(value) {
   if (value === void 0 || value === null || Array.isArray(value) || typeof value !== "object") return void 0;
@@ -40979,7 +42458,7 @@ function projectSemanticStatus(snapshot2, invocation) {
   }
   const owns = invocation !== void 0 && (shape.action_kind === "reopen" ? reopen !== void 0 && semanticInvocationEnabled(invocation) : invocationOwnsCurrentPosition(invocation, status, shape.action_kind));
   const offer = owns && canOffer(shape) ? offerFor(snapshot2, status, invocation, shape, reopen) : void 0;
-  const mismatch = invocation !== void 0 && !owns ? ` The invoked skill does not own this current action; continue with the action shown or invoke its owning skill.` : "";
+  const mismatch2 = invocation !== void 0 && !owns ? ` The invoked skill does not own this current action; continue with the action shown or invoke its owning skill.` : "";
   const configChange = status.config_change;
   const configChangeNotice = configChange === void 0 ? "" : configChange.length === 1 ? " Task config changed since the last state transaction (1 field); see config_change." : ` Task config changed since the last state transaction (${configChange.length} fields); see config_change.`;
   const repositoryNotice = status.repositories === void 0 ? "" : " The live repository set is listed in repositories; it is informational and grants no review or write authority.";
@@ -41003,7 +42482,7 @@ function projectSemanticStatus(snapshot2, invocation) {
     task_id: status.task_id,
     condition: shape.condition,
     headline: shape.headline,
-    detail: `${shape.detail}${mismatch}${configChangeNotice}${repositoryNotice}${dispatchFailureNotice}`,
+    detail: `${shape.detail}${mismatch2}${configChangeNotice}${repositoryNotice}${dispatchFailureNotice}`,
     ...position2 === void 0 ? {} : { position: position2 },
     // A settled re-entry decision is close-only authority. Document write slots become visible
     // only after the separately offered revision-entry transition commits.
@@ -41021,7 +42500,7 @@ function projectSemanticStatus(snapshot2, invocation) {
 }
 
 // src/init/diagnostics.ts
-import { readFile as readFile11, stat as stat4 } from "node:fs/promises";
+import { readFile as readFile12, stat as stat4 } from "node:fs/promises";
 import { join as join12 } from "node:path";
 
 // src/dispatch/cli.ts
@@ -41045,7 +42524,7 @@ var DispatchProcessError = class extends Error {
   project_error;
   channels;
 };
-var fail15 = (error51) => {
+var fail16 = (error51) => {
   throw new DispatchProcessError(error51);
 };
 function checkedPositiveInteger(value, label) {
@@ -41073,14 +42552,14 @@ function terminateChild(child) {
   return escalation;
 }
 function classifySpawnError(adapter2, error51) {
-  if (error51.code === "ENOENT") return fail15(createProjectError("CLI_MISSING", { adapter: adapter2 }));
+  if (error51.code === "ENOENT") return fail16(createProjectError("CLI_MISSING", { adapter: adapter2 }));
   if (error51.code === "EACCES" || error51.code === "EPERM") {
-    return fail15(createProjectError("PROCESS_FAILED", { adapter: adapter2, exit_class: "not-executable" }));
+    return fail16(createProjectError("PROCESS_FAILED", { adapter: adapter2, exit_class: "not-executable" }));
   }
   if (error51.code === "E2BIG") {
-    return fail15(createProjectError("PROCESS_FAILED", { adapter: adapter2, exit_class: "argument-list-too-long" }));
+    return fail16(createProjectError("PROCESS_FAILED", { adapter: adapter2, exit_class: "argument-list-too-long" }));
   }
-  return fail15(createProjectError("IO_ERROR", { operation: "dispatch-spawn", attempt: 1 }));
+  return fail16(createProjectError("IO_ERROR", { operation: "dispatch-spawn", attempt: 1 }));
 }
 async function readBoundedFinalOutput(adapter2, path2, byteCap) {
   let metadata2;
@@ -41088,17 +42567,17 @@ async function readBoundedFinalOutput(adapter2, path2, byteCap) {
     metadata2 = await stat2(path2, { bigint: true });
   } catch (error51) {
     if (error51.code === "ENOENT") return void 0;
-    return fail15(createProjectError("IO_ERROR", { operation: "dispatch-output-stat", attempt: 1 }));
+    return fail16(createProjectError("IO_ERROR", { operation: "dispatch-output-stat", attempt: 1 }));
   }
   if (!metadata2.isFile()) {
-    return fail15(createProjectError("IO_ERROR", { operation: "dispatch-output-read", attempt: 1 }));
+    return fail16(createProjectError("IO_ERROR", { operation: "dispatch-output-read", attempt: 1 }));
   }
   if (metadata2.size > BigInt(byteCap)) {
     const byteCount = Number(metadata2.size);
     if (!Number.isSafeInteger(byteCount)) {
-      return fail15(createProjectError("IO_ERROR", { operation: "dispatch-output-stat", attempt: 1 }));
+      return fail16(createProjectError("IO_ERROR", { operation: "dispatch-output-stat", attempt: 1 }));
     }
-    return fail15(createProjectError("OUTPUT_OVERFLOW", { adapter: adapter2, byte_count: byteCount, byte_cap: byteCap }));
+    return fail16(createProjectError("OUTPUT_OVERFLOW", { adapter: adapter2, byte_count: byteCount, byte_cap: byteCap }));
   }
   let handle;
   try {
@@ -41111,14 +42590,14 @@ async function readBoundedFinalOutput(adapter2, path2, byteCap) {
       if (bytesRead === 0) break;
       byteCount += bytesRead;
       if (byteCount > byteCap) {
-        return fail15(createProjectError("OUTPUT_OVERFLOW", { adapter: adapter2, byte_count: byteCount, byte_cap: byteCap }));
+        return fail16(createProjectError("OUTPUT_OVERFLOW", { adapter: adapter2, byte_count: byteCount, byte_cap: byteCap }));
       }
       chunks.push(buffer.subarray(0, bytesRead));
     }
     return Buffer.concat(chunks, byteCount);
   } catch (error51) {
     if (error51 instanceof DispatchProcessError) throw error51;
-    return fail15(createProjectError("IO_ERROR", { operation: "dispatch-output-read", attempt: 1 }));
+    return fail16(createProjectError("IO_ERROR", { operation: "dispatch-output-read", attempt: 1 }));
   } finally {
     await handle?.close().catch(() => void 0);
   }
@@ -41128,10 +42607,10 @@ async function runDispatchChild(spec) {
   const byteCap = checkedPositiveInteger(spec.byte_cap ?? DISPATCH_OUTPUT_BYTE_CAP, "dispatch byte cap");
   const cancellationSource = spec.cancellation_source ?? "client";
   if (spec.signal.aborted) {
-    return fail15(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
+    return fail16(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
   }
   if (spec.argv.some((element) => Buffer.byteLength(element, "utf8") >= MAX_ARGV_ELEMENT_BYTES)) {
-    return fail15(createProjectError("PROCESS_FAILED", { adapter: spec.adapter, exit_class: "argument-list-too-long" }));
+    return fail16(createProjectError("PROCESS_FAILED", { adapter: spec.adapter, exit_class: "argument-list-too-long" }));
   }
   const spawnOptions = {
     cwd: spec.cwd,
@@ -41429,18 +42908,18 @@ var CliAdapterError = class extends Error {
   project_error;
   cli_version;
 };
-var fail16 = (error51, cliVersion) => {
+var fail17 = (error51, cliVersion) => {
   throw new CliAdapterError(error51, cliVersion);
 };
 function decodeJson2(bytes, adapter2, issueCode) {
-  let text3;
+  let text4;
   try {
-    text3 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    const value = JSON.parse(text3);
+    text4 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    const value = JSON.parse(text4);
     assertPlainJson(value, "CLI JSON output");
     return value;
   } catch {
-    return fail16(createProjectError("MODEL_OUTPUT_INVALID", {
+    return fail17(createProjectError("MODEL_OUTPUT_INVALID", {
       adapter: adapter2,
       attempt: 1,
       issue_code: issueCode
@@ -41457,17 +42936,17 @@ function compareVersions(left, right) {
   return 0;
 }
 function exactVersion(adapter2, output) {
-  const text3 = Buffer.from(output).toString("utf8").trim();
+  const text4 = Buffer.from(output).toString("utf8").trim();
   if (adapter2 === "claude-cli") {
-    const match = /^(\d+\.\d+\.\d+) \(Claude Code\)$/u.exec(text3);
+    const match = /^(\d+\.\d+\.\d+) \(Claude Code\)$/u.exec(text4);
     return match?.[1] ?? "unrecognized";
   }
   if (adapter2 === "codex-cli") {
-    const match = /^codex-cli (\d+\.\d+\.\d+)$/u.exec(text3);
+    const match = /^codex-cli (\d+\.\d+\.\d+)$/u.exec(text4);
     return match?.[1] ?? "unrecognized";
   }
   if (adapter2 === "antigravity-cli") {
-    const match = /^(?:(?:agy|antigravity(?:-cli)?)\s+)?(\d+\.\d+\.\d+)/u.exec(text3);
+    const match = /^(?:(?:agy|antigravity(?:-cli)?)\s+)?(\d+\.\d+\.\d+)/u.exec(text4);
     return match?.[1] ?? "unrecognized";
   }
   return "unrecognized";
@@ -41504,9 +42983,9 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
     signal,
     cancellationSource
   );
-  const version3 = exactVersion(adapter2, versionResult.stdout);
-  if (versionResult.exit_code !== 0 || version3 === "unrecognized" || compareVersions(version3, minimumVersion) < 0) {
-    return fail16(createProjectError("CLI_VERSION_UNSUPPORTED", { adapter: adapter2, version: version3 }));
+  const version4 = exactVersion(adapter2, versionResult.stdout);
+  if (versionResult.exit_code !== 0 || version4 === "unrecognized" || compareVersions(version4, minimumVersion) < 0) {
+    return fail17(createProjectError("CLI_VERSION_UNSUPPORTED", { adapter: adapter2, version: version4 }));
   }
   const authResult = await runPreflightCommand(
     adapter2,
@@ -41530,10 +43009,10 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
   } else if (adapter2 === "antigravity-cli" && authResult.exit_code === 0) {
     loggedIn = true;
   }
-  if (!loggedIn) return fail16(createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 }), version3);
+  if (!loggedIn) return fail17(createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 }), version4);
   const managedPolicyPaths = await detectManagedPolicyPaths(policyPaths);
   return Object.freeze({
-    cli_version: version3,
+    cli_version: version4,
     managed_policy_present: managedPolicyPaths.length > 0,
     managed_policy_paths: managedPolicyPaths
   });
@@ -41541,13 +43020,13 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
 function assertRoute(adapter2, route2) {
   const expectedFamily = adapter2 === "claude-cli" ? "claude" : adapter2 === "antigravity-cli" ? "gemini" : "codex";
   if (route2.adapter !== adapter2 || route2.family !== expectedFamily) {
-    fail16(createProjectError("FAMILY_MISMATCH", {
+    fail17(createProjectError("FAMILY_MISMATCH", {
       expected_family: expectedFamily,
       observed_family: route2.family
     }));
   }
   if (!safeIdV1Schema.safeParse(route2.model).success) {
-    fail16(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
+    fail17(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
   }
 }
 function exitClass(result) {
@@ -41630,7 +43109,7 @@ var claudeAdapter = Object.freeze({
     assertRoute("claude-cli", route2);
     const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "claude-cli", envelopeSubject(envelope));
     if (route2.effort === "ultra") {
-      return fail16(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
+      return fail17(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
     }
     const mcpConfigPath = join9(workspace.root, "empty-mcp.json");
     await writeFile(mcpConfigPath, '{"mcpServers":{}}\n', { encoding: "utf8", mode: 384 });
@@ -41677,7 +43156,7 @@ var claudeAdapter = Object.freeze({
   parseOutput(result) {
     const wrapper = decodeJson2(result.stdout, "claude-cli", "claude-wrapper-invalid");
     if (wrapper === null || typeof wrapper !== "object" || Array.isArray(wrapper)) {
-      return fail16(createProjectError("MODEL_OUTPUT_INVALID", {
+      return fail17(createProjectError("MODEL_OUTPUT_INVALID", {
         adapter: "claude-cli",
         attempt: 1,
         issue_code: "structured-output-missing"
@@ -41685,7 +43164,7 @@ var claudeAdapter = Object.freeze({
     }
     const descriptor = Object.getOwnPropertyDescriptor(wrapper, "structured_output");
     if (descriptor === void 0 || descriptor.enumerable !== true || !("value" in descriptor)) {
-      return fail16(createProjectError("MODEL_OUTPUT_INVALID", {
+      return fail17(createProjectError("MODEL_OUTPUT_INVALID", {
         adapter: "claude-cli",
         attempt: 1,
         issue_code: "structured-output-missing"
@@ -41695,7 +43174,7 @@ var claudeAdapter = Object.freeze({
       assertPlainJson(descriptor.value, "Claude structured output");
       return canonicalJsonBytes(descriptor.value);
     } catch {
-      return fail16(createProjectError("MODEL_OUTPUT_INVALID", {
+      return fail17(createProjectError("MODEL_OUTPUT_INVALID", {
         adapter: "claude-cli",
         attempt: 1,
         issue_code: "structured-output-invalid"
@@ -41724,7 +43203,7 @@ var codexAdapter = Object.freeze({
   async buildInvocation(envelope, route2, workspace, outputSchema) {
     assertRoute("codex-cli", route2);
     if (route2.provider !== void 0) {
-      return fail16(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
+      return fail17(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
     }
     const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "codex-cli", envelopeSubject(envelope));
     const schemaPath = join9(workspace.root, `${envelope.result_kind}.schema.json`);
@@ -41771,7 +43250,7 @@ var codexAdapter = Object.freeze({
   },
   parseOutput(result) {
     if (result.final_output === void 0) {
-      return fail16(createProjectError("MODEL_OUTPUT_INVALID", {
+      return fail17(createProjectError("MODEL_OUTPUT_INVALID", {
         adapter: "codex-cli",
         attempt: 1,
         issue_code: "final-output-missing"
@@ -41785,14 +43264,14 @@ var codexAdapter = Object.freeze({
   }
 });
 function antigravityResultEvent(stdout) {
-  let text3;
+  let text4;
   try {
-    text3 = new TextDecoder("utf-8", { fatal: true }).decode(stdout);
+    text4 = new TextDecoder("utf-8", { fatal: true }).decode(stdout);
   } catch {
     return void 0;
   }
   let wrapper;
-  for (const line of text3.split("\n")) {
+  for (const line of text4.split("\n")) {
     if (line.trim() === "") continue;
     let value;
     try {
@@ -41845,7 +43324,7 @@ var antigravityAdapter = Object.freeze({
   async buildInvocation(envelope, route2, workspace, outputSchema) {
     assertRoute("antigravity-cli", route2);
     if (route2.provider !== void 0) {
-      return fail16(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
+      return fail17(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
     }
     const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "antigravity-cli", envelopeSubject(envelope));
     const schemaPath = join9(workspace.root, `${envelope.result_kind}.schema.json`);
@@ -41884,7 +43363,7 @@ var antigravityAdapter = Object.freeze({
   parseOutput(result) {
     const wrapper = antigravityResultEvent(result.stdout);
     if (wrapper === void 0) {
-      return fail16(createProjectError("MODEL_OUTPUT_INVALID", {
+      return fail17(createProjectError("MODEL_OUTPUT_INVALID", {
         adapter: "antigravity-cli",
         attempt: 1,
         issue_code: "antigravity-wrapper-invalid"
@@ -41892,7 +43371,7 @@ var antigravityAdapter = Object.freeze({
     }
     const descriptor = Object.getOwnPropertyDescriptor(wrapper, "structured_output");
     if (descriptor === void 0 || descriptor.enumerable !== true || !("value" in descriptor)) {
-      return fail16(createProjectError("MODEL_OUTPUT_INVALID", {
+      return fail17(createProjectError("MODEL_OUTPUT_INVALID", {
         adapter: "antigravity-cli",
         attempt: 1,
         issue_code: "structured-output-missing"
@@ -41902,7 +43381,7 @@ var antigravityAdapter = Object.freeze({
       assertPlainJson(descriptor.value, "Antigravity structured output");
       return canonicalJsonBytes(descriptor.value);
     } catch {
-      return fail16(createProjectError("MODEL_OUTPUT_INVALID", {
+      return fail17(createProjectError("MODEL_OUTPUT_INVALID", {
         adapter: "antigravity-cli",
         attempt: 1,
         issue_code: "structured-output-invalid"
@@ -41926,6 +43405,17 @@ import { homedir, tmpdir } from "node:os";
 import { isAbsolute as isAbsolute4, join as join10, relative as relative5, resolve } from "node:path";
 
 // src/review/envelopes.ts
+var ReviewEnvelopeError = class extends Error {
+  project_error;
+  /** The serialized size that failed the byte cap, when that is what failed. */
+  envelope_byte_count;
+  constructor(projectError, envelopeByteCount) {
+    super(`review envelope failed: ${projectError.code}`);
+    this.name = "ReviewEnvelopeError";
+    this.project_error = projectError;
+    if (envelopeByteCount !== void 0) this.envelope_byte_count = envelopeByteCount;
+  }
+};
 var utf82 = new TextEncoder();
 
 // src/dispatch/workspace.ts
@@ -41981,7 +43471,7 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
 // src/init/registration.ts
 import { spawn as spawn2 } from "node:child_process";
 import { randomUUID as randomUUID2 } from "node:crypto";
-import { mkdir as mkdir5, open as open6, readFile as readFile10, rename as rename3, unlink as unlink3 } from "node:fs/promises";
+import { mkdir as mkdir5, open as open6, readFile as readFile11, rename as rename3, unlink as unlink3 } from "node:fs/promises";
 import { basename as basename4, dirname as dirname6, join as join11 } from "node:path";
 var CLAUDE_MCP_TIMEOUT_MS = 36e5;
 var CODEX_TOOL_TIMEOUT_SEC = 3600;
@@ -42016,15 +43506,15 @@ ${CODEX_MANAGED_BLOCK}`;
 var ANTIGRAVITY_PASTE_GUIDANCE = `Add this exact entry under "mcpServers" in ~/.gemini/config/mcp_config.json after resolving the conflicting content:
 ${ANTIGRAVITY_MANUAL_ENTRY}
 `;
-var ok18 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail17 = (issueCode) => Object.freeze({
+var ok19 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail18 = (issueCode) => Object.freeze({
   schema_version: "1",
   ok: false,
   error: createProjectError("CONFIG_INVALID", { issue_code: issueCode })
 });
 function refuse(issueCode, guidance) {
   process.stderr.write(guidance);
-  return fail17(issueCode);
+  return fail18(issueCode);
 }
 var ioFailure3 = (operation) => Object.freeze({
   schema_version: "1",
@@ -42061,7 +43551,7 @@ function runCommand(command, argv, cwd, environment) {
 }
 async function readOptional(path2) {
   try {
-    return await readFile10(path2, "utf8");
+    return await readFile11(path2, "utf8");
   } catch (error51) {
     if (error51.code === "ENOENT") return void 0;
     throw error51;
@@ -42083,26 +43573,26 @@ async function replaceHostConfig(path2, source) {
   }
 }
 function parseMcpJson(source) {
-  if (source === void 0) return ok18({ mcpServers: {} });
+  if (source === void 0) return ok19({ mcpServers: {} });
   let value;
   try {
     value = JSON.parse(source);
   } catch {
-    return fail17("mcp-json-foreign-keys");
+    return fail18("mcp-json-foreign-keys");
   }
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    return fail17("mcp-json-foreign-keys");
+    return fail18("mcp-json-foreign-keys");
   }
   const record2 = value;
   if (Object.keys(record2).some((key) => key !== "mcpServers")) {
-    return fail17("mcp-json-foreign-keys");
+    return fail18("mcp-json-foreign-keys");
   }
   const servers = record2.mcpServers;
-  if (servers === void 0) return ok18({ mcpServers: {} });
+  if (servers === void 0) return ok19({ mcpServers: {} });
   if (servers === null || typeof servers !== "object" || Array.isArray(servers)) {
-    return fail17("mcp-json-foreign-keys");
+    return fail18("mcp-json-foreign-keys");
   }
-  return ok18({ mcpServers: servers });
+  return ok19({ mcpServers: servers });
 }
 function isArchflowCommand(command) {
   return command !== void 0 && basename4(command) === "archflow-mcp";
@@ -42165,10 +43655,10 @@ async function registerClaudeProject(input) {
     } catch (error51) {
       return commandFailure("claude-cli", error51);
     }
-    const text3 = `${get.stdout}
+    const text4 = `${get.stdout}
 ${get.stderr}`;
-    const diagnostic = claudeGetDiagnostic(text3);
-    return ok18(Object.freeze({
+    const diagnostic = claudeGetDiagnostic(text4);
+    return ok19(Object.freeze({
       schema_version: "1",
       host: "claude",
       registration,
@@ -42176,7 +43666,7 @@ ${get.stderr}`;
       pending_approval: diagnostic.pending_approval,
       project_trusted: null,
       masked_by_higher_precedence: diagnostic.masked_by_higher_precedence,
-      diagnostic: get.exit_code === 0 ? text3.trim() : "Project registration written; Claude runtime approval remains to be completed."
+      diagnostic: get.exit_code === 0 ? text4.trim() : "Project registration written; Claude runtime approval remains to be completed."
     }));
   } catch {
     return ioFailure3("claude-registration");
@@ -42185,11 +43675,11 @@ ${get.stderr}`;
 function managedBlockRange(source) {
   const begin = source.indexOf(CODEX_BLOCK_BEGIN);
   const end = source.indexOf(CODEX_BLOCK_END);
-  if (begin === -1 && end === -1) return ok18(void 0);
+  if (begin === -1 && end === -1) return ok19(void 0);
   if (begin === -1 || end === -1 || end < begin || source.indexOf(CODEX_BLOCK_BEGIN, begin + 1) !== -1 || source.indexOf(CODEX_BLOCK_END, end + 1) !== -1) {
-    return fail17("codex-config-foreign");
+    return fail18("codex-config-foreign");
   }
-  return ok18({ start: begin, end: end + CODEX_BLOCK_END.length + (source[end + CODEX_BLOCK_END.length] === "\n" ? 1 : 0) });
+  return ok19({ start: begin, end: end + CODEX_BLOCK_END.length + (source[end + CODEX_BLOCK_END.length] === "\n" ? 1 : 0) });
 }
 function outsideCodexConflict(source) {
   const lines = source.split(/\r?\n/u);
@@ -42269,7 +43759,7 @@ async function registerCodexProject(input) {
     const resolved = get.exit_code === 0 ? codexGetDiagnostic(get.stdout) : void 0;
     const resolvedCommand = resolved?.command;
     const trusted = get.exit_code === 0 && resolvedCommand === "archflow-mcp" && resolved?.startup_timeout_sec === CODEX_STARTUP_TIMEOUT_SEC && resolved?.tool_timeout_sec === CODEX_TOOL_TIMEOUT_SEC;
-    return ok18(Object.freeze({
+    return ok19(Object.freeze({
       schema_version: "1",
       host: "codex",
       registration,
@@ -42334,7 +43824,7 @@ async function registerAntigravityConfig(input) {
         masked = true;
       }
     }
-    return ok18(Object.freeze({
+    return ok19(Object.freeze({
       schema_version: "1",
       host: "antigravity",
       registration,
@@ -42411,10 +43901,10 @@ async function diagnoseAdapter(adapter2, repository) {
   } catch (caught) {
     const error51 = preflightError(caught);
     const paths = await pathsPromise;
-    const version3 = caught instanceof CliAdapterError ? caught.cli_version ?? unsupportedVersion(caught.project_error) : null;
+    const version4 = caught instanceof CliAdapterError ? caught.cli_version ?? unsupportedVersion(caught.project_error) : null;
     return Object.freeze({
       adapter: adapter2,
-      version: version3,
+      version: version4,
       authenticated: error51?.code === "AUTH_UNAVAILABLE" ? false : null,
       managed_policy_present: paths.length > 0,
       managed_policy_paths: paths,
@@ -42458,7 +43948,7 @@ function codexTimeoutFinding(source) {
 }
 async function readHostConfig(path2) {
   try {
-    return await readFile11(path2, "utf8");
+    return await readFile12(path2, "utf8");
   } catch {
     return void 0;
   }
@@ -42573,7 +44063,7 @@ async function runInit(input) {
 }
 
 // src/init/legacy-upgrade.ts
-import { lstat as lstat11, readdir as readdir5, readFile as readFile14, realpath as realpath5, rm as rm4, rmdir as rmdir3 } from "node:fs/promises";
+import { lstat as lstat11, readdir as readdir5, readFile as readFile15, realpath as realpath5, rm as rm4, rmdir as rmdir3 } from "node:fs/promises";
 import { isAbsolute as isAbsolute6, join as join16, relative as relative7, sep as sep5 } from "node:path";
 
 // src/state/initialization.ts
@@ -42698,14 +44188,14 @@ function identifyTransactionRequest(call, authority, recomputedInputFingerprint)
 }
 
 // src/state/legacy-stage.ts
-import { readFile as readFile12 } from "node:fs/promises";
+import { readFile as readFile13 } from "node:fs/promises";
 import { join as join13 } from "node:path";
 function importRoot(authority, initialization) {
   return join13(authority.workspace_root, "cache", "imports", initialization.import_digest);
 }
 async function readStagedLegacyConfig(authority, initialization) {
   try {
-    const bytes = new Uint8Array(await readFile12(join13(importRoot(authority, initialization), "config.yaml")));
+    const bytes = new Uint8Array(await readFile13(join13(importRoot(authority, initialization), "config.yaml")));
     const parsed = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(bytes), "staged task config");
     const digest10 = sha256Bytes(bytes);
     if (digest10 !== initialization.config_digest) return void 0;
@@ -42716,7 +44206,7 @@ async function readStagedLegacyConfig(authority, initialization) {
 }
 async function readStagedLegacyPayload(authority, initialization, reference) {
   try {
-    const bytes = new Uint8Array(await readFile12(join13(importRoot(authority, initialization), "payload", reference.legacy_path)));
+    const bytes = new Uint8Array(await readFile13(join13(importRoot(authority, initialization), "payload", reference.legacy_path)));
     if (bytes.byteLength !== reference.byte_count || sha256Bytes(bytes) !== reference.digest) return void 0;
     return bytes;
   } catch {
@@ -42725,10 +44215,10 @@ async function readStagedLegacyPayload(authority, initialization, reference) {
 }
 
 // src/state/initialization.ts
-var ok19 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail18 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-var contract = (issue_code) => fail18(createProjectError("CONTRACT_INVALID", { issue_code }));
-var io3 = (request, operation) => fail18(createProjectError("IO_ERROR", { operation, attempt: request.authority.context.attempt }));
+var ok20 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail19 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var contract = (issue_code) => fail19(createProjectError("CONTRACT_INVALID", { issue_code }));
+var io3 = (request, operation) => fail19(createProjectError("IO_ERROR", { operation, attempt: request.authority.context.attempt }));
 function initializationFor(artifact) {
   if (artifact.artifact_kind === "task-initialization" || artifact.artifact_kind === "legacy-import-initialization") {
     return artifact;
@@ -42782,7 +44272,7 @@ function validateLegacyMapping(initialization) {
       return contract("legacy-mapping-phase-mismatch");
     }
   }
-  return ok19(void 0);
+  return ok20(void 0);
 }
 async function validateLiveInitialization(dependencies, request, initialization) {
   const taskRoot = `.archflow/tasks/${request.authority.task_id}`;
@@ -42809,7 +44299,7 @@ async function validateLiveInitialization(dependencies, request, initialization)
       return io3(request, "validate-initialization-commit");
     }
   }
-  return ok19(void 0);
+  return ok20(void 0);
 }
 function initialState(call, artifact, parsedConfig, repositorySet) {
   const initialization = initializationFor(artifact);
@@ -42837,7 +44327,7 @@ function initialState(call, artifact, parsedConfig, repositorySet) {
     approvals: [],
     waivers: []
   };
-  return ok19(withLastSeenConfig(state, parsedConfig, repositorySet));
+  return ok20(withLastSeenConfig(state, parsedConfig, repositorySet));
 }
 async function identifyStateInitialization(dependencies, request) {
   assertInternalTransactionAuthority(request.authority, { runner: dependencies.runner, environment: dependencies.environment });
@@ -42868,7 +44358,7 @@ async function identifyStateInitialization(dependencies, request) {
     if (staged !== void 0) config2 = Object.freeze({ kind: "valid", snapshot: staged });
   }
   if (config2.kind !== "valid") {
-    return config2.kind === "invalid" ? fail18(createProjectError("CONFIG_INVALID", {
+    return config2.kind === "invalid" ? fail19(createProjectError("CONFIG_INVALID", {
       issue_code: "task-config-invalid",
       ...config2.issues === void 0 ? {} : { issues: config2.issues }
     })) : io3(request, "task-config-read");
@@ -42898,7 +44388,7 @@ async function identifyStateInitialization(dependencies, request) {
   if (!fingerprint.ok) return fingerprint;
   const inputFingerprint = fingerprint.value.fingerprint;
   const identified = identifyTransactionRequest(request.call, request.authority, inputFingerprint);
-  return ok19(Object.freeze({
+  return ok20(Object.freeze({
     call: identified.call,
     input_fingerprint: inputFingerprint,
     request_digest: identified.request_digest,
@@ -42921,15 +44411,15 @@ async function installLegacyDestination(request, initialization, initializationB
       if (bytes === void 0) return contract("legacy-staged-payload-invalid");
       const prefix = `.archflow/tasks/${initialization.task_id}/`;
       const relativeDestination = entry.destination_path.slice(prefix.length);
-      const target = join14(temporary, relativeDestination);
-      await mkdir6(dirname7(target), { recursive: true });
-      await writeFile3(target, bytes, { flag: "wx", mode: 420 });
+      const target2 = join14(temporary, relativeDestination);
+      await mkdir6(dirname7(target2), { recursive: true });
+      await writeFile3(target2, bytes, { flag: "wx", mode: 420 });
     }
     await writeFile3(join14(temporary, "authority", "initialization.json"), initializationBytes, { flag: "wx", mode: 420 });
     await writeFile3(join14(temporary, "state.json"), stateBytes, { flag: "wx", mode: 420 });
     await rename4(temporary, request.authority.task_root);
     temporary = void 0;
-    return ok19(void 0);
+    return ok20(void 0);
   } catch (error51) {
     if (error51.code === "EEXIST" || error51.code === "ENOTEMPTY") {
       return contract("legacy-destination-became-occupied");
@@ -42983,16 +44473,16 @@ async function executeLocked(dependencies, request, path2) {
       if (transition.tool !== "archflow_state" || artifact2 === void 0 || transition.operation !== operationFor(artifact2) || transition.input_fingerprint !== request.call.input.input_fingerprint || transition.outcome_digest !== intentOutcomeDigest(transition.outcome)) return contract("initialization-last-transition-mismatch");
       const identified2 = identifyTransactionRequest(request.call, request.authority, transition.input_fingerprint);
       if (identified2.request_digest !== transition.request_digest) {
-        return fail18(createProjectError("INTENT_MISMATCH", {
+        return fail19(createProjectError("INTENT_MISMATCH", {
           expected_digest: transition.request_digest,
           observed_digest: identified2.request_digest
         }));
       }
       const outcome2 = validateProjectResultStructure(request.call, { schema_version: "1", ok: true, value: transition.outcome });
       if (!outcome2.ok) return outcome2;
-      return ok19(Object.freeze({ state: stateRead.document, outcome: outcome2.value, replayed: true }));
+      return ok20(Object.freeze({ state: stateRead.document, outcome: outcome2.value, replayed: true }));
     }
-    return fail18(createProjectError("STATE_CONFLICT", { expected_revision: 0, observed_revision: stateRead.document.value.revision }));
+    return fail19(createProjectError("STATE_CONFLICT", { expected_revision: 0, observed_revision: stateRead.document.value.revision }));
   }
   if (stateRead.kind !== "missing") return contract(stateRead.kind === "unreadable" ? "task-state-unreadable" : "task-state-noncanonical");
   const identification = await identifyStateInitialization(dependencies, request);
@@ -43000,7 +44490,7 @@ async function executeLocked(dependencies, request, path2) {
   const preparedState = identification.value.prepared_state;
   const inputFingerprint = identification.value.input_fingerprint;
   if (inputFingerprint !== request.call.input.input_fingerprint) {
-    return fail18(createProjectError("INPUT_FINGERPRINT_MISMATCH", {
+    return fail19(createProjectError("INPUT_FINGERPRINT_MISMATCH", {
       expected_digest: inputFingerprint,
       observed_digest: request.call.input.input_fingerprint
     }));
@@ -43053,7 +44543,7 @@ async function executeLocked(dependencies, request, path2) {
   const existing = await dependencies.read_receipt(path2);
   if (existing.kind === "canonical") {
     if (existing.document.digest !== receipt.digest) {
-      return fail18(createProjectError("INTENT_MISMATCH", { expected_digest: existing.document.digest, observed_digest: receipt.digest }));
+      return fail19(createProjectError("INTENT_MISMATCH", { expected_digest: existing.document.digest, observed_digest: receipt.digest }));
     }
   } else if (existing.kind !== "missing") {
     return existing.kind === "unreadable" ? io3(request, "intent-receipt-read") : contract("intent-receipt-noncanonical");
@@ -43069,7 +44559,7 @@ async function executeLocked(dependencies, request, path2) {
       if (!installed.ok) return installed;
       const observed2 = await dependencies.read_state(request.authority.state);
       if (observed2.kind !== "canonical" || observed2.document.digest !== final.digest) return contract("transaction-outcome-ambiguous");
-      return ok19(Object.freeze({ state: observed2.document, outcome, replayed: false }));
+      return ok20(Object.freeze({ state: observed2.document, outcome, replayed: false }));
     }
     await ensureAuthorityDirectory(request.authority);
     await ensureIntentDirectory(request.authority);
@@ -43104,7 +44594,7 @@ async function executeLocked(dependencies, request, path2) {
     if (!(error51 instanceof AtomicReplaceError)) throw error51;
     const observed2 = await dependencies.read_state(request.authority.state);
     if (observed2.kind === "canonical" && observed2.document.digest === final.digest) {
-      return ok19(Object.freeze({ state: observed2.document, outcome, replayed: false }));
+      return ok20(Object.freeze({ state: observed2.document, outcome, replayed: false }));
     }
     if (observed2.kind === "missing") return io3(request, error51.operation === "replace" ? "task-state-replace" : "intent-receipt-create");
     return contract("transaction-outcome-ambiguous");
@@ -43112,7 +44602,7 @@ async function executeLocked(dependencies, request, path2) {
   const observed = await dependencies.read_state(request.authority.state);
   if (observed.kind !== "canonical" || observed.document.digest !== final.digest) return contract("transaction-outcome-ambiguous");
   await cleanTaskWorkspace(dependencies, request.authority, observed.document.value).catch(() => void 0);
-  return ok19(Object.freeze({ state: observed.document, outcome, replayed: false }));
+  return ok20(Object.freeze({ state: observed.document, outcome, replayed: false }));
 }
 async function runStateInitialization(dependencies, request) {
   assertInternalTransactionAuthority(request.authority, { runner: dependencies.runner, environment: dependencies.environment });
@@ -43141,8 +44631,8 @@ async function runStateInitialization(dependencies, request) {
 }
 
 // src/local/call-envelope.ts
-var ok20 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail19 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var ok21 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail20 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function deepFreeze4(value) {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
     for (const nested of Object.values(value)) deepFreeze4(nested);
@@ -43165,20 +44655,20 @@ async function fingerprintFor(services2, call) {
   if (services2.state === void 0) {
     if (call.name !== "archflow_state") {
       const phase3 = call.name === "archflow_waiver" ? call.input.origin.phase_instance : services2.authority.context.phase_instance;
-      return fail19(createProjectError("STATE_MISSING", { phase_instance: phase3 }));
+      return fail20(createProjectError("STATE_MISSING", { phase_instance: phase3 }));
     }
     const identified = await identifyStateInitialization(services2.dependencies, {
       authority: services2.authority,
       call
     });
-    return identified.ok ? ok20(identified.value.input_fingerprint) : identified;
+    return identified.ok ? ok21(identified.value.input_fingerprint) : identified;
   }
   if (call.name === "archflow_gate" || call.name === "archflow_waiver") {
-    return ok20(services2.state.value.input_fingerprint);
+    return ok21(services2.state.value.input_fingerprint);
   }
   const config2 = await services2.dependencies.read_config(services2.authority.config);
   if (config2.kind !== "valid") {
-    return fail19(createProjectError("CONFIG_INVALID", { issue_code: `config-${config2.kind}` }));
+    return fail20(createProjectError("CONFIG_INVALID", { issue_code: `config-${config2.kind}` }));
   }
   const resolved = await services2.dependencies.resolve_input_fingerprint({
     runner: services2.runner,
@@ -43190,7 +44680,7 @@ async function fingerprintFor(services2, call) {
     context: services2.authority.context
   });
   if (!resolved.ok) return resolved;
-  return ok20(resolved.value.fingerprint);
+  return ok21(resolved.value.fingerprint);
 }
 async function computeCallEnvelope(services2, value) {
   assertPlainJson(value, "call envelope input");
@@ -43218,13 +44708,13 @@ async function computeCallEnvelope(services2, value) {
     request: Object.freeze({ tool: tool2, input: resolvedInput }),
     ...call.name === "archflow_state" && call.input.artifact !== void 0 ? { artifact_digest: canonicalJsonDigest(call.input.artifact) } : {}
   };
-  if (call.name !== "archflow_gate" && call.name !== "archflow_waiver") return ok20(Object.freeze(envelope));
+  if (call.name !== "archflow_gate" && call.name !== "archflow_waiver") return ok21(Object.freeze(envelope));
   const gateId = computeGateId({
     task_identity_digest: services2.authority.task_identity_digest,
     intent_id: call.input.intent_id,
     request_digest: identified.request_digest
   });
-  return ok20(Object.freeze({
+  return ok21(Object.freeze({
     ...envelope,
     gate: Object.freeze({
       gate_id: gateId,
@@ -43237,8 +44727,8 @@ async function computeCallEnvelope(services2, value) {
 
 // src/init/task-initialization.ts
 var decoder4 = new TextDecoder("utf-8", { fatal: true });
-var ok21 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail20 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var ok22 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail21 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function commitDigest(commit, digest_kind) {
   return canonicalJsonDigest({ schema_version: "1", digest_kind, commit });
 }
@@ -43262,25 +44752,25 @@ async function resolveInitializationPolicyBase(runner, commit, context2) {
   if (!constitution.ok) return constitution;
   try {
     const workflowEntry = await readCommitTreeBlob(runner, commit, PINNED_WORKFLOW_PATH);
-    if (workflowEntry === void 0) return fail20(policyBaseInvalid(commit));
+    if (workflowEntry === void 0) return fail21(policyBaseInvalid(commit));
     const workflowBytes = await readGitBlobBytes(runner, workflowEntry.oid);
     try {
       parseWorkflowYaml(decoder4.decode(workflowBytes), "pinned workflow");
     } catch {
-      return fail20(policyBaseInvalid(commit));
+      return fail21(policyBaseInvalid(commit));
     }
-    return ok21(Object.freeze({
+    return ok22(Object.freeze({
       constitution_digest: constitution.value.digest,
       workflow_digest: sha256Bytes(workflowBytes)
     }));
   } catch (error51) {
-    if (error51 instanceof GitInvocationError) return fail20(projectErrorForGitFailure(error51, runner, context2));
+    if (error51 instanceof GitInvocationError) return fail21(projectErrorForGitFailure(error51, runner, context2));
     throw error51;
   }
 }
 
 // src/init/legacy-upgrade-stage.ts
-import { readdir as readdir4, readFile as readFile13 } from "node:fs/promises";
+import { readdir as readdir4, readFile as readFile14 } from "node:fs/promises";
 import { join as join15 } from "node:path";
 var legacyUpgradeStageDescriptorV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
@@ -43310,7 +44800,7 @@ async function inspectLegacyUpgradeStage(importsRoot, taskId) {
   for (const digest10 of digests) {
     try {
       const descriptor = parseLegacyUpgradeStageDescriptor(
-        JSON.parse(await readFile13(join15(importsRoot, digest10, "stage.json"), "utf8"))
+        JSON.parse(await readFile14(join15(importsRoot, digest10, "stage.json"), "utf8"))
       );
       if (descriptor.task_id === taskId && descriptor.import_digest === digest10 && descriptor.manifest_path === expectedManifestPath(taskId, digest10)) {
         matches.push(descriptor);
@@ -43334,8 +44824,8 @@ async function inspectLegacyUpgradeStage(importsRoot, taskId) {
 
 // src/init/legacy-upgrade.ts
 var decoder5 = new TextDecoder("utf-8", { fatal: true });
-var ok22 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail21 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var ok23 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail22 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 var ordinal8 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 function ioError3(context2) {
   return createProjectError("IO_ERROR", { operation: context2.operation, attempt: context2.attempt });
@@ -43388,15 +44878,15 @@ function deriveResumePhase(mapping) {
   while (implementations.has(highestImplemented + 1)) {
     const next = highestImplemented + 1;
     if (!designs.has(next)) {
-      return fail21(createProjectError("TASK_INVALID", { task_id: mapping[0]?.destination_path.split("/")[2] ?? "legacy", issue_code: "legacy-implementation-without-design" }));
+      return fail22(createProjectError("TASK_INVALID", { task_id: mapping[0]?.destination_path.split("/")[2] ?? "legacy", issue_code: "legacy-implementation-without-design" }));
     }
     highestImplemented = next;
   }
   if ([...implementations].some((phase3) => phase3 > highestImplemented)) {
-    return fail21(createProjectError("TASK_INVALID", { task_id: mapping[0]?.destination_path.split("/")[2] ?? "legacy", issue_code: "legacy-phase-history-gap" }));
+    return fail22(createProjectError("TASK_INVALID", { task_id: mapping[0]?.destination_path.split("/")[2] ?? "legacy", issue_code: "legacy-phase-history-gap" }));
   }
   const inFlight = highestImplemented + 1;
-  return ok22(parsePhaseInstanceId(designs.has(inFlight) ? `phase-impl-${inFlight}` : `phase-design-${inFlight}`));
+  return ok23(parsePhaseInstanceId(designs.has(inFlight) ? `phase-impl-${inFlight}` : `phase-design-${inFlight}`));
 }
 async function enumerateSource(sourceRoot, excluded, context2) {
   const files = [];
@@ -43406,7 +44896,7 @@ async function enumerateSource(sourceRoot, excluded, context2) {
     try {
       entries = await readdir5(directory, { withFileTypes: true });
     } catch {
-      return fail21(ioError3(context2));
+      return fail22(ioError3(context2));
     }
     entries.sort((left, right) => ordinal8(left.name, right.name));
     for (const entry of entries) {
@@ -43422,13 +44912,13 @@ async function enumerateSource(sourceRoot, excluded, context2) {
       try {
         claim = parseRepositoryPathClaim(relativePath);
       } catch {
-        return fail21(createProjectError("PATH_ESCAPE", { task_id: context2.task_id, path_class: "repository-source" }));
+        return fail22(createProjectError("PATH_ESCAPE", { task_id: context2.task_id, path_class: "repository-source" }));
       }
       let metadata2;
       try {
         metadata2 = await lstat11(absolute);
       } catch {
-        return fail21(ioError3(context2));
+        return fail22(ioError3(context2));
       }
       if (!metadata2.isFile()) {
         skipped.push(relativePath);
@@ -43437,15 +44927,15 @@ async function enumerateSource(sourceRoot, excluded, context2) {
       const resolved = await resolveLegacySourcePath({ sourceRoot, claim, context: context2 });
       if (!resolved.ok) return resolved;
       try {
-        files.push(Object.freeze({ legacy_path: claim, bytes: new Uint8Array(await readFile14(resolved.value.absolute)) }));
+        files.push(Object.freeze({ legacy_path: claim, bytes: new Uint8Array(await readFile15(resolved.value.absolute)) }));
       } catch {
-        return fail21(ioError3(context2));
+        return fail22(ioError3(context2));
       }
     }
-    return ok22(void 0);
+    return ok23(void 0);
   };
   const walked = await walk(sourceRoot);
-  return walked.ok ? ok22(Object.freeze({ files: Object.freeze(files), skipped: Object.freeze(skipped.sort(ordinal8)) })) : walked;
+  return walked.ok ? ok23(Object.freeze({ files: Object.freeze(files), skipped: Object.freeze(skipped.sort(ordinal8)) })) : walked;
 }
 async function stageLegacyUpgrade(input) {
   const taskId = parseTaskSlug(input.task_id);
@@ -43465,28 +44955,28 @@ async function stageLegacyUpgrade(input) {
     const sourceRepository = await discoverWorktree(createGitRunner({ cwd: sourceRoot }), context2);
     if (!sourceRepository.ok) return sourceRepository;
     if (sourceRepository.value.location.worktreeRoot !== runner.location.worktreeRoot) {
-      return fail21(createProjectError("REPOSITORY_MISMATCH", {
+      return fail22(createProjectError("REPOSITORY_MISMATCH", {
         expected_digest: canonicalJsonDigest({ schema_version: "1", root: runner.location.worktreeRoot }),
         observed_digest: canonicalJsonDigest({ schema_version: "1", root: sourceRepository.value.location.worktreeRoot })
       }));
     }
     const destinationRoot = join16(runner.location.worktreeRoot, ".archflow", "tasks", taskId);
     if (isInside2(sourceRoot, destinationRoot) || isInside2(destinationRoot, sourceRoot)) {
-      return fail21(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-source-destination-overlap" }));
+      return fail22(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-source-destination-overlap" }));
     }
     if (await exists(destinationRoot)) {
-      return fail21(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-destination-in-use" }));
+      return fail22(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-destination-in-use" }));
     }
     let configBytes;
     try {
-      configBytes = new Uint8Array(await readFile14(join16(runner.location.worktreeRoot, ".archflow", "config.yaml")));
+      configBytes = new Uint8Array(await readFile15(join16(runner.location.worktreeRoot, ".archflow", "config.yaml")));
     } catch {
-      return fail21(createProjectError("CONFIG_INVALID", { issue_code: "archflow-initialization-required" }));
+      return fail22(createProjectError("CONFIG_INVALID", { issue_code: "archflow-initialization-required" }));
     }
     try {
       parseConfigYaml(decoder5.decode(configBytes), "task config");
     } catch {
-      return fail21(createProjectError("CONFIG_INVALID", { issue_code: "task-config-invalid" }));
+      return fail22(createProjectError("CONFIG_INVALID", { issue_code: "task-config-invalid" }));
     }
     const authorityResult = await createInternalTransactionAuthority({ runner, environment: environment.value, task_id: taskId, context: context2 });
     if (!authorityResult.ok) return authorityResult;
@@ -43495,14 +44985,14 @@ async function stageLegacyUpgrade(input) {
     const importCommit = parseGitOid(input.import_baseline_commit);
     const codeCommit = parseGitOid(input.code_baseline_commit);
     for (const commit of [policyCommit, importCommit, codeCommit]) {
-      if (await resolveCommit(runner, commit) !== commit) return fail21(policyBaseInvalid(commit));
+      if (await resolveCommit(runner, commit) !== commit) return fail22(policyBaseInvalid(commit));
     }
     const policy = await resolveInitializationPolicyBase(runner, policyCommit, context2);
     if (!policy.ok) return policy;
     const edit = await detectTaskLocalConstitutionEdit(runner, policyCommit, policy.value.constitution_digest, context2);
     if (!edit.ok) return edit;
     if (edit.value !== void 0) {
-      return fail21(createProjectError("POLICY_BASE_INVALID", {
+      return fail22(createProjectError("POLICY_BASE_INVALID", {
         expected_digest: commitDigest(policyCommit, "policy-base-commit"),
         observed_digest: edit.value.current_constitution_digest
       }));
@@ -43518,7 +45008,7 @@ async function stageLegacyUpgrade(input) {
     })));
     if (scan.outcome !== "clean") {
       const finding = scan.outcome === "detected" ? scan.findings[0] : void 0;
-      return fail21(createProjectError("SECRET_DETECTED", {
+      return fail22(createProjectError("SECRET_DETECTED", {
         path_class: finding?.path_class ?? "repository-source",
         detector_id: finding?.detector_id ?? "scanner-unavailable"
       }));
@@ -43530,10 +45020,10 @@ async function stageLegacyUpgrade(input) {
     })).sort((left, right) => ordinal8(left.legacy_path, right.legacy_path));
     const mapping = selected.value.files.map((file2) => mappedEntry(file2.legacy_path, taskId)).filter((entry) => entry !== void 0).sort((left, right) => ordinal8(left.destination_path, right.destination_path));
     if (mapping.some((entry, index) => index > 0 && mapping[index - 1].destination_path === entry.destination_path)) {
-      return fail21(createProjectError("PATH_INVALID", { task_id: taskId, path_class: "document" }));
+      return fail22(createProjectError("PATH_INVALID", { task_id: taskId, path_class: "document" }));
     }
     if (!mapping.some((entry) => entry.phase_instance === "prd") || !mapping.some((entry) => entry.phase_instance === "design")) {
-      return fail21(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-prd-and-architecture-required" }));
+      return fail22(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-prd-and-architecture-required" }));
     }
     const resume = deriveResumePhase(mapping);
     if (!resume.ok) return resume;
@@ -43588,23 +45078,23 @@ async function stageLegacyUpgrade(input) {
     });
     const operation = input.operation ?? "stage";
     if (operation === "stage" && input.approved_preview_digest !== void 0 && input.approved_preview_digest !== previewDigest) {
-      return fail21(createProjectError("CONTRACT_INVALID", { issue_code: "legacy-preview-digest-mismatch" }));
+      return fail22(createProjectError("CONTRACT_INVALID", { issue_code: "legacy-preview-digest-mismatch" }));
     }
     if (operation === "stage" && input.operation !== void 0 && input.approved_preview_digest === void 0) {
-      return fail21(createProjectError("CONTRACT_INVALID", { issue_code: "legacy-preview-approval-required" }));
+      return fail22(createProjectError("CONTRACT_INVALID", { issue_code: "legacy-preview-approval-required" }));
     }
     const writer = input.projection_writer ?? createProjectionWriter();
     const stagedPaths = [];
     const stagedByLegacy = /* @__PURE__ */ new Map();
     for (const file2 of selected.value.files) {
       const claim = parseWorkspacePathClaim(`cache/imports/${importDigest}/payload/${file2.legacy_path}`);
-      const target = await resolveTaskWorkspacePath({ runner, taskId, claim, expectedClass: "workspace-import", context: context2 });
-      if (!target.ok) return target;
+      const target2 = await resolveTaskWorkspacePath({ runner, taskId, claim, expectedClass: "workspace-import", context: context2 });
+      if (!target2.ok) return target2;
       if (operation === "stage") {
-        await ensureWorkspaceProjectionParent(authority, target.value.absolute);
-        await writer.replaceRegular(target.value, file2.bytes, false);
+        await ensureWorkspaceProjectionParent(authority, target2.value.absolute);
+        await writer.replaceRegular(target2.value, file2.bytes, false);
       }
-      const stagedPath = target.value.repositoryRelative;
+      const stagedPath = target2.value.repositoryRelative;
       stagedPaths.push(stagedPath);
       stagedByLegacy.set(file2.legacy_path, stagedPath);
     }
@@ -43648,7 +45138,7 @@ async function stageLegacyUpgrade(input) {
       stagedPaths.push(stageTarget.value.repositoryRelative);
     }
     stagedPaths.sort(ordinal8);
-    return ok22(Object.freeze({
+    return ok23(Object.freeze({
       initialization,
       audit_context: Object.freeze({
         source_identity_digest: sourceIdentityDigest,
@@ -43675,8 +45165,8 @@ async function stageLegacyUpgrade(input) {
       unmapped: Object.freeze(unmapped)
     }));
   } catch (error51) {
-    if (error51 instanceof GitInvocationError) return fail21(projectErrorForGitFailure(error51, runner, context2));
-    return fail21(ioError3(context2));
+    if (error51 instanceof GitInvocationError) return fail22(projectErrorForGitFailure(error51, runner, context2));
+    return fail22(ioError3(context2));
   }
 }
 async function discardLegacyUpgrade(input) {
@@ -43692,31 +45182,31 @@ async function discardLegacyUpgrade(input) {
   const root = discovered.value.location.worktreeRoot;
   const digest10 = String(input.import_digest);
   if (!/^[a-f0-9]{64}$/u.test(digest10)) {
-    return fail21(createProjectError("CONTRACT_INVALID", { issue_code: "legacy-import-digest-invalid" }));
+    return fail22(createProjectError("CONTRACT_INVALID", { issue_code: "legacy-import-digest-invalid" }));
   }
   const destination = join16(root, ".archflow", "tasks", taskId);
   if (await exists(join16(destination, "state.json"))) {
-    return fail21(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-stage-already-adopted" }));
+    return fail22(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-stage-already-adopted" }));
   }
   if (await exists(destination)) {
     const entries = await readdir5(destination);
     if (entries.some((entry) => entry !== "config.yaml")) {
-      return fail21(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-destination-not-disposable" }));
+      return fail22(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-destination-not-disposable" }));
     }
     if (entries.includes("config.yaml")) {
       const [actual, template] = await Promise.all([
-        readFile14(join16(destination, "config.yaml")),
-        readFile14(join16(root, ".archflow", "config.yaml"))
+        readFile15(join16(destination, "config.yaml")),
+        readFile15(join16(root, ".archflow", "config.yaml"))
       ]);
       if (!actual.equals(template)) {
-        return fail21(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-destination-config-modified" }));
+        return fail22(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-destination-config-modified" }));
       }
       await rm4(join16(destination, "config.yaml"));
       await rmdir3(destination).catch(() => void 0);
     }
   }
   await rm4(join16(root, ".archflow", "runtime", "tasks", taskId, "cache", "imports", digest10), { recursive: true, force: true });
-  return ok22(Object.freeze({ discarded: true }));
+  return ok23(Object.freeze({ discarded: true }));
 }
 async function adoptLegacyUpgrade(input) {
   const taskId = parseTaskSlug(input.task_id);
@@ -43739,25 +45229,25 @@ async function adoptLegacyUpgrade(input) {
       taskId
     );
     if (inspected.kind !== "current") {
-      return fail21(createProjectError("TASK_INVALID", {
+      return fail22(createProjectError("TASK_INVALID", {
         task_id: taskId,
         issue_code: inspected.kind === "restart-required" && inspected.valid_descriptor_count > 1 ? "legacy-stage-ambiguous" : "legacy-stage-missing"
       }));
     }
     const descriptor = inspected.descriptor;
-    const manifestBytes = new Uint8Array(await readFile14(
+    const manifestBytes = new Uint8Array(await readFile15(
       join16(services2.authority.workspace_root, "cache", "imports", descriptor.import_digest, "manifest.json")
     ));
     const manifest = parseCanonicalDocument(manifestBytes, "staged legacy import manifest");
     const initialization = parseLegacyImportInitialization(manifest.value);
     if (initialization.task_id !== taskId || initialization.import_digest !== descriptor.import_digest) {
-      return fail21(createProjectError("CONTRACT_INVALID", { issue_code: "legacy-stage-manifest-mismatch" }));
+      return fail22(createProjectError("CONTRACT_INVALID", { issue_code: "legacy-stage-manifest-mismatch" }));
     }
     const intentId = parsePathSafeId(`adopt-legacy-import-${descriptor.import_digest}`);
     if (services2.state !== void 0) {
       const transition = services2.state.value.last_transition;
       if (services2.state.value.revision !== 1 || transition?.intent_id !== intentId) {
-        return fail21(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-stage-already-adopted" }));
+        return fail22(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-stage-already-adopted" }));
       }
     }
     const draft = {
@@ -43779,15 +45269,15 @@ async function adoptLegacyUpgrade(input) {
     });
     if (!adopted.ok) return adopted;
     const resumePhase = initialization.resume_phase ?? descriptor.resume_phase;
-    return ok22(Object.freeze({
+    return ok23(Object.freeze({
       task_id: taskId,
       import_digest: descriptor.import_digest,
       resume_phase: resumePhase,
       replayed: adopted.value.replayed
     }));
   } catch (error51) {
-    if (error51 instanceof GitInvocationError) return fail21(projectErrorForGitFailure(error51, services2.runner, context2));
-    return fail21(ioError3(context2));
+    if (error51 instanceof GitInvocationError) return fail22(projectErrorForGitFailure(error51, services2.runner, context2));
+    return fail22(ioError3(context2));
   }
 }
 
@@ -44320,7 +45810,7 @@ function unreadableTaskAutomationStatus(taskId, unreadable) {
 
 // src/local/status-classification.ts
 import { join as join17 } from "node:path";
-var ok23 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok24 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function action2(code2, detail, human, commands, input) {
   return Object.freeze({ code: code2, detail, human_required: human, ...commands === void 0 ? {} : { commands }, ...input === void 0 ? {} : { input } });
 }
@@ -44366,8 +45856,8 @@ async function classifyWorkflowStatus(input) {
   });
   if (readability.readability === "absent") {
     const staged = await stagedUpgradeStatus(input);
-    if (staged !== void 0) return ok23(staged);
-    return ok23(Object.freeze({
+    if (staged !== void 0) return ok24(staged);
+    return ok24(Object.freeze({
       mode: "degraded",
       next_action: action2(
         "wait-for-server",
@@ -44377,7 +45867,7 @@ async function classifyWorkflowStatus(input) {
     }));
   }
   if (readability.readability === "unreadable") {
-    return ok23(Object.freeze({
+    return ok24(Object.freeze({
       mode: "repair-required",
       next_action: action2(
         "repair-durable-state",
@@ -44402,7 +45892,7 @@ async function classifyWorkflowStatus(input) {
     claude: [`/${derived.skill}`, args].filter(Boolean).join(" "),
     codex: [`$${derived.skill}`, args].filter(Boolean).join(" ")
   });
-  return ok23(Object.freeze({
+  return ok24(Object.freeze({
     mode: "normal",
     task_status: status.value,
     next_action: action2(
@@ -44413,6 +45903,3274 @@ async function classifyWorkflowStatus(input) {
       structuredClone(derived)
     )
   }));
+}
+
+// src/contracts/contexts.ts
+var authenticConnections = /* @__PURE__ */ new WeakSet();
+var authenticInvocations = /* @__PURE__ */ new WeakSet();
+var ProtocolContextError = class extends Error {
+  constructor(protocol_error) {
+    super(protocol_error.code);
+    this.protocol_error = protocol_error;
+    this.name = "ProtocolContextError";
+  }
+  protocol_error;
+};
+var id5 = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
+var text3 = external_exports.string().min(1).max(4096).regex(/\S/u);
+var version3 = external_exports.string().regex(/^[A-Za-z0-9.-]{1,64}$/u);
+var requestIdSchema = external_exports.union([external_exports.string(), external_exports.number().int().safe()]);
+var clientImplementationSchema = external_exports.object({ name: external_exports.string(), version: external_exports.string() });
+var startupSchema = external_exports.object({ connection_id: id5, startup_repository_candidate: external_exports.object({ working_directory: text3 }).strict() }).strict();
+var initializationSchema = external_exports.object({ client: clientImplementationSchema, host: external_exports.enum(["claude", "codex", "antigravity", "unknown"]), protocol_version: version3 }).strict();
+var invocationSchema = external_exports.object({ invocation_id: id5, transport_metadata: external_exports.object({ request_id: requestIdSchema, operation: external_exports.literal("tools/call") }).strict() }).strict();
+function deepFreeze5(value) {
+  if (value !== null && typeof value === "object") {
+    for (const nested of Object.values(value)) deepFreeze5(nested);
+    Object.freeze(value);
+  }
+  return value;
+}
+function copy(value) {
+  return structuredClone(value);
+}
+var connectionContextFactory = Object.freeze({ captureStartup(seed) {
+  assertPlainJson(seed, "connection startup");
+  const startup = deepFreeze5(copy(startupSchema.parse(seed)));
+  let initialized = false;
+  return Object.freeze({ initialize(candidates) {
+    if (initialized) throw new ProtocolContextError(createProtocolError("INITIALIZATION_REPEATED", { connection_id: startup.connection_id }));
+    assertPlainJson(candidates, "connection initialization");
+    const initialization = deepFreeze5(copy(initializationSchema.parse(candidates)));
+    initialized = true;
+    const connection = deepFreeze5({ connection_id: startup.connection_id, startup_repository_candidate: startup.startup_repository_candidate, initialization_candidates: initialization });
+    authenticConnections.add(connection);
+    return connection;
+  } });
+} });
+function createInvocationContext(connection, seed, signal) {
+  if (!authenticConnections.has(connection)) throw new TypeError("a branded connection context is required");
+  if (!(signal instanceof AbortSignal)) throw new TypeError("an AbortSignal is required");
+  assertPlainJson(seed, "invocation context");
+  const invocation = deepFreeze5(copy(invocationSchema.parse(seed)));
+  const context2 = Object.freeze({ invocation_id: invocation.invocation_id, connection, signal, transport_metadata: invocation.transport_metadata });
+  authenticInvocations.add(context2);
+  return context2;
+}
+
+// src/state/transaction.ts
+import { isDeepStrictEqual as isDeepStrictEqual11 } from "node:util";
+import { isAbsolute as isAbsolute7, relative as relative8, resolve as resolvePath8 } from "node:path";
+var MAX_RECEIPT_BYTES = 1024 * 1024;
+var resultInstallations = /* @__PURE__ */ new WeakMap();
+var consumedResultInstallations = /* @__PURE__ */ new WeakSet();
+function materializeResultInstallation(plan) {
+  const reference = structuredClone(ownDataField2(plan, "reference", "result installation plan"));
+  const prepared = structuredClone(ownDataField2(plan, "prepared", "result installation plan"));
+  const manifestTarget = structuredClone(ownDataField2(plan, "manifest_target", "result installation plan"));
+  const projectionPlan = structuredClone(ownDataField2(plan, "projection_plan", "result installation plan"));
+  const worktreeRoot = ownDataField2(plan, "worktree_root", "result installation plan");
+  const secondaryDescriptor = Object.getOwnPropertyDescriptor(plan, "secondary_projection_plans");
+  if (secondaryDescriptor !== void 0 && (!("value" in secondaryDescriptor) || !secondaryDescriptor.enumerable)) {
+    throw new TypeError("secondary projection plans must be an own enumerable data property");
+  }
+  const secondaryProjectionPlans = secondaryDescriptor?.value === void 0 ? void 0 : structuredClone(secondaryDescriptor.value);
+  assertPlainJson(reference, "result installation reference");
+  assertPlainJson(manifestTarget, "result installation manifest target");
+  if (typeof worktreeRoot !== "string") throw new TypeError("result installation worktree root must be a string");
+  if (reference.result_digest !== prepared.result_digest || prepared.manifest.digest !== prepared.result_digest) {
+    throw new TypeError("result installation reference does not bind the prepared snapshot");
+  }
+  if (manifestTarget.path_class !== "authority-result") {
+    throw new TypeError("result installation reference does not bind the manifest target");
+  }
+  const canonical2 = canonicalDocument(prepared.manifest.value);
+  if (canonical2.digest !== prepared.manifest.digest || !Buffer.from(canonical2.bytes).equals(Buffer.from(prepared.manifest.bytes))) {
+    throw new TypeError("prepared snapshot manifest document disagrees");
+  }
+  parseResultManifest(prepared.manifest.value);
+  if (!validateDurableSemantics({ result_manifest: prepared.manifest }).ok) {
+    throw new TypeError("prepared snapshot manifest semantics are invalid");
+  }
+  const source = prepared.manifest.value.source_artifact;
+  const durableSecondaries = source.artifact_kind === "implementation-output" ? (source.secondary_repositories ?? []).filter((section) => section.outputs.length > 0) : [];
+  if ((secondaryProjectionPlans?.length ?? 0) !== durableSecondaries.length) {
+    throw new TypeError("secondary projection plans do not match durable repository sections");
+  }
+  for (let index = 0; index < durableSecondaries.length; index += 1) {
+    const section = durableSecondaries[index];
+    const secondary = secondaryProjectionPlans[index];
+    if (secondary.repository !== section.repository || secondary.repository_identity_digest !== section.repository_identity_digest || secondary.base_commit !== section.base_commit || secondary.snapshot_digest !== section.snapshot_digest || typeof secondary.worktree_root !== "string" || secondary.projection_plan.entries.some((entry) => entry.target.path_class !== "repository-source" || !projectionTargetMatchesRepositoryRoot(secondary.worktree_root, entry))) {
+      throw new TypeError("secondary projection plan does not bind its durable repository section");
+    }
+  }
+  return Object.freeze({ plan: Object.freeze({
+    reference,
+    prepared,
+    manifest_target: manifestTarget,
+    projection_plan: projectionPlan,
+    worktree_root: worktreeRoot,
+    ...secondaryProjectionPlans === void 0 ? {} : { secondary_projection_plans: secondaryProjectionPlans }
+  }) });
+}
+function prepareResultInstallation(plan) {
+  const facts = materializeResultInstallation(plan);
+  const capability = Object.freeze({ kind: "archflow-result-installation" });
+  resultInstallations.set(capability, facts);
+  return capability;
+}
+var authenticTransactionOutcomes = /* @__PURE__ */ new WeakSet();
+var ok25 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail23 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+function issue3(code2, issue_code) {
+  return code2 === "CONTRACT_INVALID" ? fail23(createProjectError("CONTRACT_INVALID", { issue_code })) : fail23(createProjectError("CONFIG_INVALID", { issue_code }));
+}
+function stateIssue2(state, issue_code) {
+  return fail23(createProjectError("STATE_INVALID", { phase_instance: state.phase_instance, issue_code }));
+}
+function taskIssue(task_id, issue_code) {
+  return fail23(createProjectError("TASK_INVALID", { task_id, issue_code }));
+}
+function io4(authority, operation) {
+  return fail23(createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt }));
+}
+var PERMANENT_PROJECTION_ISSUES = Object.freeze({
+  ENOENT: "projection-parent-missing",
+  ENOTDIR: "projection-parent-not-directory",
+  EACCES: "projection-target-access-denied",
+  EPERM: "projection-target-access-denied"
+});
+function projectionWriteFailure(error51, authority, task_id) {
+  if (error51 instanceof ResultLayoutError && error51.stage === "verify") {
+    return taskIssue(task_id, "projection-parent-not-directory");
+  }
+  if (error51 instanceof ResultLayoutError || error51 instanceof AtomicReplaceError) {
+    const issue4 = error51.errno === void 0 ? void 0 : PERMANENT_PROJECTION_ISSUES[error51.errno];
+    return issue4 === void 0 ? io4(authority, "result-projection-apply") : taskIssue(task_id, issue4);
+  }
+  return void 0;
+}
+function mismatch(expected_digest, observed_digest) {
+  return fail23(createProjectError("INTENT_MISMATCH", { expected_digest, observed_digest }));
+}
+function fingerprintMismatch(expected_digest, observed_digest) {
+  return fail23(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest, observed_digest }));
+}
+function operationFor2(call) {
+  switch (call.name) {
+    case "archflow_state": {
+      if (call.input.operation !== void 0) {
+        return {
+          planning_restart: "planning-restart",
+          refresh_milestone_baseline: "refresh-milestone-baseline",
+          recover_milestone_authority: "recover-milestone-authority",
+          recover_approval_trigger_authority: "recover-approval-trigger-authority",
+          refresh_stale_baseline: "refresh-stale-baseline",
+          set_commit_authority: "set-commit-authority"
+        }[call.input.operation];
+      }
+      const artifact = call.input.artifact;
+      if (artifact === void 0) return "record-state-boundary";
+      switch (artifact.artifact_kind) {
+        case "task-initialization":
+          return "adopt-task-initialization";
+        case "legacy-import-initialization":
+          return "adopt-legacy-import-initialization";
+        case "document":
+          return "record-document-artifact";
+        case "implementation-output":
+          return "record-implementation-output";
+        case "triage":
+          return "record-triage";
+      }
+    }
+    case "archflow_counter_review":
+      return "counter-review";
+    case "archflow_gate":
+      return "gate";
+    case "archflow_waiver":
+      return "waiver";
+    default: {
+      const exhaustive = call;
+      throw new TypeError(`unknown transaction tool ${String(exhaustive)}`);
+    }
+  }
+}
+function requirePath(path2, expected, label) {
+  if (path2.path_class !== expected) throw new TypeError(`${label} has the wrong resolved path class`);
+}
+function ownDataField2(value, field, label) {
+  if (value === null || typeof value !== "object" && typeof value !== "function") {
+    throw new TypeError(`${label} must be an object`);
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(value, field);
+  if (descriptor === void 0 || !("value" in descriptor) || !descriptor.enumerable) {
+    throw new TypeError(`${label}.${field} must be an own enumerable data property`);
+  }
+  return descriptor.value;
+}
+function materializeDraft(value) {
+  assertPlainJson(value, "next state draft");
+  if (Object.hasOwn(value, "revision") || Object.hasOwn(value, "last_transition")) {
+    throw new TypeError("next state draft cannot carry revision or last_transition");
+  }
+  return structuredClone(value);
+}
+function assertPreserved(current, next) {
+  const isPolicyUpdate = next.policy_base_commit !== current.policy_base_commit && next.constitution_digest !== void 0;
+  if (next.task_id !== current.task_id || next.repository_identity_digest !== current.repository_identity_digest || next.initialization_digest !== current.initialization_digest || next.config_digest !== current.config_digest || next.workflow_digest !== current.workflow_digest || !isPolicyUpdate && (next.constitution_digest !== current.constitution_digest || next.policy_base_commit !== current.policy_base_commit)) {
+    throw new TypeError("next state draft changed a transaction-substrate identity or pin");
+  }
+  const gateAuthorityPreserved = isDeepStrictEqual11(next.open_gate, current.open_gate) && isDeepStrictEqual11(next.approvals, current.approvals) && isDeepStrictEqual11(next.waivers, current.waivers);
+  const restartHistoryChanged = !isDeepStrictEqual11(next.restart_history, current.restart_history);
+  if ((!gateAuthorityPreserved || restartHistoryChanged) && !isExactPlanningRestartDraft(current, next) && !isExactMilestoneRecoveryDraft(current, next)) {
+    throw new TypeError("next state draft changed gate authority");
+  }
+}
+function outcomeResult(state, outcome, replayed) {
+  const value = Object.freeze({ state, outcome, replayed });
+  authenticTransactionOutcomes.add(value);
+  return ok25(value);
+}
+async function resolveIntentTarget(dependencies, request) {
+  const claim = parseWorkspacePathClaim(`transient/intents/${request.call.input.intent_id}.json`);
+  const resolved = await resolveTaskWorkspacePath({
+    runner: dependencies.runner,
+    taskId: request.authority.task_id,
+    claim,
+    expectedClass: "workspace-intent",
+    context: request.authority.context
+  });
+  if (!resolved.ok) return resolved;
+  if (resolved.value.path_class !== "workspace-intent") throw new TypeError("intent target has the wrong resolved path class");
+  const expectedClaim = `.archflow/runtime/tasks/${request.authority.task_id}/${claim}`;
+  if (resolved.value.repositoryRelative !== expectedClaim) throw new TypeError("intent target claim mismatch");
+  const rel = relative8(request.authority.workspace_root, resolved.value.absolute);
+  if (rel === "" || rel === ".." || rel.startsWith("../") || isAbsolute7(rel)) {
+    throw new TypeError("intent target is not contained by the authenticated task root");
+  }
+  return resolved;
+}
+function stateReadFailure(result) {
+  return issue3("CONTRACT_INVALID", result.kind === "missing" ? "task-state-missing" : result.kind === "unreadable" ? "task-state-unreadable" : "task-state-noncanonical");
+}
+function receiptShellFailure(current, claimed, result, authority) {
+  if (result.kind === "unreadable") return io4(authority, "intent-receipt-read");
+  if (result.kind === "missing") {
+    return claimed ? stateIssue2(current, "intent-receipt-missing") : void 0;
+  }
+  return claimed ? stateIssue2(current, "intent-receipt-noncanonical") : issue3("CONTRACT_INVALID", "intent-receipt-noncanonical");
+}
+async function liveIdentification(dependencies, request, current) {
+  const config2 = await dependencies.read_config(request.authority.config);
+  if (config2.kind !== "valid") {
+    return config2.kind === "invalid" ? fail23(createProjectError("CONFIG_INVALID", {
+      issue_code: "task-config-invalid",
+      ...config2.issues === void 0 ? {} : { issues: config2.issues }
+    })) : io4(request.authority, "task-config-read");
+  }
+  const repositorySet = await resolveRepositorySet(
+    { runner: dependencies.runner, environment: dependencies.environment },
+    config2.snapshot.parsed,
+    request.authority.context
+  );
+  if (!repositorySet.ok) return repositorySet;
+  const continuity = validateRepositorySetContinuity(current.value, repositorySet.value);
+  if (!continuity.ok) return continuity;
+  const resolved = await dependencies.resolve_input_fingerprint({
+    runner: dependencies.runner,
+    authority: request.authority,
+    state: current,
+    call: request.call,
+    live_config: config2.snapshot,
+    expected_input_fingerprint: request.call.input.input_fingerprint,
+    context: request.authority.context
+  });
+  if (!resolved.ok) return resolved;
+  const inputFingerprint = resolved.value.fingerprint;
+  if (inputFingerprint !== request.call.input.input_fingerprint) {
+    return fingerprintMismatch(inputFingerprint, request.call.input.input_fingerprint);
+  }
+  return ok25({
+    ...identifyTransactionRequest(request.call, request.authority, inputFingerprint),
+    live_config: config2.snapshot,
+    repository_set: repositorySet.value
+  });
+}
+function identifyFromReceipt(request, receipt) {
+  if (receipt.input_fingerprint !== request.call.input.input_fingerprint) {
+    return fingerprintMismatch(receipt.input_fingerprint, request.call.input.input_fingerprint);
+  }
+  return ok25(identifyTransactionRequest(request.call, request.authority, receipt.input_fingerprint));
+}
+function validateReceiptIdentity(request, receipt) {
+  if (receipt.intent_id !== request.call.input.intent_id) {
+    return taskIssue(receipt.task_id, "intent-receipt-intent-mismatch");
+  }
+  if (receipt.tool !== request.call.name) return taskIssue(receipt.task_id, "intent-receipt-tool-mismatch");
+  if (receipt.operation !== operationFor2(request.call)) {
+    return taskIssue(receipt.task_id, "intent-receipt-operation-mismatch");
+  }
+  if (receipt.task_id !== request.authority.task_id) {
+    return taskIssue(receipt.task_id, "intent-receipt-task-mismatch");
+  }
+  if (receipt.repository_identity_digest !== request.authority.repository_identity_digest) {
+    return taskIssue(receipt.task_id, "intent-receipt-repository-mismatch");
+  }
+  if (receipt.prepared_state.input_fingerprint !== receipt.input_fingerprint) {
+    return taskIssue(receipt.task_id, "intent-receipt-input-fingerprint-mismatch");
+  }
+  return ok25(void 0);
+}
+function validateReceiptLocally(receiptDocument) {
+  const receipt = receiptDocument.value;
+  if (intentReceiptDigest(receipt) !== receiptDocument.digest) {
+    return taskIssue(receipt.task_id, "intent-receipt-self-digest-mismatch");
+  }
+  if (intentOutcomeDigest(receipt.outcome) !== receipt.outcome_digest) {
+    return taskIssue(receipt.task_id, "intent-receipt-outcome-digest-mismatch");
+  }
+  if (canonicalJsonDigest(receipt.prepared_state) !== receipt.prepared_state_digest) {
+    return taskIssue(receipt.task_id, "intent-receipt-prepared-state-digest-mismatch");
+  }
+  if (receipt.prior_revision === Number.MAX_SAFE_INTEGER || receipt.resulting_revision !== receipt.prior_revision + 1) {
+    return taskIssue(receipt.task_id, "intent-receipt-revision-not-successor");
+  }
+  if (receipt.prepared_state.revision !== receipt.resulting_revision) {
+    return taskIssue(receipt.task_id, "intent-receipt-prepared-state-revision-mismatch");
+  }
+  if (receipt.prepared_state.last_transition !== void 0) {
+    return taskIssue(receipt.task_id, "intent-receipt-prepared-state-last-transition-present");
+  }
+  return ok25(void 0);
+}
+function replayOutcome(request, receipt) {
+  try {
+    const validated = validateProjectResultStructure(request.call, {
+      schema_version: "1",
+      ok: true,
+      value: receipt.outcome
+    });
+    if (!validated.ok || validated.value.revision !== receipt.resulting_revision) {
+      return taskIssue(receipt.task_id, "intent-receipt-reference-result-mismatch");
+    }
+    return ok25(validated.value);
+  } catch {
+    return taskIssue(receipt.task_id, "intent-receipt-reference-result-mismatch");
+  }
+}
+function replayLastTransition(request, current, transition) {
+  if (transition.tool !== request.call.name || transition.operation !== operationFor2(request.call)) {
+    return taskIssue(current.value.task_id, "last-transition-operation-mismatch");
+  }
+  if (transition.input_fingerprint !== request.call.input.input_fingerprint) {
+    return fingerprintMismatch(transition.input_fingerprint, request.call.input.input_fingerprint);
+  }
+  const identified = identifyTransactionRequest(request.call, request.authority, transition.input_fingerprint);
+  if (identified.request_digest !== transition.request_digest) {
+    return mismatch(transition.request_digest, identified.request_digest);
+  }
+  if (transition.resulting_revision !== current.value.revision || transition.prior_revision + 1 !== transition.resulting_revision || intentOutcomeDigest(transition.outcome) !== transition.outcome_digest) return stateIssue2(current.value, "last-transition-invalid");
+  try {
+    const validated = validateProjectResultStructure(request.call, {
+      schema_version: "1",
+      ok: true,
+      value: transition.outcome
+    });
+    if (!validated.ok || validated.value.revision !== transition.resulting_revision) {
+      return stateIssue2(current.value, "last-transition-result-mismatch");
+    }
+    return outcomeResult(current, validated.value, true);
+  } catch {
+    return stateIssue2(current.value, "last-transition-result-mismatch");
+  }
+}
+function lastTransition(receipt) {
+  return {
+    schema_version: "1",
+    tool: receipt.tool,
+    operation: receipt.operation,
+    intent_id: receipt.intent_id,
+    request_digest: receipt.request_digest,
+    input_fingerprint: receipt.input_fingerprint,
+    result_id: receipt.result_id,
+    outcome: receipt.outcome,
+    outcome_digest: receipt.outcome_digest,
+    prior_revision: receipt.prior_revision,
+    resulting_revision: receipt.resulting_revision
+  };
+}
+function committedState(receiptDocument) {
+  const receipt = receiptDocument.value;
+  return canonicalDocument({ ...receipt.prepared_state, last_transition: lastTransition(receipt) });
+}
+function validatePreparedAndCommitted(current, receipt, final) {
+  const prepared = validateDurableSemantics(createPreparedIntentSubject(current, receipt));
+  if (!prepared.ok) return prepared;
+  return validateDurableSemantics(createCommittedIntentSubject(final, receipt));
+}
+function consumeInstallationCapability(value, slot) {
+  const capability = ownDataField2(value, slot, "prepared transaction");
+  if (capability === null || typeof capability !== "object") throw new TypeError(`${slot} capability is invalid`);
+  const facts = resultInstallations.get(capability);
+  if (facts === void 0 || consumedResultInstallations.has(capability)) {
+    throw new TypeError(`${slot} capability is unauthenticated or already consumed`);
+  }
+  consumedResultInstallations.add(capability);
+  return facts;
+}
+function materializePlan(value) {
+  if (value === null || typeof value !== "object") throw new TypeError("prepared transaction must be an object");
+  const hasInstallation = Object.hasOwn(value, "result_installation");
+  const hasConstitution = Object.hasOwn(value, "constitution_installation");
+  if (hasConstitution && !hasInstallation) {
+    throw new TypeError("a constitution installation requires a primary result installation");
+  }
+  const expected = ["expectation", "next_state", "result"];
+  if (hasConstitution) expected.push("constitution_installation");
+  if (hasInstallation) expected.push("result_installation");
+  expected.sort();
+  const keys = Reflect.ownKeys(value);
+  if (keys.some((key) => typeof key !== "string") || !isDeepStrictEqual11(keys.sort(), expected)) {
+    throw new TypeError("prepared transaction has unexpected or missing slots");
+  }
+  const expectation = ownDataField2(value, "expectation", "prepared transaction");
+  const result = ownDataField2(value, "result", "prepared transaction");
+  const nextState = materializeDraft(ownDataField2(value, "next_state", "prepared transaction"));
+  if (!hasInstallation) return { expectation, result, next_state: nextState };
+  const facts = consumeInstallationCapability(value, "result_installation");
+  if (!hasConstitution) return { expectation, result, next_state: nextState, result_installation: facts };
+  const constitutionFacts = consumeInstallationCapability(value, "constitution_installation");
+  return {
+    expectation,
+    result,
+    next_state: nextState,
+    result_installation: facts,
+    constitution_installation: constitutionFacts
+  };
+}
+function expectedInstallationSource(call, source) {
+  if (call.name === "archflow_state") {
+    const step = call.input.step;
+    const matches = step === "produce" && (source.artifact_kind === "document" || source.artifact_kind === "implementation-output") || step === "triage" && source.artifact_kind === "triage";
+    if (!matches) throw new TypeError("result source kind is not legal for the archflow_state step");
+    if (source.artifact_kind === "triage") {
+      if (call.input.artifact === void 0) {
+        throw new TypeError("evidence result installation requires an archflow_state artifact");
+      }
+      const { disposition_ledger: _ledger, ...preparedEvidence } = source.evidence;
+      if (canonicalJsonDigest(call.input.artifact) !== canonicalJsonDigest({ ...source, evidence: preparedEvidence })) {
+        throw new TypeError("evidence result installation source does not match the archflow_state artifact");
+      }
+    }
+    return step;
+  }
+  if (call.name === "archflow_counter_review" && source.artifact_kind === "review-evidence" && source.evidence.role === "counter-review" && source.evidence.step === "counter_review") return "counter_review";
+  throw new TypeError("result installation tool and source kind do not match");
+}
+function targetIsInside(root, target2) {
+  const rel = relative8(root, target2.absolute);
+  return rel !== "" && rel !== ".." && !rel.startsWith("../") && !isAbsolute7(rel);
+}
+function projectionTargetMatchesRepositoryRoot(root, entry) {
+  return entry.path === entry.target.repositoryRelative && !isRepositoryControlPath(entry.path) && entry.target.absolute === resolvePath8(root, entry.path) && targetIsInside(root, entry.target);
+}
+function secondaryProjectionPlansMatchRepositorySet(plans, repositorySet) {
+  return (plans ?? []).every((secondary) => {
+    const member = repositorySet.members.find((candidate) => candidate.name === secondary.repository);
+    if (member === void 0 || member.mode !== "writable" || member.identity.digest !== secondary.repository_identity_digest) return false;
+    const authenticatedRoot = member.binding.runner.location.worktreeRoot;
+    return secondary.worktree_root === authenticatedRoot && secondary.projection_plan.entries.every((entry) => projectionTargetMatchesRepositoryRoot(authenticatedRoot, entry));
+  });
+}
+function resultPayloadTargetIsContained(taskId, resultDigest, workspaceRoot, payload) {
+  const root = `.archflow/runtime/tasks/${taskId}/cache/results/${resultDigest}/` + (payload.repository === void 0 ? "payload/" : `repositories/${payload.repository}/payload/`);
+  return payload.target.repositoryRelative === `${root}${payload.path}` && targetIsInside(workspaceRoot, payload.target);
+}
+function resultProjectionTargetIsContained(artifactKind, taskRoot, worktreeRoot, target2) {
+  if (artifactKind === "implementation-output" && isRepositoryControlPath(target2.repositoryRelative)) {
+    return false;
+  }
+  return target2.absolute === resolvePath8(worktreeRoot, target2.repositoryRelative) && targetIsInside(
+    artifactKind === "implementation-output" ? worktreeRoot : taskRoot,
+    target2
+  );
+}
+function validateInstallationFacts(request, current, identified, nextState, facts, expectedStep, authenticatedWorktreeRoot) {
+  const manifest = facts.prepared.manifest.value;
+  const reference = facts.reference;
+  const nextReference = nextState.authoritative_results.find((entry) => entry.phase_instance === reference.phase_instance && entry.step === reference.step);
+  if (!isDeepStrictEqual11(nextReference, reference)) {
+    throw new TypeError("result installation reference does not match the prepared transaction");
+  }
+  if (reference.input_fingerprint !== identified.input_fingerprint) {
+    return fingerprintMismatch(identified.input_fingerprint, reference.input_fingerprint);
+  }
+  if (manifest.task_id !== request.authority.task_id || manifest.task_id !== current.value.task_id) return taskIssue(request.authority.task_id, "result-installation-task-mismatch");
+  if (manifest.repository_identity_digest !== request.authority.repository_identity_digest || manifest.repository_identity_digest !== current.value.repository_identity_digest) return stateIssue2(current.value, "result-installation-repository-mismatch");
+  if (manifest.phase_instance !== nextState.phase_instance || manifest.step !== expectedStep || manifest.input_fingerprint !== identified.input_fingerprint) return stateIssue2(current.value, "result-installation-state-mismatch");
+  if (manifest.source_artifact.artifact_kind === "implementation-output") {
+    const sections = [
+      {
+        outputs: manifest.source_artifact.outputs,
+        restore_targets: manifest.source_artifact.restore_targets,
+        declared_inputs: []
+      },
+      ...manifest.source_artifact.secondary_repositories ?? []
+    ];
+    const claimedPaths = sections.flatMap((section) => [
+      ...section.outputs.flatMap((output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]),
+      ...section.restore_targets,
+      ...section.declared_inputs.map((input) => input.path)
+    ]);
+    claimedPaths.push(
+      ...manifest.projections.map((projection) => projection.path),
+      ...(manifest.secondary_projections ?? []).flatMap((section) => section.projections.map((projection) => projection.path))
+    );
+    if (claimedPaths.some(isRepositoryControlPath)) {
+      return issue3("CONTRACT_INVALID", "result-installation-repository-control-path");
+    }
+  }
+  const expectedManifestPath2 = `.archflow/tasks/${request.authority.task_id}/authority/results/${facts.prepared.result_digest}.json`;
+  if (facts.worktree_root !== authenticatedWorktreeRoot || facts.manifest_target.repositoryRelative !== expectedManifestPath2 || !targetIsInside(request.authority.task_root, facts.manifest_target)) return issue3("CONTRACT_INVALID", "result-installation-target-mismatch");
+  if (facts.prepared.payloads.some((payload) => !resultPayloadTargetIsContained(
+    request.authority.task_id,
+    facts.prepared.result_digest,
+    request.authority.workspace_root,
+    payload
+  ))) return issue3("CONTRACT_INVALID", "result-installation-payload-target-mismatch");
+  const outputs = new Map(manifest.outputs.map((output) => [output.path, output.path_class]));
+  const evidenceProjection = manifest.source_artifact.artifact_kind === "review-evidence" || manifest.source_artifact.artifact_kind === "triage" || manifest.source_artifact.artifact_kind === "adjudication-evidence";
+  if (outputs.size !== manifest.outputs.length || facts.projection_plan.entries.some((entry) => (evidenceProjection ? entry.target.path_class !== "workspace-review" : outputs.get(entry.path) !== entry.target.path_class) || !projectionTargetMatchesRepositoryRoot(authenticatedWorktreeRoot, entry) || ("workspaceRelative" in entry.target ? !targetIsInside(request.authority.workspace_root, entry.target) : !resultProjectionTargetIsContained(
+    manifest.source_artifact.artifact_kind,
+    request.authority.task_root,
+    authenticatedWorktreeRoot,
+    entry.target
+  )))) return issue3("CONTRACT_INVALID", "result-installation-projection-target-mismatch");
+  return ok25(void 0);
+}
+function validateResultInstallationBinding(request, current, identified, plan, authenticatedWorktreeRoot, repositorySet) {
+  const installation = plan.result_installation;
+  if (installation === void 0) {
+    if (plan.constitution_installation !== void 0) {
+      throw new TypeError("a constitution installation requires a primary result installation");
+    }
+    return ok25(void 0);
+  }
+  const facts = installation.plan;
+  const expectedStep = expectedInstallationSource(request.call, facts.prepared.manifest.value.source_artifact);
+  if (plan.next_state.status !== "succeeded" || plan.next_state.step !== expectedStep) {
+    throw new TypeError("result installation is permitted only at its successful evidence boundary");
+  }
+  if (facts.reference.result_id !== plan.expectation.result_id) {
+    throw new TypeError("result installation reference does not match the prepared transaction");
+  }
+  const primary = validateInstallationFacts(
+    request,
+    current,
+    identified,
+    plan.next_state,
+    facts,
+    expectedStep,
+    authenticatedWorktreeRoot
+  );
+  if (!primary.ok) return primary;
+  if (!secondaryProjectionPlansMatchRepositorySet(facts.secondary_projection_plans, repositorySet)) {
+    return issue3("CONTRACT_INVALID", "result-installation-secondary-root-mismatch");
+  }
+  const constitution = plan.constitution_installation;
+  if (constitution === void 0) return ok25(void 0);
+  const constitutionFacts = constitution.plan;
+  if (request.call.name !== "archflow_counter_review" || expectedStep !== "counter_review" || constitutionFacts.prepared.manifest.value.source_artifact.artifact_kind !== "adjudication-evidence" || constitutionFacts.reference.step !== "adjudicate") {
+    throw new TypeError("constitution installation is permitted only inside a counter-review transaction");
+  }
+  return validateInstallationFacts(
+    request,
+    current,
+    identified,
+    plan.next_state,
+    constitutionFacts,
+    "adjudicate",
+    authenticatedWorktreeRoot
+  );
+}
+function buildPlan(request, current, identified, preparedValue, authenticatedWorktreeRoot) {
+  const resultingRevision = parseSafeInteger(current.value.revision + 1);
+  const materialized = materializePlan(preparedValue);
+  const correlated = correlateProjectResult(identified.call, materialized.expectation, materialized.result);
+  if (!correlated.ok) return correlated;
+  if (materialized.expectation.resulting_revision !== resultingRevision || correlated.value.revision !== resultingRevision) {
+    throw new TypeError("prepared transaction revision is not the immediate successor");
+  }
+  if (materialized.next_state.input_fingerprint !== identified.input_fingerprint) {
+    return fingerprintMismatch(identified.input_fingerprint, materialized.next_state.input_fingerprint);
+  }
+  assertPreserved(current.value, materialized.next_state);
+  const plan = {
+    ...materialized,
+    next_state: withLastSeenConfig(
+      materialized.next_state,
+      identified.live_config.parsed,
+      identified.repository_set
+    )
+  };
+  const installation = validateResultInstallationBinding(
+    request,
+    current,
+    identified,
+    plan,
+    authenticatedWorktreeRoot,
+    identified.repository_set
+  );
+  if (!installation.ok) return installation;
+  const preparedState = { ...plan.next_state, revision: resultingRevision };
+  const outcome = structuredClone(correlated.value);
+  const receiptValue = parseIntentReceipt({
+    schema_version: "1",
+    intent_id: request.call.input.intent_id,
+    task_id: request.authority.task_id,
+    repository_identity_digest: request.authority.repository_identity_digest,
+    tool: request.call.name,
+    operation: operationFor2(request.call),
+    request_digest: identified.request_digest,
+    input_fingerprint: identified.input_fingerprint,
+    prior_revision: current.value.revision,
+    resulting_revision: resultingRevision,
+    result_id: plan.expectation.result_id,
+    outcome_digest: intentOutcomeDigest(outcome),
+    outcome,
+    prepared_state_digest: canonicalJsonDigest(preparedState),
+    prepared_state: preparedState
+  });
+  const receipt = canonicalDocument(receiptValue);
+  if (receipt.bytes.byteLength > MAX_RECEIPT_BYTES) throw new TypeError("intent receipt exceeds the 1 MiB limit");
+  const final = committedState(receipt);
+  const semantics = validatePreparedAndCommitted(current, receipt, final);
+  if (!semantics.ok) return semantics;
+  return ok25(Object.freeze({
+    receipt,
+    final,
+    outcome,
+    ...plan.result_installation === void 0 ? {} : { result_installation: plan.result_installation },
+    ...plan.constitution_installation === void 0 ? {} : { constitution_installation: plan.constitution_installation }
+  }));
+}
+async function authenticateCommitted(request, current, receipt) {
+  const semantics = validateDurableSemantics(createCommittedIntentSubject(current, receipt));
+  if (!semantics.ok) return semantics;
+  const identified = identifyFromReceipt(request, receipt.value);
+  if (!identified.ok) return identified;
+  if (identified.value.request_digest !== receipt.value.request_digest) {
+    return mismatch(receipt.value.request_digest, identified.value.request_digest);
+  }
+  const outcome = replayOutcome(request, receipt.value);
+  if (!outcome.ok) return outcome;
+  return outcomeResult(current, outcome.value, true);
+}
+async function arbitrate(dependencies, request, intentPath, predecessor, plan, operation, unchangedFailure) {
+  const stateRead = await dependencies.read_state(request.authority.state);
+  if (stateRead.kind === "canonical") {
+    if (stateRead.document.digest === plan.final.digest) {
+      const committed2 = validateDurableSemantics({ state: stateRead.document });
+      if (!committed2.ok) return committed2;
+      await cleanupCommittedWorkspace(dependencies, request.authority, stateRead.document.value);
+      return outcomeResult(stateRead.document, plan.outcome, false);
+    }
+    if (stateRead.document.digest === predecessor.digest) {
+      return unchangedFailure ?? io4(request.authority, operation);
+    }
+    return fail23(createProjectError("RECONCILIATION_REQUIRED", {
+      recorded_digest: plan.final.digest,
+      observed_digest: stateRead.document.digest
+    }));
+  }
+  if (stateRead.kind === "missing") return issue3("CONTRACT_INVALID", "transaction-outcome-ambiguous");
+  return stateIssue2(predecessor.value, "transaction-outcome-ambiguous");
+}
+function copiedResultBytes(prepared) {
+  const payloads = new Map(prepared.payloads.map((payload) => [repositoryPathKey(payload.repository, payload.path), payload]));
+  if (payloads.size !== prepared.payloads.length) throw new TypeError("prepared snapshot has duplicate payload paths");
+  let bytes = 0;
+  const sections = [
+    { repository: void 0, outputs: prepared.manifest.value.outputs },
+    ...prepared.manifest.value.source_artifact.artifact_kind === "implementation-output" ? (prepared.manifest.value.source_artifact.secondary_repositories ?? []).map((section) => ({ repository: section.repository, outputs: section.outputs })) : []
+  ];
+  for (const section of sections) for (const output of section.outputs) {
+    if (output.storage !== "raw-payload") continue;
+    const payloadKey = repositoryPathKey(section.repository, output.path);
+    const payload = payloads.get(payloadKey);
+    if (payload === void 0 || payload.target.path_class !== "workspace-result-payload" || payload.bytes.byteLength !== output.payload_bytes || sha256Bytes(payload.bytes) !== output.payload_digest) throw new TypeError("prepared snapshot payload facts disagree");
+    bytes += payload.bytes.byteLength;
+    payloads.delete(payloadKey);
+  }
+  const source = prepared.manifest.value.source_artifact;
+  const accountedBytes = prepared.manifest.value.accounting.result_bytes + (source.artifact_kind === "implementation-output" ? (source.secondary_repositories ?? []).reduce((sum, section) => sum + section.accounting.result_bytes, 0) : 0);
+  if (payloads.size !== 0 || bytes !== accountedBytes) {
+    throw new TypeError("prepared snapshot accounting disagrees");
+  }
+  return bytes;
+}
+async function installResultFacts(dependencies, authority, current, facts, replay, repositorySet) {
+  if (dependencies.read_retained_task_bytes === void 0 || dependencies.projection_writer === void 0) {
+    return stateIssue2(current.value, "result-installation-unavailable");
+  }
+  if (facts.plan.worktree_root !== dependencies.runner.location.worktreeRoot) {
+    throw new TypeError("result installation worktree root is not the authenticated repository root");
+  }
+  if ((facts.plan.secondary_projection_plans?.length ?? 0) !== 0 && (repositorySet === void 0 || !secondaryProjectionPlansMatchRepositorySet(facts.plan.secondary_projection_plans, repositorySet))) {
+    return fail23(createProjectError("CONTRACT_INVALID", { issue_code: "result-installation-secondary-root-mismatch" }));
+  }
+  const resultBytes = copiedResultBytes(facts.plan.prepared);
+  const retainedBytes = parseSafeInteger(
+    await dependencies.read_retained_task_bytes(replay ? facts.plan.reference : void 0)
+  );
+  if (resultBytes > RESULT_BYTE_CAP2) {
+    return fail23(createProjectError("SNAPSHOT_LIMIT", {
+      limit_scope: "result",
+      offending_paths: facts.plan.prepared.payloads.map((item) => item.path).sort(),
+      current_bytes: resultBytes,
+      byte_cap: RESULT_BYTE_CAP2
+    }));
+  }
+  const taskBytes = retainedBytes + resultBytes;
+  if (taskBytes > TASK_BYTE_CAP2) {
+    return fail23(createProjectError("SNAPSHOT_LIMIT", {
+      limit_scope: "task",
+      offending_paths: facts.plan.prepared.payloads.map((item) => item.path).sort(),
+      current_bytes: taskBytes,
+      byte_cap: TASK_BYTE_CAP2
+    }));
+  }
+  if (!replay && facts.plan.prepared.manifest.value.accounting.task_bytes !== taskBytes) {
+    throw new TypeError("prepared snapshot creation-time accounting is stale");
+  }
+  const creationRetainedBytes = replay ? parseSafeInteger(facts.plan.prepared.manifest.value.accounting.task_bytes - resultBytes) : retainedBytes;
+  const revalidated = prepareSnapshot({
+    manifest: facts.plan.prepared.manifest.value,
+    payloads: facts.plan.prepared.payloads,
+    retained_task_bytes: creationRetainedBytes,
+    validate_manifest: parseResultManifest
+  });
+  if (!revalidated.ok) return revalidated;
+  try {
+    await ensureResultDirectory(authority, revalidated.value.result_digest);
+    for (const payload of revalidated.value.payloads) {
+      if (payload.target.path_class !== "workspace-result-payload") {
+        throw new TypeError("result payload target has the wrong storage class");
+      }
+      if (payload.repository === void 0) {
+        await ensurePayloadParent(authority, revalidated.value.result_digest, payload.target.absolute);
+      } else {
+        await ensureWorkspaceProjectionParent(authority, payload.target.absolute);
+      }
+    }
+  } catch {
+    return fail23(createProjectError("SNAPSHOT_INVALID", {
+      snapshot_digest: revalidated.value.manifest.value.snapshot_digest,
+      issue_code: "immutable-install-disagreement"
+    }));
+  }
+  const installed = await installSnapshot(
+    dependencies.atomic,
+    revalidated.value,
+    facts.plan.manifest_target,
+    facts.plan.worktree_root
+  );
+  if (!installed.ok) return installed;
+  let projected;
+  try {
+    for (const entry of facts.plan.projection_plan.entries) {
+      if ("workspaceRelative" in entry.target) {
+        await ensureWorkspaceProjectionParent(authority, entry.target.absolute);
+      } else {
+        await ensureTaskProjectionParent(authority, entry.target.absolute);
+      }
+    }
+    projected = await applyRepositoryProjectionPlans(dependencies.projection_writer, [
+      { repository: "primary", plan: facts.plan.projection_plan },
+      ...(facts.plan.secondary_projection_plans ?? []).map((entry) => ({
+        repository: entry.repository,
+        plan: entry.projection_plan
+      }))
+    ]);
+  } catch (error51) {
+    const classified = projectionWriteFailure(error51, authority, current.value.task_id);
+    if (classified === void 0) throw error51;
+    return classified;
+  }
+  if (projected.outcome !== "applied") {
+    return fail23(createProjectError("SNAPSHOT_INVALID", {
+      snapshot_digest: facts.plan.prepared.manifest.value.snapshot_digest,
+      issue_code: `projection-${projected.outcome}`,
+      repository_name: projected.repository
+    }));
+  }
+  return ok25(void 0);
+}
+async function cleanupCommittedWorkspace(dependencies, authority, committed2) {
+  try {
+    const restart = (committed2.restart_history ?? []).find((record2) => record2.restarted_at_revision === committed2.revision);
+    if (restart !== void 0) {
+      await removeSupersededPhaseDocuments(dependencies, authority, restart.target_phase_instance);
+    }
+    await cleanTaskWorkspace(dependencies, authority, committed2);
+  } catch {
+  }
+}
+async function installPlan(dependencies, request, intentPath, current, plan, receiptAlreadyExists, repositorySet) {
+  const resumesResult = plan.receipt.value.operation === "record-document-artifact" || plan.receipt.value.operation === "record-implementation-output" || plan.receipt.value.operation === "record-triage" || plan.receipt.value.operation === "counter-review";
+  if (receiptAlreadyExists && resumesResult) {
+    const references = plan.final.value.authoritative_results.filter((entry) => entry.result_id === plan.receipt.value.result_id || plan.receipt.value.operation === "counter-review" && entry.step === "adjudicate" && entry.phase_instance === plan.final.value.phase_instance && entry.input_fingerprint === plan.receipt.value.input_fingerprint);
+    for (const reference of references) {
+      if (dependencies.load_retained_result === void 0) return stateIssue2(current.value, "result-resume-unavailable");
+      const loaded = await dependencies.load_retained_result(reference);
+      if (!loaded.ok) return loaded;
+      const resumed = await installResultFacts(
+        dependencies,
+        request.authority,
+        current,
+        materializeResultInstallation({ reference, ...loaded.value }),
+        true,
+        repositorySet
+      );
+      if (!resumed.ok) return resumed;
+    }
+  } else {
+    if (plan.result_installation !== void 0) {
+      const installed = await installResultFacts(dependencies, request.authority, current, plan.result_installation, false, repositorySet);
+      if (!installed.ok) return installed;
+    }
+    if (plan.constitution_installation !== void 0) {
+      const installed = await installResultFacts(dependencies, request.authority, current, plan.constitution_installation, false, repositorySet);
+      if (!installed.ok) return installed;
+    }
+  }
+  try {
+    await ensureIntentDirectory(request.authority);
+  } catch (error51) {
+    if (error51 instanceof IntentLayoutError) return io4(request.authority, "intent-receipt-create");
+    throw error51;
+  }
+  if (!receiptAlreadyExists) {
+    try {
+      const created = await dependencies.atomic.createExclusive(intentPath, plan.receipt.bytes);
+      if (created === "exists") {
+        const collision = await dependencies.read_receipt(intentPath);
+        if (collision.kind !== "canonical") {
+          if (collision.kind === "unreadable") return io4(request.authority, "intent-receipt-read");
+          return issue3("CONTRACT_INVALID", collision.kind === "missing" ? "intent-receipt-missing" : "intent-receipt-noncanonical");
+        }
+        if (collision.document.digest !== plan.receipt.digest) {
+          return handleExisting(dependencies, request, intentPath, current, collision.document, () => void 0);
+        }
+      }
+    } catch (error51) {
+      if (!(error51 instanceof AtomicReplaceError)) throw error51;
+      if (error51.target_may_have_changed) {
+        return arbitrate(dependencies, request, intentPath, current, plan, "intent-receipt-create");
+      }
+      return io4(request.authority, "intent-receipt-create");
+    }
+  }
+  try {
+    await dependencies.atomic.replace(request.authority.state, plan.final.bytes);
+  } catch (error51) {
+    if (!(error51 instanceof AtomicReplaceError)) throw error51;
+    if (error51.target_may_have_changed) {
+      return arbitrate(dependencies, request, intentPath, current, plan, "task-state-replace");
+    }
+    return io4(request.authority, "task-state-replace");
+  }
+  const observed = await dependencies.read_state(request.authority.state);
+  if (observed.kind !== "canonical") {
+    return observed.kind === "missing" ? issue3("CONTRACT_INVALID", "transaction-outcome-ambiguous") : stateIssue2(current.value, "transaction-outcome-ambiguous");
+  }
+  const committed2 = validateDurableSemantics(createCommittedIntentSubject(observed.document, plan.receipt));
+  if (!committed2.ok) return committed2;
+  await cleanupCommittedWorkspace(dependencies, request.authority, observed.document.value);
+  return outcomeResult(observed.document, plan.outcome, false);
+}
+async function handleExisting(dependencies, request, intentPath, current, receipt, onPlan) {
+  const local = validateReceiptLocally(receipt);
+  if (!local.ok) return local;
+  const identity = validateReceiptIdentity(request, receipt.value);
+  if (!identity.ok) return identity;
+  const claimed = current.value.last_transition?.intent_id === request.call.input.intent_id;
+  if (claimed) return authenticateCommitted(request, current, receipt);
+  if (receipt.value.prior_revision > current.value.revision) {
+    return taskIssue(receipt.value.task_id, "intent-receipt-future-revision");
+  }
+  const identified = receipt.value.resulting_revision <= current.value.revision ? identifyFromReceipt(request, receipt.value) : await liveIdentification(dependencies, request, current);
+  if (!identified.ok) return identified;
+  if (identified.value.request_digest !== receipt.value.request_digest) {
+    return mismatch(receipt.value.request_digest, identified.value.request_digest);
+  }
+  if (receipt.value.resulting_revision <= current.value.revision) {
+    return fail23(createProjectError("INTENT_NOT_CURRENT", {
+      intent_id: receipt.value.intent_id,
+      receipt_revision: receipt.value.resulting_revision,
+      current_revision: current.value.revision
+    }));
+  }
+  const final = committedState(receipt);
+  const semantics = validatePreparedAndCommitted(current, receipt, final);
+  if (!semantics.ok) return semantics;
+  const outcome = replayOutcome(request, receipt.value);
+  if (!outcome.ok) return outcome;
+  const plan = Object.freeze({ receipt, final, outcome: outcome.value });
+  onPlan(plan);
+  return installPlan(dependencies, request, intentPath, current, plan, true, identified.value.repository_set);
+}
+async function executeLocked2(dependencies, request, intentPath, prepare, onPlan) {
+  const stateRead = await dependencies.read_state(request.authority.state);
+  if (stateRead.kind !== "canonical") return stateReadFailure(stateRead);
+  const current = stateRead.document;
+  const stateSemantics = validateDurableSemantics({ state: current });
+  if (!stateSemantics.ok) return stateSemantics;
+  const repository = verifyRepositoryIdentity(current.value.repository_identity_digest, request.authority.repository_identity);
+  if (!repository.ok) return repository;
+  const last = current.value.last_transition;
+  if (last?.intent_id === request.call.input.intent_id) {
+    if (request.call.input.expected_revision !== current.value.revision && request.call.input.expected_revision !== last.prior_revision) {
+      return fail23(createProjectError("STATE_CONFLICT", {
+        expected_revision: request.call.input.expected_revision,
+        observed_revision: current.value.revision
+      }));
+    }
+    return replayLastTransition(request, current, last);
+  }
+  if (request.call.input.expected_revision !== current.value.revision) {
+    return fail23(createProjectError("STATE_CONFLICT", {
+      expected_revision: request.call.input.expected_revision,
+      observed_revision: current.value.revision
+    }));
+  }
+  const receiptRead = await dependencies.read_receipt(intentPath);
+  if (receiptRead.kind === "canonical") {
+    return handleExisting(dependencies, request, intentPath, current, receiptRead.document, (plan2) => onPlan(current, plan2));
+  }
+  const claimed = false;
+  const shellFailure = receiptShellFailure(current.value, claimed, receiptRead, request.authority);
+  if (shellFailure !== void 0) return shellFailure;
+  if (current.value.revision === Number.MAX_SAFE_INTEGER) {
+    throw new TypeError("state revision cannot advance beyond the safe-integer range");
+  }
+  const identified = await liveIdentification(dependencies, request, current);
+  if (!identified.ok) return identified;
+  const prepared = await prepare(current, identified.value.call, identified.value.live_config);
+  if (!prepared.ok) return prepared;
+  const plan = buildPlan(
+    request,
+    current,
+    identified.value,
+    ownDataField2(prepared, "value", "prepare result"),
+    dependencies.runner.location.worktreeRoot
+  );
+  if (!plan.ok) return plan;
+  onPlan(current, plan.value);
+  return installPlan(
+    dependencies,
+    request,
+    intentPath,
+    current,
+    plan.value,
+    false,
+    identified.value.repository_set
+  );
+}
+async function runStateTransaction(dependencies, request, prepare) {
+  assertInternalTransactionAuthority(request.authority, {
+    runner: dependencies.runner,
+    environment: dependencies.environment
+  });
+  assertAuthenticParsedToolCall(request.call);
+  requirePath(request.authority.state, "task-state", "authority state");
+  requirePath(request.authority.config, "task-config", "authority config");
+  const intent = await resolveIntentTarget(dependencies, request);
+  if (!intent.ok) return intent;
+  try {
+    await ensureIntentDirectory(request.authority);
+  } catch (error51) {
+    if (error51 instanceof IntentLayoutError) return io4(request.authority, "intent-receipt-create");
+    throw error51;
+  }
+  let completed;
+  let arbitrationFacts;
+  const finalize2 = async (result) => {
+    if (result.ok && result.value.state.value.terminal !== void 0) {
+      await cleanTerminalTaskWorkspace(dependencies, request.authority).catch(() => void 0);
+    }
+    return result;
+  };
+  try {
+    const result = await dependencies.lock.runExclusive(request.authority.workspace_root, async () => {
+      completed = await executeLocked2(dependencies, request, intent.value, prepare, (current, plan) => {
+        arbitrationFacts = Object.freeze({ current, plan });
+      });
+      return completed;
+    });
+    return finalize2(result);
+  } catch (error51) {
+    if (!(error51 instanceof TaskLockError)) throw error51;
+    if (error51.stage === "acquire") return io4(request.authority, "task-lock-acquire");
+    if (completed === void 0 && error51.cause !== void 0) throw error51.cause;
+    if (completed?.ok) return finalize2(completed);
+    if (arbitrationFacts !== void 0) {
+      return arbitrate(
+        dependencies,
+        request,
+        intent.value,
+        arbitrationFacts.current,
+        arbitrationFacts.plan,
+        "task-lock-release",
+        completed
+      );
+    }
+    return io4(request.authority, "task-lock-release");
+  }
+}
+
+// src/state/transitions.ts
+import { isDeepStrictEqual as isDeepStrictEqual12 } from "node:util";
+var ok26 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+function restartInvalid(input, issue4) {
+  void issue4;
+  return Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("TRANSITION_INVALID", {
+      phase_instance: input.target_phase_instance,
+      from: `${input.current.step}-${input.current.status}`,
+      to: "planning-restart"
+    })
+  });
+}
+function planPlanningRestart(value) {
+  assertPlainJson(value, "planning restart input");
+  const input = structuredClone(value);
+  const current = input.current;
+  if (current.terminal !== void 0 || current.open_gate !== void 0 || input.reason.trim() === "" || !isStrictlyEarlierPlanningPhase(input.target_phase_instance, current.phase_instance)) return restartInvalid(input, "target-not-strictly-earlier-planning-phase");
+  if ((current.restart_history ?? []).some((record3) => record3.restart_id === input.restart_id)) {
+    return restartInvalid(input, "restart-id-already-recorded");
+  }
+  const retained = current.authoritative_results.filter((reference) => comparePhaseInstances(reference.phase_instance, input.target_phase_instance) < 0);
+  const superseded = current.authoritative_results.filter((reference) => comparePhaseInstances(reference.phase_instance, input.target_phase_instance) >= 0);
+  const restartedAtRevision = parseSafeInteger(current.revision + 1);
+  const record2 = Object.freeze({
+    restart_id: input.restart_id,
+    source_phase_instance: current.phase_instance,
+    target_phase_instance: input.target_phase_instance,
+    reason: input.reason,
+    restarted_at_revision: restartedAtRevision,
+    superseded_results: Object.freeze(superseded),
+    cleared_waivers: Object.freeze([...current.waivers]),
+    ...current.pending_human_revision === void 0 ? {} : { cleared_pending_human_revision: current.pending_human_revision },
+    human_provenance: input.human_provenance
+  });
+  const history = Object.freeze(
+    [...current.restart_history ?? [], record2].sort((left, right) => left.restart_id.localeCompare(right.restart_id))
+  );
+  const targetKind = decodePhaseInstance(input.target_phase_instance).kind;
+  const {
+    revision: _revision,
+    last_transition: _lastTransition,
+    pending_human_revision: _pendingHumanRevision,
+    planned_final_phase: plannedFinalPhase,
+    ...preserved
+  } = current;
+  return ok26(Object.freeze({
+    ...preserved,
+    phase_instance: input.target_phase_instance,
+    step: "produce",
+    status: "running",
+    attempt: parseSafeInteger(1),
+    input_fingerprint: input.recomputed_input_fingerprint,
+    authoritative_results: Object.freeze(retained),
+    waivers: Object.freeze([]),
+    restart_history: history,
+    ...targetKind === "prd" || targetKind === "design" || plannedFinalPhase === void 0 ? {} : { planned_final_phase: plannedFinalPhase }
+  }));
+}
+function planMilestoneRecovery(value) {
+  assertPlainJson(value, "milestone recovery input");
+  const input = structuredClone(value);
+  const current = input.current;
+  const invalidRecovery = () => Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("TRANSITION_INVALID", {
+      phase_instance: current.phase_instance,
+      from: `${current.step}-${current.status}`,
+      to: "milestone-recovery"
+    })
+  });
+  if (current.terminal !== void 0 || current.open_gate !== void 0 || input.target_ref.trim() === "" || (current.milestone_recovery_history ?? []).some((record3) => record3.recovery_id === input.recovery_id)) return invalidRecovery();
+  const superseded = current.authoritative_results.filter((reference) => reference.phase_instance === current.phase_instance);
+  const retained = current.authoritative_results.filter((reference) => reference.phase_instance !== current.phase_instance);
+  const recoveredAtRevision = parseSafeInteger(current.revision + 1);
+  const record2 = Object.freeze({
+    recovery_id: input.recovery_id,
+    phase_instance: current.phase_instance,
+    cause: input.cause,
+    target_ref: input.target_ref,
+    target_head: input.target_head,
+    subject_digest: input.subject_digest,
+    recovered_at_revision: recoveredAtRevision,
+    superseded_results: Object.freeze(superseded),
+    cleared_waivers: Object.freeze([...current.waivers]),
+    ...current.pending_human_revision === void 0 ? {} : { cleared_pending_human_revision: current.pending_human_revision }
+  });
+  const history = Object.freeze(
+    [...current.milestone_recovery_history ?? [], record2].sort((left, right) => left.recovery_id.localeCompare(right.recovery_id))
+  );
+  const {
+    revision: _revision,
+    last_transition: _lastTransition,
+    pending_human_revision: _pendingHumanRevision,
+    ...preserved
+  } = current;
+  return ok26(Object.freeze({
+    ...preserved,
+    step: "produce",
+    status: "running",
+    attempt: parseSafeInteger(1),
+    input_fingerprint: input.recomputed_input_fingerprint,
+    authoritative_results: Object.freeze(retained),
+    waivers: Object.freeze([]),
+    milestone_recovery_history: history
+  }));
+}
+function planApprovalTriggerAuthorityRecovery(value) {
+  assertPlainJson(value, "approval trigger authority recovery input");
+  const input = structuredClone(value);
+  const current = input.current;
+  const invalidRecovery = () => Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("TRANSITION_INVALID", {
+      phase_instance: current.phase_instance,
+      from: `${current.step}-${current.status}`,
+      to: "approval-trigger-authority-recovery"
+    })
+  });
+  if (current.terminal !== void 0 || current.open_gate !== void 0 || current.pending_human_revision !== void 0 || current.step !== "triage" || current.status !== "succeeded") return invalidRecovery();
+  const retained = current.authoritative_results.filter((reference) => reference.phase_instance !== current.phase_instance || reference.step === "produce");
+  if (retained.length === current.authoritative_results.length) return invalidRecovery();
+  const {
+    revision: _revision,
+    last_transition: _lastTransition,
+    ...preserved
+  } = current;
+  return ok26(Object.freeze({
+    ...preserved,
+    step: "produce",
+    status: "running",
+    attempt: parseSafeInteger(1),
+    input_fingerprint: input.recomputed_input_fingerprint,
+    authoritative_results: Object.freeze(retained)
+  }));
+}
+function invalid(input, from, to) {
+  return Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("TRANSITION_INVALID", {
+      phase_instance: input.target.phase_instance,
+      from,
+      to
+    })
+  });
+}
+function fingerprintFailure(expected, observed) {
+  return Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("INPUT_FINGERPRINT_MISMATCH", {
+      expected_digest: expected,
+      observed_digest: observed
+    })
+  });
+}
+function phaseKind(instance) {
+  return decodePhaseInstance(instance).kind;
+}
+function pipeline(instance) {
+  const kind = phaseKind(instance);
+  const configured = WORKFLOW_V1.phases.find((phase3) => phase3.id === kind);
+  if (configured === void 0) throw new TypeError("phase instance is absent from the fixed workflow");
+  return configured.pipeline;
+}
+function sameSubject(current, target2) {
+  return current.phase_instance === target2.phase_instance && current.step === target2.step;
+}
+function artifactApprovalKind(instance) {
+  const kind = decodePhaseInstance(instance).kind;
+  return kind === "phase-impl" ? void 0 : kind;
+}
+function hasAuthenticatedArtifactApproval(input) {
+  const artifactKind = artifactApprovalKind(input.current.phase_instance);
+  if (artifactKind === void 0 || input.completion_subject_digest === void 0) return false;
+  const designArtifact = artifactKind === "design" || artifactKind === "phase-design";
+  for (const authenticated of input.authenticated_gate_approvals ?? []) {
+    assertAuthenticatedGateApproval(authenticated);
+    if (authenticated.request.kind !== "artifact-approval" && !(designArtifact && authenticated.request.kind === "design-approval")) continue;
+    if (authenticated.approval.gate_kind === authenticated.request.kind && authenticated.approval.subject_digest === input.completion_subject_digest && authenticated.request.phase_instance === input.current.phase_instance && authenticated.request.subject_digest === input.completion_subject_digest && authenticated.request.context.artifact_kind === artifactKind && authenticated.decision.envelope.payload.decision === "approve") return true;
+  }
+  return false;
+}
+function hasAuthenticatedCombinedDesignApproval(input) {
+  return (input.authenticated_gate_approvals ?? []).some((authenticated) => authenticated.request.kind === "design-approval" && authenticated.approval.gate_kind === "design-approval" && authenticated.approval.subject_digest === input.completion_subject_digest && authenticated.decision.envelope.payload.decision === "approve");
+}
+function validRuleSettlementBoundary(input, settlement) {
+  if (settlement.task_id !== input.current.task_id || settlement.phase_instance !== input.current.phase_instance || settlement.step !== input.target.step || settlement.settled_at_revision !== input.current.revision + 1 || input.target.phase_instance !== input.current.phase_instance || input.target.status !== "succeeded") return false;
+  if (input.target.step === "triage") {
+    return input.current.step === "triage" && input.current.status === "running" && input.artifact?.artifact_kind === "triage" && input.artifact.evidence.subject_digest === settlement.subject_digest;
+  }
+  if (input.target.step !== "produce" || input.current.step !== "produce" || input.current.status !== "running" || input.resulting_subject_digest !== settlement.subject_digest) {
+    return false;
+  }
+  const editorial = input.artifact?.artifact_kind === "document" && input.artifact.editorial_predecessor !== void 0;
+  return editorial && input.current.pending_human_revision === void 0 && input.human_revision === void 0;
+}
+function hasAuthenticatedMigrationAudit(input) {
+  if (input.commit_observed !== true || input.legacy_resume_phase === void 0 || input.target.phase_instance !== input.legacy_resume_phase) return false;
+  for (const authenticated of input.authenticated_gate_approvals ?? []) {
+    assertAuthenticatedGateApproval(authenticated);
+    if (authenticated.approval.gate_kind === "migration-audit" && authenticated.request.kind === "migration-audit" && authenticated.request.phase_instance === "design" && authenticated.request.subject_digest === authenticated.approval.subject_digest && authenticated.decision.envelope.payload.decision === "accept-import-audit") return true;
+  }
+  return false;
+}
+function legalMovement(input) {
+  const { current, target: target2 } = input;
+  if (current.terminal !== void 0 || current.open_gate !== void 0) return false;
+  if (sameSubject(current, target2)) {
+    if (current.status === "running") {
+      return target2.attempt === current.attempt && (target2.status === "succeeded" || target2.status === "failed");
+    }
+    if (current.status === "failed") {
+      return target2.status === "running" && target2.attempt === current.attempt + 1;
+    }
+  }
+  if (target2.phase_instance === current.phase_instance && target2.step === "produce" && target2.status === "running") {
+    return input.human_revision_reentry === true ? target2.attempt === current.attempt : target2.attempt === current.attempt + 1;
+  }
+  if (current.status !== "succeeded" || target2.status !== "running") return false;
+  const steps = pipeline(current.phase_instance);
+  const index = steps.indexOf(current.step);
+  if (index < 0) return false;
+  if (index + 1 < steps.length) {
+    return target2.phase_instance === current.phase_instance && target2.step === steps[index + 1] && target2.attempt === current.attempt;
+  }
+  if (current.phase_instance === "design" && target2.step === "produce" && target2.attempt === 1 && target2.phase_instance !== nextPhaseInstance(current.phase_instance) && hasAuthenticatedMigrationAudit(input)) return true;
+  const following = nextPhaseInstance(current.phase_instance);
+  return following !== void 0 && target2.phase_instance === following && target2.step === pipeline(following)[0] && target2.attempt === 1;
+}
+function legalSettledDocumentProduceExitMovement(input) {
+  const { current, target: target2 } = input;
+  if (phaseKind(current.phase_instance) === "phase-impl" || current.step !== "produce" || current.status !== "succeeded" || target2.status !== "running") return false;
+  const following = nextPhaseInstance(current.phase_instance);
+  return following !== void 0 && target2.phase_instance === following && target2.step === pipeline(following)[0] && target2.attempt === 1;
+}
+function artifactMatches(input) {
+  const artifact = input.artifact;
+  if (artifact === void 0) {
+    return input.target.status !== "succeeded" || input.target.step !== "produce";
+  }
+  const artifactTaskId = artifact.artifact_kind === "triage" ? artifact.evidence.task_id : artifact.task_id;
+  if (artifactTaskId !== input.current.task_id) return false;
+  if (artifact.artifact_kind === "task-initialization" || artifact.artifact_kind === "legacy-import-initialization") {
+    return false;
+  }
+  if (artifact.artifact_kind === "document" || artifact.artifact_kind === "implementation-output") {
+    return artifact.phase_instance === input.target.phase_instance && artifact.step === input.target.step && artifact.input_fingerprint === input.recomputed_input_fingerprint;
+  }
+  if (artifact.artifact_kind === "triage") {
+    return artifact.evidence.phase_instance === input.target.phase_instance && artifact.evidence.step === input.target.step && artifact.evidence.input_fingerprint === input.recomputed_input_fingerprint;
+  }
+  return input.target.phase_instance === input.current.phase_instance && input.target.step === input.current.step;
+}
+function resultReferenceMatches(input) {
+  const reference = input.result_reference;
+  const sourceKind = input.artifact?.artifact_kind;
+  const evidenceStep = input.target.step === "counter_review" || input.target.step === "triage";
+  const producing = input.target.status === "succeeded" && (input.target.step === "produce" && (sourceKind === "document" || sourceKind === "implementation-output") || evidenceStep);
+  if (!producing) return reference === void 0;
+  if (reference === void 0) return false;
+  return reference.phase_instance === input.target.phase_instance && reference.step === input.target.step && reference.input_fingerprint === input.recomputed_input_fingerprint;
+}
+function constitutionReferenceMatches(input) {
+  const reference = input.constitution_result_reference;
+  if (reference === void 0) return true;
+  return input.target.status === "succeeded" && input.target.step === "counter_review" && reference.step === "adjudicate" && reference.phase_instance === input.target.phase_instance && reference.input_fingerprint === input.recomputed_input_fingerprint;
+}
+function pendingHumanRevisionMatches(input) {
+  const pending = input.current.pending_human_revision;
+  const declaration = input.human_revision;
+  if (pending === void 0) return declaration === void 0;
+  if (input.current.phase_instance !== input.target.phase_instance || input.current.step !== "produce" || input.target.step !== "produce") return false;
+  if (input.current.attempt !== pending.attempt) return false;
+  if (input.target.status !== "succeeded") return declaration === void 0;
+  if (declaration === void 0 || input.result_reference === void 0 || input.resulting_subject_digest === void 0 || input.resulting_subject_digest === pending.predecessor_subject_digest) return false;
+  return pending.evidence.every((expected) => input.current.authoritative_results.some((observed) => isDeepStrictEqual12(expected, observed)));
+}
+function withResultReference(current, reference) {
+  if (reference === void 0) return current;
+  const next = current.filter((entry) => entry.phase_instance !== reference.phase_instance || entry.step !== reference.step);
+  next.push(reference);
+  next.sort((left, right) => {
+    const leftKey = `${left.phase_instance}\0${left.step}`;
+    const rightKey = `${right.phase_instance}\0${right.step}`;
+    return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+  });
+  return Object.freeze(next);
+}
+function hasAuthenticatedCommittedOutput(input) {
+  const decoded = decodePhaseInstance(input.current.phase_instance);
+  if (decoded.kind !== "phase-impl" || input.current.step !== "triage" || input.current.status !== "succeeded" || input.current.terminal !== void 0 || input.current.open_gate !== void 0 || input.completion_subject_digest === void 0 || input.commit_observed !== true || input.artifact !== void 0 || input.result_reference !== void 0 || input.constitution_result_reference !== void 0) return false;
+  for (const authenticated of input.authenticated_gate_approvals ?? []) {
+    assertAuthenticatedGateApproval(authenticated);
+    if (authenticated.approval.gate_kind === "commit-authorization" && authenticated.approval.subject_digest === input.completion_subject_digest && authenticated.request.kind === "commit-authorization" && authenticated.request.phase_instance === input.current.phase_instance && authenticated.request.subject_digest === input.completion_subject_digest) return true;
+  }
+  return hasAuthenticatedRuleAcceptance(input);
+}
+function hasAuthenticatedRuleAcceptance(input) {
+  const accepted = input.authenticated_rule_acceptance;
+  const digest10 = input.completion_subject_digest;
+  if (accepted === void 0 || digest10 === void 0) return false;
+  assertAuthenticatedRuleAcceptancePolicy(accepted.policy);
+  const settlement = acceptedNoWaitSettlementWithoutOrdinaryApproval(
+    accepted.policy,
+    input.current,
+    digest10,
+    input.current.phase_instance,
+    input.authenticated_gate_approvals ?? []
+  );
+  return settlement !== void 0 && isDeepStrictEqual12(settlement, accepted.settlement);
+}
+function planStateTransition(value) {
+  const {
+    authenticated_gate_approvals: authenticatedApprovals,
+    authenticated_rule_acceptance: authenticatedRuleAcceptance,
+    ...plainValue
+  } = value;
+  assertPlainJson(plainValue, "transition plan input");
+  const input = {
+    ...structuredClone(plainValue),
+    ...authenticatedApprovals === void 0 ? {} : { authenticated_gate_approvals: authenticatedApprovals },
+    ...authenticatedRuleAcceptance === void 0 ? {} : {
+      authenticated_rule_acceptance: authenticatedRuleAcceptance
+    }
+  };
+  const from = `${input.current.step}-${input.current.status}`;
+  const to = `${input.target.step}-${input.target.status}`;
+  if (input.target.input_fingerprint !== input.recomputed_input_fingerprint) {
+    return fingerprintFailure(input.recomputed_input_fingerprint, input.target.input_fingerprint);
+  }
+  const ruleSettlement = input.rule_settlement;
+  if (ruleSettlement !== void 0 && !validRuleSettlementBoundary(input, ruleSettlement)) {
+    return invalid(input, from, to);
+  }
+  const committedOutput = hasAuthenticatedCommittedOutput(input);
+  const ruleAccepted = hasAuthenticatedRuleAcceptance(input);
+  const decodedCurrent = decodePhaseInstance(input.current.phase_instance);
+  const crossesPhase = input.target.phase_instance !== input.current.phase_instance;
+  const completesFinalPhase = committedOutput && decodedCurrent.kind === "phase-impl" && input.current.planned_final_phase !== void 0 && Number(decodedCurrent.phase) === Number(input.current.planned_final_phase) && input.target.phase_instance === input.current.phase_instance && input.target.step === input.current.step && input.target.status === input.current.status && input.target.attempt === input.current.attempt && input.target.input_fingerprint === input.current.input_fingerprint;
+  if (completesFinalPhase) {
+    const { revision: _revision2, last_transition: _transition2, ...preserved2 } = input.current;
+    return ok26(Object.freeze({ ...preserved2, terminal: "complete" }));
+  }
+  if (decodedCurrent.kind === "phase-impl" && input.current.step === "triage" && input.current.status === "succeeded" && input.target.phase_instance !== input.current.phase_instance && !committedOutput) return invalid(input, from, to);
+  if (decodedCurrent.kind !== "phase-impl" && crossesPhase && !hasAuthenticatedArtifactApproval(input) && !ruleAccepted && // An accepted migration audit is the design phase's exit authority for a legacy import: the
+  // same authenticated approval legalMovement's design-jump rule settles on.
+  !(decodedCurrent.kind === "design" && hasAuthenticatedMigrationAudit(input))) return invalid(input, from, to);
+  if ((decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") && crossesPhase && (hasAuthenticatedCombinedDesignApproval(input) || ruleAccepted) && input.commit_observed !== true) return invalid(input, from, to);
+  if (decodedCurrent.kind === "design" && crossesPhase && ruleAccepted && input.derived_planned_final_phase === void 0) return invalid(input, from, to);
+  const legalMovementFromCurrentCursor = legalMovement(input) || crossesPhase && legalSettledDocumentProduceExitMovement(input);
+  if (!legalMovementFromCurrentCursor || !artifactMatches(input) || !resultReferenceMatches(input) || !constitutionReferenceMatches(input) || !pendingHumanRevisionMatches(input)) {
+    return invalid(input, from, to);
+  }
+  const {
+    revision: _revision,
+    last_transition: _transition,
+    pending_human_revision: pendingHumanRevision,
+    planned_final_phase: preservedPlannedFinalPhase,
+    ...preserved
+  } = input.current;
+  const plannedFinalPhase = input.derived_planned_final_phase !== void 0 ? input.derived_planned_final_phase : preservedPlannedFinalPhase;
+  const completingHumanRevision = pendingHumanRevision !== void 0 && input.target.step === "produce" && input.target.status === "succeeded";
+  const significantHumanRevision = completingHumanRevision && input.human_revision?.classification === "significant";
+  const currentReferences = significantHumanRevision ? preserved.authoritative_results.filter((entry) => entry.phase_instance !== input.target.phase_instance || entry.step !== "counter_review" && entry.step !== "adjudicate" && entry.step !== "triage") : preserved.authoritative_results;
+  const authoritativeResults = withResultReference(
+    withResultReference(currentReferences, input.result_reference),
+    input.constitution_result_reference
+  );
+  let humanRevisionHistory = preserved.human_revision_history;
+  if (completingHumanRevision) {
+    const declaration = input.human_revision;
+    const record2 = Object.freeze({
+      phase_instance: input.target.phase_instance,
+      gate_id: pendingHumanRevision.gate_id,
+      gate_kind: pendingHumanRevision.gate_kind,
+      predecessor_subject_digest: pendingHumanRevision.predecessor_subject_digest,
+      predecessor_input_fingerprint: pendingHumanRevision.predecessor_input_fingerprint,
+      resulting_subject_digest: input.resulting_subject_digest,
+      resulting_result_digest: input.result_reference.result_digest,
+      classification: declaration.classification,
+      rationale: declaration.rationale,
+      ...declaration.user_override === void 0 ? {} : { user_override: declaration.user_override },
+      previous_attempt: pendingHumanRevision.attempt,
+      resulting_attempt: declaration.classification === "significant" ? parseSafeInteger(1) : pendingHumanRevision.attempt,
+      evidence: pendingHumanRevision.evidence
+    });
+    humanRevisionHistory = Object.freeze(
+      [...humanRevisionHistory ?? [], record2].sort((left, right) => left.gate_id.localeCompare(right.gate_id))
+    );
+  }
+  const ruleSettlements = ruleSettlement === void 0 ? preserved.rule_settlements : Object.freeze([...preserved.rule_settlements ?? [], ruleSettlement].sort(compareRuleSettlements));
+  const draft = Object.freeze({
+    ...preserved,
+    phase_instance: input.target.phase_instance,
+    step: input.target.step,
+    status: input.target.status,
+    attempt: significantHumanRevision ? parseSafeInteger(1) : input.target.attempt,
+    input_fingerprint: input.target.input_fingerprint,
+    authoritative_results: authoritativeResults,
+    ...humanRevisionHistory === void 0 ? {} : { human_revision_history: humanRevisionHistory },
+    ...!completingHumanRevision && pendingHumanRevision !== void 0 ? { pending_human_revision: pendingHumanRevision } : {},
+    ...plannedFinalPhase === void 0 || plannedFinalPhase === null ? {} : { planned_final_phase: parseSafeInteger(plannedFinalPhase) },
+    ...ruleSettlements === void 0 ? {} : { rule_settlements: ruleSettlements }
+  });
+  if (input.result_reference === void 0 && input.constitution_result_reference === void 0 && !isDeepStrictEqual12(draft.authoritative_results, input.current.authoritative_results)) {
+    throw new TypeError("transition planning changed authoritative results");
+  }
+  return ok26(draft);
+}
+
+// src/state/planning-restart.ts
+var SEMANTIC_REOPEN_INTENT = /^afop-([0-9a-f]{64})-reopen$/u;
+function semanticPlanningRestartId(intentId) {
+  const match = SEMANTIC_REOPEN_INTENT.exec(intentId);
+  return match === null ? void 0 : parsePathSafeId(`planning-restart-${match[1].slice(0, 32)}`);
+}
+function planningRestartId(requestDigest, intentId) {
+  return intentId === void 0 ? parsePathSafeId(`planning-restart-${requestDigest.slice(0, 32)}`) : semanticPlanningRestartId(intentId) ?? parsePathSafeId(`planning-restart-${requestDigest.slice(0, 32)}`);
+}
+function completedPlanningRestartMatches(state, input) {
+  const restart = state.restart_history?.find((record2) => record2.restart_id === input.restart_id);
+  return restart !== void 0 && restart.source_phase_instance === input.source_phase_instance && restart.target_phase_instance === input.target_phase_instance && restart.reason === input.reason && state.revision === restart.restarted_at_revision && state.phase_instance === restart.target_phase_instance && state.step === "produce" && state.status === "running" && state.attempt === 1 && state.input_fingerprint === input.input_fingerprint;
+}
+
+// src/state/planned-final-phase.ts
+function plannedFinalPhaseFromDesign(bytes) {
+  let source;
+  try {
+    source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new TypeError("approved design is not UTF-8");
+  }
+  const openEndedMarker = "<!-- archflow:phase-plan:open-ended -->";
+  const lines = source.split(/\r?\n/u);
+  const exactMarkers = lines.filter((line) => line === openEndedMarker);
+  const markerLikeLines = lines.filter((line) => /archflow:phase-plan:/u.test(line));
+  const exactHeading = /^### Phase ([1-9][0-9]*): \S(?:.*\S)?$/u;
+  const exactHeadings = lines.filter((line) => exactHeading.test(line));
+  const phasePlanLikeLines = lines.filter(
+    (line) => /^\s*#{1,6}\s+Phase\s+[0-9]+(?:\s|:|[-\u2013\u2014]|$)/u.test(line) || /^\s*\|\s*Phase\s*\|/iu.test(line)
+  );
+  if (exactMarkers.length === 1 && markerLikeLines.length === 1 && phasePlanLikeLines.length === 0) return null;
+  if (markerLikeLines.length !== 0 || exactHeadings.length === 0 || phasePlanLikeLines.length !== exactHeadings.length) {
+    throw new TypeError("approved design requires an exact phase plan or the open-ended marker");
+  }
+  const phases = exactHeadings.map((heading) => Number(exactHeading.exec(heading)[1]));
+  if (phases.some((phase3) => !Number.isSafeInteger(phase3)) || phases.some((phase3, index) => phase3 !== index + 1)) {
+    throw new TypeError("approved design phase headings are not consecutive from phase 1");
+  }
+  return phases.length;
+}
+async function loadAutonomousDesignFinalPhase(dependencies, current, subjectDigest) {
+  if (current.phase_instance !== "design") {
+    return issue2("STATE_INVALID", current, "autonomous-design-phase-count-wrong-position");
+  }
+  const reference = current.authoritative_results.find((entry) => entry.phase_instance === "design" && entry.step === "produce");
+  if (reference === void 0 || dependencies.load_retained_result === void 0) {
+    return issue2("STATE_INVALID", current, "autonomous-design-result-missing");
+  }
+  const retained = await dependencies.load_retained_result(reference);
+  if (!retained.ok) return retained;
+  const manifest = retained.value.prepared.manifest.value;
+  const artifact = manifest.source_artifact;
+  if (artifact.artifact_kind !== "document" || artifact.phase_instance !== "design" || artifact.step !== "produce" || artifact.document_path !== "design.md" || manifest.artifact_digest !== subjectDigest) {
+    return issue2("STATE_INVALID", current, "autonomous-design-authority-mismatch");
+  }
+  const payload = retained.value.prepared.payloads.find((candidate) => candidate.path === artifact.projection_target);
+  if (payload === void 0 || sha256Bytes(payload.bytes) !== artifact.content_digest) {
+    return issue2("STATE_INVALID", current, "autonomous-design-authority-mismatch");
+  }
+  try {
+    return ok13(plannedFinalPhaseFromDesign(payload.bytes));
+  } catch {
+    return issue2("STATE_INVALID", current, "autonomous-design-phase-count-invalid");
+  }
+}
+function plannedFinalPhaseFromRecordedPayloads(taskId, payloads, storedPlannedFinalPhase) {
+  const designPath = `.archflow/tasks/${taskId}/design.md`;
+  const recorded = payloads.find((payload) => payload.path === designPath);
+  if (recorded === void 0 || storedPlannedFinalPhase === void 0) return void 0;
+  return plannedFinalPhaseFromDesign(recorded.bytes);
+}
+function derivedFinalPhaseBelowCurrentPhase(derived, phaseInstance4) {
+  const decoded = decodePhaseInstance(phaseInstance4);
+  return (decoded.kind === "phase-impl" || decoded.kind === "phase-design") && derived < Number(decoded.phase);
+}
+
+// src/state/gates.ts
+function exactOpenGateMatches(state, request) {
+  const open7 = state.open_gate;
+  if (open7 === void 0 || open7.gate_id !== request.gate_id || open7.gate_kind !== request.kind || open7.subject_digest !== request.subject_digest || open7.context_digest !== request.context_digest || open7.opened_at_revision !== request.opened_at_revision || state.revision !== request.opened_at_revision || state.phase_instance !== request.phase_instance) return false;
+  const { open_gate: _open, last_transition: _transition, ...base2 } = state;
+  return open7.frozen_state_digest === openGateFrozenStateDigest(base2);
+}
+function planStaleBaselineGateRefresh(current, request, liveContext) {
+  if (!exactOpenGateMatches(current.value, request)) {
+    return issue2("STATE_INVALID", current.value, "stale-baseline-open-gate-mismatch");
+  }
+  const liveSubjectDigest = baselineAdoptionDriftDigest(liveContext);
+  const liveContextDigest = computeGateContextDigest("baseline-adoption", liveContext);
+  if (liveSubjectDigest === request.subject_digest && liveContextDigest === request.context_digest) {
+    return issue2("STATE_INVALID", current.value, "baseline-adoption-interface-current");
+  }
+  const resultingRevision = parseSafeInteger(current.value.revision + 1);
+  const { open_gate: _openGate, last_transition: _lastTransition, ...preserved } = current.value;
+  const next = canonicalDocument({ ...preserved, revision: resultingRevision });
+  const supersession = canonicalDocument({
+    schema_version: "1",
+    gate_id: request.gate_id,
+    task_id: request.task_id,
+    phase_instance: request.phase_instance,
+    kind: "baseline-adoption",
+    subject_digest: request.subject_digest,
+    context_digest: request.context_digest,
+    outcome: "superseded-stale-baseline",
+    live_subject_digest: liveSubjectDigest,
+    live_context_digest: liveContextDigest,
+    superseded_at_revision: resultingRevision
+  });
+  return ok13(Object.freeze({ state: next, supersession }));
+}
+async function refreshStaleBaselineGate(dependencies, authority, expectedRevision, discoverLiveSubject) {
+  try {
+    return await dependencies.lock.runExclusive(authority.workspace_root, async () => {
+      const stateResult = await stateOrFailure(dependencies, authority);
+      if (!stateResult.ok) return stateResult;
+      const current = stateResult.value;
+      if (current.value.revision !== expectedRevision) {
+        return issue2("STATE_INVALID", current.value, "stale-baseline-revision-mismatch");
+      }
+      const open7 = current.value.open_gate;
+      if (open7 === void 0 || open7.gate_kind !== "baseline-adoption") {
+        return issue2("STATE_INVALID", current.value, "stale-baseline-open-gate-missing");
+      }
+      const requestPath = await resolvePath7(dependencies, authority, gateRequestClaim(open7.gate_id), "authority-decision");
+      const archivePath = await resolvePath7(dependencies, authority, gateDecisionClaim(open7.gate_id), "authority-decision");
+      if (!requestPath.ok) return requestPath;
+      if (!archivePath.ok) return archivePath;
+      const loaded = await readCanonical(requestPath.value, "baseline gate request", parsePersistedGateRequest);
+      if (loaded === "missing" || loaded === "invalid" || loaded.value.kind !== "baseline-adoption") {
+        return issue2("STATE_INVALID", current.value, "stale-baseline-request-invalid");
+      }
+      const request = loaded.value;
+      const existing = await readCanonical(archivePath.value, "stale baseline supersession", (value) => {
+        const parsed = parseArchivedGateDecisionRecord(value);
+        if (parsed.outcome !== "superseded-stale-baseline") throw new TypeError("not a stale baseline supersession");
+        return parsed;
+      });
+      if (existing === "invalid") return issue2("STATE_INVALID", current.value, "stale-baseline-archive-invalid");
+      let plan;
+      if (existing === "missing") {
+        const live = await discoverLiveSubject(current, request);
+        if (!live.ok) return live;
+        const freshness = assessBaselineSubjectFreshness(
+          request,
+          live.value.context,
+          live.value.presented_head_on_current_first_parent
+        );
+        if (freshness.classification !== "stale") {
+          return issue2("STATE_INVALID", current.value, "baseline-adoption-interface-current");
+        }
+        plan = planStaleBaselineGateRefresh(current, request, live.value.context);
+        if (!plan.ok) return plan;
+        if (await dependencies.atomic.createExclusive(archivePath.value, plan.value.supersession.bytes) !== "created") {
+          return issue2("STATE_INVALID", current.value, "stale-baseline-supersession-race");
+        }
+      } else {
+        if (existing.value.gate_id !== request.gate_id || existing.value.task_id !== request.task_id || existing.value.phase_instance !== request.phase_instance || existing.value.subject_digest !== request.subject_digest || existing.value.context_digest !== request.context_digest || existing.value.superseded_at_revision !== current.value.revision + 1) return issue2("STATE_INVALID", current.value, "stale-baseline-archive-binding-invalid");
+        const { open_gate: _openGate, last_transition: _transition, ...preserved } = current.value;
+        plan = ok13({
+          state: canonicalDocument({ ...preserved, revision: parseSafeInteger(current.value.revision + 1) }),
+          supersession: existing
+        });
+      }
+      if (!plan.ok) return plan;
+      await dependencies.atomic.replace(authority.state, plan.value.state.bytes);
+      for (const projection of ["gate.json", "gate.decision"]) {
+        const path2 = await resolvePath7(dependencies, authority, projection, "workspace-gate-interface");
+        if (path2.ok) await dependencies.atomic.removeGateInterface(path2.value);
+      }
+      return ok13(Object.freeze({ ...plan.value, replayed: existing !== "missing" }));
+    });
+  } catch (error51) {
+    return error51 instanceof TaskLockError ? io(authority, `stale-baseline-lock-${error51.stage}`) : io(authority, "stale-baseline-refresh");
+  }
+}
+
+// src/mcp/diagnostics.ts
+import { appendFileSync, existsSync, mkdirSync } from "node:fs";
+import { dirname as dirname8, join as join18 } from "node:path";
+var INTERNAL_ERROR_LOG = join18(".archflow", "runtime", "diagnostics", "internal-errors.log");
+function reportInternalError(correlationId, error51) {
+  const detail = error51 instanceof Error ? error51.stack ?? error51.message : String(error51);
+  const record2 = `archflow INTERNAL_ERROR correlation_id=${correlationId}
+${detail}
+`;
+  process.stderr.write(record2);
+  try {
+    if (!existsSync(".archflow")) return;
+    mkdirSync(dirname8(INTERNAL_ERROR_LOG), { recursive: true });
+    appendFileSync(INTERNAL_ERROR_LOG, `${(/* @__PURE__ */ new Date()).toISOString()} ${record2}`, "utf8");
+  } catch {
+  }
+}
+
+// src/mcp/handlers/errors.ts
+function carried(error51) {
+  if (error51 instanceof DispatchRoutingError || error51 instanceof CliAdapterError || error51 instanceof DispatchProcessError || error51 instanceof AdjudicationServiceError || error51 instanceof ReviewEnvelopeError) return error51.project_error;
+  try {
+    return parseProjectError(error51);
+  } catch {
+    return void 0;
+  }
+}
+async function mapHandlerErrors(correlationId, run) {
+  try {
+    return await run();
+  } catch (error51) {
+    const projectError = carried(error51);
+    if (projectError !== void 0) {
+      return Object.freeze({ schema_version: "1", ok: false, error: projectError });
+    }
+    if (error51 instanceof TypeError) throw error51;
+    reportInternalError(correlationId, error51);
+    return Object.freeze({
+      schema_version: "1",
+      ok: false,
+      error: createProjectError("INTERNAL_ERROR", { correlation_id: correlationId })
+    });
+  }
+}
+
+// src/contracts/hosts.ts
+var RECORDED_HANDSHAKES = Object.freeze([
+  Object.freeze({ name: "claude-code", version: "2.1.220", host: "claude" }),
+  Object.freeze({ name: "codex-mcp-client", version: "0.146.0", host: "codex" }),
+  Object.freeze({ name: "antigravity-client", version: "1.0.0", host: "antigravity" }),
+  Object.freeze({ name: "antigravity", version: "1.0.0", host: "antigravity" }),
+  Object.freeze({ name: "agy", version: "1.1.22", host: "antigravity" })
+]);
+function hostToModelFamily(host) {
+  switch (host) {
+    case "claude":
+      return "claude";
+    case "codex":
+      return "codex";
+    case "antigravity":
+      return "gemini";
+  }
+}
+
+// src/mcp/handlers/session.ts
+var fail24 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+async function openHandlerSession(call, context2) {
+  const suppliedPhase = call.name === "archflow_state" || call.name === "archflow_gate" ? call.input.phase_instance : void 0;
+  const services2 = await createProductionServices({
+    working_directory: context2.connection.startup_repository_candidate.working_directory,
+    task_id: call.input.task_id,
+    operation: parseSafeCode(call.name),
+    ...suppliedPhase === void 0 ? {} : { phase_instance: suppliedPhase }
+  });
+  if (!services2.ok) return services2;
+  const state = services2.value.state?.value;
+  if (state === void 0 && call.name !== "archflow_state") {
+    return fail24(createProjectError("STATE_MISSING", {
+      phase_instance: suppliedPhase ?? "prd"
+    }));
+  }
+  let configRead = await services2.value.dependencies.read_config(services2.value.authority.config);
+  if (configRead.kind === "missing" && state === void 0 && call.name === "archflow_state" && call.input.operation !== "planning_restart" && call.input.artifact?.artifact_kind === "legacy-import-initialization") {
+    const staged = await readStagedLegacyConfig(services2.value.authority, call.input.artifact);
+    if (staged !== void 0) configRead = Object.freeze({ kind: "valid", snapshot: staged });
+  }
+  if (configRead.kind !== "valid") {
+    return fail24(createProjectError("CONFIG_INVALID", {
+      issue_code: `config-${configRead.kind}`,
+      ...configRead.kind !== "invalid" || configRead.issues === void 0 ? {} : { issues: configRead.issues }
+    }));
+  }
+  const host = context2.connection.initialization_candidates.host;
+  if (host === "unknown") return fail24(createProjectError("UNSUPPORTED_HOST", { host }));
+  const phaseInstance4 = state?.phase_instance ?? suppliedPhase;
+  if (phaseInstance4 === void 0) throw new TypeError("phase instance is unavailable");
+  const phase_kind = decodePhaseInstance(phaseInstance4).kind;
+  let config2;
+  try {
+    config2 = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(configRead.snapshot.bytes));
+  } catch {
+    return fail24(createProjectError("CONFIG_INVALID", { issue_code: "config-unparseable" }));
+  }
+  const repositorySet = await resolveRepositorySet(
+    { runner: services2.value.runner, environment: services2.value.environment },
+    configRead.snapshot.parsed,
+    services2.value.authority.context
+  );
+  if (!repositorySet.ok) return repositorySet;
+  if (state !== void 0) {
+    const continuity = validateRepositorySetContinuity(state, repositorySet.value);
+    if (!continuity.ok) return continuity;
+  }
+  const repositoryBoundServices = Object.freeze({
+    ...services2.value,
+    repository_set: repositorySet.value
+  });
+  return Object.freeze({
+    schema_version: "1",
+    ok: true,
+    value: Object.freeze({
+      services: repositoryBoundServices,
+      config: config2,
+      host,
+      producer_family: hostToModelFamily(host),
+      phase_kind,
+      measured_at_revision: parseSafeInteger(state?.revision ?? 0),
+      repository_set: repositorySet.value
+    })
+  });
+}
+
+// src/mcp/handlers/state-results.ts
+var ok27 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var contractInvalid2 = (issueCode) => Object.freeze({
+  schema_version: "1",
+  ok: false,
+  error: createProjectError("CONTRACT_INVALID", {
+    tool: "archflow_state",
+    issue_code: issueCode
+  })
+});
+async function target(services2, claim, expectedClass) {
+  return resolveTaskPath({
+    runner: services2.runner,
+    taskId: services2.authority.task_id,
+    claim: parseTaskPathClaim(claim),
+    expectedClass,
+    context: services2.authority.context
+  });
+}
+async function payloadTarget(services2, resultDigest, path2, repository) {
+  return resolveTaskWorkspacePath({
+    runner: services2.runner,
+    taskId: services2.authority.task_id,
+    claim: parseWorkspacePathClaim(repository === void 0 ? `cache/results/${resultDigest}/payload/${path2}` : `cache/results/${resultDigest}/repositories/${repository}/payload/${path2}`),
+    expectedClass: "workspace-result-payload",
+    context: services2.authority.context
+  });
+}
+function scannerCapture(scanner) {
+  let observed;
+  return {
+    scanner: Object.freeze({
+      scan: async (candidates) => {
+        observed = parseSecretScanResult(await scanner.scan(candidates));
+        return observed;
+      }
+    }),
+    result: () => {
+      if (observed === void 0) throw new TypeError("projection scanner did not run");
+      return observed;
+    }
+  };
+}
+function accounting(outputs, retained, revision2) {
+  const counted = outputs.flatMap((output) => output.storage === "raw-payload" ? [{ path: output.path, storage: "raw-payload", stored_bytes: output.payload_bytes }] : []);
+  const resultBytes = parseSafeInteger(counted.reduce((sum, entry) => sum + entry.stored_bytes, 0));
+  return Object.freeze({
+    schema_version: "1",
+    result_bytes: resultBytes,
+    task_bytes: parseSafeInteger(retained + resultBytes),
+    result_byte_cap: 26214400,
+    task_byte_cap: 262144e3,
+    counted_entries: Object.freeze(counted),
+    measured_at_revision: revision2
+  });
+}
+async function prepareDocumentResult(input) {
+  const canonicalDefaults = phaseDocumentDefaults(
+    input.services.authority.task_id,
+    input.artifact.phase_instance
+  );
+  const allowedAdditionalPaths = new Set(canonicalDefaults?.additional_document_paths ?? []);
+  const suppliedAdditionalPaths = (input.artifact.additional_documents ?? []).map((document2) => document2.document_path);
+  if (suppliedAdditionalPaths.some((path2) => !allowedAdditionalPaths.has(path2)) || suppliedAdditionalPaths.some((path2, index) => index > 0 && suppliedAdditionalPaths[index - 1] >= path2)) {
+    return contractInvalid2("document-additional-documents-unauthorized");
+  }
+  const declaredDocuments = [{
+    document_path: input.artifact.document_path,
+    byte_count: input.artifact.byte_count,
+    content_digest: input.artifact.content_digest,
+    projection_target: input.artifact.projection_target
+  }, ...input.artifact.additional_documents ?? []].sort((left, right) => left.projection_target < right.projection_target ? -1 : left.projection_target > right.projection_target ? 1 : 0);
+  if (new Set(declaredDocuments.map((document2) => document2.projection_target)).size !== declaredDocuments.length) {
+    return contractInvalid2("document-projection-target-duplicate");
+  }
+  const observedDocuments = [];
+  for (const document2 of declaredDocuments) {
+    const documentTarget = await target(input.services, document2.document_path, "document");
+    if (!documentTarget.ok) return documentTarget;
+    if (documentTarget.value.repositoryRelative !== document2.projection_target) {
+      return contractInvalid2("document-projection-target-mismatch");
+    }
+    const captured = await captureProjectionTarget(documentTarget.value);
+    if (captured.rollback.state !== "present" || captured.rollback.file_type !== "regular") {
+      return contractInvalid2("document-projection-not-regular-file");
+    }
+    const bytes = captured.rollback.bytes;
+    if (bytes.byteLength !== document2.byte_count || sha256Bytes(bytes) !== document2.content_digest) {
+      return contractInvalid2("document-content-mismatch");
+    }
+    const identity = await hashGitBlobIdentity(input.services.runner, bytes, document2.projection_target);
+    const output = Object.freeze({
+      path: document2.projection_target,
+      path_class: "document",
+      operation: "add",
+      storage: "raw-payload",
+      payload_bytes: parseSafeInteger(bytes.byteLength),
+      payload_digest: sha256Bytes(bytes),
+      file_type: "regular",
+      after: Object.freeze({
+        oid: parseGitOid(identity.oid),
+        mode: "100644",
+        size_bytes: parseSafeInteger(identity.size_bytes)
+      })
+    });
+    observedDocuments.push(Object.freeze({ documentTarget: documentTarget.value, captured, bytes, output }));
+  }
+  const outputs = Object.freeze(observedDocuments.map((document2) => document2.output));
+  const projections = Object.freeze(outputs.map((output) => Object.freeze({
+    path: output.path,
+    content_digest: output.payload_digest
+  })));
+  if (deriveDeclaredSnapshotDigest(outputs, projections) !== input.artifact.snapshot_digest) {
+    return contractInvalid2("document-snapshot-digest-mismatch");
+  }
+  const capture = scannerCapture(input.scanner);
+  const plan = await prepareProjectionPlan(observedDocuments.map((document2) => ({
+    path: document2.output.path,
+    target: document2.documentTarget,
+    desired: { state: "present", file_type: "regular", mode: "100644", bytes: document2.bytes },
+    authenticated_before: document2.captured.observation,
+    rollback: document2.captured.rollback,
+    git_tracked: true
+  })), capture.scanner, input.services.runner.location.worktreeRoot);
+  if (!plan.ok) return plan;
+  const manifestValue = {
+    schema_version: "1",
+    task_id: input.services.authority.task_id,
+    repository_identity_digest: input.services.authority.repository_identity_digest,
+    result_id: input.result_id,
+    phase_instance: input.artifact.phase_instance,
+    step: input.artifact.step,
+    artifact_digest: canonicalJsonDigest(input.artifact),
+    source_artifact: input.artifact,
+    input_fingerprint: input.artifact.input_fingerprint,
+    snapshot_digest: input.artifact.snapshot_digest,
+    outputs,
+    projections,
+    accounting: accounting(outputs, input.retained_task_bytes, input.measured_at_revision),
+    secret_scan: capture.result()
+  };
+  const manifest = canonicalDocument(manifestValue);
+  const manifestTarget = await target(input.services, resultAuthorityClaim(manifest.digest), "authority-result");
+  if (!manifestTarget.ok) return manifestTarget;
+  const payloads = [];
+  for (const document2 of observedDocuments) {
+    const payload = await payloadTarget(input.services, manifest.digest, document2.output.path);
+    if (!payload.ok) return payload;
+    payloads.push({ path: document2.output.path, bytes: document2.bytes, target: payload.value });
+  }
+  const prepared = await prepareDocumentSnapshot({
+    runner: input.services.runner,
+    manifest: manifestValue,
+    payloads,
+    retained_task_bytes: input.retained_task_bytes
+  });
+  if (!prepared.ok) return prepared;
+  return ok27(Object.freeze({
+    reference: Object.freeze({
+      phase_instance: input.artifact.phase_instance,
+      step: input.artifact.step,
+      result_digest: prepared.value.result_digest,
+      result_id: input.result_id,
+      input_fingerprint: input.artifact.input_fingerprint
+    }),
+    prepared: prepared.value,
+    manifest_target: manifestTarget.value,
+    projection_plan: plan.value
+  }));
+}
+async function prepareImplementationResult(input) {
+  const repositorySet = input.services.repository_set;
+  const secondarySections = input.artifact.secondary_repositories ?? [];
+  const writableMembers = repositorySet?.members.filter((member, index) => index > 0 && member.mode === "writable") ?? [];
+  if (secondarySections.length !== writableMembers.length || secondarySections.some((section, index) => section.repository !== writableMembers[index]?.name)) {
+    return contractInvalid2("implementation-secondary-repository-set-mismatch");
+  }
+  if (secondarySections.some((section, index) => section.base_commit !== writableMembers[index]?.head)) {
+    return contractInvalid2("implementation-secondary-base-commit-mismatch");
+  }
+  const facts = await verifyImplementationManifest(
+    input.services.runner,
+    input.artifact,
+    input.services.authority.context
+  );
+  const sources = [];
+  const addSource = async (path2, pathClass3, desired, tracked, renamePair) => {
+    const resolved = await resolveDeclaredOutputPath({
+      runner: input.services.runner,
+      taskId: input.services.authority.task_id,
+      claim: path2,
+      pathClass: pathClass3,
+      context: input.services.authority.context
+    });
+    if (!resolved.ok) throw resolved.error;
+    const captured = await captureProjectionTarget(resolved.value);
+    sources.push(Object.freeze({
+      path: path2,
+      target: resolved.value,
+      desired,
+      authenticated_before: captured.observation,
+      rollback: captured.rollback,
+      git_tracked: tracked,
+      ...renamePair === void 0 ? {} : { rename_pair: renamePair }
+    }));
+  };
+  for (const output of input.artifact.outputs) {
+    if (output.operation === "rename") {
+      await addSource(output.previous_path, output.path_class, { state: "absent" }, true, {
+        role: "source",
+        peer_path: output.path
+      });
+    }
+    if (output.operation === "delete") {
+      await addSource(output.path, output.path_class, { state: "absent" }, true);
+      continue;
+    }
+    const raw = facts.raw_payloads.get(output.path);
+    const resolved = await resolveDeclaredOutputPath({
+      runner: input.services.runner,
+      taskId: input.services.authority.task_id,
+      claim: output.path,
+      pathClass: output.path_class,
+      context: input.services.authority.context
+    });
+    if (!resolved.ok) return resolved;
+    const captured = await captureProjectionTarget(resolved.value);
+    const bytes = raw ?? (captured.rollback.state === "present" ? captured.rollback.bytes : void 0);
+    if (bytes === void 0) return contractInvalid2("implementation-after-image-unavailable");
+    const desired = output.file_type === "regular" ? { state: "present", file_type: "regular", mode: output.after.mode, bytes } : { state: "present", file_type: "symlink", mode: "120000", bytes };
+    await addSource(output.path, output.path_class, desired, output.operation !== "add", output.operation === "rename" ? {
+      role: "destination",
+      peer_path: output.previous_path
+    } : void 0);
+  }
+  const capture = scannerCapture(input.scanner);
+  const plan = await prepareProjectionPlan(
+    sources,
+    capture.scanner,
+    input.services.runner.location.worktreeRoot
+  );
+  if (!plan.ok) return plan;
+  const snapshotByPath = new Map(facts.snapshot_entries.map((entry) => [entry.path, entry]));
+  const projections = [];
+  for (const output of input.artifact.outputs) {
+    if (output.operation === "delete") continue;
+    const observed = snapshotByPath.get(output.path);
+    if (observed?.state !== "present") return contractInvalid2("implementation-projection-identity-missing");
+    projections.push({ path: output.path, content_digest: observed.content_digest });
+  }
+  const secondaryPrepared = [];
+  for (let index = 0; index < secondarySections.length; index += 1) {
+    const section = secondarySections[index];
+    const member = writableMembers[index];
+    const sectionFacts = await verifyImplementationRepositorySection(input.services.authority, member, section);
+    const sectionSources = [];
+    const addSecondarySource = async (path2, desired, tracked, renamePair) => {
+      const resolved = await resolveRepositoryPath({
+        runner: member.binding.runner,
+        claim: path2,
+        context: input.services.authority.context
+      });
+      if (!resolved.ok) return resolved;
+      const captured = await captureProjectionTarget(resolved.value);
+      sectionSources.push(Object.freeze({
+        path: path2,
+        target: resolved.value,
+        desired,
+        authenticated_before: captured.observation,
+        rollback: captured.rollback,
+        git_tracked: tracked,
+        ...renamePair === void 0 ? {} : { rename_pair: renamePair }
+      }));
+      return ok27(void 0);
+    };
+    for (const output of section.outputs) {
+      if (output.operation === "rename") {
+        const added2 = await addSecondarySource(output.previous_path, { state: "absent" }, true, {
+          role: "source",
+          peer_path: output.path
+        });
+        if (!added2.ok) return added2;
+      }
+      if (output.operation === "delete") {
+        const added2 = await addSecondarySource(output.path, { state: "absent" }, true);
+        if (!added2.ok) return added2;
+        continue;
+      }
+      const resolved = await resolveRepositoryPath({
+        runner: member.binding.runner,
+        claim: output.path,
+        context: input.services.authority.context
+      });
+      if (!resolved.ok) return resolved;
+      const captured = await captureProjectionTarget(resolved.value);
+      const bytes = sectionFacts.raw_payloads.get(output.path) ?? (captured.rollback.state === "present" ? captured.rollback.bytes : void 0);
+      if (bytes === void 0) return contractInvalid2("implementation-secondary-after-image-unavailable");
+      const desired = output.file_type === "regular" ? { state: "present", file_type: "regular", mode: output.after.mode, bytes } : { state: "present", file_type: "symlink", mode: "120000", bytes };
+      const added = await addSecondarySource(output.path, desired, output.operation !== "add", output.operation === "rename" ? { role: "destination", peer_path: output.previous_path } : void 0);
+      if (!added.ok) return added;
+    }
+    const sectionPlan = await prepareProjectionPlan(
+      sectionSources,
+      input.scanner,
+      member.binding.runner.location.worktreeRoot
+    );
+    if (!sectionPlan.ok) return sectionPlan;
+    const snapshotByPath2 = new Map(sectionFacts.snapshot_entries.map((entry) => [entry.path, entry]));
+    const sectionProjections = [];
+    for (const output of section.outputs) {
+      if (output.operation === "delete") continue;
+      const observed = snapshotByPath2.get(output.path);
+      if (observed?.state !== "present") return contractInvalid2("implementation-secondary-projection-identity-missing");
+      sectionProjections.push(Object.freeze({ repository: section.repository, path: output.path, content_digest: observed.content_digest }));
+    }
+    secondaryPrepared.push({
+      repository: section.repository,
+      repository_identity_digest: section.repository_identity_digest,
+      base_commit: section.base_commit,
+      snapshot_digest: section.snapshot_digest,
+      projection_plan: sectionPlan.value,
+      worktree_root: member.binding.runner.location.worktreeRoot,
+      projections: Object.freeze(sectionProjections),
+      raw_payloads: sectionFacts.raw_payloads
+    });
+  }
+  const changedSecondaryPrepared = secondaryPrepared.filter((entry) => entry.projection_plan.entries.length > 0);
+  const manifestValue = {
+    schema_version: "1",
+    task_id: input.services.authority.task_id,
+    repository_identity_digest: input.services.authority.repository_identity_digest,
+    result_id: input.result_id,
+    phase_instance: input.artifact.phase_instance,
+    step: input.artifact.step,
+    artifact_digest: canonicalJsonDigest(input.artifact),
+    source_artifact: input.artifact,
+    input_fingerprint: input.artifact.input_fingerprint,
+    snapshot_digest: input.artifact.snapshot_digest,
+    outputs: input.artifact.outputs,
+    projections,
+    ...changedSecondaryPrepared.length === 0 ? {} : {
+      secondary_projections: Object.freeze(changedSecondaryPrepared.map((entry) => Object.freeze({
+        repository: entry.repository,
+        repository_identity_digest: entry.repository_identity_digest,
+        projections: entry.projections
+      })))
+    },
+    accounting: input.artifact.accounting,
+    secret_scan: input.artifact.secret_scan
+  };
+  parseResultManifest(manifestValue);
+  const manifest = canonicalDocument(manifestValue);
+  const manifestTarget = await target(input.services, resultAuthorityClaim(manifest.digest), "authority-result");
+  if (!manifestTarget.ok) return manifestTarget;
+  const payloads = [];
+  for (const [path2, bytes] of facts.raw_payloads) {
+    const targetResult = await payloadTarget(input.services, manifest.digest, path2);
+    if (!targetResult.ok) return targetResult;
+    payloads.push(Object.freeze({ path: path2, bytes, target: targetResult.value }));
+  }
+  for (const section of secondaryPrepared) {
+    for (const [path2, bytes] of section.raw_payloads) {
+      const targetResult = await payloadTarget(input.services, manifest.digest, path2, section.repository);
+      if (!targetResult.ok) return targetResult;
+      payloads.push(Object.freeze({ repository: section.repository, path: path2, bytes, target: targetResult.value }));
+    }
+  }
+  const prepared = prepareSnapshot({
+    manifest: manifestValue,
+    payloads,
+    retained_task_bytes: input.retained_task_bytes,
+    validate_manifest: parseResultManifest
+  });
+  if (!prepared.ok) return prepared;
+  return ok27(Object.freeze({
+    reference: Object.freeze({
+      phase_instance: input.artifact.phase_instance,
+      step: input.artifact.step,
+      result_digest: prepared.value.result_digest,
+      result_id: input.result_id,
+      input_fingerprint: input.artifact.input_fingerprint
+    }),
+    prepared: prepared.value,
+    manifest_target: manifestTarget.value,
+    projection_plan: plan.value,
+    ...changedSecondaryPrepared.length === 0 ? {} : {
+      secondary_projection_plans: Object.freeze(changedSecondaryPrepared.map((entry) => Object.freeze({
+        repository: entry.repository,
+        repository_identity_digest: entry.repository_identity_digest,
+        base_commit: entry.base_commit,
+        snapshot_digest: entry.snapshot_digest,
+        projection_plan: entry.projection_plan,
+        worktree_root: entry.worktree_root
+      })))
+    }
+  }));
+}
+
+// src/mcp/handlers/state.ts
+var fail25 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+function stateResultId(intentId) {
+  return parseSafeId(`state-result-${sha256Bytes(new TextEncoder().encode(intentId)).slice(0, 32)}`);
+}
+function restartProvenance(context2, requestDigest) {
+  return Object.freeze({
+    schema_version: "1",
+    actor_class: "human",
+    assurance: "connected-request-trace",
+    channel: "connected-host",
+    connection_id: parseSafeId(context2.connection.connection_id),
+    invocation_id: parseSafeId(context2.invocation_id),
+    request_id_digest: canonicalJsonDigest({
+      schema_version: "1",
+      digest_kind: "transport-request-id",
+      request_id: context2.transport_metadata.request_id
+    }),
+    request_digest: requestDigest
+  });
+}
+async function settleApprovalRules(services2, repositorySet, current, prospective, produce, retained, config2) {
+  if (config2 === void 0) return void 0;
+  try {
+    const constitution = await resolvePinnedConstitution(
+      services2.runner,
+      current.policy_base_commit,
+      services2.authority.context
+    );
+    if (!constitution.ok) return void 0;
+    const authenticated = [];
+    for (const approval of current.approvals) {
+      const loaded = await loadAuthenticatedGateApproval(services2.dependencies, services2.authority, approval);
+      if (!loaded.ok) return void 0;
+      if (!authenticatedApprovalIsEligibleAfterLatestRestart(current, loaded.value)) continue;
+      authenticated.push(loaded.value);
+    }
+    const approvedUpstreams = await currentApprovedUpstreams(
+      services2.dependencies,
+      services2.authority,
+      current,
+      authenticated,
+      produce
+    );
+    const legacyInitialization = await loadLegacyImportInitialization(
+      services2.dependencies,
+      services2.authority,
+      current
+    );
+    if (!legacyInitialization.ok) return void 0;
+    if (legacyInitialization.value !== void 0 && current.phase_instance === "design" && !authenticated.some((approval) => approval.request.kind === "migration-audit" && approval.decision.envelope.payload.decision === "accept-import-audit")) return void 0;
+    const predecessor = currentReviewPredecessor(current, produce);
+    const assessment = assessCurrentEvidence(
+      prospective,
+      retained,
+      {
+        subject_digest: produce.artifact_digest,
+        input_fingerprint: current.input_fingerprint,
+        constitution: constitution.value,
+        approved_upstream_digests: approvedUpstreams,
+        authenticated_gate_approvals: authenticated,
+        ...predecessor === void 0 ? {} : { review_predecessor: predecessor },
+        ...config2.parsed.max_attempts === void 0 ? {} : { max_attempts: config2.parsed.max_attempts }
+      }
+    );
+    if (assessment.next !== "advance") {
+      if (assessment.next !== "adjudication-gate") return void 0;
+      const pending = pendingAdjudicationGates(
+        prospective,
+        constitution.value,
+        retained,
+        authenticated
+      );
+      if (pending[0]?.kind !== "constitution-review") return void 0;
+    }
+    const changedDocuments = await changedCoProducedDocumentPaths(services2.dependencies, current, produce);
+    if (!changedDocuments.ok) return void 0;
+    const ruleContext = approvalRuleContext(current, produce, config2.parsed, changedDocuments.value);
+    const conclusion = evaluateApprovalRules(
+      ruleContext.config,
+      ruleContext.subject,
+      ruleContext.changedPaths,
+      ruleContext.secondaryChangedPaths
+    );
+    const kind = decodePhaseInstance(current.phase_instance).kind;
+    const milestoneTarget = !conclusion.wait && (kind === "design" || kind === "phase-design" || kind === "phase-impl") ? await currentTargetRef(services2.dependencies) : void 0;
+    const observedTargetHead = milestoneTarget === void 0 ? void 0 : await resolveCommit(services2.runner, milestoneTarget.value);
+    const milestoneBaseline = milestoneTarget === void 0 ? void 0 : produce.artifact.artifact_kind === "implementation-output" ? produce.artifact.base_commit : observedTargetHead;
+    const secondaryMilestones = !conclusion.wait && produce.artifact.artifact_kind === "implementation-output" ? await buildSecondaryCommitAuthorizationFacts(produce.artifact, repositorySet) : Object.freeze([]);
+    return buildRuleSettlement(
+      current,
+      produce.artifact_digest,
+      config2.digest,
+      conclusion,
+      milestoneBaseline,
+      milestoneTarget === void 0 ? void 0 : { ref: milestoneTarget.value, head: observedTargetHead },
+      secondaryMilestones
+    );
+  } catch {
+    return void 0;
+  }
+}
+async function handleState(call, context2) {
+  return mapHandlerErrors(context2.invocation_id, async () => {
+    const session = await openHandlerSession(call, context2);
+    if (!session.ok) return session;
+    const { services: services2 } = session.value;
+    const restartInput = call.input.operation === "planning_restart" ? call.input : void 0;
+    const refreshInput = call.input.operation === "refresh_milestone_baseline" ? call.input : void 0;
+    const recoveryInput = call.input.operation === "recover_milestone_authority" ? call.input : void 0;
+    const triggerRecoveryInput = call.input.operation === "recover_approval_trigger_authority" ? call.input : void 0;
+    const staleBaselineInput = call.input.operation === "refresh_stale_baseline" ? call.input : void 0;
+    const commitAuthorityInput = call.input.operation === "set_commit_authority" ? call.input : void 0;
+    const artifact = restartInput === void 0 && refreshInput === void 0 && recoveryInput === void 0 && triggerRecoveryInput === void 0 && staleBaselineInput === void 0 && commitAuthorityInput === void 0 ? call.input.artifact : void 0;
+    if (services2.state === void 0) {
+      if (restartInput !== void 0 || refreshInput !== void 0 || recoveryInput !== void 0 || triggerRecoveryInput !== void 0 || staleBaselineInput !== void 0 || commitAuthorityInput !== void 0) {
+        return fail25(createProjectError("STATE_MISSING", { phase_instance: call.input.phase_instance }));
+      }
+      const initialized = await runStateInitialization(services2.dependencies, {
+        authority: services2.authority,
+        call
+      });
+      return initialized.ok ? Object.freeze({ schema_version: "1", ok: true, value: initialized.value.outcome }) : initialized;
+    }
+    if (staleBaselineInput !== void 0) {
+      const identified2 = identifyTransactionRequest(call, services2.authority, staleBaselineInput.input_fingerprint);
+      const refreshed = await refreshStaleBaselineGate(
+        services2.dependencies,
+        services2.authority,
+        staleBaselineInput.expected_revision,
+        async (current, request) => {
+          const discovered = await discoverReconciliationInput(services2.dependencies, services2.authority, current, session.value.repository_set);
+          if (!discovered.ok) return discovered;
+          const reconciliation = reconcileCurrentAuthority(discovered.value);
+          const target2 = await currentBaselineTargetFacts(services2.dependencies, reconciliation.findings, session.value.repository_set);
+          const live = baselineAdoptionInputFromFindings(
+            services2.authority.task_id,
+            current.value,
+            reconciliation.findings,
+            target2
+          );
+          if (live === void 0) {
+            return fail25(createProjectError("STATE_INVALID", {
+              phase_instance: current.value.phase_instance,
+              issue_code: "stale-baseline-live-subject-unrepresentable"
+            }));
+          }
+          const continuous = await baselinePresentedTargetsOnCurrentFirstParent(
+            services2.dependencies,
+            request.context,
+            target2,
+            session.value.repository_set
+          );
+          return Object.freeze({
+            schema_version: "1",
+            ok: true,
+            value: Object.freeze({
+              context: live.context,
+              presented_head_on_current_first_parent: continuous
+            })
+          });
+        }
+      );
+      if (!refreshed.ok) return refreshed;
+      return Object.freeze({
+        schema_version: "1",
+        ok: true,
+        value: Object.freeze({
+          path: parseTaskPathClaim("state.json"),
+          revision: refreshed.value.state.value.revision,
+          status: refreshed.value.state.value.status,
+          request_digest: identified2.request_digest
+        })
+      });
+    }
+    if (restartInput !== void 0) {
+      const identified2 = identifyTransactionRequest(
+        call,
+        services2.authority,
+        restartInput.input_fingerprint
+      );
+      const restartId = planningRestartId(identified2.request_digest, restartInput.intent_id);
+      const existing = services2.state.value.restart_history?.find((record2) => record2.restart_id === restartId);
+      if (existing !== void 0) {
+        if (!completedPlanningRestartMatches(services2.state.value, {
+          restart_id: restartId,
+          source_phase_instance: restartInput.phase_instance,
+          target_phase_instance: restartInput.target_phase_instance,
+          reason: restartInput.reason,
+          input_fingerprint: restartInput.input_fingerprint
+        })) {
+          return fail25(createProjectError("STATE_INVALID", {
+            phase_instance: services2.state.value.phase_instance,
+            issue_code: "planning-restart-replay-mismatch"
+          }));
+        }
+        if (existing.target_phase_instance === "prd") {
+          const ask = await resolveTaskPath({
+            runner: services2.runner,
+            taskId: services2.authority.task_id,
+            claim: parseTaskPathClaim("ask.md"),
+            expectedClass: "task-ask",
+            context: services2.authority.context
+          });
+          if (!ask.ok) return ask;
+          if (restartInput.ask_base_digest === void 0 || !await validatePlanningRestartAskAppend({
+            target: ask.value,
+            expected_base_digest: restartInput.ask_base_digest,
+            restart_id: restartId,
+            request: restartInput.reason
+          })) {
+            return fail25(createProjectError("STATE_INVALID", {
+              phase_instance: services2.state.value.phase_instance,
+              issue_code: "planning-restart-ask-replay-mismatch"
+            }));
+          }
+        }
+        return Object.freeze({
+          schema_version: "1",
+          ok: true,
+          value: Object.freeze({
+            path: parseTaskPathClaim("state.json"),
+            revision: existing.restarted_at_revision,
+            status: "running",
+            request_digest: identified2.request_digest
+          })
+        });
+      }
+    }
+    const identified = identifyTransactionRequest(
+      call,
+      services2.authority,
+      call.input.input_fingerprint
+    );
+    const retainedBytes = services2.dependencies.read_retained_task_bytes;
+    const scanner = services2.dependencies.gate_secret_scanner;
+    const transaction = await runStateTransaction(
+      services2.dependencies,
+      { authority: services2.authority, call },
+      async (current, identifiedCall, liveConfig) => {
+        if (recoveryInput !== void 0) {
+          const computed = await computeTaskStatus(services2.dependencies, services2.authority);
+          const recovery = computed.ok ? computed.value.milestone_recovery : void 0;
+          if (!computed.ok || computed.value.next_action.code !== "recover-milestone-authority" || computed.value.revision !== current.value.revision || recovery === void 0 || recoveryInput.phase_instance !== current.value.phase_instance || recoveryInput.step !== current.value.step || recoveryInput.status !== current.value.status) {
+            return fail25(createProjectError("TRANSITION_INVALID", {
+              phase_instance: current.value.phase_instance,
+              from: `${current.value.step}-${current.value.status}`,
+              to: "milestone-recovery"
+            }));
+          }
+          const recoveryId = parsePathSafeId(`milestone-recovery-${identified.request_digest}`);
+          const planned = planMilestoneRecovery({
+            current: current.value,
+            recovery_id: recoveryId,
+            cause: recovery.cause,
+            target_ref: recovery.target_ref,
+            target_head: recovery.target_head,
+            subject_digest: recovery.subject_digest,
+            recomputed_input_fingerprint: identified.input_fingerprint
+          });
+          if (!planned.ok) return planned;
+          const revision3 = parseSafeInteger(current.value.revision + 1);
+          const success3 = Object.freeze({
+            path: parseTaskPathClaim("state.json"),
+            revision: revision3,
+            status: "running",
+            request_digest: identified.request_digest
+          });
+          const expectation2 = createInternalResultExpectation({
+            schema_version: "1",
+            tool: "archflow_state",
+            task_id: services2.authority.task_id,
+            intent_id: recoveryInput.intent_id,
+            input_fingerprint: identified.input_fingerprint,
+            request_digest: identified.request_digest,
+            result_id: parseSafeId(recoveryId),
+            resulting_revision: revision3,
+            success: success3
+          });
+          const result2 = validateProjectResultStructure(identifiedCall, {
+            schema_version: "1",
+            ok: true,
+            value: success3
+          });
+          return Object.freeze({
+            schema_version: "1",
+            ok: true,
+            value: Object.freeze({ expectation: expectation2, result: result2, next_state: planned.value })
+          });
+        }
+        if (triggerRecoveryInput !== void 0) {
+          const computed = await computeTaskStatus(services2.dependencies, services2.authority);
+          if (!computed.ok || computed.value.next_action.code !== "recover-approval-trigger-authority" || computed.value.revision !== current.value.revision || triggerRecoveryInput.phase_instance !== current.value.phase_instance || triggerRecoveryInput.step !== current.value.step || triggerRecoveryInput.status !== current.value.status) {
+            return fail25(createProjectError("TRANSITION_INVALID", {
+              phase_instance: current.value.phase_instance,
+              from: `${current.value.step}-${current.value.status}`,
+              to: "approval-trigger-authority-recovery"
+            }));
+          }
+          const planned = planApprovalTriggerAuthorityRecovery({
+            current: current.value,
+            recomputed_input_fingerprint: identified.input_fingerprint
+          });
+          if (!planned.ok) return planned;
+          const revision3 = parseSafeInteger(current.value.revision + 1);
+          const success3 = Object.freeze({
+            path: parseTaskPathClaim("state.json"),
+            revision: revision3,
+            status: "running",
+            request_digest: identified.request_digest
+          });
+          const expectation2 = createInternalResultExpectation({
+            schema_version: "1",
+            tool: "archflow_state",
+            task_id: services2.authority.task_id,
+            intent_id: triggerRecoveryInput.intent_id,
+            input_fingerprint: identified.input_fingerprint,
+            request_digest: identified.request_digest,
+            result_id: stateResultId(triggerRecoveryInput.intent_id),
+            resulting_revision: revision3,
+            success: success3
+          });
+          const result2 = validateProjectResultStructure(identifiedCall, {
+            schema_version: "1",
+            ok: true,
+            value: success3
+          });
+          return Object.freeze({
+            schema_version: "1",
+            ok: true,
+            value: Object.freeze({ expectation: expectation2, result: result2, next_state: planned.value })
+          });
+        }
+        if (commitAuthorityInput !== void 0) {
+          const state = current.value;
+          if (state.terminal !== void 0 || state.open_gate !== void 0) {
+            return fail25(createProjectError("TRANSITION_INVALID", {
+              phase_instance: commitAuthorityInput.phase_instance,
+              from: `${state.step}-${state.status}`,
+              to: "set-commit-authority"
+            }));
+          }
+          let resolvedCommit;
+          try {
+            resolvedCommit = await resolveCommit(services2.runner, commitAuthorityInput.target_commit);
+          } catch {
+            return fail25(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance,
+              issue_code: "target-commit-unresolvable"
+            }));
+          }
+          const scope3 = commitAuthorityInput.scope ?? ["milestone"];
+          const updateMilestone = scope3.includes("milestone");
+          const updatePolicy = scope3.includes("policy");
+          const revision3 = parseSafeInteger(state.revision + 1);
+          let updatedRuleSettlements = state.rule_settlements;
+          if (updateMilestone && updatedRuleSettlements !== void 0 && updatedRuleSettlements.length > 0) {
+            const matchingSettlement = [...updatedRuleSettlements].filter((s) => s.phase_instance === state.phase_instance).sort((a, b) => b.settled_at_revision - a.settled_at_revision)[0];
+            if (matchingSettlement !== void 0 && matchingSettlement.milestone_baseline_commit !== void 0) {
+              const replacement = Object.freeze({
+                ...matchingSettlement,
+                settled_at_revision: revision3,
+                milestone_baseline_commit: resolvedCommit,
+                ...matchingSettlement.milestone_target_ref === void 0 ? {} : {
+                  milestone_target_ref: matchingSettlement.milestone_target_ref,
+                  milestone_target_head: resolvedCommit
+                }
+              });
+              updatedRuleSettlements = Object.freeze([...state.rule_settlements ?? [], replacement].sort(compareRuleSettlements));
+            }
+          }
+          let newPolicyBaseCommit = state.policy_base_commit;
+          let newConstitutionDigest = state.constitution_digest;
+          if (updatePolicy) {
+            const resolvedConstitution = await resolvePinnedConstitution(
+              services2.runner,
+              resolvedCommit,
+              services2.authority.context
+            );
+            if (!resolvedConstitution.ok) return resolvedConstitution;
+            newPolicyBaseCommit = resolvedCommit;
+            newConstitutionDigest = resolvedConstitution.value.digest;
+          }
+          const { revision: _revision, last_transition: _transition, ...preserved } = state;
+          const nextState = Object.freeze({
+            ...preserved,
+            phase_instance: commitAuthorityInput.phase_instance,
+            step: commitAuthorityInput.step,
+            status: commitAuthorityInput.status,
+            input_fingerprint: identified.input_fingerprint,
+            ...updatePolicy ? { policy_base_commit: newPolicyBaseCommit, constitution_digest: newConstitutionDigest } : {},
+            ...updatedRuleSettlements === void 0 ? {} : { rule_settlements: updatedRuleSettlements }
+          });
+          const success3 = Object.freeze({
+            path: parseTaskPathClaim("state.json"),
+            revision: revision3,
+            status: commitAuthorityInput.status,
+            request_digest: identified.request_digest
+          });
+          const expectation2 = createInternalResultExpectation({
+            schema_version: "1",
+            tool: "archflow_state",
+            task_id: services2.authority.task_id,
+            intent_id: commitAuthorityInput.intent_id,
+            input_fingerprint: identified.input_fingerprint,
+            request_digest: identified.request_digest,
+            result_id: stateResultId(commitAuthorityInput.intent_id),
+            resulting_revision: revision3,
+            success: success3
+          });
+          const result2 = validateProjectResultStructure(identifiedCall, {
+            schema_version: "1",
+            ok: true,
+            value: success3
+          });
+          return Object.freeze({
+            schema_version: "1",
+            ok: true,
+            value: Object.freeze({ expectation: expectation2, result: result2, next_state: nextState })
+          });
+        }
+        if (refreshInput !== void 0) {
+          const state = current.value;
+          const decoded = decodePhaseInstance(state.phase_instance);
+          if (decoded.kind !== "design" && decoded.kind !== "phase-design" || refreshInput.phase_instance !== state.phase_instance || state.step !== "triage" || state.status !== "succeeded" || state.open_gate !== void 0 || state.pending_human_revision !== void 0 || state.terminal !== void 0) {
+            return fail25(createProjectError("TRANSITION_INVALID", {
+              phase_instance: refreshInput.phase_instance,
+              from: `${state.step}-${state.status}`,
+              to: "refresh-milestone-baseline"
+            }));
+          }
+          const constitution = await resolvePinnedConstitution(
+            services2.runner,
+            state.policy_base_commit,
+            services2.authority.context
+          );
+          if (!constitution.ok) return constitution;
+          const policy = authenticateRuleAcceptancePolicy(state, constitution.value);
+          const produce = await loadCurrentProduceSubject(services2.dependencies, state);
+          if (!produce.ok) return produce;
+          const refreshApprovals = [];
+          for (const approval of state.approvals) {
+            if (approval.subject_digest !== produce.value.artifact_digest) continue;
+            const loaded = await loadAuthenticatedGateApproval(
+              services2.dependencies,
+              services2.authority,
+              approval
+            );
+            if (!loaded.ok) return loaded;
+            if (authenticatedApprovalIsEligibleAfterLatestRestart(state, loaded.value)) {
+              refreshApprovals.push(loaded.value);
+            }
+          }
+          const humanApproved = matchingOrdinaryApproval(
+            state,
+            refreshApprovals,
+            produce.value.artifact_digest,
+            state.phase_instance
+          ) !== void 0;
+          const prior = policy === void 0 || humanApproved ? void 0 : acceptedNoWaitSettlement(
+            policy,
+            state,
+            produce.value.artifact_digest,
+            state.phase_instance
+          );
+          if (prior?.milestone_baseline_commit === void 0 || prior.config_digest !== liveConfig.digest) {
+            return fail25(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance,
+              issue_code: "milestone-baseline-refresh-authority-missing"
+            }));
+          }
+          if (produce.value.artifact.artifact_kind !== "document" || !await approvedDesignWorktreeMatchesRetainedArtifact(
+            services2.runner,
+            state.task_id,
+            produce.value.artifact,
+            produce.value.retained.manifest.value.outputs,
+            services2.authority.context
+          )) {
+            return fail25(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance,
+              issue_code: "milestone-baseline-refresh-reviewed-bytes-changed"
+            }));
+          }
+          const discovered = await discoverReconciliationInput(services2.dependencies, services2.authority, current, session.value.repository_set);
+          if (!discovered.ok) return discovered;
+          const reconciliation = reconcileCurrentAuthority(discovered.value);
+          if (reconciliation.findings.length !== 0 || (discovered.value.blocking_reasons ?? []).length !== 0) {
+            return fail25(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance,
+              issue_code: "milestone-baseline-refresh-reconciliation-required"
+            }));
+          }
+          const currentTarget = await currentTargetRef(services2.dependencies);
+          if (prior.milestone_target_ref !== void 0 && currentTarget.value !== prior.milestone_target_ref) {
+            return fail25(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance,
+              issue_code: "milestone-baseline-refresh-target-changed"
+            }));
+          }
+          const head = await resolveCommit(
+            services2.runner,
+            prior.milestone_target_ref ?? currentTarget.value
+          );
+          if (head === prior.milestone_baseline_commit) {
+            return fail25(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance,
+              issue_code: "milestone-baseline-refresh-not-needed"
+            }));
+          }
+          const revision3 = parseSafeInteger(state.revision + 1);
+          const replacement = Object.freeze({
+            ...prior,
+            settled_at_revision: revision3,
+            milestone_baseline_commit: head,
+            ...prior.milestone_target_ref === void 0 ? {} : {
+              milestone_target_ref: prior.milestone_target_ref,
+              milestone_target_head: head
+            }
+          });
+          const { revision: _revision, last_transition: _transition, ...preserved } = state;
+          const settlements = Object.freeze([...state.rule_settlements ?? [], replacement].sort(compareRuleSettlements));
+          const nextState = Object.freeze({ ...preserved, rule_settlements: settlements });
+          const success3 = Object.freeze({
+            path: parseTaskPathClaim("state.json"),
+            revision: revision3,
+            status: "succeeded",
+            request_digest: identified.request_digest
+          });
+          const expectation2 = createInternalResultExpectation({
+            schema_version: "1",
+            tool: "archflow_state",
+            task_id: services2.authority.task_id,
+            intent_id: refreshInput.intent_id,
+            input_fingerprint: identified.input_fingerprint,
+            request_digest: identified.request_digest,
+            result_id: stateResultId(refreshInput.intent_id),
+            resulting_revision: revision3,
+            success: success3
+          });
+          const result2 = validateProjectResultStructure(identifiedCall, { schema_version: "1", ok: true, value: success3 });
+          return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ expectation: expectation2, result: result2, next_state: nextState }) });
+        }
+        if (restartInput !== void 0) {
+          const revision3 = parseSafeInteger(current.value.revision + 1);
+          const restartId = planningRestartId(identified.request_digest, restartInput.intent_id);
+          let landingFingerprint = identified.input_fingerprint;
+          const planInput = {
+            current: current.value,
+            restart_id: restartId,
+            target_phase_instance: restartInput.target_phase_instance,
+            reason: restartInput.reason,
+            recomputed_input_fingerprint: landingFingerprint,
+            human_provenance: restartProvenance(context2, identified.request_digest)
+          };
+          let planned = planPlanningRestart(planInput);
+          if (!planned.ok) return planned;
+          if (restartInput.target_phase_instance === "prd") {
+            const writer = services2.dependencies.atomic;
+            const ask = await resolveTaskPath({
+              runner: services2.runner,
+              taskId: services2.authority.task_id,
+              claim: parseTaskPathClaim("ask.md"),
+              expectedClass: "task-ask",
+              context: services2.authority.context
+            });
+            if (!ask.ok) return ask;
+            await installPlanningRestartAskAppend(writer, {
+              target: ask.value,
+              expected_base_digest: restartInput.ask_base_digest,
+              restart_id: restartId,
+              request: restartInput.reason
+            });
+            const liveConfig2 = await services2.dependencies.read_config(services2.authority.config);
+            if (liveConfig2.kind !== "valid") {
+              return fail25(createProjectError("CONFIG_INVALID", { issue_code: `config-${liveConfig2.kind}` }));
+            }
+            const landingSubject = await services2.dependencies.resolve_input_fingerprint({
+              runner: services2.runner,
+              authority: services2.authority,
+              state: current,
+              call,
+              live_config: liveConfig2.snapshot,
+              // The landing is committed through the kernel, whose equality pin binds the next
+              // state's fingerprint to the request's claim — so this recompute is a comparing
+              // site: supply the claim as the expected digest and record the accepted
+              // (possibly legacy-composition) value rather than writing the new composition.
+              expected_input_fingerprint: restartInput.input_fingerprint,
+              context: services2.authority.context
+            });
+            if (!landingSubject.ok) return landingSubject;
+            landingFingerprint = landingSubject.value.fingerprint;
+            planned = planPlanningRestart({ ...planInput, recomputed_input_fingerprint: landingFingerprint });
+            if (!planned.ok) return planned;
+          }
+          const success3 = Object.freeze({
+            path: parseTaskPathClaim("state.json"),
+            revision: revision3,
+            status: "running",
+            request_digest: identified.request_digest
+          });
+          const resultId = parseSafeId(restartId);
+          const expectation2 = createInternalResultExpectation({
+            schema_version: "1",
+            tool: "archflow_state",
+            task_id: services2.authority.task_id,
+            intent_id: restartInput.intent_id,
+            input_fingerprint: restartInput.input_fingerprint,
+            request_digest: identified.request_digest,
+            result_id: resultId,
+            resulting_revision: revision3,
+            success: success3
+          });
+          const result2 = validateProjectResultStructure(identifiedCall, {
+            schema_version: "1",
+            ok: true,
+            value: success3
+          });
+          return Object.freeze({
+            schema_version: "1",
+            ok: true,
+            value: Object.freeze({ expectation: expectation2, result: result2, next_state: planned.value })
+          });
+        }
+        let preparedResult;
+        let derivedPlannedFinalPhase;
+        let settlementEvidence;
+        let settlementProduce;
+        if (artifact?.artifact_kind === "document" || artifact?.artifact_kind === "implementation-output") {
+          if (retainedBytes === void 0 || scanner === void 0) {
+            throw new TypeError("snapshot preparation dependencies are unavailable");
+          }
+          if (artifact.artifact_kind === "document" && artifact.editorial_predecessor !== void 0) {
+            const authorized = await validateEditorialPredecessorDeclaration(
+              services2.dependencies,
+              current.value,
+              artifact
+            );
+            if (!authorized.ok) return authorized;
+          }
+          if (current.value.pending_human_revision !== void 0 && call.input.human_revision?.classification === "simple") {
+            const loadManifest = services2.dependencies.load_retained_manifest;
+            if (loadManifest === void 0) {
+              throw new TypeError("evidence preparation dependencies are unavailable");
+            }
+            const retained = await loadRetainedEvidence(
+              { load_retained_manifest: loadManifest },
+              current.value,
+              current.value.phase_instance
+            );
+            if (!retained.ok) return retained;
+            const triage = retained.value.get("triage")?.manifest.source_artifact;
+            if (triage?.artifact_kind === "triage" && triage.evidence.accepted_count > 0) {
+              return fail25(createProjectError("CONTRACT_INVALID", {
+                tool: "archflow_state",
+                issue_code: "simple-human-revision-cannot-resolve-accepted-finding"
+              }));
+            }
+          }
+          const common3 = {
+            services: services2,
+            result_id: stateResultId(call.input.intent_id),
+            retained_task_bytes: await retainedBytes(),
+            measured_at_revision: current.value.revision,
+            scanner
+          };
+          const prepared = artifact.artifact_kind === "document" ? await prepareDocumentResult({ ...common3, artifact }) : await prepareImplementationResult({ ...common3, artifact });
+          if (!prepared.ok) return prepared;
+          preparedResult = prepared.value;
+          try {
+            derivedPlannedFinalPhase = plannedFinalPhaseFromRecordedPayloads(
+              services2.authority.task_id,
+              prepared.value.prepared.payloads,
+              current.value.planned_final_phase
+            );
+          } catch {
+            return fail25(createProjectError("CONTRACT_INVALID", {
+              tool: "archflow_state",
+              issue_code: "produce-design-phase-plan-invalid"
+            }));
+          }
+          if (derivedPlannedFinalPhase !== void 0 && derivedPlannedFinalPhase !== null && derivedFinalPhaseBelowCurrentPhase(derivedPlannedFinalPhase, call.input.phase_instance)) {
+            return fail25(createProjectError("CONTRACT_INVALID", {
+              tool: "archflow_state",
+              issue_code: "produce-derived-final-phase-below-current"
+            }));
+          }
+          const settlesProduceReentry = call.input.phase_instance === current.value.phase_instance && call.input.step === "produce" && call.input.status === "succeeded" && artifact.artifact_kind === "document" && artifact.editorial_predecessor !== void 0 && current.value.pending_human_revision === void 0 && call.input.human_revision === void 0;
+          if (settlesProduceReentry) {
+            const loadManifest = services2.dependencies.load_retained_manifest;
+            if (loadManifest === void 0) throw new TypeError("evidence preparation dependencies are unavailable");
+            const retained = await loadRetainedEvidence(
+              { load_retained_manifest: loadManifest },
+              current.value,
+              current.value.phase_instance
+            );
+            if (!retained.ok) return retained;
+            settlementEvidence = retained.value;
+            const manifest = prepared.value.prepared.manifest.value;
+            const source = manifest.source_artifact;
+            if (source.artifact_kind !== "document" && source.artifact_kind !== "implementation-output") {
+              return fail25(createProjectError("STATE_INVALID", {
+                phase_instance: current.value.phase_instance,
+                issue_code: "produce-reentry-subject-invalid"
+              }));
+            }
+            settlementProduce = Object.freeze({
+              artifact_digest: manifest.artifact_digest,
+              artifact: source,
+              reference: prepared.value.reference,
+              retained: Object.freeze({
+                manifest: prepared.value.prepared.manifest,
+                manifest_target: prepared.value.manifest_target
+              })
+            });
+          }
+        }
+        if (artifact?.artifact_kind === "triage") {
+          const loadManifest = services2.dependencies.load_retained_manifest;
+          if (retainedBytes === void 0 || scanner === void 0 || loadManifest === void 0) {
+            throw new TypeError("evidence preparation dependencies are unavailable");
+          }
+          const produce = await loadCurrentProduceSubject(services2.dependencies, current.value);
+          if (!produce.ok) return produce;
+          if (artifact.evidence.subject_digest !== produce.value.artifact_digest) {
+            return fail25(createProjectError("STATE_INVALID", {
+              phase_instance: current.value.phase_instance,
+              issue_code: "review-subject-not-current-produce-artifact"
+            }));
+          }
+          const reviews = await loadCurrentReviewSet(
+            {
+              read_state: services2.dependencies.read_state,
+              load_retained_manifest: loadManifest
+            },
+            services2.authority,
+            call.input.phase_instance
+          );
+          if (!reviews.ok) return reviews;
+          const value = { kind: "triage", current_reviews: reviews.value, evidence: artifact.evidence };
+          const installsTriage = call.input.phase_instance === current.value.phase_instance && call.input.step === "triage" && call.input.status === "succeeded";
+          const loadRetainedResult = services2.dependencies.load_retained_result;
+          if (installsTriage && loadRetainedResult === void 0) {
+            throw new TypeError("evidence preparation dependencies are unavailable");
+          }
+          const previousTriageRef = installsTriage ? current.value.authoritative_results.find((candidate) => candidate.phase_instance === call.input.phase_instance && candidate.step === "triage") : void 0;
+          const previousReviewRef = installsTriage ? current.value.authoritative_results.find((candidate) => candidate.phase_instance === call.input.phase_instance && candidate.step === "counter_review") : void 0;
+          const prepared = await prepareEvidenceResult({
+            authority: services2.authority,
+            runner: services2.runner,
+            result_id: stateResultId(call.input.intent_id),
+            retained_task_bytes: await retainedBytes(),
+            measured_at_revision: current.value.revision,
+            scanner,
+            value,
+            ...installsTriage ? {
+              disposition_ledger: {
+                attempt: current.value.attempt,
+                ...previousTriageRef === void 0 ? {} : { previous_triage_ref: previousTriageRef },
+                ...previousReviewRef === void 0 ? {} : { review_ref: previousReviewRef }
+              },
+              // The throw above proved the loader exists whenever installsTriage holds.
+              load_retained_result: loadRetainedResult
+            } : {}
+          });
+          if (!prepared.ok) return prepared;
+          preparedResult = prepared.value;
+          if (call.input.phase_instance === current.value.phase_instance && call.input.step === "triage" && call.input.status === "succeeded") {
+            const retained = await loadRetainedEvidence(
+              { load_retained_manifest: loadManifest },
+              current.value,
+              current.value.phase_instance
+            );
+            if (!retained.ok) return retained;
+            settlementEvidence = new Map(retained.value).set("triage", Object.freeze({
+              reference: prepared.value.reference,
+              manifest: prepared.value.prepared.manifest.value
+            }));
+            settlementProduce = produce.value;
+          }
+        }
+        const installation = preparedResult === void 0 ? void 0 : prepareResultInstallation({
+          reference: preparedResult.reference,
+          prepared: preparedResult.prepared,
+          manifest_target: preparedResult.manifest_target,
+          projection_plan: preparedResult.projection_plan,
+          worktree_root: services2.runner.location.worktreeRoot,
+          ..."secondary_projection_plans" in preparedResult && preparedResult.secondary_projection_plans !== void 0 ? { secondary_projection_plans: preparedResult.secondary_projection_plans } : {}
+        });
+        const revision2 = parseSafeInteger(current.value.revision + 1);
+        const success2 = Object.freeze({
+          path: parseTaskPathClaim("state.json"),
+          revision: revision2,
+          status: call.input.status,
+          request_digest: identified.request_digest
+        });
+        const expectation = createInternalResultExpectation({
+          schema_version: "1",
+          tool: "archflow_state",
+          task_id: services2.authority.task_id,
+          intent_id: call.input.intent_id,
+          input_fingerprint: call.input.input_fingerprint,
+          request_digest: identified.request_digest,
+          result_id: preparedResult?.reference.result_id ?? stateResultId(call.input.intent_id),
+          resulting_revision: revision2,
+          success: success2
+        });
+        const result = validateProjectResultStructure(identifiedCall, {
+          schema_version: "1",
+          ok: true,
+          value: success2
+        });
+        let completionSubjectDigest;
+        let commitObserved = false;
+        let legacyResumePhase;
+        const authenticatedGateApprovals2 = [];
+        const decodedCurrent = decodePhaseInstance(current.value.phase_instance);
+        const crossesPhase = call.input.phase_instance !== current.value.phase_instance;
+        const planningRestartSignal = restartInput !== void 0;
+        const completionSignal = !planningRestartSignal && artifact === void 0 && decodedCurrent.kind === "phase-impl" && current.value.step === "triage" && current.value.status === "succeeded";
+        const artifactPhaseExitSignal = !planningRestartSignal && artifact === void 0 && crossesPhase && decodedCurrent.kind !== "phase-impl";
+        let currentProduce;
+        let authenticatedRuleAcceptance;
+        if (completionSignal || artifactPhaseExitSignal) {
+          const loadedProduce = await loadCurrentProduceSubject(services2.dependencies, current.value);
+          if (!loadedProduce.ok) return loadedProduce;
+          currentProduce = loadedProduce.value;
+          completionSubjectDigest = currentProduce.artifact_digest;
+          const resolved = await resolvePinnedConstitution(
+            services2.runner,
+            current.value.policy_base_commit,
+            services2.authority.context
+          );
+          if (!resolved.ok) return resolved;
+          const policy = authenticateRuleAcceptancePolicy(current.value, resolved.value);
+          const settlement = policy === void 0 ? void 0 : acceptedNoWaitSettlement(
+            policy,
+            current.value,
+            completionSubjectDigest,
+            current.value.phase_instance
+          );
+          if (policy !== void 0 && settlement !== void 0) {
+            authenticatedRuleAcceptance = Object.freeze({ policy, settlement });
+          }
+        }
+        if (artifactPhaseExitSignal) {
+          const designExit = decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design";
+          for (const approval of current.value.approvals) {
+            if (!(designExit ? approval.gate_kind === "design-approval" || approval.gate_kind === "artifact-approval" : approval.gate_kind === "artifact-approval") || approval.subject_digest !== completionSubjectDigest) continue;
+            const loaded = await loadAuthenticatedGateApproval(
+              services2.dependencies,
+              services2.authority,
+              approval
+            );
+            if (!loaded.ok) return loaded;
+            if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
+            authenticatedGateApprovals2.push(loaded.value);
+          }
+          if (completionSubjectDigest !== void 0 && matchingOrdinaryApproval(
+            current.value,
+            authenticatedGateApprovals2,
+            completionSubjectDigest,
+            current.value.phase_instance
+          ) !== void 0) {
+            authenticatedRuleAcceptance = void 0;
+          }
+          if (designExit && currentProduce?.artifact.artifact_kind === "document") {
+            for (const authenticated of authenticatedGateApprovals2) {
+              if (authenticated.request.kind !== "design-approval") continue;
+              if ((await designArtifactCommittedAtCurrentTarget(
+                services2.runner,
+                current.value.task_id,
+                currentProduce.artifact,
+                currentProduce.retained.manifest.value.outputs,
+                authenticated.request.context
+              )).observed) {
+                commitObserved = true;
+                break;
+              }
+            }
+            if (!commitObserved && authenticatedRuleAcceptance !== void 0) {
+              const settlement = authenticatedRuleAcceptance.settlement;
+              const baseline = settlement.milestone_baseline_commit;
+              if (baseline !== void 0) {
+                const currentTarget = await currentTargetRef(services2.dependencies);
+                const legacyTarget = settlement.milestone_target_ref === void 0;
+                const pinnedTargetValid = legacyTarget || settlement.milestone_target_head === baseline && currentTarget.value === settlement.milestone_target_ref;
+                const targetRef = legacyTarget ? currentTarget.value : settlement.milestone_target_ref;
+                const phase3 = decodePhaseInstance(current.value.phase_instance);
+                if (phase3.kind !== "design" && phase3.kind !== "phase-design") {
+                  throw new TypeError("autonomous design commit has a non-design phase");
+                }
+                const phaseLabel = phase3.kind === "design" ? "design" : `phase ${String(phase3.phase)} design`;
+                const proof = pinnedTargetValid ? await resolveAutonomousDesignMilestoneProof(
+                  services2.runner,
+                  current.value,
+                  currentProduce.artifact,
+                  currentProduce.retained.manifest.value.outputs,
+                  targetRef,
+                  baseline,
+                  `ArchFlow: Approve ${current.value.task_id} ${phaseLabel}`,
+                  services2.authority.context
+                ) : void 0;
+                commitObserved = proof?.kind === "proven" && (!legacyTarget || proof.commit === proof.target_head);
+              }
+              if (commitObserved && current.value.phase_instance === "design") {
+                const bound = await loadAutonomousDesignFinalPhase(
+                  services2.dependencies,
+                  current.value,
+                  completionSubjectDigest
+                );
+                if (!bound.ok) return bound;
+                derivedPlannedFinalPhase = bound.value;
+              }
+            }
+          }
+        }
+        if (completionSignal && currentProduce !== void 0) {
+          for (const approval of current.value.approvals) {
+            if (approval.gate_kind !== "commit-authorization" || approval.subject_digest !== completionSubjectDigest) continue;
+            const loaded = await loadAuthenticatedGateApproval(
+              services2.dependencies,
+              services2.authority,
+              approval
+            );
+            if (!loaded.ok) return loaded;
+            if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
+            authenticatedGateApprovals2.push(loaded.value);
+          }
+          if (completionSubjectDigest !== void 0 && matchingOrdinaryApproval(
+            current.value,
+            authenticatedGateApprovals2,
+            completionSubjectDigest,
+            current.value.phase_instance
+          ) !== void 0) {
+            authenticatedRuleAcceptance = void 0;
+          }
+          const source = currentProduce.artifact;
+          if (source.artifact_kind === "implementation-output") {
+            for (const authenticated of authenticatedGateApprovals2) {
+              if (authenticated.request.kind !== "commit-authorization") continue;
+              const exact = exactCommitAuthorizationContext(authenticated.request.context);
+              if (exact === void 0) continue;
+              const primaryProof = await resolveImplementationMilestoneProof(
+                services2.runner,
+                source,
+                exact
+              );
+              if (primaryProof.kind === "proven" && await secondaryImplementationMilestonesProven(
+                source,
+                exact.secondary_commits ?? [],
+                session.value.repository_set
+              )) {
+                commitObserved = true;
+                break;
+              }
+            }
+            if (!commitObserved && authenticatedRuleAcceptance !== void 0) {
+              const settlement = authenticatedRuleAcceptance.settlement;
+              const currentTarget = await currentTargetRef(services2.dependencies);
+              const legacyTarget = settlement.milestone_target_ref === void 0;
+              const pinnedTargetValid = legacyTarget || settlement.milestone_target_head === source.base_commit && settlement.milestone_baseline_commit === source.base_commit && currentTarget.value === settlement.milestone_target_ref;
+              const targetRef = legacyTarget ? currentTarget.value : settlement.milestone_target_ref;
+              const phase3 = decodePhaseInstance(source.phase_instance);
+              const proof = pinnedTargetValid ? await resolveAutonomousImplementationMilestoneProof(
+                services2.runner,
+                source,
+                targetRef,
+                `ArchFlow: Implement ${source.task_id} phase ${phase3.kind === "phase-impl" ? String(phase3.phase) : source.phase_instance}`
+              ) : void 0;
+              commitObserved = proof?.kind === "proven" && (!legacyTarget || proof.commit === proof.target_head) && await secondaryImplementationMilestonesProven(
+                source,
+                settlement.secondary_milestones ?? [],
+                session.value.repository_set
+              );
+            }
+          }
+        }
+        const decodedTarget = decodePhaseInstance(call.input.phase_instance);
+        const legacyJumpSignal = !planningRestartSignal && artifact === void 0 && current.value.phase_instance === "design" && current.value.step === "triage" && current.value.status === "succeeded" && (decodedTarget.kind === "phase-design" || decodedTarget.kind === "phase-impl") && Number(decodedTarget.phase) >= 1;
+        if (legacyJumpSignal) {
+          const resolved = await findLegacyImportResumePhase(
+            services2.dependencies,
+            services2.authority,
+            current.value
+          );
+          if (!resolved.ok) return resolved;
+          legacyResumePhase = resolved.value;
+          if (legacyResumePhase !== void 0) {
+            for (const approval of current.value.approvals) {
+              if (approval.gate_kind !== "migration-audit" || approval.subject_digest !== completionSubjectDigest) continue;
+              const loaded = await loadAuthenticatedGateApproval(
+                services2.dependencies,
+                services2.authority,
+                approval
+              );
+              if (!loaded.ok) return loaded;
+              if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
+              authenticatedGateApprovals2.push(loaded.value);
+              if (loaded.value.request.kind === "migration-audit" && loaded.value.request.context.target_ref !== void 0 && loaded.value.request.context.baseline_commit !== void 0 && loaded.value.request.context.commit_message !== void 0 && currentProduce?.artifact.artifact_kind === "document") {
+                commitObserved = (await designArtifactCommittedAtCurrentTarget(
+                  services2.runner,
+                  current.value.task_id,
+                  currentProduce.artifact,
+                  currentProduce.retained.manifest.value.outputs,
+                  {
+                    target_ref: loaded.value.request.context.target_ref,
+                    baseline_commit: loaded.value.request.context.baseline_commit,
+                    commit_message: loaded.value.request.context.commit_message,
+                    ...loaded.value.request.context.imported_documents === void 0 ? {} : {
+                      authorized_document_paths: loaded.value.request.context.imported_documents.map((document2) => document2.path)
+                    }
+                  }
+                )).observed;
+              }
+            }
+          }
+        }
+        if (completionSignal || artifactPhaseExitSignal || legacyJumpSignal) {
+          const discovered = await discoverReconciliationInput(
+            services2.dependencies,
+            services2.authority,
+            current,
+            session.value.repository_set
+          );
+          if (!discovered.ok) return discovered;
+          const reconciled = reconcileCurrentAuthority(discovered.value);
+          if (reconciled.findings.length !== 0 || (discovered.value.blocking_reasons ?? []).length !== 0) {
+            return fail25(createProjectError("STATE_INVALID", {
+              phase_instance: current.value.phase_instance,
+              issue_code: "milestone-consumption-reconciliation-required"
+            }));
+          }
+          if (commitObserved && artifactPhaseExitSignal && current.value.phase_instance === "design" && authenticatedRuleAcceptance !== void 0 && derivedPlannedFinalPhase === void 0) {
+            const bound = await loadAutonomousDesignFinalPhase(
+              services2.dependencies,
+              current.value,
+              completionSubjectDigest
+            );
+            if (!bound.ok) return bound;
+            derivedPlannedFinalPhase = bound.value;
+          }
+        }
+        const transitionInput = {
+          current: current.value,
+          target: {
+            phase_instance: call.input.phase_instance,
+            step: call.input.step,
+            status: call.input.status,
+            // Mirrors `legalMovement`: a retry of a failed step and any re-opening of the
+            // produce window from elsewhere in the phase both spend an attempt. The produce
+            // door counts whatever the position it leaves — succeeded, failed, or a step
+            // still running whose terminal result cannot be recorded.
+            attempt: call.input.phase_instance !== current.value.phase_instance ? parseSafeInteger(1) : current.value.status === "failed" && call.input.step === current.value.step || call.input.step === "produce" && (current.value.step !== "produce" || current.value.status === "succeeded") ? parseSafeInteger(current.value.attempt + 1) : current.value.attempt,
+            input_fingerprint: call.input.input_fingerprint
+          },
+          recomputed_input_fingerprint: call.input.input_fingerprint,
+          ...artifact === void 0 ? {} : { artifact },
+          ...preparedResult === void 0 ? {} : { result_reference: preparedResult.reference },
+          ...preparedResult === void 0 ? {} : {
+            resulting_subject_digest: preparedResult.prepared.manifest.value.artifact_digest
+          },
+          ...completionSubjectDigest === void 0 ? {} : { completion_subject_digest: completionSubjectDigest },
+          commit_observed: commitObserved,
+          ...legacyResumePhase === void 0 ? {} : { legacy_resume_phase: legacyResumePhase },
+          ...call.input.human_revision === void 0 ? {} : { human_revision: call.input.human_revision },
+          ...derivedPlannedFinalPhase === void 0 ? {} : {
+            derived_planned_final_phase: derivedPlannedFinalPhase
+          },
+          ...authenticatedGateApprovals2.length === 0 ? {} : {
+            authenticated_gate_approvals: authenticatedGateApprovals2
+          },
+          ...authenticatedRuleAcceptance === void 0 ? {} : {
+            authenticated_rule_acceptance: authenticatedRuleAcceptance
+          }
+        };
+        let next = planStateTransition(transitionInput);
+        if (!next.ok) return next;
+        let ruleSettlement;
+        if (settlementEvidence !== void 0 && settlementProduce !== void 0) {
+          const configRead = await services2.dependencies.read_config(services2.authority.config);
+          if (configRead.kind !== "valid") {
+            return fail25(createProjectError("CONFIG_INVALID", { issue_code: `config-${configRead.kind}` }));
+          }
+          const prospective = {
+            ...next.value,
+            revision: revision2
+          };
+          ruleSettlement = await settleApprovalRules(
+            services2,
+            session.value.repository_set,
+            current.value,
+            prospective,
+            settlementProduce,
+            settlementEvidence,
+            configRead.snapshot
+          );
+          if (ruleSettlement !== void 0) {
+            next = planStateTransition({
+              ...transitionInput,
+              rule_settlement: ruleSettlement
+            });
+            if (!next.ok) return next;
+          }
+        }
+        return Object.freeze({
+          schema_version: "1",
+          ok: true,
+          value: Object.freeze({
+            expectation,
+            result,
+            next_state: next.value,
+            ...installation === void 0 ? {} : { result_installation: installation }
+          })
+        });
+      }
+    );
+    return transaction.ok ? Object.freeze({ schema_version: "1", ok: true, value: transaction.value.outcome }) : transaction;
+  });
 }
 
 // src/local/commands.ts
@@ -44428,7 +49186,8 @@ var LOCAL_COMMANDS = Object.freeze([
   "manual-status",
   "automation-status",
   "upgrade",
-  "upgrade-adopt"
+  "upgrade-adopt",
+  "set-commit-authority"
 ]);
 var LOCAL_COMMAND_CONTRACTS = Object.freeze({
   validate: { payload: '{"kind":<artifact kind>,"value":<artifact>}', task: "ignored" },
@@ -44442,7 +49201,8 @@ var LOCAL_COMMAND_CONTRACTS = Object.freeze({
   "manual-status": { payload: null, task: "required" },
   "automation-status": { payload: null, task: "required" },
   upgrade: { payload: '{"operation":"preview"|"stage"|"discard-stage",...legacy import facts}', task: "optional" },
-  "upgrade-adopt": { payload: null, task: "required" }
+  "upgrade-adopt": { payload: null, task: "required" },
+  "set-commit-authority": { payload: '{"target_commit":"<ref>","reason":"<text>","scope":["milestone"|"policy"]}', task: "required" }
 });
 var INPUT_FREE_COMMANDS = new Set(LOCAL_COMMANDS.filter((command) => LOCAL_COMMAND_CONTRACTS[command].payload === null));
 function requireValue(input) {
@@ -44606,10 +49366,10 @@ async function snapshot(input) {
     const path2 = parseRepositoryPathClaim(item.path);
     const bytes = Buffer.from(String(item.bytes_base64), "base64");
     const claim = parseWorkspacePathClaim(`cache/results/${resultDigest}/payload/${path2}`);
-    const target = await resolveTaskWorkspacePath({ runner: created.value.runner, taskId: created.value.authority.task_id, claim, expectedClass: "workspace-result-payload", context: created.value.authority.context });
-    if (!target.ok) return target;
-    await ensurePayloadParent(created.value.authority, resultDigest, target.value.absolute);
-    payloads.push({ path: path2, target: target.value, bytes: new Uint8Array(bytes) });
+    const target2 = await resolveTaskWorkspacePath({ runner: created.value.runner, taskId: created.value.authority.task_id, claim, expectedClass: "workspace-result-payload", context: created.value.authority.context });
+    if (!target2.ok) return target2;
+    await ensurePayloadParent(created.value.authority, resultDigest, target2.value.absolute);
+    payloads.push({ path: path2, target: target2.value, bytes: new Uint8Array(bytes) });
   }
   const prepared = prepareSnapshot({ manifest, payloads, retained_task_bytes: parseSafeInteger(value.retained_task_bytes), validate_manifest: parseResultManifest });
   if (!prepared.ok) return prepared;
@@ -44663,9 +49423,9 @@ async function restore(input) {
   if (repository !== void 0) return restoreSecondaryOutput(created.value, resultDigest, repository, outputPath);
   const manifestTarget = await resolveTaskPath({ runner: created.value.runner, taskId: created.value.authority.task_id, claim: resultAuthorityClaim(resultDigest), expectedClass: "authority-result", context: created.value.authority.context });
   if (!manifestTarget.ok) return manifestTarget;
-  const payloadTarget = await resolveTaskWorkspacePath({ runner: created.value.runner, taskId: created.value.authority.task_id, claim: parseWorkspacePathClaim(`cache/results/${resultDigest}/payload/${outputPath}`), expectedClass: "workspace-result-payload", context: created.value.authority.context });
-  if (!payloadTarget.ok) return payloadTarget;
-  const restored = await restoreSnapshotOutput({ target: manifestTarget.value, expected_result_digest: resultDigest, runner: created.value.runner, worktree_root: created.value.runner.location.worktreeRoot, output_path: outputPath, payload_target: payloadTarget.value });
+  const payloadTarget2 = await resolveTaskWorkspacePath({ runner: created.value.runner, taskId: created.value.authority.task_id, claim: parseWorkspacePathClaim(`cache/results/${resultDigest}/payload/${outputPath}`), expectedClass: "workspace-result-payload", context: created.value.authority.context });
+  if (!payloadTarget2.ok) return payloadTarget2;
+  const restored = await restoreSnapshotOutput({ target: manifestTarget.value, expected_result_digest: resultDigest, runner: created.value.runner, worktree_root: created.value.runner.location.worktreeRoot, output_path: outputPath, payload_target: payloadTarget2.value });
   if (!restored.ok || restored.value.state === "absent") return restored;
   return { schema_version: "1", ok: true, value: { ...restored.value, bytes: Buffer.from(restored.value.bytes).toString("base64") } };
 }
@@ -44683,6 +49443,43 @@ async function reconcile(input) {
   });
   return structuredClone(result);
 }
+async function setCommitAuthority(input) {
+  const created = await services(input);
+  if (!created.ok) return created;
+  if (created.value.state === void 0) throw new TypeError("set-commit-authority requires current task state");
+  const value = recordValue(input);
+  const state = created.value.state.value;
+  const targetCommit = typeof value.target_commit === "string" ? value.target_commit : "HEAD";
+  const reason2 = typeof value.reason === "string" ? value.reason : "Re-anchored commit authority via archflow-local";
+  const scope3 = Array.isArray(value.scope) ? value.scope : void 0;
+  const call = parseToolCall("archflow_state", {
+    schema_version: "1",
+    task_id: created.value.authority.task_id,
+    intent_id: parsePathSafeId(`local-set-commit-auth-${Date.now()}`),
+    expected_revision: state.revision,
+    input_fingerprint: state.input_fingerprint,
+    phase_instance: state.phase_instance,
+    step: state.step,
+    status: state.status,
+    operation: "set_commit_authority",
+    target_commit: targetCommit,
+    reason: reason2,
+    ...scope3 === void 0 ? {} : { scope: scope3 }
+  });
+  const connection = connectionContextFactory.captureStartup({
+    connection_id: `local-set-commit-auth-${Date.now()}`,
+    startup_repository_candidate: { working_directory: input.working_directory }
+  }).initialize({
+    client: { name: "archflow-local", version: "1.0.0" },
+    host: "claude",
+    protocol_version: "2025-11-25"
+  });
+  const invocationContext = createInvocationContext(connection, {
+    invocation_id: `local-set-commit-auth-${Date.now()}-invocation`,
+    transport_metadata: { request_id: `local-set-commit-auth-${Date.now()}-request`, operation: "tools/call" }
+  }, new AbortController().signal);
+  return handleState(call, invocationContext);
+}
 var LOCAL_COMMAND_HANDLERS = Object.freeze({
   validate,
   hash: hash2,
@@ -44695,7 +49492,8 @@ var LOCAL_COMMAND_HANDLERS = Object.freeze({
   "manual-status": manualStatus,
   "automation-status": automationStatus,
   upgrade,
-  "upgrade-adopt": upgradeAdopt
+  "upgrade-adopt": upgradeAdopt,
+  "set-commit-authority": setCommitAuthority
 });
 async function runLocalCommand(input) {
   if (!LOCAL_COMMANDS.includes(input.command)) throw new TypeError(`unknown local command: ${input.command}`);
@@ -44726,7 +49524,7 @@ async function readInput(command, path2) {
     process3.stdin.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
     process3.stdin.once("end", () => resolve2(Buffer.concat(chunks)));
     process3.stdin.once("error", reject);
-  }) : await readFile15(path2);
+  }) : await readFile16(path2);
   if (bytes.byteLength === 0) throw missingPayload();
   try {
     return JSON.parse(bytes.toString("utf8"));

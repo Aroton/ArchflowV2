@@ -38,10 +38,15 @@ import { classifyWorkflowStatus, stagedUpgradeStatus } from "./status-classifica
 import { cleanTaskWorkspace, cleanTerminalTaskWorkspace } from "../state/workspace-cleanup.js";
 import { repositoryNameV1Schema, type RepositoryName } from "../contracts/config.js";
 import { resolveRepositorySet } from "../repository/repository-set.js";
+import { connectionContextFactory, createInvocationContext } from "../contracts/contexts.js";
+import { parseToolCall } from "../contracts/mcp-tools.js";
+import { parsePathSafeId } from "../contracts/evidence.js";
+import { handleState } from "../mcp/handlers/state.js";
 
 export const LOCAL_COMMANDS = Object.freeze([
   "validate", "hash", "render", "snapshot", "restore", "clean", "reconcile",
   "init", "manual-status", "automation-status", "upgrade", "upgrade-adopt",
+  "set-commit-authority",
 ] as const);
 export type LocalCommand = typeof LOCAL_COMMANDS[number];
 
@@ -63,6 +68,7 @@ export const LOCAL_COMMAND_CONTRACTS: Readonly<Record<LocalCommand, LocalCommand
   "automation-status": { payload: null, task: "required" },
   upgrade: { payload: '{"operation":"preview"|"stage"|"discard-stage",...legacy import facts}', task: "optional" },
   "upgrade-adopt": { payload: null, task: "required" },
+  "set-commit-authority": { payload: '{"target_commit":"<ref>","reason":"<text>","scope":["milestone"|"policy"]}', task: "required" },
 });
 
 export const INPUT_FREE_COMMANDS: ReadonlySet<LocalCommand> =
@@ -344,10 +350,52 @@ async function reconcile(input: CommandInput): Promise<PlainJsonValue | ProjectR
   return structuredClone(result) as unknown as PlainJsonValue;
 }
 
+async function setCommitAuthority(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
+  const created = await services(input);
+  if (!created.ok) return created;
+  if (created.value.state === undefined) throw new TypeError("set-commit-authority requires current task state");
+  const value = recordValue(input);
+  const state = created.value.state.value;
+  const targetCommit = typeof value.target_commit === "string" ? value.target_commit : "HEAD";
+  const reason = typeof value.reason === "string" ? value.reason : "Re-anchored commit authority via archflow-local";
+  const scope = Array.isArray(value.scope) ? value.scope as ("milestone" | "policy")[] : undefined;
+
+  const call = parseToolCall("archflow_state", {
+    schema_version: "1",
+    task_id: created.value.authority.task_id,
+    intent_id: parsePathSafeId(`local-set-commit-auth-${Date.now()}`),
+    expected_revision: state.revision,
+    input_fingerprint: state.input_fingerprint,
+    phase_instance: state.phase_instance,
+    step: state.step,
+    status: state.status,
+    operation: "set_commit_authority",
+    target_commit: targetCommit,
+    reason,
+    ...(scope === undefined ? {} : { scope }),
+  });
+
+  const connection = connectionContextFactory.captureStartup({
+    connection_id: `local-set-commit-auth-${Date.now()}`,
+    startup_repository_candidate: { working_directory: input.working_directory },
+  }).initialize({
+    client: { name: "archflow-local", version: "1.0.0" },
+    host: "claude",
+    protocol_version: "2025-11-25",
+  });
+  const invocationContext = createInvocationContext(connection, {
+    invocation_id: `local-set-commit-auth-${Date.now()}-invocation`,
+    transport_metadata: { request_id: `local-set-commit-auth-${Date.now()}-request`, operation: "tools/call" },
+  }, new AbortController().signal);
+
+  return handleState(call, invocationContext) as unknown as Promise<PlainJsonValue | ProjectResult<unknown>>;
+}
+
 const LOCAL_COMMAND_HANDLERS: Readonly<Record<LocalCommand, (input: CommandInput) => Promise<PlainJsonValue | ProjectResult<unknown>>>> = Object.freeze({
   validate, hash, render, snapshot, restore, clean, reconcile,
   init, "manual-status": manualStatus, "automation-status": automationStatus,
   upgrade, "upgrade-adopt": upgradeAdopt,
+  "set-commit-authority": setCommitAuthority,
 });
 
 export async function runLocalCommand(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
