@@ -2078,9 +2078,15 @@ async function computeTaskStatusDetailedInternal(
   const adjudicationGateKind = pendingGates[0]?.kind;
   const eligibleTriggerSettlement = produceSubject === undefined
     ? undefined
-    : latestEligibleRuleSettlement(
-      state, produceSubject.artifact_digest, produceSubject.artifact.phase_instance,
-    );
+    : (latestEligibleRuleSettlement(
+        state, produceSubject.artifact_digest, produceSubject.artifact.phase_instance,
+      ) ?? (produceSubject.artifact.artifact_kind === "document" && produceSubject.artifact.editorial_predecessor !== undefined
+        ? latestEligibleRuleSettlement(
+            state,
+            produceSubject.artifact.editorial_predecessor.subject_digest,
+            produceSubject.artifact.phase_instance,
+          )
+        : undefined));
   const currentSimpleRevision = produceSubject === undefined
     ? undefined
     : [...(state.human_revision_history ?? [])]

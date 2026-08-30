@@ -6388,7 +6388,7 @@
       ]
     },
     "src/mcp/handlers/state.ts": {
-      "bytes": 66472,
+      "bytes": 66476,
       "format": "esm",
       "imports": [
         {
@@ -8740,7 +8740,7 @@
       ]
     },
     "src/state/request-composition.ts": {
-      "bytes": 59078,
+      "bytes": 59449,
       "format": "esm",
       "imports": [
         {
@@ -9233,7 +9233,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 115117,
+      "bytes": 115461,
       "format": "esm",
       "imports": [
         {
@@ -9660,7 +9660,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2124931,
+      "bytes": 2125218,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10864,7 +10864,7 @@
           "bytesInOutput": 18102
         },
         "src/mcp/handlers/state.ts": {
-          "bytesInOutput": 56984
+          "bytesInOutput": 56988
         },
         "src/repository/git.ts": {
           "bytesInOutput": 20736
@@ -10996,7 +10996,7 @@
           "bytesInOutput": 31803
         },
         "src/state/status.ts": {
-          "bytesInOutput": 75956
+          "bytesInOutput": 76239
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 50592
@@ -11013,7 +11013,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3292511,
+      "bytes": 3293141,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12321,7 +12321,7 @@
           "bytesInOutput": 18092
         },
         "src/mcp/handlers/state.ts": {
-          "bytesInOutput": 56830
+          "bytesInOutput": 56834
         },
         "src/mcp/process-runner.ts": {
           "bytesInOutput": 3941
@@ -12465,7 +12465,7 @@
           "bytesInOutput": 10042
         },
         "src/state/request-composition.ts": {
-          "bytesInOutput": 44524
+          "bytesInOutput": 44867
         },
         "src/state/request.ts": {
           "bytesInOutput": 5244
@@ -12492,7 +12492,7 @@
           "bytesInOutput": 31944
         },
         "src/state/status.ts": {
-          "bytesInOutput": 73600
+          "bytesInOutput": 73883
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 50590

@@ -741,9 +741,14 @@ async function composeGate(
   }
   const subject = await loadCurrentProduceSubject(services.dependencies, state);
   if (!subject.ok) return subject;
+  const editorialPredecessorDigest = subject.value.artifact.artifact_kind === "document"
+    ? subject.value.artifact.editorial_predecessor?.subject_digest
+    : undefined;
   const settledRule = latestEligibleRuleSettlement(
     state, subject.value.artifact_digest, state.phase_instance,
-  );
+  ) ?? (editorialPredecessorDigest === undefined
+    ? undefined
+    : latestEligibleRuleSettlement(state, editorialPredecessorDigest, state.phase_instance));
   const approvalSummary = settledRule?.conclusion.wait === true
     ? approvalRuleGateSummary(summary, settledRule.conclusion.match)
     : summary;
@@ -909,7 +914,7 @@ async function composeGate(
     };
   } else if (
     acceptedSettlement !== undefined && !ordinaryApproved &&
-    simpleTrigger === undefined && pendingGate === undefined
+    simpleTrigger === undefined && editorialPredecessorDigest === undefined && pendingGate === undefined
   ) {
     // Every exception gate above remains human-only. Only the now-unnecessary ordinary phase gate
     // is refused when the exact reviewed no-wait settlement already supplies advancement authority.

@@ -69765,7 +69765,11 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     state,
     produceSubject.artifact_digest,
     produceSubject.artifact.phase_instance
-  );
+  ) ?? (produceSubject.artifact.artifact_kind === "document" && produceSubject.artifact.editorial_predecessor !== void 0 ? latestEligibleRuleSettlement(
+    state,
+    produceSubject.artifact.editorial_predecessor.subject_digest,
+    produceSubject.artifact.phase_instance
+  ) : void 0);
   const currentSimpleRevision = produceSubject === void 0 ? void 0 : [...state.human_revision_history ?? []].filter((record3) => record3.phase_instance === state.phase_instance && record3.classification === "simple" && record3.resulting_subject_digest === produceSubject.artifact_digest && record3.resulting_result_digest === produceSubject.reference.result_digest).sort((left, right) => right.resulting_attempt - left.resulting_attempt)[0];
   const currentOrdinaryApproval = produceSubject === void 0 ? void 0 : matchingOrdinaryApproval(
     state,
@@ -73291,11 +73295,12 @@ async function composeGate(services, state, intentId, snapshot) {
   }
   const subject = await loadCurrentProduceSubject(services.dependencies, state);
   if (!subject.ok) return subject;
+  const editorialPredecessorDigest = subject.value.artifact.artifact_kind === "document" ? subject.value.artifact.editorial_predecessor?.subject_digest : void 0;
   const settledRule = latestEligibleRuleSettlement(
     state,
     subject.value.artifact_digest,
     state.phase_instance
-  );
+  ) ?? (editorialPredecessorDigest === void 0 ? void 0 : latestEligibleRuleSettlement(state, editorialPredecessorDigest, state.phase_instance));
   const approvalSummary = settledRule?.conclusion.wait === true ? approvalRuleGateSummary(summary, settledRule.conclusion.match) : summary;
   const loadRetainedManifest = services.dependencies.load_retained_manifest;
   if (loadRetainedManifest === void 0) throw new TypeError("retained evidence loading is unavailable");
@@ -73432,7 +73437,7 @@ async function composeGate(services, state, intentId, snapshot) {
       kind: "migration-audit",
       context: migrationAuditContext
     };
-  } else if (acceptedSettlement !== void 0 && !ordinaryApproved && simpleTrigger === void 0 && pendingGate === void 0) {
+  } else if (acceptedSettlement !== void 0 && !ordinaryApproved && simpleTrigger === void 0 && editorialPredecessorDigest === void 0 && pendingGate === void 0) {
     return transitionInvalid(state, `${gateKind2}-gate-not-required`);
   } else if (gateKind2 === "design-approval") {
     if (approvalTrigger2 === void 0) return transitionInvalid(state, "approval-trigger-authority-missing");
@@ -80415,7 +80420,7 @@ async function settleApprovalRules(services, repositorySet, current, prospective
     );
     if (!legacyInitialization.ok) return void 0;
     if (legacyInitialization.value !== void 0 && current.phase_instance === "design" && !authenticated.some((approval) => approval.request.kind === "migration-audit" && approval.decision.envelope.payload.decision === "accept-import-audit")) return void 0;
-    const predecessor = currentReviewPredecessor(current, produce);
+    const predecessor = currentReviewPredecessor(prospective, produce);
     const assessment = assessCurrentEvidence(
       prospective,
       retained,

@@ -184,7 +184,7 @@ async function settleApprovalRules(
         approval.request.kind === "migration-audit" &&
         approval.decision.envelope.payload.decision === "accept-import-audit")
     ) return undefined;
-    const predecessor = currentReviewPredecessor(current, produce);
+    const predecessor = currentReviewPredecessor(prospective, produce);
     const assessment = assessCurrentEvidence(
       prospective,
       retained,

@@ -41457,7 +41457,11 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     state,
     produceSubject.artifact_digest,
     produceSubject.artifact.phase_instance
-  );
+  ) ?? (produceSubject.artifact.artifact_kind === "document" && produceSubject.artifact.editorial_predecessor !== void 0 ? latestEligibleRuleSettlement(
+    state,
+    produceSubject.artifact.editorial_predecessor.subject_digest,
+    produceSubject.artifact.phase_instance
+  ) : void 0);
   const currentSimpleRevision = produceSubject === void 0 ? void 0 : [...state.human_revision_history ?? []].filter((record2) => record2.phase_instance === state.phase_instance && record2.classification === "simple" && record2.resulting_subject_digest === produceSubject.artifact_digest && record2.resulting_result_digest === produceSubject.reference.result_digest).sort((left, right) => right.resulting_attempt - left.resulting_attempt)[0];
   const currentOrdinaryApproval = produceSubject === void 0 ? void 0 : matchingOrdinaryApproval(
     state,
@@ -48104,7 +48108,7 @@ async function settleApprovalRules(services2, repositorySet, current, prospectiv
     );
     if (!legacyInitialization.ok) return void 0;
     if (legacyInitialization.value !== void 0 && current.phase_instance === "design" && !authenticated.some((approval) => approval.request.kind === "migration-audit" && approval.decision.envelope.payload.decision === "accept-import-audit")) return void 0;
-    const predecessor = currentReviewPredecessor(current, produce);
+    const predecessor = currentReviewPredecessor(prospective, produce);
     const assessment = assessCurrentEvidence(
       prospective,
       retained,

@@ -23,6 +23,8 @@ import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import type { ToolName } from "../../src/contracts/tool-names.js";
 import { handleCounterReview } from "../../src/mcp/handlers/counter-review.js";
 import { handleState } from "../../src/mcp/handlers/state.js";
+import { identifyTransactionRequest } from "../../src/state/request.js";
+import { openDurableGate } from "../../src/state/gates.js";
 import { createProductionServices } from "../../src/state/production.js";
 import { composeRequest } from "../../src/state/request-composition.js";
 import { computeTaskStatus, type TaskStatusV1 } from "../../src/state/status.js";
@@ -158,7 +160,7 @@ function harness(root: string) {
         invocation_id: `invocation-${sequence}`,
         transport_metadata: { request_id: `request-${sequence}`, operation: "tools/call" },
       }, new AbortController().signal);
-      if (tool !== "archflow_state" && tool !== "archflow_counter_review") {
+      if (tool !== "archflow_state" && tool !== "archflow_counter_review" && tool !== "archflow_gate") {
         throw new Error(`composed tool ${tool} has no retained direct handler`);
       }
       let call;
@@ -169,9 +171,28 @@ function harness(root: string) {
         // CONTRACT_INVALID failure before any handler runs.
         return { ok: false, error: { code: "CONTRACT_INVALID" } };
       }
-      return tool === "archflow_counter_review"
-        ? handleCounterReview(call as never, context) as never
-        : handleState(call as never, context) as never;
+      if (tool === "archflow_counter_review") {
+        return handleCounterReview(call as never, context) as never;
+      }
+      if (tool === "archflow_gate") {
+        const s = await services();
+        const gateInput = (call as any).input;
+        const identified = identifyTransactionRequest(call as any, s.authority, gateInput.input_fingerprint);
+        return openDurableGate(s.dependencies, {
+          authority: s.authority,
+          expected_revision: gateInput.expected_revision,
+          intent_id: gateInput.intent_id,
+          request_digest: identified.request_digest,
+          input_fingerprint: gateInput.input_fingerprint,
+          phase_instance: gateInput.phase_instance,
+          summary: gateInput.summary,
+          subject_digest: gateInput.subject_digest,
+          current_evidence: gateInput.current_evidence,
+          kind: gateInput.kind,
+          context: gateInput.context,
+        }) as never;
+      }
+      return handleState(call as never, context) as never;
     },
     async invoke(tool: ToolName, input: PlainJsonValue): Promise<PlainJsonValue> {
       const result = await this.invokeRaw(tool, input);
@@ -573,6 +594,15 @@ describe("post-triage re-entry edits are expected", () => {
         }],
       });
       expect(revised.reconciliation?.classification).toBe("consistent");
+
+      // The gate composes and opens using the predecessor's rule authority
+      const gateComposed = await h.compose({
+        intent_id: "gate-summary-editorial",
+        kind: "gate",
+        summary: "Editorial wording fix applied.",
+      });
+      expect(gateComposed.request.tool).toBe("archflow_gate");
+      await h.invoke(gateComposed.request.tool, gateComposed.request.input);
     } finally {
       stub.restore();
     }
