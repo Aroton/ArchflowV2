@@ -41641,8 +41641,24 @@ var mcp_tools_schema_default = {
               "refresh_milestone_baseline",
               "recover_milestone_authority",
               "recover_approval_trigger_authority",
-              "refresh_stale_baseline"
+              "refresh_stale_baseline",
+              "set_commit_authority"
             ]
+          },
+          target_commit: {
+            type: "string",
+            minLength: 1,
+            maxLength: 256
+          },
+          scope: {
+            type: "array",
+            items: {
+              type: "string",
+              enum: [
+                "milestone",
+                "policy"
+              ]
+            }
           },
           target_phase_instance: {
             $ref: "#/$defs/phase"
@@ -52745,7 +52761,9 @@ var stateInputSchema = external_exports.object({
   status: external_exports.enum(["running", "succeeded", "failed"]),
   artifact: durableArtifact.optional(),
   human_revision: humanRevisionDeclarationSchema.optional(),
-  operation: external_exports.enum(["planning_restart", "refresh_milestone_baseline", "recover_milestone_authority", "recover_approval_trigger_authority", "refresh_stale_baseline"]).optional(),
+  operation: external_exports.enum(["planning_restart", "refresh_milestone_baseline", "recover_milestone_authority", "recover_approval_trigger_authority", "refresh_stale_baseline", "set_commit_authority"]).optional(),
+  target_commit: external_exports.string().min(1).max(256).optional(),
+  scope: external_exports.array(external_exports.enum(["milestone", "policy"])).optional(),
   target_phase_instance: phase2.optional(),
   reason: text3.optional(),
   ask_base_digest: digest7.optional()
@@ -52757,21 +52775,31 @@ var stateInputSchema = external_exports.object({
     if (input.artifact !== void 0 || input.human_revision !== void 0) context2.addIssue({ code: "custom", path: ["artifact"], message: "planning_restart cannot carry an artifact or human revision" });
     if (input.target_phase_instance === "prd" && input.ask_base_digest === void 0) context2.addIssue({ code: "custom", path: ["ask_base_digest"], message: "PRD planning_restart requires ask_base_digest" });
     if (input.target_phase_instance !== "prd" && input.ask_base_digest !== void 0) context2.addIssue({ code: "custom", path: ["ask_base_digest"], message: "ask_base_digest is PRD-only" });
+    if (input.target_commit !== void 0 || input.scope !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "planning_restart cannot carry commit authority fields" });
+    return;
+  }
+  if (input.operation === "set_commit_authority") {
+    if (input.target_commit === void 0) context2.addIssue({ code: "custom", path: ["target_commit"], message: "set_commit_authority requires target_commit" });
+    if (input.reason === void 0) context2.addIssue({ code: "custom", path: ["reason"], message: "set_commit_authority requires reason" });
+    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.ask_base_digest !== void 0) {
+      context2.addIssue({ code: "custom", path: ["operation"], message: "set_commit_authority carries no artifact, human revision, restart target, or ask digest" });
+    }
     return;
   }
   if (input.operation === "refresh_milestone_baseline") {
     if (input.step !== "triage" || input.status !== "succeeded") context2.addIssue({ code: "custom", path: ["step"], message: "refresh_milestone_baseline requires triage/succeeded" });
-    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0) {
-      context2.addIssue({ code: "custom", path: ["operation"], message: "refresh_milestone_baseline carries no artifact, revision, restart target, reason, or ask digest" });
+    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0 || input.target_commit !== void 0 || input.scope !== void 0) {
+      context2.addIssue({ code: "custom", path: ["operation"], message: "refresh_milestone_baseline carries no artifact, revision, restart target, reason, ask digest, or commit authority fields" });
     }
     return;
   }
   if (input.operation === "recover_milestone_authority" || input.operation === "recover_approval_trigger_authority" || input.operation === "refresh_stale_baseline") {
-    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0) {
-      context2.addIssue({ code: "custom", path: ["operation"], message: `${input.operation} carries no artifact, revision, restart target, reason, or ask digest` });
+    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0 || input.target_commit !== void 0 || input.scope !== void 0) {
+      context2.addIssue({ code: "custom", path: ["operation"], message: `${input.operation} carries no artifact, revision, restart target, reason, ask digest, or commit authority fields` });
     }
     return;
   }
+  if (input.target_commit !== void 0 || input.scope !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "commit authority fields require set_commit_authority" });
   if (input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "restart fields require planning_restart" });
   if (input.human_revision !== void 0 && (input.step !== "produce" || input.status !== "succeeded")) context2.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
 });
@@ -55078,10 +55106,11 @@ function validateDurableSemantics(subject) {
     if (prepared.workflow_digest !== intentState.workflow_digest) {
       return fail6(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptWorkflowMismatch));
     }
-    if (prepared.constitution_digest !== intentState.constitution_digest) {
+    const isPolicyUpdate = receipt.operation === "set-commit-authority" && prepared.policy_base_commit !== intentState.policy_base_commit && prepared.constitution_digest !== void 0;
+    if (!isPolicyUpdate && prepared.constitution_digest !== intentState.constitution_digest) {
       return fail6(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptConstitutionMismatch));
     }
-    if (prepared.policy_base_commit !== intentState.policy_base_commit) {
+    if (!isPolicyUpdate && prepared.policy_base_commit !== intentState.policy_base_commit) {
       return fail6(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptPolicyBaseMismatch));
     }
   }
@@ -55192,6 +55221,18 @@ function closedOperationFields(subject) {
           target_phase_instance: restart.target_phase_instance,
           reason: restart.reason,
           ...restart.ask_base_digest === void 0 ? {} : { ask_base_digest: restart.ask_base_digest }
+        };
+      }
+      if (subject.operation === "set-commit-authority") {
+        const commitAuth = fields;
+        exactFields(fields, commitAuth.scope === void 0 ? ["phase_instance", "step", "status", "target_commit", "reason"] : ["phase_instance", "step", "status", "target_commit", "reason", "scope"]);
+        return {
+          phase_instance: commitAuth.phase_instance,
+          step: commitAuth.step,
+          status: commitAuth.status,
+          target_commit: commitAuth.target_commit,
+          reason: commitAuth.reason,
+          ...commitAuth.scope === void 0 ? {} : { scope: commitAuth.scope }
         };
       }
       if (subject.operation === "record-state-boundary") {
@@ -71698,6 +71739,21 @@ function subjectFor(call, authority, inputFingerprint) {
           }
         };
       }
+      if (call.input.operation === "set_commit_authority") {
+        return {
+          ...common3,
+          tool: call.name,
+          operation: "set-commit-authority",
+          operation_fields: {
+            phase_instance: call.input.phase_instance,
+            step: call.input.step,
+            status: call.input.status,
+            target_commit: call.input.target_commit,
+            reason: call.input.reason,
+            ...call.input.scope === void 0 ? {} : { scope: call.input.scope }
+          }
+        };
+      }
       if (call.input.operation !== void 0) {
         const operation = {
           refresh_milestone_baseline: "refresh-milestone-baseline",
@@ -77493,7 +77549,8 @@ function operationFor2(call) {
           refresh_milestone_baseline: "refresh-milestone-baseline",
           recover_milestone_authority: "recover-milestone-authority",
           recover_approval_trigger_authority: "recover-approval-trigger-authority",
-          refresh_stale_baseline: "refresh-stale-baseline"
+          refresh_stale_baseline: "refresh-stale-baseline",
+          set_commit_authority: "set-commit-authority"
         }[call.input.operation];
       }
       const artifact = call.input.artifact;
@@ -77544,7 +77601,8 @@ function materializeDraft(value) {
   return structuredClone(value);
 }
 function assertPreserved(current, next) {
-  if (next.task_id !== current.task_id || next.repository_identity_digest !== current.repository_identity_digest || next.initialization_digest !== current.initialization_digest || next.config_digest !== current.config_digest || next.workflow_digest !== current.workflow_digest || next.constitution_digest !== current.constitution_digest || next.policy_base_commit !== current.policy_base_commit) {
+  const isPolicyUpdate = next.policy_base_commit !== current.policy_base_commit && next.constitution_digest !== void 0;
+  if (next.task_id !== current.task_id || next.repository_identity_digest !== current.repository_identity_digest || next.initialization_digest !== current.initialization_digest || next.config_digest !== current.config_digest || next.workflow_digest !== current.workflow_digest || !isPolicyUpdate && (next.constitution_digest !== current.constitution_digest || next.policy_base_commit !== current.policy_base_commit)) {
     throw new TypeError("next state draft changed a transaction-substrate identity or pin");
   }
   const gateAuthorityPreserved = isDeepStrictEqual16(next.open_gate, current.open_gate) && isDeepStrictEqual16(next.approvals, current.approvals) && isDeepStrictEqual16(next.waivers, current.waivers);
@@ -80418,9 +80476,10 @@ async function handleState(call, context2) {
     const recoveryInput = call.input.operation === "recover_milestone_authority" ? call.input : void 0;
     const triggerRecoveryInput = call.input.operation === "recover_approval_trigger_authority" ? call.input : void 0;
     const staleBaselineInput = call.input.operation === "refresh_stale_baseline" ? call.input : void 0;
-    const artifact = restartInput === void 0 && refreshInput === void 0 && recoveryInput === void 0 && triggerRecoveryInput === void 0 && staleBaselineInput === void 0 ? call.input.artifact : void 0;
+    const commitAuthorityInput = call.input.operation === "set_commit_authority" ? call.input : void 0;
+    const artifact = restartInput === void 0 && refreshInput === void 0 && recoveryInput === void 0 && triggerRecoveryInput === void 0 && staleBaselineInput === void 0 && commitAuthorityInput === void 0 ? call.input.artifact : void 0;
     if (services.state === void 0) {
-      if (restartInput !== void 0 || refreshInput !== void 0 || recoveryInput !== void 0 || triggerRecoveryInput !== void 0 || staleBaselineInput !== void 0) {
+      if (restartInput !== void 0 || refreshInput !== void 0 || recoveryInput !== void 0 || triggerRecoveryInput !== void 0 || staleBaselineInput !== void 0 || commitAuthorityInput !== void 0) {
         return fail27(createProjectError("STATE_MISSING", { phase_instance: call.input.phase_instance }));
       }
       const initialized = await runStateInitialization(services.dependencies, {
@@ -80636,6 +80695,94 @@ async function handleState(call, context2) {
             schema_version: "1",
             ok: true,
             value: Object.freeze({ expectation: expectation2, result: result2, next_state: planned.value })
+          });
+        }
+        if (commitAuthorityInput !== void 0) {
+          const state = current.value;
+          if (state.terminal !== void 0 || state.open_gate !== void 0) {
+            return fail27(createProjectError("TRANSITION_INVALID", {
+              phase_instance: commitAuthorityInput.phase_instance,
+              from: `${state.step}-${state.status}`,
+              to: "set-commit-authority"
+            }));
+          }
+          let resolvedCommit;
+          try {
+            resolvedCommit = await resolveCommit(services.runner, commitAuthorityInput.target_commit);
+          } catch {
+            return fail27(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance,
+              issue_code: "target-commit-unresolvable"
+            }));
+          }
+          const scope3 = commitAuthorityInput.scope ?? ["milestone"];
+          const updateMilestone = scope3.includes("milestone");
+          const updatePolicy = scope3.includes("policy");
+          const revision2 = parseSafeInteger(state.revision + 1);
+          let updatedRuleSettlements = state.rule_settlements;
+          if (updateMilestone && updatedRuleSettlements !== void 0 && updatedRuleSettlements.length > 0) {
+            const matchingSettlement = [...updatedRuleSettlements].filter((s) => s.phase_instance === state.phase_instance).sort((a, b) => b.settled_at_revision - a.settled_at_revision)[0];
+            if (matchingSettlement !== void 0 && matchingSettlement.milestone_baseline_commit !== void 0) {
+              const replacement = Object.freeze({
+                ...matchingSettlement,
+                settled_at_revision: revision2,
+                milestone_baseline_commit: resolvedCommit,
+                ...matchingSettlement.milestone_target_ref === void 0 ? {} : {
+                  milestone_target_ref: matchingSettlement.milestone_target_ref,
+                  milestone_target_head: resolvedCommit
+                }
+              });
+              updatedRuleSettlements = Object.freeze([...state.rule_settlements ?? [], replacement].sort(compareRuleSettlements));
+            }
+          }
+          let newPolicyBaseCommit = state.policy_base_commit;
+          let newConstitutionDigest = state.constitution_digest;
+          if (updatePolicy) {
+            const resolvedConstitution = await resolvePinnedConstitution(
+              services.runner,
+              resolvedCommit,
+              services.authority.context
+            );
+            if (!resolvedConstitution.ok) return resolvedConstitution;
+            newPolicyBaseCommit = resolvedCommit;
+            newConstitutionDigest = resolvedConstitution.value.digest;
+          }
+          const { revision: _revision, last_transition: _transition, ...preserved } = state;
+          const nextState = Object.freeze({
+            ...preserved,
+            phase_instance: commitAuthorityInput.phase_instance,
+            step: commitAuthorityInput.step,
+            status: commitAuthorityInput.status,
+            input_fingerprint: identified.input_fingerprint,
+            ...updatePolicy ? { policy_base_commit: newPolicyBaseCommit, constitution_digest: newConstitutionDigest } : {},
+            ...updatedRuleSettlements === void 0 ? {} : { rule_settlements: updatedRuleSettlements }
+          });
+          const success4 = Object.freeze({
+            path: parseTaskPathClaim("state.json"),
+            revision: revision2,
+            status: commitAuthorityInput.status,
+            request_digest: identified.request_digest
+          });
+          const expectation2 = createInternalResultExpectation({
+            schema_version: "1",
+            tool: "archflow_state",
+            task_id: services.authority.task_id,
+            intent_id: commitAuthorityInput.intent_id,
+            input_fingerprint: identified.input_fingerprint,
+            request_digest: identified.request_digest,
+            result_id: stateResultId(commitAuthorityInput.intent_id),
+            resulting_revision: revision2,
+            success: success4
+          });
+          const result2 = validateProjectResultStructure(identifiedCall, {
+            schema_version: "1",
+            ok: true,
+            value: success4
+          });
+          return Object.freeze({
+            schema_version: "1",
+            ok: true,
+            value: Object.freeze({ expectation: expectation2, result: result2, next_state: nextState })
           });
         }
         if (refreshInput !== void 0) {

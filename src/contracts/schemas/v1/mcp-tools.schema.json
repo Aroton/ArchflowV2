@@ -233,8 +233,24 @@
               "refresh_milestone_baseline",
               "recover_milestone_authority",
               "recover_approval_trigger_authority",
-              "refresh_stale_baseline"
+              "refresh_stale_baseline",
+              "set_commit_authority"
             ]
+          },
+          "target_commit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "scope": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "milestone",
+                "policy"
+              ]
+            }
           },
           "target_phase_instance": {
             "$ref": "#/$defs/phase"

@@ -904,10 +904,13 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
     if (prepared.workflow_digest !== intentState.workflow_digest) {
       return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptWorkflowMismatch));
     }
-    if (prepared.constitution_digest !== intentState.constitution_digest) {
+    const isPolicyUpdate = receipt.operation === "set-commit-authority" &&
+      prepared.policy_base_commit !== intentState.policy_base_commit &&
+      prepared.constitution_digest !== undefined;
+    if (!isPolicyUpdate && prepared.constitution_digest !== intentState.constitution_digest) {
       return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptConstitutionMismatch));
     }
-    if (prepared.policy_base_commit !== intentState.policy_base_commit) {
+    if (!isPolicyUpdate && prepared.policy_base_commit !== intentState.policy_base_commit) {
       return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptPolicyBaseMismatch));
     }
   }

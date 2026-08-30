@@ -322,6 +322,7 @@ function operationFor(call: ParsedToolCall): IntentReceiptV1["operation"] {
           recover_milestone_authority: "recover-milestone-authority",
           recover_approval_trigger_authority: "recover-approval-trigger-authority",
           refresh_stale_baseline: "refresh-stale-baseline",
+          set_commit_authority: "set-commit-authority",
         } as const)[call.input.operation] as IntentReceiptV1["operation"];
       }
       const artifact = call.input.artifact;
@@ -368,14 +369,17 @@ function materializeDraft(value: unknown): NextStateDraft {
 }
 
 function assertPreserved(current: TaskStateV1, next: NextStateDraft): void {
+  const isPolicyUpdate = next.policy_base_commit !== current.policy_base_commit && next.constitution_digest !== undefined;
   if (
     next.task_id !== current.task_id ||
     next.repository_identity_digest !== current.repository_identity_digest ||
     next.initialization_digest !== current.initialization_digest ||
     next.config_digest !== current.config_digest ||
     next.workflow_digest !== current.workflow_digest ||
-    next.constitution_digest !== current.constitution_digest ||
-    next.policy_base_commit !== current.policy_base_commit
+    (!isPolicyUpdate && (
+      next.constitution_digest !== current.constitution_digest ||
+      next.policy_base_commit !== current.policy_base_commit
+    ))
   ) {
     throw new TypeError("next state draft changed a transaction-substrate identity or pin");
   }

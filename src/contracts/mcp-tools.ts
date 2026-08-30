@@ -46,7 +46,7 @@ export type HumanRevisionDeclaration = {
   readonly rationale: string;
   readonly user_override?: HumanRevisionOverride;
 };
-export type StateBoundaryInput = CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly step: "produce" | "counter_review" | "triage"; readonly status: "running" | "succeeded" | "failed"; readonly artifact?: DurableArtifact; readonly human_revision?: HumanRevisionDeclaration; readonly operation?: never; readonly target_phase_instance?: never; readonly reason?: never; readonly ask_base_digest?: never };
+export type StateBoundaryInput = CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly step: "produce" | "counter_review" | "triage"; readonly status: "running" | "succeeded" | "failed"; readonly artifact?: DurableArtifact; readonly human_revision?: HumanRevisionDeclaration; readonly operation?: never; readonly target_phase_instance?: never; readonly reason?: never; readonly ask_base_digest?: never; readonly target_commit?: never; readonly scope?: never };
 /** Additive migration adapter for the bounded planning-restart kernel. */
 export type PlanningRestartInput = CommonToolInput & {
   readonly operation: "planning_restart";
@@ -60,6 +60,8 @@ export type PlanningRestartInput = CommonToolInput & {
   readonly status: "running";
   readonly artifact?: never;
   readonly human_revision?: never;
+  readonly target_commit?: never;
+  readonly scope?: never;
 };
 export type RefreshMilestoneBaselineInput = CommonToolInput & {
   readonly operation: "refresh_milestone_baseline";
@@ -71,6 +73,8 @@ export type RefreshMilestoneBaselineInput = CommonToolInput & {
   readonly target_phase_instance?: never;
   readonly reason?: never;
   readonly ask_base_digest?: never;
+  readonly target_commit?: never;
+  readonly scope?: never;
 };
 export type AuthorityRecoveryInput = CommonToolInput & {
   readonly operation: "recover_milestone_authority" | "recover_approval_trigger_authority" | "refresh_stale_baseline";
@@ -82,8 +86,24 @@ export type AuthorityRecoveryInput = CommonToolInput & {
   readonly target_phase_instance?: never;
   readonly reason?: never;
   readonly ask_base_digest?: never;
+  readonly target_commit?: never;
+  readonly scope?: never;
 };
-export type StateInput = StateBoundaryInput | PlanningRestartInput | RefreshMilestoneBaselineInput | AuthorityRecoveryInput;
+export type SetCommitAuthorityScope = "milestone" | "policy";
+export type SetCommitAuthorityInput = CommonToolInput & {
+  readonly operation: "set_commit_authority";
+  readonly phase_instance: PhaseInstanceId;
+  readonly step: "produce" | "counter_review" | "triage";
+  readonly status: "running" | "succeeded" | "failed";
+  readonly target_commit: string;
+  readonly reason: string;
+  readonly scope?: readonly SetCommitAuthorityScope[];
+  readonly artifact?: never;
+  readonly human_revision?: never;
+  readonly target_phase_instance?: never;
+  readonly ask_base_digest?: never;
+};
+export type StateInput = StateBoundaryInput | PlanningRestartInput | RefreshMilestoneBaselineInput | AuthorityRecoveryInput | SetCommitAuthorityInput;
 // Every success value optionally echoes the request_digest the server recorded for the call, so
 // a client can compare one string against its envelope output to prove the arguments arrived
 // untranscribed. Optional in the contract because receipts recorded before the echo existed must
@@ -197,7 +217,9 @@ export const stateInputSchema = z.object({
   status: z.enum(["running", "succeeded", "failed"]),
   artifact: durableArtifact.optional(),
   human_revision: humanRevisionDeclarationSchema.optional(),
-  operation: z.enum(["planning_restart", "refresh_milestone_baseline", "recover_milestone_authority", "recover_approval_trigger_authority", "refresh_stale_baseline"]).optional(),
+  operation: z.enum(["planning_restart", "refresh_milestone_baseline", "recover_milestone_authority", "recover_approval_trigger_authority", "refresh_stale_baseline", "set_commit_authority"]).optional(),
+  target_commit: z.string().min(1).max(256).optional(),
+  scope: z.array(z.enum(["milestone", "policy"])).optional(),
   target_phase_instance: phase.optional(),
   reason: text.optional(),
   ask_base_digest: digest.optional(),
@@ -209,21 +231,31 @@ export const stateInputSchema = z.object({
     if (input.artifact !== undefined || input.human_revision !== undefined) context.addIssue({ code: "custom", path: ["artifact"], message: "planning_restart cannot carry an artifact or human revision" });
     if (input.target_phase_instance === "prd" && input.ask_base_digest === undefined) context.addIssue({ code: "custom", path: ["ask_base_digest"], message: "PRD planning_restart requires ask_base_digest" });
     if (input.target_phase_instance !== "prd" && input.ask_base_digest !== undefined) context.addIssue({ code: "custom", path: ["ask_base_digest"], message: "ask_base_digest is PRD-only" });
+    if (input.target_commit !== undefined || input.scope !== undefined) context.addIssue({ code: "custom", path: ["operation"], message: "planning_restart cannot carry commit authority fields" });
+    return;
+  }
+  if (input.operation === "set_commit_authority") {
+    if (input.target_commit === undefined) context.addIssue({ code: "custom", path: ["target_commit"], message: "set_commit_authority requires target_commit" });
+    if (input.reason === undefined) context.addIssue({ code: "custom", path: ["reason"], message: "set_commit_authority requires reason" });
+    if (input.artifact !== undefined || input.human_revision !== undefined || input.target_phase_instance !== undefined || input.ask_base_digest !== undefined) {
+      context.addIssue({ code: "custom", path: ["operation"], message: "set_commit_authority carries no artifact, human revision, restart target, or ask digest" });
+    }
     return;
   }
   if (input.operation === "refresh_milestone_baseline") {
     if (input.step !== "triage" || input.status !== "succeeded") context.addIssue({ code: "custom", path: ["step"], message: "refresh_milestone_baseline requires triage/succeeded" });
-    if (input.artifact !== undefined || input.human_revision !== undefined || input.target_phase_instance !== undefined || input.reason !== undefined || input.ask_base_digest !== undefined) {
-      context.addIssue({ code: "custom", path: ["operation"], message: "refresh_milestone_baseline carries no artifact, revision, restart target, reason, or ask digest" });
+    if (input.artifact !== undefined || input.human_revision !== undefined || input.target_phase_instance !== undefined || input.reason !== undefined || input.ask_base_digest !== undefined || input.target_commit !== undefined || input.scope !== undefined) {
+      context.addIssue({ code: "custom", path: ["operation"], message: "refresh_milestone_baseline carries no artifact, revision, restart target, reason, ask digest, or commit authority fields" });
     }
     return;
   }
   if (input.operation === "recover_milestone_authority" || input.operation === "recover_approval_trigger_authority" || input.operation === "refresh_stale_baseline") {
-    if (input.artifact !== undefined || input.human_revision !== undefined || input.target_phase_instance !== undefined || input.reason !== undefined || input.ask_base_digest !== undefined) {
-      context.addIssue({ code: "custom", path: ["operation"], message: `${input.operation} carries no artifact, revision, restart target, reason, or ask digest` });
+    if (input.artifact !== undefined || input.human_revision !== undefined || input.target_phase_instance !== undefined || input.reason !== undefined || input.ask_base_digest !== undefined || input.target_commit !== undefined || input.scope !== undefined) {
+      context.addIssue({ code: "custom", path: ["operation"], message: `${input.operation} carries no artifact, revision, restart target, reason, ask digest, or commit authority fields` });
     }
     return;
   }
+  if (input.target_commit !== undefined || input.scope !== undefined) context.addIssue({ code: "custom", path: ["operation"], message: "commit authority fields require set_commit_authority" });
   if (input.target_phase_instance !== undefined || input.reason !== undefined || input.ask_base_digest !== undefined) context.addIssue({ code: "custom", path: ["operation"], message: "restart fields require planning_restart" });
   if (input.human_revision !== undefined && (input.step !== "produce" || input.status !== "succeeded")) context.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
 }) as unknown as z.ZodType<StateInput>;

@@ -194,6 +194,25 @@ describe("correlated MCP tool contracts", () => {
     expect(() => parseToolCall("archflow_state", { ...refresh, step: "produce" })).toThrow();
     expect(() => parseToolCall("archflow_state", { ...refresh, reason: "move it" })).toThrow();
   });
+  it("parses and validates set_commit_authority operation", () => {
+    const commitAuth = {
+      ...stateInput, intent_id: "commit-auth-1", phase_instance: "phase-impl-2",
+      step: "produce", status: "running", operation: "set_commit_authority",
+      target_commit: "HEAD", reason: "Merged main into feature branch",
+      scope: ["milestone", "policy"] as const,
+    } as const;
+    const parsed = parseToolCall("archflow_state", commitAuth);
+    expect(parsed.input.operation).toBe("set_commit_authority");
+    if (parsed.input.operation === "set_commit_authority") {
+      expect(parsed.input.target_commit).toBe("HEAD");
+      expect(parsed.input.reason).toBe("Merged main into feature branch");
+      expect(parsed.input.scope).toEqual(["milestone", "policy"]);
+    }
+    expect(() => parseToolCall("archflow_state", { ...commitAuth, target_commit: undefined })).toThrow();
+    expect(() => parseToolCall("archflow_state", { ...commitAuth, reason: undefined })).toThrow();
+    expect(() => parseToolCall("archflow_state", { ...commitAuth, artifact: taskInitialization })).toThrow();
+    expect(() => parseToolCall("archflow_state", { ...stateInput, target_commit: "HEAD" })).toThrow();
+  });
   it("checks direct state request/result equalities", () => {
     const call = bindParsedToolCallRequest(parseToolCall("archflow_state", stateInput), parseSha256Digest("b".repeat(64)));
     expect(() => validateProjectResultStructure(call, { schema_version: "1", ok: true, value: { path: "phases/2/result.json", revision: 3, status: "failed" } })).toThrow(/status mismatch/);

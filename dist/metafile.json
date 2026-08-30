@@ -4057,7 +4057,7 @@
       ]
     },
     "src/contracts/durable.ts": {
-      "bytes": 53066,
+      "bytes": 53301,
       "format": "esm",
       "imports": [
         {
@@ -4165,7 +4165,7 @@
       ]
     },
     "src/contracts/fingerprints.ts": {
-      "bytes": 21277,
+      "bytes": 22343,
       "format": "esm",
       "imports": [
         {
@@ -4273,7 +4273,7 @@
       ]
     },
     "src/contracts/mcp-tools.ts": {
-      "bytes": 34850,
+      "bytes": 37115,
       "format": "esm",
       "imports": [
         {
@@ -4533,7 +4533,7 @@
       }
     },
     "src/contracts/schemas/v1/mcp-tools.schema.json": {
-      "bytes": 34272,
+      "bytes": 34665,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6368,7 +6368,7 @@
       ]
     },
     "src/mcp/handlers/state.ts": {
-      "bytes": 61823,
+      "bytes": 66472,
       "format": "esm",
       "imports": [
         {
@@ -8906,7 +8906,7 @@
       ]
     },
     "src/state/request.ts": {
-      "bytes": 6411,
+      "bytes": 6974,
       "format": "esm",
       "imports": [
         {
@@ -9384,7 +9384,7 @@
       ]
     },
     "src/state/transaction.ts": {
-      "bytes": 67704,
+      "bytes": 67920,
       "format": "esm",
       "imports": [
         {
@@ -9640,7 +9640,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1873819,
+      "bytes": 1876613,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10668,7 +10668,7 @@
           "bytesInOutput": 531
         },
         "src/contracts/durable.ts": {
-          "bytesInOutput": 38851
+          "bytesInOutput": 39071
         },
         "src/contracts/errors.ts": {
           "bytesInOutput": 17156
@@ -10677,7 +10677,7 @@
           "bytesInOutput": 3325
         },
         "src/contracts/fingerprints.ts": {
-          "bytesInOutput": 10128
+          "bytesInOutput": 10743
         },
         "src/contracts/gates.ts": {
           "bytesInOutput": 30405
@@ -10689,7 +10689,7 @@
           "bytesInOutput": 711
         },
         "src/contracts/mcp-tools.ts": {
-          "bytesInOutput": 20041
+          "bytesInOutput": 21468
         },
         "src/contracts/path-claims.ts": {
           "bytesInOutput": 3184
@@ -10887,7 +10887,7 @@
           "bytesInOutput": 10038
         },
         "src/state/request.ts": {
-          "bytesInOutput": 4712
+          "bytesInOutput": 5244
         },
         "src/state/restart-authority.ts": {
           "bytesInOutput": 3929
@@ -10919,7 +10919,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3284535,
+      "bytes": 3292511,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12035,7 +12035,7 @@
           "bytesInOutput": 531
         },
         "src/contracts/durable.ts": {
-          "bytesInOutput": 38850
+          "bytesInOutput": 39070
         },
         "src/contracts/errors.ts": {
           "bytesInOutput": 17416
@@ -12044,7 +12044,7 @@
           "bytesInOutput": 3325
         },
         "src/contracts/fingerprints.ts": {
-          "bytesInOutput": 10100
+          "bytesInOutput": 10715
         },
         "src/contracts/gates.ts": {
           "bytesInOutput": 30413
@@ -12059,7 +12059,7 @@
           "bytesInOutput": 1395
         },
         "src/contracts/mcp-tools.ts": {
-          "bytesInOutput": 21027
+          "bytesInOutput": 22454
         },
         "src/contracts/path-claims.ts": {
           "bytesInOutput": 3097
@@ -12104,7 +12104,7 @@
           "bytesInOutput": 3748
         },
         "src/contracts/schemas/v1/mcp-tools.schema.json": {
-          "bytesInOutput": 33066
+          "bytesInOutput": 33441
         },
         "src/contracts/schemas/v1/path-claim.schema.json": {
           "bytesInOutput": 493
@@ -12227,7 +12227,7 @@
           "bytesInOutput": 18092
         },
         "src/mcp/handlers/state.ts": {
-          "bytesInOutput": 52220
+          "bytesInOutput": 56830
         },
         "src/mcp/process-runner.ts": {
           "bytesInOutput": 3941
@@ -12374,7 +12374,7 @@
           "bytesInOutput": 44524
         },
         "src/state/request.ts": {
-          "bytesInOutput": 4712
+          "bytesInOutput": 5244
         },
         "src/state/restart-authority.ts": {
           "bytesInOutput": 9509
@@ -12401,7 +12401,7 @@
           "bytesInOutput": 73600
         },
         "src/state/transaction.ts": {
-          "bytesInOutput": 50393
+          "bytesInOutput": 50590
         },
         "src/state/transitions.ts": {
           "bytesInOutput": 25508

@@ -1,6 +1,6 @@
 import type { InvocationContext } from "../../contracts/contexts.js";
 import { createProjectError, type ProjectResult } from "../../contracts/errors.js";
-import { canonicalJsonDigest, sha256Bytes } from "../../contracts/canonical.js";
+import { canonicalJsonDigest, sha256Bytes, type GitOid } from "../../contracts/canonical.js";
 import { parsePathSafeId, parseSafeId, parseSafeInteger } from "../../contracts/evidence.js";
 import type { Sha256Digest } from "../../contracts/evidence.js";
 import {
@@ -251,10 +251,11 @@ export async function handleState(
     const recoveryInput = call.input.operation === "recover_milestone_authority" ? call.input : undefined;
     const triggerRecoveryInput = call.input.operation === "recover_approval_trigger_authority" ? call.input : undefined;
     const staleBaselineInput = call.input.operation === "refresh_stale_baseline" ? call.input : undefined;
+    const commitAuthorityInput = call.input.operation === "set_commit_authority" ? call.input : undefined;
     const artifact = restartInput === undefined && refreshInput === undefined &&
-      recoveryInput === undefined && triggerRecoveryInput === undefined && staleBaselineInput === undefined ? call.input.artifact : undefined;
+      recoveryInput === undefined && triggerRecoveryInput === undefined && staleBaselineInput === undefined && commitAuthorityInput === undefined ? call.input.artifact : undefined;
     if (services.state === undefined) {
-      if (restartInput !== undefined || refreshInput !== undefined || recoveryInput !== undefined || triggerRecoveryInput !== undefined || staleBaselineInput !== undefined) {
+      if (restartInput !== undefined || refreshInput !== undefined || recoveryInput !== undefined || triggerRecoveryInput !== undefined || staleBaselineInput !== undefined || commitAuthorityInput !== undefined) {
         return fail(createProjectError("STATE_MISSING", { phase_instance: call.input.phase_instance }));
       }
       const initialized = await runStateInitialization(services.dependencies, {
@@ -460,6 +461,99 @@ export async function handleState(
           return Object.freeze({
             schema_version: "1", ok: true,
             value: Object.freeze({ expectation, result, next_state: planned.value }),
+          });
+        }
+        if (commitAuthorityInput !== undefined) {
+          const state = current.value;
+          if (state.terminal !== undefined || state.open_gate !== undefined) {
+            return fail(createProjectError("TRANSITION_INVALID", {
+              phase_instance: commitAuthorityInput.phase_instance,
+              from: `${state.step}-${state.status}`,
+              to: "set-commit-authority",
+            }));
+          }
+          let resolvedCommit: GitOid;
+          try {
+            resolvedCommit = await resolveCommit(services.runner, commitAuthorityInput.target_commit);
+          } catch {
+            return fail(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance,
+              issue_code: "target-commit-unresolvable",
+            }));
+          }
+          const scope = commitAuthorityInput.scope ?? ["milestone"];
+          const updateMilestone = scope.includes("milestone");
+          const updatePolicy = scope.includes("policy");
+
+          const revision = parseSafeInteger(state.revision + 1);
+          let updatedRuleSettlements = state.rule_settlements;
+
+          if (updateMilestone && updatedRuleSettlements !== undefined && updatedRuleSettlements.length > 0) {
+            const matchingSettlement = [...updatedRuleSettlements]
+              .filter((s) => s.phase_instance === state.phase_instance)
+              .sort((a, b) => b.settled_at_revision - a.settled_at_revision)[0];
+            if (matchingSettlement !== undefined && matchingSettlement.milestone_baseline_commit !== undefined) {
+              const replacement: RuleSettlementV1 = Object.freeze({
+                ...matchingSettlement,
+                settled_at_revision: revision,
+                milestone_baseline_commit: resolvedCommit,
+                ...(matchingSettlement.milestone_target_ref === undefined ? {} : {
+                  milestone_target_ref: matchingSettlement.milestone_target_ref,
+                  milestone_target_head: resolvedCommit,
+                }),
+              });
+              updatedRuleSettlements = Object.freeze([...(state.rule_settlements ?? []), replacement].sort(compareRuleSettlements));
+            }
+          }
+
+          let newPolicyBaseCommit = state.policy_base_commit;
+          let newConstitutionDigest = state.constitution_digest;
+          if (updatePolicy) {
+            const resolvedConstitution = await resolvePinnedConstitution(
+              services.runner, resolvedCommit, services.authority.context,
+            );
+            if (!resolvedConstitution.ok) return resolvedConstitution;
+            newPolicyBaseCommit = resolvedCommit;
+            newConstitutionDigest = resolvedConstitution.value.digest;
+          }
+
+          const { revision: _revision, last_transition: _transition, ...preserved } = state;
+          const nextState = Object.freeze({
+            ...preserved,
+            phase_instance: commitAuthorityInput.phase_instance,
+            step: commitAuthorityInput.step,
+            status: commitAuthorityInput.status,
+            input_fingerprint: identified.input_fingerprint,
+            ...(updatePolicy ? { policy_base_commit: newPolicyBaseCommit, constitution_digest: newConstitutionDigest } : {}),
+            ...(updatedRuleSettlements === undefined ? {} : { rule_settlements: updatedRuleSettlements }),
+          });
+
+          const success = Object.freeze({
+            path: parseTaskPathClaim("state.json"),
+            revision,
+            status: commitAuthorityInput.status,
+            request_digest: identified.request_digest,
+          });
+          const expectation = createInternalResultExpectation({
+            schema_version: "1",
+            tool: "archflow_state",
+            task_id: services.authority.task_id,
+            intent_id: commitAuthorityInput.intent_id,
+            input_fingerprint: identified.input_fingerprint,
+            request_digest: identified.request_digest,
+            result_id: stateResultId(commitAuthorityInput.intent_id),
+            resulting_revision: revision,
+            success,
+          });
+          const result = validateProjectResultStructure(identifiedCall, {
+            schema_version: "1",
+            ok: true,
+            value: success,
+          });
+          return Object.freeze({
+            schema_version: "1",
+            ok: true,
+            value: Object.freeze({ expectation, result, next_state: nextState }),
           });
         }
         if (refreshInput !== undefined) {

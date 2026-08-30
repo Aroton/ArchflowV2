@@ -85,6 +85,10 @@ export type RequestDigestSubject = RequestDigestCommon & ({
   readonly operation_fields: Pick<Extract<StateInput, { readonly operation: "planning_restart" }>, "phase_instance" | "target_phase_instance" | "reason" | "ask_base_digest">;
 } | {
   readonly tool: "archflow_state";
+  readonly operation: "set-commit-authority";
+  readonly operation_fields: Pick<Extract<StateInput, { readonly operation: "set_commit_authority" }>, "phase_instance" | "step" | "status" | "target_commit" | "reason" | "scope">;
+} | {
+  readonly tool: "archflow_state";
   readonly operation: StateControlOperation;
   readonly operation_fields: Pick<StateInput, "phase_instance" | "step" | "status">;
 } | {
@@ -247,6 +251,20 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
           target_phase_instance: restart.target_phase_instance,
           reason: restart.reason,
           ...(restart.ask_base_digest === undefined ? {} : { ask_base_digest: restart.ask_base_digest }),
+        };
+      }
+      if (subject.operation === "set-commit-authority") {
+        const commitAuth = fields as Pick<Extract<StateInput, { readonly operation: "set_commit_authority" }>, "phase_instance" | "step" | "status" | "target_commit" | "reason" | "scope">;
+        exactFields(fields, commitAuth.scope === undefined
+          ? ["phase_instance", "step", "status", "target_commit", "reason"]
+          : ["phase_instance", "step", "status", "target_commit", "reason", "scope"]);
+        return {
+          phase_instance: commitAuth.phase_instance,
+          step: commitAuth.step,
+          status: commitAuth.status,
+          target_commit: commitAuth.target_commit,
+          reason: commitAuth.reason,
+          ...(commitAuth.scope === undefined ? {} : { scope: commitAuth.scope }),
         };
       }
       if (subject.operation === "record-state-boundary") {
