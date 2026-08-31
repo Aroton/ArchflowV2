@@ -1,0 +1,33 @@
+{
+  "context_digest": "774260f4621518c62ce30482f745dc8d459331977bb1f05ec1aad338ddecb8ce",
+  "envelope": {
+    "context_digest": "774260f4621518c62ce30482f745dc8d459331977bb1f05ec1aad338ddecb8ce",
+    "gate_id": "g-5ae4068ab9ed04619711a3e2408bb7aeb8de5b4c8092c17fcf49ee5bd64c7b0d",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-6cf0d253dd7643bd9f0cec8960fa12f8969b9767c6d1be2add3c7afd072ebc60",
+      "recorded_at": "2026-08-31T16:21:57.680Z",
+      "request_id_digest": "f5b73ec4ca177aa83410950145a7e4ec2e79d185fc8add31453fa82b2a2d214a",
+      "schema_version": "1"
+    },
+    "kind": "design-approval",
+    "payload": {
+      "decision": "approve",
+      "reason": "Approved design after clean counter-review with 0 findings."
+    },
+    "phase_instance": "design",
+    "schema_version": "1",
+    "subject_digest": "38f40372241d727fc31802fb0358678ce69b6c3a6c86f21b5c7b6b42461f2b4b",
+    "task_id": "review-taxonomy"
+  },
+  "gate_id": "g-5ae4068ab9ed04619711a3e2408bb7aeb8de5b4c8092c17fcf49ee5bd64c7b0d",
+  "kind": "design-approval",
+  "outcome": "decided",
+  "phase_instance": "design",
+  "schema_version": "1",
+  "subject_digest": "38f40372241d727fc31802fb0358678ce69b6c3a6c86f21b5c7b6b42461f2b4b",
+  "task_id": "review-taxonomy"
+}

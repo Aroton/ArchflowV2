@@ -1,0 +1,76 @@
+{
+  "accounting": {
+    "counted_entries": [
+      {
+        "path": ".archflow/tasks/review-taxonomy/prd.md",
+        "storage": "raw-payload",
+        "stored_bytes": 16358
+      }
+    ],
+    "measured_at_revision": 7,
+    "result_byte_cap": 26214400,
+    "result_bytes": 16358,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 29862
+  },
+  "artifact_digest": "d0f9a79af9e55c90d755c2981bc7d5b63ca70168412b81b13ec7266199c3a4e0",
+  "input_fingerprint": "e9b0e62ef7770a9cc4c3f76a7b755ec2a23ff3c7c31519120f783ba06b92cad5",
+  "outputs": [
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "74a41f8e8cc9c048ba2fa5db306de635871aa37f",
+        "size_bytes": 16358
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": ".archflow/tasks/review-taxonomy/prd.md",
+      "path_class": "document",
+      "payload_bytes": 16358,
+      "payload_digest": "2c35a2353872579cae435183e679cf1c4787a48766ca7ffe647b92dd768e37e1",
+      "storage": "raw-payload"
+    }
+  ],
+  "phase_instance": "prd",
+  "projections": [
+    {
+      "content_digest": "2c35a2353872579cae435183e679cf1c4787a48766ca7ffe647b92dd768e37e1",
+      "path": ".archflow/tasks/review-taxonomy/prd.md"
+    }
+  ],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "state-result-059f76e024f3306f203026975e62cc73",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [
+      ".archflow/tasks/review-taxonomy/prd.md"
+    ],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "894a79a6760a8ed6f6d7ee24c55e10724ad2ac2f239cea748952dc5cc6c4b6bb",
+  "source_artifact": {
+    "artifact_kind": "document",
+    "byte_count": 16358,
+    "content_digest": "2c35a2353872579cae435183e679cf1c4787a48766ca7ffe647b92dd768e37e1",
+    "declared_inputs": [
+      {
+        "digest": "1cb4adf7bb4f53acbedb069e03393eae08caa26c88bfe51fcbb7107e6b4192c8",
+        "input_id": "user-ask"
+      }
+    ],
+    "document_path": "prd.md",
+    "input_fingerprint": "e9b0e62ef7770a9cc4c3f76a7b755ec2a23ff3c7c31519120f783ba06b92cad5",
+    "path_class": "document",
+    "phase_instance": "prd",
+    "projection_target": ".archflow/tasks/review-taxonomy/prd.md",
+    "schema_version": "1",
+    "snapshot_digest": "894a79a6760a8ed6f6d7ee24c55e10724ad2ac2f239cea748952dc5cc6c4b6bb",
+    "step": "produce",
+    "task_id": "review-taxonomy"
+  },
+  "step": "produce",
+  "task_id": "review-taxonomy"
+}

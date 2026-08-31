@@ -1,0 +1,102 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 11,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 16358
+  },
+  "artifact_digest": "943318ba5ea820caf7e0bb86165e155dc2d95b11f14d19ee93913a36be1b83eb",
+  "input_fingerprint": "6c8d69eb65d6835e068e828597d84dec59b833c3efc319c38bb1318703e838c7",
+  "outputs": [],
+  "phase_instance": "prd",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "state-result-8d45862326976bc2bb6234dab16b68d4",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "triage",
+    "evidence": {
+      "accepted_count": 0,
+      "accepted_editorial_count": 0,
+      "current_evidence_set_digest": "afa96329b35e115f6c0ff12ece970bba6c07f338233e7f70912d7cf721caed82",
+      "disposition_ledger": [
+        {
+          "attempt": 1,
+          "blocking": true,
+          "disposition": "accepted",
+          "evidence": "FR-1.3 requires every finding to contain an exact settling check and says findings without one MUST be classified as `preference` or suppressed. FR-2.3 likewise requires a concrete falsifier for every defect, risk, and gap. In contrast, FR-3.1 and pinned Clarification Answer 1 require non-falsifiable claims with material consequence to be escalated to a human/author. A material non-falsifiable defect, risk, or gap therefore must simultaneously be suppressed/reclassified as a non-correctness preference and escalated. Reasonable implementations could discard these claims, invent meaningless falsifiers, or violate schema validation, changing both review behavior and gate decisions.",
+          "finding_id": "general-1-taxonomy-nonfalsifiable-routing-contradiction",
+          "rationale": "Clarify the contract for non-falsifiable claims: distinguish falsifiable checks from explicit non-falsifiable consequence claims that route to escalated-human, while keeping mandatory falsifier check descriptions for verification-routed claims.",
+          "review_evidence_digest": "62837c1bc0ccb99417e1d42f993647dd9968c9b1a27971e309fd4d3cb6b2796d",
+          "revision_intent": "Update FR-1.3, FR-2.3, and FR-3.1 to provide a coherent representation for non-falsifiable material claims that escalate to human review while enforcing concrete testable falsifiers for verification-routed findings.",
+          "severity": "blocker",
+          "suggested_resolution": "Define a representable contract for material non-falsifiable claims. For example, allow a discriminated falsifier value that records why no settling check exists and requires consequence evidence plus `escalated-human`, while retaining concrete falsifier enforcement for findings routed through verification. Remove the instruction to classify every no-check claim as a preference or suppress it.",
+          "summary": "The finding contract makes the required material non-falsifiable escalation path impossible to represent."
+        },
+        {
+          "attempt": 1,
+          "blocking": false,
+          "disposition": "accepted",
+          "evidence": "Pinned Clarification Answer 1 says the new taxonomy “replaces existing critical/bug/blocker/severity scales.” FR-1.4 only requires replacement of `severity` values (`blocker`, `major`, `minor`) and the `blocking` field in newly generated review contracts. No requirement identifies or removes/migrates separate `critical` or `bug` classifications where they exist. An implementation satisfying FR-1.4 could therefore leave those legacy classifications active, producing mixed blocking semantics and failing the requested full integration.",
+          "finding_id": "general-1-legacy-taxonomy-removal-incomplete",
+          "rationale": "Explicitly inventory and require complete deprecation/replacement of all legacy classification scales (critical, bug, blocker, major, minor, severity, blocking) in new contracts while retaining archived-read compatibility.",
+          "review_evidence_digest": "62837c1bc0ccb99417e1d42f993647dd9968c9b1a27971e309fd4d3cb6b2796d",
+          "revision_intent": "Update FR-1.4 to explicitly encompass critical, bug, blocker, major, minor, severity, and the blocking flag in the deprecation inventory and migration scope.",
+          "severity": "major",
+          "suggested_resolution": "Require an inventory and replacement of every legacy review classification and blocking decision input, explicitly including `critical`, `bug`, `blocker`, severity values, and the `blocking` flag. Specify their archived-read compatibility and prohibit them in all newly generated review and triage contracts.",
+          "summary": "The replacement requirement does not cover all legacy classification scales named by the pinned ask."
+        },
+        {
+          "attempt": 1,
+          "blocking": true,
+          "disposition": "accepted",
+          "evidence": "In the repository, `blocking` is not merely descriptive. `src/contracts/review.ts:147-148` derives the whole review summary from it: `blocking_count = findings.filter(f => f.blocking).length; verdict = blocking_count > 0 ? \"fail\" : findings.length > 0 ? \"advisory\" : \"pass\"`, and `src/contracts/review.ts:142-143`/`:153-154` reject any review whose reported `verdict`/`blocking_count` disagree. That pair is also part of the public MCP tool contract (`src/contracts/mcp-tools.ts:150` `CounterReviewSuccess { verdict, blocking_count }`, mirrored in `src/contracts/schemas/v1/mcp-tools.schema.json:649,726` and `review.schema.json:138,157`). Separately, `src/contracts/triage.ts:155` enforces `accepted-editorial is refused for blocking finding ...; a blocking finding's fix is never purely editorial`, which is what forces a material finding onto the significant-revision + fresh-review path instead of the wording-only path (`src/review/fixed-point.ts:626-638`). The PRD's replacement fields are explicitly descriptive and non-consequential — FR-1.1/FR-1.2 plus the pinned research (`docs/research/review-taxonomy-research.md:36,42`: \"type and confidence are descriptive\", \"Consequence/priority is the executor's field, not the reviewer's\") — so neither `claim_type` nor `confidence` can be silently substituted for `blocking`, and the PRD names no substitute. Section 9's acceptance row only requires that \"legacy severity is successfully replaced\".",
+          "finding_id": "general-2-blocking-signal-replacement-unspecified",
+          "rationale": "Specify how review summary metrics, verdicts, and accepted-editorial gating operate when consequence is determined during triage/execution rather than by reviewer severity.",
+          "review_evidence_digest": "62837c1bc0ccb99417e1d42f993647dd9968c9b1a27971e309fd4d3cb6b2796d",
+          "revision_intent": "Add requirements defining the new review summary/verdict derivation under the 3-field taxonomy, and define how accepted-editorial gating is evaluated via triage-declared consequence.",
+          "severity": "blocker",
+          "suggested_resolution": "Add explicit requirements stating (a) how `verdict`/`blocking_count` are computed (or that they are removed and what the MCP `CounterReviewSuccess` surface becomes) under the 3-field taxonomy, and (b) what now gates the `accepted-editorial` disposition so a material `defect` cannot be closed by a wording-only revision without fresh review. If the replacement gate is a triage-side/executor-side consequence judgment rather than a reviewer field, say so and specify who supplies it and when.",
+          "summary": "FR-1.4 removes `blocking` (and `severity`) from findings but does not state what replaces the blocking signal that today computes review `verdict`/`blocking_count` and guards the editorial-acceptance path, leaving two load-bearing server invariants undefined."
+        },
+        {
+          "attempt": 1,
+          "blocking": true,
+          "disposition": "accepted",
+          "evidence": "Today every current finding must carry exactly one of three dispositions (`src/contracts/triage.ts:151-158`, \"triage dispositions must exactly cover every current finding\"), and advancement is decided purely from that split: any accepted finding forces produce re-entry (`src/review/fixed-point.ts:609-617`, `:630`), all-rejected reaches the clean fixed point. FR-3.2 introduces two dispositions with no stated place in that decision chain, and FR-3.1 routes \"Non-Falsifiable with Material Consequence\" to `escalated-human` — i.e. a human gate — while FR-3.3 only says rejections are healthy. The PRD never says whether a round containing `escalated-human` is triage-complete, whether it must open a human gate before advancing (and which gate), or whether `deferred` items are terminal for the phase or re-presented next round. Section 9's acceptance row (\"Triage correctly distinguishes falsifiable checks from non-falsifiable escalations and non-material deferrals\") does not pin an advancement outcome, so an implementer can choose either behaviour: advancing past an unresolved material escalation (defeats FR-3.1's purpose and NFR-1's human-authority intent) or blocking forever on deferrals (the exact spinning the ask asks to end).",
+          "finding_id": "general-2-escalated-deferred-advancement-semantics-undefined",
+          "rationale": "Define precise fixed-point advancement semantics for escalated-human (must fold into/open human gate) and deferred (closed for current phase, recorded in durable ledger) dispositions.",
+          "review_evidence_digest": "62837c1bc0ccb99417e1d42f993647dd9968c9b1a27971e309fd4d3cb6b2796d",
+          "revision_intent": "Add explicit fixed-point lifecycle and advancement rules in Section 5 for escalated-human and deferred triage dispositions.",
+          "severity": "blocker",
+          "suggested_resolution": "Specify, per new disposition, its effect on triage completeness and the next fixed-point action: whether `escalated-human` must materialize a human gate before the phase can advance and what the gate's accept/override outcomes are, and whether `deferred` closes the finding for the phase instance (recorded in the disposition ledger) or is carried into the next review round.",
+          "summary": "FR-3.2 adds `escalated-human` and `deferred` dispositions without stating their effect on triage completeness and phase advancement, so a phase could either advance with unresolved escalations or stall permanently on deferrals."
+        }
+      ],
+      "dispositions": [],
+      "input_fingerprint": "6c8d69eb65d6835e068e828597d84dec59b833c3efc319c38bb1318703e838c7",
+      "phase_instance": "prd",
+      "rejected_count": 0,
+      "schema_version": "1",
+      "source_evidence_digests": [
+        "07685fd4fd88c4ad4d97a02c12f1b4ced2679c9d21e0e84c031d9f0c677480a0"
+      ],
+      "step": "triage",
+      "subject_digest": "d0f9a79af9e55c90d755c2981bc7d5b63ca70168412b81b13ec7266199c3a4e0",
+      "task_id": "review-taxonomy"
+    },
+    "schema_version": "1"
+  },
+  "step": "triage",
+  "task_id": "review-taxonomy"
+}

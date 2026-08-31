@@ -1,0 +1,133 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 29,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 59402
+  },
+  "artifact_digest": "bd7cdc96ac802032cbd8a86b40d62cac979b93851925957c2aeadac0043abab6",
+  "input_fingerprint": "8cbdf676374bb7ea1d796a1da8b0189c3629bec4b290e52cca8d04df8b79425f",
+  "outputs": [],
+  "phase_instance": "design",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "result-2aac4fe1ff054ef4f28af1219dcc0ec4",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "review-evidence",
+    "evidence": {
+      "adapter": "codex-cli",
+      "assurance": "server-attested",
+      "blocking_count": 0,
+      "cli_version": "0.151.0",
+      "effort": "medium",
+      "envelope_input_digest": "3ee9b7a545f73e1f82633a4a310cb70db7188562b5d20c1db023f7eef3cb2123",
+      "findings": [],
+      "input_fingerprint": "8cbdf676374bb7ea1d796a1da8b0189c3629bec4b290e52cca8d04df8b79425f",
+      "invocation_id": "invocation-2aac4fe1ff054ef4f28af1219dcc0ec4",
+      "matched_rule_versions": [],
+      "model": "gpt-5.6-sol",
+      "model_family": "codex",
+      "observed_output_digest": "a0bfc7588665ab8b2687f87f6db82bc8ca98084be7668c94fb43b83819a7846f",
+      "phase_instance": "design",
+      "producer_family": "gemini",
+      "repositories": [
+        {
+          "commit": "a6ebaa4e5cecda30ca9fb76551f979db964dcd1e",
+          "name": "primary",
+          "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc"
+        }
+      ],
+      "result_id": "result-2aac4fe1ff054ef4f28af1219dcc0ec4",
+      "reviewer_runs": [
+        {
+          "adapter": "codex-cli",
+          "cli_version": "0.151.0",
+          "criterion_ids": [
+            "substantive-correctness",
+            "upstream-coverage",
+            "interface-reality",
+            "quantitative-consistency",
+            "boundary-and-mechanism-coverage",
+            "evidence-completeness",
+            "proportionality",
+            "phase-plan-soundness",
+            "test-strategy",
+            "unverifiable-claims",
+            "reviewer-confidence",
+            "advisory-observations"
+          ],
+          "effort": "medium",
+          "envelope_input_digest": "3ee9b7a545f73e1f82633a4a310cb70db7188562b5d20c1db023f7eef3cb2123",
+          "finding_ids": [],
+          "focus": "general",
+          "invocation_id": "invocation-2aac4fe1ff054ef4f28af1219dcc0ec4",
+          "model": "gpt-5.6-sol",
+          "model_family": "codex",
+          "observed_output_digest": "a0bfc7588665ab8b2687f87f6db82bc8ca98084be7668c94fb43b83819a7846f",
+          "reviewer_id": "general-1",
+          "route_source": {
+            "provenance": "configured"
+          },
+          "routing_role": "counter-reviewer",
+          "rubric_digest": "1de3ef4ed22d5698493eb7a6376ebdf493763c1ba39e821fa8e875f9095a8c8e"
+        },
+        {
+          "adapter": "claude-cli",
+          "cli_version": "2.1.251",
+          "criterion_ids": [
+            "substantive-correctness",
+            "upstream-coverage",
+            "interface-reality",
+            "quantitative-consistency",
+            "boundary-and-mechanism-coverage",
+            "evidence-completeness",
+            "proportionality",
+            "phase-plan-soundness",
+            "test-strategy",
+            "unverifiable-claims",
+            "reviewer-confidence",
+            "advisory-observations"
+          ],
+          "effort": "medium",
+          "envelope_input_digest": "124c8789f2c328bbbc47e76bf93c3bc8338e868dbfa4540f3915b51b00c48ea6",
+          "finding_ids": [],
+          "focus": "general",
+          "invocation_id": "invocation-2aac4fe1ff054ef4f28af1219dcc0ec4",
+          "model": "claude-opus-5",
+          "model_family": "claude",
+          "observed_output_digest": "2ee2b83f69a9dcc8fdf9c102fe3515089359c355bf5f5806e6e4db83a165b276",
+          "reviewer_id": "general-2",
+          "route_source": {
+            "provenance": "configured"
+          },
+          "routing_role": "counter-reviewer",
+          "rubric_digest": "1de3ef4ed22d5698493eb7a6376ebdf493763c1ba39e821fa8e875f9095a8c8e"
+        }
+      ],
+      "role": "counter-review",
+      "route_source": {
+        "provenance": "configured"
+      },
+      "rubric_digest": "1de3ef4ed22d5698493eb7a6376ebdf493763c1ba39e821fa8e875f9095a8c8e",
+      "schema_version": "1",
+      "step": "counter_review",
+      "subject_digest": "38f40372241d727fc31802fb0358678ce69b6c3a6c86f21b5c7b6b42461f2b4b",
+      "task_id": "review-taxonomy",
+      "verdict": "pass"
+    },
+    "schema_version": "1"
+  },
+  "step": "counter_review",
+  "task_id": "review-taxonomy"
+}

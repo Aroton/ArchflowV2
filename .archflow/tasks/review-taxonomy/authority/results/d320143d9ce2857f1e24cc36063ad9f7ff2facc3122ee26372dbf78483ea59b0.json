@@ -1,0 +1,134 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 29,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 59402
+  },
+  "artifact_digest": "09438381ee258b5493f781ac2b75b5dfe6afd018a204d09a8257c14fabaf9c97",
+  "input_fingerprint": "8cbdf676374bb7ea1d796a1da8b0189c3629bec4b290e52cca8d04df8b79425f",
+  "outputs": [],
+  "phase_instance": "design",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-13348dcc9d004a570595120826bd712e",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "antigravity-cli",
+      "approved_upstream_digests": [],
+      "assurance": "server-attested",
+      "cli_version": "1.1.22",
+      "constitution": "pass",
+      "drift": "aligned",
+      "drift_findings": [],
+      "effort": "high",
+      "envelope_input_digest": "e764a31e6ce96c8dafd46967893c53c9292052df459278f81fe92ff0157b1299",
+      "input_fingerprint": "8cbdf676374bb7ea1d796a1da8b0189c3629bec4b290e52cca8d04df8b79425f",
+      "invocation_id": "adjudication-invocation-13348dcc9d004a570595120826bd712e",
+      "matched_rule_versions": [],
+      "model": "gemini-3.7-flash-high",
+      "model_family": "gemini",
+      "observed_output_digest": "85572815f70e2c8a30d2feee68e860bf9ad5b95ec4dc674559497c48553399b5",
+      "phase_instance": "design",
+      "pinned_constitution_digest": "39b6e6b94916a526f61597d9e1b26abc1b2534417f2eb3369afc668e68d69d56",
+      "repositories": [
+        {
+          "commit": "a6ebaa4e5cecda30ca9fb76551f979db964dcd1e",
+          "name": "primary",
+          "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc"
+        }
+      ],
+      "result_id": "adjudication-result-13348dcc9d004a570595120826bd712e",
+      "route_source": {
+        "provenance": "configured"
+      },
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "The technical design establishes a comprehensive architectural specification and structured 5-phase implementation plan before any code is written. It adheres to the phased lifecycle where implementation requires approved designs, and keeps the design and PRD aligned.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 3,
+          "trigger": "not-matched",
+          "trigger_evidence": "Rule declares no review trigger."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The design explicitly upholds human authority for validation overrides and review push-through mechanisms. It requires explicit, human-signed decision envelopes with documented rationale, forbids autonomous agent self-waivers or timeout-based advancements, and records all human decisions immutably in durable state.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 3,
+          "trigger": "not-matched",
+          "trigger_evidence": "Rule declares no review trigger."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The design embraces honest reporting by distinguishing confidence levels (including welcoming low-confidence suspicions), providing explicit human escalation paths for non-falsifiable claims with material consequences, and maintaining full transparency and auditability over skipped or displaced validations.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 2,
+          "trigger": "not-matched",
+          "trigger_evidence": "Rule declares no review trigger."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The design does not introduce or modify access control or permission-decision systems. Workflow gate mechanics adhere to documented specifications without compromising security boundaries.",
+          "rule_id": "human-approval-for-access-control",
+          "rule_version": 1,
+          "trigger": "not-matched",
+          "trigger_evidence": "The artifact defines review finding taxonomies, triage dispositions, and workflow engine gate options. It does not add or modify authentication, authorization, session/token validation, or access-control permission logic."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The design uses standard content hashing (SHA-256) for artifact digests and integrity verification without altering cryptographic primitives, keys, or secret handling.",
+          "rule_id": "human-approval-for-crypto-and-secrets",
+          "rule_version": 1,
+          "trigger": "not-matched",
+          "trigger_evidence": "The artifact does not add or modify cryptographic primitives, key/credential generation, secret storage, or secret transmission."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The design targets TypeScript source files, rubrics, skills, and documentation, leaving repository control-plane authority files (.archflow/workflow.yaml, .archflow/config.yaml, .archflow/constitution/) untouched.",
+          "rule_id": "human-approval-for-workflow-control-plane",
+          "rule_version": 1,
+          "trigger": "not-matched",
+          "trigger_evidence": "The artifact does not declare outputs in .archflow/workflow.yaml, .archflow/config.yaml, or .archflow/constitution/, nor does it modify repository-wide policy files."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The design leverages existing project infrastructure and standard libraries (such as Zod for schema definitions) without introducing unmaintained or unnecessary external packages.",
+          "rule_id": "prefer-established-libraries",
+          "rule_version": 1,
+          "trigger": "not-matched",
+          "trigger_evidence": "Rule declares no review trigger."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The design maintains strict task and evidence isolation by binding all review manifests, triage dispositions, validation overrides, and gate decisions to specific task IDs, phase instances, and content digests, ensuring evidence fails closed on mismatch.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 2,
+          "trigger": "not-matched",
+          "trigger_evidence": "Rule declares no review trigger."
+        }
+      ],
+      "schema_version": "1",
+      "source_review_envelope_digest": "3ee9b7a545f73e1f82633a4a310cb70db7188562b5d20c1db023f7eef3cb2123",
+      "step": "adjudicate",
+      "subject_digest": "38f40372241d727fc31802fb0358678ce69b6c3a6c86f21b5c7b6b42461f2b4b",
+      "task_id": "review-taxonomy",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "review-taxonomy"
+}

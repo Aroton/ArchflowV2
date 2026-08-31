@@ -1,0 +1,125 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 9,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 16358
+  },
+  "artifact_digest": "07685fd4fd88c4ad4d97a02c12f1b4ced2679c9d21e0e84c031d9f0c677480a0",
+  "input_fingerprint": "6c8d69eb65d6835e068e828597d84dec59b833c3efc319c38bb1318703e838c7",
+  "outputs": [],
+  "phase_instance": "prd",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "result-876ea7ac4c5883d20767e623ea1e6072",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "review-evidence",
+    "evidence": {
+      "adapter": "codex-cli",
+      "assurance": "server-attested",
+      "blocking_count": 0,
+      "cli_version": "0.151.0",
+      "effort": "medium",
+      "envelope_input_digest": "5843ff96c2db0cf563fbac653441cd07c2118a793ee3384d0b72c1891d5e5abe",
+      "findings": [],
+      "input_fingerprint": "6c8d69eb65d6835e068e828597d84dec59b833c3efc319c38bb1318703e838c7",
+      "invocation_id": "invocation-876ea7ac4c5883d20767e623ea1e6072",
+      "matched_rule_versions": [],
+      "model": "gpt-5.6-sol",
+      "model_family": "codex",
+      "observed_output_digest": "0d144c5cc516533d14a9296ec53b606fc93b6667992406bc93f1d637b0d5cd90",
+      "phase_instance": "prd",
+      "producer_family": "gemini",
+      "repositories": [
+        {
+          "commit": "a6ebaa4e5cecda30ca9fb76551f979db964dcd1e",
+          "name": "primary",
+          "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc"
+        }
+      ],
+      "result_id": "result-876ea7ac4c5883d20767e623ea1e6072",
+      "reviewer_runs": [
+        {
+          "adapter": "codex-cli",
+          "cli_version": "0.151.0",
+          "criterion_ids": [
+            "substantive-correctness",
+            "ask-fidelity",
+            "proportionality",
+            "testable-requirements",
+            "stated-assumptions",
+            "unverifiable-claims",
+            "reviewer-confidence",
+            "advisory-observations"
+          ],
+          "effort": "medium",
+          "envelope_input_digest": "5843ff96c2db0cf563fbac653441cd07c2118a793ee3384d0b72c1891d5e5abe",
+          "finding_ids": [],
+          "focus": "general",
+          "invocation_id": "invocation-876ea7ac4c5883d20767e623ea1e6072",
+          "model": "gpt-5.6-sol",
+          "model_family": "codex",
+          "observed_output_digest": "0d144c5cc516533d14a9296ec53b606fc93b6667992406bc93f1d637b0d5cd90",
+          "reviewer_id": "general-1",
+          "route_source": {
+            "provenance": "configured"
+          },
+          "routing_role": "counter-reviewer",
+          "rubric_digest": "8d1c0a25544d39435895472d7d1942f70886ef4073260b07343610f387714d6d"
+        },
+        {
+          "adapter": "claude-cli",
+          "cli_version": "2.1.251",
+          "criterion_ids": [
+            "substantive-correctness",
+            "ask-fidelity",
+            "proportionality",
+            "testable-requirements",
+            "stated-assumptions",
+            "unverifiable-claims",
+            "reviewer-confidence",
+            "advisory-observations"
+          ],
+          "effort": "medium",
+          "envelope_input_digest": "cb07799c5f899590235ba26e6e9036d72bcf7607a7472fe41a3b0061f06d7f7a",
+          "finding_ids": [],
+          "focus": "general",
+          "invocation_id": "invocation-876ea7ac4c5883d20767e623ea1e6072",
+          "model": "claude-opus-5",
+          "model_family": "claude",
+          "observed_output_digest": "076d24941d318d6a1e44d2c0581d6e2fa0e36eecbe0d1b0448d33315ed440fd2",
+          "reviewer_id": "general-2",
+          "route_source": {
+            "provenance": "configured"
+          },
+          "routing_role": "counter-reviewer",
+          "rubric_digest": "8d1c0a25544d39435895472d7d1942f70886ef4073260b07343610f387714d6d"
+        }
+      ],
+      "role": "counter-review",
+      "route_source": {
+        "provenance": "configured"
+      },
+      "rubric_digest": "8d1c0a25544d39435895472d7d1942f70886ef4073260b07343610f387714d6d",
+      "schema_version": "1",
+      "step": "counter_review",
+      "subject_digest": "d0f9a79af9e55c90d755c2981bc7d5b63ca70168412b81b13ec7266199c3a4e0",
+      "task_id": "review-taxonomy",
+      "verdict": "pass"
+    },
+    "schema_version": "1"
+  },
+  "step": "counter_review",
+  "task_id": "review-taxonomy"
+}

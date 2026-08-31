@@ -1,0 +1,248 @@
+{
+  "approvals": [
+    {
+      "decision_digest": "ea39ff3f983840605499e294b176094915db684ba9e4f97382de07d5fef01feb",
+      "gate_id": "g-54ce276e5648dfbb8cb4ba0dd9a09e70ac43635950a7fa04f4607f95b6ceb431",
+      "gate_kind": "artifact-approval",
+      "resolved_at_revision": 14,
+      "subject_digest": "d0f9a79af9e55c90d755c2981bc7d5b63ca70168412b81b13ec7266199c3a4e0"
+    },
+    {
+      "decision_digest": "5bc2d2b5d29695c698ec5d74fafa9503a8649cb3dfe610121907a0f0bfeb745b",
+      "gate_id": "g-5ae4068ab9ed04619711a3e2408bb7aeb8de5b4c8092c17fcf49ee5bd64c7b0d",
+      "gate_kind": "design-approval",
+      "resolved_at_revision": 34,
+      "subject_digest": "38f40372241d727fc31802fb0358678ce69b6c3a6c86f21b5c7b6b42461f2b4b"
+    }
+  ],
+  "attempt": 3,
+  "authoritative_results": [
+    {
+      "input_fingerprint": "8cbdf676374bb7ea1d796a1da8b0189c3629bec4b290e52cca8d04df8b79425f",
+      "phase_instance": "design",
+      "result_digest": "d320143d9ce2857f1e24cc36063ad9f7ff2facc3122ee26372dbf78483ea59b0",
+      "result_id": "adjudication-result-13348dcc9d004a570595120826bd712e",
+      "step": "adjudicate"
+    },
+    {
+      "input_fingerprint": "8cbdf676374bb7ea1d796a1da8b0189c3629bec4b290e52cca8d04df8b79425f",
+      "phase_instance": "design",
+      "result_digest": "a63afb9df9ded4be8e51819e0d2771f44a75b1591f33d16c63165eab4f0f4821",
+      "result_id": "result-2aac4fe1ff054ef4f28af1219dcc0ec4",
+      "step": "counter_review"
+    },
+    {
+      "input_fingerprint": "b7c575cc56683afbe37fa91fd59121fa59295996902e6dcef065135fd40798ce",
+      "phase_instance": "design",
+      "result_digest": "01e243804e016fa850f2a838e13a45493893d05239fe0d74afb404e5611c40f9",
+      "result_id": "state-result-6be6c4368c2c258df8b36bd62326481e",
+      "step": "produce"
+    },
+    {
+      "input_fingerprint": "8cbdf676374bb7ea1d796a1da8b0189c3629bec4b290e52cca8d04df8b79425f",
+      "phase_instance": "design",
+      "result_digest": "c5e075c0dd17cb260cfae5ecd9e9b9ac30d537b8076e91ad61ba43f5f3a0521a",
+      "result_id": "state-result-fc9de1d463f34592d563e2dabffb73ab",
+      "step": "triage"
+    },
+    {
+      "input_fingerprint": "6c8d69eb65d6835e068e828597d84dec59b833c3efc319c38bb1318703e838c7",
+      "phase_instance": "prd",
+      "result_digest": "317aea2065a07b9b6b5b0a774453bfb2e153f3573da66c6cbf31d5fb9324ac56",
+      "result_id": "adjudication-result-204f3c58134d70162dabafb5343998c2",
+      "step": "adjudicate"
+    },
+    {
+      "input_fingerprint": "6c8d69eb65d6835e068e828597d84dec59b833c3efc319c38bb1318703e838c7",
+      "phase_instance": "prd",
+      "result_digest": "999b8fa86d53c6557e60fff1279360503db1a0225dbfd3a7c0ba3f69ef5491d2",
+      "result_id": "result-876ea7ac4c5883d20767e623ea1e6072",
+      "step": "counter_review"
+    },
+    {
+      "input_fingerprint": "e9b0e62ef7770a9cc4c3f76a7b755ec2a23ff3c7c31519120f783ba06b92cad5",
+      "phase_instance": "prd",
+      "result_digest": "75b7367042494625dd15bbe10cf01f3a0441e79f8967163d30bf14bb902d9380",
+      "result_id": "state-result-059f76e024f3306f203026975e62cc73",
+      "step": "produce"
+    },
+    {
+      "input_fingerprint": "6c8d69eb65d6835e068e828597d84dec59b833c3efc319c38bb1318703e838c7",
+      "phase_instance": "prd",
+      "result_digest": "543de0a83ee1a3083442399556ae92cac24df483d6a60a78ff376d58cfe59155",
+      "result_id": "state-result-8d45862326976bc2bb6234dab16b68d4",
+      "step": "triage"
+    }
+  ],
+  "config_digest": "2e6cd88477e5436deda0247c072ccdc6fb08e507c05ebc9e1a390b95878e90f6",
+  "constitution_digest": "39b6e6b94916a526f61597d9e1b26abc1b2534417f2eb3369afc668e68d69d56",
+  "initialization_digest": "f61213f68f1a060840c0c33ccc375e04313d061f938ed9b95a0028174e55d4d1",
+  "input_fingerprint": "8cbdf676374bb7ea1d796a1da8b0189c3629bec4b290e52cca8d04df8b79425f",
+  "last_seen_config": {
+    "approval_rules": {
+      "content": [
+        {
+          "paths": [
+            "**/*.sql"
+          ]
+        },
+        {
+          "paths": [
+            ".archflow/tasks/*/design.md",
+            ".archflow/tasks/*/prd.md"
+          ]
+        }
+      ],
+      "subjects": [
+        "prd",
+        "design"
+      ]
+    },
+    "producers": {
+      "antigravity": {
+        "adjudicator": {
+          "effort": "high",
+          "model": "gemini-3.7-flash-high"
+        },
+        "counter-reviewers": [
+          {
+            "effort": "medium",
+            "model": "gpt-5.6-sol"
+          },
+          {
+            "effort": "medium",
+            "model": "claude-opus-5"
+          }
+        ]
+      },
+      "claude": {
+        "adjudicator": {
+          "effort": "high",
+          "model": "gemini-3.7-flash-high"
+        },
+        "counter-reviewer": {
+          "effort": "medium",
+          "model": "gpt-5.6-sol"
+        }
+      },
+      "codex": {
+        "adjudicator": {
+          "effort": "high",
+          "model": "gemini-3.7-flash-high"
+        },
+        "counter-reviewer": {
+          "effort": "medium",
+          "model": "claude-opus-5"
+        }
+      }
+    },
+    "roles": {
+      "adjudicator": {
+        "effort": "high",
+        "model": "gemini-3.7-flash-high"
+      },
+      "counter-reviewer": {
+        "effort": "medium",
+        "model": "gpt-5.6-sol"
+      },
+      "effort-reviewer": {
+        "effort": "xhigh",
+        "model": "gpt-5.6-luna"
+      },
+      "test-reviewer": {
+        "effort": "xhigh",
+        "model": "gpt-5.6-luna"
+      }
+    },
+    "schema_version": "1"
+  },
+  "last_seen_repository_bindings": [
+    {
+      "name": "primary",
+      "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc"
+    }
+  ],
+  "last_transition": {
+    "input_fingerprint": "8cbdf676374bb7ea1d796a1da8b0189c3629bec4b290e52cca8d04df8b79425f",
+    "intent_id": "afop-ee750fd59f29b5b5afe4f1187c53ed2ae4832e8d77896d8e48fd61a714b42dae-open-gate",
+    "operation": "gate",
+    "outcome": {
+      "decision": {
+        "context_digest": "774260f4621518c62ce30482f745dc8d459331977bb1f05ec1aad338ddecb8ce",
+        "gate_id": "g-5ae4068ab9ed04619711a3e2408bb7aeb8de5b4c8092c17fcf49ee5bd64c7b0d",
+        "human_provenance": {
+          "actor_class": "human",
+          "assurance": "declared-local-trace",
+          "channel": "connected-host",
+          "connection_id": "connection-1",
+          "decision_event_id": "afdecision-6cf0d253dd7643bd9f0cec8960fa12f8969b9767c6d1be2add3c7afd072ebc60",
+          "recorded_at": "2026-08-31T16:21:57.680Z",
+          "request_id_digest": "f5b73ec4ca177aa83410950145a7e4ec2e79d185fc8add31453fa82b2a2d214a",
+          "schema_version": "1"
+        },
+        "kind": "design-approval",
+        "payload": {
+          "decision": "approve",
+          "reason": "Approved design after clean counter-review with 0 findings."
+        },
+        "phase_instance": "design",
+        "schema_version": "1",
+        "subject_digest": "38f40372241d727fc31802fb0358678ce69b6c3a6c86f21b5c7b6b42461f2b4b",
+        "task_id": "review-taxonomy"
+      },
+      "kind": "design-approval",
+      "notes": "Approved design after clean counter-review with 0 findings.",
+      "revision": 34
+    },
+    "outcome_digest": "59419007d8c7dde2d597bd14d362f52b6a2de91dbe08c873cc251b47c5b88a9b",
+    "prior_revision": 33,
+    "request_digest": "bbd0eb4b7c32a15e300fe8591cb5d73b4a8e135aa8a6e6a51440da7a871fdc09",
+    "result_id": "g-5ae4068ab9ed04619711a3e2408bb7aeb8de5b4c8092c17fcf49ee5bd64c7b0d",
+    "resulting_revision": 34,
+    "schema_version": "1",
+    "tool": "archflow_gate"
+  },
+  "phase_instance": "design",
+  "planned_final_phase": 5,
+  "policy_base_commit": "a6ebaa4e5cecda30ca9fb76551f979db964dcd1e",
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "revision": 34,
+  "rule_settlements": [
+    {
+      "conclusion": {
+        "match": {
+          "kind": "subject",
+          "subject": "design"
+        },
+        "wait": true
+      },
+      "config_digest": "59a5d3c76b1737bbacb08856e761157fdae7c4c72b04d6e74f9f6c1230de039f",
+      "phase_instance": "design",
+      "settled_at_revision": 32,
+      "step": "triage",
+      "subject_digest": "38f40372241d727fc31802fb0358678ce69b6c3a6c86f21b5c7b6b42461f2b4b",
+      "task_id": "review-taxonomy"
+    },
+    {
+      "conclusion": {
+        "match": {
+          "kind": "subject",
+          "subject": "prd"
+        },
+        "wait": true
+      },
+      "config_digest": "59a5d3c76b1737bbacb08856e761157fdae7c4c72b04d6e74f9f6c1230de039f",
+      "phase_instance": "prd",
+      "settled_at_revision": 12,
+      "step": "triage",
+      "subject_digest": "d0f9a79af9e55c90d755c2981bc7d5b63ca70168412b81b13ec7266199c3a4e0",
+      "task_id": "review-taxonomy"
+    }
+  ],
+  "schema_version": "1",
+  "status": "succeeded",
+  "step": "triage",
+  "task_id": "review-taxonomy",
+  "waivers": [],
+  "workflow_digest": "3f5f7536f19219fbf4ade78aea07c93d22d03057ce2ed83d532e25a54a8aab9a"
+}

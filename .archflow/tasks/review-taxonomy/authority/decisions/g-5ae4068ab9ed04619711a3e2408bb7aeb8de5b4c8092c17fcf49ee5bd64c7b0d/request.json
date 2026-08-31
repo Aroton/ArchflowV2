@@ -1,0 +1,122 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "approval_trigger": {
+      "conclusion": {
+        "match": {
+          "kind": "subject",
+          "subject": "design"
+        },
+        "wait": true
+      },
+      "kind": "rule-settlement",
+      "rule_authority": "authenticated",
+      "settlement": {
+        "config_digest": "59a5d3c76b1737bbacb08856e761157fdae7c4c72b04d6e74f9f6c1230de039f",
+        "settled_at_revision": 32,
+        "subject_digest": "38f40372241d727fc31802fb0358678ce69b6c3a6c86f21b5c7b6b42461f2b4b"
+      }
+    },
+    "artifact_kind": "design",
+    "baseline_commit": "a6ebaa4e5cecda30ca9fb76551f979db964dcd1e",
+    "commit_message": "ArchFlow: Approve review-taxonomy design",
+    "constitution": "pass",
+    "eligible_waivers": [],
+    "policy_findings": [
+      {
+        "compliance": "pass",
+        "rationale": "The technical design establishes a comprehensive architectural specification and structured 5-phase implementation plan before any code is written. It adheres to the phased lifecycle where implementation requires approved designs, and keeps the design and PRD aligned.",
+        "rule_id": "approved-design-before-code",
+        "rule_version": 3,
+        "trigger": "not-matched",
+        "trigger_evidence": "Rule declares no review trigger."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "The design explicitly upholds human authority for validation overrides and review push-through mechanisms. It requires explicit, human-signed decision envelopes with documented rationale, forbids autonomous agent self-waivers or timeout-based advancements, and records all human decisions immutably in durable state.",
+        "rule_id": "explicit-human-authority",
+        "rule_version": 3,
+        "trigger": "not-matched",
+        "trigger_evidence": "Rule declares no review trigger."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "The design embraces honest reporting by distinguishing confidence levels (including welcoming low-confidence suspicions), providing explicit human escalation paths for non-falsifiable claims with material consequences, and maintaining full transparency and auditability over skipped or displaced validations.",
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 2,
+        "trigger": "not-matched",
+        "trigger_evidence": "Rule declares no review trigger."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "The design does not introduce or modify access control or permission-decision systems. Workflow gate mechanics adhere to documented specifications without compromising security boundaries.",
+        "rule_id": "human-approval-for-access-control",
+        "rule_version": 1,
+        "trigger": "not-matched",
+        "trigger_evidence": "The artifact defines review finding taxonomies, triage dispositions, and workflow engine gate options. It does not add or modify authentication, authorization, session/token validation, or access-control permission logic."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "The design uses standard content hashing (SHA-256) for artifact digests and integrity verification without altering cryptographic primitives, keys, or secret handling.",
+        "rule_id": "human-approval-for-crypto-and-secrets",
+        "rule_version": 1,
+        "trigger": "not-matched",
+        "trigger_evidence": "The artifact does not add or modify cryptographic primitives, key/credential generation, secret storage, or secret transmission."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "The design targets TypeScript source files, rubrics, skills, and documentation, leaving repository control-plane authority files (.archflow/workflow.yaml, .archflow/config.yaml, .archflow/constitution/) untouched.",
+        "rule_id": "human-approval-for-workflow-control-plane",
+        "rule_version": 1,
+        "trigger": "not-matched",
+        "trigger_evidence": "The artifact does not declare outputs in .archflow/workflow.yaml, .archflow/config.yaml, or .archflow/constitution/, nor does it modify repository-wide policy files."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "The design leverages existing project infrastructure and standard libraries (such as Zod for schema definitions) without introducing unmaintained or unnecessary external packages.",
+        "rule_id": "prefer-established-libraries",
+        "rule_version": 1,
+        "trigger": "not-matched",
+        "trigger_evidence": "Rule declares no review trigger."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "The design maintains strict task and evidence isolation by binding all review manifests, triage dispositions, validation overrides, and gate decisions to specific task IDs, phase instances, and content digests, ensuring evidence fails closed on mismatch.",
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 2,
+        "trigger": "not-matched",
+        "trigger_evidence": "Rule declares no review trigger."
+      }
+    ],
+    "target_ref": "refs/heads/feature/review-taxonomy"
+  },
+  "context_digest": "774260f4621518c62ce30482f745dc8d459331977bb1f05ec1aad338ddecb8ce",
+  "current_evidence": {
+    "set_digest": "884df532c60742341e35cd8d941384e25145a05bf0728d322930904f3c65f30f",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "bd7cdc96ac802032cbd8a86b40d62cac979b93851925957c2aeadac0043abab6",
+        "producer_family": "gemini",
+        "reviewer_family": "codex",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-5ae4068ab9ed04619711a3e2408bb7aeb8de5b4c8092c17fcf49ee5bd64c7b0d",
+  "intent_id": "afop-ee750fd59f29b5b5afe4f1187c53ed2ae4832e8d77896d8e48fd61a714b42dae-open-gate",
+  "kind": "design-approval",
+  "opened_at_revision": 33,
+  "phase_instance": "design",
+  "request_digest": "bbd0eb4b7c32a15e300fe8591cb5d73b4a8e135aa8a6e6a51440da7a871fdc09",
+  "schema_version": "1",
+  "subject_digest": "38f40372241d727fc31802fb0358678ce69b6c3a6c86f21b5c7b6b42461f2b4b",
+  "summary": "Technical design and 5-phase implementation plan for Review Taxonomy & Workflow State Overrides. The architecture replaces legacy severity scales with a 3-field taxonomy (claim_type, confidence, falsifier), introduces 5 triage dispositions with an editorial defect guard, adds human-gated validation overrides (with displaced validations tracking) and review push-through escape hatches, and provides complete backward compatibility for archived legacy reviews. Independent counter-review passed cleanly with 0 findings across all reviewers.\n\nApproval rule trigger: this project requires human approval for the \"design\" subject.",
+  "task_id": "review-taxonomy"
+}

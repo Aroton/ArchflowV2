@@ -1,0 +1,33 @@
+{
+  "context_digest": "857cd586c307edbb719717b21bb2d1d17538301657d87da551d87f36a5cfa205",
+  "envelope": {
+    "context_digest": "857cd586c307edbb719717b21bb2d1d17538301657d87da551d87f36a5cfa205",
+    "gate_id": "g-54ce276e5648dfbb8cb4ba0dd9a09e70ac43635950a7fa04f4607f95b6ceb431",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "connected-host",
+      "connection_id": "connection-1",
+      "decision_event_id": "afdecision-d471426633bf636ec8790ac9417e2f142fc365ce6897ea775c8614aa49b54b4c",
+      "recorded_at": "2026-08-31T16:11:37.619Z",
+      "request_id_digest": "c6b9fea6733bfb3d8de1aec8e351b5750f3c6e1ca16d07fd2c7115b3f433ae47",
+      "schema_version": "1"
+    },
+    "kind": "artifact-approval",
+    "payload": {
+      "decision": "approve",
+      "reason": "Approved by user"
+    },
+    "phase_instance": "prd",
+    "schema_version": "1",
+    "subject_digest": "d0f9a79af9e55c90d755c2981bc7d5b63ca70168412b81b13ec7266199c3a4e0",
+    "task_id": "review-taxonomy"
+  },
+  "gate_id": "g-54ce276e5648dfbb8cb4ba0dd9a09e70ac43635950a7fa04f4607f95b6ceb431",
+  "kind": "artifact-approval",
+  "outcome": "decided",
+  "phase_instance": "prd",
+  "schema_version": "1",
+  "subject_digest": "d0f9a79af9e55c90d755c2981bc7d5b63ca70168412b81b13ec7266199c3a4e0",
+  "task_id": "review-taxonomy"
+}

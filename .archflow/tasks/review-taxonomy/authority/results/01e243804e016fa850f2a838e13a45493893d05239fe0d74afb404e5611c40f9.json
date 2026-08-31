@@ -1,0 +1,108 @@
+{
+  "accounting": {
+    "counted_entries": [
+      {
+        "path": ".archflow/tasks/review-taxonomy/design.md",
+        "storage": "raw-payload",
+        "stored_bytes": 26686
+      },
+      {
+        "path": ".archflow/tasks/review-taxonomy/prd.md",
+        "storage": "raw-payload",
+        "stored_bytes": 16358
+      }
+    ],
+    "measured_at_revision": 27,
+    "result_byte_cap": 26214400,
+    "result_bytes": 43044,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 101884
+  },
+  "artifact_digest": "38f40372241d727fc31802fb0358678ce69b6c3a6c86f21b5c7b6b42461f2b4b",
+  "input_fingerprint": "b7c575cc56683afbe37fa91fd59121fa59295996902e6dcef065135fd40798ce",
+  "outputs": [
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "8abe5fec1c314393f8a72e5aaae19482639c49c9",
+        "size_bytes": 26686
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": ".archflow/tasks/review-taxonomy/design.md",
+      "path_class": "document",
+      "payload_bytes": 26686,
+      "payload_digest": "7b89e261648c0d469abd5603ec0b20b061f6f3d9472d844d416521c7a669a2bd",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "74a41f8e8cc9c048ba2fa5db306de635871aa37f",
+        "size_bytes": 16358
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": ".archflow/tasks/review-taxonomy/prd.md",
+      "path_class": "document",
+      "payload_bytes": 16358,
+      "payload_digest": "2c35a2353872579cae435183e679cf1c4787a48766ca7ffe647b92dd768e37e1",
+      "storage": "raw-payload"
+    }
+  ],
+  "phase_instance": "design",
+  "projections": [
+    {
+      "content_digest": "7b89e261648c0d469abd5603ec0b20b061f6f3d9472d844d416521c7a669a2bd",
+      "path": ".archflow/tasks/review-taxonomy/design.md"
+    },
+    {
+      "content_digest": "2c35a2353872579cae435183e679cf1c4787a48766ca7ffe647b92dd768e37e1",
+      "path": ".archflow/tasks/review-taxonomy/prd.md"
+    }
+  ],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "state-result-6be6c4368c2c258df8b36bd62326481e",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [
+      ".archflow/tasks/review-taxonomy/design.md",
+      ".archflow/tasks/review-taxonomy/prd.md"
+    ],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "7652b216f875233029aba3636c69e155abe3ac888d3e857870bc39f2365b75e8",
+  "source_artifact": {
+    "additional_documents": [
+      {
+        "byte_count": 16358,
+        "content_digest": "2c35a2353872579cae435183e679cf1c4787a48766ca7ffe647b92dd768e37e1",
+        "document_path": "prd.md",
+        "projection_target": ".archflow/tasks/review-taxonomy/prd.md"
+      }
+    ],
+    "artifact_kind": "document",
+    "byte_count": 26686,
+    "content_digest": "7b89e261648c0d469abd5603ec0b20b061f6f3d9472d844d416521c7a669a2bd",
+    "declared_inputs": [
+      {
+        "digest": "2c35a2353872579cae435183e679cf1c4787a48766ca7ffe647b92dd768e37e1",
+        "input_id": "prd"
+      }
+    ],
+    "document_path": "design.md",
+    "input_fingerprint": "b7c575cc56683afbe37fa91fd59121fa59295996902e6dcef065135fd40798ce",
+    "path_class": "document",
+    "phase_instance": "design",
+    "projection_target": ".archflow/tasks/review-taxonomy/design.md",
+    "schema_version": "1",
+    "snapshot_digest": "7652b216f875233029aba3636c69e155abe3ac888d3e857870bc39f2365b75e8",
+    "step": "produce",
+    "task_id": "review-taxonomy"
+  },
+  "step": "produce",
+  "task_id": "review-taxonomy"
+}

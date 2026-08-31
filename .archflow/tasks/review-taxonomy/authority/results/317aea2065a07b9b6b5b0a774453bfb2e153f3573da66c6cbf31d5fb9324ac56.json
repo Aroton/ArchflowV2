@@ -1,0 +1,134 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 9,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 16358
+  },
+  "artifact_digest": "bc8700b3b68d28ac66cd03c94793dfa7c9f7df7e937f71cbd114c46f0a649435",
+  "input_fingerprint": "6c8d69eb65d6835e068e828597d84dec59b833c3efc319c38bb1318703e838c7",
+  "outputs": [],
+  "phase_instance": "prd",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-204f3c58134d70162dabafb5343998c2",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "antigravity-cli",
+      "approved_upstream_digests": [],
+      "assurance": "server-attested",
+      "cli_version": "1.1.22",
+      "constitution": "pass",
+      "drift": "aligned",
+      "drift_findings": [],
+      "effort": "high",
+      "envelope_input_digest": "bc79990f7866677b167f9269277197365d8ffcd3124ed53ceea4f5b2ed2d5f87",
+      "input_fingerprint": "6c8d69eb65d6835e068e828597d84dec59b833c3efc319c38bb1318703e838c7",
+      "invocation_id": "adjudication-invocation-204f3c58134d70162dabafb5343998c2",
+      "matched_rule_versions": [],
+      "model": "gemini-3.7-flash-high",
+      "model_family": "gemini",
+      "observed_output_digest": "6eb935f6d48cce87be7d874b191f8d5b00ad12c0ba2c6269b648256242a0f457",
+      "phase_instance": "prd",
+      "pinned_constitution_digest": "39b6e6b94916a526f61597d9e1b26abc1b2534417f2eb3369afc668e68d69d56",
+      "repositories": [
+        {
+          "commit": "a6ebaa4e5cecda30ca9fb76551f979db964dcd1e",
+          "name": "primary",
+          "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc"
+        }
+      ],
+      "result_id": "adjudication-result-204f3c58134d70162dabafb5343998c2",
+      "route_source": {
+        "provenance": "configured"
+      },
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "The PRD establishes product requirements ahead of architecture design and implementation, complying with the requirement that implementation starts only after phase design approval without attempting to bypass required upstream design stages.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 3,
+          "trigger": "not-matched",
+          "trigger_evidence": "The rule declares no review trigger."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The PRD explicitly reinforces human authority by specifying that validation overrides and review push-throughs require explicit human gate authorization and non-empty rationale, explicitly forbidding agent self-approval, silent advancement, or timeout bypasses.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 3,
+          "trigger": "not-matched",
+          "trigger_evidence": "The rule declares no review trigger."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The PRD supports honest reporting of uncertainty and failure modes (welcoming suspicions with falsifiers, escalating unevaluable material claims to human review) and preserves human control and auditability across all workflow transitions.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 2,
+          "trigger": "not-matched",
+          "trigger_evidence": "The rule declares no review trigger."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The PRD defines review taxonomy and state machine override workflows, and does not implement or alter application access control or authentication logic.",
+          "rule_id": "human-approval-for-access-control",
+          "rule_version": 1,
+          "trigger": "not-matched",
+          "trigger_evidence": "The PRD does not add or alter authentication, authorization, session/token validation, or permission-decision logic; workflow server gate mechanics do not constitute access-control trigger evidence."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The artifact does not introduce or modify cryptographic primitives, credential handling, or secret storage.",
+          "rule_id": "human-approval-for-crypto-and-secrets",
+          "rule_version": 1,
+          "trigger": "not-matched",
+          "trigger_evidence": "The artifact does not add or alter cryptographic primitives, key/credential generation, secret storage, or credential comparison."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The artifact is a feature PRD and does not modify the repository's pinned constitution or workflow authority files (.archflow/workflow.yaml, .archflow/config.yaml, .archflow/constitution/).",
+          "rule_id": "human-approval-for-workflow-control-plane",
+          "rule_version": 1,
+          "trigger": "not-matched",
+          "trigger_evidence": "The change does not declare outputs modifying .archflow/workflow.yaml, .archflow/config.yaml, or .archflow/constitution/, nor does it edit repository control plane policy."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The PRD specifies domain requirements for review taxonomy and workflow state overrides and does not propose custom implementations where established libraries should be used.",
+          "rule_id": "prefer-established-libraries",
+          "rule_version": 1,
+          "trigger": "not-matched",
+          "trigger_evidence": "The rule declares no review trigger."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The PRD is scoped strictly to task 'review-taxonomy' and maintains task and evidence isolation.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 2,
+          "trigger": "not-matched",
+          "trigger_evidence": "The rule declares no review trigger."
+        }
+      ],
+      "schema_version": "1",
+      "source_review_envelope_digest": "5843ff96c2db0cf563fbac653441cd07c2118a793ee3384d0b72c1891d5e5abe",
+      "step": "adjudicate",
+      "subject_digest": "d0f9a79af9e55c90d755c2981bc7d5b63ca70168412b81b13ec7266199c3a4e0",
+      "task_id": "review-taxonomy",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "review-taxonomy"
+}

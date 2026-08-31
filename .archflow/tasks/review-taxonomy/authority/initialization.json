@@ -1,0 +1,18 @@
+{
+  "artifact_kind": "task-initialization",
+  "canonical_paths": {
+    "config": ".archflow/tasks/review-taxonomy/config.yaml",
+    "constitution_root": ".archflow/constitution",
+    "state": ".archflow/tasks/review-taxonomy/state.json",
+    "task_root": ".archflow/tasks/review-taxonomy",
+    "workflow": ".archflow/workflow.yaml"
+  },
+  "code_baseline_commit": "a6ebaa4e5cecda30ca9fb76551f979db964dcd1e",
+  "config_digest": "2e6cd88477e5436deda0247c072ccdc6fb08e507c05ebc9e1a390b95878e90f6",
+  "constitution_digest": "39b6e6b94916a526f61597d9e1b26abc1b2534417f2eb3369afc668e68d69d56",
+  "policy_base_commit": "a6ebaa4e5cecda30ca9fb76551f979db964dcd1e",
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "schema_version": "1",
+  "task_id": "review-taxonomy",
+  "workflow_digest": "3f5f7536f19219fbf4ade78aea07c93d22d03057ce2ed83d532e25a54a8aab9a"
+}

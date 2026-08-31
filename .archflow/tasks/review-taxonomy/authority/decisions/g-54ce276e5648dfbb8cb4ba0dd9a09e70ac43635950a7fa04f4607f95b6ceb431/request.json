@@ -1,0 +1,119 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "approval_trigger": {
+      "conclusion": {
+        "match": {
+          "kind": "subject",
+          "subject": "prd"
+        },
+        "wait": true
+      },
+      "kind": "rule-settlement",
+      "rule_authority": "authenticated",
+      "settlement": {
+        "config_digest": "59a5d3c76b1737bbacb08856e761157fdae7c4c72b04d6e74f9f6c1230de039f",
+        "settled_at_revision": 12,
+        "subject_digest": "d0f9a79af9e55c90d755c2981bc7d5b63ca70168412b81b13ec7266199c3a4e0"
+      }
+    },
+    "artifact_kind": "prd",
+    "constitution": "pass",
+    "eligible_waivers": [],
+    "policy_findings": [
+      {
+        "compliance": "pass",
+        "rationale": "The PRD establishes product requirements ahead of architecture design and implementation, complying with the requirement that implementation starts only after phase design approval without attempting to bypass required upstream design stages.",
+        "rule_id": "approved-design-before-code",
+        "rule_version": 3,
+        "trigger": "not-matched",
+        "trigger_evidence": "The rule declares no review trigger."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "The PRD explicitly reinforces human authority by specifying that validation overrides and review push-throughs require explicit human gate authorization and non-empty rationale, explicitly forbidding agent self-approval, silent advancement, or timeout bypasses.",
+        "rule_id": "explicit-human-authority",
+        "rule_version": 3,
+        "trigger": "not-matched",
+        "trigger_evidence": "The rule declares no review trigger."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "The PRD supports honest reporting of uncertainty and failure modes (welcoming suspicions with falsifiers, escalating unevaluable material claims to human review) and preserves human control and auditability across all workflow transitions.",
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 2,
+        "trigger": "not-matched",
+        "trigger_evidence": "The rule declares no review trigger."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "The PRD defines review taxonomy and state machine override workflows, and does not implement or alter application access control or authentication logic.",
+        "rule_id": "human-approval-for-access-control",
+        "rule_version": 1,
+        "trigger": "not-matched",
+        "trigger_evidence": "The PRD does not add or alter authentication, authorization, session/token validation, or permission-decision logic; workflow server gate mechanics do not constitute access-control trigger evidence."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "The artifact does not introduce or modify cryptographic primitives, credential handling, or secret storage.",
+        "rule_id": "human-approval-for-crypto-and-secrets",
+        "rule_version": 1,
+        "trigger": "not-matched",
+        "trigger_evidence": "The artifact does not add or alter cryptographic primitives, key/credential generation, secret storage, or credential comparison."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "The artifact is a feature PRD and does not modify the repository's pinned constitution or workflow authority files (.archflow/workflow.yaml, .archflow/config.yaml, .archflow/constitution/).",
+        "rule_id": "human-approval-for-workflow-control-plane",
+        "rule_version": 1,
+        "trigger": "not-matched",
+        "trigger_evidence": "The change does not declare outputs modifying .archflow/workflow.yaml, .archflow/config.yaml, or .archflow/constitution/, nor does it edit repository control plane policy."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "The PRD specifies domain requirements for review taxonomy and workflow state overrides and does not propose custom implementations where established libraries should be used.",
+        "rule_id": "prefer-established-libraries",
+        "rule_version": 1,
+        "trigger": "not-matched",
+        "trigger_evidence": "The rule declares no review trigger."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "The PRD is scoped strictly to task 'review-taxonomy' and maintains task and evidence isolation.",
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 2,
+        "trigger": "not-matched",
+        "trigger_evidence": "The rule declares no review trigger."
+      }
+    ]
+  },
+  "context_digest": "857cd586c307edbb719717b21bb2d1d17538301657d87da551d87f36a5cfa205",
+  "current_evidence": {
+    "set_digest": "afa96329b35e115f6c0ff12ece970bba6c07f338233e7f70912d7cf721caed82",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "07685fd4fd88c4ad4d97a02c12f1b4ced2679c9d21e0e84c031d9f0c677480a0",
+        "producer_family": "gemini",
+        "reviewer_family": "codex",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-54ce276e5648dfbb8cb4ba0dd9a09e70ac43635950a7fa04f4607f95b6ceb431",
+  "intent_id": "afop-cd8e9bdf06b1dd051582649271d4fae4c5baaee7fde19091f301a2a57e9b895f-open-gate",
+  "kind": "artifact-approval",
+  "opened_at_revision": 13,
+  "phase_instance": "prd",
+  "request_digest": "cd59415e38a1650c821b905e464c80f5e226821dedb8cbb194ff933c6e3b14e1",
+  "schema_version": "1",
+  "subject_digest": "d0f9a79af9e55c90d755c2981bc7d5b63ca70168412b81b13ec7266199c3a4e0",
+  "summary": "The Product Requirements Document for review taxonomy updates and workflow state overrides has been drafted, reviewed by independent counter-reviewers, revised through triage, and passed clean counter-review across all criteria.\n\nApproval rule trigger: this project requires human approval for the \"prd\" subject.",
+  "task_id": "review-taxonomy"
+}
