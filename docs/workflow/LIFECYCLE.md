@@ -1,6 +1,6 @@
 # workflow/LIFECYCLE
 
-**Explored:** 2026-08-27 · **Commit:** `7c19a5e` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/contracts/config.ts`, `src/state/approval-rules.ts`, `src/state/semantic-*.ts`, `src/mcp/handlers/semantic.ts`, `skills/`
+**Explored:** 2026-08-31 · **Commit:** `fe0e4ce` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/contracts/config.ts`, `src/state/approval-rules.ts`, `src/state/semantic-*.ts`, `src/mcp/handlers/semantic.ts`, `skills/`
 
 How a task moves from idea to committed code, and where a human must decide.
 
@@ -165,3 +165,11 @@ The cutover is complete: the public catalogue is exactly the two semantic tools,
 ## A phase spanning writable repositories
 
 One implementation result can cover primary plus configured writable secondaries. The declaration, retained proposed trees, review, policy settlement, and human decision form one subject. Execution is deliberately sequential: commit primary, observe proof, then commit each changed secondary in ordinal order. A failure pauses at the first unproved repository without undoing prior commits, and phase advancement waits for the complete ordered proof set. Repository-aware baseline adoption and restore address exact `(repository, path)` tuples, so identical relative paths in different members cannot collide.
+
+## Effort review in the phase-design fixed point
+
+At phase-design completion, generic status, and phase-implementation entry, clients render the same authenticated `ready | blocked | unavailable` advice before the unchanged server-derived action. The recommendation can inform a human's out-of-band model selection, but it never selects a producer, completes a hand-off, grants implementation authority, or records which route actually ran.
+
+Only phase design adds the required effort child. Production writes a strict implementation-component manifest; review captures the current hazard registry and dispatches the fixed Luna/xhigh specialist alongside the ordinary review group. The server derives a recommendation only after exact binding, component coverage, and hazard-floor checks. Ready advice does not change the successor or authority path.
+
+Effort blockers form a second fixed-point axis beside ordinary findings. Triage cannot reject them away. While attempts remain, specification questions or missing decomposition boundaries return the same phase design to production and the next changed subject runs the complete effort review again. At the attempt limit the existing exhaustion presentation reports the unresolved blocker. Editorial/finding re-entry consumes the next normal attempt; a human simple revision keeps its attempt but reruns effort, while a significant revision resets to attempt 1. Only exact unchanged pre-feature review authority is grandfathered.

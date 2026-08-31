@@ -5,11 +5,12 @@ import { parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.j
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import {
   SEMANTIC_ACTION_KINDS,
+  unavailableImplementationRecommendation,
   type SemanticActionKindV1,
   type SemanticStatusSnapshotV1,
   type WorkflowViewV1,
 } from "../../src/contracts/semantic-workflow.js";
-import { projectAutomationStatus } from "../../src/local/automation-status.js";
+import { projectAutomationStatus, projectAutomationStatusV2 } from "../../src/local/automation-status.js";
 import type { NextAction, NextActionCode } from "../../src/state/next-action.js";
 import type { TaskStatusV1 } from "../../src/state/status.js";
 
@@ -17,6 +18,11 @@ const task = parseTaskSlug("automation-projection");
 const digestA = parseSha256Digest("a".repeat(64));
 const digestB = parseSha256Digest("b".repeat(64));
 const digestC = parseSha256Digest("c".repeat(64));
+const recommendation = unavailableImplementationRecommendation(
+  "not-produced",
+  "No authenticated effort recommendation has been produced.",
+  3,
+);
 
 function rawAction(code: NextActionCode, extra: Partial<NextAction> = {}): NextAction {
   return { code, detail: `detail for ${code}`, human_required: false, phase_instance: "phase-impl-3", ...extra } as NextAction;
@@ -46,6 +52,7 @@ function snapshot(action: NextAction, extra: Partial<SemanticStatusSnapshotV1> =
     status: structuredClone(status) as unknown as PlainJsonValue,
     full_findings: [],
     reopen_impacts: [],
+    implementation_recommendation: recommendation,
     ...extra,
   };
 }
@@ -58,6 +65,7 @@ function view(
   return {
     schema_version: "1", task_id: task, condition, headline: "Current workflow status",
     detail: "Authenticated semantic detail.", position: { kind: "phase-impl", phase: 3 }, resources: [],
+    implementation_recommendation: recommendation,
     next_action: { kind, instruction: `Continue ${kind}.` },
     ...extra,
   };
@@ -114,6 +122,29 @@ describe("automation status pure projection", () => {
     expect(projected).not.toHaveProperty("offer");
   });
 
+  it("uses the v1 adjudicator surrogate only structurally for effort failures", () => {
+    const projected = projectAutomationStatus(snapshot(rawAction("run-step", { step: "counter_review" })), view("awaiting-client", "review", {
+      dispatch_failure: {
+        role: "effort-reviewer", code: "AUTH_UNAVAILABLE", message: "Reviewer authentication is unavailable.",
+        route: { model: "gpt-5.6-luna", effort: "xhigh", source: "configured" },
+      },
+    }));
+    expect(projected).toMatchObject({
+      condition: "awaiting-human",
+      human_boundary: {
+        source: "dispatch-failure",
+        failed_role: "adjudicator",
+        headline: "Effort review route needs human attention",
+      },
+    });
+    const boundary = "human_boundary" in projected ? projected.human_boundary : undefined;
+    expect(boundary).toMatchObject({
+      summary: expect.stringContaining("gpt-5.6-luna at xhigh effort"),
+      question: expect.stringContaining("effort reviewer"),
+    });
+    expect(JSON.stringify(boundary)).not.toContain("adjudicator route");
+  });
+
   it("derives stable blocked categories from typed snapshot facts", () => {
     const cases = [
       ["resume-exact-intent", "resume-exact-intent"],
@@ -139,5 +170,44 @@ describe("automation status pure projection", () => {
 
     const complete = projectAutomationStatus(snapshot(rawAction("task-complete")), view("complete", "none"));
     expect(complete).toMatchObject({ condition: "complete", next_action: { actor: "none", kind: "none" } });
+  });
+
+  it("projects v2 advice without changing any controller action", () => {
+    const semantic = view("ready", "start-next-skill", {
+      next_action: { kind: "start-next-skill", instruction: "Launch it.", skill: "archflow-phase-design", skill_args: ["4"] },
+    });
+    const projected = projectAutomationStatusV2(snapshot(rawAction("advance-phase")), semantic);
+    expect(projected).toMatchObject({
+      schema_version: "2",
+      condition: "ready",
+      implementation_recommendation: recommendation,
+      next_action: { actor: "orchestrator", skill: "archflow-phase-design", skill_args: ["4"] },
+    });
+
+    const changedRecommendation = unavailableImplementationRecommendation(
+      "subject-stale",
+      "The authenticated recommendation belongs to prior design bytes.",
+      3,
+    );
+    const changed = projectAutomationStatusV2(snapshot(rawAction("advance-phase"), {
+      implementation_recommendation: changedRecommendation,
+    }), { ...semantic, implementation_recommendation: changedRecommendation });
+    expect(changed.next_action).toEqual(projected.next_action);
+    expect(changed.observation_id).not.toBe(projected.observation_id);
+  });
+
+  it("names effort-reviewer truthfully in v2 while v1 retains its compatibility surrogate", () => {
+    const failed = view("awaiting-client", "review", {
+      dispatch_failure: {
+        role: "effort-reviewer", code: "AUTH_UNAVAILABLE", message: "Reviewer authentication is unavailable.",
+        route: { model: "gpt-5.6-luna", effort: "xhigh", source: "configured" },
+      },
+    });
+    const current = snapshot(rawAction("run-step", { step: "counter_review" }));
+    const v1 = projectAutomationStatus(current, failed);
+    const v2 = projectAutomationStatusV2(current, failed);
+    expect(v1).toMatchObject({ human_boundary: { failed_role: "adjudicator" } });
+    expect(v2).toMatchObject({ human_boundary: { failed_role: "effort-reviewer" } });
+    expect(v2.next_action).toEqual(v1.next_action);
   });
 });

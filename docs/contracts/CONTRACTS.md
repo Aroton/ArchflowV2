@@ -1,6 +1,6 @@
 # contracts/CONTRACTS
 
-**Explored:** 2026-08-26 · **Commit:** `16193ec` · **Covers:** `src/contracts/`, `src/local/automation-status.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`, `src/state/request.ts`, `src/state/semantic-*.ts`
+**Explored:** 2026-08-31 · **Commit:** `fe0e4ce` · **Covers:** `src/contracts/`, `src/local/automation-status.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`, `src/state/request.ts`, `src/state/semantic-*.ts`
 
 `src/contracts/` is the bottom layer: TypeScript contract modules plus generated JSON Schemas that define what a valid thing looks like and how to prove a thing is what it claims. Everything else imports from here; nothing here imports back out.
 
@@ -70,6 +70,10 @@ The custom `x-archflow-*` keywords mostly retired with that flip. Rules that use
 
 Adjudication has deliberately different provider and durable shapes. The child returns the bound identity plus its independent `rule_findings` and `drift_findings`; it cannot return the four redundant summaries. After strict parsing, the server folds those findings into `constitution`, `drift`, `matched_rule_versions`, and `uncertain_rule_versions`, then mints the unchanged complete evidence document. The observation digest still names the exact reduced bytes the child returned. Persisted evidence remains strict about all four summaries, so stored or imported evidence cannot contradict its findings.
 
+Effort review follows the same “judgment in, authority derived” rule with dedicated contracts. `PhaseDesignComponentManifestV1` and `HazardRegistryInputV1` bind the exact normalized component and repository-hazard inputs. `RawEffortReviewV1` contains only decomposition, A–E judgments, rationales, classifications, and required specification questions—never totals, profiles, actions, or authority. The server cross-checks every binding, exact component coverage, and E floor, applies the versioned policy once, and nests the resulting `EffortAssessmentV1` in fresh phase-design `ServerAttestedReview` evidence. The field is optional when reading old archives but required for every newly minted phase-design review; it is absent for other phase kinds.
+
+The repository registry document uses the closed top-level shape `{ schema_version: "1", hazards: [...] }`; `entries` is not an alias. Decomposition is `adequate` or `undifferentiated`, and the latter carries a non-empty `missing_boundaries` list. Each `D >= 2` judgment carries a blocker whose `answer_kind` is `number` or `priority-order`. Policy output uses only the launch-neutral profile IDs `gemini-3-7-flash-max`, `glm-5-3-flash-max`, `gpt-5-6-sol-medium`, and `gpt-5-6-sol-xhigh`.
+
 ## Design rules that follow from this layer
 
 Two conventions documented in the project's CLAUDE.md come straight from here and are worth restating:
@@ -82,6 +86,10 @@ Two conventions documented in the project's CLAUDE.md come straight from here an
 The audit's biggest finding here — shapes written twice (JSON Schema + Zod) with a third mechanism proving agreement — was resolved 2026-08-11 by the generation flip above. What remains worth watching is subtler: the generated documents are weaker than the runtime authority wherever a keyword retired, so "it passes the published schema" is not "the server will accept it". See `../COMPLEXITY.md` for the ranked list.
 
 ## Repository-attributed implementation shapes
+
+The public semantic contract also requires `ImplementationRecommendationV1` as an informational peer of review strength. Its strict `ready`, `blocked`, and `unavailable` arms separate effort-reviewer provenance, deterministic implementation profiles, and `actual_implementation_route: {"status":"not-recorded"}`. The mapper copies authenticated assessment evidence; the unavailable constructor supplies only the four closed reasons. Neither participates in action or offer identity.
+
+Automation publishes separate strict v1 and v2 roots. V1 remains available through explicit APIs and the compatibility `parseAutomationStatus` alias. V2 preserves all condition/action shapes, requires the semantic recommendation, admits `effort-reviewer` in its dispatch-failure role, and binds advice under `archflow-automation-observation-v2`. The CLI emits v2, while both generated schemas remain separate and reject cross-version bytes.
 
 The public work result preserves its primary top-level fields and optionally carries `repositories`, with exactly one ordinal section for every configured writable secondary. Durable implementation outputs mirror these as `secondary_repositories`; result manifests bind repository-qualified `secondary_projections`. Projection references may carry `repository`; omission is the archive-compatible primary spelling. Equality and ordering use the repository/path tuple, never a joined display string.
 

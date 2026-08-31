@@ -5,6 +5,7 @@ import type {
   WaiverRef,
 } from "../contracts/durable-state.js";
 import type { Sha256Digest } from "../contracts/evidence.js";
+import type { EffortAssessmentV1 } from "../contracts/effort-review.js";
 import type { WaiverScope } from "../contracts/gates.js";
 import type { ReviewEvidence } from "../contracts/review.js";
 import type { TriageCandidate } from "../contracts/triage.js";
@@ -86,6 +87,12 @@ export type EvidenceAssessment = Readonly<{
    * once when a rule's own `review_trigger` matched (the repository asked for a human).
    */
   policy_reentry_required?: boolean;
+  /** A current phase-design effort assessment found specification/decomposition blockers. */
+  effort_reentry_required?: boolean;
+  /** Exact authenticated questions/boundaries the phase-design producer must resolve. */
+  effort_blockers?: EffortAssessmentV1["recommendation"]["blockers"];
+  /** Explicit classification keeps archived exact-byte authority distinct from fresh evidence. */
+  effort_currency?: "not-required" | "missing-current" | "legacy-exact" | "ready" | "blocked";
   exhausted: boolean;
   adjudication_gate_pending: boolean;
   next:
@@ -147,12 +154,36 @@ function subjectCurrent(
 }
 
 function currentReviewSet(
+  state: TaskStateV1,
   retained: RetainedEvidenceSet,
   subject: EvidenceSubject,
 ): DerivedCurrentEvidenceSet | undefined {
   try {
     const derived = deriveCurrentEvidenceSet(retained);
-    return boundToSubjectOrDeclaredPredecessor(derived, subject) ? derived : undefined;
+    // Phase designs never inherit review currency across an editorial or simple-human revision:
+    // effort assessment belongs to the complete component set on the exact current bytes. Other
+    // phase kinds retain the established one-hop predecessor behavior.
+    const phaseDesign = state.phase_instance.startsWith("phase-design-");
+    const current = phaseDesign
+      ? boundToSubjectExactly(derived, subject)
+      : boundToSubjectOrDeclaredPredecessor(derived, subject);
+    if (!current) return undefined;
+    if (phaseDesign) {
+      const counter = derived.reviews[0]?.evidence;
+      const effort = counter?.assurance === "server-attested"
+        ? counter.effort_review
+        : undefined;
+      // Absence is the explicit legacy classification for exact unchanged archived evidence.
+      // Every fresh mint is required to carry effort; a present record that disagrees on any
+      // round binding is invalid rather than being downgraded to legacy.
+      if (effort !== undefined && (
+        effort.task_id !== state.task_id ||
+        effort.phase_instance !== state.phase_instance ||
+        effort.attempt !== state.attempt ||
+        !boundToSubjectExactly(effort, subject)
+      )) return undefined;
+    }
+    return derived;
   } catch {
     return undefined;
   }
@@ -516,6 +547,8 @@ type NextActionDecision = Readonly<{
   reentry_required: boolean;
   editorial_revision_required: boolean;
   policy_reentry_required?: boolean;
+  effort_reentry_required?: boolean;
+  effort_blockers?: EffortAssessmentV1["recommendation"]["blockers"];
   adjudication_gate_pending: boolean;
 }>;
 
@@ -528,6 +561,8 @@ function decision(
     reentry_required: flags?.reentry_required ?? false,
     editorial_revision_required: flags?.editorial_revision_required ?? false,
     ...(flags?.policy_reentry_required === true ? { policy_reentry_required: true } : {}),
+    ...(flags?.effort_reentry_required === true ? { effort_reentry_required: true } : {}),
+    ...(flags?.effort_blockers === undefined ? {} : { effort_blockers: flags.effort_blockers }),
     adjudication_gate_pending: flags?.adjudication_gate_pending ?? false,
   });
 }
@@ -568,10 +603,17 @@ function decideNextAction(
   current: readonly PipelineStep[],
   disposition: TriageDispositionState,
   triageCurrent: TriageCandidate | undefined,
+  effort: EffortAssessmentV1 | undefined,
   maximum: number,
 ): NextActionDecision {
   if (acceptedFindingsForceReentry(state, disposition)) {
-    return decision("produce", { reentry_required: true });
+    return effort?.recommendation.status === "blocked"
+      ? decision("produce", {
+          reentry_required: true,
+          effort_reentry_required: true,
+          effort_blockers: effort.recommendation.blockers,
+        })
+      : decision("produce", { reentry_required: true });
   }
   if (!current.includes("counter_review")) return decision("counter_review");
   if (constitutionReviewRequired(subject.constitution) && !current.includes("adjudicate")) {
@@ -586,7 +628,19 @@ function decideNextAction(
   // predecessor proof is exact. Material findings require a significant revision and fresh
   // review; otherwise triage remains the fail-closed action.
   if (disposition.accepted) return decision("triage");
+  if (effort?.recommendation.status === "blocked") {
+    return decision("produce", {
+      reentry_required: true,
+      effort_reentry_required: true,
+      effort_blockers: effort.recommendation.blockers,
+    });
+  }
   if (editorialRevisionPending(triageCurrent, disposition, subject)) {
+    if (state.phase_instance.startsWith("phase-design-")) {
+      // Component-wide effort scoring must be repeated after every phase-design byte change.
+      // Editorial acceptance therefore consumes the next ordinary attempt for this phase kind.
+      return decision("produce", { reentry_required: true });
+    }
     // Not a re-entry: the attempt budget and the retained review evidence both survive.
     return decision("produce", { editorial_revision_required: true });
   }
@@ -604,7 +658,7 @@ export function assessCurrentEvidence(
 ): EvidenceAssessment {
   assertSubjectMatchesDurableState(state, retained, subject);
   const maximum = resolveMaxAttempts(subject);
-  const reviews = currentReviewSet(retained, subject);
+  const reviews = currentReviewSet(state, retained, subject);
   const candidateTriage = triageAt(retained);
   const triageCurrent = currentFor(
     retained, "triage", subject, reviews,
@@ -614,8 +668,13 @@ export function assessCurrentEvidence(
   const stale = EVIDENCE_STEPS.filter((step) =>
     retained.has(step) && !current.includes(step));
   const disposition = dispositionState(retained, reviews, triageCurrent);
+  const counter = reviews?.reviews[0]?.evidence;
+  const effort = state.phase_instance.startsWith("phase-design-") &&
+      counter?.assurance === "server-attested"
+    ? counter.effort_review
+    : undefined;
   const action = decideNextAction(
-    state, retained, subject, current, disposition, triageCurrent, maximum,
+    state, retained, subject, current, disposition, triageCurrent, effort, maximum,
   );
   const exhausted = action.reentry_required && state.attempt >= maximum;
   return Object.freeze({
@@ -626,6 +685,15 @@ export function assessCurrentEvidence(
     reentry_required: action.reentry_required,
     editorial_revision_required: action.editorial_revision_required,
     ...(action.policy_reentry_required === true ? { policy_reentry_required: true } : {}),
+    ...(action.effort_reentry_required === true ? { effort_reentry_required: true } : {}),
+    ...(action.effort_blockers === undefined ? {} : { effort_blockers: action.effort_blockers }),
+    effort_currency: !state.phase_instance.startsWith("phase-design-")
+      ? "not-required"
+      : reviews === undefined
+        ? "missing-current"
+        : effort === undefined
+          ? "legacy-exact"
+          : effort.recommendation.status,
     exhausted,
     adjudication_gate_pending: action.adjudication_gate_pending,
     next: exhausted ? "attempts-exhausted" : action.next,

@@ -23,6 +23,7 @@ import {
   installSemanticReviewStub,
   reachImplementationHandoff,
   semanticJourneyHarness,
+  withImplementationComponents,
   type SemanticJourneyHarness,
 } from "../helpers/semantic-journeys.js";
 import { createTaskWorkspace, type TaskWorkspace } from "../helpers/task-workspace.js";
@@ -98,6 +99,8 @@ function observe(workspace: TaskWorkspace): AutomationObservation {
   const result = runAutomationStatus(localBundle, workspace.root, workspace.taskId);
   expect(result.status, result.stderr).toBe(0);
   if (result.observation === undefined) throw new Error("automation observation unavailable");
+  expect(result.observation.schema_version).toBe("2");
+  expect(result.observation.implementation_recommendation).toBeDefined();
   return result.observation;
 }
 
@@ -174,7 +177,7 @@ export function registerAutomationStatusControllerLoop(selected: string): void {
             const phase = action.skill_args?.[0];
             const phaseArtifact = currentArtifact(workspace, view);
             mkdirSync(dirname(phaseArtifact), { recursive: true });
-            writeFileSync(phaseArtifact, `# Phase ${phase}: Descriptor-driven behavior
+            writeFileSync(phaseArtifact, withImplementationComponents(`# Phase ${phase}: Descriptor-driven behavior
 
 ## Goal
 
@@ -205,7 +208,7 @@ The final task reaches complete.
 ## Executable Verification
 
 - \`npm run typecheck\`
-`);
+`, ["src/controller-loop-fixture.ts"]));
             view = await applyOk(harness, invocation, view, { kind: "work-result", outcome: "succeeded" });
             view = await applyOk(harness, invocation, view);
             expect(view.next_action.kind).toBe("commit");

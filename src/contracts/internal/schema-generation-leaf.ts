@@ -4,7 +4,9 @@ import { adjudicationDocumentDefs, adjudicationEvidenceSchema, rawAdjudicationSc
 import { gitOidV1Schema } from "../canonical.js";
 import { configOverridesSchema, configRolesSchema, configRouteSchema, configV1Schema, repositoriesV1Schema, repositoryDeclarationV1Schema, repositoryModeV1Schema, repositoryNameV1Schema } from "../config.js";
 import { constitutionRuleV1Schema } from "../constitution.js";
+import { phaseDesignComponentManifestV1Schema } from "../component-manifest.js";
 import { dispatchFailureObservationV1Schema } from "../dispatch-failure.js";
+import { effortAssessmentV1Schema, effortEnvelopeV1Schema, rawEffortReviewV1Schema } from "../effort-review.js";
 import {
   pathSafeIdV1Schema,
   safeCodeV1Schema,
@@ -15,6 +17,7 @@ import {
   taskSlugV1Schema,
 } from "../evidence.js";
 import { resultExpectationDataSchema } from "../mcp-tools.js";
+import { hazardRegistryInputV1Schema, hazardRegistryV1Schema } from "../hazard-registry.js";
 import { pathClaimLexicalV1Schema, repositoryPathClaimV1Schema, taskPathClaimV1Schema } from "../path-claims.js";
 import { phaseInstanceIdV1Schema, phaseInstanceV1Schema, positiveSafePhaseNumberV1Schema } from "../phase-instance.js";
 import { rawReviewSchema, reviewDocumentDefs, reviewEvidenceSchema } from "../review.js";
@@ -158,6 +161,42 @@ export const leafSchemaGroup: SchemaGenerationGroup = {
       file: "review-evidence",
       id: SCHEMA_IDS.reviewEvidence,
       root: reviewEvidenceSchema,
+      migrated: true,
+    },
+    {
+      file: "component-manifest",
+      id: SCHEMA_IDS.componentManifest,
+      root: phaseDesignComponentManifestV1Schema,
+      migrated: true,
+    },
+    {
+      file: "hazard-registry",
+      id: SCHEMA_IDS.hazardRegistry,
+      root: hazardRegistryV1Schema,
+      migrated: true,
+    },
+    {
+      file: "hazard-registry-input",
+      id: SCHEMA_IDS.hazardRegistryInput,
+      root: hazardRegistryInputV1Schema,
+      migrated: true,
+    },
+    {
+      file: "effort-envelope",
+      id: SCHEMA_IDS.effortEnvelope,
+      root: effortEnvelopeV1Schema,
+      migrated: true,
+    },
+    {
+      file: "effort-review",
+      id: SCHEMA_IDS.effortReview,
+      root: rawEffortReviewV1Schema,
+      migrated: true,
+    },
+    {
+      file: "effort-assessment",
+      id: SCHEMA_IDS.effortAssessment,
+      root: effortAssessmentV1Schema,
       migrated: true,
     },
     {

@@ -43,6 +43,7 @@ const resultManifestValidator: JsonSchemaValidator<unknown> = createJsonSchemaVa
     "implementation-output",
     "review",
     "review-evidence",
+    "effort-assessment",
     "triage",
     "adjudication",
     "adjudication-evidence",

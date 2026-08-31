@@ -26,13 +26,10 @@ describe("advertised MCP tool catalogue", () => {
         expect(descriptor.inputSchema, `${descriptor.name} input root ${combinator}`).not.toHaveProperty(combinator);
       }
     }
-    // Measured at 33,591 bytes with the repository-set and review-strength projections in both
-    // semantic tools; the ceiling sits about 3% above that so any further growth of the
-    // advertisement is a deliberate decision rather than drift. Input roots and their
-    // host-compatibility constraints remain unchanged.
-    // The additive test-reviewer route and public contributor/assignment provenance intentionally
-    // expand both semantic tool schemas. Keep a close ceiling so accidental recursive growth still
-    // fails, while accounting for those user-visible fields.
-    expect(JSON.stringify({ tools: ADVERTISED_TOOL_CATALOGUE }).length).toBeLessThan(36_500);
+    // Measured at 37,979 bytes after adding the compact implementation-recommendation output
+    // projection. The ceiling retains about 3% headroom so accidental recursive growth still
+    // fails while accounting for the new user-visible field. Input roots and their host-
+    // compatibility constraints remain unchanged.
+    expect(JSON.stringify({ tools: ADVERTISED_TOOL_CATALOGUE }).length).toBeLessThan(39_200);
   });
 });

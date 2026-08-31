@@ -1,4 +1,9 @@
-import { automationHumanBoundaryV1Schema, automationStatusV1Schema } from "../automation-status.js";
+import {
+  automationHumanBoundaryV1Schema,
+  automationHumanBoundaryV2Schema,
+  automationStatusV1Schema,
+  automationStatusV2Schema,
+} from "../automation-status.js";
 import { SCHEMA_IDS } from "../versions.js";
 import type { SchemaGenerationGroup } from "./schema-generation.js";
 
@@ -70,14 +75,48 @@ const AUTOMATION_HUMAN_BOUNDARY_FRAGMENT = {
   ],
 } as const;
 
+const AUTOMATION_HUMAN_BOUNDARY_V2_FRAGMENT = {
+  oneOf: [
+    presentation("configured-approval", { type: "array", minItems: 1, items: configuredReason }),
+    presentation("exception", reasonsContainingException),
+    {
+      type: "object",
+      properties: {
+        source: { const: "dispatch-failure" },
+        class: { const: "exception" },
+        headline: TEXT,
+        summary: TEXT,
+        question: TEXT,
+        reasons: reasonsContainingException,
+        failed_role: { enum: ["counter-reviewer", "test-reviewer", "effort-reviewer", "adjudicator"] },
+        failure_code: { type: "string", minLength: 1, maxLength: 128, pattern: "\\S" },
+      },
+      required: ["source", "class", "headline", "summary", "question", "reasons", "failed_role", "failure_code"],
+      additionalProperties: false,
+    },
+  ],
+} as const;
+
 export const automationStatusSchemaGroup: SchemaGenerationGroup = {
   group: "automation-status",
-  documents: [{
-    file: "automation-status",
-    id: SCHEMA_IDS.automationStatus,
-    root: automationStatusV1Schema,
-    defs: { humanBoundary: automationHumanBoundaryV1Schema },
-    overrides: { humanBoundary: AUTOMATION_HUMAN_BOUNDARY_FRAGMENT },
-    migrated: true,
-  }],
+  documents: [
+    {
+      file: "automation-status",
+      id: SCHEMA_IDS.automationStatus,
+      root: automationStatusV1Schema,
+      defs: { humanBoundary: automationHumanBoundaryV1Schema },
+      overrides: { humanBoundary: AUTOMATION_HUMAN_BOUNDARY_FRAGMENT },
+      migrated: true,
+    },
+    {
+      file: "automation-status-v2",
+      id: SCHEMA_IDS.automationStatusV2,
+      root: automationStatusV2Schema,
+      defs: {
+        humanBoundary: automationHumanBoundaryV2Schema,
+      },
+      overrides: { humanBoundary: AUTOMATION_HUMAN_BOUNDARY_V2_FRAGMENT },
+      migrated: true,
+    },
+  ],
 };

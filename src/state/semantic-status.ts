@@ -1,8 +1,18 @@
 import { isDeepStrictEqual } from "node:util";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import { canonicalJsonDigest, type CanonicalDocument } from "../contracts/canonical.js";
 import { parseArchivedGateDecisionRecord, parseArchivedGateRequest, type ArchivedGateDecisionRecordV1, type ArchivedGateRequestV1 } from "../contracts/durable-gate.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
+import {
+  extractPhaseDesignComponentManifest,
+  phaseDesignComponentManifestDigest,
+} from "../contracts/component-manifest.js";
+import {
+  captureHazardRegistryInput,
+  compareHazardRegistryInput,
+} from "../contracts/hazard-registry.js";
 import { validateDurableSemantics } from "../contracts/durable.js";
 import type { ProjectResult } from "../contracts/errors.js";
 import { parsePathSafeId, parseSha256Digest, type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
@@ -15,13 +25,18 @@ import {
   type WorkflowReopenImpactV1,
   type PublicReviewRoundV1,
   publicReviewRoundV1Schema,
+  implementationRecommendationFromAssessment,
+  implementationRecommendationV1Schema,
+  unavailableImplementationRecommendation,
+  type ImplementationRecommendationV1,
 } from "../contracts/semantic-workflow.js";
 import { gateDecisionClaim, gateRequestClaim, resolveTaskPath } from "../repository/paths.js";
 import type { TransactionAuthority } from "./authority.js";
-import { deriveCurrentEvidenceSet } from "./evidence-results.js";
+import { deriveCurrentEvidenceSet, loadGoverningPhaseDesignEffortEvidence } from "./evidence-results.js";
 import { readCanonical, type GateLifecycleDependencies } from "./gate-core.js";
 import { computeTaskStatusDetailed, type DetailedTaskStatusV1, type TaskStatusV1 } from "./status.js";
 import { isWaiverOriginRequest } from "./waiver-origin.js";
+import { readProduceProjection } from "./produce-subject.js";
 
 /**
  * Enrichments that detailed status obtains while it still owns the canonical read. They are
@@ -36,6 +51,7 @@ export type SemanticStatusEnrichmentsV1 = Readonly<{
   legacy_import_initialization?: true;
   full_findings: readonly PublicFindingV1[];
   review_rounds?: readonly PublicReviewRoundV1[];
+  implementation_recommendation: ImplementationRecommendationV1;
   pending_waiver_origin?: PlainJsonValue;
   archived_decision?: PlainJsonValue;
   revision_checkpoint?: PlainJsonValue;
@@ -43,6 +59,132 @@ export type SemanticStatusEnrichmentsV1 = Readonly<{
 }>;
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
+
+/** Selects only the phase design that governs effort advice at the current durable position. */
+export function governingRecommendationPhase(state: TaskStateV1 | undefined): number | undefined {
+  if (state === undefined) return undefined;
+  const decoded = decodePhaseInstance(state.phase_instance);
+  if (decoded.kind === "phase-design" || decoded.kind === "phase-impl") return Number(decoded.phase);
+  if (state.terminal === "complete" && state.planned_final_phase !== undefined) {
+    return Number(state.planned_final_phase);
+  }
+  return undefined;
+}
+
+const registryDriftExplanation = (kind: "registry-created" | "registry-removed" | "registry-changed" | "registry-unreadable"): string => ({
+  "registry-created": "The hazard registry was created after this recommendation was reviewed.",
+  "registry-removed": "The hazard registry was removed after this recommendation was reviewed.",
+  "registry-changed": "The hazard registry changed after this recommendation was reviewed.",
+  "registry-unreadable": "The current hazard registry could not be read or parsed; the authenticated recommendation remains available.",
+})[kind];
+
+/** Internal semantic-status enrichment seam; exported for direct authority/read-path verification. */
+export async function currentImplementationRecommendation(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  details: DetailedTaskStatusV1,
+): Promise<ImplementationRecommendationV1> {
+  const phase = governingRecommendationPhase(details.state);
+  if (details.state === undefined || phase === undefined) {
+    return unavailableImplementationRecommendation(
+      "not-applicable",
+      "Implementation effort advice does not apply at the current workflow position.",
+    );
+  }
+  const phaseInstance = encodePhaseInstance({
+    kind: "phase-design",
+    phase: parsePositiveSafePhaseNumber(phase),
+  });
+  const hasProduce = details.state.authoritative_results.some((reference) =>
+    reference.phase_instance === phaseInstance && reference.step === "produce");
+  const hasReview = details.state.authoritative_results.some((reference) =>
+    reference.phase_instance === phaseInstance && reference.step === "counter_review");
+  if (!hasProduce || !hasReview) {
+    return unavailableImplementationRecommendation(
+      "not-produced",
+      "No authenticated effort assessment has been produced for the governing phase design.",
+      phase,
+    );
+  }
+  if (dependencies.load_retained_manifest === undefined) {
+    throw new TypeError("governing effort evidence loading is unavailable");
+  }
+  const loaded = await loadGoverningPhaseDesignEffortEvidence(
+    { load_retained_manifest: dependencies.load_retained_manifest },
+    details.state,
+    phaseInstance,
+  );
+  if (!loaded.ok) throw new TypeError("governing effort evidence is unavailable or invalid");
+  const { produce, review, assessment } = loaded.value;
+  if (review === undefined) {
+    return unavailableImplementationRecommendation(
+      "not-produced",
+      "No authenticated effort assessment has been produced for the governing phase design.",
+      phase,
+    );
+  }
+  if (review.subject_digest !== produce.artifact_digest) {
+    return unavailableImplementationRecommendation(
+      "subject-stale",
+      "The retained effort assessment describes earlier phase-design bytes and is not current.",
+      phase,
+    );
+  }
+  if (review.assurance !== "server-attested" || assessment === undefined) {
+    return unavailableImplementationRecommendation(
+      "legacy-evidence",
+      "The exact authenticated review predates structured implementation-effort evidence.",
+      phase,
+    );
+  }
+  if (produce.artifact.artifact_kind !== "document") {
+    throw new TypeError("governing phase-design produce artifact is not a document");
+  }
+  const projection = await readProduceProjection(
+    dependencies.runner,
+    authority,
+    produce,
+    produce.artifact.document_path,
+  );
+  if (!projection.ok) {
+    const issue = (projection.error.diagnostic.parameters as Readonly<Record<string, unknown>>).issue_code;
+    if (issue === "produce-projection-not-current" || issue === "produce-projection-unavailable") {
+      return unavailableImplementationRecommendation(
+        "subject-stale",
+        "The retained effort assessment describes earlier phase-design bytes and is not current.",
+        phase,
+      );
+    }
+    throw new TypeError("governing phase-design projection is unavailable");
+  }
+  const repositoryNames = assessment.reviewer.repositories.map((repository) => repository.name);
+  const manifest = extractPhaseDesignComponentManifest(
+    new TextDecoder("utf-8", { fatal: true }).decode(projection.value.bytes),
+    repositoryNames,
+  );
+  if (phaseDesignComponentManifestDigest(manifest) !== assessment.component_manifest_digest) {
+    throw new TypeError("governing effort assessment component manifest binding disagrees");
+  }
+  let drift: "registry-created" | "registry-removed" | "registry-changed" | "registry-unreadable" | undefined;
+  try {
+    const live = await captureHazardRegistryInput(async () => {
+      try {
+        return new Uint8Array(await readFile(join(dependencies.runner.location.worktreeRoot, ".archflow", "hazards.yaml")));
+      } catch (error) {
+        if ((error as { code?: unknown }).code === "ENOENT") return undefined;
+        throw error;
+      }
+    }, repositoryNames, manifest);
+    drift = compareHazardRegistryInput(assessment.hazard_registry_digest, live, manifest);
+  } catch {
+    drift = "registry-unreadable";
+  }
+  return implementationRecommendationFromAssessment(
+    assessment,
+    phase,
+    drift === undefined ? undefined : { kind: drift, explanation: registryDriftExplanation(drift) },
+  );
+}
 
 function workflowPosition(phase: PhaseInstanceId): WorkflowReopenImpactV1["target"] {
   const decoded = decodePhaseInstance(phase);
@@ -389,6 +531,9 @@ export async function computeAuthoritativeSemanticStatus(
     throw new TypeError("semantic status repository identity does not match durable state");
   }
   const archives = await deriveArchiveEnrichments(dependencies, authority, detailed.value);
+  const implementationRecommendation = await currentImplementationRecommendation(
+    dependencies, authority, detailed.value,
+  );
   return ok(computeSemanticStatusSnapshot(status, {
     repository_identity_digest: authority.repository_identity_digest,
     ...(state === undefined ? {} : { state }),
@@ -403,6 +548,7 @@ export async function computeAuthoritativeSemanticStatus(
     }),
     full_findings: fullFindings(detailed.value),
     review_rounds: reviewRounds(detailed.value),
+    implementation_recommendation: implementationRecommendation,
     ...archives,
     reopen_impacts: state === undefined ? Object.freeze([]) : reopenImpacts(state, status),
   }));
@@ -466,6 +612,9 @@ export function computeSemanticStatusSnapshot(
     full_findings: Object.freeze(findings),
     review_rounds: Object.freeze((enrichments.review_rounds ?? []).map((round) =>
       Object.freeze(publicReviewRoundV1Schema.parse(materializeJson(round, "semantic review round"))) as PublicReviewRoundV1)),
+    implementation_recommendation: Object.freeze(implementationRecommendationV1Schema.parse(
+      materializeJson(enrichments.implementation_recommendation, "implementation recommendation"),
+    )),
     ...(enrichments.pending_waiver_origin === undefined ? {} : {
       pending_waiver_origin: materializeJson(enrichments.pending_waiver_origin, "pending waiver origin"),
     }),

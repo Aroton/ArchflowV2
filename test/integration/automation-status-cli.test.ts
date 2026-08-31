@@ -79,11 +79,16 @@ describe("automation status CLI", { timeout: TIMEOUT }, () => {
 
     expect(result.status, result.stderr).toBe(0);
     expect(result.observation).toMatchObject({
-      schema_version: "1",
+      schema_version: "2",
       task_id: taskId,
       state_revision: null,
       condition: "awaiting-client",
       position: { kind: "prd" },
+      implementation_recommendation: {
+        status: "unavailable",
+        reason: "not-applicable",
+        actual_implementation_route: { status: "not-recorded" },
+      },
       next_action: {
         actor: "skill",
         kind: "continue-skill",
@@ -93,6 +98,7 @@ describe("automation status CLI", { timeout: TIMEOUT }, () => {
       },
     });
     expect(result.observation?.observation_id).toMatch(/^[a-f0-9]{64}$/u);
+    expect(result.observation?.implementation_recommendation).not.toHaveProperty("phase");
     expect(result.observation).not.toHaveProperty("human_boundary");
     expect(result.observation).not.toHaveProperty("blocked");
     expect(snapshotDirectory(join(root, ".archflow"))).toEqual(before);
@@ -154,13 +160,18 @@ describe("automation status CLI", { timeout: TIMEOUT }, () => {
     const current = runAutomationStatus(localBundle, root, taskId, gitEnvironment);
     expect(current.status, current.stderr).toBe(0);
     expect(current.observation).toMatchObject({
+      schema_version: "2",
       condition: "blocked",
       state_revision: null,
       position: null,
+      implementation_recommendation: {
+        status: "unavailable", reason: "not-applicable", actual_implementation_route: { status: "not-recorded" },
+      },
       next_action: { actor: "operator", kind: "repair" },
       blocked: { category: "legacy-upgrade-staged" },
     });
     expect(current.observation).not.toHaveProperty("ok");
+    expect(current.observation?.implementation_recommendation).not.toHaveProperty("phase");
 
     const configPath = join(root, ".archflow", "tasks", taskId, "config.yaml");
     writeFileSync(configPath, `${readFileSync(configPath, "utf8")}# staged-task controller edit\n`);
@@ -236,9 +247,13 @@ describe("automation status CLI", { timeout: TIMEOUT }, () => {
     const result = runAutomationStatus(localBundle, workspace.root, workspace.taskId, gitEnvironment);
     expect(result.status, result.stderr).toBe(0);
     expect(result.observation).toMatchObject({
+      schema_version: "2",
       condition: "blocked",
       state_revision: null,
       position: null,
+      implementation_recommendation: {
+        status: "unavailable", reason: "not-applicable", actual_implementation_route: { status: "not-recorded" },
+      },
       next_action: { actor: "operator", kind: "repair" },
       blocked: {
         category: "state-unreadable",
@@ -246,6 +261,7 @@ describe("automation status CLI", { timeout: TIMEOUT }, () => {
       },
     });
     expect(result.observation).not.toHaveProperty("ok");
+    expect(result.observation?.implementation_recommendation).not.toHaveProperty("phase");
   });
 
   it("never waits for stdin and emits one structured failure document for bad arguments", async () => {

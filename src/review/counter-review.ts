@@ -1,10 +1,18 @@
 import adjudicationOutputSchema from "../contracts/schemas/v1/adjudication.schema.json" with { type: "json" };
+import effortReviewOutputSchema from "../contracts/schemas/v1/effort-review.schema.json" with { type: "json" };
 import reviewOutputSchema from "../contracts/schemas/v1/review.schema.json" with { type: "json" };
 
-import { canonicalJsonDigest, type CanonicalDocument } from "../contracts/canonical.js";
+import { canonicalJsonDigest, sha256Bytes, type CanonicalDocument } from "../contracts/canonical.js";
 import type { AdjudicationEvidence } from "../contracts/adjudication.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import type { ConfigV1 } from "../contracts/config.js";
+import type { DispatchFailureRoleV1 } from "../contracts/dispatch-failure.js";
+import {
+  createEffortAssessmentV1,
+  parseEffortEnvelopeV1,
+  type EffortAssessmentV1,
+  type EffortEnvelopeV1,
+} from "../contracts/effort-review.js";
 import type { ConstitutionRegistry } from "../contracts/constitution.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parseSafeInteger, type SafeId, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
@@ -69,6 +77,7 @@ import {
 } from "./adjudication.js";
 import {
   buildAdjudicationEnvelope,
+  buildEffortEnvelope,
   type AdjudicationEnvelopeInput,
   type AdjudicationUpstreamInput,
   type DispatchEnvelope,
@@ -134,10 +143,15 @@ export type RunCounterReviewDependencies = Readonly<{
   retained_outputs?: RetainedChildOutputStore;
   /** Best-effort runtime observation seam. It must never replace the original routing/dispatch error. */
   observe_failure?: (
-    role: RoutingRole,
+    role: DispatchFailureRoleV1,
     selected: SelectedRouteCandidate | undefined,
     error: unknown,
   ) => void | Promise<void>;
+}>;
+
+/** Required only for phase design; its route is fixed policy, never task/invocation routing. */
+export type EffortReviewPlan = Readonly<{
+  envelope: EffortEnvelopeV1;
 }>;
 
 /**
@@ -190,6 +204,8 @@ export type RunCounterReviewInput = Readonly<{
    * reviewer's pinned record to the findings it raised.
    */
   prior_triage?: PriorTriageRecord;
+  /** Present exactly for fresh phase-design review rounds. */
+  effort?: EffortReviewPlan;
   /**
    * Present exactly when the pinned constitution has active rules. The server, not the caller,
    * decides this: with a plan the call runs the constitution review as a second server-dispatched
@@ -326,7 +342,7 @@ export async function runCounterReview(
     throw new TypeError("counter-review subject is not derived from the server-owned request");
   }
   const observeFailure = async (
-    role: RoutingRole,
+    role: DispatchFailureRoleV1,
     selected: SelectedRouteCandidate | undefined,
     error: unknown,
   ): Promise<void> => {
@@ -361,7 +377,7 @@ export async function runCounterReview(
     }
   };
   const dispatchObserved = async <T>(
-    role: RoutingRole,
+    role: DispatchFailureRoleV1,
     selected: Readonly<{ candidate: SelectedRouteCandidate; selection: SelectedDispatchRoute }>,
     dispatch: (route: DispatchRoute) => Promise<T>,
   ): Promise<T> => {
@@ -415,6 +431,41 @@ export async function runCounterReview(
     : Object.freeze([]);
   const constitutionRoutes = plan === undefined ? undefined : await selectRoutes("adjudicator");
   const constitutionRoute = constitutionRoutes?.[0];
+  const effortPlan = input.effort;
+  if ((input.phase_kind === "phase-design") !== (effortPlan !== undefined)) {
+    throw new TypeError("fresh phase-design review requires exactly one effort plan");
+  }
+  const parsedEffortEnvelope = effortPlan === undefined ? undefined : parseEffortEnvelopeV1(effortPlan.envelope);
+  if (parsedEffortEnvelope !== undefined && (
+    parsedEffortEnvelope.task_id !== subject.task_id ||
+    parsedEffortEnvelope.phase_instance !== subject.phase_instance ||
+    parsedEffortEnvelope.attempt !== subject.attempt ||
+    parsedEffortEnvelope.subject_digest !== subject.subject_digest ||
+    parsedEffortEnvelope.input_fingerprint !== subject.input_fingerprint ||
+    canonicalJsonDigest(parsedEffortEnvelope.repositories as never) !== canonicalJsonDigest(input.repositories as never)
+  )) throw new TypeError("effort plan is not bound to the counter-review subject and repository pins");
+  const fixedEffortRoute = Object.freeze({ model: "gpt-5.6-luna", effort: "xhigh" as const });
+  const declaredEffortOverride = input.call.input.route_override?.["effort-reviewer"];
+  const effortCandidate: SelectedRouteCandidate | undefined = parsedEffortEnvelope === undefined
+    ? undefined
+    : Object.freeze({
+      raw_route: declaredEffortOverride ?? fixedEffortRoute,
+      source: declaredEffortOverride === undefined
+        ? Object.freeze({ provenance: "configured" as const })
+        : Object.freeze({
+          provenance: "route-override" as const,
+          displaced: Object.freeze({ source: "configured" as const, ...fixedEffortRoute }),
+        }),
+    });
+  let effortRoute: Readonly<{ candidate: SelectedRouteCandidate; selection: SelectedDispatchRoute }> | undefined;
+  if (effortCandidate !== undefined) {
+    try {
+      effortRoute = Object.freeze({ candidate: effortCandidate, selection: validateSelectedDispatchRoute(effortCandidate) });
+    } catch (error) {
+      await observeFailure("effort-reviewer", effortCandidate, error);
+      throw error;
+    }
+  }
 
   // Reviewer identity is the tag stamped on its findings, fixed by position in the configured
   // route list so it survives rounds that dispatch only a subset of reviewers.
@@ -505,6 +556,7 @@ export async function runCounterReview(
       workspace: plan.workspace,
       subject: constitutionSubject,
     });
+  const effortEnvelope = parsedEffortEnvelope === undefined ? undefined : buildEffortEnvelope(parsedEffortEnvelope);
 
   // Each child dispatches, validates, and retains its own output, and never rejects: the round
   // settles only after every child has finished, so one failure cannot discard its siblings'
@@ -513,6 +565,7 @@ export async function runCounterReview(
   type ReviewObservation = ReturnType<typeof mintReviewObservation>;
   type ChildValue =
     | Readonly<{ kind: "review"; observation: ReviewObservation }>
+    | Readonly<{ kind: "effort"; assessment: EffortAssessmentV1 }>
     | Readonly<{ kind: "adjudication"; evidence: AdjudicationEvidence }>;
   type ChildOutcome =
     | Readonly<{ ok: true; value: ChildValue }>
@@ -579,6 +632,74 @@ export async function runCounterReview(
   };
 
   const ops: (() => Promise<ChildOutcome>)[] = reviewRoutes.map((routeEntry, index) => reviewOp(routeEntry, reviewEnvelopes[index]!));
+  if (effortPlan !== undefined && parsedEffortEnvelope !== undefined && effortEnvelope !== undefined && effortRoute !== undefined) {
+    const route = effortRoute.selection.route;
+    const effortOverride: RouteOverrideRecord | undefined = declaredEffortOverride === undefined
+      ? undefined
+      : Object.freeze({
+        reason: input.call.input.route_override!.reason,
+        pinned_model: fixedEffortRoute.model,
+        pinned_effort: fixedEffortRoute.effort,
+      });
+    const mint = (dispatched: CounterReviewDispatchResult): EffortAssessmentV1 => createEffortAssessmentV1(
+      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(dispatched.extracted_output_bytes)),
+      parsedEffortEnvelope,
+      {
+        adapter: route.adapter,
+        cli_version: dispatched.cli_version,
+        model_family: route.family,
+        model: route.model,
+        effort: route.effort,
+        invocation_id: parsedEffortEnvelope.invocation_id,
+        result_id: parsedEffortEnvelope.result_id,
+        envelope_input_digest: effortEnvelope.digest,
+        observed_output_digest: sha256Bytes(dispatched.extracted_output_bytes),
+        ...(route.provider === undefined ? {} : { provider: route.provider }),
+        route_source: declaredEffortOverride === undefined
+          ? Object.freeze({ provenance: "fixed-policy" as const })
+          : Object.freeze({
+            provenance: "route-override" as const,
+            displaced: Object.freeze({ source: "fixed-policy" as const, ...fixedEffortRoute }),
+          }),
+        ...(effortOverride === undefined ? {} : { route_override: effortOverride }),
+        repositories: input.repositories,
+      },
+    );
+    const binding = { envelope_digest: effortEnvelope.digest, role: "effort-reviewer" as const, selection: effortRoute.selection };
+    ops.push(async (): Promise<ChildOutcome> => {
+      const kept = await retained?.read(binding);
+      if (kept !== undefined) {
+        try {
+          return { ok: true, value: { kind: "effort", assessment: mint(kept) } };
+        } catch {
+          // A stale or invalid retained result is an exact-cache miss.
+        }
+      }
+      let dispatched: CounterReviewDispatchResult;
+      try {
+        dispatched = await dispatchObserved("effort-reviewer", effortRoute, (selectedRoute) =>
+          dependencies.dispatch(selectedRoute, effortEnvelope, effortReviewOutputSchema as PlainJsonValue));
+      } catch (error) {
+        return { ok: false, error };
+      }
+      let assessment: EffortAssessmentV1;
+      try {
+        assessment = mint(dispatched);
+      } catch (error) {
+        return {
+          ok: false,
+          error,
+          project_error: createProjectError("MODEL_OUTPUT_INVALID", {
+            adapter: route.adapter,
+            attempt: 1,
+            issue_code: "effort-review-schema-or-binding-invalid",
+          }),
+        };
+      }
+      await retained?.write(binding, dispatched);
+      return { ok: true, value: { kind: "effort", assessment } };
+    });
+  }
   if (
     plan !== undefined && constitutionRoute !== undefined &&
     constitutionSubject !== undefined && constitutionEnvelope !== undefined
@@ -651,13 +772,18 @@ export async function runCounterReview(
   }
   const singleObservations: ReviewObservation[] = [];
   let constitutionEvidence: AdjudicationEvidence | undefined;
+  let effortAssessment: EffortAssessmentV1 | undefined;
   for (const outcome of settled) {
     if (!outcome.ok) continue;
     if (outcome.value.kind === "review") singleObservations.push(outcome.value.observation);
+    else if (outcome.value.kind === "effort") effortAssessment = outcome.value.assessment;
     else constitutionEvidence = outcome.value.evidence;
   }
   if (singleObservations.length !== reviewRoutes.length) {
     throw new TypeError("counter-review settled without an observation for every selected reviewer");
+  }
+  if (effortPlan !== undefined && effortAssessment === undefined) {
+    throw new TypeError("phase-design counter-review settled without an effort assessment");
   }
 
   const allFindings: ReviewFinding[] = [];
@@ -731,6 +857,7 @@ export async function runCounterReview(
     blocking_count: mergedBlockingCount,
     matched_rule_versions: Object.freeze(mergedMatchedRules),
     reviewer_runs: Object.freeze(reviewerRuns),
+    ...(effortAssessment === undefined ? {} : { effort_review: effortAssessment }),
   });
 
   const summarizedConstitution = constitutionEvidence;
@@ -808,6 +935,7 @@ export async function runCounterReview(
     await retained?.discard(digest);
   }
   if (constitutionEnvelope !== undefined) await retained?.discard(constitutionEnvelope.digest);
+  if (effortEnvelope !== undefined) await retained?.discard(effortEnvelope.digest);
   return {
     schema_version: "1",
     ok: true,

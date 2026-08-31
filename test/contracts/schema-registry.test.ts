@@ -12,15 +12,15 @@ import * as publicContracts from "../../src/contracts/index.js";
 const SCHEMA_DIR = new URL("../../src/contracts/schemas/v1/", import.meta.url);
 
 describe("SCHEMA_IDS registry", () => {
-  it("is a bijection with the 35 committed schema documents", async () => {
+  it("is a bijection with the 42 committed schema documents", async () => {
     const files = (await readdir(SCHEMA_DIR)).filter((name) => name.endsWith(".schema.json")).sort();
     const documents = await Promise.all(files.map(async (name) => JSON.parse(
       await readFile(new URL(name, SCHEMA_DIR), "utf8"),
     ) as { readonly $id?: unknown }));
 
-    expect(files).toHaveLength(35);
-    expect(Object.keys(SCHEMA_IDS)).toHaveLength(35);
-    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(35);
+    expect(files).toHaveLength(42);
+    expect(Object.keys(SCHEMA_IDS)).toHaveLength(42);
+    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(42);
     expect(new Set(documents.map((document) => document.$id))).toEqual(new Set(Object.values(SCHEMA_IDS)));
   });
 
@@ -32,7 +32,7 @@ describe("SCHEMA_IDS registry", () => {
       .sort();
 
     expect(HAND_WRITTEN_SCHEMA_FILES).toEqual(["release-manifest"]);
-    expect(generated).toHaveLength(34);
+    expect(generated).toHaveLength(41);
     expect(generated).not.toContain("release-manifest");
   });
 

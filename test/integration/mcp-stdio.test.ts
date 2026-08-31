@@ -9,7 +9,10 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createProtocolError, describeValidationIssues } from "../../src/contracts/errors.js";
-import { parseArchFlowStatusInputV1 } from "../../src/contracts/semantic-workflow.js";
+import {
+  parseArchFlowStatusInputV1,
+  unavailableImplementationRecommendation,
+} from "../../src/contracts/semantic-workflow.js";
 import { runDispatchChild } from "../../src/dispatch/process.js";
 import { startMcpRuntime, type McpRuntimeHandle } from "../../src/mcp/sdk-adapter.js";
 import type { ToolHandlerRegistry } from "../../src/mcp/server.js";
@@ -331,6 +334,10 @@ describe("bundled MCP stdio runtime", () => {
         headline: "Task initialization is ready", detail: "Create durable state for this task.",
         resources: [],
         next_action: { kind: "initialize-task", instruction: "Create the task from the exact user ask." },
+        implementation_recommendation: unavailableImplementationRecommendation(
+          "not-applicable",
+          "Implementation effort advice does not apply at the current workflow position.",
+        ),
       };
       const liveSemanticSuccess = {
         content: [{ type: "text", text: JSON.stringify({ schema_version: "1", ok: true, value: missingTaskView }) }],

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { extractPhaseDesignComponentManifest } from "../../src/contracts/component-manifest.js";
 import { createProjectError } from "../../src/contracts/errors.js";
-import { envelopeOverflowError } from "../../src/mcp/handlers/counter-review.js";
+import { effortInputContractError, envelopeOverflowError } from "../../src/mcp/handlers/counter-review.js";
 import { REVIEW_ENVELOPE_BYTE_CAP, ReviewEnvelopeError } from "../../src/review/envelopes.js";
 import type { CurrentProduceSubject } from "../../src/state/produce-subject.js";
 
@@ -34,6 +35,44 @@ const capError = new ReviewEnvelopeError(
 );
 
 describe("envelope overflow translation", () => {
+  it("preserves an actionable bounded manifest ordering diagnostic", () => {
+    let validationError: unknown;
+    try {
+      extractPhaseDesignComponentManifest(`# Phase
+
+## Implementation Components
+
+\`\`\`archflow-components-v1
+schema_version: "1"
+components:
+  - id: grouped-effort-dispatch
+    name: Grouped dispatch
+    scope: Dispatch effort review.
+    mechanism: Reuse grouped dispatch.
+    repositories:
+      - name: primary
+        paths:
+          - src/z.ts
+          - src/a.ts
+    verification: Exercise the handler.
+\`\`\`
+`, ["primary"]);
+    } catch (error) {
+      validationError = error;
+    }
+    const error = effortInputContractError(
+      "phase-design-component-manifest-invalid",
+      validationError,
+    );
+    expect(error).toMatchObject({
+      code: "CONTRACT_INVALID",
+      diagnostic: { parameters: {
+        issue_code: "phase-design-component-manifest-invalid",
+        issues: ["component grouped-effort-dispatch repositories primary paths must be ordinal-sorted with no duplicates"],
+      } },
+    });
+  });
+
   it("names the five largest rendered contributors, sorted lexically, with the failed size", () => {
     const subject = subjectWithEntries({
       "src/f-small.ts": 10,

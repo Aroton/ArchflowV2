@@ -9,6 +9,7 @@ import {
   parseArchFlowStatusInputV1,
   parseSemanticResultV1,
   parseWorkflowInvocationV1,
+  unavailableImplementationRecommendation,
 } from "../../src/contracts/semantic-workflow.js";
 import {
   comparePhaseInstances,
@@ -18,6 +19,9 @@ import {
 import semanticWorkflowSchema from "../../src/contracts/schemas/v1/semantic-workflow.schema.json" with { type: "json" };
 
 const offer = `af1_${"a".repeat(64)}`;
+const unavailable = unavailableImplementationRecommendation(
+  "not-applicable", "This contract fixture has no applicable implementation phase.",
+);
 const baseApply = () => ({
   schema_version: "1",
   task_id: "api-refactor",
@@ -30,6 +34,7 @@ describe("semantic workflow contracts", () => {
     const view = {
       schema_version: "1", task_id: "task-1", condition: "ready", headline: "Ready", detail: "Continue.", resources: [],
       next_action: { kind: "inspect", instruction: "Inspect status." },
+      implementation_recommendation: unavailable,
     } as const;
     expect(parseSemanticResultV1({ schema_version: "1", ok: true, value: view })).toEqual({ schema_version: "1", ok: true, value: view });
     expect(parseSemanticResultV1({ schema_version: "1", ok: false, error: { code: "STALE_OFFER", message: "Refresh status.", retryable: true }, view })).toMatchObject({ ok: false, view });
@@ -51,6 +56,7 @@ describe("semantic workflow contracts", () => {
         instruction: "Commit the authenticated bytes.",
         commit: { paths: ["src/a.ts"], message: "Implement the phase", target_ref: "refs/heads/main", baseline: "1".repeat(40) },
       },
+      implementation_recommendation: unavailable,
       presentation: {
         class: "exception",
         title: "Approval required",

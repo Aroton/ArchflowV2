@@ -425,6 +425,16 @@ export function planSemanticAction(
   if (offer === undefined) {
     throw new SemanticActionPlanError("SEMANTIC_OFFER_STALE", "authenticated current action has no mutation offer for this invocation");
   }
+  if (
+    input.action.submission?.kind === "review-dispatch" &&
+    input.action.submission.route_override["effort-reviewer"] !== undefined &&
+    projection.view.dispatch_failure?.role !== "effort-reviewer"
+  ) {
+    throw new SemanticActionPlanError(
+      "SEMANTIC_SUBMISSION_MISMATCH",
+      "an effort-reviewer substitution is permitted only for the exact current effort-review dispatch failure",
+    );
+  }
   assertWorkResultFactsMatchPosition(offer, input.action.submission);
   const expectedToken = semanticOfferToken(offer);
   const archivedOperation = offer.action_kind === "decide" && markerField(snapshot.archived_decision, "status") === "exact"

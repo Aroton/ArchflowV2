@@ -1,6 +1,9 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import { canonicalJsonDigest, sha256Bytes } from "../../contracts/canonical.js";
 import type { InvocationContext } from "../../contracts/contexts.js";
-import { createProjectError, type ProjectResult } from "../../contracts/errors.js";
+import { createProjectError, describeValidationIssues, type ProjectError, type ProjectResult } from "../../contracts/errors.js";
 import {
   parseSafeId,
   parseSafeInteger,
@@ -12,7 +15,17 @@ import type { ParsedToolCall, ToolSuccess } from "../../contracts/mcp-tools.js";
 import type { TaskPathClaim } from "../../contracts/path-claims.js";
 import type { PlainJsonValue } from "../../contracts/plain-json.js";
 import type { GitOid } from "../../contracts/canonical.js";
+import {
+  extractPhaseDesignComponentManifest,
+  phaseDesignComponentManifestDigest,
+  type PhaseDesignComponentManifestV1,
+} from "../../contracts/component-manifest.js";
 import type { TaskStateV1 } from "../../contracts/durable-state.js";
+import { EFFORT_REVIEW_INSTRUCTIONS, IMPLEMENTATION_EFFORT_POLICY_ID, type EffortEnvelopeV1 } from "../../contracts/effort-review.js";
+import {
+  captureHazardRegistryInput,
+  type HazardRegistryInputV1,
+} from "../../contracts/hazard-registry.js";
 import { decodePhaseInstance } from "../../contracts/phase-instance.js";
 import { createDispatchCoordinator } from "../../dispatch/coordinator.js";
 import {
@@ -27,7 +40,7 @@ import { readHeadCommit } from "../../repository/git.js";
 import type { RootBoundGitRunner } from "../../repository/identity.js";
 import { unavailableRepositoryView, type RepositorySet } from "../../repository/repository-set.js";
 import { rulesForEnvelope } from "../../review/adjudication.js";
-import { runCounterReview, type ConstitutionReviewPlan } from "../../review/counter-review.js";
+import { runCounterReview, type ConstitutionReviewPlan, type EffortReviewPlan } from "../../review/counter-review.js";
 import { loadCanonicalRubricForPhaseKind } from "../../review/rubrics.js";
 import {
   REVIEW_ENVELOPE_BYTE_CAP,
@@ -70,12 +83,37 @@ const fail = <T>(error: ReturnType<typeof createProjectError>): ProjectResult<T>
   Object.freeze({ schema_version: "1", ok: false, error });
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 
+/** Keeps a bounded actionable parser diagnostic at the public contract boundary. */
+export function effortInputContractError(
+  issueCode: "phase-design-component-manifest-invalid" | "hazard-registry-invalid-or-unreadable",
+  error: unknown,
+): ProjectError {
+  const issues = describeValidationIssues(error);
+  return createProjectError("CONTRACT_INVALID", {
+    tool: "archflow_counter_review",
+    issue_code: issueCode,
+    ...(issues === undefined ? {} : { issues }),
+  });
+}
+
 function dispatchId(prefix: string, value: string): ReturnType<typeof parseSafeId> {
   return parseSafeId(`${prefix}-${sha256Bytes(new TextEncoder().encode(value)).slice(0, 32)}`);
 }
 
 function stableId(prefix: string, seed: PlainJsonValue): ReturnType<typeof parseSafeId> {
   return parseSafeId(`${prefix}-${canonicalJsonDigest(seed).slice(0, 32)}`);
+}
+
+/** Reads the live-worktree registry once; only ENOENT has the explicit absent meaning. */
+async function readHazardRegistryBytes(
+  primaryRoot: string,
+): Promise<Uint8Array | undefined> {
+  try {
+    return new Uint8Array(await readFile(join(primaryRoot, ".archflow", "hazards.yaml")));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    return undefined;
+  }
 }
 
 /**
@@ -420,6 +458,32 @@ export async function handleCounterReview(
       }));
     }
 
+    // Effort inputs are phase-design-only and are validated before any route selection or child
+    // launch. The registry is deliberately captured once from the authenticated primary live
+    // worktree; the post-dispatch freshness proof does not read this non-authoritative input again.
+    let phaseDesignArtifact: string | undefined;
+    let componentManifest: PhaseDesignComponentManifestV1 | undefined;
+    let hazardRegistry: HazardRegistryInputV1 | undefined;
+    if (session.value.phase_kind === "phase-design") {
+      try {
+        phaseDesignArtifact = new TextDecoder("utf-8", { fatal: true }).decode(projection.value.bytes);
+        const repositoryNames = session.value.repository_set.members.map((member) => member.name);
+        componentManifest = extractPhaseDesignComponentManifest(phaseDesignArtifact, repositoryNames);
+      } catch (error) {
+        return fail(effortInputContractError("phase-design-component-manifest-invalid", error));
+      }
+      try {
+        const repositoryNames = session.value.repository_set.members.map((member) => member.name);
+        hazardRegistry = await captureHazardRegistryInput(
+          () => readHazardRegistryBytes(services.runner.location.worktreeRoot),
+          repositoryNames,
+          componentManifest!,
+        );
+      } catch (error) {
+        return fail(effortInputContractError("hazard-registry-invalid-or-unreadable", error));
+      }
+    }
+
     // The server, not the caller, decides whether the constitution review runs: it resolves the
     // pinned constitution itself and dispatches the second review exactly when active rules exist.
     const constitution = await resolvePinnedConstitution(
@@ -479,6 +543,28 @@ export async function handleCounterReview(
     );
     const reviewedRepositories = projectReviewedRepositories(repositoryViews);
     const workspaceBinding = projectRepositoryWorkspaceBinding(repositoryViews);
+    let effortPlan: EffortReviewPlan | undefined;
+    if (phaseDesignArtifact !== undefined && componentManifest !== undefined && hazardRegistry !== undefined) {
+      const effortResultId = stableId("effort-result", call.input.intent_id);
+      const effortEnvelope: EffortEnvelopeV1 = Object.freeze({
+        schema_version: "1",
+        artifact: phaseDesignArtifact,
+        instructions: EFFORT_REVIEW_INSTRUCTIONS,
+        task_id: services.authority.task_id,
+        phase_instance: state.value.phase_instance,
+        attempt: state.value.attempt,
+        subject_digest: produce.value.artifact_digest,
+        input_fingerprint: call.input.input_fingerprint,
+        invocation_id: stableId("effort-invocation", call.input.intent_id),
+        result_id: effortResultId,
+        policy_id: IMPLEMENTATION_EFFORT_POLICY_ID,
+        component_manifest_digest: phaseDesignComponentManifestDigest(componentManifest),
+        component_manifest: componentManifest,
+        hazard_registry: hazardRegistry,
+        repositories: reviewedRepositories,
+      });
+      effortPlan = Object.freeze({ envelope: effortEnvelope });
+    }
     // The rubric and constitution children receive byte-identical repository views, so one
     // materialization serves both; the handle is disposed after runCounterReview settles.
     const sharedWorkspace = shareRepositoryViewWorkspace(
@@ -618,6 +704,7 @@ export async function handleCounterReview(
       projection_digest: produceProjectionSetDigest(projections.value),
       ...(priorTriage.value === undefined ? {} : { prior_triage: priorTriage.value }),
       ...(constitutionPlan === undefined ? {} : { constitution: constitutionPlan }),
+      ...(effortPlan === undefined ? {} : { effort: effortPlan }),
     }).catch((error: unknown) => {
       const overflow = envelopeOverflowError(error, produce.value);
       if (overflow !== undefined) return fail<never>(overflow);

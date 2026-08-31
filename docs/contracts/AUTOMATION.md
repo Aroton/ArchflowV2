@@ -1,6 +1,6 @@
 # contracts/AUTOMATION
 
-**Explored:** 2026-08-27 · **Commit:** `7c19a5e` · **Covers:** `src/contracts/automation-status.ts`, `src/local/automation-status.ts`, `src/local/commands.ts`, `src/local/main.ts`, `src/state/semantic-status.ts`, `test/integration/automation-status-*.test.ts`
+**Explored:** 2026-08-31 · **Commit:** `fe0e4ce` · **Covers:** `src/contracts/automation-status.ts`, `src/local/automation-status.ts`, `src/local/commands.ts`, `src/local/main.ts`, `src/state/semantic-status.ts`, `test/integration/automation-status-*.test.ts`
 
 `archflow-local automation-status` is the stable read-only handoff between ArchFlow and an external controller. It answers three questions from one reconciled observation: what condition is the task in, who is responsible now, and which canonical skill—if any—owns the next producer session.
 
@@ -17,20 +17,21 @@ archflow-local automation-status --task <task>
 - A classified observation exits `0`, including `blocked` and `complete`.
 - Invalid arguments or a repository/preflight/identity failure that prevents a trustworthy classification exit nonzero, print one structured `ok:false` project-error envelope to stdout, and print a concise reason to stderr.
 - The successful document is the status object itself, not an `{ok,value}` wrapper.
-- The JSON Schema is `src/contracts/schemas/v1/automation-status.schema.json`, identified by `urn:archflow:schema:v1:automation-status`. Consumers should reject unknown fields and unsupported `schema_version` values.
+- The command emits automation status v2. Its JSON Schema is `src/contracts/schemas/v1/automation-status-v2.schema.json`, identified by `urn:archflow:schema:v2:automation-status`. The separate v1 schema, parser, and constructors remain strict compatibility surfaces; v1 and v2 reject each other's bytes. Consumers should reject unknown fields and unsupported `schema_version` values.
 
 ## Document contract
 
 Every successful arm has these fields:
 
 ```text
-schema_version  "1"
+schema_version  "2"
 task_id         exact requested task ID
 observation_id  SHA-256 identifier for this complete derived observation
 state_revision  non-negative durable revision, or null when no readable canonical state exists
 condition       awaiting-client | awaiting-human | ready | blocked | complete
 position        prd | design | phase-design N | phase-impl N, or null only where authority is unreadable/staged
 next_action     exactly one condition-specific discriminated action
+implementation_recommendation  authenticated ready | blocked | unavailable advice
 ```
 
 The closed union permits `human_boundary` only on `awaiting-human`, and `blocked` only on `blocked`.
@@ -144,3 +145,11 @@ Tests assert repeated observations leave `.archflow` byte-for-byte unchanged and
 The public controller interfaces are this versioned document, its JSON Schema, and the skill descriptors it returns. Raw `.archflow` state, gate archives, retained manifests, semantic offers, digests, and decision tokens are internal authority—not controller APIs. Do not read, copy, submit, or calculate them.
 
 An MCP-based controller may expose an equivalent read-only observation, but it must preserve this exact classification, descriptor, freshness, and no-mutation behavior. MCP is optional: controllers need only the local command and published schema.
+
+## Implementation recommendation
+
+V2 requires the same `implementation_recommendation` union published by semantic status on every condition arm. `ready` carries the policy and exact subject/component/hazard bindings, the actual effort-reviewer provenance, per-component A-E judgments, totals, profiles and caveats, the phase profile and determining component IDs. `blocked` carries the same evidence plus blockers and no phase profile. `unavailable` distinguishes `not-applicable`, `not-produced`, `subject-stale`, and `legacy-evidence`; positionless edge documents use `not-applicable` without inventing a phase. All arms keep `actual_implementation_route: {"status":"not-recorded"}` because recommendation, reviewer provenance, and the producer route are different facts.
+
+The recommendation is observational. Projection copies it after action selection and never branches on it to select an actor, action, owner, successor, repair, or launch. Registry-created/removed/changed/unreadable caveats likewise do not change currency or action. V2 observation identity binds the complete recommendation bytes under the `archflow-automation-observation-v2` domain, so advice changes are visible to polling without becoming authority.
+
+V2 dispatch failures truthfully permit `effort-reviewer` in `failed_role`. V1 retains its original closed `counter-reviewer | test-reviewer | adjudicator` vocabulary and compatibility projection; `parseAutomationStatus` remains the documented v1 alias. Controllers that need advice must consume v2 and still must not infer or launch an implementation route from it.

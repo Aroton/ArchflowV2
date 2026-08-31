@@ -25,6 +25,7 @@
       "enum": [
         "counter-reviewer",
         "test-reviewer",
+        "effort-reviewer",
         "adjudicator"
       ]
     },

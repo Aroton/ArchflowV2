@@ -215,7 +215,7 @@ function mapRunStep(status: TaskStatusV1, action: NextAction, snapshot: Semantic
           condition: "ready", headline: "Revision is ready to begin",
           // A policy re-entry carries what the revision has to resolve; nothing else in the
           // semantic view exposes the constitution findings.
-          detail: action.policy_reentry === true
+          detail: action.policy_reentry === true || action.effort_reentry === true
             ? action.detail
             : "Enter the bounded production write window before changing the artifact.",
           action_kind: "revise", instruction: "Begin the authorized revision, then return to the client-owned work.",
@@ -536,6 +536,7 @@ export function projectSemanticStatus(
     ...(shape.findings !== true ? {} : { findings: snapshot.full_findings }),
     ...(context === undefined ? {} : { review_context: context }),
     ...(strength === undefined ? {} : { review_strength: strength }),
+    implementation_recommendation: snapshot.implementation_recommendation,
     ...(shape.presentation === undefined ? {} : { presentation: shape.presentation }),
     ...(status.dispatch_failure === undefined ? {} : { dispatch_failure: status.dispatch_failure }),
     ...(status.repositories === undefined ? {} : { repositories: status.repositories }),

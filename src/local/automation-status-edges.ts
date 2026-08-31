@@ -1,8 +1,8 @@
 import { canonicalJsonDigest } from "../contracts/canonical.js";
 import {
-  createAutomationStatus,
-  type AutomationStatusV1,
-  type AutomationStatusWithoutIdV1,
+  createAutomationStatusV2,
+  type AutomationStatusV2,
+  type AutomationStatusWithoutIdV2,
 } from "../contracts/automation-status.js";
 import type { Sha256Digest, TaskSlug } from "../contracts/evidence.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
@@ -15,17 +15,25 @@ type EdgeAuthority = Readonly<{
   live_config_digest: Sha256Digest | null;
 }>;
 
+const NOT_APPLICABLE_RECOMMENDATION = Object.freeze({
+  status: "unavailable" as const,
+  reason: "not-applicable" as const,
+  explanation: "Implementation recommendation is not applicable without readable phase-design workflow authority.",
+  actual_implementation_route: Object.freeze({ status: "not-recorded" as const }),
+});
+
 function identityDigest(value: PlainJsonValue): ReturnType<typeof canonicalJsonDigest> {
   return canonicalJsonDigest(value);
 }
 
 /** A task with no state and no import stage belongs to the PRD producer. */
-export function newTaskAutomationStatus(taskId: TaskSlug, authority: EdgeAuthority): AutomationStatusV1 {
-  const document: AutomationStatusWithoutIdV1 = Object.freeze({
-    schema_version: "1",
+export function newTaskAutomationStatusV2(taskId: TaskSlug, authority: EdgeAuthority): AutomationStatusV2 {
+  const document: AutomationStatusWithoutIdV2 = Object.freeze({
+    schema_version: "2",
     task_id: taskId,
     state_revision: null,
     position: Object.freeze({ kind: "prd" }),
+    implementation_recommendation: NOT_APPLICABLE_RECOMMENDATION,
     condition: "awaiting-client",
     next_action: Object.freeze({
       actor: "skill",
@@ -36,25 +44,26 @@ export function newTaskAutomationStatus(taskId: TaskSlug, authority: EdgeAuthori
       instruction: "Continue the PRD workflow in its owning interactive session.",
     }),
   });
-  return createAutomationStatus(document, Object.freeze({ kind: "absent", ...authority }));
+  return createAutomationStatusV2(document, Object.freeze({ kind: "absent", ...authority }));
 }
 
 /** Import staging is operator-owned and never fabricates current producer authority. */
-export function stagedTaskAutomationStatus(
+export function stagedTaskAutomationStatusV2(
   taskId: TaskSlug,
   staged: StagedUpgradeStatus,
   authority: EdgeAuthority,
-): AutomationStatusV1 {
+): AutomationStatusV2 {
   const current = staged.mode === "upgrade-staged";
   const category = current ? "legacy-upgrade-staged" : "legacy-upgrade-restart-required";
   const instruction = current
     ? "Resolve the authenticated legacy import stage in an interactive upgrade session before continuing."
     : "Discard the incompatible legacy import staging and restart upgrade preview in an interactive session.";
-  const document: AutomationStatusWithoutIdV1 = Object.freeze({
-    schema_version: "1",
+  const document: AutomationStatusWithoutIdV2 = Object.freeze({
+    schema_version: "2",
     task_id: taskId,
     state_revision: null,
     position: null,
+    implementation_recommendation: NOT_APPLICABLE_RECOMMENDATION,
     condition: "blocked",
     next_action: Object.freeze({ actor: "operator", kind: "repair", instruction }),
     blocked: Object.freeze({ category, reasons: Object.freeze([staged.next_action.detail]) }),
@@ -66,7 +75,7 @@ export function stagedTaskAutomationStatus(
     mode: staged.mode,
     input: staged.next_action.input ?? null,
   }) as unknown as PlainJsonValue;
-  return createAutomationStatus(document, Object.freeze({
+  return createAutomationStatusV2(document, Object.freeze({
     kind: "staged",
     ...authority,
     classification: current ? "current" : "restart-required",
@@ -75,18 +84,19 @@ export function stagedTaskAutomationStatus(
 }
 
 /** Unreadable state is valid blocked observation, but its guessed position remains private. */
-export function unreadableTaskAutomationStatus(taskId: TaskSlug, unreadable: UnreadableState): AutomationStatusV1 {
+export function unreadableTaskAutomationStatusV2(taskId: TaskSlug, unreadable: UnreadableState): AutomationStatusV2 {
   if (unreadable.details.reason === "status-authority-invalid") {
     throw new TypeError("repository authority failure cannot be projected as workflow status");
   }
   if (unreadable.repository_identity_digest === undefined || unreadable.live_config_digest === undefined) {
     throw new TypeError("unreadable state classification is missing repository or config identity");
   }
-  const document: AutomationStatusWithoutIdV1 = Object.freeze({
-    schema_version: "1",
+  const document: AutomationStatusWithoutIdV2 = Object.freeze({
+    schema_version: "2",
     task_id: taskId,
     state_revision: null,
     position: null,
+    implementation_recommendation: NOT_APPLICABLE_RECOMMENDATION,
     condition: "blocked",
     next_action: Object.freeze({
       actor: "operator",
@@ -104,7 +114,7 @@ export function unreadableTaskAutomationStatus(taskId: TaskSlug, unreadable: Unr
     task_id: taskId,
     details: unreadable.details,
   }) as unknown as PlainJsonValue;
-  return createAutomationStatus(document, Object.freeze({
+  return createAutomationStatusV2(document, Object.freeze({
     kind: "unreadable",
     repository_identity_digest: unreadable.repository_identity_digest,
     live_config_digest: unreadable.live_config_digest,

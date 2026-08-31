@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
+import type { EffortAssessmentV1 } from "../../src/contracts/effort-review.js";
+import {
+  compareHazardRegistryInput,
+  createHazardRegistryInput,
+} from "../../src/contracts/hazard-registry.js";
+import type { PhaseDesignComponentManifestV1 } from "../../src/contracts/component-manifest.js";
 import { parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
@@ -11,8 +17,15 @@ import type {
   WorkflowInvocationV1,
   WorkflowReopenImpactV1,
 } from "../../src/contracts/semantic-workflow.js";
+import {
+  implementationRecommendationFromAssessment,
+  unavailableImplementationRecommendation,
+} from "../../src/contracts/semantic-workflow.js";
 import type { NextAction, NextActionCode } from "../../src/state/next-action.js";
-import { computeSemanticStatusSnapshot } from "../../src/state/semantic-status.js";
+import {
+  computeSemanticStatusSnapshot,
+  governingRecommendationPhase,
+} from "../../src/state/semantic-status.js";
 import { projectSemanticStatus, semanticOfferToken } from "../../src/state/semantic-view.js";
 import type { TaskStatusV1 } from "../../src/state/status.js";
 
@@ -65,12 +78,130 @@ function snapshot(status: TaskStatusV1, extra: Partial<SemanticStatusSnapshotV1>
     repository_identity_digest: digestA,
     status: structuredClone(status) as unknown as PlainJsonValue,
     full_findings: [],
+    implementation_recommendation: unavailableImplementationRecommendation("not-applicable", "Fixture has no effort evidence."),
     reopen_impacts: [],
     ...extra,
   };
 }
 
+function effortAssessment(blocked = false): EffortAssessmentV1 {
+  const judgment = {
+    component_id: "semantic-projection",
+    axes: {
+      A: { score: 1, rationale: "local derivation" }, B: { score: 1, rationale: "unit tests" },
+      C: { score: 1, rationale: "sequential state" },
+      D: { score: blocked ? 2 : 0, rationale: blocked ? "ownership missing" : "specified" },
+      E: { score: 0, rationale: "stable surface" },
+    },
+    long_tool_loop: { value: "no", rationale: "bounded" },
+    short_component: { value: "yes", rationale: "one focused pass" },
+    ...(blocked ? { blocker: { answer_kind: "priority-order", question: "Which subsystem owns retries?" } } : {}),
+  } as const;
+  const profile = { profile_id: "gemini-3-7-flash-max", model: "gemini-3.7-flash", effort: "max" } as const;
+  return {
+    schema_version: "1", task_id: taskId, phase_instance: "phase-design-1", attempt: 1,
+    subject_digest: digestA, input_fingerprint: digestB,
+    component_manifest_digest: digestA, hazard_registry_digest: digestB,
+    policy_id: "implementation-effort-v1",
+    decomposition: { status: "adequate", rationale: "independent boundary" }, judgments: [judgment],
+    reviewer: {
+      adapter: "codex-cli", cli_version: "1", model_family: "codex", model: "gpt-5.6-luna",
+      effort: "xhigh", invocation_id: "effort-invocation", result_id: "effort-result",
+      envelope_input_digest: digestA, observed_output_digest: digestB,
+      route_source: { provenance: "fixed-policy" },
+      repositories: [{ name: "primary", repository_identity_digest: digestA, commit: "a".repeat(40) as never }],
+    },
+    recommendation: blocked
+      ? {
+          status: "blocked", component_profiles: [], blockers: [{
+            kind: "specification-gap", component_id: judgment.component_id,
+            answer_kind: "priority-order", question: "Which subsystem owns retries?",
+          }],
+        }
+      : {
+          status: "ready", blockers: [],
+          component_profiles: [{ component_id: judgment.component_id, total: 3, profile, caveats: [] }],
+          phase_profile: profile, determining_component_ids: [judgment.component_id],
+        },
+  } as unknown as EffortAssessmentV1;
+}
+
 describe("semantic status projection", () => {
+  it("copies authenticated effort advice without changing the action or offer", () => {
+    const status = fullStatus(action("run-step", { step: "produce" }));
+    const ready = implementationRecommendationFromAssessment(effortAssessment(), 1);
+    const unavailable = snapshot(status);
+    const advised = snapshot(status, { implementation_recommendation: ready });
+    expect(projectSemanticStatus(advised, invocation).view.implementation_recommendation).toEqual(ready);
+    expect(projectSemanticStatus(advised, invocation).view.next_action)
+      .toEqual(projectSemanticStatus(unavailable, invocation).view.next_action);
+  });
+
+  it("keeps blocked and unavailable recommendation states informational", () => {
+    const status = fullStatus(action("run-step", { step: "produce" }));
+    const baseline = projectSemanticStatus(snapshot(status), invocation).view.next_action;
+    const recommendations = [
+      implementationRecommendationFromAssessment(effortAssessment(true), 1),
+      unavailableImplementationRecommendation("not-produced", "No effort review exists.", 1),
+      unavailableImplementationRecommendation("legacy-evidence", "The exact review predates effort evidence.", 1),
+      unavailableImplementationRecommendation("subject-stale", "The review describes earlier design bytes.", 1),
+    ];
+    expect(recommendations.map((item) => item.status)).toEqual(["blocked", "unavailable", "unavailable", "unavailable"]);
+    for (const recommendation of recommendations) {
+      const view = projectSemanticStatus(snapshot(status, { implementation_recommendation: recommendation }), invocation).view;
+      expect(view.implementation_recommendation).toEqual(recommendation);
+      expect(view.next_action).toEqual(baseline);
+    }
+  });
+
+  it("fails closed on malformed or wrong-phase effort evidence and selects no unrelated phase", () => {
+    const malformed = structuredClone(effortAssessment()) as unknown as { policy_id: string };
+    malformed.policy_id = "invented-policy";
+    expect(() => implementationRecommendationFromAssessment(malformed as unknown as EffortAssessmentV1, 1)).toThrow();
+    expect(() => implementationRecommendationFromAssessment(effortAssessment(), 2))
+      .toThrow(/governing phase design/u);
+    const prd = { ...({} as TaskStateV1), phase_instance: "prd", terminal: undefined } as unknown as TaskStateV1;
+    const design = { ...prd, phase_instance: "design" } as unknown as TaskStateV1;
+    expect(governingRecommendationPhase(prd)).toBeUndefined();
+    expect(governingRecommendationPhase(design)).toBeUndefined();
+  });
+
+  it("classifies every live registry comparison without changing advice or action", () => {
+    const manifest = {
+      schema_version: "1",
+      components: [{
+        id: "semantic-projection", name: "Semantic projection", scope: "Project advice.",
+        mechanism: "Map authenticated evidence.",
+        repositories: [{ name: "primary", paths: ["src/state/semantic-status.ts"] }],
+        verification: "Run focused tests.",
+      }],
+    } as unknown as PhaseDesignComponentManifestV1;
+    const absent = createHazardRegistryInput("absent", { schema_version: "1", hazards: [] }, manifest);
+    const present = createHazardRegistryInput("present", { schema_version: "1", hazards: [{
+      repository: "primary", path: "src/state/semantic-status.ts" as never, score: 2,
+      reason: "Dense authority bindings.",
+    }] }, manifest);
+    const changed = createHazardRegistryInput("present", { schema_version: "1", hazards: [{
+      repository: "primary", path: "src/state/semantic-status.ts" as never, score: 3,
+      reason: "Changed hazard judgment.",
+    }] }, manifest);
+    expect(compareHazardRegistryInput(absent.registry_digest, absent, manifest)).toBeUndefined();
+    expect(compareHazardRegistryInput(absent.registry_digest, present, manifest)).toBe("registry-created");
+    expect(compareHazardRegistryInput(present.registry_digest, changed, manifest)).toBe("registry-changed");
+    expect(compareHazardRegistryInput(present.registry_digest, absent, manifest)).toBe("registry-removed");
+
+    const status = fullStatus(action("run-step", { step: "produce" }));
+    const baseline = projectSemanticStatus(snapshot(status), invocation).view.next_action;
+    for (const kind of ["registry-created", "registry-changed", "registry-removed", "registry-unreadable"] as const) {
+      const recommendation = implementationRecommendationFromAssessment(effortAssessment(), 1, {
+        kind, explanation: `Observed ${kind}.`,
+      });
+      const projected = projectSemanticStatus(snapshot(status, { implementation_recommendation: recommendation }), invocation).view;
+      expect(projected.implementation_recommendation).toEqual(recommendation);
+      expect(projected.next_action).toEqual(baseline);
+    }
+  });
+
   it("suppresses writable resources at a close-only revision checkpoint", () => {
     const status = fullStatus(action("run-step", { step: "produce" }), { step: "triage", status: "succeeded" });
     const projected = projectSemanticStatus(snapshot(status, {
@@ -503,6 +634,7 @@ describe("semantic status projection", () => {
     } as unknown as TaskStateV1;
     expect(() => computeSemanticStatusSnapshot(status, {
       repository_identity_digest: digestA, state, full_findings: [],
+      implementation_recommendation: unavailableImplementationRecommendation("not-applicable", "Fixture has no effort evidence."),
     })).toThrow(/same canonical read/u);
   });
 
@@ -515,6 +647,7 @@ describe("semantic status projection", () => {
     } as unknown as TaskStateV1;
     expect(() => computeSemanticStatusSnapshot(status, {
       repository_identity_digest: digestA, state, full_findings: [],
+      implementation_recommendation: unavailableImplementationRecommendation("not-applicable", "Fixture has no effort evidence."),
     })).toThrow(/repository identity/u);
   });
 });

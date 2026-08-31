@@ -12,11 +12,15 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
+import { parseSha256Digest } from "../../src/contracts/evidence.js";
+import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import type { ServerAttestedReview } from "../../src/contracts/review.js";
-import type { WorkflowInvocationV1 } from "../../src/contracts/semantic-workflow.js";
+import type { SemanticStatusSnapshotV1, WorkflowInvocationV1 } from "../../src/contracts/semantic-workflow.js";
+import { unavailableImplementationRecommendation } from "../../src/contracts/semantic-workflow.js";
 import { loadRetainedEvidence } from "../../src/state/evidence-results.js";
 import { readTaskState } from "../../src/state/read.js";
-import { parseSemanticSubstepIntentId } from "../../src/state/semantic-actions.js";
+import { parseSemanticSubstepIntentId, planSemanticAction } from "../../src/state/semantic-actions.js";
+import { projectSemanticStatus } from "../../src/state/semantic-view.js";
 import { computeTaskStatusDetailed } from "../../src/state/status.js";
 import {
   installSemanticReviewStub,
@@ -229,6 +233,49 @@ approval_rules:
 }
 
 describe("reviewer route substitution through the public apply path", { timeout: TIMEOUT }, () => {
+  it("rejects a proactive effort substitution and accepts it only for the current effort failure", () => {
+    const digest = parseSha256Digest("a".repeat(64));
+    const state = {
+      schema_version: "1", task_id: "effort-override", repository_identity_digest: digest,
+      revision: 1, phase_instance: "phase-design-1", step: "counter_review", status: "running", attempt: 1,
+      input_fingerprint: digest, initialization_digest: digest, config_digest: digest,
+      workflow_digest: digest, constitution_digest: digest, policy_base_commit: "a".repeat(40),
+      authoritative_results: [], approvals: [], waivers: [],
+    } as unknown as TaskStateV1;
+    const status = {
+      task_id: state.task_id, state: "active", revision: state.revision,
+      phase_instance: state.phase_instance, step: state.step, status: state.status, attempt: state.attempt,
+      input_fingerprint: state.input_fingerprint, config: { verified: true }, blocking_reasons: [],
+      next_action: { code: "run-step", detail: "Run review.", human_required: false, phase_instance: state.phase_instance, step: "counter_review" },
+    };
+    const base: SemanticStatusSnapshotV1 = {
+      schema_version: "1", repository_identity_digest: digest, state,
+      status: status as unknown as PlainJsonValue, full_findings: [],
+      implementation_recommendation: unavailableImplementationRecommendation("not-applicable", "Fixture has no effort evidence."),
+      reopen_impacts: [],
+    };
+    const invocation = { skill: "archflow-phase-design", phase: 1, intent: "resume" } as const;
+    const submission = { kind: "review-dispatch", route_override: {
+      reason: "the required Luna route is temporarily unavailable",
+      "effort-reviewer": { model: "gpt-5.6-sol", effort: "high" },
+    } } as const;
+    const offer = projectSemanticStatus(base, invocation).view.next_action.offer!;
+    const apply = (snapshot: SemanticStatusSnapshotV1) => planSemanticAction(snapshot, {
+      schema_version: "1", task_id: state.task_id, invocation, action: { offer, submission },
+    });
+    expect(() => apply(base)).toThrowError(expect.objectContaining({ code: "SEMANTIC_SUBMISSION_MISMATCH" }));
+
+    const failed = structuredClone(base);
+    (failed.status as Record<string, unknown>).dispatch_failure = {
+      role: "effort-reviewer", code: "AUTH_UNAVAILABLE", message: "The required reviewer authentication is unavailable.",
+      route: { model: "gpt-5.6-luna", effort: "xhigh", source: "configured" },
+    };
+    const failedOffer = projectSemanticStatus(failed, invocation).view.next_action.offer!;
+    expect(planSemanticAction(failed, {
+      schema_version: "1", task_id: state.task_id, invocation, action: { offer: failedOffer, submission },
+    })).toMatchObject({ route_override: submission.route_override });
+  });
+
   it("dispatches and attests an invocation-declared route without minting human override trust", async () => {
     const workspace = await createTaskWorkspace({
       taskId: "review-invocation-route", label: "review-invocation-route", configBytes: prdApprovalConfig(),

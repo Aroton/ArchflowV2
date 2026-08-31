@@ -86,16 +86,16 @@
   ],
   "artifacts": [
     {
-      "digest": "ee9605426b3a8964b80c73a3a5474cf1a5bff9d795ca3dcafe7f9d60c8e2a0ea",
+      "digest": "e0cafb1d497abad125f83abaf22e23da9a5b5bbb0e4674873d038ea16c4fd72e",
       "path": "archflow-local.mjs",
       "role": "executable",
-      "size": 2126173
+      "size": 2173097
     },
     {
-      "digest": "d8e5f76d77af9d7b1b82dbc54cbc51718fb6cc5fd4eca690dc8ac3d66621de10",
+      "digest": "4733ef2ca4d24e6c3dc24772813568149e9e218529723f07eb04070c740262a2",
       "path": "archflow-mcp.mjs",
       "role": "executable",
-      "size": 3295110
+      "size": 3413786
     },
     {
       "digest": "b1a2da6bef84f2512ae167c3f0e9f8caee088fed9ac04f4e7022366d83729ca0",
@@ -210,10 +210,10 @@
       "role": "manifest"
     },
     {
-      "digest": "c64d05c208507d68106d8695924b64a3e7f5a345a7b4e91228da04d21bfb0294",
+      "digest": "c989a4b8127454890188fb84b7798631205b26d31d56468a2763b281dd910cfc",
       "path": "metafile.json",
       "role": "metafile",
-      "size": 357047
+      "size": 365438
     }
   ],
   "build_entries": [
@@ -232,7 +232,7 @@
       "role": "local-cli"
     }
   ],
-  "bundle_digest": "d8e5f76d77af9d7b1b82dbc54cbc51718fb6cc5fd4eca690dc8ac3d66621de10",
+  "bundle_digest": "4733ef2ca4d24e6c3dc24772813568149e9e218529723f07eb04070c740262a2",
   "bundle_inputs": [
     {
       "bytes_in_output": 34870,
@@ -2491,7 +2491,7 @@
       "size": 4498
     },
     {
-      "bytes_in_output": 15960,
+      "bytes_in_output": 15964,
       "digest": "61781f3f995d14286d8ad57f5d0f04daa4e0fb897545bc047ddee442c5113da0",
       "key": "src/contracts/adjudication.ts",
       "origin": {
@@ -2501,14 +2501,14 @@
       "size": 12273
     },
     {
-      "bytes_in_output": 8652,
-      "digest": "4c95a8dd2443f966e0efc9f80fe0674759897b14865227b32da7c51760181c16",
+      "bytes_in_output": 13092,
+      "digest": "5990fa8e72613cd333ffb068e17593a9b8805af59649ad6002b19788612053d0",
       "key": "src/contracts/automation-status.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/automation-status.ts"
       },
-      "size": 14072
+      "size": 21218
     },
     {
       "bytes_in_output": 7474,
@@ -2519,6 +2519,16 @@
         "path": "src/contracts/canonical.ts"
       },
       "size": 6992
+    },
+    {
+      "bytes_in_output": 8846,
+      "digest": "8a39bab2c68e5dea044d6e80d26cc89267cc21d5d7185c5e9f0b93654ab57648",
+      "key": "src/contracts/component-manifest.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/component-manifest.ts"
+      },
+      "size": 5869
     },
     {
       "bytes_in_output": 7468,
@@ -2551,14 +2561,14 @@
       "size": 5089
     },
     {
-      "bytes_in_output": 5812,
-      "digest": "952d3652e9a097ed8daf11037b4d05adbcb49a7bae2038ff4f2ecb00e06eb67a",
+      "bytes_in_output": 5888,
+      "digest": "b816f7aef2d03d48f8337fe6be351d6a59dad542a1717fe19b40c6736e26bd4e",
       "key": "src/contracts/dispatch-failure.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/dispatch-failure.ts"
       },
-      "size": 5317
+      "size": 5375
     },
     {
       "bytes_in_output": 3964,
@@ -2661,6 +2671,16 @@
       "size": 53301
     },
     {
+      "bytes_in_output": 26226,
+      "digest": "285e7c2b242eb83604a361b3dbf456c008567fce7c491845f7ed622905330ba5",
+      "key": "src/contracts/effort-review.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/effort-review.ts"
+      },
+      "size": 20290
+    },
+    {
       "bytes_in_output": 34696,
       "digest": "7a6ac0603657d1e75ac4b837ba5d41f073cedb28bf76bfebd4fbbd3747e078d7",
       "key": "src/contracts/errors.ts",
@@ -2701,6 +2721,16 @@
       "size": 47726
     },
     {
+      "bytes_in_output": 9526,
+      "digest": "e723573a82c5348f82450defcdc4f6c483e9e057c25603c46c2e3a30e9f5aec5",
+      "key": "src/contracts/hazard-registry.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/hazard-registry.ts"
+      },
+      "size": 7207
+    },
+    {
       "bytes_in_output": 1669,
       "digest": "d1541e71cbca159ee9475d5bb011d5791de990d73304e18efb9a6e57a9222208",
       "key": "src/contracts/hosts.ts",
@@ -2731,14 +2761,14 @@
       "size": 3415
     },
     {
-      "bytes_in_output": 44911,
-      "digest": "a13af06c09e06d4dcf48dd04948bcc3f8572e559e9022c2f679efcfdff1a1685",
+      "bytes_in_output": 45145,
+      "digest": "a8e1a51a0e2b0352b6bc0f6c5a8a6665efdf6e09d04582669faccd728533e39f",
       "key": "src/contracts/mcp-tools.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/mcp-tools.ts"
       },
-      "size": 37115
+      "size": 37280
     },
     {
       "bytes_in_output": 6281,
@@ -2781,14 +2811,14 @@
       "size": 10678
     },
     {
-      "bytes_in_output": 19037,
-      "digest": "490d592f6de22d8162a95e9b5b434f30c92d75a5e4df0e2f168c5e00878c2474",
+      "bytes_in_output": 19218,
+      "digest": "fb4024e8a55216bae7aac668d83f428e68ac5deba44331acd2f5587ce12eead6",
       "key": "src/contracts/review.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/review.ts"
       },
-      "size": 16239
+      "size": 16540
     },
     {
       "bytes_in_output": 1954,
@@ -2829,6 +2859,16 @@
         "path": "src/contracts/schemas/v1/durable-primitives.schema.json"
       },
       "size": 27360
+    },
+    {
+      "bytes_in_output": 9978,
+      "digest": "48dfce26af6239d1150b04f7893c443a6ef86275659dab23d01dfefdb56db3b0",
+      "key": "src/contracts/schemas/v1/effort-review.schema.json",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/schemas/v1/effort-review.schema.json"
+      },
+      "size": 10358
     },
     {
       "bytes_in_output": 1352,
@@ -2881,14 +2921,14 @@
       "size": 3857
     },
     {
-      "bytes_in_output": 33441,
-      "digest": "2e8adfd9e16797167e7350609b0bb115d2b5920d77bcdb1fac70fd2f28dbe496",
+      "bytes_in_output": 34343,
+      "digest": "cd715b604c5607b326e71bd38b357dee6775b59f9a1c91682bd018eeae30e398",
       "key": "src/contracts/schemas/v1/mcp-tools.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/mcp-tools.schema.json"
       },
-      "size": 34665
+      "size": 35597
     },
     {
       "bytes_in_output": 493,
@@ -2951,14 +2991,14 @@
       "size": 3115
     },
     {
-      "bytes_in_output": 55947,
-      "digest": "4673a5c69614cbaa5c7c6f3063b2c8e67a85fe45c4400a6041c8ba1e22722079",
+      "bytes_in_output": 106221,
+      "digest": "048ef8d82fe192d4c566801c341d5428e27e60d13a39742d43d60ee6f8326fe7",
       "key": "src/contracts/schemas/v1/semantic-workflow.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/semantic-workflow.schema.json"
       },
-      "size": 58459
+      "size": 110345
     },
     {
       "bytes_in_output": 1432,
@@ -3001,14 +3041,14 @@
       "size": 4065
     },
     {
-      "bytes_in_output": 33051,
-      "digest": "196e72f2b0ef44da64a71c7e48980fde1558e5cd8c4ab524238ed3427b0925ad",
+      "bytes_in_output": 48891,
+      "digest": "314254000d3d2f98166212b76f4e268367ef2088278823bfc395f498a7576079",
       "key": "src/contracts/semantic-workflow.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/semantic-workflow.ts"
       },
-      "size": 30987
+      "size": 41082
     },
     {
       "bytes_in_output": 872,
@@ -3091,14 +3131,14 @@
       "size": 1721
     },
     {
-      "bytes_in_output": 56718,
-      "digest": "aca736acee7ee576b0b987c7e6581790a3430a845c69652319658679ace2c906",
+      "bytes_in_output": 57726,
+      "digest": "38527b587dcc20d2444fe641e1cb316a2329956f99be275a07a282c377b8d458",
       "key": "src/dispatch/cli.ts",
       "origin": {
         "kind": "repository",
         "path": "src/dispatch/cli.ts"
       },
-      "size": 41846
+      "size": 42478
     },
     {
       "bytes_in_output": 6939,
@@ -3131,14 +3171,14 @@
       "size": 10958
     },
     {
-      "bytes_in_output": 5677,
-      "digest": "f5220c891477f24085eebdf8d46f854e41555f90b055abdea12d76a1ac9a3065",
+      "bytes_in_output": 5696,
+      "digest": "14b704506546de1b95a29df4632fc821adbe37a01df9b6498ed8f295abde82c4",
       "key": "src/dispatch/retained-child-output.ts",
       "origin": {
         "kind": "repository",
         "path": "src/dispatch/retained-child-output.ts"
       },
-      "size": 9921
+      "size": 9960
     },
     {
       "bytes_in_output": 12962,
@@ -3151,7 +3191,7 @@
       "size": 10291
     },
     {
-      "bytes_in_output": 13513,
+      "bytes_in_output": 13515,
       "digest": "f0ab832b5eef29104f73b38a63ace26a1ac6978e89b63042f9e17bde0e529e3e",
       "key": "src/dispatch/workspace.ts",
       "origin": {
@@ -3161,24 +3201,24 @@
       "size": 16984
     },
     {
-      "bytes_in_output": 6924,
-      "digest": "54e3b1ec9428d1694e80e75129645844f70b39ab71b90687907c6644ffdd12f9",
+      "bytes_in_output": 7016,
+      "digest": "2619938ee899c643464d9e7f7eadd99ad6e0e6f258377a59551eb0a8304df2e0",
       "key": "src/init/assets.ts",
       "origin": {
         "kind": "repository",
         "path": "src/init/assets.ts"
       },
-      "size": 6819
+      "size": 6865
     },
     {
-      "bytes_in_output": 8333,
-      "digest": "a287525413ffc982548e015d2b5b0f045cf3b71278509c3984dd2230f6b96523",
+      "bytes_in_output": 8361,
+      "digest": "1a0a58142c85954f26b0f68e9b267433dce1c25ca1a37060b234fefe1a349500",
       "key": "src/init/diagnostics.ts",
       "origin": {
         "kind": "repository",
         "path": "src/init/diagnostics.ts"
       },
-      "size": 11395
+      "size": 11423
     },
     {
       "bytes_in_output": 2008,
@@ -3201,7 +3241,7 @@
       "size": 3689
     },
     {
-      "bytes_in_output": 23037,
+      "bytes_in_output": 23047,
       "digest": "171c7be8da281eab92198ce8b1aff85da44c7377cd305e6236e6a62c4f432fd3",
       "key": "src/init/legacy-upgrade.ts",
       "origin": {
@@ -3231,24 +3271,24 @@
       "size": 9262
     },
     {
-      "bytes_in_output": 3358,
-      "digest": "3ac415463edda0f5c328dcba964b9b17ea17710e18aca1593c1754c5acb87300",
+      "bytes_in_output": 3866,
+      "digest": "b4f9c7de49fd732c42ea2addb6e2efd80dbdc83b05b4be30be6e30ba8117c006",
       "key": "src/local/automation-status-edges.ts",
       "origin": {
         "kind": "repository",
         "path": "src/local/automation-status-edges.ts"
       },
-      "size": 4726
+      "size": 5267
     },
     {
-      "bytes_in_output": 10432,
-      "digest": "3c048e3e435203e7f7572e9e870d554af8e5ea6a034bc4b1797f916a6b96170b",
+      "bytes_in_output": 11762,
+      "digest": "b62358a7fdd914a43634a82afa3c65f2b446330b4ff4d3e645b6dcbfd93ddcac",
       "key": "src/local/automation-status.ts",
       "origin": {
         "kind": "repository",
         "path": "src/local/automation-status.ts"
       },
-      "size": 11891
+      "size": 14121
     },
     {
       "bytes_in_output": 8547,
@@ -3261,14 +3301,14 @@
       "size": 7396
     },
     {
-      "bytes_in_output": 17181,
-      "digest": "016bb64163ed57df441f8c985647d9bf26815566690a71b2c53b175b016731f1",
+      "bytes_in_output": 17189,
+      "digest": "5bb699f107ee9ec7bdd84a9cd5450f93a59d5e54f03a24ad1145bf8652a37f2d",
       "key": "src/local/commands.ts",
       "origin": {
         "kind": "repository",
         "path": "src/local/commands.ts"
       },
-      "size": 22838
+      "size": 22854
     },
     {
       "bytes_in_output": 5073,
@@ -3321,14 +3361,14 @@
       "size": 3378
     },
     {
-      "bytes_in_output": 21107,
-      "digest": "3f340074d9923976e48a40a0d4837942d95047d2743ea62d5ffef57bf7a79398",
+      "bytes_in_output": 23917,
+      "digest": "39a31d58abca07cc5416bb25cf5283473b01d024a5c12d20019df0b0beb22543",
       "key": "src/mcp/handlers/counter-review.ts",
       "origin": {
         "kind": "repository",
         "path": "src/mcp/handlers/counter-review.ts"
       },
-      "size": 30881
+      "size": 34971
     },
     {
       "bytes_in_output": 1816,
@@ -3451,14 +3491,14 @@
       "size": 8000
     },
     {
-      "bytes_in_output": 7121,
-      "digest": "e1fc48fd3190c4cdabc5c7f0536a215bd9eed7694222dd5dfed2fc0e98f7fc2a",
+      "bytes_in_output": 8149,
+      "digest": "6a918a2fc7de81d835e9b744673fb46992c8234dc65464fe4fd32e6cef9653d7",
       "key": "src/mcp/tools.ts",
       "origin": {
         "kind": "repository",
         "path": "src/mcp/tools.ts"
       },
-      "size": 10510
+      "size": 11941
     },
     {
       "bytes_in_output": 42006,
@@ -3521,34 +3561,44 @@
       "size": 10317
     },
     {
-      "bytes_in_output": 21343,
-      "digest": "061698c07fc8bd328510d6acb3c1bef2de17166c9ec331859e4750e6d0646b88",
+      "bytes_in_output": 26288,
+      "digest": "e1e955de9ad3b5663f35b55245817f8089e7f98fe34c111c5f6ffc7e93d7de8e",
       "key": "src/review/counter-review.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/counter-review.ts"
       },
-      "size": 36755
+      "size": 43116
     },
     {
-      "bytes_in_output": 25077,
-      "digest": "b9d3c0241e804ba55d0bbf851afd1fdd9d546beb8856ee7639c8a0d8140baabe",
+      "bytes_in_output": 5137,
+      "digest": "be8cbca67133937c5ff937fafbf32d39a2d2d7ed836764137f67503366d5de4f",
+      "key": "src/review/effort-policy.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/review/effort-policy.ts"
+      },
+      "size": 6382
+    },
+    {
+      "bytes_in_output": 25239,
+      "digest": "160e77b18e49844cdb5dadd93e9169daf6d6083e95f1d71178872c11e6e0598b",
       "key": "src/review/envelopes.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/envelopes.ts"
       },
-      "size": 35880
+      "size": 36302
     },
     {
-      "bytes_in_output": 30609,
-      "digest": "e442d0ce6837d51a22b0faf0b852565b5c751e0ba0c748fc5180fa6d3ec8478a",
+      "bytes_in_output": 34431,
+      "digest": "617d4218ef76283a46684c25b09b1f9867e68887c3b856686b9b459030259cf4",
       "key": "src/review/fixed-point.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/fixed-point.ts"
       },
-      "size": 29744
+      "size": 33258
     },
     {
       "bytes_in_output": 19761,
@@ -3641,14 +3691,14 @@
       "size": 8454
     },
     {
-      "bytes_in_output": 36896,
-      "digest": "6cb8bc350131ae80a6db3a6c7a25c24da37048f067ae50a3f4acde43ca21696c",
+      "bytes_in_output": 41632,
+      "digest": "bbd8e701dc9719b0a390c954dd16868ac51f5fce6d355a9d3e9a20469ab42098",
       "key": "src/state/evidence-results.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/evidence-results.ts"
       },
-      "size": 31297
+      "size": 34730
     },
     {
       "bytes_in_output": 12045,
@@ -3701,7 +3751,7 @@
       "size": 30413
     },
     {
-      "bytes_in_output": 124663,
+      "bytes_in_output": 124668,
       "digest": "f7b923e870c5b44a859896ccf0e66133ebced5e1df2969796f66294de62db0d9",
       "key": "src/state/gates.ts",
       "origin": {
@@ -3771,14 +3821,14 @@
       "size": 8194
     },
     {
-      "bytes_in_output": 41838,
-      "digest": "76871365792bab8608f7d75fda8b42df08696fd6c8f9281824635d6833633ebd",
+      "bytes_in_output": 43122,
+      "digest": "f407f0db288de07b762224fbcb11bfdb91773310fa2b1bf3d93ca5b9a135da6b",
       "key": "src/state/next-action.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/next-action.ts"
       },
-      "size": 34261
+      "size": 35051
     },
     {
       "bytes_in_output": 3062,
@@ -3871,14 +3921,14 @@
       "size": 16314
     },
     {
-      "bytes_in_output": 45881,
-      "digest": "6ef4cee4e5fe4bb9945aac1f8c87608a606d82f8aaa3617df71910b525acaff1",
+      "bytes_in_output": 45931,
+      "digest": "0f99a807c06669330c5b81804738c18c48b4935d9a8bbba698622698dbedc9ed",
       "key": "src/state/request-composition.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/request-composition.ts"
       },
-      "size": 60529
+      "size": 60579
     },
     {
       "bytes_in_output": 10488,
@@ -3921,34 +3971,34 @@
       "size": 7611
     },
     {
-      "bytes_in_output": 35039,
-      "digest": "92d22f6e01cd6012d77400aa5ea759ee9c8362b028d4477fb0f05b7f209b9214",
+      "bytes_in_output": 35435,
+      "digest": "822ef60dbc300448ba6b80e0cf39645df5674b73b0aa1004c1e45737d2ce42e7",
       "key": "src/state/semantic-actions.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/semantic-actions.ts"
       },
-      "size": 45599
+      "size": 46015
     },
     {
-      "bytes_in_output": 39918,
-      "digest": "788923d8346d7b09d6b7ba5d26eec40f1ac69cb6dd3b7b52683574347e6bf83a",
+      "bytes_in_output": 51008,
+      "digest": "6bb8e5ed8f3fb3f971196eed5394de06695bcb4740c7179c642a87c9e5e9f6ee",
       "key": "src/state/semantic-status.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/semantic-status.ts"
       },
-      "size": 26486
+      "size": 33249
     },
     {
-      "bytes_in_output": 47224,
-      "digest": "bb470a9a5e633ec267806e2ebfece261aeaef40fd8f57f45b56aace88371fa23",
+      "bytes_in_output": 47445,
+      "digest": "db335660d58a4356d63cab99f6bebfb7b4e8c8684fa853f7af6ce8ad3b5082fd",
       "key": "src/state/semantic-view.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/semantic-view.ts"
       },
-      "size": 27387
+      "size": 27496
     },
     {
       "bytes_in_output": 63747,
@@ -4197,6 +4247,7 @@
     "src/contracts/adjudication.ts",
     "src/contracts/automation-status.ts",
     "src/contracts/canonical.ts",
+    "src/contracts/component-manifest.ts",
     "src/contracts/config.ts",
     "src/contracts/constitution.ts",
     "src/contracts/contexts.ts",
@@ -4211,10 +4262,12 @@
     "src/contracts/durable-state.ts",
     "src/contracts/durable-task-initialization.ts",
     "src/contracts/durable.ts",
+    "src/contracts/effort-review.ts",
     "src/contracts/errors.ts",
     "src/contracts/evidence.ts",
     "src/contracts/fingerprints.ts",
     "src/contracts/gates.ts",
+    "src/contracts/hazard-registry.ts",
     "src/contracts/hosts.ts",
     "src/contracts/internal/trust-brands.ts",
     "src/contracts/internal/trust-mints.ts",
@@ -4228,6 +4281,7 @@
     "src/contracts/schemas/v1/adjudication.schema.json",
     "src/contracts/schemas/v1/document-artifact.schema.json",
     "src/contracts/schemas/v1/durable-primitives.schema.json",
+    "src/contracts/schemas/v1/effort-review.schema.json",
     "src/contracts/schemas/v1/evidence-slots.schema.json",
     "src/contracts/schemas/v1/gate-contract.schema.json",
     "src/contracts/schemas/v1/gate-decision.schema.json",
@@ -4298,6 +4352,7 @@
     "src/repository/repository-set.ts",
     "src/review/adjudication.ts",
     "src/review/counter-review.ts",
+    "src/review/effort-policy.ts",
     "src/review/envelopes.ts",
     "src/review/fixed-point.ts",
     "src/review/pinned-context.ts",
@@ -4362,17 +4417,24 @@
       "src/contracts/schemas/v1/active-gate.schema.json",
       "src/contracts/schemas/v1/adjudication-evidence.schema.json",
       "src/contracts/schemas/v1/adjudication.schema.json",
+      "src/contracts/schemas/v1/automation-status-v2.schema.json",
       "src/contracts/schemas/v1/automation-status.schema.json",
+      "src/contracts/schemas/v1/component-manifest.schema.json",
       "src/contracts/schemas/v1/config.schema.json",
       "src/contracts/schemas/v1/constitution-rule.schema.json",
       "src/contracts/schemas/v1/dispatch-failure.schema.json",
       "src/contracts/schemas/v1/document-artifact.schema.json",
       "src/contracts/schemas/v1/durable-primitives.schema.json",
+      "src/contracts/schemas/v1/effort-assessment.schema.json",
+      "src/contracts/schemas/v1/effort-envelope.schema.json",
+      "src/contracts/schemas/v1/effort-review.schema.json",
       "src/contracts/schemas/v1/evidence-slots.schema.json",
       "src/contracts/schemas/v1/gate-contract.schema.json",
       "src/contracts/schemas/v1/gate-decision-record.schema.json",
       "src/contracts/schemas/v1/gate-decision.schema.json",
       "src/contracts/schemas/v1/gate-request.schema.json",
+      "src/contracts/schemas/v1/hazard-registry-input.schema.json",
+      "src/contracts/schemas/v1/hazard-registry.schema.json",
       "src/contracts/schemas/v1/implementation-output.schema.json",
       "src/contracts/schemas/v1/intent-receipt.schema.json",
       "src/contracts/schemas/v1/legacy-import-initialization.schema.json",
@@ -4823,6 +4885,7 @@
         "node_modules/zod/v4/locales/zh-TW.js",
         "src/contracts/adjudication.ts",
         "src/contracts/canonical.ts",
+        "src/contracts/component-manifest.ts",
         "src/contracts/config.ts",
         "src/contracts/constitution.ts",
         "src/contracts/contexts.ts",
@@ -4837,10 +4900,12 @@
         "src/contracts/durable-state.ts",
         "src/contracts/durable-task-initialization.ts",
         "src/contracts/durable.ts",
+        "src/contracts/effort-review.ts",
         "src/contracts/errors.ts",
         "src/contracts/evidence.ts",
         "src/contracts/fingerprints.ts",
         "src/contracts/gates.ts",
+        "src/contracts/hazard-registry.ts",
         "src/contracts/hosts.ts",
         "src/contracts/internal/trust-brands.ts",
         "src/contracts/internal/trust-mints.ts",
@@ -4854,6 +4919,7 @@
         "src/contracts/schemas/v1/adjudication.schema.json",
         "src/contracts/schemas/v1/document-artifact.schema.json",
         "src/contracts/schemas/v1/durable-primitives.schema.json",
+        "src/contracts/schemas/v1/effort-review.schema.json",
         "src/contracts/schemas/v1/evidence-slots.schema.json",
         "src/contracts/schemas/v1/gate-contract.schema.json",
         "src/contracts/schemas/v1/gate-decision.schema.json",
@@ -4914,6 +4980,7 @@
         "src/repository/repository-set.ts",
         "src/review/adjudication.ts",
         "src/review/counter-review.ts",
+        "src/review/effort-policy.ts",
         "src/review/envelopes.ts",
         "src/review/fixed-point.ts",
         "src/review/pinned-context.ts",
@@ -4965,7 +5032,7 @@
       ],
       "entry_point": "src/main.ts",
       "id": "mcp-stdio",
-      "output_digest": "d8e5f76d77af9d7b1b82dbc54cbc51718fb6cc5fd4eca690dc8ac3d66621de10",
+      "output_digest": "4733ef2ca4d24e6c3dc24772813568149e9e218529723f07eb04070c740262a2",
       "output_path": "archflow-mcp.mjs"
     },
     {
@@ -5168,6 +5235,7 @@
         "src/contracts/adjudication.ts",
         "src/contracts/automation-status.ts",
         "src/contracts/canonical.ts",
+        "src/contracts/component-manifest.ts",
         "src/contracts/config.ts",
         "src/contracts/constitution.ts",
         "src/contracts/contexts.ts",
@@ -5182,10 +5250,12 @@
         "src/contracts/durable-state.ts",
         "src/contracts/durable-task-initialization.ts",
         "src/contracts/durable.ts",
+        "src/contracts/effort-review.ts",
         "src/contracts/errors.ts",
         "src/contracts/evidence.ts",
         "src/contracts/fingerprints.ts",
         "src/contracts/gates.ts",
+        "src/contracts/hazard-registry.ts",
         "src/contracts/hosts.ts",
         "src/contracts/internal/trust-brands.ts",
         "src/contracts/internal/trust-mints.ts",
@@ -5234,6 +5304,7 @@
         "src/repository/paths.ts",
         "src/repository/repository-set.ts",
         "src/review/adjudication.ts",
+        "src/review/effort-policy.ts",
         "src/review/envelopes.ts",
         "src/review/fixed-point.ts",
         "src/review/rubrics.ts",
@@ -5279,7 +5350,7 @@
       ],
       "entry_point": "src/local/main.ts",
       "id": "local-cli",
-      "output_digest": "ee9605426b3a8964b80c73a3a5474cf1a5bff9d795ca3dcafe7f9d60c8e2a0ea",
+      "output_digest": "e0cafb1d497abad125f83abaf22e23da9a5b5bbb0e4674873d038ea16c4fd72e",
       "output_path": "archflow-local.mjs"
     }
   ],
@@ -5427,6 +5498,11 @@
       "size": 509
     },
     {
+      "digest": "2e9fa57f51b8c5fca438e7e09ec88cce2a01add89fcb472ac7e07a6262fe8885",
+      "path": "assets/hazards.yaml",
+      "size": 32
+    },
+    {
       "digest": "8d8665acf2b9874be00516e59840a73bf7cc9a2053605c0bec616ba8948405e4",
       "path": "assets/rubrics/README.md",
       "size": 1917
@@ -5557,9 +5633,9 @@
       "size": 610
     },
     {
-      "digest": "34450504b080aa3467144a8b96ce2a28aa419cef956bb5fbe724357c7429f67d",
+      "digest": "94398cc7912faa487eb516e9855875cc40ace1038a8971c5f456721ef39be4b8",
       "path": "scripts/release-support.mjs",
-      "size": 55966
+      "size": 55991
     },
     {
       "digest": "ccfbcc8df639e93b98bf292de22364e20c3f45b6e8993d2db8606160d0aa7a8e",
@@ -5592,9 +5668,19 @@
       "size": 24454
     },
     {
+      "digest": "fdea3ebe626e3753bd805bf612af016f70947e0216e328be646b5b1c62350a61",
+      "path": "src/contracts/schemas/v1/automation-status-v2.schema.json",
+      "size": 21320
+    },
+    {
       "digest": "07cb6018e133ebdb974fc56fb4856e1abc3b3cd3f6a15f3ff5e441c6be642606",
       "path": "src/contracts/schemas/v1/automation-status.schema.json",
       "size": 20100
+    },
+    {
+      "digest": "c2f2cbc0a09b6aff2fe8d20399ddaa29077c8bf9cd0462b8d8126c3b723cb303",
+      "path": "src/contracts/schemas/v1/component-manifest.schema.json",
+      "size": 2239
     },
     {
       "digest": "21db7a5586c075c74ff8657a2a14b81631ed2343281c39be8a432fe47b2cadc0",
@@ -5607,9 +5693,19 @@
       "size": 941
     },
     {
-      "digest": "1444feb21eaa1cce00a513e62cddff53381d4f84f734f5b9941a0ff5f84275e3",
+      "digest": "489e7d416c71769df8b17306e5f3f90cbd45c92195dfb88bf4245456ee34fe0a",
       "path": "src/contracts/schemas/v1/dispatch-failure.schema.json",
-      "size": 3218
+      "size": 3245
+    },
+    {
+      "digest": "100aca5d27fa1208a40efb4eb31e7adfc6c76966836b950e9760fc9ce3dedde8",
+      "path": "src/contracts/schemas/v1/effort-assessment.schema.json",
+      "size": 35482
+    },
+    {
+      "digest": "74d80f6589b831acce4ca0a6061ceaf1ec74ecb18ce973e1a433fd0429f387af",
+      "path": "src/contracts/schemas/v1/effort-envelope.schema.json",
+      "size": 4249
     },
     {
       "digest": "87d48fedc8e4d7119aeeae7f842ec3ba9bca4003ee66763eb1f094180ff52a7b",
@@ -5620,6 +5716,16 @@
       "digest": "8ab3b1da2cde7e1ec41da7912e13180471e30500315c9c2c5d20d89fbc83e8b6",
       "path": "src/contracts/schemas/v1/gate-request.schema.json",
       "size": 25455
+    },
+    {
+      "digest": "bd86a0f3b92c9545d486c9a7a99ddfd0fbce311e3a758733f6242223981087fb",
+      "path": "src/contracts/schemas/v1/hazard-registry-input.schema.json",
+      "size": 4371
+    },
+    {
+      "digest": "c97d135b135bc5e4045f8e895e0d92cb009a688853f4247a8393feb77155dced",
+      "path": "src/contracts/schemas/v1/hazard-registry.schema.json",
+      "size": 1576
     },
     {
       "digest": "3b47e8ed370bb7f75358d7d80ee9793ec47e32cf5e903585b45454e6a0af3568",
@@ -5652,9 +5758,9 @@
       "size": 5188
     },
     {
-      "digest": "2cb2eda4aaabd79d0571f38e2c7d005cc36d5cd2edac4289ab5369fa9f9693fd",
+      "digest": "32ed5b8f25ecccf7271b9ab66807db984bc1a41a82d677d94d4098fcc9564f14",
       "path": "src/contracts/schemas/v1/review-evidence.schema.json",
-      "size": 17032
+      "size": 17131
     },
     {
       "digest": "1547a660d2f43ce743ad5f39f4da7f6fb82f9e3d2e6630b7106782d96d793b36",
@@ -5662,9 +5768,9 @@
       "size": 2032
     },
     {
-      "digest": "31cce8279e1522ad66e9deb2e9073a016472af3a006d1dcf2ffeb43d2eca36ff",
+      "digest": "f78f05074490933fd8456ab994e7af47405e98a87b06d6c40df95a9ba3167975",
       "path": "src/contracts/versions.ts",
-      "size": 2145
+      "size": 2588
     },
     {
       "digest": "f2daa77e0f017a1ae067857b414a404534e06c3916aa1ff412ef4952819a8697",
@@ -5672,7 +5778,7 @@
       "size": 9560
     },
     {
-      "digest": "584532b79dec875261583f7b679db9e9ce29eb32e36a6cb419449589049df34c",
+      "digest": "217ca8511198c8e4efb07b3a5aa9e0e77ebe37948c63e43f1a5a0538bdb499e9",
       "path": "test/contracts/schema-registry.test.ts",
       "size": 2187
     },
@@ -5697,9 +5803,9 @@
       "size": 3289
     },
     {
-      "digest": "eafab6166188c2596623e1fa9bb31bbbd961f2b4d4eca35180d38b4dff133d93",
+      "digest": "e62bf9e609350604226736b5738a6b02def9ab5f6f0d24c027f498655796c0de",
       "path": "test/integration/mcp-stdio.test.ts",
-      "size": 18584
+      "size": 18840
     },
     {
       "digest": "dae39c5f090afb101fcf636e81614453a6ea1b5092788fe91d637658abde1b2f",
@@ -5757,6 +5863,11 @@
       "digest": "37ba4931fc7b16e093aab9228594d6194f79be1f42ce6d1de53b261196fb39e2",
       "path": "assets/constitution/README.md",
       "size": 509
+    },
+    {
+      "digest": "2e9fa57f51b8c5fca438e7e09ec88cce2a01add89fcb472ac7e07a6262fe8885",
+      "path": "assets/hazards.yaml",
+      "size": 32
     },
     {
       "digest": "8d8665acf2b9874be00516e59840a73bf7cc9a2053605c0bec616ba8948405e4",

@@ -15,6 +15,7 @@ export * from "./tool-names.js";
 export * from "./fingerprints.js";
 export * from "./secret-scan.js";
 export * from "./review.js";
+export * from "./effort-review.js";
 export * from "./adjudication.js";
 export * from "./trust.js";
 export * from "./triage.js";

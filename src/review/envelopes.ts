@@ -13,6 +13,7 @@ import { parsePhaseInstanceId, type PhaseInstanceId } from "../contracts/phase-i
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { MODEL_FAMILIES, type ModelFamily } from "../contracts/review.js";
 import { parseRubricV1, type RubricV1 } from "../contracts/rubric.js";
+import { parseEffortEnvelopeV1, type EffortEnvelopeV1 } from "../contracts/effort-review.js";
 
 export const REVIEW_ENVELOPE_BYTE_CAP = 1_048_576;
 
@@ -195,11 +196,17 @@ export const CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION =
   "For this implementation phase, judge rules, triggers, and approved-upstream drift only against the declared outputs, their co-produced documents, and their current post-change behavior. Repository snapshots and unchanged files are supporting evidence, not separate review subjects. A noncompliant, uncertain, triggered, or drifted result must identify the declared output that introduced, exposed, or materially worsened the condition. Do not surface pre-existing or unrelated repository conditions.";
 
 export type DispatchEnvelope = Readonly<{
-  readonly result_kind: "review" | "adjudication";
+  readonly result_kind: "review" | "effort-review" | "adjudication";
   readonly bytes: Uint8Array;
   readonly digest: Sha256Digest;
   readonly byte_count: number;
 }>;
+
+/** Seals the already server-derived, phase-design-only effort input for dispatch. */
+export function buildEffortEnvelope(value: EffortEnvelopeV1): DispatchEnvelope {
+  const envelope = parseEffortEnvelopeV1(value);
+  return finishEnvelope("effort-review", envelope as PlainJsonValue, "dispatch-envelope");
+}
 
 export type AdjudicationSubject = {
   readonly task_id: TaskSlug;

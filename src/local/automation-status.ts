@@ -1,10 +1,14 @@
 import {
   createAutomationStatus,
+  createAutomationStatusV2,
   type AutomationHumanBoundaryV1,
+  type AutomationHumanBoundaryV2,
   type AutomationPositionedBlockedCategoryV1,
   type AutomationSkillV1,
   type AutomationStatusV1,
+  type AutomationStatusV2,
   type AutomationStatusWithoutIdV1,
+  type AutomationStatusWithoutIdV2,
 } from "../contracts/automation-status.js";
 import { canonicalJsonDigest } from "../contracts/canonical.js";
 import { parseTaskSlug } from "../contracts/evidence.js";
@@ -152,14 +156,25 @@ function presentationBoundary(view: WorkflowViewV1): AutomationHumanBoundaryV1 {
 function dispatchFailureBoundary(view: WorkflowViewV1): AutomationHumanBoundaryV1 {
   const failure = view.dispatch_failure;
   if (failure === undefined) throw new TypeError("dispatch failure boundary requires failure facts");
-  const role = failure.role === "counter-reviewer" ? "counter-reviewer" : "adjudicator";
+  // Automation status v1 cannot add a new failed_role enum value without breaking strict
+  // consumers. Preserve `adjudicator` as the temporary structured surrogate for effort review,
+  // while every human-facing field states the real role and fixed policy route truthfully.
+  const role = failure.role === "counter-reviewer" || failure.role === "test-reviewer"
+    ? failure.role
+    : "adjudicator";
+  const humanRole = failure.role === "effort-reviewer" ? "effort reviewer" : failure.role;
+  const effortSuffix = failure.role === "effort-reviewer"
+    ? " The required policy route is gpt-5.6-luna at xhigh effort."
+    : "";
   return Object.freeze({
     source: "dispatch-failure",
     class: "exception",
-    headline: "Reviewer route needs human attention",
-    summary: failure.message,
-    question: `Return to the owning skill to repair the ${role} route or authorize a substitute reviewer.`,
-    reasons: Object.freeze([{ class: "exception" as const, text: `${role} dispatch failed: ${failure.message}` }]),
+    headline: failure.role === "effort-reviewer"
+      ? "Effort review route needs human attention"
+      : "Reviewer route needs human attention",
+    summary: `${failure.message}${effortSuffix}`,
+    question: `Return to the owning skill to repair the ${humanRole} route or authorize a one-dispatch substitute reviewer.`,
+    reasons: Object.freeze([{ class: "exception" as const, text: `${humanRole} dispatch failed: ${failure.message}${effortSuffix}` }]),
     failed_role: role,
     failure_code: failure.code,
   });
@@ -290,6 +305,42 @@ export function projectAutomationStatus(
     kind: "readable",
     repository_identity_digest: snapshot.repository_identity_digest,
     state_document_digest: snapshot.state_document_digest,
+    live_config_digest: snapshot.live_config_digest ?? null,
+    semantic_snapshot_digest: canonicalJsonDigest(snapshot as unknown as PlainJsonValue),
+  });
+}
+
+/**
+ * V2 preserves the v1 action projection and adds authenticated recommendation advice. The
+ * recommendation is copied only after the action has been selected, so it cannot influence who
+ * acts or which workflow operation is next.
+ */
+export function projectAutomationStatusV2(
+  snapshot: SemanticStatusSnapshotV1,
+  view: WorkflowViewV1,
+): AutomationStatusV2 {
+  const v1 = projectAutomationStatus(snapshot, view);
+  const { observation_id: _observationId, schema_version: _schemaVersion, ...v1Document } = v1;
+  let document = {
+    ...v1Document,
+    schema_version: "2" as const,
+    implementation_recommendation: view.implementation_recommendation,
+  } as AutomationStatusWithoutIdV2;
+
+  if (view.dispatch_failure?.role === "effort-reviewer" && document.condition === "awaiting-human") {
+    document = {
+      ...document,
+      human_boundary: {
+        ...document.human_boundary,
+        failed_role: "effort-reviewer",
+      } as AutomationHumanBoundaryV2,
+    };
+  }
+
+  return createAutomationStatusV2(document, {
+    kind: "readable",
+    repository_identity_digest: snapshot.repository_identity_digest,
+    state_document_digest: snapshot.state_document_digest as NonNullable<SemanticStatusSnapshotV1["state_document_digest"]>,
     live_config_digest: snapshot.live_config_digest ?? null,
     semantic_snapshot_digest: canonicalJsonDigest(snapshot as unknown as PlainJsonValue),
   });

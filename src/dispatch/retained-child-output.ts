@@ -39,7 +39,7 @@ import type { DispatchRoute, SelectedDispatchRoute } from "./routing.js";
  * anything: losing it costs one re-dispatch, never workflow progress.
  */
 
-export type RetainedChildRole = "counter-reviewer" | "test-reviewer" | "adjudicator";
+export type RetainedChildRole = "counter-reviewer" | "test-reviewer" | "effort-reviewer" | "adjudicator";
 
 export type RetainedChildOutputBinding = Readonly<{
   envelope_digest: Sha256Digest;
@@ -79,7 +79,7 @@ const retainedChildOutputSchema = z.object({
   phase_instance: phaseInstanceIdV1Schema,
   step: z.literal("counter_review"),
   attempt: safeIntegerV1Schema,
-  role: z.enum(["counter-reviewer", "test-reviewer", "adjudicator"]),
+  role: z.enum(["counter-reviewer", "test-reviewer", "effort-reviewer", "adjudicator"]),
   envelope_digest: sha256DigestV1Schema,
   route: retainedRouteSchema,
   route_source: routeSourceRecordSchema,

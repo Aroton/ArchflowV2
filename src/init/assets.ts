@@ -13,6 +13,7 @@ const ARCHFLOW_GITATTRIBUTES_LINE = ".archflow/** -text merge=binary";
 const ASSETS = Object.freeze([
   ["archflow.gitignore", ".archflow/.gitignore"],
   ["workflow.yaml", ".archflow/workflow.yaml"],
+  ["hazards.yaml", ".archflow/hazards.yaml"],
   ["constitution/README.md", ".archflow/constitution/README.md"],
   ["constitution/00-process.md", ".archflow/constitution/00-process.md"],
   ["constitution/10-architecture.md", ".archflow/constitution/10-architecture.md"],

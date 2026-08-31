@@ -29,6 +29,30 @@ type JsonObject = Record<string, unknown>;
 const JSON_SCHEMA_2020_12 = "https://json-schema.org/draft/2020-12/schema";
 const MCP_SCHEMA_ID = "https://archflow.dev/schemas/v1/mcp-tools";
 
+// The server validates the complete recommendation union before it reaches the adapter. MCP hosts
+// only need its public discriminator and field map in the advertised output schema; embedding the
+// full nested assessment vocabulary twice (once per semantic tool) consumes the catalogue budget
+// without admitting any client input or strengthening server-output validation.
+const ADVERTISED_IMPLEMENTATION_RECOMMENDATION = Object.freeze({
+  type: "object",
+  description: "Authenticated advisory implementation recommendation; strict ready, blocked, and unavailable arms are validated by the semantic runtime.",
+  properties: {
+    status: { enum: ["ready", "blocked", "unavailable"] },
+    phase: { type: "integer", minimum: 1 },
+    reason: { enum: ["not-applicable", "not-produced", "subject-stale", "legacy-evidence"] },
+    explanation: { type: "string" },
+    policy_id: { type: "string" },
+    reviewer: { type: "object" },
+    components: { type: "array" },
+    phase_profile: { type: "object" },
+    determining_component_ids: { type: "array", items: { type: "string" } },
+    blockers: { type: "array" },
+    registry_drift: { type: "object" },
+    actual_implementation_route: { type: "object" },
+  },
+  required: ["status", "actual_implementation_route"],
+} as const);
+
 const schemaDocuments = Object.freeze([
   Object.freeze({ key: "mcp-tools", id: MCP_SCHEMA_ID, schema: mcpToolsSchema }),
   Object.freeze({ key: "primitives", id: "urn:archflow:schema:v1:primitives", schema: primitivesSchema }),
@@ -120,7 +144,9 @@ function embedSchema(entry: JsonObject, sourceKey: string): { fragment: JsonObje
     // Registered before embedding so a self-referencing definition reuses its own reference.
     placements.set(placementKey, localReference);
     takenNames.add(name);
-    definitions[name] = embed(target, key);
+    definitions[name] = key === "semantic-workflow" && tokens.join("/") === "$defs/implementationRecommendation"
+      ? ADVERTISED_IMPLEMENTATION_RECOMMENDATION
+      : embed(target, key);
     return localReference;
   };
 

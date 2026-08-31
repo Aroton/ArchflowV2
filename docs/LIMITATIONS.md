@@ -1,6 +1,6 @@
 # LIMITATIONS
 
-**Explored:** 2026-08-27 · **Commit:** `1b2602e` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
+**Explored:** 2026-08-31 · **Commit:** `fe0e4ce` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
 
 ArchFlow is a local developer-workflow prototype, not a security sandbox. The controls below reduce accidental context leakage and constrain ordinary operation, but the listed cases are unsupported because the current implementation cannot prove the claimed boundary. A planted canary not appearing in output is evidence about that run; it is not proof that the child could not read the canary.
 
@@ -217,3 +217,19 @@ These limitations assume a trusted developer account and a filesystem not being 
 **Existing mitigation:** The fixed point treats an unreadable or non-current constitution slot like any other stale slot: the next action is a fresh review round, whose new adjudication carries the new binding. Retained review evidence is unaffected — its `envelope_input_digest` predates and outlives this change.
 
 **Why accepted:** Consistent with the repository's fail-closed version posture; `.archflow/` task state is removed before PR, so the affected population is in-flight local tasks across one upgrade, and the recovery is the ordinary restart-the-round path.
+
+## Effort recommendations are policy judgments, not measurements
+
+**Not provided:** The A–E scores do not predict elapsed time, token use, cost, or a universal model ranking. The hand-maintained hazard registry can be incomplete, and an unmatched path means only that no entry matched—not that the code is safe or easy.
+
+**Existing mitigation:** Every score keeps its rationale, explicit hazards impose a mandatory E floor, uncertain route-changing classifications choose the conservative GLM branch with a caveat, and the server derives totals and profiles from a versioned policy instead of trusting model-authored routes. A material specification gap or undifferentiated component blocks phase design rather than producing false precision.
+
+**Why accepted:** This is bounded planning evidence for a prototype workflow. Outcome telemetry and automatic calibration are deliberately deferred; the recommendation remains advisory and cannot launch a producer or grant authority.
+
+## Automation v1 retains its legacy effort-failure surrogate
+
+**Not provided:** The strict automation-status v1 `failed_role` vocabulary cannot represent `effort-reviewer` without breaking existing consumers.
+
+**Existing mitigation:** Automation status v2 truthfully admits `effort-reviewer`, includes the authenticated implementation recommendation, and is what the CLI emits. V1 remains a separate strict compatibility contract and keeps the legacy `adjudicator` surrogate while its human text names effort review. Semantic status always retains the distinct real role.
+
+**Why accepted:** Widening v1 would break strict readers. A deliberate v2 lets updated controllers consume the real role and advice while old consumers can continue parsing exactly the contract they adopted.

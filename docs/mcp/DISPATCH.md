@@ -1,6 +1,6 @@
 # mcp/DISPATCH
 
-**Explored:** 2026-08-27 · **Commit:** `1b2602e` · **Covers:** `src/dispatch/`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/mcp/handlers/session.ts`, `src/state/semantic-actions.ts`, `src/state/workspace-cleanup.ts`
+**Explored:** 2026-08-31 · **Commit:** `fe0e4ce` · **Covers:** `src/dispatch/`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/mcp/handlers/session.ts`, `src/state/semantic-actions.ts`, `src/state/workspace-cleanup.ts`
 
 Dispatch turns a semantic `review` action into server-run general, optional test-specialist, and constitution reviewer processes. The server supplies sealed role-specific inputs, captures validated output, and binds it to contributor provenance, so the producer cannot author the evidence. Required children share the same ordered server-materialized repository views and run concurrently.
 
@@ -46,6 +46,8 @@ Other properties worth knowing:
 
 ## Fragility to watch
 
+Public recommendation provenance reports the route that actually ran the effort review, including any human-authorized substitute, separately from the deterministic implementation profile it produced. Human renderers make substitution conspicuous, but substitution never changes the scoring policy. The actual implementation producer route remains explicitly `not-recorded`; dispatch does not copy advice into invocation routing.
+
 Two parts of this subsystem are version-coupled to the external CLIs and will drift over time: the lockdown argv (flag sets written out literally per CLI release) and the failure classifier, which parses free-text CLI error messages with regexes to detect rate limits and extract model names. When a host CLI updates, look here first.
 
 A third part is coupled to the *providers* behind those CLIs, and has already drifted once: the output-schema projection. It binds each server-derived subject field into the child's schema so a child cannot return a result bound to a different task or digest, and the accepted way to write that binding is not stable. Codex rejects an array-valued `const` outright, so array bindings (only `approved_upstream_digests` today) go to it as exact cardinality plus a closed element set instead; Claude still takes the plain `const`. A provider that tightens its structured-output validator surfaces as an unclassified `PROCESS_FAILED`, and only the opt-in real-host suite (`ARCHFLOW_REAL_HOSTS=1 npm run test:real-host`) can catch it — the local schema compiler accepts far more than the providers do.
@@ -53,3 +55,7 @@ A third part is coupled to the *providers* behind those CLIs, and has already dr
 The adjudication transport schema asks the child only for bound identity fields plus `rule_findings` and `drift_findings`. Constitution, drift, and trigger rollups are mechanical duplicates, so the server derives them after strict parsing and before minting the unchanged complete evidence shape. This prevents a structured-output host from satisfying the transport schema while contradicting its own findings. Normative parsing and attestation remain the authority: `observeAdjudication` compares every bound field, hashes the exact reduced child bytes, and returns no evidence unless all finding and coverage invariants hold.
 
 For implementation review, a changed writable secondary now receives its authenticated retained proposed tree rather than HEAD context. The repository-view plan remains the single source for filesystem materialization, child bindings, and evidence pins. Unchanged writable and context-only members stay commit-pinned at HEAD. All views still remove secondary `.archflow/`, and the child remains a first-party process under best-effort context hygiene rather than OS-enforced confinement.
+
+Phase-design review also dispatches an effort child on the fixed policy route `gpt-5.6-luna` at `xhigh`. It is intentionally outside configurable and invocation routing. Before any child spends tokens, the server validates the component manifest, captures the hazard registry once from the authenticated primary worktree, and validates every selected ordinary route. Rubric, optional test, effort, and constitution children then share the byte-identical repository workspace and all settle before the round can commit.
+
+The effort child returns judgments only through its own strict schema. The server checks exact task, subject, component, hazard, policy, and repository bindings and derives the recommendation itself. A successful sibling is retained under the distinct `effort-reviewer` role when another child fails, so an exact retry dispatches only missing work. A classified effort-route failure permits a reason-bearing human substitute for that single returned failure boundary; provenance keeps both the displaced Luna policy and actual exceptional route.

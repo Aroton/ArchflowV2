@@ -1,6 +1,6 @@
 # cli/COMMANDS
 
-**Explored:** 2026-08-26 · **Commit:** `16193ec` · **Covers:** `src/local/`, `src/state/status.ts`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
+**Explored:** 2026-08-31 · **Commit:** `fe0e4ce` · **Covers:** `src/local/`, `src/state/status.ts`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
 
 `archflow-local` is the local adapter surface: repository bootstrap, the legacy-upgrade adapter, bounded diagnostics, a degraded human classifier, and the versioned read-only automation observation used by external controllers. It is deliberately *not* the authority — with one narrow exception (the staged legacy import and its atomic adoption), it derives and verifies rather than writes.
 
@@ -36,12 +36,14 @@ Initialization diagnostics also list generated ArchFlow assets hidden by an ance
 
 | Command | Purpose |
 |---|---|
-| `automation-status` | Stable controller contract: reconcile one task, classify its five-way condition, and identify exactly one skill, human, orchestrator, operator, or terminal actor without mutation |
+| `automation-status` | Emit strict automation status v2: reconcile one task, classify its condition, expose authenticated implementation advice, and identify exactly one skill, human, orchestrator, operator, or terminal actor without mutation |
 | `manual-status` | Read-only mode classifier: `normal`, `degraded`, `repair-required`, `upgrade-staged` (one strictly validated current import waits for MCP), or `upgrade-restart-required` (old, malformed, incompatible, or ambiguous staging must be explicitly discarded) |
 
 In its normal classification, `manual-status` carries the same `TaskStatusV1.repositories` projection as semantic status: implicit writable `primary` first, then configured secondaries in ordinal name order, with resolved absolute location, resolved mode, current commit, and `last_reviewed_commit` only when current-position server-attested review evidence names that member. Relative declarations are rooted at the primary worktree, absolute declarations are accepted, omitted mode resolves to `context-only`, and `primary` is reserved. Repository config edits and moved-HEAD review notices remain informational and nonblocking.
 
 `automation-status --task <task>` is the supported polling surface. Its success body is the strict versioned document itself, not an `ok/value` envelope. The readable path reuses authoritative semantic status and projects it without an invocation, so no mutation offer exists. State absence becomes PRD ownership; staged or unreadable authority becomes a safe blocked category; a repository failure too early to classify remains a structured command failure. See [`../contracts/AUTOMATION.md`](../contracts/AUTOMATION.md) for the complete action union, controller loop, freshness rules, benchmark, and trust boundary.
+
+The command emits schema version 2. Its required implementation recommendation is copied from semantic status and never participates in actor or action selection; no-state, staged-import, and unreadable-state edge documents use unavailable/not-applicable advice without fabricating a phase. The v1 parser and schema remain compatibility surfaces, but the command does not emit v1.
 
 **Task-scoped, mutating:**
 

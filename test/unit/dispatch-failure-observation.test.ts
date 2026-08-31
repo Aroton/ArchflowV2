@@ -153,4 +153,26 @@ describe("dispatch-failure observation", () => {
       ...state, status: "succeeded",
     })).resolves.toBeUndefined();
   });
+
+  it("records the effort specialist under its distinct failure role and selected Luna route", async () => {
+    const { authority, dependencies, state } = await fixture();
+    await writeDispatchFailureObservation({
+      authority,
+      dependencies,
+      phase_instance: state.phase_instance,
+      attempt: state.attempt,
+      observed_at_revision: state.revision,
+    }, {
+      role: "effort-reviewer",
+      selected: {
+        raw_route: { model: "gpt-5.6-luna", effort: "xhigh" },
+        source: { provenance: "configured" },
+      },
+      error: new DispatchRoutingError(createProjectError("AUTH_UNAVAILABLE", { adapter: "codex-cli" })),
+    });
+    await expect(readCurrentDispatchFailure(dependencies, authority, state)).resolves.toMatchObject({
+      role: "effort-reviewer",
+      route: { model: "gpt-5.6-luna", effort: "xhigh", source: "configured" },
+    });
+  });
 });

@@ -7,6 +7,7 @@ import type {
   SemanticStatusSnapshotV1,
   WorkflowInvocationV1,
 } from "../../src/contracts/semantic-workflow.js";
+import { unavailableImplementationRecommendation } from "../../src/contracts/semantic-workflow.js";
 import {
   authenticateSemanticLastTransition,
   executeSemanticAction,
@@ -54,7 +55,9 @@ function snapshot(
   };
   return {
     schema_version: "1", repository_identity_digest: durable.repository_identity_digest, state: durable,
-    status: status as unknown as SemanticStatusSnapshotV1["status"], full_findings: [], reopen_impacts: [], ...extra,
+    status: status as unknown as SemanticStatusSnapshotV1["status"], full_findings: [],
+    implementation_recommendation: unavailableImplementationRecommendation("not-applicable", "Fixture has no effort evidence."),
+    reopen_impacts: [], ...extra,
   };
 }
 
@@ -525,7 +528,7 @@ describe("semantic one-action planning", () => {
       task_id: "api-refactor", state: "missing", blocking_reasons: [], config: { verified: true },
       next_action: { code: "create-task", detail: "Create task.", human_required: false },
     } as unknown as TaskStatusV1;
-    const missing: SemanticStatusSnapshotV1 = { schema_version: "1", repository_identity_digest: digest("1"), status: missingStatus as unknown as SemanticStatusSnapshotV1["status"], full_findings: [], reopen_impacts: [] };
+    const missing: SemanticStatusSnapshotV1 = { schema_version: "1", repository_identity_digest: digest("1"), status: missingStatus as unknown as SemanticStatusSnapshotV1["status"], full_findings: [], implementation_recommendation: unavailableImplementationRecommendation("not-applicable", "Fixture has no effort evidence."), reopen_impacts: [] };
     const owner: WorkflowInvocationV1 = { skill: "archflow-prd", intent: "resume" };
     const plan = apply(missing, owner, { kind: "task-ask", text: " exact ask\n" });
     const order: string[] = [];

@@ -871,6 +871,14 @@ describe("absence is omission except in contracts that explicitly classify absen
       walk(parsed, "");
     }
     expect(offenders).toStrictEqual([
+      "automation-status-v2.schema.json",
+      "automation-status-v2.schema.json/oneOf/0/properties/state_revision/anyOf/1/type",
+      "automation-status-v2.schema.json/oneOf/1/properties/state_revision/anyOf/1/type",
+      "automation-status-v2.schema.json/oneOf/2/properties/state_revision/anyOf/1/type",
+      "automation-status-v2.schema.json/oneOf/3/properties/state_revision/anyOf/1/type",
+      "automation-status-v2.schema.json/oneOf/4/properties/state_revision/anyOf/1/type",
+      "automation-status-v2.schema.json/oneOf/4/properties/position/type",
+      "automation-status-v2.schema.json/oneOf/5/properties/state_revision/anyOf/1/type",
       "automation-status.schema.json",
       "automation-status.schema.json/oneOf/0/properties/state_revision/anyOf/1/type",
       "automation-status.schema.json/oneOf/1/properties/state_revision/anyOf/1/type",

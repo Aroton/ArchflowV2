@@ -1,6 +1,6 @@
 # TESTING
 
-**Explored:** 2026-08-26 · **Commit:** `16193ec` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/build-temp.mjs`, `scripts/smoke-release-bundle.mjs`, `scripts/test-release-integrity.mjs`
+**Explored:** 2026-08-31 · **Commit:** `fe0e4ce` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/build-temp.mjs`, `scripts/smoke-release-bundle.mjs`, `scripts/test-release-integrity.mjs`
 
 ## The default is deliberately fast
 
@@ -102,6 +102,12 @@ These commands may use credentials, provider quota, installed CLIs, and long pro
 The review benchmark reviews the corpus in `test/fixtures/corpus/artifacts/` (thirteen cases: ten seeded with exactly one defect each, three clean controls) in both producer directions with the exact production design rubric (`design-v3`), so its measurements are about the policy tasks actually run under. Seeded classes cover single-statement contradictions, unhandled named results, verification shortcuts, and — added after a real design passed review with a budget that could not fit its own measured snapshot — cross-section arithmetic gaps and constants that cannot jointly hold. The offline half of `review-benchmark.test.ts` pins the rubric digest, matrix size, and the split between immutable observations and human scoring; quality is a human disposition recorded in `docs/validation/`, never a CI assertion.
 
 Specific-reviewer coverage is layered rather than measured by a percentage. Unit and contract tests pin phase-specific invocation legality, role routing precedence, shipped Luna/max defaults, skill flags, sealed assignment validation/order/digests, non-overlapping rubric partitions, fresh and legacy public provenance, and economical test-review language. Fixed-point integration tests cover the initial general/Luna/adjudicator merge, Luna-only remediation, specialist-owner disappearance with full-general fallback, invocation and one-dispatch override provenance, and exact `test-reviewer` failure attribution including pre-launch route rejection. The process test reproduces the original collision shape with concurrent Codex children of the same result kind and asserts one shared repository view but distinct output roots and `TMPDIR`s. This guards the high-value behavior without an expensive matrix of every route combination.
+
+Effort review adds focused checks at each trust seam. Unit tests cover exact component-fence extraction, repository/path ordering, absent and invalid hazard registries, segment-aware matches and E floors, all score totals and conditional routing branches, blocker-first behavior, phase maxima, and the absence of a Sol-max profile. Contract tests pin strict raw-versus-attested shapes and archive compatibility. Integration tests prove phase-design-only fixed routing, all-child settlement and retained retry, one-dispatch substitution provenance, exact post-dispatch rebinding, blocker independence from triage, attempt lifecycle, and action invariance with or without recommendation data.
+
+## Recommendation and automation-version coverage
+
+Contract tests validate the `ImplementationRecommendationV1` ready, blocked, unavailable, substituted-provenance, and malformed shapes, plus strict automation v1/v2 self-acceptance and cross-version rejection. Semantic and integration journeys cover governing-design evidence selection, stale and legacy evidence, live registry drift, and identical actions across recommendation variants. CLI/controller-loop tests pin v2 emission, `effort-reviewer` failure vocabulary, positionless unavailable advice, observation identity, and the rule that advice never launches or reroutes a producer. Skill contract tests require phase design, phase implementation entry, and generic status to render only the returned union, keep actual routing separate, and preserve the exact server action.
 
 ## Placement rules
 

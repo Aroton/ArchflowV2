@@ -2,6 +2,7 @@ import { PassThrough } from "node:stream";
 
 import { describe, expect, it } from "vitest";
 
+import { unavailableImplementationRecommendation } from "../../src/contracts/semantic-workflow.js";
 import { ADVERTISED_TOOL_CATALOGUE } from "../../src/mcp/tools.js";
 import { startMcpRuntime, type McpRuntimeHandle } from "../../src/mcp/sdk-adapter.js";
 import type { ToolHandlerRegistry } from "../../src/mcp/server.js";
@@ -22,6 +23,10 @@ const semanticSuccess = {
   value: {
     schema_version: "1", task_id: "task-1", condition: "ready", headline: "Ready", detail: "Continue.", resources: [],
     next_action: { kind: "inspect", instruction: "Inspect status." },
+    implementation_recommendation: unavailableImplementationRecommendation(
+      "not-applicable",
+      "Fixture has no implementation-effort evidence.",
+    ),
   }
 } as const;
 
@@ -140,6 +145,10 @@ describe("MCP SDK adapter", () => {
     const view = {
       schema_version: "1", task_id: "task-1", condition: "ready", headline: "Ready", detail: "Continue.", resources: [],
       next_action: { kind: "inspect", instruction: "Inspect status." },
+      implementation_recommendation: unavailableImplementationRecommendation(
+        "not-applicable",
+        "Fixture has no implementation-effort evidence.",
+      ),
     } as const;
     const runtime = await harness({
       archflow_status: () => ({ schema_version: "1", ok: true, value: view }),

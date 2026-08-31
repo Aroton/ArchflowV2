@@ -4,10 +4,10 @@ import { cpSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync }
 import { basename, dirname, join } from "node:path";
 
 import { buildSync } from "esbuild";
-import { parseAutomationStatus, type AutomationStatusV1 } from "../../src/contracts/automation-status.js";
+import { parseAutomationStatusV2, type AutomationStatusV2 } from "../../src/contracts/automation-status.js";
 import type { WorkflowInvocationV1 } from "../../src/contracts/semantic-workflow.js";
 
-export type AutomationObservation = AutomationStatusV1;
+export type AutomationObservation = AutomationStatusV2;
 
 export type AutomationProcessResult = Readonly<{
   status: number | null;
@@ -58,7 +58,7 @@ export function runAutomationStatus(
     stdout: result.stdout,
     stderr: result.stderr,
     ...(result.status === 0 && result.stdout !== ""
-      ? { observation: parseAutomationStatus(JSON.parse(result.stdout)) }
+      ? { observation: parseAutomationStatusV2(JSON.parse(result.stdout)) }
       : {}),
   });
 }

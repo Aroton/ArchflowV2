@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
 import type { InvocationContext } from "../../src/contracts/contexts.js";
 import { createProtocolError } from "../../src/contracts/errors.js";
+import { unavailableImplementationRecommendation } from "../../src/contracts/semantic-workflow.js";
 import { createToolBoundary, assertAuthenticToolBoundary, assertAuthenticToolBoundaryOutcome, authenticateProtocolError, type ToolBoundaryOutcome } from "../../src/mcp/server.js";
 import { TOOL_NAMES } from "../../src/contracts/tool-names.js";
 
@@ -18,6 +19,10 @@ const semanticView = {
   detail: "Inspect the current workflow.",
   resources: [],
   next_action: { kind: "inspect", instruction: "Inspect status." },
+  implementation_recommendation: unavailableImplementationRecommendation(
+    "not-applicable",
+    "Fixture has no implementation-effort evidence.",
+  ),
 } as const;
 const semanticSuccess = {
   schema_version: "1",

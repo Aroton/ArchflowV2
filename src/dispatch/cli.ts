@@ -254,7 +254,9 @@ export function projectCliOutputSchema(
   }
   const bindingKeys = resultKind === "review"
     ? ["task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family"]
-    : ["task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "pinned_constitution_digest", "approved_upstream_digests", "source_review_envelope_digest"];
+    : resultKind === "effort-review"
+      ? ["task_id", "phase_instance", "subject_digest", "input_fingerprint", "component_manifest_digest", "hazard_registry_digest", "policy_id"]
+      : ["task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "pinned_constitution_digest", "approved_upstream_digests", "source_review_envelope_digest"];
   if (subject !== undefined) {
     const properties = root.properties;
     if (properties === null || typeof properties !== "object" || Array.isArray(properties)) {
@@ -262,7 +264,11 @@ export function projectCliOutputSchema(
     }
     const bound = { ...(properties as Readonly<Record<string, PlainJsonValue>>) };
     for (const key of bindingKeys) {
-      const value = subject[key];
+      const hazardRegistry = key === "hazard_registry_digest" ? subject.hazard_registry : undefined;
+      const value = key === "hazard_registry_digest" && hazardRegistry !== null &&
+          typeof hazardRegistry === "object" && !Array.isArray(hazardRegistry)
+        ? (hazardRegistry as Readonly<Record<string, PlainJsonValue>>).registry_digest
+        : subject[key];
       if (value !== undefined) bound[key] = boundSubjectNode(bound[key]!, value, adapter);
     }
     root = { ...root, properties: bound };
@@ -274,6 +280,7 @@ function envelopeSubject(envelope: DispatchEnvelope): Readonly<Record<string, Pl
   const decoded: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(envelope.bytes));
   assertPlainJson(decoded, "dispatch envelope");
   if (decoded === null || typeof decoded !== "object" || Array.isArray(decoded)) throw new TypeError("dispatch envelope must be an object");
+  if (envelope.result_kind === "effort-review") return decoded as Readonly<Record<string, PlainJsonValue>>;
   const subject = (decoded as Readonly<Record<string, PlainJsonValue>>).subject;
   if (subject === undefined) return {};
   if (subject === null || typeof subject !== "object" || Array.isArray(subject)) throw new TypeError("dispatch envelope subject must be an object");

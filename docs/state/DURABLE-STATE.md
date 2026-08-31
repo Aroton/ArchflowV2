@@ -1,6 +1,6 @@
 # state/DURABLE-STATE
 
-**Explored:** 2026-08-26 · **Commit:** `16193ec` · **Covers:** `src/state/`, `src/contracts/durable-state.ts`, `src/contracts/durable-implementation-output.ts`, `src/repository/`, `src/init/`, `src/local/`, `src/mcp/handlers/semantic.ts`, `src/dispatch/failure-observation.ts`
+**Explored:** 2026-08-31 · **Commit:** `fe0e4ce` · **Covers:** `src/state/`, `src/contracts/durable-state.ts`, `src/contracts/durable-implementation-output.ts`, `src/repository/`, `src/init/`, `src/local/`, `src/mcp/handlers/semantic.ts`, `src/dispatch/failure-observation.ts`
 
 Durable state is ArchFlow's memory and authority, but not every file the workflow uses deserves that status. The repository now separates tracked, reviewable authority from an ignored workspace containing bytes that are transient, reconstructible, or useful only for diagnosis.
 
@@ -170,3 +170,11 @@ Degraded mode remains read-only: `archflow-local manual-status` reports the posi
 The primary repository still owns all task state and retained authority. A phase result may add ordinal writable-secondary sections that bind repository identity, caller-declared base, exact outputs, undeclared-change scan, restore targets, inputs, and snapshot accounting. Retained secondary payloads are repository-qualified below the primary task cache; durable authority stores names and identity digests, never live locations. Projection and adoption identity is the structured `(repository, path)` tuple, with omitted repository meaning primary for old records.
 
 Installation and restore validate every repository group before writing, apply primary then ordinal secondaries, and roll back in reverse after an ordinary failure. This is a recoverable sequence, not a cross-filesystem atomic transaction. One approval or authenticated settlement governs all member commits, but Git proof lands one repository at a time; already-proved commits survive partial failure and the phase advances only after every changed member is proved.
+
+## Effort evidence currency
+
+Status does not add a durable recommendation pointer or duplicate assessment bytes. It follows the existing authoritative result reference for the governing `phase-design-N`, authenticates only the retained review slice it consumes, and derives the current public recommendation during one consistent read. Phase implementation N and terminal completion use that same phase design's retained review; unrelated tasks, phases, predecessor subjects, Markdown, and reviewer-authored routing prose are never candidates.
+
+Fresh phase-design review evidence nests one authenticated effort assessment beside ordinary reviewer provenance. It binds the exact task, phase instance, attempt, subject/input identities, component-manifest and hazard digests, policy, repository pins, child input/output digests, and any one-dispatch override. The recommendation is server-derived data inside evidence, not a state transition or approval field.
+
+Fixed-point readers require an exact-current, ready assessment for newly reviewed phase designs. An effort blocker remains active even when all ordinary findings are rejected; remaining attempts return to production with the recorded questions, and the maximum reaches the existing exhausted-attempt boundary. Read paths accept absent effort data only for explicitly classified, byte-identical pre-feature authority. Retained-graph accounting continues reading the narrow authenticated manifest slice it consumes, so an old record cannot strand a task merely because its nested review schema predates effort evidence.

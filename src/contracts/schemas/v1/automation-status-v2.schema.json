@@ -1,0 +1,805 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v2:automation-status",
+  "$defs": {
+    "humanBoundary": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "const": "presentation"
+            },
+            "class": {
+              "const": "configured-approval"
+            },
+            "headline": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            },
+            "summary": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            },
+            "question": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            },
+            "reasons": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "const": "configured-approval"
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "class",
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "source",
+            "class",
+            "headline",
+            "summary",
+            "question",
+            "reasons"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "const": "presentation"
+            },
+            "class": {
+              "const": "exception"
+            },
+            "headline": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            },
+            "summary": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            },
+            "question": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            },
+            "reasons": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "enum": [
+                      "configured-approval",
+                      "exception"
+                    ]
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "class",
+                  "text"
+                ],
+                "additionalProperties": false
+              },
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "const": "exception"
+                  }
+                },
+                "required": [
+                  "class"
+                ]
+              },
+              "minContains": 1
+            }
+          },
+          "required": [
+            "source",
+            "class",
+            "headline",
+            "summary",
+            "question",
+            "reasons"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "const": "dispatch-failure"
+            },
+            "class": {
+              "const": "exception"
+            },
+            "headline": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            },
+            "summary": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            },
+            "question": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            },
+            "reasons": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "enum": [
+                      "configured-approval",
+                      "exception"
+                    ]
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "class",
+                  "text"
+                ],
+                "additionalProperties": false
+              },
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "const": "exception"
+                  }
+                },
+                "required": [
+                  "class"
+                ]
+              },
+              "minContains": 1
+            },
+            "failed_role": {
+              "enum": [
+                "counter-reviewer",
+                "test-reviewer",
+                "effort-reviewer",
+                "adjudicator"
+              ]
+            },
+            "failure_code": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "source",
+            "class",
+            "headline",
+            "summary",
+            "question",
+            "reasons",
+            "failed_role",
+            "failure_code"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "2"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "observation_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "state_revision": {
+          "anyOf": [
+            {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "position": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/workflowPosition"
+        },
+        "implementation_recommendation": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/implementationRecommendation"
+        },
+        "condition": {
+          "type": "string",
+          "const": "awaiting-client"
+        },
+        "next_action": {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string",
+              "const": "skill"
+            },
+            "kind": {
+              "type": "string",
+              "const": "continue-skill"
+            },
+            "skill": {
+              "type": "string",
+              "enum": [
+                "archflow-upgrade",
+                "archflow-prd",
+                "archflow-design",
+                "archflow-phase-design",
+                "archflow-phase-impl"
+              ]
+            },
+            "task_id": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+            },
+            "skill_args": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 256
+              }
+            },
+            "instruction": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "actor",
+            "kind",
+            "skill",
+            "task_id",
+            "skill_args",
+            "instruction"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "observation_id",
+        "state_revision",
+        "position",
+        "implementation_recommendation",
+        "condition",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "2"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "observation_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "state_revision": {
+          "anyOf": [
+            {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "position": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/workflowPosition"
+        },
+        "implementation_recommendation": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/implementationRecommendation"
+        },
+        "condition": {
+          "type": "string",
+          "const": "awaiting-human"
+        },
+        "next_action": {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string",
+              "const": "human"
+            },
+            "kind": {
+              "type": "string",
+              "const": "respond-in-session"
+            },
+            "skill": {
+              "type": "string",
+              "enum": [
+                "archflow-upgrade",
+                "archflow-prd",
+                "archflow-design",
+                "archflow-phase-design",
+                "archflow-phase-impl"
+              ]
+            },
+            "task_id": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+            },
+            "skill_args": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 256
+              }
+            },
+            "instruction": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "actor",
+            "kind",
+            "skill",
+            "task_id",
+            "skill_args",
+            "instruction"
+          ],
+          "additionalProperties": false
+        },
+        "human_boundary": {
+          "$ref": "#/$defs/humanBoundary"
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "observation_id",
+        "state_revision",
+        "position",
+        "implementation_recommendation",
+        "condition",
+        "next_action",
+        "human_boundary"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "2"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "observation_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "state_revision": {
+          "anyOf": [
+            {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "position": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/workflowPosition"
+        },
+        "implementation_recommendation": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/implementationRecommendation"
+        },
+        "condition": {
+          "type": "string",
+          "const": "ready"
+        },
+        "next_action": {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string",
+              "const": "orchestrator"
+            },
+            "kind": {
+              "type": "string",
+              "const": "launch-skill"
+            },
+            "skill": {
+              "type": "string",
+              "enum": [
+                "archflow-upgrade",
+                "archflow-prd",
+                "archflow-design",
+                "archflow-phase-design",
+                "archflow-phase-impl"
+              ]
+            },
+            "task_id": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+            },
+            "skill_args": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 256
+              }
+            },
+            "instruction": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "actor",
+            "kind",
+            "skill",
+            "task_id",
+            "skill_args",
+            "instruction"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "observation_id",
+        "state_revision",
+        "position",
+        "implementation_recommendation",
+        "condition",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "2"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "observation_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "state_revision": {
+          "anyOf": [
+            {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "position": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/workflowPosition"
+        },
+        "implementation_recommendation": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/implementationRecommendation"
+        },
+        "condition": {
+          "type": "string",
+          "const": "blocked"
+        },
+        "next_action": {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string",
+              "const": "operator"
+            },
+            "kind": {
+              "type": "string",
+              "const": "repair"
+            },
+            "instruction": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "actor",
+            "kind",
+            "instruction"
+          ],
+          "additionalProperties": false
+        },
+        "blocked": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string",
+              "enum": [
+                "inspect-state",
+                "resume-exact-intent",
+                "inspect-retained-receipt",
+                "create-fresh-intent",
+                "resolve-current-authority",
+                "archived-decision-invalid",
+                "revision-checkpoint-invalid",
+                "waiver-origin-invalid",
+                "presentation-unavailable",
+                "commit-facts-unavailable"
+              ]
+            },
+            "reasons": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096,
+                "pattern": "\\S"
+              }
+            }
+          },
+          "required": [
+            "category",
+            "reasons"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "observation_id",
+        "state_revision",
+        "position",
+        "implementation_recommendation",
+        "condition",
+        "next_action",
+        "blocked"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "2"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "observation_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "state_revision": {
+          "anyOf": [
+            {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "position": {
+          "type": "null"
+        },
+        "implementation_recommendation": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/implementationRecommendation"
+        },
+        "condition": {
+          "type": "string",
+          "const": "blocked"
+        },
+        "next_action": {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string",
+              "const": "operator"
+            },
+            "kind": {
+              "type": "string",
+              "const": "repair"
+            },
+            "instruction": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "actor",
+            "kind",
+            "instruction"
+          ],
+          "additionalProperties": false
+        },
+        "blocked": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string",
+              "enum": [
+                "state-unreadable",
+                "legacy-upgrade-staged",
+                "legacy-upgrade-restart-required"
+              ]
+            },
+            "reasons": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096,
+                "pattern": "\\S"
+              }
+            }
+          },
+          "required": [
+            "category",
+            "reasons"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "observation_id",
+        "state_revision",
+        "position",
+        "implementation_recommendation",
+        "condition",
+        "next_action",
+        "blocked"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "2"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "observation_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "state_revision": {
+          "anyOf": [
+            {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "position": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/workflowPosition"
+        },
+        "implementation_recommendation": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/implementationRecommendation"
+        },
+        "condition": {
+          "type": "string",
+          "const": "complete"
+        },
+        "next_action": {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string",
+              "const": "none"
+            },
+            "kind": {
+              "type": "string",
+              "const": "none"
+            },
+            "instruction": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "actor",
+            "kind",
+            "instruction"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "observation_id",
+        "state_revision",
+        "position",
+        "implementation_recommendation",
+        "condition",
+        "next_action"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

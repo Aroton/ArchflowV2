@@ -1,6 +1,6 @@
 # review/COUNTER-REVIEW
 
-**Explored:** 2026-08-27 · **Commit:** `7c19a5e` · **Covers:** `src/review/`, `src/dispatch/`, `src/contracts/mcp-tools.ts`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
+**Explored:** 2026-08-31 · **Commit:** `fe0e4ce` · **Covers:** `src/review/`, `src/dispatch/`, `src/contracts/mcp-tools.ts`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
 
 Counter-review is independent evidence the producer cannot author. One semantic `review` action dispatches general review, the configured test specialist for phase design and implementation, and constitution review when active rules exist. Children run concurrently against sealed assignments and shared server-materialized repository views. Stable reviewer IDs bind findings and provenance before the results merge into one authoritative evidence document.
 
@@ -206,3 +206,15 @@ An implementation review maps each authenticated retained section back to the on
 Every fresh server-attested review records the repository pins it saw (`repositories[]`, one entry per member, `primary` alone for a single-repository task); evidence archived before repository sets existed has none and stays readable. The pins are display only: status compares them with live HEADs so a human can see that reviewed context moved, but a context-only member changing after review never stales the evidence or reopens its gate — only the reviewed subject and writable after-images bind authority.
 
 Content globs match each repository's own repository-relative path and run independently in each changed section: `**/*.sql` matches SQL in any writable repository, while a rule like `apis/src/**` does not address a secondary by name. Durable matches retain secondary attribution structurally; human presentation uses `<repository>/<path>` only as display text. One gate or no-wait settlement covers the combined reviewed subject and yields primary-first, ordinal-secondary commit facts.
+
+## Phase-design effort evidence
+
+Semantic status projects effort evidence through one closed public union. Ready advice includes all component judgments, totals, profiles and caveats plus the phase profile and determining IDs. Blocked advice exposes its questions without a phase route. Unavailable advice distinguishes `not-applicable`, `not-produced`, `subject-stale`, and `legacy-evidence`. A live post-review hazard-registry comparison may add one `registry-created`, `registry-removed`, `registry-changed`, or `registry-unreadable` caveat; it is informational and cannot stale authenticated advice or alter an action.
+
+A new phase design contains exactly one fenced `archflow-components-v1` manifest. The manifest is a validated index into the Markdown authority: stable component IDs, repository-qualified normalized paths, scope, mechanism, and verification boundaries. The server never reconstructs it from prose or changed files. It captures the repository-owned hazard registry once at review entry; missing legacy data is an explicit `absent` input, invalid existing bytes fail before dispatch, and later registry drift cannot rewrite evidence from the completed round.
+
+The fixed Luna/xhigh effort child judges decomposition, A–E axes, long-loop and short-component classifications, and concrete questions for material specification gaps. It cannot author totals or routes. Exact component equality and hazard E floors are server checks; the versioned policy then derives component profiles and the phase maximum. A `D >= 2` result or undifferentiated decomposition withholds the phase profile and blocks the fixed point independently of rubric findings or triage.
+
+The strict registry key is `hazards`. Raw decomposition reports `adequate` or `undifferentiated`; an undifferentiated result names at least one `missing_boundaries` entry. A specification blocker identifies whether its question needs a `number` or `priority-order` answer. Derived recommendations use the ordered IDs `gemini-3-7-flash-max`, `glm-5-3-flash-max`, `gpt-5-6-sol-medium`, and `gpt-5-6-sol-xhigh`; these are advisory profile identifiers, not dispatch routes.
+
+Fresh phase-design bytes always require fresh effort evidence, including editorial and remediation changes. Exact unchanged evidence created before this feature may settle under the explicit legacy classification, but any later design edit ends that exception. The nested assessment is optional only for archive reading; a newly minted phase-design review without it is invalid.

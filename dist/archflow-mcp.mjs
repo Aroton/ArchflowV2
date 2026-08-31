@@ -36839,6 +36839,542 @@ function gateDecisionEffect(payload) {
   return effects[payload.decision];
 }
 
+// src/contracts/component-manifest.ts
+var componentIdSchema = external_exports.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u, "component id must be kebab-case");
+var nonblank = external_exports.string().min(1).regex(/\S/u, "must contain a non-whitespace character");
+var repositoryName = external_exports.union([external_exports.literal("primary"), repositoryNameV1Schema]);
+var componentRepositorySchema = external_exports.object({
+  name: repositoryName,
+  paths: external_exports.array(repositoryPathClaimV1Schema).min(1)
+}).strict();
+var componentSchema = external_exports.object({
+  id: componentIdSchema,
+  name: nonblank,
+  scope: nonblank,
+  mechanism: nonblank,
+  repositories: external_exports.array(componentRepositorySchema).min(1),
+  verification: nonblank
+}).strict();
+var phaseDesignComponentManifestV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  components: external_exports.array(componentSchema).min(1)
+}).strict();
+var ordinal2 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+function requireSortedUnique(values, label) {
+  for (let index = 1; index < values.length; index += 1) {
+    if (ordinal2(values[index - 1], values[index]) >= 0) {
+      throw new TypeError(`${label} must be ordinal-sorted with no duplicates`);
+    }
+  }
+}
+function requireRepositoryOrder(repositories, knownRepositories, label) {
+  const names = repositories.map((repository) => repository.name);
+  if (names[0] !== "primary") throw new TypeError(`${label} must place primary first`);
+  requireSortedUnique(names.slice(1), `${label} secondary repositories`);
+  if (new Set(names).size !== names.length) throw new TypeError(`${label} repository names must not repeat`);
+  for (const repository of repositories) {
+    if (!knownRepositories.has(repository.name)) {
+      throw new TypeError(`${label} names unknown repository ${repository.name}`);
+    }
+    requireSortedUnique(repository.paths, `${label} ${repository.name} paths`);
+  }
+}
+function parsePhaseDesignComponentManifestV1(value, resolvedRepositoryNames) {
+  assertPlainJson(value, "phase design component manifest");
+  const materialized = structuredClone(value);
+  const parsed = phaseDesignComponentManifestV1Schema.parse(materialized);
+  const componentIds = parsed.components.map((component) => component.id);
+  if (new Set(componentIds).size !== componentIds.length) throw new TypeError("component ids must not repeat");
+  const known = new Set(resolvedRepositoryNames);
+  if (!known.has("primary")) throw new TypeError("resolved repository set must contain primary");
+  for (const component of parsed.components) {
+    requireRepositoryOrder(component.repositories, known, `component ${component.id} repositories`);
+  }
+  return structuredClone(parsed);
+}
+var SECTION = "## Implementation Components";
+var OPEN = "```archflow-components-v1";
+var CLOSE = "```";
+var MAX_MANIFEST_SCAN_LINES = 2e4;
+function extractPhaseDesignComponentManifest(markdown, resolvedRepositoryNames) {
+  if (typeof markdown !== "string") throw new TypeError("phase design must be a string");
+  const lines = markdown.split(/\r?\n/u);
+  if (lines.length > MAX_MANIFEST_SCAN_LINES) throw new TypeError("phase design exceeds the component manifest scan bound");
+  const sections = lines.flatMap((line, index) => line === SECTION ? [index] : []);
+  if (sections.length !== 1) throw new TypeError(`phase design must contain exactly one ${SECTION} section`);
+  const nextH2 = lines.findIndex((line, index) => index > sections[0] && /^##\s/u.test(line));
+  const end = nextH2 === -1 ? lines.length : nextH2;
+  const openings = lines.flatMap((line, index) => line === OPEN ? [index] : []);
+  if (openings.length !== 1) throw new TypeError(`phase design ${SECTION} section must contain exactly one ${OPEN} fence`);
+  if (openings[0] <= sections[0] || openings[0] >= end) {
+    throw new TypeError(`phase design ${SECTION} section must contain the ${OPEN} fence`);
+  }
+  const close = lines.findIndex((line, index) => index > openings[0] && index < end && line === CLOSE);
+  if (close === -1) throw new TypeError("phase design component manifest fence is unclosed");
+  const yaml = lines.slice(openings[0] + 1, close).join("\n");
+  return parsePhaseDesignComponentManifestV1(
+    parseSingleYamlDocument(yaml, "phase design component manifest"),
+    resolvedRepositoryNames
+  );
+}
+function phaseDesignComponentManifestDigest(manifest) {
+  return canonicalJsonDigest(manifest);
+}
+
+// src/contracts/hazard-registry.ts
+var repositoryName2 = external_exports.union([external_exports.literal("primary"), repositoryNameV1Schema]);
+var hazardRegistryEntryV1Schema = external_exports.object({
+  repository: repositoryName2,
+  path: repositoryPathClaimV1Schema,
+  score: external_exports.union([external_exports.literal(0), external_exports.literal(1), external_exports.literal(2), external_exports.literal(3)]),
+  reason: external_exports.string().min(1).regex(/\S/u, "reason must contain a non-whitespace character")
+}).strict();
+var hazardRegistryV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  hazards: external_exports.array(hazardRegistryEntryV1Schema)
+}).strict();
+var componentHazardInputV1Schema = external_exports.object({
+  component_id: external_exports.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u),
+  matches: external_exports.array(hazardRegistryEntryV1Schema),
+  e_floor: external_exports.union([external_exports.literal(0), external_exports.literal(1), external_exports.literal(2), external_exports.literal(3), external_exports.literal("unmatched")])
+}).strict();
+var hazardRegistryInputV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  state: external_exports.enum(["absent", "present"]),
+  registry_digest: sha256DigestV1Schema,
+  hazards: external_exports.array(hazardRegistryEntryV1Schema),
+  components: external_exports.array(componentHazardInputV1Schema)
+}).strict();
+var ordinal3 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+var entryKey = (entry) => [entry.repository, entry.path, entry.score, entry.reason];
+function compareEntries(left, right) {
+  const a = entryKey(left);
+  const b = entryKey(right);
+  return ordinal3(a[0], b[0]) || ordinal3(a[1], b[1]) || a[2] - b[2] || ordinal3(a[3], b[3]);
+}
+function parseHazardRegistryV1(value, resolvedRepositoryNames) {
+  assertPlainJson(value, "hazard registry");
+  const parsed = hazardRegistryV1Schema.parse(structuredClone(value));
+  const known = new Set(resolvedRepositoryNames);
+  if (!known.has("primary")) throw new TypeError("resolved repository set must contain primary");
+  for (const entry of parsed.hazards) {
+    if (!known.has(entry.repository)) throw new TypeError(`hazard registry names unknown repository ${entry.repository}`);
+  }
+  for (let index = 1; index < parsed.hazards.length; index += 1) {
+    if (compareEntries(parsed.hazards[index - 1], parsed.hazards[index]) >= 0) {
+      throw new TypeError("hazard registry entries must be ordinal-sorted with no duplicates");
+    }
+  }
+  return structuredClone(parsed);
+}
+function parseHazardRegistryYaml(source, resolvedRepositoryNames) {
+  return parseHazardRegistryV1(parseSingleYamlDocument(source, ".archflow/hazards.yaml"), resolvedRepositoryNames);
+}
+function hazardPathOverlaps(left, right) {
+  return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
+}
+function matchHazardsToComponents(registry2, manifest) {
+  return Object.freeze(manifest.components.map((component) => {
+    const matches = registry2.hazards.filter((entry) => component.repositories.some((repository) => repository.name === entry.repository && repository.paths.some((path2) => hazardPathOverlaps(path2, entry.path))));
+    const floor = matches.length === 0 ? "unmatched" : Math.max(...matches.map((entry) => entry.score));
+    return Object.freeze({ component_id: component.id, matches: Object.freeze(matches), e_floor: floor });
+  }));
+}
+function createHazardRegistryInput(state, registry2, manifest) {
+  return Object.freeze({
+    schema_version: "1",
+    state,
+    registry_digest: canonicalJsonDigest({ schema_version: "1", state, registry: registry2 }),
+    hazards: Object.freeze([...registry2.hazards]),
+    components: matchHazardsToComponents(registry2, manifest)
+  });
+}
+async function captureHazardRegistryInput(readRegistry, resolvedRepositoryNames, manifest) {
+  const bytes = await readRegistry();
+  if (bytes === void 0) {
+    return createHazardRegistryInput("absent", { schema_version: "1", hazards: [] }, manifest);
+  }
+  const source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  const registry2 = parseHazardRegistryYaml(source, resolvedRepositoryNames);
+  return createHazardRegistryInput("present", registry2, manifest);
+}
+function compareHazardRegistryInput(sealedDigest, live, manifest) {
+  if (live.registry_digest === sealedDigest) return void 0;
+  const absentDigest = createHazardRegistryInput(
+    "absent",
+    { schema_version: "1", hazards: [] },
+    manifest
+  ).registry_digest;
+  if (sealedDigest === absentDigest && live.state === "present") return "registry-created";
+  if (sealedDigest !== absentDigest && live.state === "absent") return "registry-removed";
+  return "registry-changed";
+}
+
+// src/review/effort-policy.ts
+var IMPLEMENTATION_EFFORT_POLICY_ID = "implementation-effort-v1";
+var IMPLEMENTATION_PROFILE_IDS = [
+  "gemini-3-7-flash-max",
+  "glm-5-3-flash-max",
+  "gpt-5-6-sol-medium",
+  "gpt-5-6-sol-xhigh"
+];
+var EFFORT_CAVEAT_CODES = [
+  "long-loop-unknown-conservative-glm",
+  "short-component-unknown-conservative-glm"
+];
+var PROFILES = Object.freeze({
+  "gemini-3-7-flash-max": Object.freeze({ profile_id: "gemini-3-7-flash-max", model: "gemini-3.7-flash", effort: "max" }),
+  "glm-5-3-flash-max": Object.freeze({ profile_id: "glm-5-3-flash-max", model: "glm-5.3-flash", effort: "max" }),
+  "gpt-5-6-sol-medium": Object.freeze({ profile_id: "gpt-5-6-sol-medium", model: "gpt-5.6-sol", effort: "medium" }),
+  "gpt-5-6-sol-xhigh": Object.freeze({ profile_id: "gpt-5-6-sol-xhigh", model: "gpt-5.6-sol", effort: "xhigh" })
+});
+var PROFILE_RANK = Object.freeze({
+  "gemini-3-7-flash-max": 0,
+  "glm-5-3-flash-max": 1,
+  "gpt-5-6-sol-medium": 2,
+  "gpt-5-6-sol-xhigh": 3
+});
+function profileFor(judgment, total) {
+  if (total <= 2) return { profile: PROFILES["gemini-3-7-flash-max"], caveats: [] };
+  if (total <= 5) {
+    if (judgment.axes.E.score >= 2 || judgment.long_tool_loop.value === "yes") {
+      return { profile: PROFILES["glm-5-3-flash-max"], caveats: [] };
+    }
+    if (judgment.long_tool_loop.value === "unknown") {
+      return {
+        profile: PROFILES["glm-5-3-flash-max"],
+        caveats: [{
+          code: "long-loop-unknown-conservative-glm",
+          message: "Long-loop behavior is unknown, so the conservative GLM profile applies."
+        }]
+      };
+    }
+    return { profile: PROFILES["gemini-3-7-flash-max"], caveats: [] };
+  }
+  if (total <= 7) {
+    if (judgment.axes.B.score <= 1 && judgment.short_component.value === "yes") {
+      return { profile: PROFILES["gemini-3-7-flash-max"], caveats: [] };
+    }
+    if (judgment.axes.B.score <= 1 && judgment.short_component.value === "unknown") {
+      return {
+        profile: PROFILES["glm-5-3-flash-max"],
+        caveats: [{
+          code: "short-component-unknown-conservative-glm",
+          message: "Short-component suitability is unknown, so the conservative GLM profile applies."
+        }]
+      };
+    }
+    return { profile: PROFILES["glm-5-3-flash-max"], caveats: [] };
+  }
+  if (total <= 11) return { profile: PROFILES["gpt-5-6-sol-medium"], caveats: [] };
+  return { profile: PROFILES["gpt-5-6-sol-xhigh"], caveats: [] };
+}
+function deriveImplementationEffortV1(raw) {
+  const blockers = [];
+  if (raw.decomposition.status === "undifferentiated") {
+    blockers.push({
+      kind: "undifferentiated-decomposition",
+      rationale: raw.decomposition.rationale,
+      missing_boundaries: raw.decomposition.missing_boundaries
+    });
+  }
+  const componentProfiles = [];
+  for (const judgment of raw.components) {
+    if (judgment.axes.D.score >= 2) {
+      blockers.push({
+        kind: "specification-gap",
+        component_id: judgment.component_id,
+        answer_kind: judgment.blocker.answer_kind,
+        question: judgment.blocker.question
+      });
+      continue;
+    }
+    const total = Object.values(judgment.axes).reduce((sum, axis) => sum + axis.score, 0);
+    const selected = profileFor(judgment, total);
+    componentProfiles.push({
+      component_id: judgment.component_id,
+      total,
+      profile: selected.profile,
+      caveats: selected.caveats
+    });
+  }
+  if (blockers.length > 0) {
+    return Object.freeze({
+      status: "blocked",
+      component_profiles: Object.freeze(componentProfiles),
+      blockers: Object.freeze(blockers)
+    });
+  }
+  const maximumRank = Math.max(...componentProfiles.map((component) => PROFILE_RANK[component.profile.profile_id]));
+  const determining = componentProfiles.filter((component) => PROFILE_RANK[component.profile.profile_id] === maximumRank).map((component) => component.component_id);
+  return Object.freeze({
+    status: "ready",
+    component_profiles: Object.freeze(componentProfiles),
+    blockers: Object.freeze([]),
+    phase_profile: componentProfiles.find((component) => PROFILE_RANK[component.profile.profile_id] === maximumRank).profile,
+    determining_component_ids: Object.freeze(determining)
+  });
+}
+
+// src/contracts/effort-review.ts
+var EFFORT_CLASSIFICATIONS = ["yes", "no", "unknown"];
+var EFFORT_REVIEW_INSTRUCTIONS = "Assess each implementation component independently. First decide whether the manifest decomposition is adequate; use undifferentiated and name every missing implementation boundary when one component merges independently scoreable scope, mechanisms, paths, or verification boundaries. Score every component from 0 through 3 on all five axes: A derivation depth (0 transcription, 1 known pattern with local adaptation, 2 approach given but mechanism missing, 3 derive from constraints); B verifier weakness (0 compiler, 1 deterministic unit tests, 2 reproducible simulation, 3 timing/nondeterministic/tail metric); C state space (0 pure or straight-line I/O, 1 sequential error paths, 2 shared state or async without timers, 3 timers/cancellation/partial failure/cross-component invariants); D specification gaps (0 numeric thresholds and priorities given, 1 minor obvious defaults, 2 one material unstated decision, 3 conflicting goals without priority); E codebase hazard (0 new module, 1 stable clear interfaces, 2 registry hazard, 3 unsafe/manual lifetime/open correctness defect). E must meet the captured floor when one exists. Classify long_tool_loop and short_component as yes, no, or unknown with a rationale. Every D score of 2 or 3 must include one blocker whose answer_kind is number or priority-order and whose question is concrete; lower D scores must omit it. Return judgments and classifications only: never author totals, profiles, routes, phase aggregation, actions, or authority.";
+var nonblank2 = external_exports.string().min(1).regex(/\S/u, "must contain a non-whitespace character");
+var componentId = external_exports.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u);
+var ADAPTER_IDS_LOCAL = ["claude-cli", "codex-cli", "antigravity-cli"];
+var MODEL_FAMILIES_LOCAL = ["claude", "codex", "gemini"];
+var EFFORT_VALUES_LOCAL = ["low", "medium", "high", "xhigh", "max", "ultra"];
+var routeOverrideRecordSchema = external_exports.object({
+  reason: nonblank2,
+  pinned_model: nonblank2.optional(),
+  pinned_effort: external_exports.enum(EFFORT_VALUES_LOCAL).optional(),
+  pinned_provider: nonblank2.optional()
+}).strict();
+var displacedEffortRouteRecordSchema = external_exports.object({
+  source: external_exports.literal("fixed-policy"),
+  model: nonblank2,
+  effort: external_exports.enum(EFFORT_VALUES_LOCAL),
+  provider: nonblank2.optional()
+}).strict();
+var effortRouteSourceRecordSchema = external_exports.discriminatedUnion("provenance", [
+  external_exports.object({ provenance: external_exports.literal("fixed-policy") }).strict(),
+  external_exports.object({ provenance: external_exports.literal("route-override"), displaced: displacedEffortRouteRecordSchema }).strict()
+]);
+var repositoryName3 = external_exports.union([
+  external_exports.literal("primary"),
+  external_exports.string().regex(REPOSITORY_NAME_PATTERN, REPOSITORY_NAME_MESSAGE)
+]);
+var reviewedRepositorySchema = external_exports.object({
+  name: repositoryName3,
+  repository_identity_digest: sha256DigestV1Schema,
+  commit: gitOidV1Schema
+}).strict();
+var reviewedRepositoriesV1Schema = external_exports.array(reviewedRepositorySchema).min(1).superRefine((repositories, context2) => {
+  const names = repositories.map((repository) => repository.name);
+  if (names[0] !== "primary") context2.addIssue({ code: "custom", message: "reviewed repositories must begin with primary" });
+  if (new Set(names).size !== names.length || names.some((name, index) => index > 1 && names[index - 1] >= name)) {
+    context2.addIssue({ code: "custom", message: "reviewed repositories must contain unique names sorted after primary" });
+  }
+});
+var score = external_exports.union([external_exports.literal(0), external_exports.literal(1), external_exports.literal(2), external_exports.literal(3)]);
+var effortAxisJudgmentV1Schema = external_exports.object({ score, rationale: nonblank2 }).strict();
+var effortClassificationV1Schema = external_exports.object({
+  value: external_exports.enum(EFFORT_CLASSIFICATIONS),
+  rationale: nonblank2
+}).strict();
+var axes = external_exports.object({
+  A: effortAxisJudgmentV1Schema,
+  B: effortAxisJudgmentV1Schema,
+  C: effortAxisJudgmentV1Schema,
+  D: effortAxisJudgmentV1Schema,
+  E: effortAxisJudgmentV1Schema
+}).strict();
+var componentEffortJudgmentV1Schema = external_exports.object({
+  component_id: componentId,
+  axes,
+  long_tool_loop: effortClassificationV1Schema,
+  short_component: effortClassificationV1Schema,
+  blocker: external_exports.object({ answer_kind: external_exports.enum(["number", "priority-order"]), question: nonblank2 }).strict().optional()
+}).strict().superRefine((judgment, context2) => {
+  const required2 = judgment.axes.D.score >= 2;
+  if (required2 !== (judgment.blocker !== void 0)) {
+    context2.addIssue({
+      code: "custom",
+      path: ["blocker"],
+      message: required2 ? "D scores of 2 or 3 require a number-or-priority blocker" : "blocker is permitted only for D scores of 2 or 3"
+    });
+  }
+});
+var decomposition = external_exports.discriminatedUnion("status", [
+  external_exports.object({ status: external_exports.literal("adequate"), rationale: nonblank2 }).strict(),
+  external_exports.object({ status: external_exports.literal("undifferentiated"), rationale: nonblank2, missing_boundaries: external_exports.array(nonblank2).min(1) }).strict()
+]);
+var rawEffortReviewV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema.refine((value) => value.startsWith("phase-design-"), "effort review is phase-design-only"),
+  step: external_exports.literal("effort_review"),
+  role: external_exports.literal("effort-reviewer"),
+  subject_digest: sha256DigestV1Schema,
+  input_fingerprint: sha256DigestV1Schema,
+  component_manifest_digest: sha256DigestV1Schema,
+  hazard_registry_digest: sha256DigestV1Schema,
+  policy_id: external_exports.literal(IMPLEMENTATION_EFFORT_POLICY_ID),
+  decomposition,
+  components: external_exports.array(componentEffortJudgmentV1Schema).min(1)
+}).strict().superRefine((review, context2) => {
+  const ids = review.components.map((component) => component.component_id);
+  if (new Set(ids).size !== ids.length) {
+    context2.addIssue({ code: "custom", path: ["components"], message: "component judgments must have unique ids" });
+  }
+});
+var effortEnvelopeV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  instructions: external_exports.literal(EFFORT_REVIEW_INSTRUCTIONS),
+  artifact: external_exports.string(),
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema.refine((value) => value.startsWith("phase-design-"), "effort review is phase-design-only"),
+  attempt: safeIntegerV1Schema.refine((value) => value >= 1, "attempt must be at least 1"),
+  subject_digest: sha256DigestV1Schema,
+  input_fingerprint: sha256DigestV1Schema,
+  invocation_id: safeIdV1Schema,
+  result_id: safeIdV1Schema,
+  policy_id: external_exports.literal(IMPLEMENTATION_EFFORT_POLICY_ID),
+  component_manifest_digest: sha256DigestV1Schema,
+  component_manifest: phaseDesignComponentManifestV1Schema,
+  hazard_registry: hazardRegistryInputV1Schema,
+  repositories: reviewedRepositoriesV1Schema
+}).strict();
+var effortProfileV1Schema = external_exports.discriminatedUnion("profile_id", [
+  external_exports.object({ profile_id: external_exports.literal("gemini-3-7-flash-max"), model: external_exports.literal("gemini-3.7-flash"), effort: external_exports.literal("max") }).strict(),
+  external_exports.object({ profile_id: external_exports.literal("glm-5-3-flash-max"), model: external_exports.literal("glm-5.3-flash"), effort: external_exports.literal("max") }).strict(),
+  external_exports.object({ profile_id: external_exports.literal("gpt-5-6-sol-medium"), model: external_exports.literal("gpt-5.6-sol"), effort: external_exports.literal("medium") }).strict(),
+  external_exports.object({ profile_id: external_exports.literal("gpt-5-6-sol-xhigh"), model: external_exports.literal("gpt-5.6-sol"), effort: external_exports.literal("xhigh") }).strict()
+]);
+var caveat = external_exports.object({ code: external_exports.enum(EFFORT_CAVEAT_CODES), message: nonblank2 }).strict();
+var componentProfile = external_exports.object({
+  component_id: componentId,
+  total: external_exports.number().int().min(0).max(15),
+  profile: effortProfileV1Schema,
+  caveats: external_exports.array(caveat)
+}).strict();
+var blocker = external_exports.discriminatedUnion("kind", [
+  external_exports.object({ kind: external_exports.literal("specification-gap"), component_id: componentId, answer_kind: external_exports.enum(["number", "priority-order"]), question: nonblank2 }).strict(),
+  external_exports.object({ kind: external_exports.literal("undifferentiated-decomposition"), rationale: nonblank2, missing_boundaries: external_exports.array(nonblank2).min(1) }).strict()
+]);
+var recommendation = external_exports.discriminatedUnion("status", [
+  external_exports.object({
+    status: external_exports.literal("blocked"),
+    component_profiles: external_exports.array(componentProfile),
+    blockers: external_exports.array(blocker).min(1)
+  }).strict(),
+  external_exports.object({
+    status: external_exports.literal("ready"),
+    component_profiles: external_exports.array(componentProfile).min(1),
+    blockers: external_exports.array(blocker).max(0),
+    phase_profile: effortProfileV1Schema,
+    determining_component_ids: external_exports.array(componentId).min(1)
+  }).strict()
+]);
+var effortReviewerProvenanceV1Schema = external_exports.object({
+  adapter: external_exports.enum(ADAPTER_IDS_LOCAL),
+  cli_version: nonblank2,
+  model_family: external_exports.enum(MODEL_FAMILIES_LOCAL),
+  model: nonblank2,
+  effort: external_exports.enum(EFFORT_VALUES_LOCAL),
+  invocation_id: safeIdV1Schema,
+  result_id: safeIdV1Schema,
+  envelope_input_digest: sha256DigestV1Schema,
+  observed_output_digest: sha256DigestV1Schema,
+  provider: nonblank2.optional(),
+  route_source: effortRouteSourceRecordSchema,
+  route_override: routeOverrideRecordSchema.optional(),
+  repositories: reviewedRepositoriesV1Schema
+}).strict();
+var effortAssessmentV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema.refine((value) => value.startsWith("phase-design-"), "effort review is phase-design-only"),
+  attempt: safeIntegerV1Schema.refine((value) => value >= 1, "attempt must be at least 1"),
+  subject_digest: sha256DigestV1Schema,
+  input_fingerprint: sha256DigestV1Schema,
+  component_manifest_digest: sha256DigestV1Schema,
+  hazard_registry_digest: sha256DigestV1Schema,
+  policy_id: external_exports.literal(IMPLEMENTATION_EFFORT_POLICY_ID),
+  decomposition,
+  judgments: external_exports.array(componentEffortJudgmentV1Schema).min(1),
+  reviewer: effortReviewerProvenanceV1Schema,
+  recommendation
+}).strict();
+function parseEffortEnvelopeV1(value) {
+  assertPlainJson(value, "effort envelope");
+  return effortEnvelopeV1Schema.parse(structuredClone(value));
+}
+function parseRawEffortReviewV1(value) {
+  assertPlainJson(value, "raw effort review");
+  return rawEffortReviewV1Schema.parse(structuredClone(value));
+}
+function deriveBoundImplementationEffortV1(value, expected) {
+  const raw = parseRawEffortReviewV1(value);
+  for (const key of [
+    "task_id",
+    "phase_instance",
+    "subject_digest",
+    "input_fingerprint",
+    "component_manifest_digest",
+    "policy_id"
+  ]) {
+    if (raw[key] !== expected[key]) throw new TypeError(`effort review ${key} does not match its envelope`);
+  }
+  if (raw.hazard_registry_digest !== expected.hazard_registry.registry_digest) {
+    throw new TypeError("effort review hazard_registry_digest does not match its envelope");
+  }
+  const expectedIds = expected.component_manifest.components.map((component) => component.id);
+  const observedIds = raw.components.map((component) => component.component_id);
+  if (expectedIds.length !== observedIds.length || expectedIds.some((id6, index) => observedIds[index] !== id6)) {
+    throw new TypeError("effort review components must exactly match manifest component order");
+  }
+  const hazards = new Map(expected.hazard_registry.components.map((component) => [component.component_id, component]));
+  for (const judgment of raw.components) {
+    const hazard = hazards.get(judgment.component_id);
+    if (hazard === void 0) throw new TypeError(`effort review component ${judgment.component_id} has no captured hazard input`);
+    if (hazard.e_floor !== "unmatched" && judgment.axes.E.score < hazard.e_floor) {
+      throw new TypeError(`effort review component ${judgment.component_id} scores E below the captured hazard floor`);
+    }
+  }
+  return Object.freeze({ raw, recommendation: deriveImplementationEffortV1(raw) });
+}
+function parseEffortAssessmentV1(value) {
+  assertPlainJson(value, "effort assessment");
+  const parsed = effortAssessmentV1Schema.parse(structuredClone(value));
+  const raw = {
+    schema_version: "1",
+    task_id: parsed.task_id,
+    phase_instance: parsed.phase_instance,
+    step: "effort_review",
+    role: "effort-reviewer",
+    subject_digest: parsed.subject_digest,
+    input_fingerprint: parsed.input_fingerprint,
+    component_manifest_digest: parsed.component_manifest_digest,
+    hazard_registry_digest: parsed.hazard_registry_digest,
+    policy_id: parsed.policy_id,
+    decomposition: parsed.decomposition,
+    components: parsed.judgments
+  };
+  const derived = deriveImplementationEffortV1(raw);
+  if (JSON.stringify(parsed.recommendation) !== JSON.stringify(derived)) {
+    throw new TypeError("effort assessment recommendation does not match server policy");
+  }
+  return parsed;
+}
+function createEffortAssessmentV1(value, envelope, reviewer) {
+  if (reviewer.invocation_id !== envelope.invocation_id || reviewer.result_id !== envelope.result_id) {
+    throw new TypeError("effort reviewer provenance does not match envelope result identity");
+  }
+  if (reviewer.repositories.length !== envelope.repositories.length || reviewer.repositories.some((repository, index) => {
+    const expected = envelope.repositories[index];
+    return expected === void 0 || repository.name !== expected.name || repository.repository_identity_digest !== expected.repository_identity_digest || repository.commit !== expected.commit;
+  })) {
+    throw new TypeError("effort reviewer repository provenance does not match envelope repositories");
+  }
+  const derived = deriveBoundImplementationEffortV1(value, envelope);
+  return parseEffortAssessmentV1({
+    schema_version: "1",
+    task_id: envelope.task_id,
+    phase_instance: envelope.phase_instance,
+    attempt: envelope.attempt,
+    subject_digest: envelope.subject_digest,
+    input_fingerprint: envelope.input_fingerprint,
+    component_manifest_digest: envelope.component_manifest_digest,
+    hazard_registry_digest: envelope.hazard_registry.registry_digest,
+    policy_id: envelope.policy_id,
+    decomposition: derived.raw.decomposition,
+    judgments: derived.raw.components,
+    reviewer,
+    recommendation: derived.recommendation
+  });
+}
+
 // src/contracts/review.ts
 var REVIEW_VERDICTS = ["pass", "advisory", "fail"];
 var REVIEW_ROLES = ["counter-review"];
@@ -36852,12 +37388,12 @@ var digest2 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var taskSlug = createTaskSlugV1Schema();
 var phaseInstance = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
 var safePositive = external_exports.number().int().positive().safe();
-var repositoryName = external_exports.union([
+var repositoryName4 = external_exports.union([
   external_exports.literal("primary"),
   external_exports.string().regex(REPOSITORY_NAME_PATTERN, REPOSITORY_NAME_MESSAGE)
 ]);
 var reviewedRepositoryV1Schema = external_exports.object({
-  name: repositoryName,
+  name: repositoryName4,
   repository_identity_digest: digest2,
   commit: gitOidV1Schema
 }).strict();
@@ -36870,7 +37406,7 @@ function validateReviewedRepositories(repositories) {
     throw new TypeError("reviewed repositories must contain unique names sorted after primary");
   }
 }
-var reviewedRepositoriesV1Schema = external_exports.array(reviewedRepositoryV1Schema).superRefine((repositories, context2) => {
+var reviewedRepositoriesV1Schema2 = external_exports.array(reviewedRepositoryV1Schema).superRefine((repositories, context2) => {
   try {
     validateReviewedRepositories(repositories);
   } catch (error51) {
@@ -36879,7 +37415,7 @@ var reviewedRepositoriesV1Schema = external_exports.array(reviewedRepositoryV1Sc
 });
 function parseReviewedRepositoriesV1(value) {
   assertPlainJson(value, "reviewed repositories");
-  return reviewedRepositoriesV1Schema.parse(value);
+  return reviewedRepositoriesV1Schema2.parse(value);
 }
 var ruleVersionRefSchema = external_exports.object({ rule_id: id, rule_version: safePositive }).strict();
 var reviewFindingSchema = external_exports.object({
@@ -36948,7 +37484,7 @@ var provenanceBase = rawReviewSchema.safeExtend({
   model: nonBlank,
   effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")])
 });
-var routeOverrideRecordSchema = external_exports.object({
+var routeOverrideRecordSchema2 = external_exports.object({
   reason: nonBlank,
   pinned_model: nonBlank.optional(),
   pinned_effort: external_exports.enum(EFFORT_VALUES).optional(),
@@ -36981,7 +37517,7 @@ var reviewerRunV1Schema = external_exports.object({
   finding_ids: external_exports.array(id),
   provider: nonBlank.optional(),
   route_source: routeSourceRecordSchema,
-  route_override: routeOverrideRecordSchema.optional()
+  route_override: routeOverrideRecordSchema2.optional()
 }).strict().superRefine((run, context2) => {
   if (new Set(run.criterion_ids).size !== run.criterion_ids.length) {
     context2.addIssue({ code: "custom", path: ["criterion_ids"], message: "reviewer run criteria must be unique" });
@@ -37002,9 +37538,10 @@ var serverAttestedReviewSchema = provenanceBase.safeExtend({
   result_id: id,
   provider: nonBlank.optional(),
   route_source: routeSourceRecordSchema.optional(),
-  route_override: routeOverrideRecordSchema.optional(),
-  repositories: reviewedRepositoriesV1Schema.optional(),
-  reviewer_runs: external_exports.array(reviewerRunV1Schema).min(1).optional()
+  route_override: routeOverrideRecordSchema2.optional(),
+  repositories: reviewedRepositoriesV1Schema2.optional(),
+  reviewer_runs: external_exports.array(reviewerRunV1Schema).min(1).optional(),
+  effort_review: external_exports.lazy(() => effortAssessmentV1Schema).optional()
 }).strict().superRefine((review, context2) => {
   if (review.reviewer_runs === void 0) return;
   const reviewerIds = review.reviewer_runs.map((run) => run.reviewer_id);
@@ -37060,7 +37597,7 @@ var tool = external_exports.enum(TOOL_NAMES);
 var adapter = external_exports.enum(ADAPTER_IDS);
 var family = external_exports.enum(MODEL_FAMILIES);
 var gateKind = external_exports.enum(GATE_KINDS);
-var repositoryName2 = external_exports.union([external_exports.literal("primary"), external_exports.string().regex(REPOSITORY_NAME_PATTERN)]);
+var repositoryName5 = external_exports.union([external_exports.literal("primary"), external_exports.string().regex(REPOSITORY_NAME_PATTERN)]);
 var phaseInstance2 = external_exports.string().regex(/^(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)$/u).refine((value) => {
   try {
     decodePhaseInstance(value);
@@ -37106,7 +37643,7 @@ var PROJECT_PARAMETER_SCHEMAS = {
   RUNTIME_VERSION_UNSUPPORTED: object2({ component: id2, version: version2 }),
   REPOSITORY_NOT_FOUND: object2({ repository_candidate_digest: digest3 }),
   REPOSITORY_MISMATCH: digestsParams,
-  REPOSITORY_VIEW_UNAVAILABLE: object2({ repository_name: repositoryName2 }),
+  REPOSITORY_VIEW_UNAVAILABLE: object2({ repository_name: repositoryName5 }),
   TASK_INVALID: object2({ task_id: taskSlug2, issue_code: code }),
   PATH_INVALID: taskPathParams,
   PATH_ESCAPE: taskPathParams,
@@ -37125,7 +37662,7 @@ var PROJECT_PARAMETER_SCHEMAS = {
   INTENT_MISMATCH: digestsParams,
   INTENT_NOT_CURRENT: object2({ intent_id: pathSafeId, receipt_revision: integer2, current_revision: integer2 }),
   SNAPSHOT_LIMIT: object2({ limit_scope: external_exports.enum(["result", "task"]), offending_paths: sortedPaths, current_bytes: integer2, byte_cap: integer2 }),
-  SNAPSHOT_INVALID: object2({ snapshot_digest: digest3, issue_code: code, repository_name: repositoryName2.optional() }),
+  SNAPSHOT_INVALID: object2({ snapshot_digest: digest3, issue_code: code, repository_name: repositoryName5.optional() }),
   RESTORE_COLLISION: object2({ gate_id: pathSafeId, path_class: pathClass }),
   RECONCILIATION_REQUIRED: object2({ recorded_digest: digest3, observed_digest: digest3 }),
   SECRET_DETECTED: object2({ path_class: pathClass, detector_id: id2 }),
@@ -37665,7 +38202,7 @@ function requireRepositoryNameOnlyForViewFailures(failure3, context2) {
     context2.addIssue({ code: "custom", path: ["repository_name"], message: "repository_name is required only for repository view failures" });
   }
 }
-var repositoryName3 = () => external_exports.union([external_exports.literal("primary"), external_exports.string().regex(REPOSITORY_NAME_PATTERN)]);
+var repositoryName6 = () => external_exports.union([external_exports.literal("primary"), external_exports.string().regex(REPOSITORY_NAME_PATTERN)]);
 var route = external_exports.object({
   model: external_exports.string().min(1).regex(/\S/u),
   effort: external_exports.enum(REASONING_EFFORTS),
@@ -37678,18 +38215,18 @@ var dispatchFailureObservationV1Schema = external_exports.object({
   phase_instance: phaseInstanceIdV1Schema,
   step: external_exports.literal("counter_review"),
   attempt: safeIntegerV1Schema,
-  role: external_exports.enum(["counter-reviewer", "test-reviewer", "adjudicator"]),
+  role: external_exports.enum(["counter-reviewer", "test-reviewer", "effort-reviewer", "adjudicator"]),
   code: external_exports.enum(DISPATCH_FAILURE_CODES),
   message: boundedMessage,
-  repository_name: repositoryName3().optional(),
+  repository_name: repositoryName6().optional(),
   route: route.optional(),
   observed_at_revision: safeIntegerV1Schema
 }).strict().superRefine(requireRepositoryNameOnlyForViewFailures).meta({ ...REPOSITORY_NAME_PRESENCE_RULE });
 var publicDispatchFailureV1Schema = external_exports.object({
-  role: external_exports.enum(["counter-reviewer", "test-reviewer", "adjudicator"]),
+  role: external_exports.enum(["counter-reviewer", "test-reviewer", "effort-reviewer", "adjudicator"]),
   code: external_exports.enum(DISPATCH_FAILURE_CODES),
   message: boundedMessage,
-  repository_name: repositoryName3().optional(),
+  repository_name: repositoryName6().optional(),
   route: route.optional()
 }).strict().superRefine(requireRepositoryNameOnlyForViewFailures).meta({ ...REPOSITORY_NAME_PRESENCE_RULE });
 function projectDispatchFailureObservation(observation) {
@@ -37707,6 +38244,154 @@ var nonBlank2 = external_exports.string().min(1).regex(/\S/u);
 var boundedText2 = nonBlank2.max(4096);
 var workflowRepositoryNameV1Schema = repositoryNameV1Schema.clone(repositoryNameV1Schema.def);
 var WORKFLOW_CONDITIONS = ["awaiting-client", "awaiting-human", "ready", "blocked", "complete"];
+var IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS = [
+  "not-applicable",
+  "not-produced",
+  "subject-stale",
+  "legacy-evidence"
+];
+var IMPLEMENTATION_RECOMMENDATION_REGISTRY_DRIFT = [
+  "registry-created",
+  "registry-removed",
+  "registry-changed",
+  "registry-unreadable"
+];
+var actualImplementationRouteV1Schema = external_exports.object({ status: external_exports.literal("not-recorded") }).strict();
+var registryDriftV1Schema = external_exports.object({
+  kind: external_exports.enum(IMPLEMENTATION_RECOMMENDATION_REGISTRY_DRIFT),
+  explanation: nonBlank2
+}).strict();
+var effortValue = external_exports.enum(["low", "medium", "high", "xhigh", "max", "ultra"]);
+var publicEffortReviewerV1Schema = external_exports.object({
+  model: nonBlank2,
+  effort: effortValue,
+  model_family: external_exports.enum(["claude", "codex", "gemini"]),
+  provider: nonBlank2.optional(),
+  route_source: external_exports.discriminatedUnion("provenance", [
+    external_exports.object({ provenance: external_exports.literal("fixed-policy") }).strict(),
+    external_exports.object({
+      provenance: external_exports.literal("route-override"),
+      displaced: external_exports.object({
+        source: external_exports.literal("fixed-policy"),
+        model: nonBlank2,
+        effort: effortValue,
+        provider: nonBlank2.optional()
+      }).strict()
+    }).strict()
+  ]),
+  route_override: external_exports.object({
+    reason: nonBlank2,
+    pinned_model: nonBlank2.optional(),
+    pinned_effort: effortValue.optional(),
+    pinned_provider: nonBlank2.optional()
+  }).strict().optional()
+}).strict();
+var implementationProfileSchema = external_exports.discriminatedUnion("profile_id", [
+  external_exports.object({ profile_id: external_exports.literal(IMPLEMENTATION_PROFILE_IDS[0]), model: external_exports.literal("gemini-3.7-flash"), effort: external_exports.literal("max") }).strict(),
+  external_exports.object({ profile_id: external_exports.literal(IMPLEMENTATION_PROFILE_IDS[1]), model: external_exports.literal("glm-5.3-flash"), effort: external_exports.literal("max") }).strict(),
+  external_exports.object({ profile_id: external_exports.literal(IMPLEMENTATION_PROFILE_IDS[2]), model: external_exports.literal("gpt-5.6-sol"), effort: external_exports.literal("medium") }).strict(),
+  external_exports.object({ profile_id: external_exports.literal(IMPLEMENTATION_PROFILE_IDS[3]), model: external_exports.literal("gpt-5.6-sol"), effort: external_exports.literal("xhigh") }).strict()
+]);
+var effortCaveatSchema = external_exports.object({ code: external_exports.enum(EFFORT_CAVEAT_CODES), message: nonBlank2 }).strict();
+var blockerSchema = external_exports.discriminatedUnion("kind", [
+  external_exports.object({
+    kind: external_exports.literal("specification-gap"),
+    component_id: external_exports.string(),
+    answer_kind: external_exports.enum(["number", "priority-order"]),
+    question: nonBlank2
+  }).strict(),
+  external_exports.object({
+    kind: external_exports.literal("undifferentiated-decomposition"),
+    rationale: nonBlank2,
+    missing_boundaries: external_exports.array(nonBlank2).min(1)
+  }).strict()
+]);
+var publicImplementationComponentV1Schema = componentEffortJudgmentV1Schema.extend({
+  total: external_exports.number().int().min(0).max(15),
+  profile: implementationProfileSchema.optional(),
+  caveats: external_exports.array(effortCaveatSchema)
+}).strict();
+var publicRecommendationEvidenceShape = {
+  phase: positiveSafePhaseNumberV1Schema,
+  policy_id: external_exports.literal("implementation-effort-v1"),
+  subject_digest: sha256DigestV1Schema,
+  component_manifest_digest: sha256DigestV1Schema,
+  hazard_registry_digest: sha256DigestV1Schema,
+  reviewer: publicEffortReviewerV1Schema,
+  components: external_exports.array(publicImplementationComponentV1Schema).min(1),
+  registry_drift: registryDriftV1Schema.optional(),
+  actual_implementation_route: actualImplementationRouteV1Schema
+};
+var implementationRecommendationV1Schema = external_exports.discriminatedUnion("status", [
+  external_exports.object({
+    status: external_exports.literal("ready"),
+    ...publicRecommendationEvidenceShape,
+    phase_profile: implementationProfileSchema,
+    determining_component_ids: external_exports.array(external_exports.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)).min(1)
+  }).strict(),
+  external_exports.object({
+    status: external_exports.literal("blocked"),
+    ...publicRecommendationEvidenceShape,
+    blockers: external_exports.array(blockerSchema).min(1)
+  }).strict(),
+  external_exports.object({
+    status: external_exports.literal("unavailable"),
+    phase: positiveSafePhaseNumberV1Schema.optional(),
+    reason: external_exports.enum(IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS),
+    explanation: nonBlank2,
+    actual_implementation_route: actualImplementationRouteV1Schema
+  }).strict()
+]);
+var ACTUAL_ROUTE_NOT_RECORDED = Object.freeze({ status: "not-recorded" });
+function unavailableImplementationRecommendation(reason2, explanation, phase3) {
+  return Object.freeze(implementationRecommendationV1Schema.parse({
+    status: "unavailable",
+    ...phase3 === void 0 ? {} : { phase: phase3 },
+    reason: reason2,
+    explanation,
+    actual_implementation_route: ACTUAL_ROUTE_NOT_RECORDED
+  }));
+}
+function implementationRecommendationFromAssessment(value, phase3, registryDrift) {
+  const assessment = effortAssessmentV1Schema.parse(structuredClone(value));
+  if (assessment.phase_instance !== `phase-design-${String(phase3)}`) {
+    throw new TypeError("effort assessment does not match the governing phase design");
+  }
+  const profiles = new Map(assessment.recommendation.component_profiles.map((component) => [component.component_id, component]));
+  const components = assessment.judgments.map((judgment) => {
+    const profile = profiles.get(judgment.component_id);
+    return Object.freeze({
+      ...judgment,
+      total: Object.values(judgment.axes).reduce((sum, axis) => sum + axis.score, 0),
+      ...profile === void 0 ? {} : { profile: profile.profile },
+      caveats: Object.freeze([...profile?.caveats ?? []])
+    });
+  });
+  const common3 = {
+    phase: phase3,
+    policy_id: assessment.policy_id,
+    subject_digest: assessment.subject_digest,
+    component_manifest_digest: assessment.component_manifest_digest,
+    hazard_registry_digest: assessment.hazard_registry_digest,
+    reviewer: Object.freeze({
+      model: assessment.reviewer.model,
+      effort: assessment.reviewer.effort,
+      model_family: assessment.reviewer.model_family,
+      ...assessment.reviewer.provider === void 0 ? {} : { provider: assessment.reviewer.provider },
+      route_source: assessment.reviewer.route_source,
+      ...assessment.reviewer.route_override === void 0 ? {} : { route_override: assessment.reviewer.route_override }
+    }),
+    components: Object.freeze(components),
+    ...registryDrift === void 0 ? {} : { registry_drift: Object.freeze(registryDrift) },
+    actual_implementation_route: ACTUAL_ROUTE_NOT_RECORDED
+  };
+  return Object.freeze(implementationRecommendationV1Schema.parse(assessment.recommendation.status === "ready" ? {
+    status: "ready",
+    ...common3,
+    phase_profile: assessment.recommendation.phase_profile,
+    determining_component_ids: assessment.recommendation.determining_component_ids
+  } : { status: "blocked", ...common3, blockers: assessment.recommendation.blockers }));
+}
 var SEMANTIC_ACTION_KINDS = [
   "initialize-task",
   "begin-work",
@@ -37840,7 +38525,7 @@ var repositoryStatusV1Schema = external_exports.object({
   head: gitOidV1Schema.optional(),
   last_reviewed_commit: gitOidV1Schema.optional()
 }).strict();
-var workflowViewV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, condition: external_exports.enum(WORKFLOW_CONDITIONS), headline: nonBlank2, detail: nonBlank2, position: workflowPositionV1Schema.optional(), resources: external_exports.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: external_exports.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), review_strength: publicReviewStrengthV1Schema.optional(), presentation: humanPresentationV1Schema.optional(), dispatch_failure: publicDispatchFailureV1Schema.optional(), repositories: external_exports.array(repositoryStatusV1Schema).optional(), config_change: external_exports.array(configChangeEntryV1Schema).optional() }).strict();
+var workflowViewV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, condition: external_exports.enum(WORKFLOW_CONDITIONS), headline: nonBlank2, detail: nonBlank2, position: workflowPositionV1Schema.optional(), resources: external_exports.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: external_exports.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), review_strength: publicReviewStrengthV1Schema.optional(), implementation_recommendation: implementationRecommendationV1Schema, presentation: humanPresentationV1Schema.optional(), dispatch_failure: publicDispatchFailureV1Schema.optional(), repositories: external_exports.array(repositoryStatusV1Schema).optional(), config_change: external_exports.array(configChangeEntryV1Schema).optional() }).strict();
 var semanticErrorSummaryV1Schema = external_exports.object({
   code: nonBlank2.max(128),
   message: nonBlank2.max(4096),
@@ -37872,10 +38557,11 @@ var routeOverrideDeclarationV1Schema = external_exports.object({
   reason: boundedText2,
   "counter-reviewer": overrideRoute.optional(),
   "test-reviewer": overrideRoute.optional(),
+  "effort-reviewer": overrideRoute.optional(),
   adjudicator: overrideRoute.optional()
 }).strict().superRefine((override, context2) => {
-  if (override["counter-reviewer"] === void 0 && override["test-reviewer"] === void 0 && override.adjudicator === void 0) {
-    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
+  if (override["counter-reviewer"] === void 0 && override["test-reviewer"] === void 0 && override["effort-reviewer"] === void 0 && override.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, effort-reviewer, adjudicator, or a combination" });
   }
 });
 var applySubmissionV1Schema = external_exports.union([
@@ -37896,6 +38582,9 @@ var archFlowApplyInputV1Schema = external_exports.object({ schema_version: exter
       path: ["action", "submission", "route_override", "test-reviewer"],
       message: "test-reviewer overrides are available only for phase design and phase implementation"
     });
+  }
+  if (input.invocation.skill !== "archflow-phase-design" && submission?.kind === "review-dispatch" && submission.route_override["effort-reviewer"] !== void 0) {
+    context2.addIssue({ code: "custom", path: ["action", "submission", "route_override", "effort-reviewer"], message: "effort-reviewer overrides are available only for phase design" });
   }
 });
 var archFlowStatusInputV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema.optional() }).strict();
@@ -41900,6 +42589,37 @@ var mcp_tools_schema_default = {
                 additionalProperties: false
               },
               "test-reviewer": {
+                type: "object",
+                properties: {
+                  model: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  effort: {
+                    type: "string",
+                    enum: [
+                      "low",
+                      "medium",
+                      "high",
+                      "xhigh",
+                      "max",
+                      "ultra"
+                    ]
+                  },
+                  provider: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  }
+                },
+                required: [
+                  "model",
+                  "effort"
+                ],
+                additionalProperties: false
+              },
+              "effort-reviewer": {
                 type: "object",
                 properties: {
                   model: {
@@ -49467,6 +50187,9 @@ var semantic_workflow_schema_default = {
           ],
           additionalProperties: false
         },
+        implementation_recommendation: {
+          $ref: "#/$defs/implementationRecommendation"
+        },
         presentation: {
           type: "object",
           properties: {
@@ -49590,9 +50313,1477 @@ var semantic_workflow_schema_default = {
         "headline",
         "detail",
         "resources",
-        "next_action"
+        "next_action",
+        "implementation_recommendation"
       ],
       additionalProperties: false
+    },
+    implementationRecommendation: {
+      oneOf: [
+        {
+          type: "object",
+          properties: {
+            status: {
+              type: "string",
+              const: "ready"
+            },
+            phase: {
+              $ref: "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber"
+            },
+            policy_id: {
+              type: "string",
+              const: "implementation-effort-v1"
+            },
+            subject_digest: {
+              $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+            },
+            component_manifest_digest: {
+              $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+            },
+            hazard_registry_digest: {
+              $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+            },
+            reviewer: {
+              type: "object",
+              properties: {
+                model: {
+                  type: "string",
+                  minLength: 1,
+                  pattern: "\\S"
+                },
+                effort: {
+                  type: "string",
+                  enum: [
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max",
+                    "ultra"
+                  ]
+                },
+                model_family: {
+                  type: "string",
+                  enum: [
+                    "claude",
+                    "codex",
+                    "gemini"
+                  ]
+                },
+                provider: {
+                  type: "string",
+                  minLength: 1,
+                  pattern: "\\S"
+                },
+                route_source: {
+                  oneOf: [
+                    {
+                      type: "object",
+                      properties: {
+                        provenance: {
+                          type: "string",
+                          const: "fixed-policy"
+                        }
+                      },
+                      required: [
+                        "provenance"
+                      ],
+                      additionalProperties: false
+                    },
+                    {
+                      type: "object",
+                      properties: {
+                        provenance: {
+                          type: "string",
+                          const: "route-override"
+                        },
+                        displaced: {
+                          type: "object",
+                          properties: {
+                            source: {
+                              type: "string",
+                              const: "fixed-policy"
+                            },
+                            model: {
+                              type: "string",
+                              minLength: 1,
+                              pattern: "\\S"
+                            },
+                            effort: {
+                              type: "string",
+                              enum: [
+                                "low",
+                                "medium",
+                                "high",
+                                "xhigh",
+                                "max",
+                                "ultra"
+                              ]
+                            },
+                            provider: {
+                              type: "string",
+                              minLength: 1,
+                              pattern: "\\S"
+                            }
+                          },
+                          required: [
+                            "source",
+                            "model",
+                            "effort"
+                          ],
+                          additionalProperties: false
+                        }
+                      },
+                      required: [
+                        "provenance",
+                        "displaced"
+                      ],
+                      additionalProperties: false
+                    }
+                  ]
+                },
+                route_override: {
+                  type: "object",
+                  properties: {
+                    reason: {
+                      type: "string",
+                      minLength: 1,
+                      pattern: "\\S"
+                    },
+                    pinned_model: {
+                      type: "string",
+                      minLength: 1,
+                      pattern: "\\S"
+                    },
+                    pinned_effort: {
+                      type: "string",
+                      enum: [
+                        "low",
+                        "medium",
+                        "high",
+                        "xhigh",
+                        "max",
+                        "ultra"
+                      ]
+                    },
+                    pinned_provider: {
+                      type: "string",
+                      minLength: 1,
+                      pattern: "\\S"
+                    }
+                  },
+                  required: [
+                    "reason"
+                  ],
+                  additionalProperties: false
+                }
+              },
+              required: [
+                "model",
+                "effort",
+                "model_family",
+                "route_source"
+              ],
+              additionalProperties: false
+            },
+            components: {
+              minItems: 1,
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  component_id: {
+                    type: "string",
+                    pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                  },
+                  axes: {
+                    type: "object",
+                    properties: {
+                      A: {
+                        type: "object",
+                        properties: {
+                          score: {
+                            anyOf: [
+                              {
+                                type: "number",
+                                const: 0
+                              },
+                              {
+                                type: "number",
+                                const: 1
+                              },
+                              {
+                                type: "number",
+                                const: 2
+                              },
+                              {
+                                type: "number",
+                                const: 3
+                              }
+                            ]
+                          },
+                          rationale: {
+                            type: "string",
+                            minLength: 1,
+                            pattern: "\\S"
+                          }
+                        },
+                        required: [
+                          "score",
+                          "rationale"
+                        ],
+                        additionalProperties: false
+                      },
+                      B: {
+                        type: "object",
+                        properties: {
+                          score: {
+                            anyOf: [
+                              {
+                                type: "number",
+                                const: 0
+                              },
+                              {
+                                type: "number",
+                                const: 1
+                              },
+                              {
+                                type: "number",
+                                const: 2
+                              },
+                              {
+                                type: "number",
+                                const: 3
+                              }
+                            ]
+                          },
+                          rationale: {
+                            type: "string",
+                            minLength: 1,
+                            pattern: "\\S"
+                          }
+                        },
+                        required: [
+                          "score",
+                          "rationale"
+                        ],
+                        additionalProperties: false
+                      },
+                      C: {
+                        type: "object",
+                        properties: {
+                          score: {
+                            anyOf: [
+                              {
+                                type: "number",
+                                const: 0
+                              },
+                              {
+                                type: "number",
+                                const: 1
+                              },
+                              {
+                                type: "number",
+                                const: 2
+                              },
+                              {
+                                type: "number",
+                                const: 3
+                              }
+                            ]
+                          },
+                          rationale: {
+                            type: "string",
+                            minLength: 1,
+                            pattern: "\\S"
+                          }
+                        },
+                        required: [
+                          "score",
+                          "rationale"
+                        ],
+                        additionalProperties: false
+                      },
+                      D: {
+                        type: "object",
+                        properties: {
+                          score: {
+                            anyOf: [
+                              {
+                                type: "number",
+                                const: 0
+                              },
+                              {
+                                type: "number",
+                                const: 1
+                              },
+                              {
+                                type: "number",
+                                const: 2
+                              },
+                              {
+                                type: "number",
+                                const: 3
+                              }
+                            ]
+                          },
+                          rationale: {
+                            type: "string",
+                            minLength: 1,
+                            pattern: "\\S"
+                          }
+                        },
+                        required: [
+                          "score",
+                          "rationale"
+                        ],
+                        additionalProperties: false
+                      },
+                      E: {
+                        type: "object",
+                        properties: {
+                          score: {
+                            anyOf: [
+                              {
+                                type: "number",
+                                const: 0
+                              },
+                              {
+                                type: "number",
+                                const: 1
+                              },
+                              {
+                                type: "number",
+                                const: 2
+                              },
+                              {
+                                type: "number",
+                                const: 3
+                              }
+                            ]
+                          },
+                          rationale: {
+                            type: "string",
+                            minLength: 1,
+                            pattern: "\\S"
+                          }
+                        },
+                        required: [
+                          "score",
+                          "rationale"
+                        ],
+                        additionalProperties: false
+                      }
+                    },
+                    required: [
+                      "A",
+                      "B",
+                      "C",
+                      "D",
+                      "E"
+                    ],
+                    additionalProperties: false
+                  },
+                  long_tool_loop: {
+                    type: "object",
+                    properties: {
+                      value: {
+                        type: "string",
+                        enum: [
+                          "yes",
+                          "no",
+                          "unknown"
+                        ]
+                      },
+                      rationale: {
+                        type: "string",
+                        minLength: 1,
+                        pattern: "\\S"
+                      }
+                    },
+                    required: [
+                      "value",
+                      "rationale"
+                    ],
+                    additionalProperties: false
+                  },
+                  short_component: {
+                    type: "object",
+                    properties: {
+                      value: {
+                        type: "string",
+                        enum: [
+                          "yes",
+                          "no",
+                          "unknown"
+                        ]
+                      },
+                      rationale: {
+                        type: "string",
+                        minLength: 1,
+                        pattern: "\\S"
+                      }
+                    },
+                    required: [
+                      "value",
+                      "rationale"
+                    ],
+                    additionalProperties: false
+                  },
+                  blocker: {
+                    type: "object",
+                    properties: {
+                      answer_kind: {
+                        type: "string",
+                        enum: [
+                          "number",
+                          "priority-order"
+                        ]
+                      },
+                      question: {
+                        type: "string",
+                        minLength: 1,
+                        pattern: "\\S"
+                      }
+                    },
+                    required: [
+                      "answer_kind",
+                      "question"
+                    ],
+                    additionalProperties: false
+                  },
+                  total: {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 15
+                  },
+                  profile: {
+                    oneOf: [
+                      {
+                        type: "object",
+                        properties: {
+                          profile_id: {
+                            type: "string",
+                            const: "gemini-3-7-flash-max"
+                          },
+                          model: {
+                            type: "string",
+                            const: "gemini-3.7-flash"
+                          },
+                          effort: {
+                            type: "string",
+                            const: "max"
+                          }
+                        },
+                        required: [
+                          "profile_id",
+                          "model",
+                          "effort"
+                        ],
+                        additionalProperties: false
+                      },
+                      {
+                        type: "object",
+                        properties: {
+                          profile_id: {
+                            type: "string",
+                            const: "glm-5-3-flash-max"
+                          },
+                          model: {
+                            type: "string",
+                            const: "glm-5.3-flash"
+                          },
+                          effort: {
+                            type: "string",
+                            const: "max"
+                          }
+                        },
+                        required: [
+                          "profile_id",
+                          "model",
+                          "effort"
+                        ],
+                        additionalProperties: false
+                      },
+                      {
+                        type: "object",
+                        properties: {
+                          profile_id: {
+                            type: "string",
+                            const: "gpt-5-6-sol-medium"
+                          },
+                          model: {
+                            type: "string",
+                            const: "gpt-5.6-sol"
+                          },
+                          effort: {
+                            type: "string",
+                            const: "medium"
+                          }
+                        },
+                        required: [
+                          "profile_id",
+                          "model",
+                          "effort"
+                        ],
+                        additionalProperties: false
+                      },
+                      {
+                        type: "object",
+                        properties: {
+                          profile_id: {
+                            type: "string",
+                            const: "gpt-5-6-sol-xhigh"
+                          },
+                          model: {
+                            type: "string",
+                            const: "gpt-5.6-sol"
+                          },
+                          effort: {
+                            type: "string",
+                            const: "xhigh"
+                          }
+                        },
+                        required: [
+                          "profile_id",
+                          "model",
+                          "effort"
+                        ],
+                        additionalProperties: false
+                      }
+                    ]
+                  },
+                  caveats: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        code: {
+                          type: "string",
+                          enum: [
+                            "long-loop-unknown-conservative-glm",
+                            "short-component-unknown-conservative-glm"
+                          ]
+                        },
+                        message: {
+                          type: "string",
+                          minLength: 1,
+                          pattern: "\\S"
+                        }
+                      },
+                      required: [
+                        "code",
+                        "message"
+                      ],
+                      additionalProperties: false
+                    }
+                  }
+                },
+                required: [
+                  "component_id",
+                  "axes",
+                  "long_tool_loop",
+                  "short_component",
+                  "total",
+                  "caveats"
+                ],
+                additionalProperties: false
+              }
+            },
+            registry_drift: {
+              type: "object",
+              properties: {
+                kind: {
+                  type: "string",
+                  enum: [
+                    "registry-created",
+                    "registry-removed",
+                    "registry-changed",
+                    "registry-unreadable"
+                  ]
+                },
+                explanation: {
+                  type: "string",
+                  minLength: 1,
+                  pattern: "\\S"
+                }
+              },
+              required: [
+                "kind",
+                "explanation"
+              ],
+              additionalProperties: false
+            },
+            actual_implementation_route: {
+              type: "object",
+              properties: {
+                status: {
+                  type: "string",
+                  const: "not-recorded"
+                }
+              },
+              required: [
+                "status"
+              ],
+              additionalProperties: false
+            },
+            phase_profile: {
+              oneOf: [
+                {
+                  type: "object",
+                  properties: {
+                    profile_id: {
+                      type: "string",
+                      const: "gemini-3-7-flash-max"
+                    },
+                    model: {
+                      type: "string",
+                      const: "gemini-3.7-flash"
+                    },
+                    effort: {
+                      type: "string",
+                      const: "max"
+                    }
+                  },
+                  required: [
+                    "profile_id",
+                    "model",
+                    "effort"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    profile_id: {
+                      type: "string",
+                      const: "glm-5-3-flash-max"
+                    },
+                    model: {
+                      type: "string",
+                      const: "glm-5.3-flash"
+                    },
+                    effort: {
+                      type: "string",
+                      const: "max"
+                    }
+                  },
+                  required: [
+                    "profile_id",
+                    "model",
+                    "effort"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    profile_id: {
+                      type: "string",
+                      const: "gpt-5-6-sol-medium"
+                    },
+                    model: {
+                      type: "string",
+                      const: "gpt-5.6-sol"
+                    },
+                    effort: {
+                      type: "string",
+                      const: "medium"
+                    }
+                  },
+                  required: [
+                    "profile_id",
+                    "model",
+                    "effort"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    profile_id: {
+                      type: "string",
+                      const: "gpt-5-6-sol-xhigh"
+                    },
+                    model: {
+                      type: "string",
+                      const: "gpt-5.6-sol"
+                    },
+                    effort: {
+                      type: "string",
+                      const: "xhigh"
+                    }
+                  },
+                  required: [
+                    "profile_id",
+                    "model",
+                    "effort"
+                  ],
+                  additionalProperties: false
+                }
+              ]
+            },
+            determining_component_ids: {
+              minItems: 1,
+              type: "array",
+              items: {
+                type: "string",
+                pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+              }
+            }
+          },
+          required: [
+            "status",
+            "phase",
+            "policy_id",
+            "subject_digest",
+            "component_manifest_digest",
+            "hazard_registry_digest",
+            "reviewer",
+            "components",
+            "actual_implementation_route",
+            "phase_profile",
+            "determining_component_ids"
+          ],
+          additionalProperties: false
+        },
+        {
+          type: "object",
+          properties: {
+            status: {
+              type: "string",
+              const: "blocked"
+            },
+            phase: {
+              $ref: "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber"
+            },
+            policy_id: {
+              type: "string",
+              const: "implementation-effort-v1"
+            },
+            subject_digest: {
+              $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+            },
+            component_manifest_digest: {
+              $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+            },
+            hazard_registry_digest: {
+              $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+            },
+            reviewer: {
+              type: "object",
+              properties: {
+                model: {
+                  type: "string",
+                  minLength: 1,
+                  pattern: "\\S"
+                },
+                effort: {
+                  type: "string",
+                  enum: [
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max",
+                    "ultra"
+                  ]
+                },
+                model_family: {
+                  type: "string",
+                  enum: [
+                    "claude",
+                    "codex",
+                    "gemini"
+                  ]
+                },
+                provider: {
+                  type: "string",
+                  minLength: 1,
+                  pattern: "\\S"
+                },
+                route_source: {
+                  oneOf: [
+                    {
+                      type: "object",
+                      properties: {
+                        provenance: {
+                          type: "string",
+                          const: "fixed-policy"
+                        }
+                      },
+                      required: [
+                        "provenance"
+                      ],
+                      additionalProperties: false
+                    },
+                    {
+                      type: "object",
+                      properties: {
+                        provenance: {
+                          type: "string",
+                          const: "route-override"
+                        },
+                        displaced: {
+                          type: "object",
+                          properties: {
+                            source: {
+                              type: "string",
+                              const: "fixed-policy"
+                            },
+                            model: {
+                              type: "string",
+                              minLength: 1,
+                              pattern: "\\S"
+                            },
+                            effort: {
+                              type: "string",
+                              enum: [
+                                "low",
+                                "medium",
+                                "high",
+                                "xhigh",
+                                "max",
+                                "ultra"
+                              ]
+                            },
+                            provider: {
+                              type: "string",
+                              minLength: 1,
+                              pattern: "\\S"
+                            }
+                          },
+                          required: [
+                            "source",
+                            "model",
+                            "effort"
+                          ],
+                          additionalProperties: false
+                        }
+                      },
+                      required: [
+                        "provenance",
+                        "displaced"
+                      ],
+                      additionalProperties: false
+                    }
+                  ]
+                },
+                route_override: {
+                  type: "object",
+                  properties: {
+                    reason: {
+                      type: "string",
+                      minLength: 1,
+                      pattern: "\\S"
+                    },
+                    pinned_model: {
+                      type: "string",
+                      minLength: 1,
+                      pattern: "\\S"
+                    },
+                    pinned_effort: {
+                      type: "string",
+                      enum: [
+                        "low",
+                        "medium",
+                        "high",
+                        "xhigh",
+                        "max",
+                        "ultra"
+                      ]
+                    },
+                    pinned_provider: {
+                      type: "string",
+                      minLength: 1,
+                      pattern: "\\S"
+                    }
+                  },
+                  required: [
+                    "reason"
+                  ],
+                  additionalProperties: false
+                }
+              },
+              required: [
+                "model",
+                "effort",
+                "model_family",
+                "route_source"
+              ],
+              additionalProperties: false
+            },
+            components: {
+              minItems: 1,
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  component_id: {
+                    type: "string",
+                    pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                  },
+                  axes: {
+                    type: "object",
+                    properties: {
+                      A: {
+                        type: "object",
+                        properties: {
+                          score: {
+                            anyOf: [
+                              {
+                                type: "number",
+                                const: 0
+                              },
+                              {
+                                type: "number",
+                                const: 1
+                              },
+                              {
+                                type: "number",
+                                const: 2
+                              },
+                              {
+                                type: "number",
+                                const: 3
+                              }
+                            ]
+                          },
+                          rationale: {
+                            type: "string",
+                            minLength: 1,
+                            pattern: "\\S"
+                          }
+                        },
+                        required: [
+                          "score",
+                          "rationale"
+                        ],
+                        additionalProperties: false
+                      },
+                      B: {
+                        type: "object",
+                        properties: {
+                          score: {
+                            anyOf: [
+                              {
+                                type: "number",
+                                const: 0
+                              },
+                              {
+                                type: "number",
+                                const: 1
+                              },
+                              {
+                                type: "number",
+                                const: 2
+                              },
+                              {
+                                type: "number",
+                                const: 3
+                              }
+                            ]
+                          },
+                          rationale: {
+                            type: "string",
+                            minLength: 1,
+                            pattern: "\\S"
+                          }
+                        },
+                        required: [
+                          "score",
+                          "rationale"
+                        ],
+                        additionalProperties: false
+                      },
+                      C: {
+                        type: "object",
+                        properties: {
+                          score: {
+                            anyOf: [
+                              {
+                                type: "number",
+                                const: 0
+                              },
+                              {
+                                type: "number",
+                                const: 1
+                              },
+                              {
+                                type: "number",
+                                const: 2
+                              },
+                              {
+                                type: "number",
+                                const: 3
+                              }
+                            ]
+                          },
+                          rationale: {
+                            type: "string",
+                            minLength: 1,
+                            pattern: "\\S"
+                          }
+                        },
+                        required: [
+                          "score",
+                          "rationale"
+                        ],
+                        additionalProperties: false
+                      },
+                      D: {
+                        type: "object",
+                        properties: {
+                          score: {
+                            anyOf: [
+                              {
+                                type: "number",
+                                const: 0
+                              },
+                              {
+                                type: "number",
+                                const: 1
+                              },
+                              {
+                                type: "number",
+                                const: 2
+                              },
+                              {
+                                type: "number",
+                                const: 3
+                              }
+                            ]
+                          },
+                          rationale: {
+                            type: "string",
+                            minLength: 1,
+                            pattern: "\\S"
+                          }
+                        },
+                        required: [
+                          "score",
+                          "rationale"
+                        ],
+                        additionalProperties: false
+                      },
+                      E: {
+                        type: "object",
+                        properties: {
+                          score: {
+                            anyOf: [
+                              {
+                                type: "number",
+                                const: 0
+                              },
+                              {
+                                type: "number",
+                                const: 1
+                              },
+                              {
+                                type: "number",
+                                const: 2
+                              },
+                              {
+                                type: "number",
+                                const: 3
+                              }
+                            ]
+                          },
+                          rationale: {
+                            type: "string",
+                            minLength: 1,
+                            pattern: "\\S"
+                          }
+                        },
+                        required: [
+                          "score",
+                          "rationale"
+                        ],
+                        additionalProperties: false
+                      }
+                    },
+                    required: [
+                      "A",
+                      "B",
+                      "C",
+                      "D",
+                      "E"
+                    ],
+                    additionalProperties: false
+                  },
+                  long_tool_loop: {
+                    type: "object",
+                    properties: {
+                      value: {
+                        type: "string",
+                        enum: [
+                          "yes",
+                          "no",
+                          "unknown"
+                        ]
+                      },
+                      rationale: {
+                        type: "string",
+                        minLength: 1,
+                        pattern: "\\S"
+                      }
+                    },
+                    required: [
+                      "value",
+                      "rationale"
+                    ],
+                    additionalProperties: false
+                  },
+                  short_component: {
+                    type: "object",
+                    properties: {
+                      value: {
+                        type: "string",
+                        enum: [
+                          "yes",
+                          "no",
+                          "unknown"
+                        ]
+                      },
+                      rationale: {
+                        type: "string",
+                        minLength: 1,
+                        pattern: "\\S"
+                      }
+                    },
+                    required: [
+                      "value",
+                      "rationale"
+                    ],
+                    additionalProperties: false
+                  },
+                  blocker: {
+                    type: "object",
+                    properties: {
+                      answer_kind: {
+                        type: "string",
+                        enum: [
+                          "number",
+                          "priority-order"
+                        ]
+                      },
+                      question: {
+                        type: "string",
+                        minLength: 1,
+                        pattern: "\\S"
+                      }
+                    },
+                    required: [
+                      "answer_kind",
+                      "question"
+                    ],
+                    additionalProperties: false
+                  },
+                  total: {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 15
+                  },
+                  profile: {
+                    oneOf: [
+                      {
+                        type: "object",
+                        properties: {
+                          profile_id: {
+                            type: "string",
+                            const: "gemini-3-7-flash-max"
+                          },
+                          model: {
+                            type: "string",
+                            const: "gemini-3.7-flash"
+                          },
+                          effort: {
+                            type: "string",
+                            const: "max"
+                          }
+                        },
+                        required: [
+                          "profile_id",
+                          "model",
+                          "effort"
+                        ],
+                        additionalProperties: false
+                      },
+                      {
+                        type: "object",
+                        properties: {
+                          profile_id: {
+                            type: "string",
+                            const: "glm-5-3-flash-max"
+                          },
+                          model: {
+                            type: "string",
+                            const: "glm-5.3-flash"
+                          },
+                          effort: {
+                            type: "string",
+                            const: "max"
+                          }
+                        },
+                        required: [
+                          "profile_id",
+                          "model",
+                          "effort"
+                        ],
+                        additionalProperties: false
+                      },
+                      {
+                        type: "object",
+                        properties: {
+                          profile_id: {
+                            type: "string",
+                            const: "gpt-5-6-sol-medium"
+                          },
+                          model: {
+                            type: "string",
+                            const: "gpt-5.6-sol"
+                          },
+                          effort: {
+                            type: "string",
+                            const: "medium"
+                          }
+                        },
+                        required: [
+                          "profile_id",
+                          "model",
+                          "effort"
+                        ],
+                        additionalProperties: false
+                      },
+                      {
+                        type: "object",
+                        properties: {
+                          profile_id: {
+                            type: "string",
+                            const: "gpt-5-6-sol-xhigh"
+                          },
+                          model: {
+                            type: "string",
+                            const: "gpt-5.6-sol"
+                          },
+                          effort: {
+                            type: "string",
+                            const: "xhigh"
+                          }
+                        },
+                        required: [
+                          "profile_id",
+                          "model",
+                          "effort"
+                        ],
+                        additionalProperties: false
+                      }
+                    ]
+                  },
+                  caveats: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        code: {
+                          type: "string",
+                          enum: [
+                            "long-loop-unknown-conservative-glm",
+                            "short-component-unknown-conservative-glm"
+                          ]
+                        },
+                        message: {
+                          type: "string",
+                          minLength: 1,
+                          pattern: "\\S"
+                        }
+                      },
+                      required: [
+                        "code",
+                        "message"
+                      ],
+                      additionalProperties: false
+                    }
+                  }
+                },
+                required: [
+                  "component_id",
+                  "axes",
+                  "long_tool_loop",
+                  "short_component",
+                  "total",
+                  "caveats"
+                ],
+                additionalProperties: false
+              }
+            },
+            registry_drift: {
+              type: "object",
+              properties: {
+                kind: {
+                  type: "string",
+                  enum: [
+                    "registry-created",
+                    "registry-removed",
+                    "registry-changed",
+                    "registry-unreadable"
+                  ]
+                },
+                explanation: {
+                  type: "string",
+                  minLength: 1,
+                  pattern: "\\S"
+                }
+              },
+              required: [
+                "kind",
+                "explanation"
+              ],
+              additionalProperties: false
+            },
+            actual_implementation_route: {
+              type: "object",
+              properties: {
+                status: {
+                  type: "string",
+                  const: "not-recorded"
+                }
+              },
+              required: [
+                "status"
+              ],
+              additionalProperties: false
+            },
+            blockers: {
+              minItems: 1,
+              type: "array",
+              items: {
+                oneOf: [
+                  {
+                    type: "object",
+                    properties: {
+                      kind: {
+                        type: "string",
+                        const: "specification-gap"
+                      },
+                      component_id: {
+                        type: "string"
+                      },
+                      answer_kind: {
+                        type: "string",
+                        enum: [
+                          "number",
+                          "priority-order"
+                        ]
+                      },
+                      question: {
+                        type: "string",
+                        minLength: 1,
+                        pattern: "\\S"
+                      }
+                    },
+                    required: [
+                      "kind",
+                      "component_id",
+                      "answer_kind",
+                      "question"
+                    ],
+                    additionalProperties: false
+                  },
+                  {
+                    type: "object",
+                    properties: {
+                      kind: {
+                        type: "string",
+                        const: "undifferentiated-decomposition"
+                      },
+                      rationale: {
+                        type: "string",
+                        minLength: 1,
+                        pattern: "\\S"
+                      },
+                      missing_boundaries: {
+                        minItems: 1,
+                        type: "array",
+                        items: {
+                          type: "string",
+                          minLength: 1,
+                          pattern: "\\S"
+                        }
+                      }
+                    },
+                    required: [
+                      "kind",
+                      "rationale",
+                      "missing_boundaries"
+                    ],
+                    additionalProperties: false
+                  }
+                ]
+              }
+            }
+          },
+          required: [
+            "status",
+            "phase",
+            "policy_id",
+            "subject_digest",
+            "component_manifest_digest",
+            "hazard_registry_digest",
+            "reviewer",
+            "components",
+            "actual_implementation_route",
+            "blockers"
+          ],
+          additionalProperties: false
+        },
+        {
+          type: "object",
+          properties: {
+            status: {
+              type: "string",
+              const: "unavailable"
+            },
+            phase: {
+              $ref: "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber"
+            },
+            reason: {
+              type: "string",
+              enum: [
+                "not-applicable",
+                "not-produced",
+                "subject-stale",
+                "legacy-evidence"
+              ]
+            },
+            explanation: {
+              type: "string",
+              minLength: 1,
+              pattern: "\\S"
+            },
+            actual_implementation_route: {
+              type: "object",
+              properties: {
+                status: {
+                  type: "string",
+                  const: "not-recorded"
+                }
+              },
+              required: [
+                "status"
+              ],
+              additionalProperties: false
+            }
+          },
+          required: [
+            "status",
+            "reason",
+            "explanation",
+            "actual_implementation_route"
+          ],
+          additionalProperties: false
+        }
+      ]
     },
     publicDispatchFailure: {
       type: "object",
@@ -50198,6 +52389,37 @@ var semantic_workflow_schema_default = {
                   ],
                   additionalProperties: false
                 },
+                "effort-reviewer": {
+                  type: "object",
+                  properties: {
+                    model: {
+                      type: "string",
+                      minLength: 1,
+                      pattern: "\\S"
+                    },
+                    effort: {
+                      type: "string",
+                      enum: [
+                        "low",
+                        "medium",
+                        "high",
+                        "xhigh",
+                        "max",
+                        "ultra"
+                      ]
+                    },
+                    provider: {
+                      type: "string",
+                      minLength: 1,
+                      pattern: "\\S"
+                    }
+                  },
+                  required: [
+                    "model",
+                    "effort"
+                  ],
+                  additionalProperties: false
+                },
                 adjudicator: {
                   type: "object",
                   properties: {
@@ -50711,6 +52933,9 @@ var semantic_workflow_schema_default = {
       ],
       additionalProperties: false
     },
+    implementation_recommendation: {
+      $ref: "#/$defs/implementationRecommendation"
+    },
     presentation: {
       type: "object",
       properties: {
@@ -50834,7 +53059,8 @@ var semantic_workflow_schema_default = {
     "headline",
     "detail",
     "resources",
-    "next_action"
+    "next_action",
+    "implementation_recommendation"
   ],
   additionalProperties: false
 };
@@ -50842,6 +53068,25 @@ var semantic_workflow_schema_default = {
 // src/mcp/tools.ts
 var JSON_SCHEMA_2020_12 = "https://json-schema.org/draft/2020-12/schema";
 var MCP_SCHEMA_ID = "https://archflow.dev/schemas/v1/mcp-tools";
+var ADVERTISED_IMPLEMENTATION_RECOMMENDATION = Object.freeze({
+  type: "object",
+  description: "Authenticated advisory implementation recommendation; strict ready, blocked, and unavailable arms are validated by the semantic runtime.",
+  properties: {
+    status: { enum: ["ready", "blocked", "unavailable"] },
+    phase: { type: "integer", minimum: 1 },
+    reason: { enum: ["not-applicable", "not-produced", "subject-stale", "legacy-evidence"] },
+    explanation: { type: "string" },
+    policy_id: { type: "string" },
+    reviewer: { type: "object" },
+    components: { type: "array" },
+    phase_profile: { type: "object" },
+    determining_component_ids: { type: "array", items: { type: "string" } },
+    blockers: { type: "array" },
+    registry_drift: { type: "object" },
+    actual_implementation_route: { type: "object" }
+  },
+  required: ["status", "actual_implementation_route"]
+});
 var schemaDocuments = Object.freeze([
   Object.freeze({ key: "mcp-tools", id: MCP_SCHEMA_ID, schema: mcp_tools_schema_default }),
   Object.freeze({ key: "primitives", id: "urn:archflow:schema:v1:primitives", schema: primitives_schema_default }),
@@ -50915,7 +53160,7 @@ function embedSchema(entry, sourceKey) {
     const localReference = `#/$defs/${name}`;
     placements.set(placementKey, localReference);
     takenNames.add(name);
-    definitions[name] = embed(target2, key);
+    definitions[name] = key === "semantic-workflow" && tokens.join("/") === "$defs/implementationRecommendation" ? ADVERTISED_IMPLEMENTATION_RECOMMENDATION : embed(target2, key);
     return localReference;
   };
   const embed = (value, fromKey) => {
@@ -51356,7 +53601,7 @@ function parseAndDeriveAdjudication(value) {
 }
 var provenanceBase2 = derivedAdjudicationSchema.safeExtend({ model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]), model: nonBlank3, effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")]) });
 var agentSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("agent-declared") }).strict();
-var serverSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("server-attested"), adapter: external_exports.enum(ADAPTER_IDS), cli_version: nonBlank3, model_family: external_exports.enum(MODEL_FAMILIES), effort: external_exports.enum(EFFORT_VALUES), invocation_id: id4, envelope_input_digest: digest4, observed_output_digest: digest4, result_id: id4, provider: nonBlank3.optional(), route_source: routeSourceRecordSchema.optional(), route_override: routeOverrideRecordSchema.optional(), repositories: reviewedRepositoriesV1Schema.optional() }).strict();
+var serverSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("server-attested"), adapter: external_exports.enum(ADAPTER_IDS), cli_version: nonBlank3, model_family: external_exports.enum(MODEL_FAMILIES), effort: external_exports.enum(EFFORT_VALUES), invocation_id: id4, envelope_input_digest: digest4, observed_output_digest: digest4, result_id: id4, provider: nonBlank3.optional(), route_source: routeSourceRecordSchema.optional(), route_override: routeOverrideRecordSchema2.optional(), repositories: reviewedRepositoriesV1Schema2.optional() }).strict();
 var degradedSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank3 }).strict();
 var adjudicationEvidenceSchema = external_exports.discriminatedUnion("assurance", [agentSchema, serverSchema, degradedSchema]);
 function parseAdjudicationEvidence(value) {
@@ -52817,10 +55062,11 @@ var routeOverrideSchema = external_exports.object({
   reason: text3,
   "counter-reviewer": reviewModelRouteV1Schema.optional(),
   "test-reviewer": reviewModelRouteV1Schema.optional(),
+  "effort-reviewer": reviewModelRouteV1Schema.optional(),
   adjudicator: reviewModelRouteV1Schema.optional()
 }).strict().superRefine((override, context2) => {
-  if (override["counter-reviewer"] === void 0 && override["test-reviewer"] === void 0 && override.adjudicator === void 0) {
-    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
+  if (override["counter-reviewer"] === void 0 && override["test-reviewer"] === void 0 && override["effort-reviewer"] === void 0 && override.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, effort-reviewer, adjudicator, or a combination" });
   }
 });
 var counterReviewInputSchema = external_exports.object({
@@ -54071,7 +56317,7 @@ function ioError2(context2) {
 function isErrnoException(error51) {
   return error51 instanceof Error && typeof error51.code === "string";
 }
-function ordinal2(a, b) {
+function ordinal4(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 var MAX_REPOSITORY_IDENTITIES = 256;
@@ -54156,7 +56402,7 @@ async function resolveRepositoryIdentity(runner, environment, context2) {
       argv: ["rev-list", "--max-parents=0", "HEAD"],
       operation: ROOTS_OPERATION
     });
-    const rootCommits = output.split("\n").filter((line) => line !== "").map((line) => parseGitOid(line)).sort(ordinal2);
+    const rootCommits = output.split("\n").filter((line) => line !== "").map((line) => parseGitOid(line)).sort(ordinal4);
     if (rootCommits.length === 0) return fail4(repositoryNotFound(runner));
     const digest9 = sha256Bytes(
       canonicalJsonBytes({
@@ -54231,7 +56477,7 @@ async function openRepository(workingDirectory, operationContext) {
   repositoryBindings.set(rootKey, binding);
   return ok4(binding);
 }
-function ordinal3(a, b) {
+function ordinal5(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 var VIEW_FAILURE_ISSUE_CODES = Object.freeze({
@@ -54273,8 +56519,8 @@ function unavailableRepositoryView(error51) {
   const reason2 = VIEW_FAILURE_REASONS.get(error51.diagnostic.parameters.issue_code);
   const issue4 = error51.diagnostic.parameters.issues?.[0];
   if (reason2 === void 0 || issue4 === void 0) return void 0;
-  const repositoryName4 = memberFromIssue(issue4);
-  return repositoryName4 === void 0 ? void 0 : Object.freeze({ repository_name: repositoryName4, reason: reason2 });
+  const repositoryName7 = memberFromIssue(issue4);
+  return repositoryName7 === void 0 ? void 0 : Object.freeze({ repository_name: repositoryName7, reason: reason2 });
 }
 function isWithin(parent, candidate) {
   const path2 = relative2(parent, candidate);
@@ -54304,7 +56550,7 @@ async function resolveRepositorySet(primaryBinding, config2, context2) {
   if (!primary.ok) return primary;
   const members = [primary.value];
   const declarations = config2.repositories ?? {};
-  for (const rawName of Object.keys(declarations).sort(ordinal3)) {
+  for (const rawName of Object.keys(declarations).sort(ordinal5)) {
     const name = rawName;
     const declaration = declarations[name];
     const declaredPath = declaration.path;
@@ -55147,7 +57393,7 @@ function materialize2(subject, label) {
   assertPlainJson(subject, label);
   return structuredClone(subject);
 }
-function ordinal4(a, b) {
+function ordinal6(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 function sortedSet(items, key, label) {
@@ -55157,7 +57403,7 @@ function sortedSet(items, key, label) {
     if (seen.has(value)) throw new TypeError(`${label} is a set: duplicate key ${JSON.stringify(value)}`);
     seen.add(value);
   }
-  return [...items].sort((left, right) => ordinal4(key(left), key(right)));
+  return [...items].sort((left, right) => ordinal6(key(left), key(right)));
 }
 var identityJson = (identity) => ({
   path: identity.path,
@@ -60284,7 +62530,7 @@ var FILTER_RULE = "@secretlint/secretlint-rule-filter-comments";
 var RULE_PREFIX = "@secretlint/secretlint-rule-";
 var RULE_ID = /^@secretlint\/secretlint-rule-(?<suffix>[a-z0-9][a-z0-9-]*)$/u;
 var utf8 = new TextDecoder("utf-8", { fatal: true });
-var ordinal5 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+var ordinal7 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 var enabledCreators = rules.filter((creator) => creator.meta.id !== FILTER_RULE);
 var enabledRuleIds = Object.freeze(enabledCreators.map((creator) => creator.meta.id).sort());
 if (new Set(enabledRuleIds).size !== enabledRuleIds.length || enabledRuleIds.some((id6) => !RULE_ID.test(id6))) {
@@ -60347,7 +62593,7 @@ function createSecretlintScanner() {
     const seen = /* @__PURE__ */ new Set();
     const findings = [];
     try {
-      for (const candidate of candidates.sort((left, right) => ordinal5(left.virtual_path, right.virtual_path))) {
+      for (const candidate of candidates.sort((left, right) => ordinal7(left.virtual_path, right.virtual_path))) {
         if (seen.has(candidate.virtual_path)) throw new TypeError("duplicate secret-scan candidate path");
         seen.add(candidate.virtual_path);
         const extension = sourceExtension(candidate.virtual_path);
@@ -60385,7 +62631,7 @@ function createSecretlintScanner() {
       await releaseSecretlintProfilerEntries();
     }
     if (findings.length > 0) {
-      findings.sort((left, right) => ordinal5(left.virtual_path, right.virtual_path) || left.line - right.line || left.column - right.column || ordinal5(left.detector_id, right.detector_id));
+      findings.sort((left, right) => ordinal7(left.virtual_path, right.virtual_path) || left.line - right.line || left.column - right.column || ordinal7(left.detector_id, right.detector_id));
       return Object.freeze({
         schema_version: "1",
         outcome: "detected",
@@ -60479,14 +62725,14 @@ async function proveImplementationCommit(runner, subject, facts, options) {
       operation: `${options.operation_prefix}-implementation-commit-message`
     });
     if (message !== facts.commit_message) return missing(pin.target_ref, pin.target_head, "message-mismatch");
-    const authorizedPaths = [...facts.paths].sort(ordinal6);
+    const authorizedPaths = [...facts.paths].sort(ordinal8);
     if (JSON.stringify(authorizedPaths) !== JSON.stringify(sortedUniqueImplementationPaths(subject))) {
       return missing(pin.target_ref, pin.target_head, "paths-mismatch");
     }
     const changedPaths = [...new Set(await runner.runNulFields({
       argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", facts.baseline_commit, pin.candidate, "--"],
       operation: `${options.operation_prefix}-implementation-commit-paths`
-    }))].sort(ordinal6);
+    }))].sort(ordinal8);
     if (JSON.stringify(changedPaths) !== JSON.stringify(authorizedPaths)) {
       return missing(pin.target_ref, pin.target_head, "paths-mismatch", changedPaths);
     }
@@ -60671,7 +62917,7 @@ async function resolveAutonomousDesignMilestoneProofUnchecked(runner, state, art
   const changed = [...new Set(await runner.runNulFields({
     argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", baselineCommit, pin.candidate, "--"],
     operation: "git-autonomous-design-commit-paths"
-  }))].sort(ordinal6);
+  }))].sort(ordinal8);
   if (changed.length === 0 || changed.some((path2) => !path2.startsWith(prefix))) return missing(pin.target_ref, pin.target_head, "paths-outside-task", changed);
   if (!changed.includes(`${prefix}state.json`)) return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
   for (const path2 of approvedPaths) {
@@ -60767,7 +63013,7 @@ async function approvedDesignWorktreeMatchesRetainedArtifact(runner, taskId, art
   }
   return true;
 }
-var ordinal6 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+var ordinal8 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 function ownEnumerableData(value, key) {
   const descriptor = Object.getOwnPropertyDescriptor(value, key);
   if (descriptor === void 0 || !("value" in descriptor) || !descriptor.enumerable) {
@@ -60787,13 +63033,13 @@ function sortedUniqueImplementationPaths(output) {
       paths.add(entry.previous_path);
     }
   }
-  return Object.freeze([...paths].sort(ordinal6));
+  return Object.freeze([...paths].sort(ordinal8));
 }
 function deriveSnapshotDigest(entries) {
   return canonicalJsonDigest({
     schema_version: "1",
     digest_kind: "declared-output-snapshot",
-    entries: [...entries].sort((left, right) => ordinal6(left.path, right.path))
+    entries: [...entries].sort((left, right) => ordinal8(left.path, right.path))
   });
 }
 function deriveImplementationDiffDigest(baseCommit, outputs) {
@@ -60815,7 +63061,7 @@ function deriveImplementationDiffDigest(baseCommit, outputs) {
     schema_version: "1",
     digest_kind: "implementation-diff",
     base_commit: baseCommit,
-    entries: entries.sort((left, right) => ordinal6(left.path, right.path))
+    entries: entries.sort((left, right) => ordinal8(left.path, right.path))
   });
 }
 function deriveOverallImplementationDiffDigest(primaryDigest, sections) {
@@ -60824,7 +63070,7 @@ function deriveOverallImplementationDiffDigest(primaryDigest, sections) {
     schema_version: "1",
     digest_kind: "multi-repository-implementation-diff",
     primary_diff_digest: primaryDigest,
-    secondary_repositories: [...sections].sort((a, b) => ordinal6(a.repository, b.repository)).map((section) => ({
+    secondary_repositories: [...sections].sort((a, b) => ordinal8(a.repository, b.repository)).map((section) => ({
       repository: section.repository,
       repository_identity_digest: section.repository_identity_digest,
       base_commit: section.base_commit,
@@ -60838,7 +63084,7 @@ function deriveOverallImplementationSnapshotDigest(primaryDigest, sections) {
     schema_version: "1",
     digest_kind: "multi-repository-implementation-snapshot",
     primary_snapshot_digest: primaryDigest,
-    secondary_repositories: [...sections].sort((a, b) => ordinal6(a.repository, b.repository)).map((section) => ({
+    secondary_repositories: [...sections].sort((a, b) => ordinal8(a.repository, b.repository)).map((section) => ({
       repository: section.repository,
       repository_identity_digest: section.repository_identity_digest,
       base_commit: section.base_commit,
@@ -60850,7 +63096,7 @@ function deriveIndexIdentityDigest(entries, undeclaredChanges) {
   return canonicalJsonDigest({
     schema_version: "1",
     digest_kind: "declared-index-identity",
-    entries: [...entries].sort((left, right) => ordinal6(left.path, right.path)),
+    entries: [...entries].sort((left, right) => ordinal8(left.path, right.path)),
     undeclared_changes: undeclaredChanges
   });
 }
@@ -60858,7 +63104,7 @@ function deriveWorktreeIdentityDigest(entries, undeclaredChanges) {
   return canonicalJsonDigest({
     schema_version: "1",
     digest_kind: "declared-worktree-identity",
-    entries: [...entries].sort((left, right) => ordinal6(left.path, right.path)),
+    entries: [...entries].sort((left, right) => ordinal8(left.path, right.path)),
     undeclared_changes: undeclaredChanges
   });
 }
@@ -61008,7 +63254,7 @@ async function readRenameSources(runner, baseCommit) {
       if (status === "D") deleted.push(parseRepositoryPathClaim(path2));
     }
   }
-  return Object.freeze({ renames, deleted: Object.freeze(deleted.sort(ordinal6)) });
+  return Object.freeze({ renames, deleted: Object.freeze(deleted.sort(ordinal8)) });
 }
 function identityOf(observation) {
   return Object.freeze({
@@ -61039,7 +63285,7 @@ async function buildSecondaryRepositorySection(authority, member, declaration, m
       error: createProjectError("CONTRACT_INVALID", { issue_code: "secondary-base-commit-mismatch" })
     });
   }
-  const outputPaths = [...declaration.outputs].sort(ordinal6);
+  const outputPaths = [...declaration.outputs].sort(ordinal8);
   if (new Set(outputPaths).size !== outputPaths.length) throw new TypeError(`secondary repository ${member.name} outputs must be unique`);
   const renameChanges = await readRenameSources(runner, base2.value);
   const observations = /* @__PURE__ */ new Map();
@@ -61133,12 +63379,12 @@ async function buildSecondaryRepositorySection(authority, member, declaration, m
       }));
     } else throw new TypeError("secondary declared output is absent from both base and worktree");
   }
-  outputs.sort((a, b) => ordinal6(a.path, b.path));
-  const restoreTargets = [...declaration.restore_targets].sort(ordinal6);
+  outputs.sort((a, b) => ordinal8(a.path, b.path));
+  const restoreTargets = [...declaration.restore_targets].sort(ordinal8);
   if (new Set(restoreTargets).size !== restoreTargets.length || restoreTargets.some((path2) => !outputPaths.includes(path2))) {
     throw new TypeError(`secondary repository ${member.name} restore targets must be unique declared outputs`);
   }
-  const scope3 = [...new Set(outputs.flatMap((output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]))].sort(ordinal6);
+  const scope3 = [...new Set(outputs.flatMap((output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]))].sort(ordinal8);
   const changed = await readChangedGitPaths(runner);
   const scopeSet = new Set(scope3);
   const callerChanges = changed.paths.filter((path2) => !path2.startsWith(".archflow/runtime/"));
@@ -61158,7 +63404,7 @@ async function buildSecondaryRepositorySection(authority, member, declaration, m
     return Object.freeze({ path: path2, state: "present", stage: 0, mode: entry.mode, oid: entry.oid });
   });
   const declaredInputs = [];
-  for (const declared of [...declaration.declared_inputs].sort((a, b) => ordinal6(a.input_id, b.input_id))) {
+  for (const declared of [...declaration.declared_inputs].sort((a, b) => ordinal8(a.input_id, b.input_id))) {
     if (declared.path === ".archflow" || declared.path.startsWith(".archflow/")) throw new TypeError(`secondary repository ${member.name} input is not repository source`);
     const resolved = await resolveRepositoryPath({ runner, claim: declared.path, context: authority.context });
     if (!resolved.ok) return resolved;
@@ -61228,7 +63474,7 @@ async function buildImplementationOutput(dependencies, authority, state, supplie
   if (dependencies.read_retained_task_bytes === void 0) {
     throw new TypeError("retained byte accounting is unavailable");
   }
-  const outputPaths = [...input.outputs].sort(ordinal6);
+  const outputPaths = [...input.outputs].sort(ordinal8);
   if (outputPaths.length === 0 || new Set(outputPaths).size !== outputPaths.length) {
     throw new TypeError("implementation outputs must be non-empty and unique");
   }
@@ -61336,12 +63582,12 @@ async function buildImplementationOutput(dependencies, authority, state, supplie
       throw new TypeError("declared output is absent from both base and worktree");
     }
   }
-  outputs.sort((left, right) => ordinal6(left.path, right.path));
-  const restoreTargets = [...input.restore_targets].sort(ordinal6);
+  outputs.sort((left, right) => ordinal8(left.path, right.path));
+  const restoreTargets = [...input.restore_targets].sort(ordinal8);
   if (new Set(restoreTargets).size !== restoreTargets.length || restoreTargets.some((path2) => !outputPaths.includes(path2))) {
     throw new TypeError("restore targets must be unique declared output paths");
   }
-  const scope3 = [...new Set(outputs.flatMap((output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]))].sort(ordinal6);
+  const scope3 = [...new Set(outputs.flatMap((output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]))].sort(ordinal8);
   const changed = await readChangedGitPaths(dependencies.runner);
   const scopeSet = new Set(scope3);
   const callerChanges = changed.paths.filter((path2) => !path2.startsWith(".archflow/runtime/"));
@@ -61361,7 +63607,7 @@ async function buildImplementationOutput(dependencies, authority, state, supplie
     return Object.freeze({ path: path2, state: "present", stage: 0, mode: entry.mode, oid: entry.oid });
   });
   const parentDocuments = [];
-  for (const parent of [...input.parent_documents].sort((left, right) => ordinal6(left.document_path, right.document_path))) {
+  for (const parent of [...input.parent_documents].sort((left, right) => ordinal8(left.document_path, right.document_path))) {
     const resolved = await resolveTaskPath({
       runner: dependencies.runner,
       taskId: authority.task_id,
@@ -61380,7 +63626,7 @@ async function buildImplementationOutput(dependencies, authority, state, supplie
     throw new TypeError("parent documents must be unique");
   }
   const declaredInputs = [];
-  for (const declared of [...input.declared_inputs].sort((left, right) => ordinal6(left.input_id, right.input_id))) {
+  for (const declared of [...input.declared_inputs].sort((left, right) => ordinal8(left.input_id, right.input_id))) {
     const resolved = await resolveReadablePath(dependencies, authority, declared.path);
     if (!resolved.ok) return resolved;
     declaredInputs.push(Object.freeze({
@@ -65338,6 +67584,7 @@ import { fileURLToPath } from "node:url";
 var ASSETS = Object.freeze([
   ["archflow.gitignore", ".archflow/.gitignore"],
   ["workflow.yaml", ".archflow/workflow.yaml"],
+  ["hazards.yaml", ".archflow/hazards.yaml"],
   ["constitution/README.md", ".archflow/constitution/README.md"],
   ["constitution/00-process.md", ".archflow/constitution/00-process.md"],
   ["constitution/10-architecture.md", ".archflow/constitution/10-architecture.md"],
@@ -67090,6 +69337,47 @@ async function loadRetainedEvidence(dependencies, state, phase_instance) {
   }
   return ok16(retained);
 }
+async function loadGoverningPhaseDesignEffortEvidence(dependencies, state, phase_instance) {
+  const loadManifest = dependencies.load_retained_manifest;
+  if (loadManifest === void 0) throw new TypeError("retained evidence loading is unavailable");
+  if (decodePhaseInstance(phase_instance).kind !== "phase-design") {
+    throw new TypeError("governing effort evidence must name a phase design");
+  }
+  const phaseState = Object.freeze({ ...state, phase_instance });
+  const produced = await loadCurrentProduceSubject(dependencies, phaseState);
+  if (!produced.ok) return produced;
+  const reference = state.authoritative_results.find((candidate) => candidate.phase_instance === phase_instance && candidate.step === "counter_review");
+  if (reference === void 0) {
+    return ok16(Object.freeze({ phase_instance, produce: produced.value }));
+  }
+  const loaded = await loadManifest(reference);
+  if (!loaded.ok) return loaded;
+  const manifest = loaded.value.manifest;
+  const source = manifest.value.source_artifact;
+  if (manifest.digest !== reference.result_digest || manifest.value.result_id !== reference.result_id || manifest.value.phase_instance !== reference.phase_instance || manifest.value.step !== reference.step || manifest.value.input_fingerprint !== reference.input_fingerprint) {
+    throw new TypeError("governing counter review reference disagrees with its retained manifest");
+  }
+  if (source.artifact_kind !== "review-evidence") {
+    throw new TypeError("governing counter review has the wrong source kind");
+  }
+  const review = source.evidence;
+  if (review.task_id !== state.task_id || review.phase_instance !== phase_instance || review.role !== "counter-review") {
+    throw new TypeError("governing counter review scope disagrees");
+  }
+  let assessment;
+  if (review.assurance === "server-attested") {
+    assessment = review.effort_review;
+    if (assessment !== void 0 && (assessment.task_id !== review.task_id || assessment.phase_instance !== review.phase_instance || assessment.subject_digest !== review.subject_digest || assessment.input_fingerprint !== review.input_fingerprint)) {
+      throw new TypeError("governing effort assessment bindings disagree with its review");
+    }
+  }
+  return ok16(Object.freeze({
+    phase_instance,
+    produce: produced.value,
+    review,
+    ...assessment === void 0 ? {} : { assessment }
+  }));
+}
 function deriveCurrentEvidenceSet(retained) {
   const counterEntry = retained.get("counter_review");
   if (counterEntry === void 0) {
@@ -67394,10 +69682,18 @@ function subjectCurrent(evidence, subject, allowPredecessor) {
   if (evidence === void 0) return false;
   return boundToSubjectExactly(evidence, subject) || allowPredecessor && boundToDeclaredPredecessor(evidence, subject);
 }
-function currentReviewSet(retained, subject) {
+function currentReviewSet(state, retained, subject) {
   try {
     const derived = deriveCurrentEvidenceSet(retained);
-    return boundToSubjectOrDeclaredPredecessor(derived, subject) ? derived : void 0;
+    const phaseDesign = state.phase_instance.startsWith("phase-design-");
+    const current = phaseDesign ? boundToSubjectExactly(derived, subject) : boundToSubjectOrDeclaredPredecessor(derived, subject);
+    if (!current) return void 0;
+    if (phaseDesign) {
+      const counter = derived.reviews[0]?.evidence;
+      const effort = counter?.assurance === "server-attested" ? counter.effort_review : void 0;
+      if (effort !== void 0 && (effort.task_id !== state.task_id || effort.phase_instance !== state.phase_instance || effort.attempt !== state.attempt || !boundToSubjectExactly(effort, subject))) return void 0;
+    }
+    return derived;
   } catch {
     return void 0;
   }
@@ -67532,10 +69828,10 @@ function dispositionState(retained, reviews, triage) {
     item.disposition
   ]));
   const complete = actual.size === expected.size && [...expected.keys()].every((key) => actual.has(key));
-  const blocker = [...expected].some(([key, blocking]) => blocking && actual.get(key) !== "rejected");
+  const blocker2 = [...expected].some(([key, blocking]) => blocking && actual.get(key) !== "rejected");
   return Object.freeze({
     complete,
-    blocker,
+    blocker: blocker2,
     accepted: triage.accepted_count > 0
   });
 }
@@ -67571,6 +69867,8 @@ function decision2(next, flags) {
     reentry_required: flags?.reentry_required ?? false,
     editorial_revision_required: flags?.editorial_revision_required ?? false,
     ...flags?.policy_reentry_required === true ? { policy_reentry_required: true } : {},
+    ...flags?.effort_reentry_required === true ? { effort_reentry_required: true } : {},
+    ...flags?.effort_blockers === void 0 ? {} : { effort_blockers: flags.effort_blockers },
     adjudication_gate_pending: flags?.adjudication_gate_pending ?? false
   });
 }
@@ -67585,9 +69883,13 @@ function resolveAdjudicationGateStep(state, retained, subject, maximum) {
   }
   return decision2("adjudication-gate", { adjudication_gate_pending: pending });
 }
-function decideNextAction(state, retained, subject, current, disposition, triageCurrent, maximum) {
+function decideNextAction(state, retained, subject, current, disposition, triageCurrent, effort, maximum) {
   if (acceptedFindingsForceReentry(state, disposition)) {
-    return decision2("produce", { reentry_required: true });
+    return effort?.recommendation.status === "blocked" ? decision2("produce", {
+      reentry_required: true,
+      effort_reentry_required: true,
+      effort_blockers: effort.recommendation.blockers
+    }) : decision2("produce", { reentry_required: true });
   }
   if (!current.includes("counter_review")) return decision2("counter_review");
   if (constitutionReviewRequired(subject.constitution) && !current.includes("adjudicate")) {
@@ -67595,7 +69897,17 @@ function decideNextAction(state, retained, subject, current, disposition, triage
   }
   if (!current.includes("triage") || !disposition.complete) return decision2("triage");
   if (disposition.accepted) return decision2("triage");
+  if (effort?.recommendation.status === "blocked") {
+    return decision2("produce", {
+      reentry_required: true,
+      effort_reentry_required: true,
+      effort_blockers: effort.recommendation.blockers
+    });
+  }
   if (editorialRevisionPending(triageCurrent, disposition, subject)) {
+    if (state.phase_instance.startsWith("phase-design-")) {
+      return decision2("produce", { reentry_required: true });
+    }
     return decision2("produce", { editorial_revision_required: true });
   }
   return resolveAdjudicationGateStep(state, retained, subject, maximum);
@@ -67603,7 +69915,7 @@ function decideNextAction(state, retained, subject, current, disposition, triage
 function assessCurrentEvidence(state, retained, subject) {
   assertSubjectMatchesDurableState(state, retained, subject);
   const maximum = resolveMaxAttempts(subject);
-  const reviews = currentReviewSet(retained, subject);
+  const reviews = currentReviewSet(state, retained, subject);
   const candidateTriage = triageAt(retained);
   const triageCurrent = currentFor(
     retained,
@@ -67614,6 +69926,8 @@ function assessCurrentEvidence(state, retained, subject) {
   const current = EVIDENCE_STEPS.filter((step) => currentFor(retained, step, subject, reviews));
   const stale = EVIDENCE_STEPS.filter((step) => retained.has(step) && !current.includes(step));
   const disposition = dispositionState(retained, reviews, triageCurrent);
+  const counter = reviews?.reviews[0]?.evidence;
+  const effort = state.phase_instance.startsWith("phase-design-") && counter?.assurance === "server-attested" ? counter.effort_review : void 0;
   const action2 = decideNextAction(
     state,
     retained,
@@ -67621,6 +69935,7 @@ function assessCurrentEvidence(state, retained, subject) {
     current,
     disposition,
     triageCurrent,
+    effort,
     maximum
   );
   const exhausted = action2.reentry_required && state.attempt >= maximum;
@@ -67632,6 +69947,9 @@ function assessCurrentEvidence(state, retained, subject) {
     reentry_required: action2.reentry_required,
     editorial_revision_required: action2.editorial_revision_required,
     ...action2.policy_reentry_required === true ? { policy_reentry_required: true } : {},
+    ...action2.effort_reentry_required === true ? { effort_reentry_required: true } : {},
+    ...action2.effort_blockers === void 0 ? {} : { effort_blockers: action2.effort_blockers },
+    effort_currency: !state.phase_instance.startsWith("phase-design-") ? "not-required" : reviews === void 0 ? "missing-current" : effort === void 0 ? "legacy-exact" : effort.recommendation.status,
     exhausted,
     adjudication_gate_pending: action2.adjudication_gate_pending,
     next: exhausted ? "attempts-exhausted" : action2.next
@@ -68205,6 +70523,17 @@ function deriveNextAction(input) {
         { step: "produce", editorial_revision: true }
       );
     }
+    if (next === "produce" && input.assessment?.effort_reentry_required === true) {
+      const blockers = input.assessment.effort_blockers ?? [];
+      const details = blockers.map((blocker2) => blocker2.kind === "specification-gap" ? `${blocker2.component_id}: ${blocker2.question}` : `Implementation components need a clearer boundary: ${blocker2.rationale}`);
+      return action(
+        "run-step",
+        `Revise the phase design to resolve its authenticated effort-review blockers.${details.length === 0 ? "" : ` ${details.join(" ")}`}`,
+        false,
+        state,
+        { step: "produce", effort_reentry: true }
+      );
+    }
     if (next === "produce" && input.assessment?.policy_reentry_required === true) {
       return action("run-step", policyReentryDetail(input.policy_findings), false, state, {
         step: "produce",
@@ -68434,8 +70763,8 @@ function classifiedDispatchFailure(error51) {
   const projectError = carriedProjectError(error51);
   if (projectError === void 0 || !supportedCodes.has(projectError.code)) return void 0;
   const code2 = projectError.code;
-  const repositoryName4 = code2 === "REPOSITORY_VIEW_UNAVAILABLE" ? projectError.diagnostic.parameters.repository_name : void 0;
-  return Object.freeze({ code: code2, message: SAFE_MESSAGES[code2], ...typeof repositoryName4 === "string" ? { repository_name: repositoryName4 } : {} });
+  const repositoryName7 = code2 === "REPOSITORY_VIEW_UNAVAILABLE" ? projectError.diagnostic.parameters.repository_name : void 0;
+  return Object.freeze({ code: code2, message: SAFE_MESSAGES[code2], ...typeof repositoryName7 === "string" ? { repository_name: repositoryName7 } : {} });
 }
 function observationClaim(phaseInstance4, attempt) {
   return parseWorkspacePathClaim(
@@ -71476,7 +73805,7 @@ async function assessBaselineRestoreSourceFreshness(source, humanObservedDigest)
   });
 }
 function baselineAdoptionRecord(gateId, adoptedAtRevision, driftedProjections, deletedProjections = [], secondaryTargets = []) {
-  const ordinal9 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+  const ordinal11 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
   const adoptedProjections = [
     ...driftedProjections.map((drifted) => Object.freeze({ path: drifted.path, content_digest: drifted.observed_digest })),
     ...secondaryTargets.flatMap((target2) => target2.drifted_projections.map((drifted) => Object.freeze({
@@ -71488,7 +73817,7 @@ function baselineAdoptionRecord(gateId, adoptedAtRevision, driftedProjections, d
   return Object.freeze({
     gate_id: gateId,
     adopted_at_revision: adoptedAtRevision,
-    adopted_projections: Object.freeze(adoptedProjections.sort((left, right) => ordinal9(left.repository ?? "", right.repository ?? "") || ordinal9(left.path, right.path))),
+    adopted_projections: Object.freeze(adoptedProjections.sort((left, right) => ordinal11(left.repository ?? "", right.repository ?? "") || ordinal11(left.path, right.path))),
     // Absence is recorded only when the decision adopted deletions; a bytes-only archive from
     // before that decision exists must keep its exact historical shape.
     ...deletedProjections.length === 0 && secondaryTargets.every((target2) => (target2.deleted_projections ?? []).length === 0) ? {} : {
@@ -71503,7 +73832,7 @@ function baselineAdoptionRecord(gateId, adoptedAtRevision, driftedProjections, d
         const rightRepository = typeof right === "string" ? "" : right.repository ?? "";
         const leftPath = typeof left === "string" ? left : left.path;
         const rightPath = typeof right === "string" ? right : right.path;
-        return ordinal9(leftRepository, rightRepository) || ordinal9(leftPath, rightPath);
+        return ordinal11(leftRepository, rightRepository) || ordinal11(leftPath, rightPath);
       }))
     }
   });
@@ -72831,14 +75160,14 @@ var BUILD_REQUEST_KINDS = Object.freeze([
   "recover-approval-trigger-authority",
   "refresh-stale-baseline"
 ]);
-var PAYLOAD_SHAPE = `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},"step"?:<pipeline step for kind running>,"document"?:{...},"implementation"?:{...},"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],"summary"?:<gate summary text>,"invocation_routes"?:{"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"adjudicator"?:{...}},"route_override"?:{"reason":<why the pinned reviewer was substituted>,"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"adjudicator"?:{...}},"origin"?:<waiver origin>,"rationale"?:<waiver rationale>}`;
+var PAYLOAD_SHAPE = `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},"step"?:<pipeline step for kind running>,"document"?:{...},"implementation"?:{...},"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],"summary"?:<gate summary text>,"invocation_routes"?:{"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"adjudicator"?:{...}},"route_override"?:{"reason":<why the selected reviewer was substituted>,"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"test-reviewer"?:{...},"effort-reviewer"?:{...},"adjudicator"?:{...}},"origin"?:<waiver origin>,"rationale"?:<waiver rationale>}`;
 function record2(value, name) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${name} must be an object; expected ${PAYLOAD_SHAPE}`);
   }
   return value;
 }
-var ordinal7 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+var ordinal9 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 function includeChangedImplementationDocuments(input) {
   const defaults = phaseImplParentDocumentDefaults(input.phase_instance);
   if (defaults === void 0) throw new TypeError("implementation document capture requires a phase-impl phase");
@@ -72855,9 +75184,9 @@ function includeChangedImplementationDocuments(input) {
     if (!parents.has(parent.document_path)) parents.set(parent.document_path, parent);
   }
   return Object.freeze({
-    outputs: Object.freeze([...outputs].sort(ordinal7)),
-    restore_targets: Object.freeze([...restoreTargets].sort(ordinal7)),
-    parent_documents: Object.freeze([...parents.values()].sort((left, right) => ordinal7(left.document_path, right.document_path)))
+    outputs: Object.freeze([...outputs].sort(ordinal9)),
+    restore_targets: Object.freeze([...restoreTargets].sort(ordinal9)),
+    parent_documents: Object.freeze([...parents.values()].sort((left, right) => ordinal9(left.document_path, right.document_path)))
   });
 }
 function implementationPathList(value, name) {
@@ -72878,7 +75207,7 @@ function parseImplementationDeclaredInputs(value, label) {
 }
 function parseImplementationRepositories(value, config2, primaryInputs) {
   const configured = config2.repositories ?? {};
-  const writableNames = Object.entries(configured).filter(([, declaration]) => declaration.mode === "writable").map(([name]) => name).sort(ordinal7);
+  const writableNames = Object.entries(configured).filter(([, declaration]) => declaration.mode === "writable").map(([name]) => name).sort(ordinal9);
   const candidates = value === void 0 ? [] : value;
   if (!Array.isArray(candidates)) throw new TypeError("implementation repositories must be an array");
   const seenIds = /* @__PURE__ */ new Set();
@@ -73886,7 +76215,7 @@ function mapRunStep(status, action2, snapshot) {
           headline: "Revision is ready to begin",
           // A policy re-entry carries what the revision has to resolve; nothing else in the
           // semantic view exposes the constitution findings.
-          detail: action2.policy_reentry === true ? action2.detail : "Enter the bounded production write window before changing the artifact.",
+          detail: action2.policy_reentry === true || action2.effort_reentry === true ? action2.detail : "Enter the bounded production write window before changing the artifact.",
           action_kind: "revise",
           instruction: "Begin the authorized revision, then return to the client-owned work.",
           expected_submission: "none"
@@ -74220,6 +76549,7 @@ function projectSemanticStatus(snapshot, invocation) {
     ...shape.findings !== true ? {} : { findings: snapshot.full_findings },
     ...context2 === void 0 ? {} : { review_context: context2 },
     ...strength === void 0 ? {} : { review_strength: strength },
+    implementation_recommendation: snapshot.implementation_recommendation,
     ...shape.presentation === void 0 ? {} : { presentation: shape.presentation },
     ...status.dispatch_failure === void 0 ? {} : { dispatch_failure: status.dispatch_failure },
     ...status.repositories === void 0 ? {} : { repositories: status.repositories },
@@ -74598,7 +76928,7 @@ function projectCliOutputSchema(outputSchema, resultKind, adapter2, subject) {
       $defs: resultKind === "review" ? { ...common3, finding: hostFindingSchema(common3.finding) } : common3
     };
   }
-  const bindingKeys = resultKind === "review" ? ["task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family"] : ["task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "pinned_constitution_digest", "approved_upstream_digests", "source_review_envelope_digest"];
+  const bindingKeys = resultKind === "review" ? ["task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family"] : resultKind === "effort-review" ? ["task_id", "phase_instance", "subject_digest", "input_fingerprint", "component_manifest_digest", "hazard_registry_digest", "policy_id"] : ["task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "pinned_constitution_digest", "approved_upstream_digests", "source_review_envelope_digest"];
   if (subject !== void 0) {
     const properties = root.properties;
     if (properties === null || typeof properties !== "object" || Array.isArray(properties)) {
@@ -74606,7 +76936,8 @@ function projectCliOutputSchema(outputSchema, resultKind, adapter2, subject) {
     }
     const bound = { ...properties };
     for (const key of bindingKeys) {
-      const value = subject[key];
+      const hazardRegistry = key === "hazard_registry_digest" ? subject.hazard_registry : void 0;
+      const value = key === "hazard_registry_digest" && hazardRegistry !== null && typeof hazardRegistry === "object" && !Array.isArray(hazardRegistry) ? hazardRegistry.registry_digest : subject[key];
       if (value !== void 0) bound[key] = boundSubjectNode(bound[key], value, adapter2);
     }
     root = { ...root, properties: bound };
@@ -74617,6 +76948,7 @@ function envelopeSubject(envelope) {
   const decoded = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(envelope.bytes));
   assertPlainJson(decoded, "dispatch envelope");
   if (decoded === null || typeof decoded !== "object" || Array.isArray(decoded)) throw new TypeError("dispatch envelope must be an object");
+  if (envelope.result_kind === "effort-review") return decoded;
   const subject = decoded.subject;
   if (subject === void 0) return {};
   if (subject === null || typeof subject !== "object" || Array.isArray(subject)) throw new TypeError("dispatch envelope subject must be an object");
@@ -75525,6 +77857,12 @@ function planSemanticAction(snapshot, value) {
   if (offer === void 0) {
     throw new SemanticActionPlanError("SEMANTIC_OFFER_STALE", "authenticated current action has no mutation offer for this invocation");
   }
+  if (input.action.submission?.kind === "review-dispatch" && input.action.submission.route_override["effort-reviewer"] !== void 0 && projection.view.dispatch_failure?.role !== "effort-reviewer") {
+    throw new SemanticActionPlanError(
+      "SEMANTIC_SUBMISSION_MISMATCH",
+      "an effort-reviewer substitution is permitted only for the exact current effort-review dispatch failure"
+    );
+  }
   assertWorkResultFactsMatchPosition(offer, input.action.submission);
   const expectedToken = semanticOfferToken(offer);
   const archivedOperation = offer.action_kind === "decide" && markerField(snapshot.archived_decision, "status") === "exact" ? markerField(snapshot.archived_decision, "operation_digest") : void 0;
@@ -75877,7 +78215,124 @@ async function executeSemanticAction(services, snapshot, value, capabilities2) {
 
 // src/state/semantic-status.ts
 import { isDeepStrictEqual as isDeepStrictEqual15 } from "node:util";
+import { readFile as readFile15 } from "node:fs/promises";
+import { join as join14 } from "node:path";
 var ok23 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+function governingRecommendationPhase(state) {
+  if (state === void 0) return void 0;
+  const decoded = decodePhaseInstance(state.phase_instance);
+  if (decoded.kind === "phase-design" || decoded.kind === "phase-impl") return Number(decoded.phase);
+  if (state.terminal === "complete" && state.planned_final_phase !== void 0) {
+    return Number(state.planned_final_phase);
+  }
+  return void 0;
+}
+var registryDriftExplanation = (kind) => ({
+  "registry-created": "The hazard registry was created after this recommendation was reviewed.",
+  "registry-removed": "The hazard registry was removed after this recommendation was reviewed.",
+  "registry-changed": "The hazard registry changed after this recommendation was reviewed.",
+  "registry-unreadable": "The current hazard registry could not be read or parsed; the authenticated recommendation remains available."
+})[kind];
+async function currentImplementationRecommendation(dependencies, authority, details) {
+  const phase3 = governingRecommendationPhase(details.state);
+  if (details.state === void 0 || phase3 === void 0) {
+    return unavailableImplementationRecommendation(
+      "not-applicable",
+      "Implementation effort advice does not apply at the current workflow position."
+    );
+  }
+  const phaseInstance4 = encodePhaseInstance({
+    kind: "phase-design",
+    phase: parsePositiveSafePhaseNumber(phase3)
+  });
+  const hasProduce = details.state.authoritative_results.some((reference) => reference.phase_instance === phaseInstance4 && reference.step === "produce");
+  const hasReview = details.state.authoritative_results.some((reference) => reference.phase_instance === phaseInstance4 && reference.step === "counter_review");
+  if (!hasProduce || !hasReview) {
+    return unavailableImplementationRecommendation(
+      "not-produced",
+      "No authenticated effort assessment has been produced for the governing phase design.",
+      phase3
+    );
+  }
+  if (dependencies.load_retained_manifest === void 0) {
+    throw new TypeError("governing effort evidence loading is unavailable");
+  }
+  const loaded = await loadGoverningPhaseDesignEffortEvidence(
+    { load_retained_manifest: dependencies.load_retained_manifest },
+    details.state,
+    phaseInstance4
+  );
+  if (!loaded.ok) throw new TypeError("governing effort evidence is unavailable or invalid");
+  const { produce, review, assessment } = loaded.value;
+  if (review === void 0) {
+    return unavailableImplementationRecommendation(
+      "not-produced",
+      "No authenticated effort assessment has been produced for the governing phase design.",
+      phase3
+    );
+  }
+  if (review.subject_digest !== produce.artifact_digest) {
+    return unavailableImplementationRecommendation(
+      "subject-stale",
+      "The retained effort assessment describes earlier phase-design bytes and is not current.",
+      phase3
+    );
+  }
+  if (review.assurance !== "server-attested" || assessment === void 0) {
+    return unavailableImplementationRecommendation(
+      "legacy-evidence",
+      "The exact authenticated review predates structured implementation-effort evidence.",
+      phase3
+    );
+  }
+  if (produce.artifact.artifact_kind !== "document") {
+    throw new TypeError("governing phase-design produce artifact is not a document");
+  }
+  const projection = await readProduceProjection(
+    dependencies.runner,
+    authority,
+    produce,
+    produce.artifact.document_path
+  );
+  if (!projection.ok) {
+    const issue4 = projection.error.diagnostic.parameters.issue_code;
+    if (issue4 === "produce-projection-not-current" || issue4 === "produce-projection-unavailable") {
+      return unavailableImplementationRecommendation(
+        "subject-stale",
+        "The retained effort assessment describes earlier phase-design bytes and is not current.",
+        phase3
+      );
+    }
+    throw new TypeError("governing phase-design projection is unavailable");
+  }
+  const repositoryNames = assessment.reviewer.repositories.map((repository) => repository.name);
+  const manifest = extractPhaseDesignComponentManifest(
+    new TextDecoder("utf-8", { fatal: true }).decode(projection.value.bytes),
+    repositoryNames
+  );
+  if (phaseDesignComponentManifestDigest(manifest) !== assessment.component_manifest_digest) {
+    throw new TypeError("governing effort assessment component manifest binding disagrees");
+  }
+  let drift;
+  try {
+    const live = await captureHazardRegistryInput(async () => {
+      try {
+        return new Uint8Array(await readFile15(join14(dependencies.runner.location.worktreeRoot, ".archflow", "hazards.yaml")));
+      } catch (error51) {
+        if (error51.code === "ENOENT") return void 0;
+        throw error51;
+      }
+    }, repositoryNames, manifest);
+    drift = compareHazardRegistryInput(assessment.hazard_registry_digest, live, manifest);
+  } catch {
+    drift = "registry-unreadable";
+  }
+  return implementationRecommendationFromAssessment(
+    assessment,
+    phase3,
+    drift === void 0 ? void 0 : { kind: drift, explanation: registryDriftExplanation(drift) }
+  );
+}
 function workflowPosition(phase3) {
   const decoded = decodePhaseInstance(phase3);
   return decoded.kind === "prd" || decoded.kind === "design" ? Object.freeze({ kind: decoded.kind }) : Object.freeze({ kind: decoded.kind, phase: Number(decoded.phase) });
@@ -76118,6 +78573,11 @@ async function computeAuthoritativeSemanticStatus(dependencies, authority) {
     throw new TypeError("semantic status repository identity does not match durable state");
   }
   const archives = await deriveArchiveEnrichments(dependencies, authority, detailed.value);
+  const implementationRecommendation = await currentImplementationRecommendation(
+    dependencies,
+    authority,
+    detailed.value
+  );
   return ok23(computeSemanticStatusSnapshot(status, {
     repository_identity_digest: authority.repository_identity_digest,
     ...state === void 0 ? {} : { state },
@@ -76132,6 +78592,7 @@ async function computeAuthoritativeSemanticStatus(dependencies, authority) {
     },
     full_findings: fullFindings(detailed.value),
     review_rounds: reviewRounds(detailed.value),
+    implementation_recommendation: implementationRecommendation,
     ...archives,
     reopen_impacts: state === void 0 ? Object.freeze([]) : reopenImpacts(state, status)
   }));
@@ -76173,6 +78634,9 @@ function computeSemanticStatusSnapshot(status, enrichments) {
     status: statusJson,
     full_findings: Object.freeze(findings),
     review_rounds: Object.freeze((enrichments.review_rounds ?? []).map((round) => Object.freeze(publicReviewRoundV1Schema.parse(materializeJson(round, "semantic review round"))))),
+    implementation_recommendation: Object.freeze(implementationRecommendationV1Schema.parse(
+      materializeJson(enrichments.implementation_recommendation, "implementation recommendation")
+    )),
     ...enrichments.pending_waiver_origin === void 0 ? {} : {
       pending_waiver_origin: materializeJson(enrichments.pending_waiver_origin, "pending waiver origin")
     },
@@ -76187,16 +78651,20 @@ function computeSemanticStatusSnapshot(status, enrichments) {
   return Object.freeze(snapshot);
 }
 
+// src/mcp/handlers/counter-review.ts
+import { readFile as readFile18 } from "node:fs/promises";
+import { join as join19 } from "node:path";
+
 // src/dispatch/coordinator.ts
 import { randomUUID as randomUUID3 } from "node:crypto";
 import { mkdir as mkdir7 } from "node:fs/promises";
-import { join as join15 } from "node:path";
+import { join as join16 } from "node:path";
 
 // src/dispatch/workspace.ts
 import { spawn as spawn2 } from "node:child_process";
 import { chmod as chmod2, lstat as lstat10, mkdir as mkdir6, mkdtemp as mkdtemp2, realpath as realpath4, rm as rm3, symlink as symlink2, writeFile as writeFile3 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { isAbsolute as isAbsolute5, join as join14, relative as relative6, resolve } from "node:path";
+import { isAbsolute as isAbsolute5, join as join15, relative as relative6, resolve } from "node:path";
 
 // src/review/envelopes.ts
 var REVIEW_ENVELOPE_BYTE_CAP = 1048576;
@@ -76219,6 +78687,10 @@ var REVIEW_ASSIGNMENT_INSTRUCTION = "Assess only the rubric criteria named by as
 var IMPLEMENTATION_REVIEW_INSTRUCTION = "Review only the implementation output declared by this phase: its added, modified, deleted, and renamed paths; its co-produced documents; and the current post-change behavior of those outputs. Use unchanged files, repository snapshots, pinned context, and dependencies only to verify how a declared output behaves or connects to an existing interface. They are evidence, not additional review subjects. Do not report a pre-existing or unrelated defect. Every finding must name the declared output that introduced, exposed, or materially worsened the defect and explain the current concrete consequence. This is a phase-change review, not a general code review. Apply the rubric's materiality bar and return only the structured result the output schema describes.";
 var PRIOR_TRIAGE_INSTRUCTION = "This is a remediation review, not a new full review. The pinned prior-triage record contains only the latest accepted findings assigned to you. Verify each revision intent against the current artifact. Report an accepted finding only when its intent was not carried out. Report a new finding only when the remediation change itself introduced, exposed, or materially worsened a blocker in the changed content or a directly dependent section. Do not revisit completed findings, inspect unrelated unchanged content, or apply the full rubric as a new sweep. If evidence needed for this confirmation is missing, one scoped unverifiable- or escalate- finding is allowed. Otherwise, when every intent is satisfied and no remediation regression exists, return no findings.";
 var CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION = "For this implementation phase, judge rules, triggers, and approved-upstream drift only against the declared outputs, their co-produced documents, and their current post-change behavior. Repository snapshots and unchanged files are supporting evidence, not separate review subjects. A noncompliant, uncertain, triggered, or drifted result must identify the declared output that introduced, exposed, or materially worsened the condition. Do not surface pre-existing or unrelated repository conditions.";
+function buildEffortEnvelope(value) {
+  const envelope = parseEffortEnvelopeV1(value);
+  return finishEnvelope("effort-review", envelope, "dispatch-envelope");
+}
 var ReviewEnvelopeError = class extends Error {
   project_error;
   /** The serialized size that failed the byte cap, when that is what failed. */
@@ -76637,7 +79109,7 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
   if (isInside(realRepositoryRoot, realTemporaryRoot)) {
     throw new Error("dispatch temporary directory must be outside the repository");
   }
-  const root = await mkdtemp2(join14(realTemporaryRoot, "archflow-dispatch-"));
+  const root = await mkdtemp2(join15(realTemporaryRoot, "archflow-dispatch-"));
   try {
     const sourceHome = resolve(process.env.HOME ?? homedir());
     const env = {
@@ -76645,7 +79117,7 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
       TMPDIR: root,
       // A shared workspace serves both adapters of one review; each CLI ignores the other's
       // variable, and a single-adapter list produces exactly the env it produced before.
-      ...adapters.includes("codex-cli") ? { CODEX_HOME: resolve(process.env.CODEX_HOME ?? join14(sourceHome, ".codex")) } : {},
+      ...adapters.includes("codex-cli") ? { CODEX_HOME: resolve(process.env.CODEX_HOME ?? join15(sourceHome, ".codex")) } : {},
       ...adapters.includes("claude-cli") && process.env.CLAUDE_CONFIG_DIR !== void 0 ? { CLAUDE_CONFIG_DIR: resolve(process.env.CLAUDE_CONFIG_DIR) } : {}
     };
     for (const name of FORWARDED_ENVIRONMENT) {
@@ -76667,13 +79139,13 @@ var GIT_OID2 = /^[0-9a-f]{40}$/u;
 var SHA256_DIGEST = /^[0-9a-f]{64}$/u;
 var RepositoryViewMaterializationError = class extends Error {
   repository_name;
-  constructor(repositoryName4, cause) {
-    super(`repository view materialization failed for ${repositoryName4}`, { cause });
+  constructor(repositoryName7, cause) {
+    super(`repository view materialization failed for ${repositoryName7}`, { cause });
     this.name = "RepositoryViewMaterializationError";
-    this.repository_name = repositoryName4;
+    this.repository_name = repositoryName7;
   }
 };
-function ordinal8(left, right) {
+function ordinal10(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 function validateDispatchRepositoryViewPlan(candidate) {
@@ -76705,7 +79177,7 @@ function validateDispatchRepositoryViewPlan(candidate) {
       if (member.member_kind !== "secondary") {
         throw new TypeError(`repository view member ${member.name} must be secondary`);
       }
-      if (index > 1 && ordinal8(previous, member.name) >= 0) {
+      if (index > 1 && ordinal10(previous, member.name) >= 0) {
         throw new TypeError("secondary repository view names must be sorted and unique");
       }
     }
@@ -76791,26 +79263,26 @@ async function materializeRepositoryArchive(view, member) {
     });
   });
   if (member.member_kind === "primary") {
-    await rm3(join14(view, ".archflow", "tasks"), { recursive: true, force: true });
-    await rm3(join14(view, ".archflow", "constitution"), { recursive: true, force: true });
+    await rm3(join15(view, ".archflow", "tasks"), { recursive: true, force: true });
+    await rm3(join15(view, ".archflow", "constitution"), { recursive: true, force: true });
   } else {
-    await rm3(join14(view, ".archflow"), { recursive: true, force: true });
+    await rm3(join15(view, ".archflow"), { recursive: true, force: true });
   }
   if (member.projection_plan !== void 0) await applyProducedProjection(view, member.projection_plan);
 }
 async function materializeRepositoryViews(workspace, candidate) {
   const plan = validateDispatchRepositoryViewPlan(candidate);
-  const container = plan.length === 1 ? workspace.root : join14(workspace.root, "repos");
+  const container = plan.length === 1 ? workspace.root : join15(workspace.root, "repos");
   if (plan.length > 1) await mkdir6(container);
   for (const member of plan) {
-    const view = plan.length === 1 ? join14(workspace.root, "repo") : join14(container, member.name);
+    const view = plan.length === 1 ? join15(workspace.root, "repo") : join15(container, member.name);
     try {
       await materializeRepositoryArchive(view, member);
     } catch (error51) {
       throw new RepositoryViewMaterializationError(member.name, error51);
     }
   }
-  return Object.freeze({ ...workspace, repository_view_root: plan.length === 1 ? join14(workspace.root, "repo") : container });
+  return Object.freeze({ ...workspace, repository_view_root: plan.length === 1 ? join15(workspace.root, "repo") : container });
 }
 function errno3(error51) {
   return error51 !== null && typeof error51 === "object" && "code" in error51 && typeof error51.code === "string" ? error51.code : void 0;
@@ -76823,7 +79295,7 @@ async function ensureContainedParent(view, repositoryPath) {
   const segments = repositoryPath.split("/");
   let parent = view;
   for (const segment of segments.slice(0, -1)) {
-    parent = join14(parent, segment);
+    parent = join15(parent, segment);
     try {
       const status = await lstat10(parent);
       if (!status.isDirectory() || status.isSymbolicLink()) {
@@ -76892,10 +79364,10 @@ function failureCode(error51) {
 }
 var RepositoryViewUnavailableError = class extends Error {
   project_error;
-  constructor(repositoryName4) {
-    super(`The read-only snapshot for repository ${repositoryName4} is unavailable. Repair repository access and resume the unchanged review.`);
+  constructor(repositoryName7) {
+    super(`The read-only snapshot for repository ${repositoryName7} is unavailable. Repair repository access and resume the unchanged review.`);
     this.name = "RepositoryViewUnavailableError";
-    this.project_error = createProjectError("REPOSITORY_VIEW_UNAVAILABLE", { repository_name: repositoryName4 });
+    this.project_error = createProjectError("REPOSITORY_VIEW_UNAVAILABLE", { repository_name: repositoryName7 });
   }
 };
 var CHANNEL_TAIL_BYTE_CAP = 4096;
@@ -76997,7 +79469,7 @@ function createDispatchCoordinator(input) {
       failureStage = "cli-preflight";
       preflight2 = await memoizedCliPreflight(adapter2, workspace, input.signal, input.cancellation_source);
       failureStage = "invocation-build";
-      const childRoot = join15(workspace.root, "children", attemptId);
+      const childRoot = join16(workspace.root, "children", attemptId);
       await mkdir7(childRoot, { recursive: true, mode: 448 });
       const childWorkspace = Object.freeze({
         ...workspace,
@@ -77037,8 +79509,8 @@ function createDispatchCoordinator(input) {
 }
 
 // src/dispatch/retained-child-output.ts
-import { readdir as readdir4, readFile as readFile15 } from "node:fs/promises";
-import { join as join16 } from "node:path";
+import { readdir as readdir4, readFile as readFile16 } from "node:fs/promises";
+import { join as join17 } from "node:path";
 var nonBlank5 = external_exports.string().min(1);
 var retainedRouteSchema = external_exports.object({
   adapter: external_exports.enum(ADAPTER_IDS),
@@ -77053,7 +79525,7 @@ var retainedChildOutputSchema = external_exports.object({
   phase_instance: phaseInstanceIdV1Schema,
   step: external_exports.literal("counter_review"),
   attempt: safeIntegerV1Schema,
-  role: external_exports.enum(["counter-reviewer", "test-reviewer", "adjudicator"]),
+  role: external_exports.enum(["counter-reviewer", "test-reviewer", "effort-reviewer", "adjudicator"]),
   envelope_digest: sha256DigestV1Schema,
   route: retainedRouteSchema,
   route_source: routeSourceRecordSchema,
@@ -77121,7 +79593,7 @@ function createRetainedChildOutputStore(context2) {
       try {
         target2 = await resolveRecord(context2, recordClaim(context2.phase_instance, binding));
         if (!target2.ok) return void 0;
-        const record3 = retainedChildOutputSchema.parse(JSON.parse(await readFile15(target2.value.absolute, "utf8")));
+        const record3 = retainedChildOutputSchema.parse(JSON.parse(await readFile16(target2.value.absolute, "utf8")));
         const bytes = new Uint8Array(Buffer.from(record3.output_base64, "base64"));
         if (matches(record3, binding) && sha256Bytes(bytes) === record3.observed_output_digest) {
           return Object.freeze({ cli_version: record3.cli_version, extracted_output_bytes: bytes });
@@ -77156,7 +79628,7 @@ function createRetainedChildOutputStore(context2) {
     },
     async discard(envelopeDigest) {
       try {
-        const directory = join16(context2.authority.workspace_root, "diagnostics", "attempts", context2.phase_instance);
+        const directory = join17(context2.authority.workspace_root, "diagnostics", "attempts", context2.phase_instance);
         const prefix = roundPrefix(envelopeDigest);
         for (const name of await readdir4(directory)) {
           if (!name.startsWith(prefix) || !name.endsWith(".json")) continue;
@@ -77326,6 +79798,392 @@ var adjudication_schema_default = {
     "source_review_envelope_digest",
     "rule_findings",
     "drift_findings"
+  ],
+  additionalProperties: false
+};
+
+// src/contracts/schemas/v1/effort-review.schema.json
+var effort_review_schema_default = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "urn:archflow:schema:v1:effort-review",
+  type: "object",
+  properties: {
+    schema_version: {
+      type: "string",
+      const: "1"
+    },
+    task_id: {
+      $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+    },
+    phase_instance: {
+      $ref: "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+    },
+    step: {
+      type: "string",
+      const: "effort_review"
+    },
+    role: {
+      type: "string",
+      const: "effort-reviewer"
+    },
+    subject_digest: {
+      $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    input_fingerprint: {
+      $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    component_manifest_digest: {
+      $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    hazard_registry_digest: {
+      $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    policy_id: {
+      type: "string",
+      const: "implementation-effort-v1"
+    },
+    decomposition: {
+      oneOf: [
+        {
+          type: "object",
+          properties: {
+            status: {
+              type: "string",
+              const: "adequate"
+            },
+            rationale: {
+              type: "string",
+              minLength: 1,
+              pattern: "\\S"
+            }
+          },
+          required: [
+            "status",
+            "rationale"
+          ],
+          additionalProperties: false
+        },
+        {
+          type: "object",
+          properties: {
+            status: {
+              type: "string",
+              const: "undifferentiated"
+            },
+            rationale: {
+              type: "string",
+              minLength: 1,
+              pattern: "\\S"
+            },
+            missing_boundaries: {
+              minItems: 1,
+              type: "array",
+              items: {
+                type: "string",
+                minLength: 1,
+                pattern: "\\S"
+              }
+            }
+          },
+          required: [
+            "status",
+            "rationale",
+            "missing_boundaries"
+          ],
+          additionalProperties: false
+        }
+      ]
+    },
+    components: {
+      minItems: 1,
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          component_id: {
+            type: "string",
+            pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          axes: {
+            type: "object",
+            properties: {
+              A: {
+                type: "object",
+                properties: {
+                  score: {
+                    anyOf: [
+                      {
+                        type: "number",
+                        const: 0
+                      },
+                      {
+                        type: "number",
+                        const: 1
+                      },
+                      {
+                        type: "number",
+                        const: 2
+                      },
+                      {
+                        type: "number",
+                        const: 3
+                      }
+                    ]
+                  },
+                  rationale: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  }
+                },
+                required: [
+                  "score",
+                  "rationale"
+                ],
+                additionalProperties: false
+              },
+              B: {
+                type: "object",
+                properties: {
+                  score: {
+                    anyOf: [
+                      {
+                        type: "number",
+                        const: 0
+                      },
+                      {
+                        type: "number",
+                        const: 1
+                      },
+                      {
+                        type: "number",
+                        const: 2
+                      },
+                      {
+                        type: "number",
+                        const: 3
+                      }
+                    ]
+                  },
+                  rationale: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  }
+                },
+                required: [
+                  "score",
+                  "rationale"
+                ],
+                additionalProperties: false
+              },
+              C: {
+                type: "object",
+                properties: {
+                  score: {
+                    anyOf: [
+                      {
+                        type: "number",
+                        const: 0
+                      },
+                      {
+                        type: "number",
+                        const: 1
+                      },
+                      {
+                        type: "number",
+                        const: 2
+                      },
+                      {
+                        type: "number",
+                        const: 3
+                      }
+                    ]
+                  },
+                  rationale: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  }
+                },
+                required: [
+                  "score",
+                  "rationale"
+                ],
+                additionalProperties: false
+              },
+              D: {
+                type: "object",
+                properties: {
+                  score: {
+                    anyOf: [
+                      {
+                        type: "number",
+                        const: 0
+                      },
+                      {
+                        type: "number",
+                        const: 1
+                      },
+                      {
+                        type: "number",
+                        const: 2
+                      },
+                      {
+                        type: "number",
+                        const: 3
+                      }
+                    ]
+                  },
+                  rationale: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  }
+                },
+                required: [
+                  "score",
+                  "rationale"
+                ],
+                additionalProperties: false
+              },
+              E: {
+                type: "object",
+                properties: {
+                  score: {
+                    anyOf: [
+                      {
+                        type: "number",
+                        const: 0
+                      },
+                      {
+                        type: "number",
+                        const: 1
+                      },
+                      {
+                        type: "number",
+                        const: 2
+                      },
+                      {
+                        type: "number",
+                        const: 3
+                      }
+                    ]
+                  },
+                  rationale: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  }
+                },
+                required: [
+                  "score",
+                  "rationale"
+                ],
+                additionalProperties: false
+              }
+            },
+            required: [
+              "A",
+              "B",
+              "C",
+              "D",
+              "E"
+            ],
+            additionalProperties: false
+          },
+          long_tool_loop: {
+            type: "object",
+            properties: {
+              value: {
+                type: "string",
+                enum: [
+                  "yes",
+                  "no",
+                  "unknown"
+                ]
+              },
+              rationale: {
+                type: "string",
+                minLength: 1,
+                pattern: "\\S"
+              }
+            },
+            required: [
+              "value",
+              "rationale"
+            ],
+            additionalProperties: false
+          },
+          short_component: {
+            type: "object",
+            properties: {
+              value: {
+                type: "string",
+                enum: [
+                  "yes",
+                  "no",
+                  "unknown"
+                ]
+              },
+              rationale: {
+                type: "string",
+                minLength: 1,
+                pattern: "\\S"
+              }
+            },
+            required: [
+              "value",
+              "rationale"
+            ],
+            additionalProperties: false
+          },
+          blocker: {
+            type: "object",
+            properties: {
+              answer_kind: {
+                type: "string",
+                enum: [
+                  "number",
+                  "priority-order"
+                ]
+              },
+              question: {
+                type: "string",
+                minLength: 1,
+                pattern: "\\S"
+              }
+            },
+            required: [
+              "answer_kind",
+              "question"
+            ],
+            additionalProperties: false
+          }
+        },
+        required: [
+          "component_id",
+          "axes",
+          "long_tool_loop",
+          "short_component"
+        ],
+        additionalProperties: false
+      }
+    }
+  },
+  required: [
+    "schema_version",
+    "task_id",
+    "phase_instance",
+    "step",
+    "role",
+    "subject_digest",
+    "input_fingerprint",
+    "component_manifest_digest",
+    "hazard_registry_digest",
+    "policy_id",
+    "decomposition",
+    "components"
   ],
   additionalProperties: false
 };
@@ -78465,8 +81323,8 @@ async function runStateTransaction(dependencies, request, prepare) {
 }
 
 // src/review/pinned-context.ts
-import { readFile as readFile16 } from "node:fs/promises";
-import { join as join17, posix } from "node:path";
+import { readFile as readFile17 } from "node:fs/promises";
+import { join as join18, posix } from "node:path";
 
 // src/contracts/utf8.ts
 import { Buffer as Buffer3 } from "node:buffer";
@@ -78659,7 +81517,7 @@ async function assembleUpstreamContext(input) {
           context: input.authority.context
         });
         if (!target2.ok) return target2;
-        const bytes = new Uint8Array(await readFile16(target2.value.absolute));
+        const bytes = new Uint8Array(await readFile17(target2.value.absolute));
         const reference = imported.value.staged_payload_refs.find((item) => item.legacy_path === mapping.legacy_path);
         if (reference === void 0 || sha256Bytes(bytes) !== reference.digest) return fail24(input.state.phase_instance, "imported-reference-changed");
         entries.push(pinnedContextEntry("imported-reference", relativePath, bytes));
@@ -78775,7 +81633,7 @@ async function verificationTranscriptEvidence(runner, authority, state, subject)
   }
   let bytes;
   try {
-    bytes = new Uint8Array(await readFile16(resolved.value.absolute));
+    bytes = new Uint8Array(await readFile17(resolved.value.absolute));
   } catch {
     return [unavailableContextEntry(
       "verification-transcript",
@@ -78934,7 +81792,7 @@ async function priorTriageEvidence(dependencies, state, preloaded) {
 async function conventionsEvidence(runner) {
   let bytes;
   try {
-    bytes = new Uint8Array(await readFile16(join17(runner.location.worktreeRoot, "CLAUDE.md")));
+    bytes = new Uint8Array(await readFile17(join18(runner.location.worktreeRoot, "CLAUDE.md")));
   } catch {
     return Object.freeze([]);
   }
@@ -79114,6 +81972,30 @@ async function runCounterReview(dependencies, input) {
   const configuredTestRoutes = specialistApplicable && testReviewDeclared ? await selectRoutes("test-reviewer") : Object.freeze([]);
   const constitutionRoutes = plan === void 0 ? void 0 : await selectRoutes("adjudicator");
   const constitutionRoute = constitutionRoutes?.[0];
+  const effortPlan = input.effort;
+  if (input.phase_kind === "phase-design" !== (effortPlan !== void 0)) {
+    throw new TypeError("fresh phase-design review requires exactly one effort plan");
+  }
+  const parsedEffortEnvelope = effortPlan === void 0 ? void 0 : parseEffortEnvelopeV1(effortPlan.envelope);
+  if (parsedEffortEnvelope !== void 0 && (parsedEffortEnvelope.task_id !== subject.task_id || parsedEffortEnvelope.phase_instance !== subject.phase_instance || parsedEffortEnvelope.attempt !== subject.attempt || parsedEffortEnvelope.subject_digest !== subject.subject_digest || parsedEffortEnvelope.input_fingerprint !== subject.input_fingerprint || canonicalJsonDigest(parsedEffortEnvelope.repositories) !== canonicalJsonDigest(input.repositories))) throw new TypeError("effort plan is not bound to the counter-review subject and repository pins");
+  const fixedEffortRoute = Object.freeze({ model: "gpt-5.6-luna", effort: "xhigh" });
+  const declaredEffortOverride = input.call.input.route_override?.["effort-reviewer"];
+  const effortCandidate = parsedEffortEnvelope === void 0 ? void 0 : Object.freeze({
+    raw_route: declaredEffortOverride ?? fixedEffortRoute,
+    source: declaredEffortOverride === void 0 ? Object.freeze({ provenance: "configured" }) : Object.freeze({
+      provenance: "route-override",
+      displaced: Object.freeze({ source: "configured", ...fixedEffortRoute })
+    })
+  });
+  let effortRoute;
+  if (effortCandidate !== void 0) {
+    try {
+      effortRoute = Object.freeze({ candidate: effortCandidate, selection: validateSelectedDispatchRoute(effortCandidate) });
+    } catch (error51) {
+      await observeFailure("effort-reviewer", effortCandidate, error51);
+      throw error51;
+    }
+  }
   const specialistActive = configuredTestRoutes.length > 0;
   const phaseKind2 = input.phase_kind;
   const generalRoutes = configuredReviewRoutes.map((routeEntry, index) => {
@@ -79177,6 +82059,7 @@ async function runCounterReview(dependencies, input) {
     workspace: plan.workspace,
     subject: constitutionSubject
   });
+  const effortEnvelope = parsedEffortEnvelope === void 0 ? void 0 : buildEffortEnvelope(parsedEffortEnvelope);
   const retained = dependencies.retained_outputs;
   const failures = [];
   const noteFailure = (outcome) => {
@@ -79229,6 +82112,68 @@ async function runCounterReview(dependencies, input) {
     return { ok: true, value: { kind: "review", observation } };
   };
   const ops = reviewRoutes.map((routeEntry, index) => reviewOp(routeEntry, reviewEnvelopes[index]));
+  if (effortPlan !== void 0 && parsedEffortEnvelope !== void 0 && effortEnvelope !== void 0 && effortRoute !== void 0) {
+    const route2 = effortRoute.selection.route;
+    const effortOverride = declaredEffortOverride === void 0 ? void 0 : Object.freeze({
+      reason: input.call.input.route_override.reason,
+      pinned_model: fixedEffortRoute.model,
+      pinned_effort: fixedEffortRoute.effort
+    });
+    const mint = (dispatched) => createEffortAssessmentV1(
+      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(dispatched.extracted_output_bytes)),
+      parsedEffortEnvelope,
+      {
+        adapter: route2.adapter,
+        cli_version: dispatched.cli_version,
+        model_family: route2.family,
+        model: route2.model,
+        effort: route2.effort,
+        invocation_id: parsedEffortEnvelope.invocation_id,
+        result_id: parsedEffortEnvelope.result_id,
+        envelope_input_digest: effortEnvelope.digest,
+        observed_output_digest: sha256Bytes(dispatched.extracted_output_bytes),
+        ...route2.provider === void 0 ? {} : { provider: route2.provider },
+        route_source: declaredEffortOverride === void 0 ? Object.freeze({ provenance: "fixed-policy" }) : Object.freeze({
+          provenance: "route-override",
+          displaced: Object.freeze({ source: "fixed-policy", ...fixedEffortRoute })
+        }),
+        ...effortOverride === void 0 ? {} : { route_override: effortOverride },
+        repositories: input.repositories
+      }
+    );
+    const binding = { envelope_digest: effortEnvelope.digest, role: "effort-reviewer", selection: effortRoute.selection };
+    ops.push(async () => {
+      const kept = await retained?.read(binding);
+      if (kept !== void 0) {
+        try {
+          return { ok: true, value: { kind: "effort", assessment: mint(kept) } };
+        } catch {
+        }
+      }
+      let dispatched;
+      try {
+        dispatched = await dispatchObserved("effort-reviewer", effortRoute, (selectedRoute) => dependencies.dispatch(selectedRoute, effortEnvelope, effort_review_schema_default));
+      } catch (error51) {
+        return { ok: false, error: error51 };
+      }
+      let assessment;
+      try {
+        assessment = mint(dispatched);
+      } catch (error51) {
+        return {
+          ok: false,
+          error: error51,
+          project_error: createProjectError("MODEL_OUTPUT_INVALID", {
+            adapter: route2.adapter,
+            attempt: 1,
+            issue_code: "effort-review-schema-or-binding-invalid"
+          })
+        };
+      }
+      await retained?.write(binding, dispatched);
+      return { ok: true, value: { kind: "effort", assessment } };
+    });
+  }
   if (plan !== void 0 && constitutionRoute !== void 0 && constitutionSubject !== void 0 && constitutionEnvelope !== void 0) {
     const constitutionOverride = overrideRecordFor("adjudicator");
     const route2 = constitutionRoute.selection.route;
@@ -79290,13 +82235,18 @@ async function runCounterReview(dependencies, input) {
   }
   const singleObservations = [];
   let constitutionEvidence;
+  let effortAssessment;
   for (const outcome of settled) {
     if (!outcome.ok) continue;
     if (outcome.value.kind === "review") singleObservations.push(outcome.value.observation);
+    else if (outcome.value.kind === "effort") effortAssessment = outcome.value.assessment;
     else constitutionEvidence = outcome.value.evidence;
   }
   if (singleObservations.length !== reviewRoutes.length) {
     throw new TypeError("counter-review settled without an observation for every selected reviewer");
+  }
+  if (effortPlan !== void 0 && effortAssessment === void 0) {
+    throw new TypeError("phase-design counter-review settled without an effort assessment");
   }
   const allFindings = [];
   const ownedFindingIds = singleObservations.map(() => []);
@@ -79365,7 +82315,8 @@ async function runCounterReview(dependencies, input) {
     verdict: mergedVerdict,
     blocking_count: mergedBlockingCount,
     matched_rule_versions: Object.freeze(mergedMatchedRules),
-    reviewer_runs: Object.freeze(reviewerRuns)
+    reviewer_runs: Object.freeze(reviewerRuns),
+    ...effortAssessment === void 0 ? {} : { effort_review: effortAssessment }
   });
   const summarizedConstitution = constitutionEvidence;
   const currentProjection = await dependencies.reobserve_projection_digest();
@@ -79433,6 +82384,7 @@ async function runCounterReview(dependencies, input) {
     await retained?.discard(digest9);
   }
   if (constitutionEnvelope !== void 0) await retained?.discard(constitutionEnvelope.digest);
+  if (effortEnvelope !== void 0) await retained?.discard(effortEnvelope.digest);
   return {
     schema_version: "1",
     ok: true,
@@ -79562,11 +82514,27 @@ async function openHandlerSession(call, context2) {
 // src/mcp/handlers/counter-review.ts
 var fail26 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 var ok26 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+function effortInputContractError(issueCode, error51) {
+  const issues = describeValidationIssues(error51);
+  return createProjectError("CONTRACT_INVALID", {
+    tool: "archflow_counter_review",
+    issue_code: issueCode,
+    ...issues === void 0 ? {} : { issues }
+  });
+}
 function dispatchId(prefix, value) {
   return parseSafeId(`${prefix}-${sha256Bytes(new TextEncoder().encode(value)).slice(0, 32)}`);
 }
 function stableId(prefix, seed) {
   return parseSafeId(`${prefix}-${canonicalJsonDigest(seed).slice(0, 32)}`);
+}
+async function readHazardRegistryBytes(primaryRoot) {
+  try {
+    return new Uint8Array(await readFile18(join19(primaryRoot, ".archflow", "hazards.yaml")));
+  } catch (error51) {
+    if (error51.code !== "ENOENT") throw error51;
+    return void 0;
+  }
 }
 function envelopeOverflowError(error51, subject) {
   if (!(error51 instanceof ReviewEnvelopeError)) return void 0;
@@ -79810,6 +82778,28 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
         issue_code: "artifact-not-utf8"
       }));
     }
+    let phaseDesignArtifact;
+    let componentManifest;
+    let hazardRegistry;
+    if (session.value.phase_kind === "phase-design") {
+      try {
+        phaseDesignArtifact = new TextDecoder("utf-8", { fatal: true }).decode(projection.value.bytes);
+        const repositoryNames = session.value.repository_set.members.map((member) => member.name);
+        componentManifest = extractPhaseDesignComponentManifest(phaseDesignArtifact, repositoryNames);
+      } catch (error51) {
+        return fail26(effortInputContractError("phase-design-component-manifest-invalid", error51));
+      }
+      try {
+        const repositoryNames = session.value.repository_set.members.map((member) => member.name);
+        hazardRegistry = await captureHazardRegistryInput(
+          () => readHazardRegistryBytes(services.runner.location.worktreeRoot),
+          repositoryNames,
+          componentManifest
+        );
+      } catch (error51) {
+        return fail26(effortInputContractError("hazard-registry-invalid-or-unreadable", error51));
+      }
+    }
     const constitution = await resolvePinnedConstitution(
       services.runner,
       state.value.policy_base_commit,
@@ -79863,6 +82853,28 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
     );
     const reviewedRepositories = projectReviewedRepositories(repositoryViews);
     const workspaceBinding = projectRepositoryWorkspaceBinding(repositoryViews);
+    let effortPlan;
+    if (phaseDesignArtifact !== void 0 && componentManifest !== void 0 && hazardRegistry !== void 0) {
+      const effortResultId = stableId("effort-result", call.input.intent_id);
+      const effortEnvelope = Object.freeze({
+        schema_version: "1",
+        artifact: phaseDesignArtifact,
+        instructions: EFFORT_REVIEW_INSTRUCTIONS,
+        task_id: services.authority.task_id,
+        phase_instance: state.value.phase_instance,
+        attempt: state.value.attempt,
+        subject_digest: produce.value.artifact_digest,
+        input_fingerprint: call.input.input_fingerprint,
+        invocation_id: stableId("effort-invocation", call.input.intent_id),
+        result_id: effortResultId,
+        policy_id: IMPLEMENTATION_EFFORT_POLICY_ID,
+        component_manifest_digest: phaseDesignComponentManifestDigest(componentManifest),
+        component_manifest: componentManifest,
+        hazard_registry: hazardRegistry,
+        repositories: reviewedRepositories
+      });
+      effortPlan = Object.freeze({ envelope: effortEnvelope });
+    }
     const sharedWorkspace = shareRepositoryViewWorkspace(
       repositoryViews,
       services.runner.location.worktreeRoot
@@ -80001,7 +83013,8 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
       },
       projection_digest: produceProjectionSetDigest(projections.value),
       ...priorTriage.value === void 0 ? {} : { prior_triage: priorTriage.value },
-      ...constitutionPlan === void 0 ? {} : { constitution: constitutionPlan }
+      ...constitutionPlan === void 0 ? {} : { constitution: constitutionPlan },
+      ...effortPlan === void 0 ? {} : { effort: effortPlan }
     }).catch((error51) => {
       const overflow = envelopeOverflowError(error51, produce.value);
       if (overflow !== void 0) return fail26(overflow);

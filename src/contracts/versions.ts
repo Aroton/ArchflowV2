@@ -9,6 +9,12 @@ export const SCHEMA_IDS = {
   constitutionRule: "urn:archflow:schema:v1:constitution-rule",
   review: "urn:archflow:schema:v1:review",
   reviewEvidence: "urn:archflow:schema:v1:review-evidence",
+  componentManifest: "urn:archflow:schema:v1:component-manifest",
+  hazardRegistry: "urn:archflow:schema:v1:hazard-registry",
+  hazardRegistryInput: "urn:archflow:schema:v1:hazard-registry-input",
+  effortEnvelope: "urn:archflow:schema:v1:effort-envelope",
+  effortReview: "urn:archflow:schema:v1:effort-review",
+  effortAssessment: "urn:archflow:schema:v1:effort-assessment",
   adjudication: "urn:archflow:schema:v1:adjudication",
   adjudicationEvidence: "urn:archflow:schema:v1:adjudication-evidence",
   evidenceSlots: "urn:archflow:schema:v1:evidence-slots",
@@ -36,4 +42,5 @@ export const SCHEMA_IDS = {
   semanticWorkflow: "urn:archflow:schema:v1:semantic-workflow",
   dispatchFailure: "urn:archflow:schema:v1:dispatch-failure",
   automationStatus: "urn:archflow:schema:v1:automation-status",
+  automationStatusV2: "urn:archflow:schema:v2:automation-status",
 } as const;

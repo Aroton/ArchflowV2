@@ -8,6 +8,13 @@ import {
   type PublicDispatchFailureV1,
 } from "./dispatch-failure.js";
 import type { ConfigChangeEntry, TaskStateV1 } from "./durable-state.js";
+import {
+  componentEffortJudgmentV1Schema,
+  effortAssessmentV1Schema,
+  type ComponentEffortJudgmentV1,
+  type EffortAssessmentV1,
+  type EffortReviewerProvenanceV1,
+} from "./effort-review.js";
 import type { Sha256Digest, TaskSlug } from "./evidence.js";
 import { sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
 import type { ReviewRouteSetV1, RouteOverrideDeclaration } from "./mcp-tools.js";
@@ -16,6 +23,12 @@ import { assertPlainJson } from "./plain-json.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
 import { positiveSafePhaseNumberV1Schema } from "./phase-instance.js";
 import { REVIEW_FINDING_SEVERITIES } from "./review.js";
+import type {
+  ComponentEffortProfileV1,
+  EffortBlockerV1,
+  ImplementationProfileV1,
+} from "../review/effort-policy.js";
+import { EFFORT_CAVEAT_CODES, IMPLEMENTATION_PROFILE_IDS } from "../review/effort-policy.js";
 
 const nonBlank = z.string().min(1).regex(/\S/u);
 const boundedText = nonBlank.max(4096);
@@ -107,6 +120,199 @@ export type PublicReviewerStrengthV1 = {
   readonly same_family: boolean;
   readonly finding_count: number;
 };
+
+export const IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS = [
+  "not-applicable", "not-produced", "subject-stale", "legacy-evidence",
+] as const;
+export const IMPLEMENTATION_RECOMMENDATION_REGISTRY_DRIFT = [
+  "registry-created", "registry-removed", "registry-changed", "registry-unreadable",
+] as const;
+
+export type PublicActualImplementationRouteV1 = { readonly status: "not-recorded" };
+export type PublicEffortReviewerV1 = Pick<EffortReviewerProvenanceV1,
+  "model" | "effort" | "model_family" | "provider" | "route_source" | "route_override">;
+export type PublicImplementationComponentV1 = ComponentEffortJudgmentV1 & {
+  readonly total: number;
+  readonly profile?: ImplementationProfileV1;
+  readonly caveats: readonly ComponentEffortProfileV1["caveats"][number][];
+};
+export type PublicRecommendationRegistryDriftV1 = {
+  readonly kind: (typeof IMPLEMENTATION_RECOMMENDATION_REGISTRY_DRIFT)[number];
+  readonly explanation: string;
+};
+export type PublicImplementationRecommendationEvidenceV1 = {
+  readonly phase: number;
+  readonly policy_id: EffortAssessmentV1["policy_id"];
+  readonly subject_digest: Sha256Digest;
+  readonly component_manifest_digest: Sha256Digest;
+  readonly hazard_registry_digest: Sha256Digest;
+  readonly reviewer: PublicEffortReviewerV1;
+  readonly components: readonly PublicImplementationComponentV1[];
+  readonly registry_drift?: PublicRecommendationRegistryDriftV1;
+  readonly actual_implementation_route: PublicActualImplementationRouteV1;
+};
+export type ImplementationRecommendationV1 =
+  | (PublicImplementationRecommendationEvidenceV1 & {
+      readonly status: "ready";
+      readonly phase_profile: ImplementationProfileV1;
+      readonly determining_component_ids: readonly string[];
+    })
+  | (PublicImplementationRecommendationEvidenceV1 & {
+      readonly status: "blocked";
+      readonly blockers: readonly EffortBlockerV1[];
+    })
+  | {
+      readonly status: "unavailable";
+      readonly phase?: number;
+      readonly reason: (typeof IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS)[number];
+      readonly explanation: string;
+      readonly actual_implementation_route: PublicActualImplementationRouteV1;
+    };
+
+const actualImplementationRouteV1Schema = z.object({ status: z.literal("not-recorded") }).strict();
+const registryDriftV1Schema = z.object({
+  kind: z.enum(IMPLEMENTATION_RECOMMENDATION_REGISTRY_DRIFT),
+  explanation: nonBlank,
+}).strict();
+const effortValue = z.enum(["low", "medium", "high", "xhigh", "max", "ultra"]);
+const publicEffortReviewerV1Schema = z.object({
+  model: nonBlank,
+  effort: effortValue,
+  model_family: z.enum(["claude", "codex", "gemini"]),
+  provider: nonBlank.optional(),
+  route_source: z.discriminatedUnion("provenance", [
+    z.object({ provenance: z.literal("fixed-policy") }).strict(),
+    z.object({
+      provenance: z.literal("route-override"),
+      displaced: z.object({
+        source: z.literal("fixed-policy"), model: nonBlank, effort: effortValue, provider: nonBlank.optional(),
+      }).strict(),
+    }).strict(),
+  ]),
+  route_override: z.object({
+    reason: nonBlank,
+    pinned_model: nonBlank.optional(),
+    pinned_effort: effortValue.optional(),
+    pinned_provider: nonBlank.optional(),
+  }).strict().optional(),
+}).strict();
+const implementationProfileSchema = z.discriminatedUnion("profile_id", [
+  z.object({ profile_id: z.literal(IMPLEMENTATION_PROFILE_IDS[0]), model: z.literal("gemini-3.7-flash"), effort: z.literal("max") }).strict(),
+  z.object({ profile_id: z.literal(IMPLEMENTATION_PROFILE_IDS[1]), model: z.literal("glm-5.3-flash"), effort: z.literal("max") }).strict(),
+  z.object({ profile_id: z.literal(IMPLEMENTATION_PROFILE_IDS[2]), model: z.literal("gpt-5.6-sol"), effort: z.literal("medium") }).strict(),
+  z.object({ profile_id: z.literal(IMPLEMENTATION_PROFILE_IDS[3]), model: z.literal("gpt-5.6-sol"), effort: z.literal("xhigh") }).strict(),
+]);
+const effortCaveatSchema = z.object({ code: z.enum(EFFORT_CAVEAT_CODES), message: nonBlank }).strict();
+const blockerSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("specification-gap"), component_id: z.string(),
+    answer_kind: z.enum(["number", "priority-order"]), question: nonBlank,
+  }).strict(),
+  z.object({
+    kind: z.literal("undifferentiated-decomposition"), rationale: nonBlank,
+    missing_boundaries: z.array(nonBlank).min(1),
+  }).strict(),
+]);
+const publicImplementationComponentV1Schema = componentEffortJudgmentV1Schema.extend({
+  total: z.number().int().min(0).max(15),
+  profile: implementationProfileSchema.optional(),
+  caveats: z.array(effortCaveatSchema),
+}).strict();
+const publicRecommendationEvidenceShape = {
+  phase: positiveSafePhaseNumberV1Schema,
+  policy_id: z.literal("implementation-effort-v1"),
+  subject_digest: sha256DigestV1Schema,
+  component_manifest_digest: sha256DigestV1Schema,
+  hazard_registry_digest: sha256DigestV1Schema,
+  reviewer: publicEffortReviewerV1Schema,
+  components: z.array(publicImplementationComponentV1Schema).min(1),
+  registry_drift: registryDriftV1Schema.optional(),
+  actual_implementation_route: actualImplementationRouteV1Schema,
+} as const;
+export const implementationRecommendationV1Schema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("ready"),
+    ...publicRecommendationEvidenceShape,
+    phase_profile: implementationProfileSchema,
+    determining_component_ids: z.array(z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)).min(1),
+  }).strict(),
+  z.object({
+    status: z.literal("blocked"),
+    ...publicRecommendationEvidenceShape,
+    blockers: z.array(blockerSchema).min(1),
+  }).strict(),
+  z.object({
+    status: z.literal("unavailable"),
+    phase: positiveSafePhaseNumberV1Schema.optional(),
+    reason: z.enum(IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS),
+    explanation: nonBlank,
+    actual_implementation_route: actualImplementationRouteV1Schema,
+  }).strict(),
+]) as unknown as z.ZodType<ImplementationRecommendationV1>;
+
+const ACTUAL_ROUTE_NOT_RECORDED = Object.freeze({ status: "not-recorded" as const });
+
+export function unavailableImplementationRecommendation(
+  reason: Extract<ImplementationRecommendationV1, { status: "unavailable" }>["reason"],
+  explanation: string,
+  phase?: number,
+): ImplementationRecommendationV1 {
+  return Object.freeze(implementationRecommendationV1Schema.parse({
+    status: "unavailable",
+    ...(phase === undefined ? {} : { phase }),
+    reason,
+    explanation,
+    actual_implementation_route: ACTUAL_ROUTE_NOT_RECORDED,
+  }));
+}
+
+/** Copies one strictly parsed authenticated assessment into the public advisory-only union. */
+export function implementationRecommendationFromAssessment(
+  value: EffortAssessmentV1,
+  phase: number,
+  registryDrift?: PublicRecommendationRegistryDriftV1,
+): ImplementationRecommendationV1 {
+  const assessment = effortAssessmentV1Schema.parse(structuredClone(value));
+  if (assessment.phase_instance !== `phase-design-${String(phase)}`) {
+    throw new TypeError("effort assessment does not match the governing phase design");
+  }
+  const profiles = new Map(assessment.recommendation.component_profiles.map((component) => [component.component_id, component]));
+  const components = assessment.judgments.map((judgment) => {
+    const profile = profiles.get(judgment.component_id);
+    return Object.freeze({
+      ...judgment,
+      total: Object.values(judgment.axes).reduce((sum, axis) => sum + axis.score, 0),
+      ...(profile === undefined ? {} : { profile: profile.profile }),
+      caveats: Object.freeze([...(profile?.caveats ?? [])]),
+    });
+  });
+  const common = {
+    phase,
+    policy_id: assessment.policy_id,
+    subject_digest: assessment.subject_digest,
+    component_manifest_digest: assessment.component_manifest_digest,
+    hazard_registry_digest: assessment.hazard_registry_digest,
+    reviewer: Object.freeze({
+      model: assessment.reviewer.model,
+      effort: assessment.reviewer.effort,
+      model_family: assessment.reviewer.model_family,
+      ...(assessment.reviewer.provider === undefined ? {} : { provider: assessment.reviewer.provider }),
+      route_source: assessment.reviewer.route_source,
+      ...(assessment.reviewer.route_override === undefined ? {} : { route_override: assessment.reviewer.route_override }),
+    }),
+    components: Object.freeze(components),
+    ...(registryDrift === undefined ? {} : { registry_drift: Object.freeze(registryDrift) }),
+    actual_implementation_route: ACTUAL_ROUTE_NOT_RECORDED,
+  };
+  return Object.freeze(implementationRecommendationV1Schema.parse(assessment.recommendation.status === "ready"
+    ? {
+        status: "ready",
+        ...common,
+        phase_profile: assessment.recommendation.phase_profile,
+        determining_component_ids: assessment.recommendation.determining_component_ids,
+      }
+    : { status: "blocked", ...common, blockers: assessment.recommendation.blockers }));
+}
 
 export type HumanPresentationOptionV1 = { readonly token: string; readonly label: string; readonly consequence: string };
 export type HumanPresentationReasonV1 = {
@@ -201,6 +407,8 @@ export type WorkflowViewV1 = {
   readonly review_context?: PublicReviewContextV1;
   /** Present whenever current counter-review evidence exists; see {@link PublicReviewStrengthV1}. */
   readonly review_strength?: PublicReviewStrengthV1;
+  /** Authenticated effort advice only; never participates in action or authority selection. */
+  readonly implementation_recommendation: ImplementationRecommendationV1;
   readonly presentation?: HumanPresentationV1;
   readonly dispatch_failure?: PublicDispatchFailureV1;
   /**
@@ -287,6 +495,7 @@ export type SemanticStatusSnapshotV1 = {
   readonly full_findings: readonly PublicFindingV1[];
   /** Per-attempt finding and acceptance counts for the current phase instance, from retained review and triage. */
   readonly review_rounds?: readonly PublicReviewRoundV1[];
+  readonly implementation_recommendation: ImplementationRecommendationV1;
   readonly pending_waiver_origin?: PlainJsonValue;
   readonly archived_decision?: PlainJsonValue;
   readonly revision_checkpoint?: PlainJsonValue;
@@ -444,7 +653,7 @@ export const repositoryStatusV1Schema = z.object({
   last_reviewed_commit: gitOidV1Schema.optional(),
 }).strict() as unknown as z.ZodType<RepositoryStatusV1>;
 
-export const workflowViewV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, condition: z.enum(WORKFLOW_CONDITIONS), headline: nonBlank, detail: nonBlank, position: workflowPositionV1Schema.optional(), resources: z.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: z.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), review_strength: publicReviewStrengthV1Schema.optional(), presentation: humanPresentationV1Schema.optional(), dispatch_failure: publicDispatchFailureV1Schema.optional(), repositories: z.array(repositoryStatusV1Schema).optional(), config_change: z.array(configChangeEntryV1Schema).optional() }).strict() as unknown as z.ZodType<WorkflowViewV1>;
+export const workflowViewV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, condition: z.enum(WORKFLOW_CONDITIONS), headline: nonBlank, detail: nonBlank, position: workflowPositionV1Schema.optional(), resources: z.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: z.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), review_strength: publicReviewStrengthV1Schema.optional(), implementation_recommendation: implementationRecommendationV1Schema, presentation: humanPresentationV1Schema.optional(), dispatch_failure: publicDispatchFailureV1Schema.optional(), repositories: z.array(repositoryStatusV1Schema).optional(), config_change: z.array(configChangeEntryV1Schema).optional() }).strict() as unknown as z.ZodType<WorkflowViewV1>;
 
 export const semanticErrorSummaryV1Schema = z.object({
   code: nonBlank.max(128),
@@ -485,10 +694,11 @@ const routeOverrideDeclarationV1Schema = z.object({
   reason: boundedText,
   "counter-reviewer": overrideRoute.optional(),
   "test-reviewer": overrideRoute.optional(),
+  "effort-reviewer": overrideRoute.optional(),
   adjudicator: overrideRoute.optional(),
 }).strict().superRefine((override, context) => {
-  if (override["counter-reviewer"] === undefined && override["test-reviewer"] === undefined && override.adjudicator === undefined) {
-    context.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
+  if (override["counter-reviewer"] === undefined && override["test-reviewer"] === undefined && override["effort-reviewer"] === undefined && override.adjudicator === undefined) {
+    context.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, effort-reviewer, adjudicator, or a combination" });
   }
 });
 export const applySubmissionV1Schema = z.union([
@@ -515,6 +725,13 @@ export const archFlowApplyInputV1Schema = z.object({ schema_version: z.literal("
       path: ["action", "submission", "route_override", "test-reviewer"],
       message: "test-reviewer overrides are available only for phase design and phase implementation",
     });
+  }
+  if (
+    input.invocation.skill !== "archflow-phase-design" &&
+    submission?.kind === "review-dispatch" &&
+    submission.route_override["effort-reviewer"] !== undefined
+  ) {
+    context.addIssue({ code: "custom", path: ["action", "submission", "route_override", "effort-reviewer"], message: "effort-reviewer overrides are available only for phase design" });
   }
 }) as unknown as z.ZodType<ArchFlowApplyInputV1>;
 export const archFlowStatusInputV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema.optional() }).strict() as unknown as z.ZodType<ArchFlowStatusInputV1>;

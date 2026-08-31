@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   createAutomationStatus,
+  createAutomationStatusV2,
   parseAutomationStatus,
+  parseAutomationStatusV2,
   type AutomationStatusWithoutIdV1,
+  type AutomationStatusWithoutIdV2,
 } from "../../src/contracts/automation-status.js";
 import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import automationStatusSchema from "../../src/contracts/schemas/v1/automation-status.schema.json" with { type: "json" };
+import automationStatusV2Schema from "../../src/contracts/schemas/v1/automation-status-v2.schema.json" with { type: "json" };
 import primitivesSchema from "../../src/contracts/schemas/v1/primitives.schema.json" with { type: "json" };
 import semanticWorkflowSchema from "../../src/contracts/schemas/v1/semantic-workflow.schema.json" with { type: "json" };
 import { createJsonSchemaValidator } from "../helpers/json-schema.js";
@@ -37,6 +41,20 @@ const ready = (): AutomationStatusWithoutIdV1 => ({
     skill_args: ["2"],
     instruction: "Launch the server-derived successor.",
   },
+});
+
+const unavailable = {
+  status: "unavailable" as const,
+  phase: 2,
+  reason: "not-produced" as const,
+  explanation: "No authenticated implementation recommendation has been produced.",
+  actual_implementation_route: { status: "not-recorded" as const },
+};
+
+const readyV2 = (): AutomationStatusWithoutIdV2 => ({
+  ...ready(),
+  schema_version: "2",
+  implementation_recommendation: unavailable,
 });
 
 describe("automation status contract", () => {
@@ -209,5 +227,58 @@ describe("automation status contract", () => {
     } as unknown as AutomationStatusWithoutIdV1;
     expect(() => createAutomationStatus(dispatch, authority)).toThrow(/exceptional reason/u);
     expect(() => validate.assert({ ...dispatch, observation_id: valid.observation_id })).toThrow();
+  });
+});
+
+describe("automation status v2 contract", () => {
+  const validateV1 = createJsonSchemaValidator(automationStatusSchema, [primitivesSchema, semanticWorkflowSchema]);
+  const validateV2 = createJsonSchemaValidator(automationStatusV2Schema, [primitivesSchema, semanticWorkflowSchema]);
+
+  it("round-trips only v2 through its strict runtime and generated schema", () => {
+    const value = createAutomationStatusV2(readyV2(), authority);
+    expect(parseAutomationStatusV2(value)).toEqual(value);
+    expect(validateV2.assert(value)).toEqual(value);
+    expect(automationStatusV2Schema.$id).toBe("urn:archflow:schema:v2:automation-status");
+    expect(() => parseAutomationStatus(value)).toThrow();
+    expect(() => validateV1.assert(value)).toThrow();
+
+    const v1 = createAutomationStatus(ready(), authority);
+    expect(() => parseAutomationStatusV2(v1)).toThrow();
+    expect(() => validateV2.assert(v1)).toThrow();
+  });
+
+  it("binds recommendation bytes into the v2 observation identity", () => {
+    const first = createAutomationStatusV2(readyV2(), authority);
+    const changed = createAutomationStatusV2({
+      ...readyV2(),
+      implementation_recommendation: {
+        ...unavailable,
+        reason: "subject-stale",
+        explanation: "The retained recommendation belongs to prior design bytes.",
+      },
+    }, authority);
+    expect(changed.observation_id).not.toBe(first.observation_id);
+    expect(changed.next_action).toEqual(first.next_action);
+  });
+
+  it("admits effort-reviewer only in the v2 dispatch-failure vocabulary", () => {
+    const document: AutomationStatusWithoutIdV2 = {
+      schema_version: "2", task_id: task, state_revision: parseSafeInteger(7), position: { kind: "phase-design", phase: 2 },
+      implementation_recommendation: unavailable,
+      condition: "awaiting-human",
+      next_action: {
+        actor: "human", kind: "respond-in-session", skill: "archflow-phase-design",
+        task_id: task, skill_args: ["2"], instruction: "Repair or substitute the effort reviewer.",
+      },
+      human_boundary: {
+        source: "dispatch-failure", class: "exception", headline: "Effort reviewer unavailable",
+        summary: "The configured effort reviewer failed.", question: "Repair or substitute?",
+        reasons: [{ class: "exception", text: "Effort review is required." }],
+        failed_role: "effort-reviewer", failure_code: "AUTH_UNAVAILABLE",
+      },
+    };
+    const value = createAutomationStatusV2(document, authority);
+    expect(parseAutomationStatusV2(value)).toEqual(value);
+    expect(validateV2.assert(value)).toEqual(value);
   });
 });

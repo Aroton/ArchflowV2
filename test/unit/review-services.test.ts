@@ -9,6 +9,7 @@ import type { ConstitutionRegistry } from "../../src/contracts/constitution.js";
 import type { ResultManifestV1 } from "../../src/contracts/durable-result-manifest.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import type { Sha256Digest } from "../../src/contracts/evidence.js";
+import type { EffortAssessmentV1 } from "../../src/contracts/effort-review.js";
 import { computeGateContextDigest } from "../../src/contracts/fingerprints.js";
 import { encodePhaseInstance } from "../../src/contracts/phase-instance.js";
 import {
@@ -173,6 +174,109 @@ function retained(
   ]) as RetainedEvidenceSet;
 }
 
+function phaseDesignRetained(status?: "ready" | "blocked", attempt = 1): RetainedEvidenceSet {
+  const entries = new Map(retained());
+  const counterEntry = entries.get("counter_review")!;
+  const counterSource = counterEntry.manifest.source_artifact;
+  if (counterSource.artifact_kind !== "review-evidence") throw new Error("expected review evidence");
+  const effort = status === undefined ? undefined : {
+    schema_version: "1",
+    task_id: "task",
+    phase_instance: "phase-design-14",
+    attempt,
+    subject_digest: D("8"),
+    input_fingerprint: D("2"),
+    component_manifest_digest: D("3"),
+    hazard_registry_digest: D("4"),
+    policy_id: "implementation-effort-v1",
+    decomposition: { status: "adequate", rationale: "The component is independently scoreable." },
+    judgments: [{
+      component_id: "api-boundary",
+      axes: {
+        A: { score: 0, rationale: "small" }, B: { score: 0, rationale: "local" },
+        C: { score: 0, rationale: "direct" },
+        D: { score: status === "blocked" ? 2 : 0, rationale: "specified" },
+        E: { score: 0, rationale: "safe" },
+      },
+      long_tool_loop: { value: "no", rationale: "bounded" },
+      short_component: { value: "yes", rationale: "small" },
+      ...(status === "blocked" ? { blocker: { answer_kind: "priority-order", question: "Which API owns retries?" } } : {}),
+    }],
+    reviewer: {
+      adapter: "codex-cli", cli_version: "1.0.0", model_family: "codex",
+      model: "gpt-5.6-luna", effort: "xhigh", invocation_id: "effort-invocation",
+      result_id: "effort-result", envelope_input_digest: D("5"), observed_output_digest: D("6"),
+      route_source: { provenance: "fixed-policy" },
+      repositories: [{ name: "primary", repository_identity_digest: D("7"), commit: "8".repeat(40) }],
+    },
+    recommendation: status === "ready"
+      ? {
+          status: "ready", blockers: [], component_profiles: [{
+            component_id: "api-boundary", total: 0,
+            profile: { profile_id: "gemini-3-7-flash-max", model: "gemini-3.7-flash", effort: "max" },
+            caveats: [],
+          }],
+          phase_profile: { profile_id: "gemini-3-7-flash-max", model: "gemini-3.7-flash", effort: "max" },
+          determining_component_ids: ["api-boundary"],
+        }
+      : { status: "blocked", component_profiles: [], blockers: [{
+          kind: "specification-gap", component_id: "api-boundary", answer_kind: "priority-order", question: "Which API owns retries?",
+        }] },
+  } as unknown as EffortAssessmentV1;
+  const counter = {
+    ...counterSource.evidence,
+    phase_instance: "phase-design-14",
+    ...(effort === undefined ? {} : { effort_review: effort }),
+  };
+  const counterDigest = canonicalJsonDigest(counter);
+  const evidenceSet = currentEvidenceSetRef(parseRequiredReviewSlots([{
+    role: "counter-review",
+    evidence_digest: counterDigest,
+    assurance: counter.assurance,
+    producer_family: counter.producer_family,
+    reviewer_family: counter.model_family,
+  }]));
+  entries.set("counter_review", {
+    ...counterEntry,
+    manifest: {
+      ...counterEntry.manifest,
+      artifact_digest: counterDigest,
+      source_artifact: { schema_version: "1", artifact_kind: "review-evidence", evidence: counter },
+    },
+  } as never);
+  const triageEntry = entries.get("triage")!;
+  const triageSource = triageEntry.manifest.source_artifact;
+  if (triageSource.artifact_kind !== "triage") throw new Error("expected triage evidence");
+  entries.set("triage", {
+    ...triageEntry,
+    manifest: {
+      ...triageEntry.manifest,
+      source_artifact: { schema_version: "1", artifact_kind: "triage", evidence: {
+        ...triageSource.evidence,
+        phase_instance: "phase-design-14",
+        current_evidence_set_digest: evidenceSet.set_digest,
+        source_evidence_digests: [counterDigest],
+        dispositions: triageSource.evidence.dispositions.map((item) => ({
+          ...item, review_evidence_digest: counterDigest,
+        })),
+      } },
+    },
+  } as never);
+  const adjudicationEntry = entries.get("adjudicate")!;
+  const adjudicationSource = adjudicationEntry.manifest.source_artifact;
+  if (adjudicationSource.artifact_kind !== "adjudication-evidence") throw new Error("expected adjudication evidence");
+  entries.set("adjudicate", {
+    ...adjudicationEntry,
+    manifest: {
+      ...adjudicationEntry.manifest,
+      source_artifact: { schema_version: "1", artifact_kind: "adjudication-evidence", evidence: {
+        ...adjudicationSource.evidence, phase_instance: "phase-design-14",
+      } },
+    },
+  } as never);
+  return entries as RetainedEvidenceSet;
+}
+
 function adjudication(): DerivedAdjudication {
   return {
     schema_version: "1",
@@ -248,6 +352,38 @@ describe("review services", () => {
       subject_digest: D("a"), input_fingerprint: D("9"), constitution, max_attempts: 3,
     });
     expect(significant).toMatchObject({ next: "counter_review", exhausted: false });
+  });
+
+  it("requires exact-current ready effort evidence for changed phase designs", () => {
+    const phaseState = state({ phase_instance: "phase-design-14" });
+    const subject = { subject_digest: D("8"), input_fingerprint: D("2"), constitution, max_attempts: 3 };
+    expect(assessCurrentEvidence(phaseState, phaseDesignRetained("ready"), subject)).toMatchObject({
+      next: "advance", effort_currency: "ready",
+    });
+    expect(assessCurrentEvidence(phaseState, phaseDesignRetained(), subject)).toMatchObject({
+      next: "advance", effort_currency: "legacy-exact",
+    });
+    expect(assessCurrentEvidence(phaseState, phaseDesignRetained("ready"), {
+      ...subject,
+      subject_digest: D("a"),
+      review_predecessor: { subject_digest: D("8"), input_fingerprint: D("2") },
+    })).toMatchObject({ next: "counter_review" });
+  });
+
+  it("keeps effort blockers independent of triage and exhausts their retry budget", () => {
+    const subject = { subject_digest: D("8"), input_fingerprint: D("2"), constitution, max_attempts: 3 };
+    expect(assessCurrentEvidence(
+      state({ phase_instance: "phase-design-14", attempt: 1 }), phaseDesignRetained("blocked"), subject,
+    )).toMatchObject({
+      next: "produce",
+      reentry_required: true,
+      effort_reentry_required: true,
+      effort_currency: "blocked",
+      effort_blockers: [{ kind: "specification-gap", question: "Which API owns retries?" }],
+    });
+    expect(assessCurrentEvidence(
+      state({ phase_instance: "phase-design-14", attempt: 3 }), phaseDesignRetained("blocked", 3), subject,
+    )).toMatchObject({ next: "attempts-exhausted", exhausted: true });
   });
 
   it("never lets a simple human revision clear an accepted material finding", () => {

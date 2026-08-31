@@ -25,7 +25,7 @@ export const DISPATCH_FAILURE_CODES = [
 ] as const;
 
 export type DispatchFailureCodeV1 = (typeof DISPATCH_FAILURE_CODES)[number];
-export type DispatchFailureRoleV1 = "counter-reviewer" | "test-reviewer" | "adjudicator";
+export type DispatchFailureRoleV1 = "counter-reviewer" | "test-reviewer" | "effort-reviewer" | "adjudicator";
 export type DispatchRouteSourceV1 = "configured" | "invocation-declared" | "route-override";
 
 export type DispatchFailureRouteV1 = Readonly<{
@@ -100,7 +100,7 @@ export const dispatchFailureObservationV1Schema = z.object({
   phase_instance: phaseInstanceIdV1Schema,
   step: z.literal("counter_review"),
   attempt: safeIntegerV1Schema,
-  role: z.enum(["counter-reviewer", "test-reviewer", "adjudicator"]),
+  role: z.enum(["counter-reviewer", "test-reviewer", "effort-reviewer", "adjudicator"]),
   code: z.enum(DISPATCH_FAILURE_CODES),
   message: boundedMessage,
   repository_name: repositoryName().optional(),
@@ -109,7 +109,7 @@ export const dispatchFailureObservationV1Schema = z.object({
 }).strict().superRefine(requireRepositoryNameOnlyForViewFailures).meta({ ...REPOSITORY_NAME_PRESENCE_RULE }) as unknown as z.ZodType<DispatchFailureObservationV1>;
 
 export const publicDispatchFailureV1Schema = z.object({
-  role: z.enum(["counter-reviewer", "test-reviewer", "adjudicator"]),
+  role: z.enum(["counter-reviewer", "test-reviewer", "effort-reviewer", "adjudicator"]),
   code: z.enum(DISPATCH_FAILURE_CODES),
   message: boundedMessage,
   repository_name: repositoryName().optional(),

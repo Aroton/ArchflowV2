@@ -361,10 +361,10 @@ describe("the pinned $def inventory resolves", () => {
 });
 
 describe("schema registry invariants", () => {
-  it("SCHEMA_IDS holds 35 entries in exact bijection with the schema directory", () => {
-    expect(Object.keys(SCHEMA_IDS)).toHaveLength(35);
-    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(35);
-    expect(schemaFileNames()).toHaveLength(35);
+  it("SCHEMA_IDS holds 42 entries in exact bijection with the schema directory", () => {
+    expect(Object.keys(SCHEMA_IDS)).toHaveLength(42);
+    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(42);
+    expect(schemaFileNames()).toHaveLength(42);
 
     const idsInFiles = [...ALL_SCHEMAS.values()].map((document) => document.$id as string).sort();
     expect(idsInFiles).toEqual([...Object.values(SCHEMA_IDS)].sort());
@@ -493,6 +493,13 @@ describe("the phase's exclusions hold", () => {
     // autonomous settlement arm deliberately pins `match: null` to make the conclusion complete,
     // including when that frozen conclusion is copied into a fresh ordinary gate trigger.
     expect(nullNodes).toEqual([
+      "automation-status-v2/oneOf/0/properties/state_revision/anyOf/1/type",
+      "automation-status-v2/oneOf/1/properties/state_revision/anyOf/1/type",
+      "automation-status-v2/oneOf/2/properties/state_revision/anyOf/1/type",
+      "automation-status-v2/oneOf/3/properties/state_revision/anyOf/1/type",
+      "automation-status-v2/oneOf/4/properties/state_revision/anyOf/1/type",
+      "automation-status-v2/oneOf/4/properties/position/type",
+      "automation-status-v2/oneOf/5/properties/state_revision/anyOf/1/type",
       "automation-status/oneOf/0/properties/state_revision/anyOf/1/type",
       "automation-status/oneOf/1/properties/state_revision/anyOf/1/type",
       "automation-status/oneOf/2/properties/state_revision/anyOf/1/type",

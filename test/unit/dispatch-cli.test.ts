@@ -9,6 +9,7 @@ import { parseAndDeriveAdjudication } from "../../src/contracts/adjudication.js"
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import { parseAndDeriveReview } from "../../src/contracts/review.js";
 import adjudicationSchema from "../../src/contracts/schemas/v1/adjudication.schema.json" with { type: "json" };
+import effortReviewSchema from "../../src/contracts/schemas/v1/effort-review.schema.json" with { type: "json" };
 import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
 import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 import type { HostIdentity } from "../../src/contracts/hosts.js";
@@ -320,6 +321,43 @@ describe("CLI invocation construction", () => {
 
     for (const [key, value] of Object.entries(subject)) expect(properties[key]).toEqual({ const: value });
   });
+
+  it.each(["claude-cli", "codex-cli"] as const)(
+    "binds all seven effort output identities for %s, including the nested hazard digest",
+    (adapter) => {
+      const values = {
+        task_id: "effort-review",
+        phase_instance: "phase-design-1",
+        subject_digest: "1".repeat(64),
+        input_fingerprint: "2".repeat(64),
+        component_manifest_digest: "3".repeat(64),
+        hazard_registry_digest: "4".repeat(64),
+        policy_id: "implementation-effort-v1",
+      } as const;
+      const subject: Record<string, PlainJsonValue> = {
+        task_id: values.task_id,
+        phase_instance: values.phase_instance,
+        subject_digest: values.subject_digest,
+        input_fingerprint: values.input_fingerprint,
+        component_manifest_digest: values.component_manifest_digest,
+        policy_id: values.policy_id,
+        hazard_registry: {
+          schema_version: "1", state: "present", registry_digest: values.hazard_registry_digest,
+          hazards: [], components: [],
+        },
+      };
+      const projected = projectCliOutputSchema(
+        effortReviewSchema as PlainJsonValue,
+        "effort-review",
+        adapter,
+        subject,
+      ) as Record<string, unknown>;
+      const properties = projected.properties as Record<string, Record<string, unknown>>;
+      for (const [key, value] of Object.entries(values)) {
+        expect(properties[key], key).toMatchObject({ const: value });
+      }
+    },
+  );
 
   it("binds the adjudication subject to Codex without an array-valued const", () => {
     const projected = projectCliOutputSchema(

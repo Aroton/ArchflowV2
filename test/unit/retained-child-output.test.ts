@@ -101,6 +101,11 @@ describe("retained child outputs", () => {
     expect(kept!.cli_version).toBe("codex-cli 0.1");
     expect(Buffer.from(kept!.extracted_output_bytes).equals(Buffer.from(output))).toBe(true);
 
+    await f.store.write(binding({ role: "effort-reviewer" }), {
+      cli_version: "codex-cli 0.1", extracted_output_bytes: output,
+    });
+    expect(await f.store.read(binding({ role: "effort-reviewer" }))).toBeDefined();
+
     expect(await f.store.read(binding({ role: "adjudicator" }))).toBeUndefined();
     expect(await f.store.read(binding({ envelope_digest: otherEnvelopeDigest }))).toBeUndefined();
     expect(await f.store.read(binding({ selection: selection("claude-fable-5") }))).toBeUndefined();
@@ -148,4 +153,3 @@ describe("retained child outputs", () => {
     expect(await f.store.read(binding({ envelope_digest: otherEnvelopeDigest }))).toBeDefined();
   });
 });
-

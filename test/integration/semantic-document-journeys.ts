@@ -1,19 +1,26 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import { parseSafeCode } from "../../src/contracts/evidence.js";
-import { canonicalJsonBytes, sha256Bytes } from "../../src/contracts/canonical.js";
+import { canonicalDocument, canonicalJsonBytes, canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
+import { extractPhaseDesignComponentManifest } from "../../src/contracts/component-manifest.js";
+import { createHazardRegistryInput } from "../../src/contracts/hazard-registry.js";
 import { handleSemanticApply } from "../../src/mcp/handlers/semantic.js";
 import { createProductionServices } from "../../src/state/production.js";
 import { readTaskState } from "../../src/state/read.js";
 import { composeRequest } from "../../src/state/request-composition.js";
 import { computeTaskStatusDetailed } from "../../src/state/status.js";
+import { currentImplementationRecommendation } from "../../src/state/semantic-status.js";
+import type { DetailedTaskStatusV1 } from "../../src/state/status.js";
+import type { GateLifecycleDependencies } from "../../src/state/gate-core.js";
+import type { RetainedManifest } from "../../src/state/transaction.js";
 import {
   installSemanticReviewStub,
   semanticJourneyHarness,
+  withImplementationComponents,
 } from "../helpers/semantic-journeys.js";
 import {
   createTaskWorkspace,
@@ -71,6 +78,10 @@ describe("semantic document journeys", { timeout: TIMEOUT }, () => {
     const initialHead = execFileSync("git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" });
 
     let view = await h.status(invocation);
+    expect(view.implementation_recommendation).toMatchObject({
+      status: "unavailable", reason: "not-applicable",
+      actual_implementation_route: { status: "not-recorded" },
+    });
     expect(view.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
     const produced = await h.apply(invocation, view, { kind: "work-result", outcome: "succeeded" });
     expect(produced.ok).toBe(true);
@@ -164,6 +175,10 @@ describe("semantic document journeys", { timeout: TIMEOUT }, () => {
     if (!startedPhaseDesign.ok) return;
     expect(startedPhaseDesign.value.position).toEqual({ kind: "phase-design", phase: 1 });
     expect(startedPhaseDesign.value.next_action.kind).toBe("submit-work");
+    expect(startedPhaseDesign.value.implementation_recommendation).toMatchObject({
+      status: "unavailable", phase: 1, reason: "not-produced",
+      actual_implementation_route: { status: "not-recorded" },
+    });
 
     const phaseDesignResource = startedPhaseDesign.value.resources.find((resource) => resource.role === "current-artifact");
     const phasePrdResource = startedPhaseDesign.value.resources.find((resource) => resource.role === "prd");
@@ -177,7 +192,7 @@ describe("semantic document journeys", { timeout: TIMEOUT }, () => {
     const phaseDesignPath = join(workspace.root, phaseDesignResource.path);
     const phasePrdPath = join(workspace.root, phasePrdResource.path);
     const taskDesignPath = join(workspace.root, taskDesignResource.path);
-    const phaseDesignBytes = `# Phase 1: Implement the verified behavior
+    const phaseDesignBytes = withImplementationComponents(`# Phase 1: Implement the verified behavior
 
 ## Goal
 
@@ -215,7 +230,7 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
 
 - \`npm test -- --run test/integration/semantic-document-journeys.test.ts\`
 - \`npm run typecheck\`
-`;
+`, ["src/state/semantic-view.ts", "test/integration/semantic-document-journeys.test.ts"]);
     const phasePrdBytes = "# Semantic journey\n\nThe client authors this document and observes fresh status after every applied action.\n";
     const taskDesignBytes = "# Design\n\nThe semantic facade preserves client-owned documents and Git operations.\n\n### Phase 1: Implement the verified behavior\n";
     const phaseBaseline = execFileSync("git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" }).trim();
@@ -279,10 +294,153 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
       .toBe(phaseCommit.message);
 
     const observedPhaseDesign = await h.status(phaseDesignInvocation);
+    expect(observedPhaseDesign.implementation_recommendation).toMatchObject({
+      status: "ready",
+      phase: 1,
+      phase_profile: { model: "gemini-3.7-flash", effort: "max" },
+      determining_component_ids: ["journey-fixture"],
+      reviewer: { model: "gpt-5.6-luna", effort: "xhigh" },
+      actual_implementation_route: { status: "not-recorded" },
+    });
     expect(observedPhaseDesign.next_action).toMatchObject({
       kind: "start-next-skill", skill: "archflow-phase-impl", skill_args: ["1"],
     });
     expect(observedPhaseDesign.next_action.offer).toBeUndefined();
+
+    // Exercise the actual semantic-status evidence selector/read path against narrowly varied
+    // retained review bytes. The retained-manifest callback remains the authentication boundary;
+    // each variant updates its matching authoritative reference exactly as a historical archive
+    // would, while the governing produce subject and repository bytes stay real.
+    const detailedResult = await computeTaskStatusDetailed(workspace.services.dependencies, workspace.services.authority);
+    if (!detailedResult.ok || detailedResult.value.state === undefined) throw new Error("detailed phase-design status unavailable");
+    const detailed = detailedResult.value;
+    const detailedState = detailed.state;
+    if (detailedState === undefined) throw new Error("detailed phase-design state unavailable");
+    const counterReference = detailedState.authoritative_results.find((reference) =>
+      reference.phase_instance === "phase-design-1" && reference.step === "counter_review");
+    if (counterReference === undefined || workspace.services.dependencies.load_retained_manifest === undefined) {
+      throw new Error("retained phase-design review unavailable");
+    }
+    const originalLoader = workspace.services.dependencies.load_retained_manifest;
+    const originalReview = await originalLoader(counterReference);
+    if (!originalReview.ok || originalReview.value.manifest.value.source_artifact.artifact_kind !== "review-evidence") {
+      throw new Error("retained phase-design review is invalid");
+    }
+    const originalReviewEvidence = originalReview.value.manifest.value.source_artifact.evidence;
+    const recommendationVariant = async (
+      mutate: (review: Record<string, unknown>) => Record<string, unknown>,
+    ) => {
+      const evidence = mutate(structuredClone(originalReviewEvidence) as unknown as Record<string, unknown>);
+      const manifest = canonicalDocument({
+        ...originalReview.value.manifest.value,
+        artifact_digest: canonicalJsonDigest(evidence as never),
+        source_artifact: { schema_version: "1", artifact_kind: "review-evidence", evidence },
+      } as never);
+      const replacementReference = { ...counterReference, result_digest: manifest.digest };
+      const variantState = {
+        ...detailedState,
+        authoritative_results: detailedState.authoritative_results.map((reference) =>
+          reference === counterReference ? replacementReference : reference),
+      };
+      const variantDetails = { ...detailed, state: variantState } as unknown as DetailedTaskStatusV1;
+      const variantRetained = { ...originalReview.value, manifest } as unknown as RetainedManifest;
+      const dependencies = {
+        ...workspace.services.dependencies,
+        load_retained_manifest: async (reference: typeof counterReference) =>
+          reference.result_digest === manifest.digest
+            ? { schema_version: "1" as const, ok: true as const, value: variantRetained }
+            : originalLoader(reference),
+      } as unknown as GateLifecycleDependencies;
+      return currentImplementationRecommendation(dependencies, workspace.services.authority, variantDetails);
+    };
+    const withoutEffort = await recommendationVariant((review) => {
+      const { effort_review: _omitted, ...legacy } = review;
+      return legacy;
+    });
+    expect(withoutEffort).toMatchObject({ status: "unavailable", reason: "legacy-evidence", phase: 1 });
+    const stale = await recommendationVariant((review) => ({
+      ...review,
+      subject_digest: "f".repeat(64),
+      effort_review: { ...(review.effort_review as Record<string, unknown>), subject_digest: "f".repeat(64) },
+    }));
+    expect(stale).toMatchObject({ status: "unavailable", reason: "subject-stale", phase: 1 });
+    await expect(recommendationVariant((review) => ({ ...review, task_id: "wrong-task" })))
+      .rejects.toThrow(/scope disagrees/u);
+    await expect(recommendationVariant((review) => ({ ...review, phase_instance: "phase-design-2" })))
+      .rejects.toThrow(/scope disagrees/u);
+    await expect(recommendationVariant((review) => ({
+      ...review,
+      effort_review: {
+        ...(review.effort_review as Record<string, unknown>),
+        input_fingerprint: "e".repeat(64),
+      },
+    }))).rejects.toThrow(/assessment bindings disagree/u);
+    await expect(recommendationVariant((review) => ({
+      ...review,
+      effort_review: { ...(review.effort_review as Record<string, unknown>), policy_id: "malformed-policy" },
+    }))).rejects.toThrow();
+
+    // The live registry remains advisory. Status performs the real one-read capture each time and
+    // retains the exact next action while exposing read/parse failures as an informational caveat.
+    const baselineAction = observedPhaseDesign.next_action;
+    const hazardPath = join(workspace.root, ".archflow", "hazards.yaml");
+    const originalHazardBytes = existsSync(hazardPath) ? readFileSync(hazardPath) : undefined;
+    const componentManifest = extractPhaseDesignComponentManifest(phaseDesignBytes, ["primary"]);
+    const registryYaml = (score: 2 | 3, reason: string) => `schema_version: "1"\nhazards:\n  - repository: primary\n    path: src/state/semantic-view.ts\n    score: ${score}\n    reason: ${reason}\n`;
+    writeFileSync(hazardPath, registryYaml(2, "Dense semantic authority surface."));
+    const liveChanged = await h.status(phaseDesignInvocation);
+    expect(liveChanged.implementation_recommendation).toMatchObject({ status: "ready", registry_drift: { kind: "registry-changed" } });
+    expect(liveChanged.next_action).toEqual(baselineAction);
+    writeFileSync(hazardPath, "schema_version: [invalid\n");
+    const unreadable = await h.status(phaseDesignInvocation);
+    expect(unreadable.implementation_recommendation).toMatchObject({ status: "ready", registry_drift: { kind: "registry-unreadable" } });
+    expect(unreadable.next_action).toEqual(baselineAction);
+    unlinkSync(hazardPath);
+    const liveRemoved = await h.status(phaseDesignInvocation);
+    expect(liveRemoved.implementation_recommendation).toMatchObject({ status: "ready", registry_drift: { kind: "registry-removed" } });
+    expect(liveRemoved.next_action).toEqual(baselineAction);
+    if (originalHazardBytes !== undefined) writeFileSync(hazardPath, originalHazardBytes);
+    const restored = await h.status(phaseDesignInvocation);
+    expect(restored.implementation_recommendation).not.toHaveProperty("registry_drift");
+    expect(restored.next_action).toEqual(baselineAction);
+
+    // Rebind only the sealed digest in the authenticated fixture to exercise the complementary
+    // changed/removed branches through the same read path.
+    const sealedPresent = createHazardRegistryInput("present", {
+      schema_version: "1", hazards: [{
+        repository: "primary", path: "src/state/semantic-view.ts" as never, score: 2,
+        reason: "Dense semantic authority surface.",
+      }],
+    }, componentManifest);
+    writeFileSync(hazardPath, registryYaml(3, "Materially changed hazard."));
+    const sealedAbsent = createHazardRegistryInput("absent", { schema_version: "1", hazards: [] }, componentManifest);
+    const created = await recommendationVariant((review) => ({
+      ...review,
+      effort_review: {
+        ...(review.effort_review as Record<string, unknown>),
+        hazard_registry_digest: sealedAbsent.registry_digest,
+      },
+    }));
+    expect(created).toMatchObject({ status: "ready", registry_drift: { kind: "registry-created" } });
+    const changed = await recommendationVariant((review) => ({
+      ...review,
+      effort_review: {
+        ...(review.effort_review as Record<string, unknown>),
+        hazard_registry_digest: sealedPresent.registry_digest,
+      },
+    }));
+    expect(changed).toMatchObject({ status: "ready", registry_drift: { kind: "registry-changed" } });
+    unlinkSync(hazardPath);
+    const removed = await recommendationVariant((review) => ({
+      ...review,
+      effort_review: {
+        ...(review.effort_review as Record<string, unknown>),
+        hazard_registry_digest: sealedPresent.registry_digest,
+      },
+    }));
+    expect(removed).toMatchObject({ status: "ready", registry_drift: { kind: "registry-removed" } });
+    if (originalHazardBytes !== undefined) writeFileSync(hazardPath, originalHazardBytes);
+    expect(detailed.status.next_action).toEqual(detailedResult.value.status.next_action);
 
     // The implementation invocation participates semantically: it owns and consumes its exact
     // start-next-skill hand-off, landing at its own implementation position.
@@ -296,6 +454,8 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
     expect(startedImplementation.ok, JSON.stringify(startedImplementation)).toBe(true);
     if (!startedImplementation.ok) return;
     expect(startedImplementation.value.position).toEqual({ kind: "phase-impl", phase: 1 });
+    expect(startedImplementation.value.implementation_recommendation)
+      .toEqual(observedPhaseDesign.implementation_recommendation);
     expect(startedImplementation.value.next_action.kind).toBe("submit-work");
     expect(readFileSync(join(workspace.root, "semantic-review-count"), "utf8")).toBe("3");
   });
@@ -630,7 +790,7 @@ roles:
     const phaseResource = result.value.resources.find((resource) => resource.role === "current-artifact");
     if (phaseResource === undefined) throw new Error("phase-design resource unavailable");
     mkdirSync(dirname(join(workspace.root, phaseResource.path)), { recursive: true });
-    writeFileSync(join(workspace.root, phaseResource.path), `# Phase 1: Implement autonomy
+    writeFileSync(join(workspace.root, phaseResource.path), withImplementationComponents(`# Phase 1: Implement autonomy
 
 ## Goal
 
@@ -665,7 +825,7 @@ The implementation handoff is offered after exact commit proof.
 ## Executable Verification
 
 - \`npm run typecheck\`
-`);
+`, ["src/state/next-action.ts"]));
     result = await h.apply(phaseInvocation, result.value, { kind: "work-result", outcome: "succeeded" });
     if (!result.ok) throw new Error(JSON.stringify(result));
     result = await h.apply(phaseInvocation, result.value);
@@ -890,7 +1050,7 @@ The implementation handoff is offered after exact commit proof.
     if (phaseDesignResource === undefined) throw new Error("phase-design resource unavailable");
     const phaseDesignPath = join(workspace.root, phaseDesignResource.path);
     mkdirSync(dirname(phaseDesignPath), { recursive: true });
-    writeFileSync(phaseDesignPath, `# Phase 1: Implement the verified behavior
+    writeFileSync(phaseDesignPath, withImplementationComponents(`# Phase 1: Implement the verified behavior
 
 ## Goal
 
@@ -904,7 +1064,7 @@ Record the phase-design rule evaluation and advance from authenticated no-wait a
 ## Success Criteria
 
 The committed state carries the settlement and the successor hand-off is offered.
-`);
+`));
     phaseDesign = await h.apply(phaseDesignInvocation, phaseDesign.value, { kind: "work-result", outcome: "succeeded" });
     expect(phaseDesign.ok, JSON.stringify(phaseDesign)).toBe(true);
     if (!phaseDesign.ok) return;
@@ -1031,7 +1191,10 @@ The committed state carries the settlement and the successor hand-off is offered
     expect(taskDesignResource.access).toBe("read-write");
     const phaseDesignPath = join(workspace.root, phaseDesignResource.path);
     mkdirSync(dirname(phaseDesignPath), { recursive: true });
-    writeFileSync(phaseDesignPath, "# Phase 1: Implement the verified behavior\n\n## Goal\n\nPlan the phase and correct the architecture it depends on.\n");
+    writeFileSync(phaseDesignPath, withImplementationComponents(
+      "# Phase 1: Implement the verified behavior\n\n## Goal\n\nPlan the phase and correct the architecture it depends on.\n",
+      ["src/state/semantic-view.ts"],
+    ));
     // Planning found the architecture wrong; the phase design corrects design.md in the same result.
     writeFileSync(join(workspace.root, taskDesignResource.path),
       "# Design\n\nThe boundary moves into the first phase.\n\n### Phase 1: Implement the verified behavior\n\n### Phase 2: Implement the follow-on behavior\n");

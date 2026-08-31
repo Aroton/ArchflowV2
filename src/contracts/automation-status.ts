@@ -4,7 +4,12 @@ import { canonicalJsonDigest } from "./canonical.js";
 import type { SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
 import { safeIntegerV1Schema, sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
 import { assertPlainJson, type PlainJsonValue } from "./plain-json.js";
-import { workflowPositionV1Schema, type WorkflowPositionV1 } from "./semantic-workflow.js";
+import {
+  implementationRecommendationV1Schema,
+  workflowPositionV1Schema,
+  type ImplementationRecommendationV1,
+  type WorkflowPositionV1,
+} from "./semantic-workflow.js";
 
 const nonBlank = z.string().min(1).regex(/\S/u);
 const boundedText = nonBlank.max(4096);
@@ -111,6 +116,19 @@ export type AutomationHumanBoundaryV1 =
       readonly failure_code: string;
     };
 
+export type AutomationHumanBoundaryV2 =
+  | Exclude<AutomationHumanBoundaryV1, { readonly source: "dispatch-failure" }>
+  | {
+      readonly source: "dispatch-failure";
+      readonly class: "exception";
+      readonly headline: string;
+      readonly summary: string;
+      readonly question: string;
+      readonly reasons: readonly AutomationHumanBoundaryReasonV1[];
+      readonly failed_role: "counter-reviewer" | "test-reviewer" | "effort-reviewer" | "adjudicator";
+      readonly failure_code: string;
+    };
+
 export type AutomationBlockedV1 = {
   readonly category: AutomationBlockedCategoryV1;
   readonly reasons: readonly string[];
@@ -163,6 +181,56 @@ export type AutomationStatusV1 =
 export type AutomationStatusWithoutIdV1 =
   AutomationStatusV1 extends infer Arm
     ? Arm extends AutomationStatusV1 ? Omit<Arm, "observation_id"> : never
+    : never;
+
+type AutomationStatusCommonV2 = {
+  readonly schema_version: "2";
+  readonly task_id: TaskSlug;
+  readonly observation_id: Sha256Digest;
+  readonly state_revision: SafeInteger | null;
+  readonly implementation_recommendation: ImplementationRecommendationV1;
+};
+
+type AutomationPositionedStatusCommonV2 = AutomationStatusCommonV2 & {
+  readonly position: WorkflowPositionV1;
+};
+
+type AutomationPositionlessStatusCommonV2 = AutomationStatusCommonV2 & {
+  readonly position: null;
+};
+
+export type AutomationStatusV2 =
+  | (AutomationPositionedStatusCommonV2 & {
+      readonly condition: "awaiting-client";
+      readonly next_action: AutomationSkillActionV1;
+    })
+  | (AutomationPositionedStatusCommonV2 & {
+      readonly condition: "awaiting-human";
+      readonly next_action: AutomationHumanActionV1;
+      readonly human_boundary: AutomationHumanBoundaryV2;
+    })
+  | (AutomationPositionedStatusCommonV2 & {
+      readonly condition: "ready";
+      readonly next_action: AutomationLaunchActionV1;
+    })
+  | (AutomationPositionedStatusCommonV2 & {
+      readonly condition: "blocked";
+      readonly next_action: AutomationRepairActionV1;
+      readonly blocked: AutomationBlockedV1 & { readonly category: AutomationPositionedBlockedCategoryV1 };
+    })
+  | (AutomationPositionlessStatusCommonV2 & {
+      readonly condition: "blocked";
+      readonly next_action: AutomationRepairActionV1;
+      readonly blocked: AutomationBlockedV1 & { readonly category: AutomationPositionlessBlockedCategoryV1 };
+    })
+  | (AutomationPositionedStatusCommonV2 & {
+      readonly condition: "complete";
+      readonly next_action: AutomationNoneActionV1;
+    });
+
+export type AutomationStatusWithoutIdV2 =
+  AutomationStatusV2 extends infer Arm
+    ? Arm extends AutomationStatusV2 ? Omit<Arm, "observation_id"> : never
     : never;
 
 /** Internal identity facts bound into an observation ID but never exposed as workflow authority. */
@@ -241,9 +309,23 @@ const dispatchBoundaryV1Schema = z.object({
     context.addIssue({ code: "custom", path: ["reasons"], message: "dispatch failure requires an exceptional reason" });
   }
 });
+const dispatchBoundaryV2Schema = z.object({
+  source: z.literal("dispatch-failure"), class: z.literal("exception"),
+  headline: boundedText, summary: boundedText, question: boundedText,
+  reasons: z.array(humanBoundaryReasonV1Schema).min(1),
+  failed_role: z.enum(["counter-reviewer", "test-reviewer", "effort-reviewer", "adjudicator"]),
+  failure_code: nonBlank.max(128),
+}).strict().superRefine((boundary, context) => {
+  if (!boundary.reasons.some((reason) => reason.class === "exception")) {
+    context.addIssue({ code: "custom", path: ["reasons"], message: "dispatch failure requires an exceptional reason" });
+  }
+});
 /** Exported for schema generation so the document can publish its aggregate-class condition exactly. */
 export const automationHumanBoundaryV1Schema = z.discriminatedUnion("source", [
   presentationBoundaryV1Schema, dispatchBoundaryV1Schema,
+]);
+export const automationHumanBoundaryV2Schema = z.discriminatedUnion("source", [
+  presentationBoundaryV1Schema, dispatchBoundaryV2Schema,
 ]);
 const positionedBlockedCategories = AUTOMATION_BLOCKED_CATEGORIES.filter(
   (category): category is AutomationPositionedBlockedCategoryV1 =>
@@ -285,6 +367,37 @@ export const automationStatusWithoutIdV1Schema = z.xor([
   z.object({ ...withoutIdCommonShape, condition: z.literal("complete"), next_action: noneActionV1Schema }).strict(),
 ]) as unknown as z.ZodType<AutomationStatusWithoutIdV1>;
 
+const commonShapeV2 = {
+  schema_version: z.literal("2"), task_id: taskSlugV1Schema, observation_id: digest,
+  state_revision: revision.nullable(), position: workflowPositionV1Schema,
+  implementation_recommendation: implementationRecommendationV1Schema,
+} as const;
+const positionlessCommonShapeV2 = { ...commonShapeV2, position: z.null() } as const;
+const withoutIdCommonShapeV2 = {
+  schema_version: z.literal("2"), task_id: taskSlugV1Schema,
+  state_revision: revision.nullable(), position: workflowPositionV1Schema,
+  implementation_recommendation: implementationRecommendationV1Schema,
+} as const;
+const positionlessWithoutIdCommonShapeV2 = { ...withoutIdCommonShapeV2, position: z.null() } as const;
+
+export const automationStatusV2Schema = z.xor([
+  z.object({ ...commonShapeV2, condition: z.literal("awaiting-client"), next_action: skillActionV1Schema }).strict(),
+  z.object({ ...commonShapeV2, condition: z.literal("awaiting-human"), next_action: humanActionV1Schema, human_boundary: automationHumanBoundaryV2Schema }).strict(),
+  z.object({ ...commonShapeV2, condition: z.literal("ready"), next_action: launchActionV1Schema }).strict(),
+  z.object({ ...commonShapeV2, condition: z.literal("blocked"), next_action: repairActionV1Schema, blocked: positionedBlockedV1Schema }).strict(),
+  z.object({ ...positionlessCommonShapeV2, condition: z.literal("blocked"), next_action: repairActionV1Schema, blocked: positionlessBlockedV1Schema }).strict(),
+  z.object({ ...commonShapeV2, condition: z.literal("complete"), next_action: noneActionV1Schema }).strict(),
+]) as unknown as z.ZodType<AutomationStatusV2>;
+
+export const automationStatusWithoutIdV2Schema = z.xor([
+  z.object({ ...withoutIdCommonShapeV2, condition: z.literal("awaiting-client"), next_action: skillActionV1Schema }).strict(),
+  z.object({ ...withoutIdCommonShapeV2, condition: z.literal("awaiting-human"), next_action: humanActionV1Schema, human_boundary: automationHumanBoundaryV2Schema }).strict(),
+  z.object({ ...withoutIdCommonShapeV2, condition: z.literal("ready"), next_action: launchActionV1Schema }).strict(),
+  z.object({ ...withoutIdCommonShapeV2, condition: z.literal("blocked"), next_action: repairActionV1Schema, blocked: positionedBlockedV1Schema }).strict(),
+  z.object({ ...positionlessWithoutIdCommonShapeV2, condition: z.literal("blocked"), next_action: repairActionV1Schema, blocked: positionlessBlockedV1Schema }).strict(),
+  z.object({ ...withoutIdCommonShapeV2, condition: z.literal("complete"), next_action: noneActionV1Schema }).strict(),
+]) as unknown as z.ZodType<AutomationStatusWithoutIdV2>;
+
 const authorityV1Schema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("readable"), repository_identity_digest: digest, state_document_digest: digest, live_config_digest: digest.nullable(), semantic_snapshot_digest: digest }).strict(),
   z.object({ kind: z.literal("absent"), repository_identity_digest: digest, live_config_digest: digest.nullable() }).strict(),
@@ -293,7 +406,7 @@ const authorityV1Schema = z.discriminatedUnion("kind", [
 ]) as unknown as z.ZodType<AutomationObservationAuthorityV1>;
 
 /** Creates a validated cache identity. The digest is observational and grants no mutation authority. */
-export function createAutomationStatus(
+export function createAutomationStatusV1(
   document: AutomationStatusWithoutIdV1,
   authority: AutomationObservationAuthorityV1,
 ): AutomationStatusV1 {
@@ -310,7 +423,38 @@ export function createAutomationStatus(
   return Object.freeze(automationStatusV1Schema.parse({ ...observed, observation_id }));
 }
 
-export function parseAutomationStatus(value: unknown): AutomationStatusV1 {
-  assertPlainJson(value, "automation status");
+/** Creates a v2 observation whose identity binds the complete recommendation projection. */
+export function createAutomationStatusV2(
+  document: AutomationStatusWithoutIdV2,
+  authority: AutomationObservationAuthorityV1,
+): AutomationStatusV2 {
+  assertPlainJson(document, "automation status v2 without observation id");
+  assertPlainJson(authority, "automation observation authority");
+  const observed = automationStatusWithoutIdV2Schema.parse(structuredClone(document));
+  const identity = authorityV1Schema.parse(structuredClone(authority));
+  const observation_id = canonicalJsonDigest({
+    schema_version: "2",
+    purpose: "archflow-automation-observation-v2",
+    observation: observed,
+    authority: identity,
+  } as unknown as PlainJsonValue);
+  return Object.freeze(automationStatusV2Schema.parse({ ...observed, observation_id }));
+}
+
+/** Compatibility constructor for the published v1 contract. */
+export const createAutomationStatus = createAutomationStatusV1;
+
+export function parseAutomationStatusV1(value: unknown): AutomationStatusV1 {
+  assertPlainJson(value, "automation status v1");
   return automationStatusV1Schema.parse(structuredClone(value));
+}
+
+export function parseAutomationStatusV2(value: unknown): AutomationStatusV2 {
+  assertPlainJson(value, "automation status v2");
+  return automationStatusV2Schema.parse(structuredClone(value));
+}
+
+/** Compatibility parser for strict v1 consumers. */
+export function parseAutomationStatus(value: unknown): AutomationStatusV1 {
+  return parseAutomationStatusV1(value);
 }

@@ -1,6 +1,6 @@
 # OVERVIEW
 
-**Explored:** 2026-08-24 · **Commit:** `6bccdf9` · **Covers:** the whole repository
+**Explored:** 2026-08-31 · **Commit:** `fe0e4ce` · **Covers:** the whole repository
 
 ArchFlow is a governed development workflow for AI coding agents. A *task* moves through fixed stages — PRD → design → per-phase design → per-phase implementation — and at every stage the agent must produce an artifact, review it, and survive an adversarial review dispatched to an independent reviewer CLI (the **other model family** by default, either family by explicit config). Project `approval_rules` decide which clean PRD, design, phase-design, or phase-implementation subjects stop for a human; changed-path content triggers add phase-implementation-only waits. Policy findings over those same reviewed bytes fold into that position's ordinary approval boundary, while distinct safety and recovery remedies remain separate unconditional gates. The system's core belief, stated plainly:
 
@@ -109,5 +109,9 @@ Editing the artifact changes its digest, which automatically invalidates every d
 Git sees only the durable side of `.archflow/`: task documents, `state.json`, adopted initialization, current result manifests under `authority/results/`, and state-referenced gate decisions under `authority/decisions/`. The shipped `.archflow/.gitignore` contains only `/runtime/`; payload duplicates, rendered reviews and gate UI, verification transcripts, import staging, locks, transaction receipts, and attempts all live below that ignored root.
 
 Repeated review rounds replace the current authority for a `(phase, step)` instead of accumulating tracked files. Automatic cleanup runs after successful writes and phase boundaries; `archflow-local clean --task <id>` retries it manually. Cleanup failure is non-blocking and appears as `workspace.cleanup_pending` in full status (and in brief status only while pending).
+
+Phase-design review has one additional required child: a fixed `gpt-5.6-luna`/`xhigh` effort reviewer. The phase design supplies a strict implementation-component manifest, while the repository may supply `.archflow/hazards.yaml`. The server captures both, asks the child only for A–E judgments and classifications, then derives component and phase implementation profiles itself. Specification gaps and undifferentiated decomposition block the phase-design fixed point independently of ordinary findings; recommendations remain evidence and never select a producer, create approval, alter an offer, or authorize a commit.
+
+That evidence now has one authenticated public projection. Phase-design completion, generic status, phase-implementation entry, and automation status v2 receive the same `ready`, `blocked`, or `unavailable` recommendation while the server-derived action remains unchanged. Reviewer provenance—including a conspicuous one-dispatch substitute—stays separate from the recommended implementation profile, and the actual producer route is explicitly not recorded. Live hazard-registry drift may add an informational caveat but cannot rewrite sealed evidence or workflow authority.
 
 This split defines recovery honestly. A fresh clone reconstructs status, current result validation, and gate UI from tracked authority, verified projections, and recorded Git blobs. It recovers the last checked-in durable boundary, not uncommitted implementation or cache bytes. Durable `.archflow` files exist only on the working branch for resumability and are removed before the final product PR.

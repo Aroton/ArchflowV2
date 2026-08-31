@@ -5,6 +5,7 @@ import { REPOSITORY_NAME_MESSAGE, REPOSITORY_NAME_PATTERN } from "./config.js";
 import type { ReferencedEvidence, Sha256Digest, TaskSlug } from "./evidence.js";
 import { createTaskSlugV1Schema } from "./evidence.js";
 import { assertPlainJson } from "./plain-json.js";
+import { effortAssessmentV1Schema, type EffortAssessmentV1 } from "./effort-review.js";
 
 export const REVIEW_VERDICTS = ["pass", "advisory", "fail"] as const;
 export const REVIEW_ROLES = ["counter-review"] as const;
@@ -259,6 +260,8 @@ export type ServerAttestedReview = Omit<ReviewProvenanceBase, "model_family" | "
   readonly repositories?: readonly ReviewedRepositoryV1[];
   /** Ordered contributor provenance for fresh multi/specialist reviews; absent on archived evidence. */
   readonly reviewer_runs?: readonly ReviewerRunV1[];
+  /** Optional on read for archives; required on fresh phase-design evidence by server policy. */
+  readonly effort_review?: EffortAssessmentV1;
 };
 export type DegradedReview = ReviewProvenanceBase & {
   readonly assurance: "degraded";
@@ -328,6 +331,7 @@ const serverAttestedReviewSchema = provenanceBase.safeExtend({
   route_override: routeOverrideRecordSchema.optional(),
   repositories: reviewedRepositoriesV1Schema.optional(),
   reviewer_runs: z.array(reviewerRunV1Schema).min(1).optional(),
+  effort_review: z.lazy(() => effortAssessmentV1Schema).optional(),
 }).strict().superRefine((review, context) => {
   if (review.reviewer_runs === undefined) return;
   const reviewerIds = review.reviewer_runs.map((run) => run.reviewer_id);

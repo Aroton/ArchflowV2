@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:hazard-registry-input",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "absent",
+        "present"
+      ]
+    },
+    "registry_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "hazards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "primary"
+              },
+              {
+                "$ref": "urn:archflow:schema:v1:config#/$defs/repositoryName"
+              }
+            ]
+          },
+          "path": {
+            "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 0
+              },
+              {
+                "type": "number",
+                "const": 1
+              },
+              {
+                "type": "number",
+                "const": 2
+              },
+              {
+                "type": "number",
+                "const": 3
+              }
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        },
+        "required": [
+          "repository",
+          "path",
+          "score",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "component_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "matches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "repository": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "primary"
+                    },
+                    {
+                      "$ref": "urn:archflow:schema:v1:config#/$defs/repositoryName"
+                    }
+                  ]
+                },
+                "path": {
+                  "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                },
+                "score": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "const": 0
+                    },
+                    {
+                      "type": "number",
+                      "const": 1
+                    },
+                    {
+                      "type": "number",
+                      "const": 2
+                    },
+                    {
+                      "type": "number",
+                      "const": 3
+                    }
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "repository",
+                "path",
+                "score",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "e_floor": {
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 0
+              },
+              {
+                "type": "number",
+                "const": 1
+              },
+              {
+                "type": "number",
+                "const": 2
+              },
+              {
+                "type": "number",
+                "const": 3
+              },
+              {
+                "type": "string",
+                "const": "unmatched"
+              }
+            ]
+          }
+        },
+        "required": [
+          "component_id",
+          "matches",
+          "e_floor"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "state",
+    "registry_digest",
+    "hazards",
+    "components"
+  ],
+  "additionalProperties": false
+}

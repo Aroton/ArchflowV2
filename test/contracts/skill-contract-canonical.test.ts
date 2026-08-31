@@ -204,6 +204,17 @@ describe("canonical skill contracts", () => {
     }
   });
 
+  it("requires phase designs to author one stable implementation-component manifest", () => {
+    const source = skill("archflow-phase-design");
+    expect(source).toContain("## Implementation Components");
+    expect(source).toContain("archflow-components-v1");
+    expect(source).toContain("independently scoreable");
+    expect(source).toContain("primary` first");
+    expect(source).toContain("ordinal-sorted secondaries");
+    expect(source).toContain("normalized literal `paths`");
+    expect(source).toContain("Never infer it");
+  });
+
   it("keeps review triage on the submitted subject instead of the whole repository", () => {
     for (const name of producerSkills) {
       const source = skill(name);
@@ -379,6 +390,27 @@ describe("canonical skill contracts", () => {
     expect(source).toContain("`next_action.skill`");
     expect(source).toContain("`next_action.skill_args`");
     expect(source.toLowerCase()).toContain("never substitute the current phase's skill");
+  });
+
+  it("renders authenticated implementation advice without changing workflow action authority", () => {
+    for (const name of ["archflow-phase-design", "archflow-phase-impl", "archflow-status"] as const) {
+      const source = skill(name);
+      expect(source).toContain("`implementation_recommendation`");
+      expect(source).toContain("For `ready`");
+      expect(source).toContain("For `blocked`");
+      expect(source).toContain("For `unavailable`");
+      expect(source).toContain("determining components");
+      expect(source).toContain("A-E judgments");
+      expect(source).toContain("actual implementation route is not recorded");
+      expect(source).toContain("substituted effort-review route conspicuous");
+      expect(source).toContain("`next_action`");
+    }
+    expect(skill("archflow-phase-design")).toContain("Every changed phase-design subject");
+    expect(skill("archflow-phase-design")).toContain("predecessor evidence can never supply");
+    expect(skill("archflow-phase-design")).toContain("`effort-reviewer`");
+    expect(skill("archflow-phase-impl")).toContain("before reading implementation inputs or writing code");
+    expect(skill("archflow-phase-impl")).toContain("Model selection happens outside ArchFlow");
+    expect(skill("archflow-status")).toContain("Never parse Markdown or raw task state for advice");
   });
 
   it("keeps the status skill a read-only semantic consumer", () => {

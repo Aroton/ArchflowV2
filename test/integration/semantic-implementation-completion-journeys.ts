@@ -12,8 +12,10 @@ import {
   type WorkflowViewV1,
 } from "../../src/contracts/semantic-workflow.js";
 import {
+  SEMANTIC_EFFORT_STUB_SOURCE,
   reachImplementationHandoff,
   semanticJourneyHarness,
+  withImplementationComponents,
   type SemanticJourneyHarness,
 } from "../helpers/semantic-journeys.js";
 import {
@@ -89,7 +91,9 @@ function installScriptedReviewChild(
   mkdirSync(bin, { recursive: true });
   writeFileSync(join(stubHome, ".codex", "auth.json"), "{}\n");
   const generatorScript = `
+${SEMANTIC_EFFORT_STUB_SOURCE}
 function generateOutput(envelope, countPath, findingsByReview, script) {
+  const effort = generateEffortOutput(envelope); if (effort !== undefined) return effort;
   const subject = envelope.subject;
   if (subject.role === "counter-review") {
     let count = 0; try { count = Number(readFileSync(countPath, "utf8")); } catch {}
@@ -1235,8 +1239,9 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     expect(view.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
     const phaseDesignResource = view.resources.find((resource) => resource.role === "current-artifact");
     if (phaseDesignResource === undefined) throw new Error("phase-design resource unavailable");
-    writeFileSync(join(workspace.root, phaseDesignResource.path),
-      "# Phase 1: Implement the verified behavior\n\n## Goal\n\nReach the implementation hand-off again after the reopened design.\n");
+    writeFileSync(join(workspace.root, phaseDesignResource.path), withImplementationComponents(
+      "# Phase 1: Implement the verified behavior\n\n## Goal\n\nReach the implementation hand-off again after the reopened design.\n",
+    ));
     view = await applied(h, phaseDesign, view, { kind: "work-result", outcome: "succeeded" });
     view = await applied(h, phaseDesign, view);
     view = await applied(h, phaseDesign, view, { kind: "gate-summary", summary: "The phase design is ready for approval again." });

@@ -61,6 +61,8 @@ export type NextAction = Readonly<{
   editorial_revision?: boolean;
   /** Set on the produce run-step routed by `policy_reentry_required`: `detail` names the constitution findings the re-entry must resolve. */
   policy_reentry?: boolean;
+  /** Set when authenticated phase-design effort evidence requires specification/decomposition revision. */
+  effort_reentry?: boolean;
 }>;
 
 /** Agent-resolvable constitution findings, already mapped to the paths a producer can act on. */
@@ -674,6 +676,19 @@ export function deriveNextAction(input: NextActionInput): NextAction {
         false,
         state,
         { step: "produce", editorial_revision: true },
+      );
+    }
+    if (next === "produce" && input.assessment?.effort_reentry_required === true) {
+      const blockers = input.assessment.effort_blockers ?? [];
+      const details = blockers.map((blocker) => blocker.kind === "specification-gap"
+        ? `${blocker.component_id}: ${blocker.question}`
+        : `Implementation components need a clearer boundary: ${blocker.rationale}`);
+      return action(
+        "run-step",
+        `Revise the phase design to resolve its authenticated effort-review blockers.${details.length === 0 ? "" : ` ${details.join(" ")}`}`,
+        false,
+        state,
+        { step: "produce", effort_reentry: true },
       );
     }
     if (next === "produce" && input.assessment?.policy_reentry_required === true) {

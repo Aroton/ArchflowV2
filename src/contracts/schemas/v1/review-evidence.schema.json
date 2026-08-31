@@ -432,6 +432,9 @@
             ],
             "additionalProperties": false
           }
+        },
+        "effort_review": {
+          "$ref": "urn:archflow:schema:v1:effort-assessment"
         }
       },
       "required": [

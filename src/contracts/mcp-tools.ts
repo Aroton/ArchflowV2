@@ -119,6 +119,7 @@ export type RouteOverrideDeclaration = {
   readonly reason: string;
   readonly "counter-reviewer"?: ModelRouteV1;
   readonly "test-reviewer"?: ModelRouteV1;
+  readonly "effort-reviewer"?: ModelRouteV1;
   readonly adjudicator?: ModelRouteV1;
 };
 /** Normal per-invocation reviewer routing, distinct from a human outage substitution. */
@@ -281,10 +282,11 @@ export const routeOverrideSchema = z.object({
   reason: text,
   "counter-reviewer": reviewModelRouteV1Schema.optional(),
   "test-reviewer": reviewModelRouteV1Schema.optional(),
+  "effort-reviewer": reviewModelRouteV1Schema.optional(),
   adjudicator: reviewModelRouteV1Schema.optional(),
 }).strict().superRefine((override, context) => {
-  if (override["counter-reviewer"] === undefined && override["test-reviewer"] === undefined && override.adjudicator === undefined) {
-    context.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
+  if (override["counter-reviewer"] === undefined && override["test-reviewer"] === undefined && override["effort-reviewer"] === undefined && override.adjudicator === undefined) {
+    context.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, effort-reviewer, adjudicator, or a combination" });
   }
 });
 export const counterReviewInputSchema = z.object({

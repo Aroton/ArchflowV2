@@ -14,6 +14,7 @@ import {
   sha256Bytes,
 } from "../../src/contracts/canonical.js";
 import type { AdjudicationEvidence } from "../../src/contracts/adjudication.js";
+import { phaseDesignComponentManifestDigest, type PhaseDesignComponentManifestV1 } from "../../src/contracts/component-manifest.js";
 import type { ConfigV1, TaskConfigSnapshot } from "../../src/contracts/config.js";
 import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
 import type { ResultManifestV1 } from "../../src/contracts/durable-result-manifest.js";
@@ -28,6 +29,12 @@ import {
   parseTaskSlug,
   type Sha256Digest,
 } from "../../src/contracts/evidence.js";
+import {
+  EFFORT_REVIEW_INSTRUCTIONS,
+  IMPLEMENTATION_EFFORT_POLICY_ID,
+  type EffortEnvelopeV1,
+} from "../../src/contracts/effort-review.js";
+import { createHazardRegistryInput } from "../../src/contracts/hazard-registry.js";
 import {
   computeInputFingerprint,
   type InputFingerprintSubject,
@@ -80,6 +87,7 @@ import { rulesForEnvelope } from "../../src/review/adjudication.js";
 import {
   runCounterReview,
   type ConstitutionReviewPlan,
+  type EffortReviewPlan,
 } from "../../src/review/counter-review.js";
 import {
   assessCurrentEvidence,
@@ -1597,6 +1605,116 @@ describe("partial review round retry", () => {
   const outage = (route: DispatchRoute) => new DispatchRoutingError(createProjectError("PROCESS_FAILED", {
     adapter: route.adapter, exit_class: "simulated-outage",
   }));
+
+  it("retains settled rubric siblings and retries only a failed effort child", async () => {
+    const h = await fixture();
+    const subject = canonicalJsonDigest({ artifact: "effort-round" });
+    const fingerprint = computeInputFingerprint(fingerprintSubject(0));
+    const { store, records } = memoryStore();
+    await enterStep(h, h.dependencies, "effort-counter-running", "counter_review", fingerprint);
+    const runningState = await durableState(h.authority);
+    const designPhase = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(14) });
+    const repositories = Object.freeze([Object.freeze({
+      name: "primary" as const,
+      repository_identity_digest: "a".repeat(64) as Sha256Digest,
+      commit: "b".repeat(40) as never,
+    })]);
+    const manifest: PhaseDesignComponentManifestV1 = {
+      schema_version: "1",
+      components: [{
+        id: "effort-round",
+        name: "Effort round",
+        scope: "Exercise grouped dispatch retention.",
+        mechanism: "Reuse the existing all-settle transaction.",
+        repositories: [{ name: "primary", paths: [parseRepositoryPathClaim("src/review/counter-review.ts")] }],
+        verification: "Observe the exact child models dispatched across a retry.",
+      }],
+    };
+    const effortEnvelope: EffortEnvelopeV1 = {
+      schema_version: "1",
+      instructions: EFFORT_REVIEW_INSTRUCTIONS,
+      artifact: "# Phase design\n",
+      task_id: task,
+      phase_instance: designPhase,
+      attempt: runningState.attempt,
+      subject_digest: subject,
+      input_fingerprint: fingerprint,
+      invocation_id: "effort-invocation",
+      result_id: "effort-result",
+      policy_id: IMPLEMENTATION_EFFORT_POLICY_ID,
+      component_manifest_digest: phaseDesignComponentManifestDigest(manifest),
+      component_manifest: manifest,
+      hazard_registry: createHazardRegistryInput("absent", { schema_version: "1", hazards: [] }, manifest),
+      repositories,
+    };
+    const call = parseToolCall("archflow_counter_review", {
+      schema_version: "1",
+      task_id: task,
+      intent_id: "effort-counter-intent",
+      expected_revision: runningState.revision,
+      input_fingerprint: fingerprint,
+      artifact_path: parseTaskPathClaim("phases/phase-14-output.md"),
+    });
+    const effort: EffortReviewPlan = { envelope: effortEnvelope };
+    const attempt = async () => {
+      const models: string[] = [];
+      const result = runCounterReview({
+        transaction: h.dependencies,
+        retained_outputs: store,
+        reobserve_projection_digest: async () => ({ schema_version: "1", ok: true, value: subject }),
+        dispatch: async (route) => {
+          models.push(route.model);
+          if (route.model === LUNA) throw outage(route);
+          return {
+            cli_version: "fixture-1",
+            extracted_output_bytes: canonicalJsonBytes({
+              ...reviewOutput("counter-review", subject, fingerprint, "clean"),
+              phase_instance: designPhase,
+            }),
+          };
+        },
+        prepare_evidence: async () => { throw new Error("failed effort must prevent evidence preparation"); },
+        serialize_dispatch: async <T>(operation: () => Promise<T>) => operation(),
+        serialize_dispatch_all: async <T>(ops: readonly (() => Promise<T>)[]) => Promise.all(ops.map((op) => op())),
+      }, {
+        authority: h.authority,
+        call,
+        config: multiReviewConfig,
+        phase_kind: "phase-design",
+        producer_family: "claude",
+        host: "claude",
+        measured_at_revision: runningState.revision,
+        repositories,
+        envelope: {
+          artifact: "# Phase design\n",
+          rubric,
+          context: [],
+          subject: {
+            task_id: task,
+            phase_instance: designPhase,
+            role: "counter-review",
+            step: "counter_review",
+            subject_digest: subject,
+            input_fingerprint: fingerprint,
+            rubric_digest: rubricDigest,
+            producer_family: "claude",
+            invocation_id: "counter-invocation",
+            result_id: "counter-result",
+          },
+        },
+        projection_digest: subject,
+        effort,
+      });
+      await expect(result).rejects.toBeInstanceOf(DispatchRoutingError);
+      return models.sort();
+    };
+
+    expect(await attempt()).toEqual([FABLE, LUNA, SOL].sort());
+    expect([...records.values()].map((record) => record.binding.role).sort())
+      .toEqual(["counter-reviewer", "counter-reviewer"]);
+    expect((await durableState(h.authority)).revision).toBe(runningState.revision);
+    expect(await attempt()).toEqual([LUNA]);
+  });
 
   async function round(
     h: Harness,

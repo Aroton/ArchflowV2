@@ -83,6 +83,7 @@ describe("init diagnostics", () => {
       const hidden = await diagnoseIgnoredGeneratedAssets(repository);
       expect(hidden).toContain(".archflow/workflow.yaml");
       expect(hidden).toContain(".archflow/config.yaml");
+      expect(hidden).toContain(".archflow/hazards.yaml");
       expect(hidden).toContain(".mcp.json");
       expect(hidden).not.toContain(".codex/config.toml");
     } finally {

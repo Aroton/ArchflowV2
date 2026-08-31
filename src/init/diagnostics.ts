@@ -50,6 +50,7 @@ const GENERATED_ASSET_PATHS = Object.freeze([
   ".archflow/.gitignore",
   ".archflow/config.yaml",
   ".archflow/workflow.yaml",
+  ".archflow/hazards.yaml",
   ".archflow/constitution/README.md",
   ".mcp.json",
   ".codex/config.toml",

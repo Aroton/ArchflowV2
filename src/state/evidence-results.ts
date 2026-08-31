@@ -38,6 +38,7 @@ import {
   renderTriage,
 } from "../contracts/renderers.js";
 import type { ReviewEvidence } from "../contracts/review.js";
+import type { EffortAssessmentV1 } from "../contracts/effort-review.js";
 import {
   parseSecretScanResult,
   type SecretScanner,
@@ -57,7 +58,7 @@ import {
   type TriageDisposition,
   type TriageDispositionLedgerEntry,
 } from "../contracts/triage.js";
-import type { PhaseInstanceId } from "../contracts/phase-instance.js";
+import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
 import type { RootBoundGitRunner } from "../repository/identity.js";
 import {
@@ -74,6 +75,7 @@ import {
   type TransactionAuthority,
 } from "./authority.js";
 import { loadCurrentProduceSubject } from "./produce-subject.js";
+import type { CurrentProduceSubject } from "./produce-subject.js";
 import {
   captureProjectionTarget,
   deriveDeclaredSnapshotDigest,
@@ -135,6 +137,13 @@ export type RetainedEvidenceSet = ReadonlyMap<
     manifest: ResultManifestV1;
   }>
 >;
+
+export type GoverningPhaseDesignEffortEvidence = Readonly<{
+  phase_instance: PhaseInstanceId;
+  produce: CurrentProduceSubject;
+  review?: ReviewEvidence;
+  assessment?: EffortAssessmentV1;
+}>;
 
 type RetainedEvidenceDependencies = Pick<TransactionDependencies, "load_retained_manifest">;
 /** Editorial checks read retained evidence and the current produce subject entirely by manifest. */
@@ -505,6 +514,75 @@ export async function loadRetainedEvidence(
     }));
   }
   return ok(retained);
+}
+
+/**
+ * Loads only the authoritative produce and counter-review records for one governing phase design.
+ * The ordinary retained loaders authenticate references, manifests, source artifacts, and digests;
+ * this join additionally pins the review/assessment to the same task, phase, attempt, subject, and
+ * fingerprint. A differing review subject is returned intact so semantic status can report the
+ * one explicit `subject-stale` unavailable state.
+ */
+export async function loadGoverningPhaseDesignEffortEvidence(
+  dependencies: RetainedEvidenceDependencies,
+  state: TaskStateV1,
+  phase_instance: PhaseInstanceId,
+): Promise<ProjectResult<GoverningPhaseDesignEffortEvidence>> {
+  const loadManifest = dependencies.load_retained_manifest;
+  if (loadManifest === undefined) throw new TypeError("retained evidence loading is unavailable");
+  if (decodePhaseInstance(phase_instance).kind !== "phase-design") {
+    throw new TypeError("governing effort evidence must name a phase design");
+  }
+  const phaseState = Object.freeze({ ...state, phase_instance });
+  const produced = await loadCurrentProduceSubject(dependencies, phaseState);
+  if (!produced.ok) return produced;
+  const reference = state.authoritative_results.find((candidate) =>
+    candidate.phase_instance === phase_instance && candidate.step === "counter_review");
+  if (reference === undefined) {
+    return ok(Object.freeze({ phase_instance, produce: produced.value }));
+  }
+  const loaded = await loadManifest(reference);
+  if (!loaded.ok) return loaded;
+  const manifest = loaded.value.manifest;
+  const source = manifest.value.source_artifact;
+  if (
+    manifest.digest !== reference.result_digest ||
+    manifest.value.result_id !== reference.result_id ||
+    manifest.value.phase_instance !== reference.phase_instance ||
+    manifest.value.step !== reference.step ||
+    manifest.value.input_fingerprint !== reference.input_fingerprint
+  ) {
+    throw new TypeError("governing counter review reference disagrees with its retained manifest");
+  }
+  if (source.artifact_kind !== "review-evidence") {
+    throw new TypeError("governing counter review has the wrong source kind");
+  }
+  const review = source.evidence;
+  if (
+    review.task_id !== state.task_id ||
+    review.phase_instance !== phase_instance ||
+    review.role !== "counter-review"
+  ) {
+    throw new TypeError("governing counter review scope disagrees");
+  }
+  let assessment: EffortAssessmentV1 | undefined;
+  if (review.assurance === "server-attested") {
+    assessment = review.effort_review;
+    if (assessment !== undefined && (
+      assessment.task_id !== review.task_id ||
+      assessment.phase_instance !== review.phase_instance ||
+      assessment.subject_digest !== review.subject_digest ||
+      assessment.input_fingerprint !== review.input_fingerprint
+    )) {
+      throw new TypeError("governing effort assessment bindings disagree with its review");
+    }
+  }
+  return ok(Object.freeze({
+    phase_instance,
+    produce: produced.value,
+    review,
+    ...(assessment === undefined ? {} : { assessment }),
+  }));
 }
 
 /**

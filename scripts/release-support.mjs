@@ -111,6 +111,7 @@ const REQUIRED_CONTROLS = Object.freeze([
 const DECLARED_ASSETS = Object.freeze([
   "assets/archflow.gitignore",
   "assets/config.template.yaml",
+  "assets/hazards.yaml",
   "assets/constitution/00-process.md",
   "assets/constitution/10-architecture.md",
   "assets/constitution/20-data.md",
