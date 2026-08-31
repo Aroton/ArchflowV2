@@ -71,6 +71,10 @@ export type StateArtifactOperationFields = Pick<StateInput, "phase_instance" | "
   readonly human_revision?: NonNullable<StateInput["human_revision"]>;
 };
 
+export type StateControlOperationFields = Pick<StateInput, "phase_instance" | "step" | "status"> & {
+  readonly intent_id: PathSafeId;
+};
+
 export type RequestDigestSubject = RequestDigestCommon & ({
   readonly tool: "archflow_state";
   readonly operation: "record-state-boundary";
@@ -90,7 +94,7 @@ export type RequestDigestSubject = RequestDigestCommon & ({
 } | {
   readonly tool: "archflow_state";
   readonly operation: StateControlOperation;
-  readonly operation_fields: Pick<StateInput, "phase_instance" | "step" | "status">;
+  readonly operation_fields: StateControlOperationFields;
 } | {
   readonly tool: "archflow_counter_review";
   readonly operation: "counter-review";
@@ -274,9 +278,9 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
       }
       if (subject.operation === "refresh-milestone-baseline" || subject.operation === "recover-milestone-authority" ||
           subject.operation === "recover-approval-trigger-authority" || subject.operation === "refresh-stale-baseline") {
-        exactFields(fields, ["phase_instance", "step", "status"]);
-        const control = fields as Pick<StateInput, "phase_instance" | "step" | "status">;
-        return { phase_instance: control.phase_instance, step: control.step, status: control.status };
+        exactFields(fields, ["phase_instance", "step", "status", "intent_id"]);
+        const control = fields as StateControlOperationFields;
+        return { phase_instance: control.phase_instance, step: control.step, status: control.status, intent_id: control.intent_id };
       }
       const artifactFields = fields as StateArtifactOperationFields;
       const operationForKind: Readonly<Record<StateArtifactOperationFields["artifact_kind"], StateArtifactOperation>> = {

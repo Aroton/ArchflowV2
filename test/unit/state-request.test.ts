@@ -100,10 +100,10 @@ function selectorFixtures(): readonly SelectorFixture[] {
   const raw = rawInputs();
   return [
     { call: parseToolCall("archflow_state", raw.archflow_state), operation: "record-state-boundary", operation_fields: { phase_instance: phase, step: "produce", status: "succeeded" } },
-    { call: parseToolCall("archflow_state", raw.archflow_approval_trigger_recovery), operation: "recover-approval-trigger-authority", operation_fields: { phase_instance: phase, step: "triage", status: "succeeded" } },
-    { call: parseToolCall("archflow_state", raw.archflow_milestone_refresh), operation: "refresh-milestone-baseline", operation_fields: { phase_instance: phase, step: "triage", status: "succeeded" } },
-    { call: parseToolCall("archflow_state", raw.archflow_milestone_recovery), operation: "recover-milestone-authority", operation_fields: { phase_instance: phase, step: "produce", status: "running" } },
-    { call: parseToolCall("archflow_state", raw.archflow_stale_refresh), operation: "refresh-stale-baseline", operation_fields: { phase_instance: phase, step: "triage", status: "succeeded" } },
+    { call: parseToolCall("archflow_state", raw.archflow_approval_trigger_recovery), operation: "recover-approval-trigger-authority", operation_fields: { phase_instance: phase, step: "triage", status: "succeeded", intent_id: raw.archflow_approval_trigger_recovery.intent_id } },
+    { call: parseToolCall("archflow_state", raw.archflow_milestone_refresh), operation: "refresh-milestone-baseline", operation_fields: { phase_instance: phase, step: "triage", status: "succeeded", intent_id: raw.archflow_milestone_refresh.intent_id } },
+    { call: parseToolCall("archflow_state", raw.archflow_milestone_recovery), operation: "recover-milestone-authority", operation_fields: { phase_instance: phase, step: "produce", status: "running", intent_id: raw.archflow_milestone_recovery.intent_id } },
+    { call: parseToolCall("archflow_state", raw.archflow_stale_refresh), operation: "refresh-stale-baseline", operation_fields: { phase_instance: phase, step: "triage", status: "succeeded", intent_id: raw.archflow_stale_refresh.intent_id } },
     { call: parseToolCall("archflow_state", raw.archflow_set_commit_authority), operation: "set-commit-authority", operation_fields: { phase_instance: phase, step: "produce", status: "running", target_commit: "HEAD", reason: "Rebase onto updated main branch", scope: ["milestone"] } },
     { call: parseToolCall("archflow_counter_review", raw.archflow_counter_review), operation: "counter-review", operation_fields: { artifact_path: "phases/9/result.md" } },
     { call: parseToolCall("archflow_gate", raw.archflow_gate), operation: "gate", operation_fields: { phase_instance: phase, summary: "Approve implementation", subject_digest: "7".repeat(64), current_evidence: currentEvidence, kind: "artifact-approval", context: artifactApprovalContext, preview_digest: previewDigest, decision: gateDecision } },
@@ -238,16 +238,41 @@ describe("internal transaction request identity", () => {
     }
   });
 
-  it("excludes CAS, intent, caller fingerprint, and transport metadata for every selector", () => {
+  it("excludes CAS, intent, caller fingerprint, and transport metadata for non-control selectors", () => {
     for (const fixture of selectorFixtures()) {
+      const isControlOp = fixture.call.name === "archflow_state" &&
+        fixture.call.input.operation !== undefined &&
+        fixture.call.input.operation !== "planning_restart" &&
+        fixture.call.input.operation !== "set_commit_authority";
       const baseline = identifyTransactionRequest(fixture.call, authority, fingerprint).request_digest;
       const envelopeA = { request_id: "transport-1", timestamp: "2026-07-28T00:00:00.000Z", call: fixture.call };
-      const raw = { ...fixture.call.input, intent_id: "retry-intent", expected_revision: 99, input_fingerprint: "c".repeat(64) };
+      const raw = {
+        ...fixture.call.input,
+        ...(isControlOp ? {} : { intent_id: "retry-intent" }),
+        expected_revision: 99,
+        input_fingerprint: "c".repeat(64),
+      };
       const retry = parseToolCall(fixture.call.name, raw) as ParsedToolCall;
       const envelopeB = { request_id: "transport-2", timestamp: "2026-07-28T01:00:00.000Z", call: retry };
       expect(identifyTransactionRequest(envelopeB.call, authority, fingerprint).request_digest, fixture.call.name).toBe(baseline);
       expect(identifyTransactionRequest(envelopeB.call, authority, parseSha256Digest("d".repeat(64))).request_digest, fixture.call.name).not.toBe(baseline);
       expect(envelopeA.request_id).not.toBe(envelopeB.request_id);
+    }
+  });
+
+  it("retains intent_id as discriminator for control operations", () => {
+    const raw = rawInputs();
+    for (const opInput of [
+      raw.archflow_approval_trigger_recovery,
+      raw.archflow_milestone_refresh,
+      raw.archflow_milestone_recovery,
+      raw.archflow_stale_refresh,
+    ]) {
+      const call1 = parseToolCall("archflow_state", { ...opInput, intent_id: "intent-1" });
+      const call2 = parseToolCall("archflow_state", { ...opInput, intent_id: "intent-2" });
+      const digest1 = identifyTransactionRequest(call1, authority, fingerprint).request_digest;
+      const digest2 = identifyTransactionRequest(call2, authority, fingerprint).request_digest;
+      expect(digest1).not.toBe(digest2);
     }
   });
 

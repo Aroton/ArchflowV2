@@ -55,7 +55,12 @@ function subjectFor(call: ParsedToolCall, authority: TransactionAuthority, input
         } satisfies Readonly<Record<Exclude<typeof call.input.operation, "planning_restart" | "set_commit_authority">, StateControlOperation>>)[call.input.operation];
         return {
           ...common, tool: call.name, operation,
-          operation_fields: { phase_instance: call.input.phase_instance, step: call.input.step, status: call.input.status },
+          operation_fields: {
+            phase_instance: call.input.phase_instance,
+            step: call.input.step,
+            status: call.input.status,
+            intent_id: call.input.intent_id,
+          },
         };
       }
       if (call.input.artifact === undefined) {

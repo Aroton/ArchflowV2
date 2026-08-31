@@ -28182,9 +28182,9 @@ function closedOperationFields(subject) {
         return { phase_instance: boundary.phase_instance, step: boundary.step, status: boundary.status };
       }
       if (subject.operation === "refresh-milestone-baseline" || subject.operation === "recover-milestone-authority" || subject.operation === "recover-approval-trigger-authority" || subject.operation === "refresh-stale-baseline") {
-        exactFields(fields, ["phase_instance", "step", "status"]);
+        exactFields(fields, ["phase_instance", "step", "status", "intent_id"]);
         const control = fields;
-        return { phase_instance: control.phase_instance, step: control.step, status: control.status };
+        return { phase_instance: control.phase_instance, step: control.step, status: control.status, intent_id: control.intent_id };
       }
       const artifactFields = fields;
       const operationForKind = {
@@ -44952,7 +44952,12 @@ function subjectFor(call, authority, inputFingerprint) {
           ...common3,
           tool: call.name,
           operation,
-          operation_fields: { phase_instance: call.input.phase_instance, step: call.input.step, status: call.input.status }
+          operation_fields: {
+            phase_instance: call.input.phase_instance,
+            step: call.input.step,
+            status: call.input.status,
+            intent_id: call.input.intent_id
+          }
         };
       }
       if (call.input.artifact === void 0) {
@@ -48294,6 +48299,16 @@ function completedPlanningRestartMatches(state, input) {
   return restart !== void 0 && restart.source_phase_instance === input.source_phase_instance && restart.target_phase_instance === input.target_phase_instance && restart.reason === input.reason && state.revision === restart.restarted_at_revision && state.phase_instance === restart.target_phase_instance && state.step === "produce" && state.status === "running" && state.attempt === 1 && state.input_fingerprint === input.input_fingerprint;
 }
 
+// src/state/milestone-recovery.ts
+var SEMANTIC_RECOVERY_INTENT = /^afop-([0-9a-f]{64})-recover-milestone-authority$/u;
+function semanticMilestoneRecoveryId(intentId) {
+  const match = SEMANTIC_RECOVERY_INTENT.exec(intentId);
+  return match === null ? void 0 : parsePathSafeId(`milestone-recovery-${match[1].slice(0, 32)}`);
+}
+function milestoneRecoveryId(requestDigest, intentId) {
+  return intentId === void 0 ? parsePathSafeId(`milestone-recovery-${requestDigest.slice(0, 32)}`) : semanticMilestoneRecoveryId(intentId) ?? parsePathSafeId(`milestone-recovery-${requestDigest.slice(0, 32)}`);
+}
+
 // src/state/planned-final-phase.ts
 function plannedFinalPhaseFromDesign(bytes) {
   let source;
@@ -49237,7 +49252,7 @@ async function handleState(call, context2) {
               to: "milestone-recovery"
             }));
           }
-          const recoveryId = parsePathSafeId(`milestone-recovery-${identified.request_digest}`);
+          const recoveryId = milestoneRecoveryId(identified.request_digest, recoveryInput.intent_id);
           const planned = planMilestoneRecovery({
             current: current.value,
             recovery_id: recoveryId,

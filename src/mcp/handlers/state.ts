@@ -86,6 +86,7 @@ import {
   matchingOrdinaryApproval,
 } from "../../state/restart-authority.js";
 import { completedPlanningRestartMatches, planningRestartId } from "../../state/planning-restart.js";
+import { milestoneRecoveryId } from "../../state/milestone-recovery.js";
 import {
   derivedFinalPhaseBelowCurrentPhase,
   loadAutonomousDesignFinalPhase,
@@ -392,7 +393,7 @@ export async function handleState(
               to: "milestone-recovery",
             }));
           }
-          const recoveryId = parsePathSafeId(`milestone-recovery-${identified.request_digest}`);
+          const recoveryId = milestoneRecoveryId(identified.request_digest, recoveryInput.intent_id);
           const planned = planMilestoneRecovery({
             current: current.value,
             recovery_id: recoveryId,
