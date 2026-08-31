@@ -108,7 +108,7 @@ function effortAssessment(blocked = false): EffortAssessmentV1 {
       adapter: "codex-cli", cli_version: "1", model_family: "codex", model: "gpt-5.6-luna",
       effort: "xhigh", invocation_id: "effort-invocation", result_id: "effort-result",
       envelope_input_digest: digestA, observed_output_digest: digestB,
-      route_source: { provenance: "fixed-policy" },
+      route_source: { provenance: "configured" },
       repositories: [{ name: "primary", repository_identity_digest: digestA, commit: "a".repeat(40) as never }],
     },
     recommendation: blocked

@@ -15,7 +15,11 @@ roles:
   # role continue to run the general reviewer against the full rubric.
   test-reviewer:
     model: gpt-5.6-luna
-    effort: max
+    effort: xhigh
+  # Used only for phase-design. Assigns implementation model + effort per component.
+  effort-reviewer:
+    model: gpt-5.6-luna
+    effort: xhigh
   adjudicator:
     model: gemini-3.7-flash-high
     effort: high

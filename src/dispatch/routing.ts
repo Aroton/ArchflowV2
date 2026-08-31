@@ -119,6 +119,8 @@ export function configuredRoutes(
       if (candidates.length > 0) return candidates;
     } else if (role === "test-reviewer" && producerRoles?.["test-reviewer"] !== undefined) {
       return [producerRoles["test-reviewer"]];
+    } else if (role === "effort-reviewer" && producerRoles?.["effort-reviewer"] !== undefined) {
+      return [producerRoles["effort-reviewer"]];
     } else if (role === "adjudicator" && producerRoles?.adjudicator !== undefined) {
       return [producerRoles.adjudicator];
     }
@@ -131,6 +133,8 @@ export function configuredRoutes(
       if (candidates.length > 0) return candidates;
     } else if (role === "test-reviewer" && phaseOverrides["test-reviewer"] !== undefined) {
       return [phaseOverrides["test-reviewer"]];
+    } else if (role === "effort-reviewer" && phaseOverrides["effort-reviewer"] !== undefined) {
+      return [phaseOverrides["effort-reviewer"]];
     } else if (role === "adjudicator" && phaseOverrides.adjudicator !== undefined) {
       return [phaseOverrides.adjudicator];
     }
@@ -142,6 +146,9 @@ export function configuredRoutes(
     if (candidates.length > 0) return candidates;
   } else if (role === "test-reviewer" && baseRoles["test-reviewer"] !== undefined) {
     return [baseRoles["test-reviewer"]];
+  } else if (role === "effort-reviewer") {
+    if (baseRoles["effort-reviewer"] !== undefined) return [baseRoles["effort-reviewer"]];
+    return [Object.freeze({ model: "gpt-5.6-luna", effort: "xhigh" as const })];
   } else if (role === "adjudicator" && baseRoles.adjudicator !== undefined) {
     return [baseRoles.adjudicator];
   }

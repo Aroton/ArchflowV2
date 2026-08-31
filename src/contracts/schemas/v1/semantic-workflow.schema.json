@@ -270,6 +270,12 @@
         "counter-reviewer": {
           "$ref": "#/$defs/reviewModelRoute"
         },
+        "test-reviewer": {
+          "$ref": "#/$defs/reviewModelRoute"
+        },
+        "effort-reviewer": {
+          "$ref": "#/$defs/reviewModelRoute"
+        },
         "adjudicator": {
           "$ref": "#/$defs/reviewModelRoute"
         }
@@ -1048,7 +1054,20 @@
                       "properties": {
                         "provenance": {
                           "type": "string",
-                          "const": "fixed-policy"
+                          "const": "configured"
+                        }
+                      },
+                      "required": [
+                        "provenance"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "provenance": {
+                          "type": "string",
+                          "const": "invocation-declared"
                         }
                       },
                       "required": [
@@ -1068,7 +1087,10 @@
                           "properties": {
                             "source": {
                               "type": "string",
-                              "const": "fixed-policy"
+                              "enum": [
+                                "configured",
+                                "invocation-declared"
+                              ]
                             },
                             "model": {
                               "type": "string",
@@ -1775,7 +1797,20 @@
                       "properties": {
                         "provenance": {
                           "type": "string",
-                          "const": "fixed-policy"
+                          "const": "configured"
+                        }
+                      },
+                      "required": [
+                        "provenance"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "provenance": {
+                          "type": "string",
+                          "const": "invocation-declared"
                         }
                       },
                       "required": [
@@ -1795,7 +1830,10 @@
                           "properties": {
                             "source": {
                               "type": "string",
-                              "const": "fixed-policy"
+                              "enum": [
+                                "configured",
+                                "invocation-declared"
+                              ]
                             },
                             "model": {
                               "type": "string",
@@ -2457,6 +2495,8 @@
         "role": {
           "enum": [
             "counter-reviewer",
+            "test-reviewer",
+            "effort-reviewer",
             "adjudicator"
           ]
         },

@@ -22,6 +22,7 @@ import {
   type ModelFamily,
   type ReviewedRepositoryV1,
   type RouteOverrideRecord,
+  type RouteSourceRecord,
 } from "./review.js";
 import {
   EFFORT_CAVEAT_CODES,
@@ -111,17 +112,7 @@ export type EffortReviewerProvenanceV1 = {
   readonly repositories: readonly ReviewedRepositoryV1[];
 };
 
-export type EffortRouteSourceRecordV1 =
-  | { readonly provenance: "fixed-policy" }
-  | {
-      readonly provenance: "route-override";
-      readonly displaced: {
-        readonly source: "fixed-policy";
-        readonly model: string;
-        readonly effort: (typeof EFFORT_VALUES_LOCAL)[number];
-        readonly provider?: string;
-      };
-    };
+export type EffortRouteSourceRecordV1 = RouteSourceRecord;
 
 /** Exact-subject, server-derived evidence. Provenance and recommendation are intentionally peers. */
 export type EffortAssessmentV1 = {
@@ -152,13 +143,14 @@ const routeOverrideRecordSchema = z.object({
   pinned_provider: nonblank.optional(),
 }).strict();
 const displacedEffortRouteRecordSchema = z.object({
-  source: z.literal("fixed-policy"),
+  source: z.enum(["configured", "invocation-declared"]),
   model: nonblank,
   effort: z.enum(EFFORT_VALUES_LOCAL),
   provider: nonblank.optional(),
 }).strict();
 const effortRouteSourceRecordSchema = z.discriminatedUnion("provenance", [
-  z.object({ provenance: z.literal("fixed-policy") }).strict(),
+  z.object({ provenance: z.literal("configured") }).strict(),
+  z.object({ provenance: z.literal("invocation-declared") }).strict(),
   z.object({ provenance: z.literal("route-override"), displaced: displacedEffortRouteRecordSchema }).strict(),
 ]);
 const repositoryName = z.union([

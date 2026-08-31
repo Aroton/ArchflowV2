@@ -910,6 +910,9 @@
         "test-reviewer": {
           "$ref": "#/$defs/configRoute"
         },
+        "effort-reviewer": {
+          "$ref": "#/$defs/configRoute"
+        },
         "adjudicator": {
           "$ref": "#/$defs/configRoute"
         }

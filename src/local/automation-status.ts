@@ -163,8 +163,8 @@ function dispatchFailureBoundary(view: WorkflowViewV1): AutomationHumanBoundaryV
     ? failure.role
     : "adjudicator";
   const humanRole = failure.role === "effort-reviewer" ? "effort reviewer" : failure.role;
-  const effortSuffix = failure.role === "effort-reviewer"
-    ? " The required policy route is gpt-5.6-luna at xhigh effort."
+  const effortSuffix = failure.role === "effort-reviewer" && failure.route !== undefined
+    ? ` The configured route is ${failure.route.model} at ${failure.route.effort} effort.`
     : "";
   return Object.freeze({
     source: "dispatch-failure",

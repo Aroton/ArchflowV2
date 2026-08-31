@@ -36087,6 +36087,7 @@ var configRolesSchema = external_exports.object({
   "counter-reviewer": singleOrArrayRoutesSchema.optional(),
   "counter-reviewers": external_exports.array(configRouteSchema).min(1).optional(),
   "test-reviewer": configRouteSchema.optional(),
+  "effort-reviewer": configRouteSchema.optional(),
   adjudicator: configRouteSchema.optional()
 }).strict();
 var producersSchema = external_exports.object({
@@ -37131,13 +37132,14 @@ var routeOverrideRecordSchema = external_exports.object({
   pinned_provider: nonblank2.optional()
 }).strict();
 var displacedEffortRouteRecordSchema = external_exports.object({
-  source: external_exports.literal("fixed-policy"),
+  source: external_exports.enum(["configured", "invocation-declared"]),
   model: nonblank2,
   effort: external_exports.enum(EFFORT_VALUES_LOCAL),
   provider: nonblank2.optional()
 }).strict();
 var effortRouteSourceRecordSchema = external_exports.discriminatedUnion("provenance", [
-  external_exports.object({ provenance: external_exports.literal("fixed-policy") }).strict(),
+  external_exports.object({ provenance: external_exports.literal("configured") }).strict(),
+  external_exports.object({ provenance: external_exports.literal("invocation-declared") }).strict(),
   external_exports.object({ provenance: external_exports.literal("route-override"), displaced: displacedEffortRouteRecordSchema }).strict()
 ]);
 var repositoryName3 = external_exports.union([
@@ -38268,11 +38270,12 @@ var publicEffortReviewerV1Schema = external_exports.object({
   model_family: external_exports.enum(["claude", "codex", "gemini"]),
   provider: nonBlank2.optional(),
   route_source: external_exports.discriminatedUnion("provenance", [
-    external_exports.object({ provenance: external_exports.literal("fixed-policy") }).strict(),
+    external_exports.object({ provenance: external_exports.literal("configured") }).strict(),
+    external_exports.object({ provenance: external_exports.literal("invocation-declared") }).strict(),
     external_exports.object({
       provenance: external_exports.literal("route-override"),
       displaced: external_exports.object({
-        source: external_exports.literal("fixed-policy"),
+        source: external_exports.enum(["configured", "invocation-declared"]),
         model: nonBlank2,
         effort: effortValue,
         provider: nonBlank2.optional()
@@ -38477,6 +38480,16 @@ var workflowReviewModelRouteV1Schema = configRouteSchema.clone(configRouteSchema
 var workflowReviewRoutesV1Schema = external_exports.object({
   "counter-reviewer": workflowReviewModelRouteV1Schema.optional(),
   "test-reviewer": workflowReviewModelRouteV1Schema.optional(),
+  "effort-reviewer": workflowReviewModelRouteV1Schema.optional(),
+  adjudicator: workflowReviewModelRouteV1Schema.optional()
+}).strict().superRefine((routes, context2) => {
+  if (routes["counter-reviewer"] === void 0 && routes["test-reviewer"] === void 0 && routes["effort-reviewer"] === void 0 && routes.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "review_routes must name counter-reviewer, test-reviewer, effort-reviewer, adjudicator, or a combination" });
+  }
+});
+var workflowPhaseImplReviewRoutesV1Schema = external_exports.object({
+  "counter-reviewer": workflowReviewModelRouteV1Schema.optional(),
+  "test-reviewer": workflowReviewModelRouteV1Schema.optional(),
   adjudicator: workflowReviewModelRouteV1Schema.optional()
 }).strict().superRefine((routes, context2) => {
   if (routes["counter-reviewer"] === void 0 && routes["test-reviewer"] === void 0 && routes.adjudicator === void 0) {
@@ -38495,7 +38508,7 @@ var workflowInvocationV1Schema = external_exports.discriminatedUnion("skill", [
   external_exports.object({ skill: external_exports.literal("archflow-prd"), intent: external_exports.enum(["resume", "reopen"]), review_routes: workflowGeneralReviewRoutesV1Schema.optional() }).strict(),
   external_exports.object({ skill: external_exports.literal("archflow-design"), intent: external_exports.enum(["resume", "reopen"]), review_routes: workflowGeneralReviewRoutesV1Schema.optional() }).strict(),
   external_exports.object({ skill: external_exports.literal("archflow-phase-design"), phase: positiveSafePhaseNumberV1Schema, intent: external_exports.enum(["resume", "reopen"]), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
-  external_exports.object({ skill: external_exports.literal("archflow-phase-impl"), phase: positiveSafePhaseNumberV1Schema, intent: external_exports.literal("resume"), review_routes: workflowReviewRoutesV1Schema.optional() }).strict()
+  external_exports.object({ skill: external_exports.literal("archflow-phase-impl"), phase: positiveSafePhaseNumberV1Schema, intent: external_exports.literal("resume"), review_routes: workflowPhaseImplReviewRoutesV1Schema.optional() }).strict()
 ]);
 var reopenImpactV1Schema = external_exports.object({
   target: workflowPositionV1Schema,
@@ -42487,6 +42500,37 @@ var mcp_tools_schema_default = {
                 additionalProperties: false
               },
               "test-reviewer": {
+                type: "object",
+                properties: {
+                  model: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  effort: {
+                    type: "string",
+                    enum: [
+                      "low",
+                      "medium",
+                      "high",
+                      "xhigh",
+                      "max",
+                      "ultra"
+                    ]
+                  },
+                  provider: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  }
+                },
+                required: [
+                  "model",
+                  "effort"
+                ],
+                additionalProperties: false
+              },
+              "effort-reviewer": {
                 type: "object",
                 properties: {
                   model: {
@@ -48614,6 +48658,9 @@ var task_state_schema_default = {
         "test-reviewer": {
           $ref: "#/$defs/configRoute"
         },
+        "effort-reviewer": {
+          $ref: "#/$defs/configRoute"
+        },
         adjudicator: {
           $ref: "#/$defs/configRoute"
         }
@@ -49604,6 +49651,12 @@ var semantic_workflow_schema_default = {
         "counter-reviewer": {
           $ref: "#/$defs/reviewModelRoute"
         },
+        "test-reviewer": {
+          $ref: "#/$defs/reviewModelRoute"
+        },
+        "effort-reviewer": {
+          $ref: "#/$defs/reviewModelRoute"
+        },
         adjudicator: {
           $ref: "#/$defs/reviewModelRoute"
         }
@@ -50382,7 +50435,20 @@ var semantic_workflow_schema_default = {
                       properties: {
                         provenance: {
                           type: "string",
-                          const: "fixed-policy"
+                          const: "configured"
+                        }
+                      },
+                      required: [
+                        "provenance"
+                      ],
+                      additionalProperties: false
+                    },
+                    {
+                      type: "object",
+                      properties: {
+                        provenance: {
+                          type: "string",
+                          const: "invocation-declared"
                         }
                       },
                       required: [
@@ -50402,7 +50468,10 @@ var semantic_workflow_schema_default = {
                           properties: {
                             source: {
                               type: "string",
-                              const: "fixed-policy"
+                              enum: [
+                                "configured",
+                                "invocation-declared"
+                              ]
                             },
                             model: {
                               type: "string",
@@ -51109,7 +51178,20 @@ var semantic_workflow_schema_default = {
                       properties: {
                         provenance: {
                           type: "string",
-                          const: "fixed-policy"
+                          const: "configured"
+                        }
+                      },
+                      required: [
+                        "provenance"
+                      ],
+                      additionalProperties: false
+                    },
+                    {
+                      type: "object",
+                      properties: {
+                        provenance: {
+                          type: "string",
+                          const: "invocation-declared"
                         }
                       },
                       required: [
@@ -51129,7 +51211,10 @@ var semantic_workflow_schema_default = {
                           properties: {
                             source: {
                               type: "string",
-                              const: "fixed-policy"
+                              enum: [
+                                "configured",
+                                "invocation-declared"
+                              ]
                             },
                             model: {
                               type: "string",
@@ -51791,6 +51876,8 @@ var semantic_workflow_schema_default = {
         role: {
           enum: [
             "counter-reviewer",
+            "test-reviewer",
+            "effort-reviewer",
             "adjudicator"
           ]
         },
@@ -54709,6 +54796,7 @@ var taskConfigRolesV1Schema = configRolesSchema.clone({
     "counter-reviewer": taskConfigSingleOrArrayRoutesV1Schema.optional(),
     "counter-reviewers": external_exports.array(taskConfigRouteV1Schema).min(1).optional(),
     "test-reviewer": taskConfigRouteV1Schema.optional(),
+    "effort-reviewer": taskConfigRouteV1Schema.optional(),
     adjudicator: taskConfigRouteV1Schema.optional()
   }
 });
@@ -55052,10 +55140,11 @@ var reviewModelRouteV1Schema = configRouteSchema.clone(configRouteSchema.def);
 var reviewRouteSetV1Schema = external_exports.object({
   "counter-reviewer": reviewModelRouteV1Schema.optional(),
   "test-reviewer": reviewModelRouteV1Schema.optional(),
+  "effort-reviewer": reviewModelRouteV1Schema.optional(),
   adjudicator: reviewModelRouteV1Schema.optional()
 }).strict().superRefine((routes, context2) => {
-  if (routes["counter-reviewer"] === void 0 && routes["test-reviewer"] === void 0 && routes.adjudicator === void 0) {
-    context2.addIssue({ code: "custom", message: "review routes must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
+  if (routes["counter-reviewer"] === void 0 && routes["test-reviewer"] === void 0 && routes["effort-reviewer"] === void 0 && routes.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "review routes must name counter-reviewer, test-reviewer, effort-reviewer, adjudicator, or a combination" });
   }
 });
 var routeOverrideSchema = external_exports.object({
@@ -70046,6 +70135,8 @@ function configuredRoutes(config2, phaseKind2, role, host) {
       if (candidates.length > 0) return candidates;
     } else if (role === "test-reviewer" && producerRoles?.["test-reviewer"] !== void 0) {
       return [producerRoles["test-reviewer"]];
+    } else if (role === "effort-reviewer" && producerRoles?.["effort-reviewer"] !== void 0) {
+      return [producerRoles["effort-reviewer"]];
     } else if (role === "adjudicator" && producerRoles?.adjudicator !== void 0) {
       return [producerRoles.adjudicator];
     }
@@ -70057,6 +70148,8 @@ function configuredRoutes(config2, phaseKind2, role, host) {
       if (candidates.length > 0) return candidates;
     } else if (role === "test-reviewer" && phaseOverrides["test-reviewer"] !== void 0) {
       return [phaseOverrides["test-reviewer"]];
+    } else if (role === "effort-reviewer" && phaseOverrides["effort-reviewer"] !== void 0) {
+      return [phaseOverrides["effort-reviewer"]];
     } else if (role === "adjudicator" && phaseOverrides.adjudicator !== void 0) {
       return [phaseOverrides.adjudicator];
     }
@@ -70067,6 +70160,9 @@ function configuredRoutes(config2, phaseKind2, role, host) {
     if (candidates.length > 0) return candidates;
   } else if (role === "test-reviewer" && baseRoles["test-reviewer"] !== void 0) {
     return [baseRoles["test-reviewer"]];
+  } else if (role === "effort-reviewer") {
+    if (baseRoles["effort-reviewer"] !== void 0) return [baseRoles["effort-reviewer"]];
+    return [Object.freeze({ model: "gpt-5.6-luna", effort: "xhigh" })];
   } else if (role === "adjudicator" && baseRoles.adjudicator !== void 0) {
     return [baseRoles.adjudicator];
   }
@@ -71478,10 +71574,12 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       const phaseKind2 = decodedPhase.kind;
       const counterReviewer = resolveDispatchRoute(parsedConfig, phaseKind2, "counter-reviewer");
       const testReviewer = configuredRoute(parsedConfig, phaseKind2, "test-reviewer") === void 0 ? void 0 : resolveDispatchRoute(parsedConfig, phaseKind2, "test-reviewer");
+      const effortReviewer = configuredRoute(parsedConfig, phaseKind2, "effort-reviewer") === void 0 ? void 0 : resolveDispatchRoute(parsedConfig, phaseKind2, "effort-reviewer");
       const adjudicator = resolveDispatchRoute(parsedConfig, phaseKind2, "adjudicator");
       routes = Object.freeze({
         counter_reviewer: counterReviewer,
         ...testReviewer === void 0 ? {} : { test_reviewer: testReviewer },
+        ...effortReviewer === void 0 ? {} : { effort_reviewer: effortReviewer },
         adjudicator
       });
     } catch {
@@ -81960,6 +82058,7 @@ async function runCounterReview(dependencies, input) {
   };
   const reviewOverride = overrideRecordFor("counter-reviewer");
   const testReviewOverride = overrideRecordFor("test-reviewer");
+  const effortOverride = overrideRecordFor("effort-reviewer");
   const subject = Object.freeze({
     ...input.envelope.subject,
     attempt: input.authority.context.attempt
@@ -81978,24 +82077,8 @@ async function runCounterReview(dependencies, input) {
   }
   const parsedEffortEnvelope = effortPlan === void 0 ? void 0 : parseEffortEnvelopeV1(effortPlan.envelope);
   if (parsedEffortEnvelope !== void 0 && (parsedEffortEnvelope.task_id !== subject.task_id || parsedEffortEnvelope.phase_instance !== subject.phase_instance || parsedEffortEnvelope.attempt !== subject.attempt || parsedEffortEnvelope.subject_digest !== subject.subject_digest || parsedEffortEnvelope.input_fingerprint !== subject.input_fingerprint || canonicalJsonDigest(parsedEffortEnvelope.repositories) !== canonicalJsonDigest(input.repositories))) throw new TypeError("effort plan is not bound to the counter-review subject and repository pins");
-  const fixedEffortRoute = Object.freeze({ model: "gpt-5.6-luna", effort: "xhigh" });
-  const declaredEffortOverride = input.call.input.route_override?.["effort-reviewer"];
-  const effortCandidate = parsedEffortEnvelope === void 0 ? void 0 : Object.freeze({
-    raw_route: declaredEffortOverride ?? fixedEffortRoute,
-    source: declaredEffortOverride === void 0 ? Object.freeze({ provenance: "configured" }) : Object.freeze({
-      provenance: "route-override",
-      displaced: Object.freeze({ source: "configured", ...fixedEffortRoute })
-    })
-  });
-  let effortRoute;
-  if (effortCandidate !== void 0) {
-    try {
-      effortRoute = Object.freeze({ candidate: effortCandidate, selection: validateSelectedDispatchRoute(effortCandidate) });
-    } catch (error51) {
-      await observeFailure("effort-reviewer", effortCandidate, error51);
-      throw error51;
-    }
-  }
+  const effortRoutes = parsedEffortEnvelope === void 0 ? void 0 : await selectRoutes("effort-reviewer");
+  const effortRoute = effortRoutes?.[0];
   const specialistActive = configuredTestRoutes.length > 0;
   const phaseKind2 = input.phase_kind;
   const generalRoutes = configuredReviewRoutes.map((routeEntry, index) => {
@@ -82114,11 +82197,6 @@ async function runCounterReview(dependencies, input) {
   const ops = reviewRoutes.map((routeEntry, index) => reviewOp(routeEntry, reviewEnvelopes[index]));
   if (effortPlan !== void 0 && parsedEffortEnvelope !== void 0 && effortEnvelope !== void 0 && effortRoute !== void 0) {
     const route2 = effortRoute.selection.route;
-    const effortOverride = declaredEffortOverride === void 0 ? void 0 : Object.freeze({
-      reason: input.call.input.route_override.reason,
-      pinned_model: fixedEffortRoute.model,
-      pinned_effort: fixedEffortRoute.effort
-    });
     const mint = (dispatched) => createEffortAssessmentV1(
       JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(dispatched.extracted_output_bytes)),
       parsedEffortEnvelope,
@@ -82133,10 +82211,7 @@ async function runCounterReview(dependencies, input) {
         envelope_input_digest: effortEnvelope.digest,
         observed_output_digest: sha256Bytes(dispatched.extracted_output_bytes),
         ...route2.provider === void 0 ? {} : { provider: route2.provider },
-        route_source: declaredEffortOverride === void 0 ? Object.freeze({ provenance: "fixed-policy" }) : Object.freeze({
-          provenance: "route-override",
-          displaced: Object.freeze({ source: "fixed-policy", ...fixedEffortRoute })
-        }),
+        route_source: effortRoute.selection.source,
         ...effortOverride === void 0 ? {} : { route_override: effortOverride },
         repositories: input.repositories
       }

@@ -495,7 +495,7 @@ export type TaskStatusV1 = Readonly<{
    */
   config_change?: readonly ConfigChangeEntry[];
   /** The dispatched review routes for the current phase kind; the producer is the host, never routed. */
-  routes?: Readonly<{ counter_reviewer: DispatchRoute; test_reviewer?: DispatchRoute; adjudicator: DispatchRoute }>;
+  routes?: Readonly<{ counter_reviewer: DispatchRoute; test_reviewer?: DispatchRoute; effort_reviewer?: DispatchRoute; adjudicator: DispatchRoute }>;
   /** Safe exact-current dispatch outage facts; carries no runtime path or state join identifiers. */
   dispatch_failure?: PublicDispatchFailureV1;
   constitution?: Readonly<{
@@ -1323,10 +1323,14 @@ async function computeTaskStatusDetailedInternal(
       const testReviewer = configuredRoute(parsedConfig, phaseKind, "test-reviewer") === undefined
         ? undefined
         : resolveDispatchRoute(parsedConfig, phaseKind, "test-reviewer");
+      const effortReviewer = configuredRoute(parsedConfig, phaseKind, "effort-reviewer") === undefined
+        ? undefined
+        : resolveDispatchRoute(parsedConfig, phaseKind, "effort-reviewer");
       const adjudicator = resolveDispatchRoute(parsedConfig, phaseKind, "adjudicator");
       routes = Object.freeze({
         counter_reviewer: counterReviewer,
         ...(testReviewer === undefined ? {} : { test_reviewer: testReviewer }),
+        ...(effortReviewer === undefined ? {} : { effort_reviewer: effortReviewer }),
         adjudicator,
       });
     } catch {

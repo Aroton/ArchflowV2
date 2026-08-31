@@ -63,6 +63,9 @@
         "test-reviewer": {
           "$ref": "#/$defs/route"
         },
+        "effort-reviewer": {
+          "$ref": "#/$defs/route"
+        },
         "adjudicator": {
           "$ref": "#/$defs/route"
         }

@@ -206,7 +206,7 @@ function phaseDesignRetained(status?: "ready" | "blocked", attempt = 1): Retaine
       adapter: "codex-cli", cli_version: "1.0.0", model_family: "codex",
       model: "gpt-5.6-luna", effort: "xhigh", invocation_id: "effort-invocation",
       result_id: "effort-result", envelope_input_digest: D("5"), observed_output_digest: D("6"),
-      route_source: { provenance: "fixed-policy" },
+      route_source: { provenance: "configured" },
       repositories: [{ name: "primary", repository_identity_digest: D("7"), commit: "8".repeat(40) }],
     },
     recommendation: status === "ready"

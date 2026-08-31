@@ -60,6 +60,8 @@ const REVIEW_ROUTE_SET_FRAGMENT = {
   minProperties: 1,
   properties: {
     "counter-reviewer": { $ref: "#/$defs/reviewModelRoute" },
+    "test-reviewer": { $ref: "#/$defs/reviewModelRoute" },
+    "effort-reviewer": { $ref: "#/$defs/reviewModelRoute" },
     adjudicator: { $ref: "#/$defs/reviewModelRoute" },
   },
   additionalProperties: false,
@@ -79,7 +81,7 @@ const REVIEW_MODEL_ROUTE_FRAGMENT = {
 const PUBLIC_DISPATCH_FAILURE_FRAGMENT = {
   type: "object",
   properties: {
-    role: { enum: ["counter-reviewer", "adjudicator"] },
+    role: { enum: ["counter-reviewer", "test-reviewer", "effort-reviewer", "adjudicator"] },
     code: { enum: DISPATCH_FAILURE_CODES },
     message: { type: "string", minLength: 1, maxLength: 256 },
     repository_name: {

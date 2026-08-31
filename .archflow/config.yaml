@@ -11,6 +11,15 @@ roles:
   counter-reviewer:
     model: gpt-5.6-sol
     effort: medium
+  # Used only for phase-design and phase-impl. Older task configs without this
+  # role continue to run the general reviewer against the full rubric.
+  test-reviewer:
+    model: gpt-5.6-luna
+    effort: xhigh
+  # Used only for phase-design. Assigns implementation model + effort per component.
+  effort-reviewer:
+    model: gpt-5.6-luna
+    effort: xhigh
   adjudicator:
     model: gemini-3.7-flash-high
     effort: high

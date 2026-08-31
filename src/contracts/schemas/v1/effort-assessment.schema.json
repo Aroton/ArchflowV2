@@ -424,7 +424,20 @@
               "properties": {
                 "provenance": {
                   "type": "string",
-                  "const": "fixed-policy"
+                  "const": "configured"
+                }
+              },
+              "required": [
+                "provenance"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "provenance": {
+                  "type": "string",
+                  "const": "invocation-declared"
                 }
               },
               "required": [
@@ -444,7 +457,10 @@
                   "properties": {
                     "source": {
                       "type": "string",
-                      "const": "fixed-policy"
+                      "enum": [
+                        "configured",
+                        "invocation-declared"
+                      ]
                     },
                     "model": {
                       "type": "string",

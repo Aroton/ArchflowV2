@@ -181,11 +181,12 @@ const publicEffortReviewerV1Schema = z.object({
   model_family: z.enum(["claude", "codex", "gemini"]),
   provider: nonBlank.optional(),
   route_source: z.discriminatedUnion("provenance", [
-    z.object({ provenance: z.literal("fixed-policy") }).strict(),
+    z.object({ provenance: z.literal("configured") }).strict(),
+    z.object({ provenance: z.literal("invocation-declared") }).strict(),
     z.object({
       provenance: z.literal("route-override"),
       displaced: z.object({
-        source: z.literal("fixed-policy"), model: nonBlank, effort: effortValue, provider: nonBlank.optional(),
+        source: z.enum(["configured", "invocation-declared"]), model: nonBlank, effort: effortValue, provider: nonBlank.optional(),
       }).strict(),
     }).strict(),
   ]),
@@ -335,13 +336,14 @@ export type WorkflowPositionV1 =
 
 /** Public route declaration repeated unchanged for one producer skill invocation. */
 export type WorkflowReviewRoutesV1 = ReviewRouteSetV1;
-export type WorkflowGeneralReviewRoutesV1 = Omit<ReviewRouteSetV1, "test-reviewer">;
+export type WorkflowGeneralReviewRoutesV1 = Omit<ReviewRouteSetV1, "test-reviewer" | "effort-reviewer">;
+export type WorkflowPhaseImplReviewRoutesV1 = Omit<ReviewRouteSetV1, "effort-reviewer">;
 
 export type WorkflowInvocationV1 =
   | { readonly skill: "archflow-prd"; readonly intent: "resume" | "reopen"; readonly review_routes?: WorkflowGeneralReviewRoutesV1 }
   | { readonly skill: "archflow-design"; readonly intent: "resume" | "reopen"; readonly review_routes?: WorkflowGeneralReviewRoutesV1 }
   | { readonly skill: "archflow-phase-design"; readonly phase: number; readonly intent: "resume" | "reopen"; readonly review_routes?: WorkflowReviewRoutesV1 }
-  | { readonly skill: "archflow-phase-impl"; readonly phase: number; readonly intent: "resume"; readonly review_routes?: WorkflowReviewRoutesV1 };
+  | { readonly skill: "archflow-phase-impl"; readonly phase: number; readonly intent: "resume"; readonly review_routes?: WorkflowPhaseImplReviewRoutesV1 };
 
 export type WorkflowReopenImpactV1 = {
   readonly target: WorkflowPositionV1;
@@ -596,12 +598,22 @@ export const workflowReviewModelRouteV1Schema = configRouteSchema.clone(configRo
 export const workflowReviewRoutesV1Schema = z.object({
   "counter-reviewer": workflowReviewModelRouteV1Schema.optional(),
   "test-reviewer": workflowReviewModelRouteV1Schema.optional(),
+  "effort-reviewer": workflowReviewModelRouteV1Schema.optional(),
+  adjudicator: workflowReviewModelRouteV1Schema.optional(),
+}).strict().superRefine((routes, context) => {
+  if (routes["counter-reviewer"] === undefined && routes["test-reviewer"] === undefined && routes["effort-reviewer"] === undefined && routes.adjudicator === undefined) {
+    context.addIssue({ code: "custom", message: "review_routes must name counter-reviewer, test-reviewer, effort-reviewer, adjudicator, or a combination" });
+  }
+}) as z.ZodType<ReviewRouteSetV1>;
+export const workflowPhaseImplReviewRoutesV1Schema = z.object({
+  "counter-reviewer": workflowReviewModelRouteV1Schema.optional(),
+  "test-reviewer": workflowReviewModelRouteV1Schema.optional(),
   adjudicator: workflowReviewModelRouteV1Schema.optional(),
 }).strict().superRefine((routes, context) => {
   if (routes["counter-reviewer"] === undefined && routes["test-reviewer"] === undefined && routes.adjudicator === undefined) {
     context.addIssue({ code: "custom", message: "review_routes must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
   }
-}) as z.ZodType<ReviewRouteSetV1>;
+}) as z.ZodType<WorkflowPhaseImplReviewRoutesV1>;
 export const workflowGeneralReviewRoutesV1Schema = z.object({
   "counter-reviewer": workflowReviewModelRouteV1Schema.optional(),
   adjudicator: workflowReviewModelRouteV1Schema.optional(),
@@ -614,7 +626,7 @@ export const workflowInvocationV1Schema = z.discriminatedUnion("skill", [
   z.object({ skill: z.literal("archflow-prd"), intent: z.enum(["resume", "reopen"]), review_routes: workflowGeneralReviewRoutesV1Schema.optional() }).strict(),
   z.object({ skill: z.literal("archflow-design"), intent: z.enum(["resume", "reopen"]), review_routes: workflowGeneralReviewRoutesV1Schema.optional() }).strict(),
   z.object({ skill: z.literal("archflow-phase-design"), phase: positiveSafePhaseNumberV1Schema, intent: z.enum(["resume", "reopen"]), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
-  z.object({ skill: z.literal("archflow-phase-impl"), phase: positiveSafePhaseNumberV1Schema, intent: z.literal("resume"), review_routes: workflowReviewRoutesV1Schema.optional() }).strict(),
+  z.object({ skill: z.literal("archflow-phase-impl"), phase: positiveSafePhaseNumberV1Schema, intent: z.literal("resume"), review_routes: workflowPhaseImplReviewRoutesV1Schema.optional() }).strict(),
 ]) as unknown as z.ZodType<WorkflowInvocationV1>;
 const reopenImpactV1Schema = z.object({
   target: workflowPositionV1Schema,

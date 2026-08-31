@@ -409,6 +409,7 @@ export async function runCounterReview(
   };
   const reviewOverride = overrideRecordFor("counter-reviewer");
   const testReviewOverride = overrideRecordFor("test-reviewer");
+  const effortOverride = overrideRecordFor("effort-reviewer");
   // The server stamps the durable attempt counter into the child-visible subject from the same
   // transaction authority the dispatch runs under, so the round number is never a caller claim.
   const subject: DispatchSubject = Object.freeze({
@@ -444,28 +445,8 @@ export async function runCounterReview(
     parsedEffortEnvelope.input_fingerprint !== subject.input_fingerprint ||
     canonicalJsonDigest(parsedEffortEnvelope.repositories as never) !== canonicalJsonDigest(input.repositories as never)
   )) throw new TypeError("effort plan is not bound to the counter-review subject and repository pins");
-  const fixedEffortRoute = Object.freeze({ model: "gpt-5.6-luna", effort: "xhigh" as const });
-  const declaredEffortOverride = input.call.input.route_override?.["effort-reviewer"];
-  const effortCandidate: SelectedRouteCandidate | undefined = parsedEffortEnvelope === undefined
-    ? undefined
-    : Object.freeze({
-      raw_route: declaredEffortOverride ?? fixedEffortRoute,
-      source: declaredEffortOverride === undefined
-        ? Object.freeze({ provenance: "configured" as const })
-        : Object.freeze({
-          provenance: "route-override" as const,
-          displaced: Object.freeze({ source: "configured" as const, ...fixedEffortRoute }),
-        }),
-    });
-  let effortRoute: Readonly<{ candidate: SelectedRouteCandidate; selection: SelectedDispatchRoute }> | undefined;
-  if (effortCandidate !== undefined) {
-    try {
-      effortRoute = Object.freeze({ candidate: effortCandidate, selection: validateSelectedDispatchRoute(effortCandidate) });
-    } catch (error) {
-      await observeFailure("effort-reviewer", effortCandidate, error);
-      throw error;
-    }
-  }
+  const effortRoutes = parsedEffortEnvelope === undefined ? undefined : await selectRoutes("effort-reviewer");
+  const effortRoute = effortRoutes?.[0];
 
   // Reviewer identity is the tag stamped on its findings, fixed by position in the configured
   // route list so it survives rounds that dispatch only a subset of reviewers.
@@ -634,13 +615,6 @@ export async function runCounterReview(
   const ops: (() => Promise<ChildOutcome>)[] = reviewRoutes.map((routeEntry, index) => reviewOp(routeEntry, reviewEnvelopes[index]!));
   if (effortPlan !== undefined && parsedEffortEnvelope !== undefined && effortEnvelope !== undefined && effortRoute !== undefined) {
     const route = effortRoute.selection.route;
-    const effortOverride: RouteOverrideRecord | undefined = declaredEffortOverride === undefined
-      ? undefined
-      : Object.freeze({
-        reason: input.call.input.route_override!.reason,
-        pinned_model: fixedEffortRoute.model,
-        pinned_effort: fixedEffortRoute.effort,
-      });
     const mint = (dispatched: CounterReviewDispatchResult): EffortAssessmentV1 => createEffortAssessmentV1(
       JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(dispatched.extracted_output_bytes)),
       parsedEffortEnvelope,
@@ -655,12 +629,7 @@ export async function runCounterReview(
         envelope_input_digest: effortEnvelope.digest,
         observed_output_digest: sha256Bytes(dispatched.extracted_output_bytes),
         ...(route.provider === undefined ? {} : { provider: route.provider }),
-        route_source: declaredEffortOverride === undefined
-          ? Object.freeze({ provenance: "fixed-policy" as const })
-          : Object.freeze({
-            provenance: "route-override" as const,
-            displaced: Object.freeze({ source: "fixed-policy" as const, ...fixedEffortRoute }),
-          }),
+        route_source: effortRoute.selection.source,
         ...(effortOverride === undefined ? {} : { route_override: effortOverride }),
         repositories: input.repositories,
       },

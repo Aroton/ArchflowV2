@@ -757,6 +757,7 @@ export const taskConfigRolesV1Schema = configRolesSchema.clone({
     "counter-reviewer": taskConfigSingleOrArrayRoutesV1Schema.optional(),
     "counter-reviewers": z.array(taskConfigRouteV1Schema).min(1).optional(),
     "test-reviewer": taskConfigRouteV1Schema.optional(),
+    "effort-reviewer": taskConfigRouteV1Schema.optional(),
     adjudicator: taskConfigRouteV1Schema.optional(),
   },
 });

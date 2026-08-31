@@ -131,6 +131,7 @@ export type ReviewRouteV1 = {
 export type ReviewRouteSetV1 = {
   readonly "counter-reviewer"?: ReviewRouteV1;
   readonly "test-reviewer"?: ReviewRouteV1;
+  readonly "effort-reviewer"?: ReviewRouteV1;
   readonly adjudicator?: ReviewRouteV1;
 };
 export interface CounterReviewInput extends CommonToolInput {
@@ -272,10 +273,11 @@ const reviewModelRouteV1Schema = configRouteSchema.clone(configRouteSchema.def) 
 export const reviewRouteSetV1Schema = z.object({
   "counter-reviewer": reviewModelRouteV1Schema.optional(),
   "test-reviewer": reviewModelRouteV1Schema.optional(),
+  "effort-reviewer": reviewModelRouteV1Schema.optional(),
   adjudicator: reviewModelRouteV1Schema.optional(),
 }).strict().superRefine((routes, context) => {
-  if (routes["counter-reviewer"] === undefined && routes["test-reviewer"] === undefined && routes.adjudicator === undefined) {
-    context.addIssue({ code: "custom", message: "review routes must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
+  if (routes["counter-reviewer"] === undefined && routes["test-reviewer"] === undefined && routes["effort-reviewer"] === undefined && routes.adjudicator === undefined) {
+    context.addIssue({ code: "custom", message: "review routes must name counter-reviewer, test-reviewer, effort-reviewer, adjudicator, or a combination" });
   }
 }) as z.ZodType<ReviewRouteSetV1>;
 export const routeOverrideSchema = z.object({

@@ -58,7 +58,13 @@ describe("config template", () => {
     });
     expect(resolveDispatchRoute(config, "phase-impl", "test-reviewer")).toMatchObject({
       model: "gpt-5.6-luna",
-      effort: "max",
+      effort: "xhigh",
+      family: "codex",
+      adapter: "codex-cli",
+    });
+    expect(resolveDispatchRoute(config, "phase-design", "effort-reviewer")).toMatchObject({
+      model: "gpt-5.6-luna",
+      effort: "xhigh",
       family: "codex",
       adapter: "codex-cli",
     });
