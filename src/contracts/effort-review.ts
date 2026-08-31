@@ -10,6 +10,7 @@ import {
 } from "./hazard-registry.js";
 import type { SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
 import {
+  createTaskSlugV1Schema,
   safeIdV1Schema,
   safeIntegerV1Schema,
   sha256DigestV1Schema,
@@ -205,16 +206,32 @@ const decomposition = z.discriminatedUnion("status", [
   z.object({ status: z.literal("undifferentiated"), rationale: nonblank, missing_boundaries: z.array(nonblank).min(1) }).strict(),
 ]);
 
+const digest = z.string().regex(/^[0-9a-f]{64}$/u) as unknown as z.ZodType<Sha256Digest>;
+const taskSlug = createTaskSlugV1Schema();
+const phaseInstance = z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
+
+/**
+ * The generated `effort-review.schema.json` `$defs` layout. The def names are load-bearing:
+ * `projectCliOutputSchema` rewrites `taskSlug` (lookahead simplification) by name before handing
+ * the document to a child host, and the document must stay self-contained because hosts cannot
+ * resolve cross-document references.
+ */
+export const effortDocumentDefs = {
+  taskSlug,
+  phaseInstance,
+  digest,
+} as const;
+
 export const rawEffortReviewV1Schema = z.object({
   schema_version: z.literal("1"),
-  task_id: taskSlugV1Schema,
-  phase_instance: phaseInstanceIdV1Schema.refine((value) => value.startsWith("phase-design-"), "effort review is phase-design-only"),
+  task_id: taskSlug,
+  phase_instance: phaseInstance.refine((value) => value.startsWith("phase-design-"), "effort review is phase-design-only") as unknown as z.ZodType<PhaseInstanceId>,
   step: z.literal("effort_review"),
   role: z.literal("effort-reviewer"),
-  subject_digest: sha256DigestV1Schema,
-  input_fingerprint: sha256DigestV1Schema,
-  component_manifest_digest: sha256DigestV1Schema,
-  hazard_registry_digest: sha256DigestV1Schema,
+  subject_digest: digest,
+  input_fingerprint: digest,
+  component_manifest_digest: digest,
+  hazard_registry_digest: digest,
   policy_id: z.literal(IMPLEMENTATION_EFFORT_POLICY_ID),
   decomposition,
   components: z.array(componentEffortJudgmentV1Schema).min(1),

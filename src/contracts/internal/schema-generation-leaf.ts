@@ -6,7 +6,7 @@ import { configOverridesSchema, configRolesSchema, configRouteSchema, configV1Sc
 import { constitutionRuleV1Schema } from "../constitution.js";
 import { phaseDesignComponentManifestV1Schema } from "../component-manifest.js";
 import { dispatchFailureObservationV1Schema } from "../dispatch-failure.js";
-import { effortAssessmentV1Schema, effortEnvelopeV1Schema, rawEffortReviewV1Schema } from "../effort-review.js";
+import { effortAssessmentV1Schema, effortDocumentDefs, effortEnvelopeV1Schema, rawEffortReviewV1Schema } from "../effort-review.js";
 import {
   pathSafeIdV1Schema,
   safeCodeV1Schema,
@@ -191,6 +191,7 @@ export const leafSchemaGroup: SchemaGenerationGroup = {
       file: "effort-review",
       id: SCHEMA_IDS.effortReview,
       root: rawEffortReviewV1Schema,
+      defs: effortDocumentDefs,
       migrated: true,
     },
     {

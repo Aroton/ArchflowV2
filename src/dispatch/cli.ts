@@ -122,7 +122,8 @@ function projectSchemaNode(value: PlainJsonValue, adapter: AdapterId): PlainJson
     if (HOST_SCHEMA_METADATA.has(key) || key.startsWith("x-archflow-") || key === "allOf" ||
         (adapter === "claude-cli" && CLAUDE_UNSUPPORTED_SCHEMA_KEYWORDS.has(key)) ||
         (adapter === "codex-cli" && key === "uniqueItems")) continue;
-    projected[key] = projectSchemaNode(child, adapter);
+    const targetKey = adapter === "codex-cli" && key === "oneOf" ? "anyOf" : key;
+    projected[targetKey] = projectSchemaNode(child, adapter);
   }
   return projected;
 }
@@ -213,6 +214,31 @@ function hostFindingSchema(value: PlainJsonValue): PlainJsonValue {
   };
 }
 
+function hostEffortComponentSchema(value: PlainJsonValue): PlainJsonValue {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
+  const component = value as Readonly<Record<string, PlainJsonValue>>;
+  const properties = component.properties;
+  if (properties === null || typeof properties !== "object" || Array.isArray(properties)) return value;
+  const base = { ...(properties as Readonly<Record<string, PlainJsonValue>>) };
+  delete base.blocker;
+  const unblocked = {
+    type: "object",
+    additionalProperties: false,
+    properties: base,
+    required: Object.keys(base),
+  };
+  const blocked = {
+    type: "object",
+    additionalProperties: false,
+    properties: properties as Record<string, PlainJsonValue>,
+    required: Object.keys(properties),
+  };
+  return {
+    type: "object",
+    anyOf: [unblocked, blocked],
+  };
+}
+
 function hostTaskSlugSchema(value: PlainJsonValue): PlainJsonValue {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
   return {
@@ -251,6 +277,28 @@ export function projectCliOutputSchema(
         ? { ...common, finding: hostFindingSchema(common.finding!) }
         : common,
     };
+  }
+  if (resultKind === "effort-review") {
+    const rawProperties = root.properties;
+    if (rawProperties !== null && typeof rawProperties === "object" && !Array.isArray(rawProperties)) {
+      const propertiesObj = rawProperties as Readonly<Record<string, PlainJsonValue>>;
+      const components = propertiesObj.components;
+      if (components !== null && typeof components === "object" && !Array.isArray(components)) {
+        const items = (components as Readonly<Record<string, PlainJsonValue>>).items;
+        if (items !== undefined) {
+          root = {
+            ...root,
+            properties: {
+              ...propertiesObj,
+              components: {
+                ...(components as Readonly<Record<string, PlainJsonValue>>),
+                items: hostEffortComponentSchema(items),
+              },
+            },
+          };
+        }
+      }
+    }
   }
   const bindingKeys = resultKind === "review"
     ? ["task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family"]

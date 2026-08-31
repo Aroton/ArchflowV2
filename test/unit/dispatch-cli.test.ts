@@ -359,6 +359,70 @@ describe("CLI invocation construction", () => {
     },
   );
 
+  it("projects effort-review schema for Codex without oneOf and with branched components", () => {
+    const projected = projectCliOutputSchema(
+      effortReviewSchema as PlainJsonValue,
+      "effort-review",
+      "codex-cli",
+    ) as Record<string, unknown>;
+
+    // Must not contain oneOf anywhere (OpenAI Structured Outputs restriction)
+    expect(JSON.stringify(projected)).not.toContain('"oneOf"');
+    // Must not contain any external URN references
+    expect(JSON.stringify(projected)).not.toContain("urn:archflow:");
+    // Definitions must include simplified taskSlug
+    const definitions = projected.$defs as Record<string, Record<string, unknown>>;
+    expect(definitions.taskSlug).toMatchObject({ pattern: "^[a-z0-9][a-z0-9._-]{0,63}$" });
+
+    // components.items must be an anyOf branching unblocked and blocked component shapes
+    const components = (projected.properties as Record<string, Record<string, unknown>>).components!;
+    const items = components.items as Record<string, unknown>;
+    expect(items).toHaveProperty("anyOf");
+    const branches = items.anyOf as Array<Record<string, unknown>>;
+    expect(branches).toHaveLength(2);
+    const unblocked = branches[0]!;
+    const blocked = branches[1]!;
+    expect(unblocked.properties).not.toHaveProperty("blocker");
+    expect(unblocked.required).toEqual(Object.keys(unblocked.properties as Record<string, unknown>));
+    expect(blocked.properties).toHaveProperty("blocker");
+    expect(blocked.required).toEqual(Object.keys(blocked.properties as Record<string, unknown>));
+
+    const validateProjected = createJsonSchemaValidator<Record<string, unknown>>(projected);
+    const unblockedJudgment = {
+      component_id: "comp-1",
+      axes: Object.fromEntries(["A", "B", "C", "D", "E"].map((axis) => [axis, { score: 0, rationale: `${axis} ok` }])),
+      long_tool_loop: { value: "no", rationale: "fast" },
+      short_component: { value: "yes", rationale: "small" },
+    };
+    const blockedJudgment = {
+      component_id: "comp-2",
+      axes: Object.fromEntries(["A", "B", "C", "D", "E"].map((axis) => [axis, { score: axis === "D" ? 2 : 0, rationale: `${axis} ok` }])),
+      long_tool_loop: { value: "no", rationale: "fast" },
+      short_component: { value: "yes", rationale: "small" },
+      blocker: { answer_kind: "number", question: "Threshold?" },
+    };
+    const sampleOutput = {
+      schema_version: "1",
+      task_id: "test-task",
+      phase_instance: "phase-design-1",
+      step: "effort_review",
+      role: "effort-reviewer",
+      subject_digest: "a".repeat(64),
+      input_fingerprint: "b".repeat(64),
+      component_manifest_digest: "c".repeat(64),
+      hazard_registry_digest: "d".repeat(64),
+      policy_id: "implementation-effort-v1",
+      decomposition: { status: "adequate", rationale: "good decomposition" },
+      components: [unblockedJudgment, blockedJudgment],
+    };
+    expect(() => validateProjected.assert(sampleOutput, "sample effort review")).not.toThrow();
+
+    // Extra property on unblocked branch or missing blocker on blocked branch should be caught
+    const invalidUnblocked = structuredClone(sampleOutput);
+    (invalidUnblocked.components[0] as Record<string, unknown>).extra_prop = "bad";
+    expect(() => validateProjected.assert(invalidUnblocked, "extra prop on unblocked")).toThrow();
+  });
+
   it("binds the adjudication subject to Codex without an array-valued const", () => {
     const projected = projectCliOutputSchema(
       adjudicationSchema as PlainJsonValue,
